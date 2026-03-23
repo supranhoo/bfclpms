@@ -350,12 +350,15 @@ export function EmployeeSelectorGrid({
       const reviewable = resolveReviewableStatuses('hr_pms', stages);
       const hrIdx = stages.indexOf('hr_pms_review');
       const doneStatuses = hrIdx >= 0 ? stages.slice(hrIdx + 1) : [];
+      const pendingKpis = [...empKpis.filter(k => reviewable.includes(k.status || '') && k.status !== 'hr_pms_review'), ...empKpis.filter(k => k.status === 'hr_pms_review')];
       return {
         badge1: empKpis.filter(k => reviewable.includes(k.status || '') && k.status !== 'hr_pms_review').length,
         badge2: empKpis.filter(k => k.status === 'hr_pms_review').length,
         badge3: empKpis.filter(k => doneStatuses.includes(k.status || '')).length,
         total: empKpis.length,
         clearedKraSet,
+        orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
+        nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
       };
     } else if (viewLevel === 'audit') {
       const reviewable = resolveReviewableStatuses('auditor', stages);
