@@ -1,85 +1,52 @@
 
 
-## Make All Management Dashboard Widgets Respond to Month Selection
+## RCA: Why Sent-Back KPIs Were Not Rolled Back
 
-### Problem
-When selecting a specific month (e.g., Dec) from the top month bar, the main tiles and charts update correctly, but several widgets remain static — they fetch data independently without considering the selected months.
+### Root Cause
 
-### Widgets That Already Respond
-- KPI Snapshot tiles (Total Employees, Avg Score, Completion Rate, Pending Review)
-- Performance Trend chart
-- Rating Distribution (Bell Curve)
-- Division Performance table
-- Top & Bottom Performers
-- Pending Management Reviews table
-- Reviewer Analytics + Manager Deviation
-- Direct Reportees Monitor (has its own `selectedMonths` prop)
+The previous rollback identification query was **too narrow**. It only checked `kpi_queries` table for `query_type = 'send_back'` records. However, **auditor and management send-backs are recorded in `kpi_audit_logs`** (actions like `AUDITOR_SENT_BACK_TO_EMPLOYEE`, `MANAGEMENT_SENT_BACK_TO_AUDITOR`, etc.), NOT in `kpi_queries`.
 
-### Widgets That Do NOT Respond
+For employee 100856 Feb:
+- Auditor sent back "Ensure project retention" on Mar 15 (action: `AUDITOR_SENT_BACK_TO_EMPLOYEE`)
+- Auditor sent back "CCTV Surveillance" on Mar 15 (action: `AUDITOR_SENT_BACK_TO_EMPLOYEE`)
+- Both were then auto-scored zero on Mar 21
 
-1. **Open Queries tile** — counts ALL open queries globally (`kpi_queries` table has no `review_period` column, but links to `kpi_id` which has one). Currently uses a simple `head: true` count with no period filter.
+These KPIs had **no `kpi_queries` record**, so the rollback query missed them entirely.
 
-2. **ReviewPeriodStatusWidget** — hardcoded to `currentYear`, ignores selected months entirely.
+### Still-Penalized KPIs (11 total, all with `status: approved`, `final_score: 0`)
 
-3. **RecentAuditLog** — fetches last 10 audit log entries globally, no period filter.
+| Employee | Code | Period | KPI (truncated) |
+|----------|------|--------|-----------------|
+| Nitesh Baldwa | 100012 | Jan 26 | Timely payments as per SOP |
+| Nitesh Baldwa | 100012 | Jan 26 | Lifting of balance BL quantity |
+| Biswajit Sahoo | 100426 | Feb 26 | Days compliance for report |
+| Biswajit Sahoo | 100426 | Feb 26 | Timely submission of HR MIS |
+| Prakash Kumar Sinha | 100840 | Feb 26 | Payment receipts and reconciliation |
+| **Abhas Luharuwalla** | **100856** | **Feb 26** | **Ensure Availability of CCTV** |
+| **Abhas Luharuwalla** | **100856** | **Feb 26** | **Ensure project retention** |
+| Chandra Bhan Singh | 101680 | Feb 26 | Preventive maintenance |
+| Dippendu Das | 101773 | Jan 26 | No Material shortage in USA |
+| Dippendu Das | 101773 | Jan 26 | Accounts reconciliation - USA |
+| Rakesh Kumar Gupta | 101902 | Jan 26 | Compliance to TAT for In-bound |
 
-4. **NotificationsSummary** — fetches all notifications, no period filter.
+### Fix Plan
 
-5. **ActionItemsCards > pendingRollbacks** — `useRollbackStatusCounts` counts all pending rollbacks, no period filter.
+#### 1. Database migration — Rollback all 11 KPIs
 
-### Changes
+For each of the 11 KPI IDs:
+- Set `kpis.status` back to `self_review`
+- Clear `review_submissions`: `auto_advance_reason = NULL`, `self_score = NULL`, `self_rating = NULL`, `self_remarks = NULL`, `final_score = NULL`, `final_rating = NULL`, `achieved_value = NULL`
+- Insert audit log entry: action `PENALTY_ROLLBACK`, recording reason
 
-#### 1. `src/pages/ManagementDashboard.tsx` — Open Queries count filtered by period
+#### 2. Fix the edge function — `supabase/functions/auto-lock-review-periods/index.ts`
 
-Replace the simple `head: true` count with a join through `kpi_id` to filter by the selected months/years:
-- Fetch open query `kpi_id`s, then cross-reference against the KPIs already fetched (which are period-filtered) to count only queries on KPIs in the selected months.
-- This avoids a complex join and reuses existing data.
+Update the sent-back detection to check **both** sources:
+- `kpi_queries` where `query_type = 'send_back'` (existing)
+- `kpi_audit_logs` where action matches `%SENT_BACK%` (new)
 
-#### 2. `src/components/management/ReviewPeriodStatusWidget.tsx` — Accept month/year props
-
-- Add props: `fiscalStartYear: number`, `selectedMonths: string[]`
-- Filter `review_periods` query to only show periods matching the selected months and their corresponding calendar years
-- Filter the KPI completion calculation to match
-
-#### 3. `src/components/management/RecentAuditLog.tsx` — Accept month/year props
-
-- Add props: `fiscalStartYear: number`, `selectedMonths: string[]`
-- Join through `kpi_id` to filter audit logs to KPIs in the selected periods
-- Alternatively, filter by `created_at` date range derived from the selected months (simpler)
-
-#### 4. `src/components/management/NotificationsSummary.tsx` — Filter by date range
-
-- Add props: `fiscalStartYear: number`, `selectedMonths: string[]`
-- Filter notifications by `created_at` within the date range of selected months
-
-#### 5. `src/pages/ManagementDashboard.tsx` — Pass props to child widgets
-
-Update the render section to pass `fiscalStartYear` and `selectedMonths` to all three bottom-row widgets:
-```tsx
-<ReviewPeriodStatusWidget fiscalStartYear={selectedFiscalYear} selectedMonths={selectedMonths} />
-<RecentAuditLog fiscalStartYear={selectedFiscalYear} selectedMonths={selectedMonths} />
-<NotificationsSummary fiscalStartYear={selectedFiscalYear} selectedMonths={selectedMonths} />
-```
-
-#### 6. Open Queries — Period-aware count
-
-In the main `queryFn`, after fetching KPIs, get open queries with their `kpi_id`, then filter to only count queries whose `kpi_id` exists in the already-fetched (period-filtered) KPI set:
-```typescript
-const { data: openQueryData } = await supabase
-  .from('kpi_queries')
-  .select('kpi_id')
-  .eq('status', 'open')
-  .eq('query_type', 'query');
-
-const kpiIdSet = new Set(kpis.map(k => k.id));
-const openQueries = (openQueryData || []).filter(q => kpiIdSet.has(q.kpi_id)).length;
-```
+Merge both sets into a single `sentBackIds` Set before filtering eligible KPIs.
 
 ### Files Modified
-- `src/pages/ManagementDashboard.tsx` — pass props + fix open queries count
-- `src/components/management/ReviewPeriodStatusWidget.tsx` — accept and use month filters
-- `src/components/management/RecentAuditLog.tsx` — accept and use month/date filters
-- `src/components/management/NotificationsSummary.tsx` — accept and use date filters
-
-### No database changes needed
+- `supabase/functions/auto-lock-review-periods/index.ts` — broaden sent-back detection
+- Database migration — rollback 11 wrongly penalized KPIs
 
