@@ -123,6 +123,7 @@ export function DirectReporteesMonitor({ fiscalStartYear, selectedMonths }: Dire
       const empMonthly = new Map<string, Map<string, { total: number; weightage: number }>>();
       allKpis.forEach(kpi => {
         const s = kpi.review_submissions;
+        if (s?.is_na) return;
         const score = (kpi.status === 'approved' ? s?.final_score : null) ?? s?.management_score ?? s?.auditor_score ?? s?.manager_score ?? s?.self_score ?? null;
         if (score === null) return;
         const w = kpi.weightage || 100;
