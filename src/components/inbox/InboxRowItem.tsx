@@ -1,4 +1,5 @@
 import { Bell, MessageSquare, Send, CheckCircle2, Clock, AlertCircle, CheckCheck, ExternalLink, MessageCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { getNotificationNavigationPath } from '@/lib/inboxUtils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { TableRow, TableCell } from '@/components/ui/table';
