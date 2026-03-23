@@ -113,17 +113,30 @@ export function DirectReporteesMonitor({ fiscalStartYear, selectedMonths }: Dire
         idBatches.push(reporteeIds.slice(i, i + idBatchSize));
       }
 
+      // Paginated fetch to avoid Supabase 1000-row default limit
+      const pageBatchSize = 1000;
       await Promise.all(
         Array.from(monthsByYear.entries()).flatMap(([calYear, months]) =>
           idBatches.map(async (idBatch) => {
-            const { data, error } = await supabase
-              .from('kpis')
-              .select('employee_id, weightage, review_period, review_year, status, review_submissions (final_score, management_score, auditor_score, hr_pms_score, skip_level_score, manager_score, self_score, is_na)')
-              .eq('review_year', calYear)
-              .in('review_period', months)
-              .in('employee_id', idBatch);
-            if (error) throw error;
-            if (data) allKpis.push(...data);
+            let offset = 0;
+            let hasMore = true;
+            while (hasMore) {
+              const { data, error } = await supabase
+                .from('kpis')
+                .select('employee_id, weightage, review_period, review_year, status, review_submissions (final_score, management_score, auditor_score, hr_pms_score, skip_level_score, manager_score, self_score, is_na)')
+                .eq('review_year', calYear)
+                .in('review_period', months)
+                .in('employee_id', idBatch)
+                .range(offset, offset + pageBatchSize - 1);
+              if (error) throw error;
+              if (data && data.length > 0) {
+                allKpis.push(...data);
+                offset += pageBatchSize;
+                hasMore = data.length === pageBatchSize;
+              } else {
+                hasMore = false;
+              }
+            }
           })
         )
       );
