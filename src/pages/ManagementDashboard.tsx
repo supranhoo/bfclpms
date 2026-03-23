@@ -510,6 +510,7 @@ export default function ManagementDashboard() {
         trendData,
         reviewerAnalytics,
         orgMeanPct,
+        managerReviewDeviation,
         overdueReviews,
       };
      } catch (error) {
