@@ -182,7 +182,7 @@ export function resolveForwardStatus(
       //   → 'audit'    for templates that include an audit stage after hr_pms
       return resolveNextStatus('hr_pms_review', workflowStages) || 'approved';
     case 'auditor':
-      return resolveNextStatus('audit', workflowStages) || 'management_review';
+      return resolveNextStatus('audit', workflowStages) || 'approved';
     case 'management':
       return 'approved';
     default:
