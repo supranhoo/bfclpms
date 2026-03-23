@@ -326,6 +326,7 @@ export default function AllKpis() {
     setSelectedDivision('all');
     setSelectedPeriod('all');
     setSelectedYear('all');
+    setVisibleCount(50);
   };
 
   const { toast } = useToast();

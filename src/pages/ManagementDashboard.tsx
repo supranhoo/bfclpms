@@ -156,6 +156,7 @@ export default function ManagementDashboard() {
   const stableEmployeeKey = filteredEmployeeIds.join(',');
   const { data: dashboardData, isLoading: dataLoading, isError, refetch } = useQuery({
     queryKey: ['management-dashboard', selectedFiscalYear, selectedMonths, stableEmployeeKey, filters.divisionId, filters.businessUnitId, filters.departmentId, filters.managerId, filters.employeeId],
+    placeholderData: keepPreviousData,
     queryFn: async () => {
      try {
       // Detect if any hierarchy filter is active to avoid .in() overflow with 454+ UUIDs
