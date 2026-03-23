@@ -136,6 +136,7 @@ export function useAdminSubmitReviewData() {
         score,
         remarks,
         evidence_url,
+        evidence_urls,
       });
 
       // 2b. Handle is_na flag: explicit toggle takes priority,

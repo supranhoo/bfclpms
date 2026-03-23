@@ -820,11 +820,14 @@ export function AdminDataEntryDialog({
 
               {/* Evidence Upload */}
               {kpi && (
-                <EvidenceUpload
+                <MultiFileUpload
                   userId={employeeId}
-                  kpiId={kpi.id}
-                  onUploadComplete={(url) => setEvidenceUrl(url || null)}
-                  existingUrl={evidenceUrl}
+                  contextId={kpi.id}
+                  folder={roleLevel === 'self' ? 'self-evidence' : `${roleLevel}-evidence`}
+                  existingUrls={evidenceUrls}
+                  onUploadComplete={setEvidenceUrls}
+                  maxFiles={5}
+                  label="Evidence Attachments"
                 />
               )}
             </div>
