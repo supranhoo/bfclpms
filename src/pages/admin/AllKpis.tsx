@@ -63,6 +63,7 @@ export default function AllKpis() {
 
   // Scroll-to-top visibility
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(50);
   useEffect(() => {
     const handleScroll = () => setShowScrollTop(window.scrollY > 300);
     window.addEventListener('scroll', handleScroll);
@@ -87,7 +88,7 @@ export default function AllKpis() {
     isAllPeriods ? undefined : selectedPeriod === 'all' ? undefined : selectedPeriod,
     isAllPeriods ? undefined : selectedYear === 'all' ? undefined : parseInt(selectedYear),
   );
-  const { data: allKpisData, isLoading: allKpisLoading } = useAllKpis();
+  const { data: allKpisData, isLoading: allKpisLoading } = useAllKpis({ enabled: isAllPeriods });
 
   // Use period-scoped data when available, fall back to all
   const kpis = isAllPeriods ? allKpisData : periodKpis;
@@ -325,6 +326,7 @@ export default function AllKpis() {
     setSelectedDivision('all');
     setSelectedPeriod('all');
     setSelectedYear('all');
+    setVisibleCount(50);
   };
 
   const { toast } = useToast();
@@ -600,7 +602,7 @@ export default function AllKpis() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {employeeData.map(emp => {
+                {employeeData.slice(0, visibleCount).map(emp => {
                   const isExpanded = expandedEmployees.has(emp.employeeId);
                   const employeeKpis = isExpanded ? getEmployeeKpis(emp.employeeId) : [];
                   
@@ -906,6 +908,17 @@ export default function AllKpis() {
               </TableBody>
             </Table>
           </div>
+          {visibleCount < employeeData.length && (
+            <div className="flex justify-center py-4 border-t">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setVisibleCount(prev => prev + 50)}
+              >
+                Load more ({employeeData.length - visibleCount} remaining)
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
