@@ -165,9 +165,9 @@ export function DirectReporteesMonitor({ fiscalStartYear, selectedMonths }: Dire
 
   const hasData = (data?.monthlyData?.length ?? 0) > 0;
 
-  const activeMonths = hasData
+  const activeMonths = useMemo(() => hasData
     ? selectedMonths.filter(m => data!.monthlyData.some((r: any) => r.scores[m] !== null))
-    : [];
+    : [], [hasData, data, selectedMonths]);
 
   // Compute average and sort
   const sortedData = useMemo(() => {
