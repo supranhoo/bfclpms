@@ -92,7 +92,14 @@ export default function Dashboard() {
     if (employeeParam && kpiParam) {
       const fetchAndSelectEmployee = async () => {
         if (periodParam && yearParam) {
-          setPeriodSelection({ period: periodParam, year: parseInt(yearParam, 10) });
+          const yr = parseInt(yearParam, 10);
+          setPeriodSelection({
+            mode: 'single',
+            selectedMonth: periodParam,
+            selectedYear: yr,
+            months: [periodParam],
+            periodRanges: [{ month: periodParam, year: yr }],
+          });
         }
 
         const { data: empProfile } = await supabase
