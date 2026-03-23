@@ -1,4 +1,5 @@
 import { Bell, MessageSquare, Send, CheckCircle2, Clock, AlertCircle, CheckCheck, ExternalLink, MessageCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { getNotificationNavigationPath } from '@/lib/inboxUtils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { TableRow, TableCell } from '@/components/ui/table';
@@ -185,9 +186,16 @@ export function InboxRowItem({ item, onView, onMarkRead, onNavigate, onToggleExp
             variant="ghost"
             size="icon"
             className="h-8 w-8"
+            title="Open in App"
             onClick={(e) => {
               e.stopPropagation();
-              onView(item);
+              const path = getNotificationNavigationPath(item, currentUserId);
+              if (path && onNavigate) {
+                if (!item.isRead && onMarkRead) onMarkRead(item);
+                onNavigate(path);
+              } else {
+                onView(item);
+              }
             }}
           >
             <ExternalLink className="h-4 w-4" />
