@@ -1,38 +1,43 @@
 
 
-## Fix: DirectReporteesMonitor Includes N/A KPIs in Score Calculation
+## Fix: Score Trend Hyperlink Lands on Wrong Month
+
+### Problem
+When clicking a score (e.g., 4.9 for Feb) in the Direct Reportees monitor, the URL includes `period=February&year=2026`, but the Dashboard page never reads these params. It defaults to the current month instead.
 
 ### Root Cause
+`src/pages/Dashboard.tsx` line 83-130: The deep-link `useEffect` reads `employee` and `kpi` from URL params but ignores `period` and `year`. The `periodSelection` state is always initialized from `useDefaultPeriodSelection()` (current month).
 
-The `DirectReporteesMonitor` query does **not** fetch or check `is_na` from `review_submissions`. When a KPI is marked N/A, `final_score` is set to NULL, but the fallback chain (`management_score ?? auditor_score ?? manager_score ?? self_score`) picks up a stale 0 score from a prior review stage.
+### Changes
 
-**Example — Jaspal, December:**
-- "Fulfillment of Vacant Positions" (weightage 14) is `is_na = true`, `final_score = NULL`, but `auditor_score = 0`
-- Dashboard correctly excludes it → weighted avg = 345/81 = **4.26**
-- Monitor includes it with score 0 → weighted avg = 345/95 = **3.63** (shown as 3.6)
+#### `src/pages/Dashboard.tsx` (deep-link useEffect, ~line 83-130)
 
-This affects every employee who has N/A KPIs.
-
-### Fix — `src/components/management/DirectReporteesMonitor.tsx`
-
-#### 1. Add `is_na` to the KPI select (line 113)
-
-```sql
-review_submissions (final_score, management_score, auditor_score, manager_score, self_score, is_na)
-```
-
-#### 2. Skip N/A KPIs in the aggregation loop (line 124-134)
-
-Add an early return when `is_na` is true:
+In the `employeeParam` branch, also read `period` and `year` from searchParams and call `setPeriodSelection` before selecting the employee:
 
 ```typescript
-allKpis.forEach(kpi => {
-  const s = kpi.review_submissions;
-  if (s?.is_na) return;  // ← new line
-  const score = ...
+const periodParam = searchParams.get('period');
+const yearParam = searchParams.get('year');
+if (periodParam && yearParam) {
+  setPeriodSelection({
+    period: periodParam,
+    year: parseInt(yearParam, 10),
+  });
+}
 ```
 
-### No other changes needed
+Then clean up these params alongside the others:
 
-This is a 2-line fix. The dashboard's scoring engine already handles N/A exclusion correctly; only this monitor widget was missing it.
+```typescript
+next.delete('period');
+next.delete('year');
+```
+
+Also handle the case where `employeeParam` is provided without `kpiParam` (which is the pattern the monitor uses — it passes `employee`, `period`, `year` but no `kpi`). Currently only the `employeeParam && kpiParam` branch runs. Add a new branch for `employeeParam` alone (without `kpiParam`) that:
+1. Reads period/year and sets periodSelection
+2. Fetches the employee profile
+3. Switches to team view and selects the employee
+4. Cleans up URL params
+
+### No other changes needed
+The `DirectReporteesMonitor` already passes the correct month and year in the URL. Only the Dashboard's deep-link handler needs to consume them.
 
