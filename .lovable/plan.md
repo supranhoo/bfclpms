@@ -1,105 +1,85 @@
 
-RCA found a real bug I missed earlier.
 
-## Root cause
+## Make All Management Dashboard Widgets Respond to Month Selection
 
-Employee `100840` does have valid scores for Sep–Dec in the database, and the main dashboard calculation also resolves them correctly. The reason they disappear in **Direct Reportees — Score Trend** is:
+### Problem
+When selecting a specific month (e.g., Dec) from the top month bar, the main tiles and charts update correctly, but several widgets remain static — they fetch data independently without considering the selected months.
 
-- `DirectReporteesMonitor.tsx` fetches KPIs with:
-  - year filter
-  - month filter
-  - employee_id batch filter
-- but it does **not paginate** the KPI query
-- backend queries default to **1000 rows max**
+### Widgets That Already Respond
+- KPI Snapshot tiles (Total Employees, Avg Score, Completion Rate, Pending Review)
+- Performance Trend chart
+- Rating Distribution (Bell Curve)
+- Division Performance table
+- Top & Bottom Performers
+- Pending Management Reviews table
+- Reviewer Analytics + Manager Deviation
+- Direct Reportees Monitor (has its own `selectedMonths` prop)
 
-For this manager/team:
-- **Sep–Dec 2025** KPI rows = **1199**
-- **Jan–Feb 2026** KPI rows = **654**
+### Widgets That Do NOT Respond
 
-So the widget silently receives only the first 1000 rows for Sep–Dec. Employees whose KPI rows fall after that cutoff lose some or all month data. That is why `100840` can show scores on the dashboard but appear blank in the trend widget. The screenshot pattern also matches this: later months with fewer rows still appear, while earlier overloaded months can be blank.
+1. **Open Queries tile** — counts ALL open queries globally (`kpi_queries` table has no `review_period` column, but links to `kpi_id` which has one). Currently uses a simple `head: true` count with no period filter.
 
-## Evidence
+2. **ReviewPeriodStatusWidget** — hardcoded to `currentYear`, ignores selected months entirely.
 
-For employee `100840`:
-- Sep 2025 weighted avg = **3.15**
-- Oct 2025 weighted avg = **3.2703**
-- Nov 2025 weighted avg = **3.4211**
-- Dec 2025 weighted avg = **3.6842**
+3. **RecentAuditLog** — fetches last 10 audit log entries globally, no period filter.
 
-So the data exists and is scoreable. The bug is fetch truncation.
+4. **NotificationsSummary** — fetches all notifications, no period filter.
 
-## What to change
+5. **ActionItemsCards > pendingRollbacks** — `useRollbackStatusCounts` counts all pending rollbacks, no period filter.
 
-### 1. Fix KPI fetching in `src/components/management/DirectReporteesMonitor.tsx`
-Replace the single KPI fetch per year/month/idBatch with paginated fetching using `.range(offset, offset + batchSize - 1)` inside a loop, same pattern already used in `ManagementDashboard.tsx`.
+### Changes
 
-Implementation shape:
-- keep employee batching
-- for each `(calendarYear, months, idBatch)`:
-  - fetch in pages of 1000
-  - append all pages into `allKpis`
-  - stop when returned rows `< batchSize`
+#### 1. `src/pages/ManagementDashboard.tsx` — Open Queries count filtered by period
 
-This removes silent truncation for large teams or large month selections.
+Replace the simple `head: true` count with a join through `kpi_id` to filter by the selected months/years:
+- Fetch open query `kpi_id`s, then cross-reference against the KPIs already fetched (which are period-filtered) to count only queries on KPIs in the selected months.
+- This avoids a complex join and reuses existing data.
 
-### 2. Keep current scoring logic
-No scoring formula change is needed for this specific issue:
-- employee scores exist
-- fallback chain is now aligned
-- N/A handling is already correct in this widget
+#### 2. `src/components/management/ReviewPeriodStatusWidget.tsx` — Accept month/year props
 
-### 3. Add a defensive comment / helper
-Create a small helper inside the component (or shared util later) for paged KPI fetches so this limit is not reintroduced during future edits.
+- Add props: `fiscalStartYear: number`, `selectedMonths: string[]`
+- Filter `review_periods` query to only show periods matching the selected months and their corresponding calendar years
+- Filter the KPI completion calculation to match
 
-## Additional bug now confirmed
+#### 3. `src/components/management/RecentAuditLog.tsx` — Accept month/year props
 
-This means the earlier “all bugs” review missed a key high-impact defect:
+- Add props: `fiscalStartYear: number`, `selectedMonths: string[]`
+- Join through `kpi_id` to filter audit logs to KPIs in the selected periods
+- Alternatively, filter by `created_at` date range derived from the selected months (simpler)
 
-- **Missing pagination for KPI fetch in Direct Reportees monitor**
-  - Severity: High
-  - Effect: employees randomly lose month scores when row count exceeds 1000
-  - Scope: any manager/team/month selection with large result sets
+#### 4. `src/components/management/NotificationsSummary.tsx` — Filter by date range
 
-## Concise implementation plan
+- Add props: `fiscalStartYear: number`, `selectedMonths: string[]`
+- Filter notifications by `created_at` within the date range of selected months
 
-1. Update `DirectReporteesMonitor.tsx` KPI query to paginate with `.range(...)`.
-2. Preserve current employee batching and merge all pages before aggregation.
-3. Verify month scores for employee `100840` now appear for Sep–Dec.
-4. Spot-check a few other employees/managers to confirm no more silent blanks under heavy datasets.
+#### 5. `src/pages/ManagementDashboard.tsx` — Pass props to child widgets
 
-## Technical note
-
-Current buggy pattern:
-```ts
-.from('kpis')
-.select(...)
-.eq('review_year', calYear)
-.in('review_period', months)
-.in('employee_id', idBatch)
+Update the render section to pass `fiscalStartYear` and `selectedMonths` to all three bottom-row widgets:
+```tsx
+<ReviewPeriodStatusWidget fiscalStartYear={selectedFiscalYear} selectedMonths={selectedMonths} />
+<RecentAuditLog fiscalStartYear={selectedFiscalYear} selectedMonths={selectedMonths} />
+<NotificationsSummary fiscalStartYear={selectedFiscalYear} selectedMonths={selectedMonths} />
 ```
 
-Required fix pattern:
-```ts
-let offset = 0;
-const batchSize = 1000;
-let hasMore = true;
+#### 6. Open Queries — Period-aware count
 
-while (hasMore) {
-  const { data, error } = await supabase
-    .from('kpis')
-    .select(...)
-    .eq('review_year', calYear)
-    .in('review_period', months)
-    .in('employee_id', idBatch)
-    .range(offset, offset + batchSize - 1);
+In the main `queryFn`, after fetching KPIs, get open queries with their `kpi_id`, then filter to only count queries whose `kpi_id` exists in the already-fetched (period-filtered) KPI set:
+```typescript
+const { data: openQueryData } = await supabase
+  .from('kpi_queries')
+  .select('kpi_id')
+  .eq('status', 'open')
+  .eq('query_type', 'query');
 
-  if (error) throw error;
-  if (data?.length) {
-    allKpis.push(...data);
-    offset += batchSize;
-    hasMore = data.length === batchSize;
-  } else {
-    hasMore = false;
-  }
-}
+const kpiIdSet = new Set(kpis.map(k => k.id));
+const openQueries = (openQueryData || []).filter(q => kpiIdSet.has(q.kpi_id)).length;
 ```
+
+### Files Modified
+- `src/pages/ManagementDashboard.tsx` — pass props + fix open queries count
+- `src/components/management/ReviewPeriodStatusWidget.tsx` — accept and use month filters
+- `src/components/management/RecentAuditLog.tsx` — accept and use month/date filters
+- `src/components/management/NotificationsSummary.tsx` — accept and use date filters
+
+### No database changes needed
+
