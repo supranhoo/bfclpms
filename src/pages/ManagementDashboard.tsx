@@ -216,7 +216,7 @@ export default function ManagementDashboard() {
 
       const getScore = (kpi: any): number | null => {
         const s = kpi.review_submissions;
-        if (!s) return null;
+        if (!s || s.is_na) return null;
         const score = (kpi.status === 'approved' ? s.final_score : null) ?? s.management_score ?? s.auditor_score 
           ?? s.hr_pms_score ?? s.skip_level_score 
           ?? s.manager_score ?? s.self_score ?? null;
