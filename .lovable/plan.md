@@ -1,36 +1,38 @@
 
 
-## Add Filters and Average Column to Direct Reportees Score Trend
+## Fix: DirectReporteesMonitor Includes N/A KPIs in Score Calculation
 
-### Problem
-The Direct Reportees monitor currently shows only the logged-in user's direct reports with no filtering. The user wants:
-1. **Reporting Manager filter** — view any manager's team, not just own
-2. **Business Unit filter** — filter employees by business unit
-3. **Period (month/year) filter** — independent month/year selection for this widget
-4. **Average column** — show the weighted average across all displayed months
+### Root Cause
 
-### Changes
+The `DirectReporteesMonitor` query does **not** fetch or check `is_na` from `review_submissions`. When a KPI is marked N/A, `final_score` is set to NULL, but the fallback chain (`management_score ?? auditor_score ?? manager_score ?? self_score`) picks up a stale 0 score from a prior review stage.
 
-#### `src/components/management/DirectReporteesMonitor.tsx`
+**Example — Jaspal, December:**
+- "Fulfillment of Vacant Positions" (weightage 14) is `is_na = true`, `final_score = NULL`, but `auditor_score = 0`
+- Dashboard correctly excludes it → weighted avg = 345/81 = **4.26**
+- Monitor includes it with score 0 → weighted avg = 345/95 = **3.63** (shown as 3.6)
 
-1. **Add filter state** — `reportingManagerId`, `businessUnitId` as local state with dropdowns. Use the existing `selectedMonths` and `fiscalStartYear` from props (already controlled by the parent dashboard).
+This affects every employee who has N/A KPIs.
 
-2. **Fetch filter options** — Query `profiles` for distinct reporting managers (who have reports) and `business_units` for the BU dropdown. Only admins/management roles see the reporting manager filter; regular managers see only their own team.
+### Fix — `src/components/management/DirectReporteesMonitor.tsx`
 
-3. **Update the main query**:
-   - When `reportingManagerId` is set, query `profiles` with `.eq('reporting_manager_id', reportingManagerId)` instead of `user.id`.
-   - When `businessUnitId` is set, join through `profiles → departments → business_units` to filter employees by BU. Specifically: fetch department IDs for the selected BU, then add `.in('department_id', deptIds)` to the profiles query.
+#### 1. Add `is_na` to the KPI select (line 113)
 
-4. **Add "Avg" column** — After the monthly columns, add a final `TableHead` "Avg". For each employee row, compute the average of non-null monthly scores and display it with the same color-coded badge. This is a simple client-side calculation from the existing `scores` object.
+```sql
+review_submissions (final_score, management_score, auditor_score, manager_score, self_score, is_na)
+```
 
-5. **Filter UI** — Render a compact filter bar above the table inside the card:
-   ```
-   [Reporting Manager ▼]  [Business Unit ▼]
-   ```
-   Use existing `Select` components. Keep it minimal — 1-2 lines.
+#### 2. Skip N/A KPIs in the aggregation loop (line 124-134)
 
-6. **Sort by average** — Default sort employees by their average score (descending) so top performers appear first.
+Add an early return when `is_na` is true:
 
-### No database or backend changes needed
-All data is already accessible via existing RLS policies. The profiles and business_units tables are readable by authenticated users.
+```typescript
+allKpis.forEach(kpi => {
+  const s = kpi.review_submissions;
+  if (s?.is_na) return;  // ← new line
+  const score = ...
+```
+
+### No other changes needed
+
+This is a 2-line fix. The dashboard's scoring engine already handles N/A exclusion correctly; only this monitor widget was missing it.
 
