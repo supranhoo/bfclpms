@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { format, addMonths } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { MONTH_NAMES } from '@/hooks/useAdminReports';
