@@ -105,18 +105,27 @@ export function DirectReporteesMonitor({ fiscalStartYear, selectedMonths }: Dire
       });
 
       // Fetch KPIs
+      // Fetch KPIs with batching for large reportee sets
       const allKpis: any[] = [];
+      const idBatchSize = 100;
+      const idBatches: string[][] = [];
+      for (let i = 0; i < reporteeIds.length; i += idBatchSize) {
+        idBatches.push(reporteeIds.slice(i, i + idBatchSize));
+      }
+
       await Promise.all(
-        Array.from(monthsByYear.entries()).map(async ([calYear, months]) => {
-          const { data, error } = await supabase
-            .from('kpis')
-            .select('employee_id, weightage, review_period, review_year, status, review_submissions (final_score, management_score, auditor_score, manager_score, self_score, is_na)')
-            .eq('review_year', calYear)
-            .in('review_period', months)
-            .in('employee_id', reporteeIds);
-          if (error) throw error;
-          if (data) allKpis.push(...data);
-        })
+        Array.from(monthsByYear.entries()).flatMap(([calYear, months]) =>
+          idBatches.map(async (idBatch) => {
+            const { data, error } = await supabase
+              .from('kpis')
+              .select('employee_id, weightage, review_period, review_year, status, review_submissions (final_score, management_score, auditor_score, hr_pms_score, skip_level_score, manager_score, self_score, is_na)')
+              .eq('review_year', calYear)
+              .in('review_period', months)
+              .in('employee_id', idBatch);
+            if (error) throw error;
+            if (data) allKpis.push(...data);
+          })
+        )
       );
 
       // Build monthly scores per reportee
@@ -124,7 +133,10 @@ export function DirectReporteesMonitor({ fiscalStartYear, selectedMonths }: Dire
       allKpis.forEach(kpi => {
         const s = kpi.review_submissions;
         if (s?.is_na) return;
-        const score = (kpi.status === 'approved' ? s?.final_score : null) ?? s?.management_score ?? s?.auditor_score ?? s?.manager_score ?? s?.self_score ?? null;
+        const score = (kpi.status === 'approved' ? s?.final_score : null)
+          ?? s?.management_score ?? s?.auditor_score
+          ?? s?.hr_pms_score ?? s?.skip_level_score
+          ?? s?.manager_score ?? s?.self_score ?? null;
         if (score === null) return;
         const w = kpi.weightage || 100;
         if (!empMonthly.has(kpi.employee_id)) empMonthly.set(kpi.employee_id, new Map());
@@ -153,9 +165,9 @@ export function DirectReporteesMonitor({ fiscalStartYear, selectedMonths }: Dire
 
   const hasData = (data?.monthlyData?.length ?? 0) > 0;
 
-  const activeMonths = hasData
+  const activeMonths = useMemo(() => hasData
     ? selectedMonths.filter(m => data!.monthlyData.some((r: any) => r.scores[m] !== null))
-    : [];
+    : [], [hasData, data, selectedMonths]);
 
   // Compute average and sort
   const sortedData = useMemo(() => {

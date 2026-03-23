@@ -184,7 +184,7 @@ export default function ManagementDashboard() {
                 .from('kpis')
                 .select(`
                   id, employee_id, status, weightage, review_period, review_year, frequency,
-                  review_submissions ( final_score, management_score, auditor_score, hr_pms_score, skip_level_score, manager_score, self_score )
+                  review_submissions ( final_score, management_score, auditor_score, hr_pms_score, skip_level_score, manager_score, self_score, is_na )
                 `)
                 .eq('review_year', calYear)
                 .in('review_period', months)
@@ -216,7 +216,7 @@ export default function ManagementDashboard() {
 
       const getScore = (kpi: any): number | null => {
         const s = kpi.review_submissions;
-        if (!s) return null;
+        if (!s || s.is_na) return null;
         const score = (kpi.status === 'approved' ? s.final_score : null) ?? s.management_score ?? s.auditor_score 
           ?? s.hr_pms_score ?? s.skip_level_score 
           ?? s.manager_score ?? s.self_score ?? null;
