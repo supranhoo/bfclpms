@@ -203,15 +203,17 @@ export default function ManagementDashboard() {
         return yearResults.flat();
       };
 
-      const [currentKpis, profilesResult, queriesResult] = await Promise.all([
+      const [currentKpis, profilesResult, openQueryResult] = await Promise.all([
         fetchFiscalData(),
         supabase.from('profiles').select('id, full_name, employee_code, department_id, reporting_manager_id, departments (name, business_unit_id, business_units (name, division_id, divisions (name)))'),
-        supabase.from('kpi_queries').select('*', { count: 'exact', head: true }).eq('status', 'open').eq('query_type', 'query'),
+        supabase.from('kpi_queries').select('kpi_id').eq('status', 'open').eq('query_type', 'query'),
       ]);
 
       const profiles = profilesResult.data || [];
       const kpis = currentKpis;
-      const openQueries = queriesResult.count || 0;
+      // Filter open queries to only those linked to KPIs in the selected period
+      const kpiIdSet = new Set(kpis.map((k: any) => k.id));
+      const openQueries = (openQueryResult.data || []).filter((q: any) => kpiIdSet.has(q.kpi_id)).length;
       const profileMap = new Map(profiles.map(p => [p.id, p]));
 
       const getScore = (kpi: any): number | null => {
