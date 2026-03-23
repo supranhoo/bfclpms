@@ -50,6 +50,7 @@ function buildUpdateFields(
     score?: number | null;
     remarks?: string | null;
     evidence_url?: string | null;
+    evidence_urls?: string[] | null;
   }
 ): Record<string, unknown> {
   const prefix = roleLevel === 'self' ? '' : `${roleLevel}_`;
