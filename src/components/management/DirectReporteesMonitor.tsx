@@ -1,3 +1,4 @@
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -6,12 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Users, ExternalLink } from 'lucide-react';
-
-const FISCAL_MONTHS = [
-  'July', 'August', 'September', 'October', 'November', 'December',
-  'January', 'February', 'March', 'April', 'May', 'June',
-];
 
 const MONTHS_ALL = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -31,37 +28,80 @@ const getScoreBg = (score: number) => {
 };
 
 export function DirectReporteesMonitor({ fiscalStartYear, selectedMonths }: DirectReporteesMonitorProps) {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const navigate = useNavigate();
+  const isPrivileged = role === 'admin' || role === 'management' || role === 'hr_pms';
+
+  const [reportingManagerId, setReportingManagerId] = useState<string>('__self__');
+  const [businessUnitId, setBusinessUnitId] = useState<string>('__all__');
+
+  // Fetch managers who have direct reports
+  const { data: managers } = useQuery({
+    queryKey: ['reportee-monitor-managers'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, full_name, employee_code, reporting_manager_id')
+        .eq('is_active', true)
+        .order('full_name');
+      const mgrIds = new Set(data?.map(p => p.reporting_manager_id).filter(Boolean));
+      return data?.filter(p => mgrIds.has(p.id)).map(p => ({
+        id: p.id,
+        name: p.employee_code ? `${p.full_name || 'Unknown'} (${p.employee_code})` : (p.full_name || 'Unknown'),
+      })) || [];
+    },
+    enabled: isPrivileged,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  // Fetch business units
+  const { data: businessUnits } = useQuery({
+    queryKey: ['reportee-monitor-bus'],
+    queryFn: async () => {
+      const { data } = await supabase.from('business_units').select('id, name').order('name');
+      return data || [];
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const effectiveManagerId = reportingManagerId === '__self__' ? user?.id : reportingManagerId;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['direct-reportees-monitor', user?.id, fiscalStartYear, selectedMonths],
+    queryKey: ['direct-reportees-monitor', effectiveManagerId, businessUnitId, fiscalStartYear, selectedMonths],
     queryFn: async () => {
-      if (!user?.id) return { reportees: [], monthScores: new Map() };
+      if (!effectiveManagerId) return { reportees: [], monthlyData: [] };
 
-      // Get direct reports
-      const { data: reportees, error: repError } = await supabase
+      // Build profiles query
+      let profilesQuery = supabase
         .from('profiles')
-        .select('id, full_name, employee_code, designation, departments (name)')
-        .eq('reporting_manager_id', user.id);
+        .select('id, full_name, employee_code, designation, department_id, departments (name, business_unit_id)')
+        .eq('reporting_manager_id', effectiveManagerId)
+        .eq('is_active', true);
 
+      // Filter by business unit if selected
+      if (businessUnitId !== '__all__') {
+        const { data: depts } = await supabase
+          .from('departments')
+          .select('id')
+          .eq('business_unit_id', businessUnitId);
+        const deptIds = depts?.map(d => d.id) || [];
+        if (deptIds.length === 0) return { reportees: [], monthlyData: [] };
+        profilesQuery = profilesQuery.in('department_id', deptIds);
+      }
+
+      const { data: reportees, error: repError } = await profilesQuery;
       if (repError) throw repError;
       if (!reportees || reportees.length === 0) return { reportees: [], monthlyData: [] };
 
       const reporteeIds = reportees.map(r => r.id);
 
       // Get fiscal period ranges
-      const periodRanges = selectedMonths.map(month => {
+      const monthsByYear = new Map<number, string[]>();
+      selectedMonths.forEach(month => {
         const monthIndex = MONTHS_ALL.indexOf(month);
         const calYear = monthIndex >= 6 ? fiscalStartYear : fiscalStartYear + 1;
-        return { month, year: calYear };
-      });
-
-      // Group by year for querying
-      const monthsByYear = new Map<number, string[]>();
-      periodRanges.forEach(({ month, year }) => {
-        if (!monthsByYear.has(year)) monthsByYear.set(year, []);
-        monthsByYear.get(year)!.push(month);
+        if (!monthsByYear.has(calYear)) monthsByYear.set(calYear, []);
+        monthsByYear.get(calYear)!.push(month);
       });
 
       // Fetch KPIs
@@ -80,14 +120,11 @@ export function DirectReporteesMonitor({ fiscalStartYear, selectedMonths }: Dire
       );
 
       // Build monthly scores per reportee
-      // Map<employeeId, Map<month, { total, weightage }>>
       const empMonthly = new Map<string, Map<string, { total: number; weightage: number }>>();
-
       allKpis.forEach(kpi => {
         const s = kpi.review_submissions;
         const score = (kpi.status === 'approved' ? s?.final_score : null) ?? s?.management_score ?? s?.auditor_score ?? s?.manager_score ?? s?.self_score ?? null;
         if (score === null) return;
-
         const w = kpi.weightage || 100;
         if (!empMonthly.has(kpi.employee_id)) empMonthly.set(kpi.employee_id, new Map());
         const monthMap = empMonthly.get(kpi.employee_id)!;
@@ -97,7 +134,6 @@ export function DirectReporteesMonitor({ fiscalStartYear, selectedMonths }: Dire
         monthMap.set(kpi.review_period, existing);
       });
 
-      // Build table data
       const monthlyData = reportees.map(rep => {
         const monthMap = empMonthly.get(rep.id);
         const scores: Record<string, number | null> = {};
@@ -110,27 +146,25 @@ export function DirectReporteesMonitor({ fiscalStartYear, selectedMonths }: Dire
 
       return { reportees, monthlyData };
     },
-    enabled: !!user?.id,
+    enabled: !!effectiveManagerId,
     staleTime: 5 * 60 * 1000,
   });
 
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader><Skeleton className="h-6 w-48" /></CardHeader>
-        <CardContent><Skeleton className="h-40" /></CardContent>
-      </Card>
-    );
-  }
+  const hasData = (data?.monthlyData?.length ?? 0) > 0;
 
-  const hasData = data?.monthlyData?.length > 0;
-
-  // Only show months that have at least one score across all reportees
   const activeMonths = hasData
-    ? selectedMonths.filter(m =>
-        data.monthlyData.some((r: any) => r.scores[m] !== null)
-      )
+    ? selectedMonths.filter(m => data!.monthlyData.some((r: any) => r.scores[m] !== null))
     : [];
+
+  // Compute average and sort
+  const sortedData = useMemo(() => {
+    if (!hasData) return [];
+    return [...data!.monthlyData].map((rep: any) => {
+      const vals = activeMonths.map(m => rep.scores[m]).filter((v: any) => v !== null) as number[];
+      const avg = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+      return { ...rep, avg };
+    }).sort((a: any, b: any) => (b.avg ?? -1) - (a.avg ?? -1));
+  }, [data, activeMonths, hasData]);
 
   const handleRowClick = (employeeId: string, month: string, year: number) => {
     navigate(`/dashboard?employee=${employeeId}&period=${month}&year=${year}`);
@@ -147,13 +181,43 @@ export function DirectReporteesMonitor({ fiscalStartYear, selectedMonths }: Dire
           Month-by-month weighted average (0-5 scale). Click a score to view details.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        {!hasData || activeMonths.length === 0 ? (
+      <CardContent className="space-y-4">
+        {/* Filter bar */}
+        <div className="flex flex-wrap gap-3">
+          {isPrivileged && (
+            <Select value={reportingManagerId} onValueChange={setReportingManagerId}>
+              <SelectTrigger className="w-[220px] h-9 text-xs">
+                <SelectValue placeholder="Reporting Manager" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__self__">My Direct Reports</SelectItem>
+                {managers?.map(m => (
+                  <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Select value={businessUnitId} onValueChange={setBusinessUnitId}>
+            <SelectTrigger className="w-[180px] h-9 text-xs">
+              <SelectValue placeholder="Business Unit" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All Business Units</SelectItem>
+              {businessUnits?.map(bu => (
+                <SelectItem key={bu.id} value={bu.id}>{bu.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {isLoading ? (
+          <Skeleton className="h-40" />
+        ) : !hasData || activeMonths.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
             <Users className="h-10 w-10 mb-2 opacity-40" />
             <p className="text-sm">
               {!hasData
-                ? 'No direct reportees found for your account.'
+                ? 'No direct reportees found for the selected manager.'
                 : 'No scored data available for the selected months.'}
             </p>
           </div>
@@ -164,14 +228,13 @@ export function DirectReporteesMonitor({ fiscalStartYear, selectedMonths }: Dire
                 <TableRow>
                   <TableHead className="sticky left-0 bg-background z-10">Employee</TableHead>
                   {activeMonths.map(m => (
-                    <TableHead key={m} className="text-center min-w-[60px]">
-                      {m.substring(0, 3)}
-                    </TableHead>
+                    <TableHead key={m} className="text-center min-w-[60px]">{m.substring(0, 3)}</TableHead>
                   ))}
+                  <TableHead className="text-center min-w-[60px] font-semibold">Avg</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.monthlyData.map((rep: any) => (
+                {sortedData.map((rep: any) => (
                   <TableRow key={rep.id}>
                     <TableCell className="sticky left-0 bg-background z-10">
                       <div>
@@ -199,6 +262,15 @@ export function DirectReporteesMonitor({ fiscalStartYear, selectedMonths }: Dire
                         </TableCell>
                       );
                     })}
+                    <TableCell className="text-center p-1">
+                      {rep.avg !== null ? (
+                        <Badge variant="outline" className={`text-xs font-semibold ${getScoreBg(rep.avg)}`}>
+                          {rep.avg.toFixed(2)}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
