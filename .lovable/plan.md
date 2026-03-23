@@ -1,43 +1,46 @@
 
 
-## Fix: Score Trend Hyperlink Lands on Wrong Month
+## Add Manager vs. HR PMS / Auditor Deviation Widget
 
 ### Problem
-When clicking a score (e.g., 4.9 for Feb) in the Direct Reportees monitor, the URL includes `period=February&year=2026`, but the Dashboard page never reads these params. It defaults to the current month instead.
-
-### Root Cause
-`src/pages/Dashboard.tsx` line 83-130: The deep-link `useEffect` reads `employee` and `kpi` from URL params but ignores `period` and `year`. The `periodSelection` state is always initialized from `useDefaultPeriodSelection()` (current month).
+The existing "Reviewer Analytics — Score Bias" shows manager scoring deviation from the org mean. The user wants a companion widget showing how each manager's scores deviate from HR PMS and Auditor ratings, to identify managers who aren't reviewing KPIs properly (rubber-stamping or over/under-scoring compared to independent reviewers).
 
 ### Changes
 
-#### `src/pages/Dashboard.tsx` (deep-link useEffect, ~line 83-130)
+#### 1. New component: `src/components/management/ManagerReviewDeviationTable.tsx`
 
-In the `employeeParam` branch, also read `period` and `year` from searchParams and call `setPeriodSelection` before selecting the employee:
+A card similar to `ReviewerAnalyticsTable` with columns:
+- **Manager** — name
+- **Avg Mgr Score** — manager's average score (as %)
+- **vs HR PMS** — deviation from avg HR PMS score for same KPIs (badge, red if >10%)
+- **vs Auditor** — deviation from avg Auditor score for same KPIs (badge, red if >10%)
+- **# KPIs** — number of KPIs compared
 
-```typescript
-const periodParam = searchParams.get('period');
-const yearParam = searchParams.get('year');
-if (periodParam && yearParam) {
-  setPeriodSelection({
-    period: periodParam,
-    year: parseInt(yearParam, 10),
-  });
-}
+Title: "Manager vs. Reviewer Deviation". Description: "How manager scores compare to HR PMS & Auditor ratings on the same KPIs".
+
+#### 2. Data computation in `src/pages/ManagementDashboard.tsx` (~line 409-439)
+
+After the existing reviewer analytics block, add a new computation:
+
+- For each KPI with a `manager_score`, also check if `hr_pms_score` and/or `auditor_score` exist.
+- Group by reporting manager ID. For each manager, accumulate:
+  - `mgrTotal`, `mgrCount` (manager scores)
+  - `hrPmsTotal`, `hrPmsCount` (HR PMS scores on same KPIs)
+  - `auditorTotal`, `auditorCount` (Auditor scores on same KPIs)
+- Compute averages and deviations: `avgMgr - avgHrPms` and `avgMgr - avgAuditor`.
+- Filter to managers with at least 3 comparable KPIs.
+- Sort by largest absolute deviation (max of hr_pms or auditor deviation).
+- Return as `managerReviewDeviation` in dashboard data.
+
+#### 3. Layout in `src/pages/ManagementDashboard.tsx` (~line 873-883)
+
+Change the grid from 2-col (`ReviewerAnalyticsTable` + `TrainingGapSummary`) to 3-col:
+```
+[Reviewer Analytics — Score Bias] [Manager vs. Reviewer Deviation] [Training Gap Summary]
 ```
 
-Then clean up these params alongside the others:
+On smaller screens, stack naturally via `lg:grid-cols-3`.
 
-```typescript
-next.delete('period');
-next.delete('year');
-```
-
-Also handle the case where `employeeParam` is provided without `kpiParam` (which is the pattern the monitor uses — it passes `employee`, `period`, `year` but no `kpi`). Currently only the `employeeParam && kpiParam` branch runs. Add a new branch for `employeeParam` alone (without `kpiParam`) that:
-1. Reads period/year and sets periodSelection
-2. Fetches the employee profile
-3. Switches to team view and selects the employee
-4. Cleans up URL params
-
-### No other changes needed
-The `DirectReporteesMonitor` already passes the correct month and year in the URL. Only the Dashboard's deep-link handler needs to consume them.
+### No database changes needed
+All `manager_score`, `hr_pms_score`, and `auditor_score` fields are already fetched in the dashboard query's `review_submissions` select.
 
