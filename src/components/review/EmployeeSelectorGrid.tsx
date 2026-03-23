@@ -336,12 +336,15 @@ export function EmployeeSelectorGrid({
       const reviewable = resolveReviewableStatuses('skip_level', stages);
       const slIdx = stages.indexOf('skip_level_check');
       const doneStatuses = slIdx >= 0 ? stages.slice(slIdx) : [];
+      const pendingKpis = empKpis.filter(k => reviewable.includes(k.status || ''));
       return {
-        badge1: empKpis.filter(k => reviewable.includes(k.status || '')).length,
+        badge1: pendingKpis.length,
         badge2: empKpis.filter(k => doneStatuses.includes(k.status || '')).length,
         badge3: 0,
         total: empKpis.length,
         clearedKraSet,
+        orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
+        nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
       };
     } else if (viewLevel === 'hr_pms') {
       const reviewable = resolveReviewableStatuses('hr_pms', stages);
