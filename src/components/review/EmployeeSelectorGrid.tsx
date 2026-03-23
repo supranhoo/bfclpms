@@ -415,15 +415,17 @@ export function EmployeeSelectorGrid({
         nonMonthlyCount,
       };
     } else {
-      const pending = empKpis.filter(k => k.status === 'management_review').length;
+      const pendingKpis = empKpis.filter(k => k.status === 'management_review');
       const approved = empKpis.filter(k => k.status === 'approved').length;
-      const inPipeline = empKpis.length - pending - approved;
+      const inPipeline = empKpis.length - pendingKpis.length - approved;
       return {
-        badge1: pending,
+        badge1: pendingKpis.length,
         badge2: approved,
         badge3: inPipeline,
         total: empKpis.length,
         clearedKraSet,
+        orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
+        nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
       };
     }
   };
