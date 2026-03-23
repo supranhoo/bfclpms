@@ -925,9 +925,9 @@ export default function ManagementDashboard() {
 
       {/* Review Period Status + Audit Log + Notifications */}
       <div className="grid gap-4 lg:grid-cols-3">
-        <ReviewPeriodStatusWidget />
-        <RecentAuditLog />
-        <NotificationsSummary />
+        <ReviewPeriodStatusWidget fiscalStartYear={selectedFiscalYear} selectedMonths={selectedMonths} />
+        <RecentAuditLog fiscalStartYear={selectedFiscalYear} selectedMonths={selectedMonths} />
+        <NotificationsSummary fiscalStartYear={selectedFiscalYear} selectedMonths={selectedMonths} />
       </div>
 
       {/* Quick Actions */}

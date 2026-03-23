@@ -5,11 +5,37 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { FileText } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
-export function RecentAuditLog() {
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+interface Props {
+  fiscalStartYear: number;
+  selectedMonths: string[];
+}
+
+export function RecentAuditLog({ fiscalStartYear, selectedMonths }: Props) {
+  // Compute date range from selected months
+  const dateRange = (() => {
+    const pairs = selectedMonths.map(month => {
+      const monthIndex = MONTHS.indexOf(month);
+      const calendarYear = monthIndex >= 6 ? fiscalStartYear : fiscalStartYear + 1;
+      return { monthIndex, calendarYear };
+    });
+    if (pairs.length === 0) return null;
+    const sorted = [...pairs].sort((a, b) => a.calendarYear - b.calendarYear || a.monthIndex - b.monthIndex);
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+    const startDate = new Date(first.calendarYear, first.monthIndex, 1).toISOString();
+    const endDate = new Date(last.calendarYear, last.monthIndex + 1, 0, 23, 59, 59).toISOString();
+    return { startDate, endDate };
+  })();
+
   const { data: logs } = useQuery({
-    queryKey: ['recent-audit-logs'],
+    queryKey: ['recent-audit-logs', fiscalStartYear, selectedMonths],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('kpi_audit_logs')
         .select(`
           id,
@@ -20,6 +46,12 @@ export function RecentAuditLog() {
         `)
         .order('created_at', { ascending: false })
         .limit(10);
+
+      if (dateRange) {
+        query = query.gte('created_at', dateRange.startDate).lte('created_at', dateRange.endDate);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
 
       // Fetch employee names for the KPIs

@@ -6,6 +6,11 @@ import { Progress } from '@/components/ui/progress';
 import { Calendar, Lock, Unlock } from 'lucide-react';
 import { STAGE_LABELS } from '@/hooks/useReviewPeriodGovernance';
 
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
 interface PeriodStatus {
   id: string;
   period_name: string;
@@ -16,31 +21,57 @@ interface PeriodStatus {
   lock_count: number;
 }
 
-export function ReviewPeriodStatusWidget() {
+interface Props {
+  fiscalStartYear: number;
+  selectedMonths: string[];
+}
+
+export function ReviewPeriodStatusWidget({ fiscalStartYear, selectedMonths }: Props) {
+  // Map selected months to their calendar years
+  const monthYearPairs = selectedMonths.map(month => {
+    const monthIndex = MONTHS.indexOf(month);
+    const calendarYear = monthIndex >= 6 ? fiscalStartYear : fiscalStartYear + 1;
+    return { month, year: calendarYear };
+  });
+
+  // Group by year for queries
+  const yearMonthMap = new Map<number, string[]>();
+  monthYearPairs.forEach(({ month, year }) => {
+    if (!yearMonthMap.has(year)) yearMonthMap.set(year, []);
+    yearMonthMap.get(year)!.push(month);
+  });
+
   const { data: periods, isLoading } = useQuery({
-    queryKey: ['review-period-status-widget'],
+    queryKey: ['review-period-status-widget', fiscalStartYear, selectedMonths],
     queryFn: async () => {
-      // Get current month/year periods
-      const now = new Date();
-      const currentYear = now.getFullYear();
+      // Fetch review periods for all relevant years
+      const allPeriods: any[] = [];
+      for (const [year, months] of yearMonthMap.entries()) {
+        const { data, error } = await supabase
+          .from('review_periods')
+          .select('*')
+          .eq('review_year', year)
+          .in('period_name', months)
+          .order('period_name');
+        if (error) throw error;
+        if (data) allPeriods.push(...data);
+      }
 
-      const { data: rpData, error } = await supabase
-        .from('review_periods')
-        .select('*')
-        .eq('review_year', currentYear)
-        .order('period_name');
-      if (error) throw error;
-
-      // Get KPI statuses for completion calculation
-      const { data: kpiData } = await supabase
-        .from('kpis')
-        .select('review_period, review_year, status')
-        .eq('review_year', currentYear)
-        .not('review_period', 'is', null);
+      // Get KPI statuses for completion calculation, filtered to selected months
+      const kpiPromises = Array.from(yearMonthMap.entries()).map(async ([year, months]) => {
+        const { data } = await supabase
+          .from('kpis')
+          .select('review_period, review_year, status')
+          .eq('review_year', year)
+          .in('review_period', months);
+        return data || [];
+      });
+      const kpiResults = await Promise.all(kpiPromises);
+      const kpiData = kpiResults.flat();
 
       const kpiCounts: Record<string, number> = {};
       const kpiApproved: Record<string, number> = {};
-      (kpiData || []).forEach(kpi => {
+      kpiData.forEach(kpi => {
         const key = `${kpi.review_period}-${kpi.review_year}`;
         kpiCounts[key] = (kpiCounts[key] || 0) + 1;
         if (kpi.status === 'approved') {
@@ -49,7 +80,7 @@ export function ReviewPeriodStatusWidget() {
       });
 
       // Get lock counts per period
-      const periodIds = (rpData || []).map(p => p.id);
+      const periodIds = allPeriods.map(p => p.id);
       let lockCounts: Record<string, number> = {};
       if (periodIds.length > 0) {
         const { data: locks } = await supabase
@@ -62,7 +93,7 @@ export function ReviewPeriodStatusWidget() {
         });
       }
 
-      return (rpData || []).map(rp => {
+      return allPeriods.map(rp => {
         const key = `${rp.period_name}-${rp.review_year}`;
         const total = kpiCounts[key] || 0;
         const approved = kpiApproved[key] || 0;

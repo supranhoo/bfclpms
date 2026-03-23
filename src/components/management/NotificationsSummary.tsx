@@ -4,13 +4,83 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Bell, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useNotifications, useUnreadNotificationCount } from '@/hooks/useNotifications';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { formatDistanceToNow } from 'date-fns';
 
-export function NotificationsSummary() {
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+interface Props {
+  fiscalStartYear: number;
+  selectedMonths: string[];
+}
+
+export function NotificationsSummary({ fiscalStartYear, selectedMonths }: Props) {
   const navigate = useNavigate();
-  const { data: notifications } = useNotifications();
-  const { data: unreadCount } = useUnreadNotificationCount();
+  const { user } = useAuth();
+
+  // Compute date range from selected months
+  const dateRange = (() => {
+    const pairs = selectedMonths.map(month => {
+      const monthIndex = MONTHS.indexOf(month);
+      const calendarYear = monthIndex >= 6 ? fiscalStartYear : fiscalStartYear + 1;
+      return { monthIndex, calendarYear };
+    });
+    if (pairs.length === 0) return null;
+    const sorted = [...pairs].sort((a, b) => a.calendarYear - b.calendarYear || a.monthIndex - b.monthIndex);
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+    const startDate = new Date(first.calendarYear, first.monthIndex, 1).toISOString();
+    const endDate = new Date(last.calendarYear, last.monthIndex + 1, 0, 23, 59, 59).toISOString();
+    return { startDate, endDate };
+  })();
+
+  const { data: notifications } = useQuery({
+    queryKey: ['notifications-summary', user?.id, fiscalStartYear, selectedMonths],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      let query = supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (dateRange) {
+        query = query.gte('created_at', dateRange.startDate).lte('created_at', dateRange.endDate);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
+
+  const { data: unreadCount } = useQuery({
+    queryKey: ['notifications-summary-unread', user?.id, fiscalStartYear, selectedMonths],
+    queryFn: async () => {
+      if (!user?.id) return 0;
+      let query = supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('is_read', false);
+
+      if (dateRange) {
+        query = query.gte('created_at', dateRange.startDate).lte('created_at', dateRange.endDate);
+      }
+
+      const { count, error } = await query;
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: !!user?.id,
+  });
 
   const recent = (notifications || []).slice(0, 5);
 
@@ -41,7 +111,7 @@ export function NotificationsSummary() {
         ) : (
           <ScrollArea className="h-[250px]">
             <div className="space-y-3">
-              {recent.map((n) => (
+              {recent.map((n: any) => (
                 <div
                   key={n.id}
                   className={`flex gap-3 text-sm rounded-lg p-2 ${!n.is_read ? 'bg-muted/50' : ''}`}
