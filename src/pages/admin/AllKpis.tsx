@@ -601,7 +601,7 @@ export default function AllKpis() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {employeeData.map(emp => {
+                {employeeData.slice(0, visibleCount).map(emp => {
                   const isExpanded = expandedEmployees.has(emp.employeeId);
                   const employeeKpis = isExpanded ? getEmployeeKpis(emp.employeeId) : [];
                   
