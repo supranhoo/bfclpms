@@ -249,9 +249,32 @@ Deno.serve(async (req) => {
 
           if (!stuckKpis || stuckKpis.length === 0) break;
 
+          // Exclude sent-back KPIs — check BOTH kpi_queries and kpi_audit_logs
+          const stuckIds = stuckKpis.map(k => k.id);
+
+          const { data: sentBackQueries } = await supabase
+            .from('kpi_queries')
+            .select('kpi_id')
+            .in('kpi_id', stuckIds)
+            .eq('query_type', 'send_back');
+
+          const { data: auditSendBacks } = await supabase
+            .from('kpi_audit_logs')
+            .select('kpi_id')
+            .in('kpi_id', stuckIds)
+            .ilike('action', '%SENT_BACK%');
+
+          const sentBackIds = new Set([
+            ...(sentBackQueries || []).map(q => q.kpi_id),
+            ...(auditSendBacks || []).map(a => a.kpi_id),
+          ]);
+
+          const eligibleKpis = stuckKpis.filter(k => !sentBackIds.has(k.id));
+          if (eligibleKpis.length === 0) break;
+
           const autoAdvanceReason = `Auto-advanced with score ${defaultScore}: Employee did not submit within ${deadlineDays} days of stage start`;
 
-          for (const kpi of stuckKpis) {
+          for (const kpi of eligibleKpis) {
             // Determine next status based on current
             let nextStatus = 'manager_check';
             if (kpi.status === 'kra_set') nextStatus = 'self_review';
