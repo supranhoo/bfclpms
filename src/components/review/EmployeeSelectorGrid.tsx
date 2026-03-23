@@ -362,12 +362,15 @@ export function EmployeeSelectorGrid({
       };
     } else if (viewLevel === 'audit') {
       const reviewable = resolveReviewableStatuses('auditor', stages);
+      const pendingKpis = [...empKpis.filter(k => reviewable.includes(k.status || '') && k.status !== 'audit'), ...empKpis.filter(k => k.status === 'audit')];
       return {
         badge1: empKpis.filter(k => reviewable.includes(k.status || '') && k.status !== 'audit').length,
         badge2: empKpis.filter(k => k.status === 'audit').length,
         badge3: empKpis.filter(k => ['management_review', 'approved'].includes(k.status || '')).length,
         total: empKpis.length,
         clearedKraSet,
+        orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
+        nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
       };
     } else if (viewLevel === 'pending_self_review') {
       const pendingKpis = empKpis.filter(k => k.status === 'kra_set');
