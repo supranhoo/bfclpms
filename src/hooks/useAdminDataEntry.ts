@@ -114,6 +114,7 @@ export function useAdminSubmitReviewData() {
       score,
       remarks,
       evidence_url,
+      evidence_urls,
       is_na,
       reason,
       kpi_name,
