@@ -438,6 +438,40 @@ export default function ManagementDashboard() {
         .sort((a, b) => Math.abs(b.deviation) - Math.abs(a.deviation))
         .slice(0, 10);
 
+      // Manager vs. HR PMS / Auditor deviation
+      const mgrDevMap = new Map<string, {
+        mgrTotal: number; mgrCount: number;
+        hrTotal: number; hrCount: number;
+        audTotal: number; audCount: number;
+      }>();
+      kpis.forEach(kpi => {
+        const s = kpi.review_submissions;
+        if (!s || s.manager_score == null || s.manager_score <= 0) return;
+        const profile = profileMap.get(kpi.employee_id);
+        const managerId = profile?.reporting_manager_id;
+        if (!managerId) return;
+        const entry = mgrDevMap.get(managerId) || { mgrTotal: 0, mgrCount: 0, hrTotal: 0, hrCount: 0, audTotal: 0, audCount: 0 };
+        entry.mgrTotal += s.manager_score; entry.mgrCount++;
+        if (s.hr_pms_score != null && s.hr_pms_score > 0) { entry.hrTotal += s.hr_pms_score; entry.hrCount++; }
+        if (s.auditor_score != null && s.auditor_score > 0) { entry.audTotal += s.auditor_score; entry.audCount++; }
+        mgrDevMap.set(managerId, entry);
+      });
+      const managerReviewDeviation = Array.from(mgrDevMap.entries())
+        .filter(([_, d]) => d.mgrCount >= 3 && (d.hrCount >= 1 || d.audCount >= 1))
+        .map(([mid, d]) => {
+          const mp = profileMap.get(mid);
+          const avgMgrPct = (d.mgrTotal / d.mgrCount) * 20;
+          const hrPmsDeviation = d.hrCount >= 1 ? avgMgrPct - (d.hrTotal / d.hrCount) * 20 : null;
+          const auditorDeviation = d.audCount >= 1 ? avgMgrPct - (d.audTotal / d.audCount) * 20 : null;
+          return { managerId: mid, managerName: mp?.full_name || 'Unknown', avgMgrPct, hrPmsDeviation, auditorDeviation, kpiCount: d.mgrCount };
+        })
+        .sort((a, b) => {
+          const maxA = Math.max(Math.abs(a.hrPmsDeviation ?? 0), Math.abs(a.auditorDeviation ?? 0));
+          const maxB = Math.max(Math.abs(b.hrPmsDeviation ?? 0), Math.abs(b.auditorDeviation ?? 0));
+          return maxB - maxA;
+        })
+        .slice(0, 10);
+
       // Overdue reviews: KPIs in non-terminal stages updated > 7 days ago
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
