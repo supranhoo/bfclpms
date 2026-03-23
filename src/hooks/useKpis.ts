@@ -255,6 +255,7 @@ export function useKpisByPeriodRanges(periodRanges: Array<{ month: string; year:
   return useQuery({
     queryKey: ['kpis-by-period-ranges', periodRanges],
     enabled: periodRanges.length > 0,
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       if (periodRanges.length === 0) return [];
 
@@ -268,11 +269,7 @@ export function useKpisByPeriodRanges(periodRanges: Array<{ month: string; year:
         while (hasMore) {
           const { data, error } = await supabase
             .from('kpis')
-            .select(`
-              *,
-              kra_categories (id, name, color, weightage),
-              profiles:employee_id (id, full_name, email, employee_code, department_id, reporting_manager_id)
-            `)
+            .select(SLIM_KPI_SELECT)
             .eq('review_period', month)
             .eq('review_year', year)
             .order('created_at', { ascending: false })
