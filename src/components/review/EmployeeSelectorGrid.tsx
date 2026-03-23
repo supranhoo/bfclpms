@@ -311,51 +311,66 @@ export function EmployeeSelectorGrid({
         const reviewable = resolveReviewableStatuses('skip_level', stages);
         const slIdx = stages.indexOf('skip_level_check');
         const doneStatuses = slIdx >= 0 ? stages.slice(slIdx) : [];
+        const pendingKpis = empKpis.filter(k => reviewable.includes(k.status || ''));
         return {
-          badge1: empKpis.filter(k => reviewable.includes(k.status || '')).length,
+          badge1: pendingKpis.length,
           badge2: empKpis.filter(k => !['kra_set', 'self_review'].includes(k.status || '')).length,
           badge3: 0,
           total: empKpis.length,
           clearedKraSet,
+          orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
+          nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
         };
       }
+      const pendingKpis = empKpis.filter(k => k.status === 'self_review');
       return {
-        badge1: empKpis.filter(k => k.status === 'self_review').length,
+        badge1: pendingKpis.length,
         badge2: empKpis.filter(k => !['kra_set', 'self_review'].includes(k.status || '')).length,
         badge3: 0,
         total: empKpis.length,
         clearedKraSet,
+        orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
+        nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
       };
     } else if (viewLevel === 'skip_level') {
       const reviewable = resolveReviewableStatuses('skip_level', stages);
       const slIdx = stages.indexOf('skip_level_check');
       const doneStatuses = slIdx >= 0 ? stages.slice(slIdx) : [];
+      const pendingKpis = empKpis.filter(k => reviewable.includes(k.status || ''));
       return {
-        badge1: empKpis.filter(k => reviewable.includes(k.status || '')).length,
+        badge1: pendingKpis.length,
         badge2: empKpis.filter(k => doneStatuses.includes(k.status || '')).length,
         badge3: 0,
         total: empKpis.length,
         clearedKraSet,
+        orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
+        nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
       };
     } else if (viewLevel === 'hr_pms') {
       const reviewable = resolveReviewableStatuses('hr_pms', stages);
       const hrIdx = stages.indexOf('hr_pms_review');
       const doneStatuses = hrIdx >= 0 ? stages.slice(hrIdx + 1) : [];
+      const pendingKpis = [...empKpis.filter(k => reviewable.includes(k.status || '') && k.status !== 'hr_pms_review'), ...empKpis.filter(k => k.status === 'hr_pms_review')];
       return {
         badge1: empKpis.filter(k => reviewable.includes(k.status || '') && k.status !== 'hr_pms_review').length,
         badge2: empKpis.filter(k => k.status === 'hr_pms_review').length,
         badge3: empKpis.filter(k => doneStatuses.includes(k.status || '')).length,
         total: empKpis.length,
         clearedKraSet,
+        orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
+        nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
       };
     } else if (viewLevel === 'audit') {
       const reviewable = resolveReviewableStatuses('auditor', stages);
+      const pendingKpis = [...empKpis.filter(k => reviewable.includes(k.status || '') && k.status !== 'audit'), ...empKpis.filter(k => k.status === 'audit')];
       return {
         badge1: empKpis.filter(k => reviewable.includes(k.status || '') && k.status !== 'audit').length,
         badge2: empKpis.filter(k => k.status === 'audit').length,
         badge3: empKpis.filter(k => ['management_review', 'approved'].includes(k.status || '')).length,
         total: empKpis.length,
         clearedKraSet,
+        orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
+        nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
       };
     } else if (viewLevel === 'pending_self_review') {
       const pendingKpis = empKpis.filter(k => k.status === 'kra_set');
@@ -400,15 +415,17 @@ export function EmployeeSelectorGrid({
         nonMonthlyCount,
       };
     } else {
-      const pending = empKpis.filter(k => k.status === 'management_review').length;
+      const pendingKpis = empKpis.filter(k => k.status === 'management_review');
       const approved = empKpis.filter(k => k.status === 'approved').length;
-      const inPipeline = empKpis.length - pending - approved;
+      const inPipeline = empKpis.length - pendingKpis.length - approved;
       return {
-        badge1: pending,
+        badge1: pendingKpis.length,
         badge2: approved,
         badge3: inPipeline,
         total: empKpis.length,
         clearedKraSet,
+        orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
+        nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
       };
     }
   };
@@ -844,7 +861,7 @@ export function EmployeeSelectorGrid({
       );
     } else if (viewLevel === 'pending_self_review' || viewLevel === 'pending_manager_review' || viewLevel === 'pending_skip_review') {
       const labelMap = { pending_self_review: 'Pending Self Review', pending_manager_review: 'Pending Manager Review', pending_skip_review: 'Pending Skip Mgr Review' };
-      const pendingSubtitle = viewLevel === 'pending_self_review' && (stats.stat2 > 0 || stats.stat3 > 0)
+      const pendingSubtitle = (stats.stat2 > 0 || stats.stat3 > 0)
         ? [stats.stat2 > 0 ? `${stats.stat2} org KPI` : '', stats.stat3 > 0 ? `${stats.stat3} bi-monthly/quarterly` : ''].filter(Boolean).join(' · ')
         : 'KPIs at this stage';
       return (
@@ -930,6 +947,16 @@ export function EmployeeSelectorGrid({
                 {kpiStats.badge2} reviewed
               </Badge>
             )}
+            {(kpiStats as any).orgKpiCount > 0 && (
+              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
+                {(kpiStats as any).orgKpiCount} org KPI
+              </Badge>
+            )}
+            {(kpiStats as any).nonMonthlyCount > 0 && (
+              <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800">
+                {(kpiStats as any).nonMonthlyCount} bi-monthly/quarterly
+              </Badge>
+            )}
           </>
         );
       } else if (viewLevel === 'skip_level') {
@@ -943,6 +970,16 @@ export function EmployeeSelectorGrid({
             {kpiStats.badge2 > 0 && (
               <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
                 {kpiStats.badge2} reviewed
+              </Badge>
+            )}
+            {(kpiStats as any).orgKpiCount > 0 && (
+              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
+                {(kpiStats as any).orgKpiCount} org KPI
+              </Badge>
+            )}
+            {(kpiStats as any).nonMonthlyCount > 0 && (
+              <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800">
+                {(kpiStats as any).nonMonthlyCount} bi-monthly/quarterly
               </Badge>
             )}
           </>
@@ -965,6 +1002,16 @@ export function EmployeeSelectorGrid({
                 {kpiStats.badge3} reviewed
               </Badge>
             )}
+            {(kpiStats as any).orgKpiCount > 0 && (
+              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
+                {(kpiStats as any).orgKpiCount} org KPI
+              </Badge>
+            )}
+            {(kpiStats as any).nonMonthlyCount > 0 && (
+              <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800">
+                {(kpiStats as any).nonMonthlyCount} bi-monthly/quarterly
+              </Badge>
+            )}
           </>
         );
       } else if (viewLevel === 'audit') {
@@ -983,6 +1030,16 @@ export function EmployeeSelectorGrid({
             {kpiStats.badge3 > 0 && (
               <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
                 {kpiStats.badge3} forwarded
+              </Badge>
+            )}
+            {(kpiStats as any).orgKpiCount > 0 && (
+              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
+                {(kpiStats as any).orgKpiCount} org KPI
+              </Badge>
+            )}
+            {(kpiStats as any).nonMonthlyCount > 0 && (
+              <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800">
+                {(kpiStats as any).nonMonthlyCount} bi-monthly/quarterly
               </Badge>
             )}
             {(() => {
@@ -1032,6 +1089,16 @@ export function EmployeeSelectorGrid({
             {kpiStats.badge2 > 0 && (
               <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
                 {kpiStats.badge2} approved
+              </Badge>
+            )}
+            {(kpiStats as any).orgKpiCount > 0 && (
+              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
+                {(kpiStats as any).orgKpiCount} org KPI
+              </Badge>
+            )}
+            {(kpiStats as any).nonMonthlyCount > 0 && (
+              <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800">
+                {(kpiStats as any).nonMonthlyCount} bi-monthly/quarterly
               </Badge>
             )}
           </>
