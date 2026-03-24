@@ -158,6 +158,10 @@ export default function IncentiveConfig() {
                       <TabsContent value="rules">
                         <DisqualificationRulesEditor programId={p.id} />
                       </TabsContent>
+
+                      <TabsContent value="fields">
+                        <EligibilityFieldsConfig programId={p.id} />
+                      </TabsContent>
                     </Tabs>
                   </AccordionContent>
                 </AccordionItem>
