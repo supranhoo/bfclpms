@@ -362,7 +362,7 @@ export default function EmployeePerformanceSummary() {
   // Reset page when filters change
   useMemo(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedYear, selectedPeriod, selectedStatus, pageSize]);
+  }, [searchTerm, selectedYear, selectedPeriod, selectedStatus, pageSize, showFreqLocked]);
 
   // Get unique employees for comparison
   const uniqueEmployees = useMemo(() => {
