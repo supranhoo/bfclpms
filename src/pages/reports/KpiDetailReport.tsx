@@ -276,7 +276,7 @@ export default function KpiDetailReport() {
   }, [filteredRows, currentPage, pageSize]);
 
   // Reset page on filter change
-  useMemo(() => { setCurrentPage(1); }, [searchTerm, selectedYear, selectedPeriod, selectedDept, selectedCategory, includeNa, pageSize]);
+  useMemo(() => { setCurrentPage(1); }, [searchTerm, selectedYear, selectedPeriod, selectedDept, selectedCategory, includeNa, showFreqLocked, pageSize]);
 
   // Excel export
   const handleExport = () => {
