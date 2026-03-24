@@ -1193,13 +1193,37 @@ export default function UserManagement() {
                 <Separator />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
+                    <Label>Division</Label>
+                    <Select value={newDivisionId || '__all__'} onValueChange={(val) => {
+                      const newDiv = val === '__all__' ? '' : val;
+                      setNewDivisionId(newDiv);
+                      if (newDiv && newDepartmentId) {
+                        const buIdsInDiv = new Set(businessUnits?.filter(bu => bu.division_id === newDiv).map(bu => bu.id));
+                        const dept = departments?.find(d => d.id === newDepartmentId);
+                        if (dept && dept.business_unit_id && !buIdsInDiv.has(dept.business_unit_id)) {
+                          setNewDepartmentId('');
+                        }
+                      }
+                    }}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All divisions" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">All Divisions</SelectItem>
+                        {divisions?.map(d => (
+                          <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
                     <Label>Department</Label>
                     <Select value={newDepartmentId} onValueChange={setNewDepartmentId}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select department" />
                       </SelectTrigger>
                       <SelectContent>
-                        {departments?.map(d => (
+                        {createFilteredDepartments.map(d => (
                           <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
                         ))}
                       </SelectContent>
