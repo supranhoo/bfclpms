@@ -137,6 +137,12 @@ export default function IncentiveConfig() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="mapping">
+          {selectedProgramId && (
+            <ProgramEmployeeMapping programId={selectedProgramId} />
+          )}
+        </TabsContent>
+
         <TabsContent value="slabs">
           {selectedProgramId && selectedProgram && (
             <IncentiveSlabEditor

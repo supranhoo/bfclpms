@@ -115,6 +115,50 @@ export function useDeleteSlab() {
   });
 }
 
+// ── Program Mappings ──
+
+export function useProgramMappings(programId?: string) {
+  return useQuery({
+    queryKey: ['incentive-program-mappings', programId],
+    enabled: !!programId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('incentive_program_mappings')
+        .select('*')
+        .eq('program_id', programId!)
+        .order('mapping_type');
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+export function useAddProgramMapping() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: async (values: { program_id: string; mapping_type: string; mapping_value: string }) => {
+      const { error } = await supabase.from('incentive_program_mappings').insert(values);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['incentive-program-mappings'] }); },
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+}
+
+export function useRemoveProgramMapping() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('incentive_program_mappings').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['incentive-program-mappings'] }); },
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+}
+
 // ── Disqualification Rules ──
 
 export function useDisqualificationRules(programId?: string) {
