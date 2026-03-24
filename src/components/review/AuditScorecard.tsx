@@ -132,13 +132,13 @@ export function AuditScorecard({
     const scope = (kpi as any).org_level_scope || 'organization';
     let key: string;
     if (scope === 'organization') {
-      key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
+      key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
     } else if (scope === 'department') {
       const deptId = employee.department_id || 'null';
-      key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${deptId}||null`;
+      key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||${deptId}||null`;
     } else {
       const empId = employee.id || 'null';
-      key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||${empId}`;
+      key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||${empId}`;
     }
     return orgKpiValuesMap.get(key) || null;
   };
