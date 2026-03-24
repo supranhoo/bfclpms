@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useMemo } from 'react';
 
 export interface EligibilityRow {
   id?: string;
@@ -74,4 +75,121 @@ export function useBulkUpsertEligibility() {
     onSuccess: (count) => { qc.invalidateQueries({ queryKey: ['incentive-eligibility'] }); toast({ title: `${count} rows saved` }); },
     onError: (e: Error) => toast({ title: 'Import error', description: e.message, variant: 'destructive' }),
   });
+}
+
+// ── Resolve Program Mappings → Employee IDs ──
+
+export function useResolvedProgramEmployees(programId?: string | 'all') {
+  const { data: mappings = [] } = useQuery({
+    queryKey: ['incentive-program-mappings-resolve', programId],
+    queryFn: async () => {
+      let query = supabase.from('incentive_program_mappings').select('*, incentive_programs(name)');
+      if (programId && programId !== 'all') {
+        query = query.eq('program_id', programId);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const { data: departments = [] } = useQuery({
+    queryKey: ['departments-for-mapping'],
+    queryFn: async () => {
+      const { data } = await supabase.from('departments').select('id, name, business_unit_id');
+      return data || [];
+    },
+  });
+
+  const { data: businessUnits = [] } = useQuery({
+    queryKey: ['business-units-for-mapping'],
+    queryFn: async () => {
+      const { data } = await supabase.from('business_units').select('id, name, division_id');
+      return data || [];
+    },
+  });
+
+  const { data: allProfiles = [] } = useQuery({
+    queryKey: ['profiles-for-mapping'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, full_name, employee_code, department_id, designation_id, pms_grade, departments(name)')
+        .eq('is_active', true)
+        .order('employee_code');
+      return data || [];
+    },
+  });
+
+  const resolved = useMemo(() => {
+    if (!mappings.length || !allProfiles.length) {
+      return { employees: [] as any[], programByEmployee: new Map<string, string[]>(), hasMappings: mappings.length > 0 };
+    }
+
+    const programByEmployee = new Map<string, string[]>();
+
+    const programMappings = new Map<string, { programName: string; maps: typeof mappings }>();
+    for (const m of mappings) {
+      const pid = m.program_id;
+      if (!programMappings.has(pid)) {
+        programMappings.set(pid, { programName: (m as any).incentive_programs?.name || pid, maps: [] });
+      }
+      programMappings.get(pid)!.maps.push(m);
+    }
+
+    for (const [_pid, { programName, maps }] of programMappings) {
+      const directEmployeeIds = new Set<string>();
+      const targetDeptIds = new Set<string>();
+      const targetBuIds = new Set<string>();
+      const targetDivisionIds = new Set<string>();
+      const targetDesignationIds = new Set<string>();
+      const targetGrades = new Set<string>();
+
+      for (const m of maps) {
+        switch (m.mapping_type) {
+          case 'employee': directEmployeeIds.add(m.mapping_value); break;
+          case 'department': targetDeptIds.add(m.mapping_value); break;
+          case 'business_unit': targetBuIds.add(m.mapping_value); break;
+          case 'division': targetDivisionIds.add(m.mapping_value); break;
+          case 'designation': targetDesignationIds.add(m.mapping_value); break;
+          case 'pms_grade': targetGrades.add(m.mapping_value); break;
+        }
+      }
+
+      // Resolve division → BU → department cascade
+      if (targetDivisionIds.size > 0) {
+        for (const bu of businessUnits) {
+          if (bu.division_id && targetDivisionIds.has(bu.division_id)) {
+            targetBuIds.add(bu.id);
+          }
+        }
+      }
+      if (targetBuIds.size > 0) {
+        for (const dept of departments) {
+          if (dept.business_unit_id && targetBuIds.has(dept.business_unit_id)) {
+            targetDeptIds.add(dept.id);
+          }
+        }
+      }
+
+      for (const profile of allProfiles) {
+        let matched = false;
+        if (directEmployeeIds.has(profile.id)) matched = true;
+        if (!matched && profile.department_id && targetDeptIds.has(profile.department_id)) matched = true;
+        if (!matched && profile.designation_id && targetDesignationIds.has(profile.designation_id)) matched = true;
+        if (!matched && (profile as any).pms_grade && targetGrades.has((profile as any).pms_grade)) matched = true;
+
+        if (matched) {
+          const existing = programByEmployee.get(profile.id) || [];
+          existing.push(programName);
+          programByEmployee.set(profile.id, existing);
+        }
+      }
+    }
+
+    const matchedEmployees = allProfiles.filter((p: any) => programByEmployee.has(p.id));
+    return { employees: matchedEmployees, programByEmployee, hasMappings: true };
+  }, [mappings, allProfiles, departments, businessUnits]);
+
+  return resolved;
 }
