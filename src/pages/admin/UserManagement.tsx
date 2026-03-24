@@ -81,6 +81,7 @@ export default function UserManagement() {
   const [editEmail, setEditEmail] = useState('');
   const [editMobile, setEditMobile] = useState('');
   const [editIsActive, setEditIsActive] = useState(true);
+  const [editDivisionId, setEditDivisionId] = useState('');  // UI-only cascading filter
   // Create Dialog
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newFullName, setNewFullName] = useState('');
