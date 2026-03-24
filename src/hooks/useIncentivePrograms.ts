@@ -137,7 +137,7 @@ export function useUpsertDqRule() {
   const qc = useQueryClient();
   const { toast } = useToast();
   return useMutation({
-    mutationFn: async (values: { id?: string; program_id: string; rule_type: string; rule_config: Record<string, unknown>; is_active?: boolean; exemption_notes?: string | null }) => {
+    mutationFn: async (values: { id?: string; program_id: string; rule_type: string; rule_config: any; is_active?: boolean; exemption_notes?: string | null }) => {
       if (values.id) {
         const { id, ...rest } = values;
         const { error } = await supabase.from('incentive_disqualification_rules').update(rest).eq('id', id);
