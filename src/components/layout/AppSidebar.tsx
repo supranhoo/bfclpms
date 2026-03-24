@@ -95,6 +95,7 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
     { title: 'KPI Mapping', icon: Target, path: '/admin/kpi-mapping', roles: ['admin'] },
     { title: 'Weightage Matrix', icon: Percent, path: '/admin/kpi-weightage', roles: ['admin'] },
     { title: 'Pending Reviews', icon: ClipboardCheck, path: '/admin/pending-reviews', roles: ['admin'] },
+    { title: 'Incentive Config', icon: Percent, path: '/admin/incentive-config', roles: ['admin'] },
   ],
   dataEntry: [
     { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', roles: ['employee', 'manager', 'auditor', 'management', 'hr_pms'] },
@@ -104,6 +105,7 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
     { title: 'Performance Report', icon: BarChart3, path: '/reports/performance', roles: ['admin', 'manager', 'auditor'] },
     { title: 'KRA Issuance', icon: FileText, path: '/reports/kra-issuance', roles: ['admin', 'manager', 'auditor'] },
     { title: 'TNI Report', icon: GraduationCap, path: '/reports/tni', roles: ['admin', 'manager', 'auditor'] },
+    { title: 'Incentive Report', icon: Percent, path: '/reports/incentive', roles: ['admin', 'management', 'hr_pms'] },
   ],
 });
 

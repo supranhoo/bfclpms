@@ -15,6 +15,7 @@ import { useKpiFilters } from '@/hooks/useKpiFilters';
 import { getKpiDueDate } from '@/lib/frequencyUtils';
 import { KpiFilterBar } from '@/components/ui/KpiFilterBar';
 import { useRollbackStatusCounts } from '@/hooks/useAllRollbackRequests';
+import { usePendingAdjustmentCount } from '@/hooks/useIncentiveRecords';
 import { PerformanceTrendChart } from '@/components/management/PerformanceTrendChart';
 import { RatingBellCurve } from '@/components/management/RatingBellCurve';
 import { TopBottomPerformers } from '@/components/management/TopBottomPerformers';
@@ -116,6 +117,7 @@ export default function ManagementDashboard() {
   const defaultFiscalYear = currentMonth >= 6 ? currentYear : currentYear - 1;
   const [selectedFiscalYear, setSelectedFiscalYear] = useState(defaultFiscalYear);
   const [selectedMonths, setSelectedMonths] = useState<string[]>(FISCAL_MONTHS);
+  const { data: pendingAdjustments = 0 } = usePendingAdjustmentCount();
 
   const {
     filters,
@@ -929,6 +931,21 @@ export default function ManagementDashboard() {
         <RecentAuditLog fiscalStartYear={selectedFiscalYear} selectedMonths={selectedMonths} />
         <NotificationsSummary fiscalStartYear={selectedFiscalYear} selectedMonths={selectedMonths} />
       </div>
+
+      {/* Pending Incentive Adjustments */}
+      {pendingAdjustments > 0 && (
+        <Card className="border-destructive/50 bg-destructive/5">
+          <CardContent className="pt-4 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Pending Incentive Adjustments</p>
+              <p className="text-xs text-muted-foreground">{pendingAdjustments} retroactive slab change{pendingAdjustments > 1 ? 's' : ''} awaiting payroll notification</p>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => navigate('/reports/incentive')}>
+              <Award className="h-4 w-4 mr-1" /> View Report
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Quick Actions */}
       <Card>

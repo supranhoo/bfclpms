@@ -47,6 +47,7 @@ const RollbackRequests = lazy(() => import("./pages/admin/RollbackRequests"));
 const KpiMappingMatrix = lazy(() => import("./pages/admin/KpiMappingMatrix"));
 const KpiWeightageDashboard = lazy(() => import("./pages/admin/KpiWeightageDashboard"));
 const PendingSelfReviews = lazy(() => import("./pages/admin/PendingSelfReviews"));
+const IncentiveConfig = lazy(() => import("./pages/admin/IncentiveConfig"));
 
 // Report pages
 const PerformanceReport = lazy(() => import("./pages/reports/PerformanceReport"));
@@ -64,6 +65,7 @@ const KpiDetailReport = lazy(() => import("./pages/reports/KpiDetailReport"));
 const BottleneckReport = lazy(() => import("./pages/reports/BottleneckReport"));
 const KpiStatusTracker = lazy(() => import("./pages/reports/KpiStatusTracker"));
 const KpiJourneyReport = lazy(() => import("./pages/reports/KpiJourneyReport"));
+const IncentiveReport = lazy(() => import("./pages/reports/IncentiveReport"));
 
 // Layout components
 import { ReportRoute } from "./components/layout/ReportRoute";
@@ -317,6 +319,16 @@ const App = () => (
                   <ProtectedRoute allowedRoles={['admin']}>
                     <Suspense fallback={<PageFallback />}><PendingSelfReviews /></Suspense>
                   </ProtectedRoute>
+                } />
+                <Route path="/admin/incentive-config" element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <Suspense fallback={<PageFallback />}><IncentiveConfig /></Suspense>
+                  </ProtectedRoute>
+                } />
+                <Route path="/reports/incentive" element={
+                  <ReportRoute reportKey="incentive">
+                    <Suspense fallback={<PageFallback />}><IncentiveReport /></Suspense>
+                  </ReportRoute>
                 } />
               </Route>
               <Route path="*" element={<Suspense fallback={<PageFallback />}><NotFound /></Suspense>} />
