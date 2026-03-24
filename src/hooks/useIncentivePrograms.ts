@@ -255,3 +255,76 @@ export function useMappingCount(programId?: string) {
     },
   });
 }
+
+// ── Eligibility Fields ──
+
+export function useEligibilityFields(programId?: string) {
+  return useQuery({
+    queryKey: ['incentive-eligibility-fields', programId],
+    enabled: !!programId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('incentive_eligibility_fields')
+        .select('*')
+        .or(`program_id.is.null,program_id.eq.${programId}`)
+        .eq('is_active', true)
+        .order('sort_order');
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+export function useAllEligibilityFields() {
+  return useQuery({
+    queryKey: ['incentive-eligibility-fields-all'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('incentive_eligibility_fields')
+        .select('*')
+        .eq('is_active', true)
+        .order('sort_order');
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+export function useCreateEligibilityField() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: async (values: { program_id: string; field_key: string; field_label: string; field_type: string; default_value?: string | null; sort_order?: number }) => {
+      const { error } = await supabase.from('incentive_eligibility_fields').insert(values);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['incentive-eligibility-fields'] }); toast({ title: 'Field added' }); },
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+}
+
+export function useUpdateEligibilityField() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: async ({ id, ...values }: { id: string; is_active?: boolean; field_label?: string; sort_order?: number }) => {
+      const { error } = await supabase.from('incentive_eligibility_fields').update(values).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['incentive-eligibility-fields'] }); },
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+}
+
+export function useDeleteEligibilityField() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('incentive_eligibility_fields').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['incentive-eligibility-fields'] }); toast({ title: 'Field removed' }); },
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+}

@@ -23,6 +23,7 @@ import { IncentiveSlabEditor } from '@/components/incentive/IncentiveSlabEditor'
 import { DisqualificationRulesEditor } from '@/components/incentive/DisqualificationRulesEditor';
 import { EligibilityDataEntry } from '@/components/incentive/EligibilityDataEntry';
 import { ProgramEmployeeMapping } from '@/components/incentive/ProgramEmployeeMapping';
+import { EligibilityFieldsConfig } from '@/components/incentive/EligibilityFieldsConfig';
 
 /* ── Summary badges for each program card ── */
 function ProgramSummaryBadges({ programId }: { programId: string }) {
@@ -140,6 +141,7 @@ export default function IncentiveConfig() {
                         <TabsTrigger value="mapping">Mapping</TabsTrigger>
                         <TabsTrigger value="slabs">Slabs</TabsTrigger>
                         <TabsTrigger value="rules">DQ Rules</TabsTrigger>
+                        <TabsTrigger value="fields">Fields</TabsTrigger>
                       </TabsList>
 
                       <TabsContent value="mapping">
@@ -155,6 +157,10 @@ export default function IncentiveConfig() {
 
                       <TabsContent value="rules">
                         <DisqualificationRulesEditor programId={p.id} />
+                      </TabsContent>
+
+                      <TabsContent value="fields">
+                        <EligibilityFieldsConfig programId={p.id} />
                       </TabsContent>
                     </Tabs>
                   </AccordionContent>

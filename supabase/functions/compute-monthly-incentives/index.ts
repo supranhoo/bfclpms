@@ -238,6 +238,7 @@ serve(async (req) => {
 
       // Evaluate DQ rules
       if (elig) {
+        const customFields = (elig.custom_fields || {}) as Record<string, any>;
         for (const rule of (dqRules || [])) {
           const config = rule.rule_config as any;
           switch (rule.rule_type) {
@@ -274,6 +275,28 @@ serve(async (req) => {
               } else if (elig.lti_count === 1 || elig.department_lti_count === 1) {
                 ltiPenalty = config.lti_1_penalty_percent || 50;
                 dqReasons.push(`LTI 1 (50% penalty)`);
+              }
+              break;
+            case 'custom':
+              // Evaluate custom field-based DQ rules
+              if (config.field_key && customFields[config.field_key] !== undefined) {
+                const fieldValue = customFields[config.field_key];
+                const op = config.operator || 'gte';
+                const threshold = config.threshold;
+                let triggered = false;
+                if (typeof fieldValue === 'boolean') {
+                  triggered = fieldValue === true;
+                } else if (typeof fieldValue === 'number' && threshold !== undefined) {
+                  if (op === 'gte') triggered = fieldValue >= threshold;
+                  else if (op === 'gt') triggered = fieldValue > threshold;
+                  else if (op === 'lte') triggered = fieldValue <= threshold;
+                  else if (op === 'lt') triggered = fieldValue < threshold;
+                  else if (op === 'eq') triggered = fieldValue === threshold;
+                }
+                if (triggered) {
+                  isDQ = config.action === 'disqualify';
+                  dqReasons.push(config.reason || `Custom rule: ${config.field_key}`);
+                }
               }
               break;
           }
