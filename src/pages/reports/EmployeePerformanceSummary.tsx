@@ -744,11 +744,18 @@ export default function EmployeePerformanceSummary() {
                                           </Badge>
                                         );
                                       }
-                                      return STATUS_PRIORITY_ORDER
+                                      const badges = STATUS_PRIORITY_ORDER
                                         .filter(s => (row.statusCounts[s] || 0) > 0)
-                                        .map(s => (
-                                          <Badge key={s} variant="outline" className={`text-[11px] px-1.5 py-0 ${STATUS_COLORS[s] || 'bg-muted'}`}>
-                                            {STATUS_LABELS[s] || s}{row.statusCounts[s] > 1 ? ` (${row.statusCounts[s]})` : ''}
+                                        .map(s => {
+                                          const isOrphaned = row.orphanedStatuses?.has(s);
+                                          return (
+                                            <Badge key={s} variant="outline" className={`text-[11px] px-1.5 py-0 ${isOrphaned ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' : (STATUS_COLORS[s] || 'bg-muted')}`}>
+                                              {isOrphaned ? '⚠ ' : ''}{STATUS_LABELS[s] || s}{row.statusCounts[s] > 1 ? ` (${row.statusCounts[s]})` : ''}
+                                            </Badge>
+                                          );
+                                        });
+                                      return badges;
+                                    })()}
                                           </Badge>
                                         ));
                                     })()}
