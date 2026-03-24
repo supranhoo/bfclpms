@@ -163,6 +163,7 @@ export default function KpiStatusTracker() {
 
         return {
           kpiId: kpi.id,
+          employeeId: kpi.employee_id,
           employeeCode: profile?.employee_code ?? '—',
           employeeName: profile?.full_name ?? 'Unknown',
           designation: profile?.designation ?? '—',
@@ -180,6 +181,7 @@ export default function KpiStatusTracker() {
           isOrgLevel: kpi.is_org_level ?? false,
           reviewPeriod: kpi.review_period ?? '—',
           isFrequencyLocked,
+          isOrphaned: false, // will be set after workflow data loads
         };
       });
 
