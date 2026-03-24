@@ -234,13 +234,38 @@ export default function KpiDetailReport() {
     },
   });
 
+  // Bulk workflow for orphan detection
+  const detailEmployeeIds = useMemo(() => {
+    if (!rows) return [];
+    const ids = new Set<string>();
+    rows.forEach(r => ids.add(r.employeeId));
+    return Array.from(ids);
+  }, [rows]);
+
+  const { data: detailWorkflowMap } = useBulkEmployeeWorkflows(
+    detailEmployeeIds,
+    selectedPeriod !== 'all' ? selectedPeriod : undefined,
+    selectedPeriod !== 'all' ? parseInt(selectedYear) : undefined
+  );
+
+  const enrichedRows = useMemo(() => {
+    if (!rows) return [];
+    if (!detailWorkflowMap || detailWorkflowMap.size === 0) return rows;
+    return rows.map(r => {
+      if (r.status === 'approved' || r.status === 'kra_set') return r;
+      const stages = detailWorkflowMap.get(r.employeeId);
+      if (!stages) return r;
+      return stages.includes(r.status) ? r : { ...r, isOrphaned: true };
+    });
+  }, [rows, detailWorkflowMap]);
+
   // Derived department list from data
   const departments = useMemo(() => {
-    if (!rows) return [];
+    if (!enrichedRows) return [];
     const s = new Set<string>();
-    rows.forEach(r => { if (r.department && r.department !== '—') s.add(r.department); });
+    enrichedRows.forEach(r => { if (r.department && r.department !== '—') s.add(r.department); });
     return Array.from(s).sort();
-  }, [rows]);
+  }, [enrichedRows]);
 
   // Client-side filtering
   const filteredRows = useMemo(() => {
