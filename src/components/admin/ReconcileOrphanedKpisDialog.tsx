@@ -94,9 +94,11 @@ export default function ReconcileOrphanedKpisDialog({
       const result = await reconcileMutation.mutateAsync({ dryRun: false });
       setDryRunResult(result);
       setExecuted(true);
+      const approvedCount = result.affected.filter(a => a.new_status === 'approved').length;
+      const rerouted = result.count - approvedCount;
       toast({
         title: 'Reconciliation complete',
-        description: `${result.count} KPI(s) have been moved to Approved.`,
+        description: `${result.count} KPI(s) reconciled${approvedCount > 0 ? ` (${approvedCount} approved` : ''}${rerouted > 0 ? `, ${rerouted} rerouted)` : approvedCount > 0 ? ')' : ''}.`,
       });
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['employee-workflow'] });
