@@ -756,9 +756,6 @@ export default function EmployeePerformanceSummary() {
                                         });
                                       return badges;
                                     })()}
-                                          </Badge>
-                                        ));
-                                    })()}
                                   </div>
                                 </TableCell>
                                 <TableCell className="text-right font-medium">
