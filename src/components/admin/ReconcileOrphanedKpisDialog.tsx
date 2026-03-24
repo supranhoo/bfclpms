@@ -206,11 +206,13 @@ export default function ReconcileOrphanedKpisDialog({
                   const orphaned = dryRunResult.affected.filter(a => a.reason === 'missing_stage_orphan').length;
                   const completed = dryRunResult.affected.filter(a => a.reason === 'terminal_stage_completed').length;
                   const unreviewed = dryRunResult.affected.filter(a => a.reason === 'terminal_stage_unreviewed').length;
+                  const mismatch = dryRunResult.affected.filter(a => a.reason === 'review_stage_mismatch').length;
                   return (
                     <>
                       {orphaned > 0 && <Badge variant="outline" className="text-xs bg-amber-50 dark:bg-amber-900/20">{orphaned} orphaned</Badge>}
                       {completed > 0 && <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-900/20">{completed} terminal→approved</Badge>}
                       {unreviewed > 0 && <Badge variant="outline" className="text-xs bg-blue-50 dark:bg-blue-900/20">{unreviewed} terminal→reopened</Badge>}
+                      {mismatch > 0 && <Badge variant="outline" className="text-xs bg-purple-50 dark:bg-purple-900/20">{mismatch} stage mismatch</Badge>}
                     </>
                   );
                 })()}
