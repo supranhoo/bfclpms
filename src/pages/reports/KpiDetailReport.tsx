@@ -269,9 +269,9 @@ export default function KpiDetailReport() {
 
   // Client-side filtering
   const filteredRows = useMemo(() => {
-    if (!rows) return [];
+    if (!enrichedRows) return [];
     const term = searchTerm.toLowerCase();
-    return rows.filter(r => {
+    return enrichedRows.filter(r => {
       if (!includeNa && r.isNa) return false;
       if (!showFreqLocked && r.isFrequencyLocked) return false;
       if (selectedDept !== 'all' && r.department !== selectedDept) return false;
