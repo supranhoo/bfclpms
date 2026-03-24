@@ -463,6 +463,171 @@ export type Database = {
         }
         Relationships: []
       }
+      employee_incentive_eligibility: {
+        Row: {
+          absent_days: number
+          availability_percent: number | null
+          created_at: string
+          department_lti_count: number
+          employee_id: string
+          entered_by: string | null
+          has_warning_letter: boolean
+          id: string
+          is_contract_worker: boolean
+          is_suspended: boolean
+          lti_count: number
+          lwp_days: number
+          present_days: number | null
+          production_value: number | null
+          remarks: string | null
+          review_period: string
+          review_year: number
+          shutdown_hours: number | null
+          total_working_days: number | null
+          updated_at: string
+          weekly_off_days: number | null
+        }
+        Insert: {
+          absent_days?: number
+          availability_percent?: number | null
+          created_at?: string
+          department_lti_count?: number
+          employee_id: string
+          entered_by?: string | null
+          has_warning_letter?: boolean
+          id?: string
+          is_contract_worker?: boolean
+          is_suspended?: boolean
+          lti_count?: number
+          lwp_days?: number
+          present_days?: number | null
+          production_value?: number | null
+          remarks?: string | null
+          review_period: string
+          review_year: number
+          shutdown_hours?: number | null
+          total_working_days?: number | null
+          updated_at?: string
+          weekly_off_days?: number | null
+        }
+        Update: {
+          absent_days?: number
+          availability_percent?: number | null
+          created_at?: string
+          department_lti_count?: number
+          employee_id?: string
+          entered_by?: string | null
+          has_warning_letter?: boolean
+          id?: string
+          is_contract_worker?: boolean
+          is_suspended?: boolean
+          lti_count?: number
+          lwp_days?: number
+          present_days?: number | null
+          production_value?: number | null
+          remarks?: string | null
+          review_period?: string
+          review_year?: number
+          shutdown_hours?: number | null
+          total_working_days?: number | null
+          updated_at?: string
+          weekly_off_days?: number | null
+        }
+        Relationships: []
+      }
+      employee_incentive_records: {
+        Row: {
+          adjusted_score: number | null
+          adjustment_source_period: string | null
+          base_incentive_percent: number
+          computed_at: string | null
+          confirmed_by: string | null
+          created_at: string
+          disqualification_reasons: string[] | null
+          employee_id: string
+          final_incentive_percent: number
+          id: string
+          is_disqualified: boolean
+          is_retroactive_adjustment: boolean
+          lti_penalty_percent: number
+          matched_slab_id: string | null
+          original_score: number | null
+          pms_score: number | null
+          pro_rata_factor: number
+          production_value: number | null
+          program_id: string | null
+          review_period: string
+          review_year: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          adjusted_score?: number | null
+          adjustment_source_period?: string | null
+          base_incentive_percent?: number
+          computed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          disqualification_reasons?: string[] | null
+          employee_id: string
+          final_incentive_percent?: number
+          id?: string
+          is_disqualified?: boolean
+          is_retroactive_adjustment?: boolean
+          lti_penalty_percent?: number
+          matched_slab_id?: string | null
+          original_score?: number | null
+          pms_score?: number | null
+          pro_rata_factor?: number
+          production_value?: number | null
+          program_id?: string | null
+          review_period: string
+          review_year: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          adjusted_score?: number | null
+          adjustment_source_period?: string | null
+          base_incentive_percent?: number
+          computed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          disqualification_reasons?: string[] | null
+          employee_id?: string
+          final_incentive_percent?: number
+          id?: string
+          is_disqualified?: boolean
+          is_retroactive_adjustment?: boolean
+          lti_penalty_percent?: number
+          matched_slab_id?: string | null
+          original_score?: number | null
+          pms_score?: number | null
+          pro_rata_factor?: number
+          production_value?: number | null
+          program_id?: string | null
+          review_period?: string
+          review_year?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_incentive_records_matched_slab_id_fkey"
+            columns: ["matched_slab_id"]
+            isOneToOne: false
+            referencedRelation: "incentive_slabs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_incentive_records_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "incentive_programs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employee_working_days: {
         Row: {
           created_at: string | null
@@ -588,6 +753,197 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      incentive_disqualification_rules: {
+        Row: {
+          created_at: string
+          exemption_notes: string | null
+          id: string
+          is_active: boolean
+          program_id: string
+          rule_config: Json
+          rule_type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          exemption_notes?: string | null
+          id?: string
+          is_active?: boolean
+          program_id: string
+          rule_config?: Json
+          rule_type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          exemption_notes?: string | null
+          id?: string
+          is_active?: boolean
+          program_id?: string
+          rule_config?: Json
+          rule_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "incentive_disqualification_rules_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "incentive_programs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      incentive_programs: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          effective_from: string | null
+          effective_to: string | null
+          id: string
+          is_active: boolean
+          name: string
+          program_type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          effective_from?: string | null
+          effective_to?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          program_type?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          effective_from?: string | null
+          effective_to?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          program_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      incentive_score_revisions: {
+        Row: {
+          affected_period: string
+          affected_year: number
+          created_at: string
+          employee_id: string
+          id: string
+          is_payroll_notified: boolean
+          notified_at: string | null
+          original_score: number | null
+          original_slab_percent: number | null
+          revised_score: number | null
+          revised_slab_percent: number | null
+          revision_reason: string
+          source_kpi_id: string | null
+          source_period: string | null
+        }
+        Insert: {
+          affected_period: string
+          affected_year: number
+          created_at?: string
+          employee_id: string
+          id?: string
+          is_payroll_notified?: boolean
+          notified_at?: string | null
+          original_score?: number | null
+          original_slab_percent?: number | null
+          revised_score?: number | null
+          revised_slab_percent?: number | null
+          revision_reason: string
+          source_kpi_id?: string | null
+          source_period?: string | null
+        }
+        Update: {
+          affected_period?: string
+          affected_year?: number
+          created_at?: string
+          employee_id?: string
+          id?: string
+          is_payroll_notified?: boolean
+          notified_at?: string | null
+          original_score?: number | null
+          original_slab_percent?: number | null
+          revised_score?: number | null
+          revised_slab_percent?: number | null
+          revision_reason?: string
+          source_kpi_id?: string | null
+          source_period?: string | null
+        }
+        Relationships: []
+      }
+      incentive_slabs: {
+        Row: {
+          business_unit_id: string | null
+          created_at: string
+          id: string
+          incentive_percent: number
+          max_value: number
+          min_value: number
+          program_id: string
+          rating_label: string | null
+          slab_category: string
+          sort_order: number
+          sub_category: string | null
+          updated_at: string
+        }
+        Insert: {
+          business_unit_id?: string | null
+          created_at?: string
+          id?: string
+          incentive_percent?: number
+          max_value: number
+          min_value: number
+          program_id: string
+          rating_label?: string | null
+          slab_category: string
+          sort_order?: number
+          sub_category?: string | null
+          updated_at?: string
+        }
+        Update: {
+          business_unit_id?: string | null
+          created_at?: string
+          id?: string
+          incentive_percent?: number
+          max_value?: number
+          min_value?: number
+          program_id?: string
+          rating_label?: string | null
+          slab_category?: string
+          sort_order?: number
+          sub_category?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "incentive_slabs_business_unit_id_fkey"
+            columns: ["business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incentive_slabs_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "incentive_programs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       kpi_audit_logs: {
         Row: {
