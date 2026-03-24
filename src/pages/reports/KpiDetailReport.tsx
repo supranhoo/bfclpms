@@ -69,6 +69,7 @@ interface KpiDetailRow {
   percentage: number | null;
   overallRating: string | null;
   isNa: boolean;
+  isFrequencyLocked: boolean;
 }
 
 // Compact score cell
