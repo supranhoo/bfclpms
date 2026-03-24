@@ -450,6 +450,19 @@ export default function KpiStatusTracker() {
             </div>
           </CardContent>
         </Card>
+        {orphanedCount > 0 && (
+          <Card className="border-amber-300 dark:border-amber-700">
+            <CardHeader className="pb-1 pt-3 px-4">
+              <CardTitle className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5" /> Workflow Mismatch
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-3">
+              <p className="text-2xl font-semibold tabular-nums text-amber-600 dark:text-amber-400">{orphanedCount}</p>
+              <p className="text-xs text-muted-foreground">KPIs at a removed stage</p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Table */}
