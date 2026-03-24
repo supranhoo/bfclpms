@@ -226,6 +226,8 @@ export default function EmployeePerformanceSummary() {
             totalWeight: isLocked ? 0 : weight,
             kpiCount: isLocked ? 0 : 1,
             lockedKpiCount: isLocked ? 1 : 0,
+            orphanedKpiCount: 0,
+            orphanedStatuses: new Set<string>(),
           });
         }
       });
