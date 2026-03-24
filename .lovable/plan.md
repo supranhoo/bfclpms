@@ -1,69 +1,36 @@
 
-RCA confirmed: employee 101784 is not the same data case as the earlier HR PMS issue.
 
-What I verified
-- 101784’s January 2026 workflow is `kra_set → self_review → manager_check → approved`
-- All 10 January KPIs are currently at `manager_check`
-- Several of those KPIs already have `manager_score` filled, so they were effectively completed at manager level
-- The current reconciliation function does not touch them, because `manager_check` still exists in the workflow, so they are not treated as “orphaned”
-- Result: they look stuck even though there is no downstream reviewer for that month
+## RCA: "Failed to reconcile workflow statuses" Error
 
-Actual root cause
-- We fixed “status missing from workflow”
-- But we did not fix “status still exists, yet is the final actionable stage and can no longer move anywhere”
-- That creates a second class of stale data:
-  1. Missing-stage orphaned KPI
-  2. Terminal-stage stale KPI
+### Root Cause
 
-Plan to fix
+The error is a **PostgreSQL type casting failure**:
 
-1. Extend backend reconciliation logic
-- Update `reconcile_workflow_statuses` so it handles both classes:
-  - `missing_stage_orphan` → keep current reroute behavior
-  - `terminal_stage_stale` → new behavior
-- New terminal-stage rules:
-  - If KPI is sitting at the last non-approved stage in the employee’s active workflow, and reviewer data for that stage already exists, auto-finalize it to `approved`
-  - If KPI is sitting at that terminal stage but reviewer data is missing, move it back to the previous actionable status so the reviewer can actually act on it
-- For 101784 this means:
-  - rows with manager review data → `approved`
-  - rows without manager review data → back to `self_review`
+```
+column "status" is of type review_status but expression is of type text
+```
 
-2. Return reason codes from reconciliation
-- Enhance the function response with a reason such as:
-  - `missing_stage_orphan`
-  - `terminal_stage_completed`
-  - `terminal_stage_unreviewed`
-- This will make the admin tool explain exactly why each KPI is being moved
+The `reconcile_workflow_statuses` function declares `v_new_status TEXT`, but the `kpis.status` column uses a custom enum type `review_status`. PostgreSQL does not implicitly cast `text → review_status`, so both UPDATE statements fail:
 
-3. Upgrade the admin reconciliation UI
-- Update `src/components/admin/ReconcileOrphanedKpisDialog.tsx`
-- Rename the concept from only “Orphaned KPIs” to a broader “Workflow Status Reconciliation”
-- Show:
-  - current status
-  - target status
-  - reason category
-  - whether the row will be approved or reopened
+- Line ~187: `UPDATE kpis SET status = v_new_status ...` (for non-approved)
+- Line ~181: `UPDATE kpis SET status = 'approved' ...` (this one works because string literals ARE implicitly cast, but `v_new_status` as a variable is not)
 
-4. Add UI guardrails in review screens
-- In reviewer scorecard/table/tracker, detect KPIs that are in a terminal stale state
-- Show an amber warning badge like “Needs Reconcile” instead of a misleading normal stage label
-- This prevents future confusion before the repair action is run
+The dry run succeeds because it never hits the UPDATE path. The execute fails immediately on the first KPI it tries to update.
 
-5. Run a one-time repair for affected periods
-- After deploying the reconciliation update, run it for the affected month/year (starting with January 2026)
-- This should clean both:
-  - old HR PMS mismatches like 100705
-  - terminal manager-stage cases like 101784
+### Fix — One database migration
 
-Files to update
-- `supabase/migrations/...sql` — extend `reconcile_workflow_statuses`
-- `src/components/admin/ReconcileOrphanedKpisDialog.tsx` — broaden reconciliation UI/copy
-- `src/components/review/KpiDetailsTable.tsx` — add terminal-stale badge
-- `src/components/review/WorkflowProgressTracker.tsx` — avoid misleading stage counts/status display
-- `src/components/review/UnifiedScorecard.tsx` — surface the warning state consistently
+Add explicit `::review_status` casts to both UPDATE statements in the function:
 
-Validation after implementation
-- 101784 should no longer show all KPIs stranded at `manager_check`
-- completed manager-reviewed KPIs should become `approved`
-- incomplete ones should reopen into a real actionable state
-- 100705-style removed-stage cases must still reconcile correctly
+```sql
+-- Line for approved path:
+UPDATE kpis SET status = 'approved'::review_status, updated_at = now() WHERE id = v_kpi.kpi_id;
+
+-- Line for non-approved path:
+UPDATE kpis SET status = v_new_status::review_status, updated_at = now() WHERE id = v_kpi.kpi_id;
+```
+
+The full `reconcile_workflow_statuses` function will be recreated with these two casts added. No other changes needed — the logic is correct, only the type casting was missing.
+
+### Files
+- DB migration only (recreate `reconcile_workflow_statuses` with `::review_status` casts)
+
