@@ -47,6 +47,7 @@ const RollbackRequests = lazy(() => import("./pages/admin/RollbackRequests"));
 const KpiMappingMatrix = lazy(() => import("./pages/admin/KpiMappingMatrix"));
 const KpiWeightageDashboard = lazy(() => import("./pages/admin/KpiWeightageDashboard"));
 const PendingSelfReviews = lazy(() => import("./pages/admin/PendingSelfReviews"));
+const IncentiveConfig = lazy(() => import("./pages/admin/IncentiveConfig"));
 
 // Report pages
 const PerformanceReport = lazy(() => import("./pages/reports/PerformanceReport"));
