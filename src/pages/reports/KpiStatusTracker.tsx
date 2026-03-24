@@ -350,6 +350,11 @@ export default function KpiStatusTracker() {
                 />
               </div>
             </div>
+
+            <FrequencyLockToggle
+              checked={showFreqLocked}
+              onCheckedChange={v => { setShowFreqLocked(v); setCurrentPage(1); }}
+            />
           </div>
         </CardContent>
       </Card>
