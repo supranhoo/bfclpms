@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-24  
-> **Version:** 1.82.0 — Extended reconcile_workflow_statuses to handle terminal-stage stale KPIs (Class 2: KPI at final workflow stage with/without reviewer score); added reason codes (missing_stage_orphan, terminal_stage_completed, terminal_stage_unreviewed); broadened ReconcileOrphanedKpisDialog to "Workflow Status Reconciliation" with reason badges and summary counts
+> **Version:** 1.83.0 — Added auto-reconcile-workflow edge function that automatically reconciles in-flight KPIs when workflow templates are changed; info banner on Workflow Configuration page
 > **Maintainer:** Lovable AI
 
 ---
