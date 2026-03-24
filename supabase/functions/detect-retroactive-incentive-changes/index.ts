@@ -166,6 +166,60 @@ serve(async (req) => {
       }
     }
 
+    // Send email alert to HR/Admin if revisions were created
+    if (revisionsCreated > 0) {
+      try {
+        // Get affected employee names for the email
+        const affectedEmployeeIds = Array.from(affectedEmployeeMonths.keys());
+        const { data: affectedProfiles } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .in('id', affectedEmployeeIds);
+        const affectedNames = (affectedProfiles || []).map((p: any) => p.full_name).filter(Boolean).join(', ');
+        const affectedMonthsList = Array.from(new Set(
+          Array.from(affectedEmployeeMonths.values()).flatMap(s => Array.from(s))
+        )).join(', ');
+
+        // Get HR/Admin recipients
+        const { data: recipients } = await supabase
+          .from('user_roles')
+          .select('user_id, role')
+          .in('role', ['admin', 'hr_pms']);
+
+        if (recipients && recipients.length > 0) {
+          const uniqueUserIds = Array.from(new Set(recipients.map((r: any) => r.user_id)));
+          const { data: recipientProfiles } = await supabase
+            .from('profiles')
+            .select('id, full_name, email')
+            .in('id', uniqueUserIds);
+
+          for (const profile of (recipientProfiles || [])) {
+            if (!profile.email) continue;
+            try {
+              await supabase.functions.invoke('send-email-notification', {
+                body: {
+                  event_type: 'incentive_retroactive_alert',
+                  recipient_email: profile.email,
+                  recipient_name: profile.full_name || 'HR/Admin',
+                  metadata: {
+                    revisions_count: String(revisionsCreated),
+                    source_period: review_period,
+                    review_year: String(review_year),
+                    affected_employees: affectedNames || `${affectedEmployeeIds.length} employee(s)`,
+                    affected_months: affectedMonthsList,
+                  },
+                },
+              });
+            } catch (emailErr) {
+              console.error('Failed to send incentive alert email to', profile.email, emailErr);
+            }
+          }
+        }
+      } catch (alertErr) {
+        console.error('Failed to send incentive retroactive alerts:', alertErr);
+      }
+    }
+
     return new Response(
       JSON.stringify({ revisions_created: revisionsCreated }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

@@ -848,6 +848,7 @@ export default function ManagementDashboard() {
         overdueReviews={dashboardData?.overdueReviews || 0}
         pendingRollbacks={rollbackCounts?.pending || 0}
         openQueries={dashboardData?.openQueries || 0}
+        pendingIncentiveAdjustments={pendingAdjustments}
       />
 
       {/* Pending Management Reviews Table */}

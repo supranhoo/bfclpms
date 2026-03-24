@@ -1,15 +1,16 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Clock, RotateCcw, HelpCircle, ArrowRight } from 'lucide-react';
+import { Clock, RotateCcw, HelpCircle, ArrowRight, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface ActionItemsCardsProps {
   overdueReviews: number;
   pendingRollbacks: number;
   openQueries: number;
+  pendingIncentiveAdjustments?: number;
 }
 
-export function ActionItemsCards({ overdueReviews, pendingRollbacks, openQueries }: ActionItemsCardsProps) {
+export function ActionItemsCards({ overdueReviews, pendingRollbacks, openQueries, pendingIncentiveAdjustments = 0 }: ActionItemsCardsProps) {
   const navigate = useNavigate();
 
   const items = [
@@ -37,6 +38,14 @@ export function ActionItemsCards({ overdueReviews, pendingRollbacks, openQueries
       bgColor: 'bg-red-100 dark:bg-red-900/30',
       onClick: () => navigate('/reports/queries'),
     },
+    {
+      title: 'Incentive Adjustments',
+      count: pendingIncentiveAdjustments,
+      icon: TrendingUp,
+      color: 'text-blue-600 dark:text-blue-400',
+      bgColor: 'bg-blue-100 dark:bg-blue-900/30',
+      onClick: () => navigate('/reports/incentive'),
+    },
   ];
 
   return (
@@ -45,7 +54,7 @@ export function ActionItemsCards({ overdueReviews, pendingRollbacks, openQueries
         <CardTitle className="text-base">Action Items & Approvals</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {items.map((item) => (
             <button
               key={item.title}

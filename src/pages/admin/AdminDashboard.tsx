@@ -21,6 +21,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { FixCorruptedScoresDialog } from '@/components/admin/FixCorruptedScoresDialog';
+import { usePendingAdjustmentCount } from '@/hooks/useIncentiveRecords';
 
 interface StageCount {
   stage: string;
@@ -48,6 +49,8 @@ const STAGE_CONFIG: Record<string, { label: string; icon: typeof Clock; color: s
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+
+  const { data: pendingAdjustments = 0 } = usePendingAdjustmentCount();
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['admin-dashboard-stats'],
@@ -160,7 +163,7 @@ export default function AdminDashboard() {
       />
 
       {/* Key Stats */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <StatCard
           title="Total Employees"
           value={stats?.totalEmployees || 0}
@@ -195,6 +198,13 @@ export default function AdminDashboard() {
           icon={Undo2}
           description="Awaiting admin action"
           onClick={() => navigate('/admin/rollback-requests')}
+        />
+        <StatCard
+          title="Incentive Adjustments"
+          value={pendingAdjustments}
+          icon={TrendingUp}
+          description={pendingAdjustments > 0 ? 'Slab changes detected' : 'No pending changes'}
+          onClick={() => navigate('/reports/incentive')}
         />
       </div>
 
