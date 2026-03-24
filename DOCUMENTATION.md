@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-24  
-> **Version:** 1.73.0 — Incentive Module: 6 new tables, admin config UI (programs/slabs/DQ rules/eligibility), monthly & retroactive reports, edge functions for computation
+> **Version:** 1.74.0 — Incentive Module: Added `incentive_program_mappings` table for flexible employee enrollment (by dept/BU/designation/grade/individual), ProgramEmployeeMapping UI, compute function resolves mappings before processing
 > **Maintainer:** Lovable AI
 
 ---

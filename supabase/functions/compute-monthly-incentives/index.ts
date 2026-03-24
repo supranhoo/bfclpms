@@ -42,11 +42,94 @@ serve(async (req) => {
       .eq('program_id', program_id)
       .eq('is_active', true);
 
-    // 2. Fetch all employees
-    const { data: employees } = await supabase
+    // 2. Resolve program mappings to get eligible employee IDs
+    const { data: mappings } = await supabase
+      .from('incentive_program_mappings')
+      .select('mapping_type, mapping_value')
+      .eq('program_id', program_id);
+
+    let employeeFilter: string[] | null = null; // null = no mappings = all employees
+
+    if (mappings && mappings.length > 0) {
+      const eligibleIds = new Set<string>();
+      const deptIds: string[] = [];
+      const buIds: string[] = [];
+      const desigs: string[] = [];
+      const pmsGrades: string[] = [];
+
+      for (const m of mappings) {
+        switch (m.mapping_type) {
+          case 'employee': eligibleIds.add(m.mapping_value); break;
+          case 'department': deptIds.push(m.mapping_value); break;
+          case 'business_unit': buIds.push(m.mapping_value); break;
+          case 'designation': desigs.push(m.mapping_value); break;
+          case 'pms_grade': pmsGrades.push(m.mapping_value); break;
+        }
+      }
+
+      // Resolve department employees
+      if (deptIds.length > 0) {
+        const { data: deptEmps } = await supabase
+          .from('profiles').select('id').eq('is_active', true).in('department_id', deptIds);
+        deptEmps?.forEach((e: any) => eligibleIds.add(e.id));
+      }
+
+      // Resolve BU employees (dept -> BU mapping)
+      if (buIds.length > 0) {
+        const { data: buDepts } = await supabase
+          .from('departments').select('id').in('business_unit_id', buIds);
+        if (buDepts?.length) {
+          const { data: buEmps } = await supabase
+            .from('profiles').select('id').eq('is_active', true)
+            .in('department_id', buDepts.map((d: any) => d.id));
+          buEmps?.forEach((e: any) => eligibleIds.add(e.id));
+        }
+      }
+
+      // Resolve designation employees
+      if (desigs.length > 0) {
+        const { data: desigEmps } = await supabase
+          .from('profiles').select('id').eq('is_active', true).in('designation', desigs);
+        desigEmps?.forEach((e: any) => eligibleIds.add(e.id));
+      }
+
+      // Resolve PMS grade employees
+      if (pmsGrades.length > 0) {
+        const { data: gradeEmps } = await supabase
+          .from('profiles').select('id').eq('is_active', true).in('pms_grade', pmsGrades);
+        gradeEmps?.forEach((e: any) => eligibleIds.add(e.id));
+      }
+
+      employeeFilter = Array.from(eligibleIds);
+    }
+
+    // Fetch employees (filtered if mappings exist, otherwise all)
+    let employeeQuery = supabase
       .from('profiles')
       .select('id, full_name, employee_code, department_id')
       .eq('is_active', true);
+
+    if (employeeFilter !== null) {
+      if (employeeFilter.length === 0) {
+        return new Response(JSON.stringify({ computed: 0, message: 'No employees match program mappings' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      // Batch employee filter in groups of 100 to avoid query limits
+      const allEmployees: any[] = [];
+      for (let i = 0; i < employeeFilter.length; i += 100) {
+        const batch = employeeFilter.slice(i, i + 100);
+        const { data } = await supabase
+          .from('profiles')
+          .select('id, full_name, employee_code, department_id')
+          .eq('is_active', true)
+          .in('id', batch);
+        if (data) allEmployees.push(...data);
+      }
+      var employees = allEmployees;
+    } else {
+      const { data } = await employeeQuery;
+      var employees = data;
+    }
 
     if (!employees?.length) {
       return new Response(JSON.stringify({ computed: 0 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

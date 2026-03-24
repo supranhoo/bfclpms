@@ -795,6 +795,38 @@ export type Database = {
           },
         ]
       }
+      incentive_program_mappings: {
+        Row: {
+          created_at: string
+          id: string
+          mapping_type: string
+          mapping_value: string
+          program_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          mapping_type: string
+          mapping_value: string
+          program_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          mapping_type?: string
+          mapping_value?: string
+          program_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "incentive_program_mappings_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "incentive_programs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       incentive_programs: {
         Row: {
           created_at: string

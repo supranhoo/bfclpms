@@ -20,6 +20,7 @@ import {
 import { IncentiveSlabEditor } from '@/components/incentive/IncentiveSlabEditor';
 import { DisqualificationRulesEditor } from '@/components/incentive/DisqualificationRulesEditor';
 import { EligibilityDataEntry } from '@/components/incentive/EligibilityDataEntry';
+import { ProgramEmployeeMapping } from '@/components/incentive/ProgramEmployeeMapping';
 
 export default function IncentiveConfig() {
   const { data: programs = [], isLoading } = useIncentivePrograms();
@@ -52,6 +53,7 @@ export default function IncentiveConfig() {
       <Tabs defaultValue="programs">
         <TabsList>
           <TabsTrigger value="programs">Programs</TabsTrigger>
+          <TabsTrigger value="mapping" disabled={!selectedProgramId}>Mapping</TabsTrigger>
           <TabsTrigger value="slabs" disabled={!selectedProgramId}>Slabs</TabsTrigger>
           <TabsTrigger value="rules" disabled={!selectedProgramId}>DQ Rules</TabsTrigger>
           <TabsTrigger value="eligibility">Eligibility Data</TabsTrigger>
@@ -133,6 +135,12 @@ export default function IncentiveConfig() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="mapping">
+          {selectedProgramId && (
+            <ProgramEmployeeMapping programId={selectedProgramId} />
+          )}
         </TabsContent>
 
         <TabsContent value="slabs">
