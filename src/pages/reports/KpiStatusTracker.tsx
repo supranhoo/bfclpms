@@ -204,6 +204,7 @@ export default function KpiStatusTracker() {
     if (!rows) return [];
     const term = searchTerm.toLowerCase();
     return rows.filter(r => {
+      if (!showFreqLocked && r.isFrequencyLocked) return false;
       if (selectedDept !== 'all' && r.department !== selectedDept) return false;
       if (selectedStatus !== 'all' && r.status !== selectedStatus) return false;
       if (term) {
@@ -216,7 +217,7 @@ export default function KpiStatusTracker() {
       }
       return true;
     });
-  }, [rows, searchTerm, selectedDept, selectedStatus]);
+  }, [rows, searchTerm, selectedDept, selectedStatus, showFreqLocked]);
 
   // Summary stats by status
   const statusCounts = useMemo(() => {
