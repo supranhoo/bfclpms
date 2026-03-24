@@ -8,6 +8,7 @@ import { getCycleLabel } from '@/lib/frequencyUtils';
 import { Clock, Building2, Users, User, Lock, Settings, ClipboardEdit } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
+import { useWorkflowSetting } from '@/hooks/useWorkflowSettings';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -38,6 +39,9 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
   
   const govPerms = useReviewPeriodPermissions(selectedPeriod, selectedYear);
   const hasRestrictions = !govPerms.isLoading && (govPerms.view_only || !govPerms.edit_kpi || !govPerms.edit_scores);
+
+  const { data: showDataOwnerSetting } = useWorkflowSetting('show_data_owner_to_employees');
+  const showDataOwnerToEmployees = isAdmin || (showDataOwnerSetting?.setting_value !== false && showDataOwnerSetting?.setting_value !== 'false');
 
   const { data: employeeProfile } = useQuery({
     queryKey: ['kpi-employee-profile', kpi.employee_id],
@@ -149,12 +153,12 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
             )}
             Organization KPI — {scope.charAt(0).toUpperCase() + scope.slice(1)}
           </Badge>
-          {orgKpiDataOwnerNames && orgKpiDataOwnerNames.length > 0 && (
+          {showDataOwnerToEmployees && orgKpiDataOwnerNames && orgKpiDataOwnerNames.length > 0 && (
             <Badge variant="outline" className="text-xs">
               Data Owner: {orgKpiDataOwnerNames.join(', ')}
             </Badge>
           )}
-          {orgKpiEnteredByName && kpi.status !== 'kra_set' && (
+          {showDataOwnerToEmployees && orgKpiEnteredByName && kpi.status !== 'kra_set' && (
             <Badge variant="outline" className="text-xs">
               Data entered by: {orgKpiEnteredByName}
             </Badge>

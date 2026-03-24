@@ -66,6 +66,9 @@ const DEFAULT_VALUES: Record<string, string | number | boolean> = {
   
   // Org KPI self-entry
   org_kpi_employee_self_entry: false,
+  
+  // Visibility
+  show_data_owner_to_employees: true,
 };
 
 function parseSettingValue(value: unknown): string | number | boolean {
