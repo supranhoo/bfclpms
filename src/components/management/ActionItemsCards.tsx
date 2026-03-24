@@ -38,6 +38,14 @@ export function ActionItemsCards({ overdueReviews, pendingRollbacks, openQueries
       bgColor: 'bg-red-100 dark:bg-red-900/30',
       onClick: () => navigate('/reports/queries'),
     },
+    {
+      title: 'Incentive Adjustments',
+      count: pendingIncentiveAdjustments,
+      icon: TrendingUp,
+      color: 'text-blue-600 dark:text-blue-400',
+      bgColor: 'bg-blue-100 dark:bg-blue-900/30',
+      onClick: () => navigate('/reports/incentive'),
+    },
   ];
 
   return (
