@@ -21,6 +21,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { FixCorruptedScoresDialog } from '@/components/admin/FixCorruptedScoresDialog';
+import { usePendingAdjustmentCount } from '@/hooks/useIncentiveRecords';
 
 interface StageCount {
   stage: string;
