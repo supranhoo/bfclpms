@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-24  
-> **Version:** 1.81.0 — Fixed reconcile_workflow_statuses to handle middle-stage orphaned KPIs (not just past-terminal); added "Orphaned" / "Workflow Mismatch" badges to KPI Status Tracker, Employee Performance Summary, and KPI Detail Report; ReconcileOrphanedKpisDialog now shows correct target status per KPI
+> **Version:** 1.82.0 — Extended reconcile_workflow_statuses to handle terminal-stage stale KPIs (Class 2: KPI at final workflow stage with/without reviewer score); added reason codes (missing_stage_orphan, terminal_stage_completed, terminal_stage_unreviewed); broadened ReconcileOrphanedKpisDialog to "Workflow Status Reconciliation" with reason badges and summary counts
 > **Maintainer:** Lovable AI
 
 ---

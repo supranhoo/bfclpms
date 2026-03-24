@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { RefreshCw, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { RefreshCw, AlertTriangle, CheckCircle2, ArrowRight, RotateCcw, Zap } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -23,20 +23,23 @@ import {
 } from '@/components/ui/table';
 import { getStageLabel } from '@/hooks/useWorkflowConfig';
 
+interface ReconcileAffectedItem {
+  kpi_id: string;
+  employee_name: string;
+  employee_id: string;
+  kpi_name: string;
+  kra_name: string;
+  old_status: string;
+  new_status: string;
+  reason?: string;
+  review_period: string | null;
+  review_year: number | null;
+}
+
 interface ReconcileResult {
   count: number;
   dry_run: boolean;
-  affected: Array<{
-    kpi_id: string;
-    employee_name: string;
-    employee_id: string;
-    kpi_name: string;
-    kra_name: string;
-    old_status: string;
-    new_status: string;
-    review_period: string | null;
-    review_year: number | null;
-  }>;
+  affected: ReconcileAffectedItem[];
 }
 
 interface ReconcileOrphanedKpisDialogProps {
@@ -44,6 +47,27 @@ interface ReconcileOrphanedKpisDialogProps {
   selectedMonth: string;
   selectedYear: number;
 }
+
+const REASON_CONFIG: Record<string, { label: string; description: string; color: string; icon: typeof AlertTriangle }> = {
+  missing_stage_orphan: {
+    label: 'Orphaned Stage',
+    description: 'Status no longer exists in workflow',
+    color: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+    icon: AlertTriangle,
+  },
+  terminal_stage_completed: {
+    label: 'Terminal Completed',
+    description: 'Final stage reviewed but not finalized',
+    color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+    icon: CheckCircle2,
+  },
+  terminal_stage_unreviewed: {
+    label: 'Terminal Unreviewed',
+    description: 'At final stage without reviewer score',
+    color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+    icon: RotateCcw,
+  },
+};
 
 export default function ReconcileOrphanedKpisDialog({
   periodMode,
@@ -82,7 +106,7 @@ export default function ReconcileOrphanedKpisDialog({
     } catch {
       toast({
         title: 'Error',
-        description: 'Failed to scan for orphaned KPIs.',
+        description: 'Failed to scan for workflow status issues.',
         variant: 'destructive',
       });
       setDialogOpen(false);
@@ -105,7 +129,7 @@ export default function ReconcileOrphanedKpisDialog({
     } catch {
       toast({
         title: 'Error',
-        description: 'Failed to reconcile orphaned KPIs.',
+        description: 'Failed to reconcile workflow statuses.',
         variant: 'destructive',
       });
     }
@@ -115,28 +139,40 @@ export default function ReconcileOrphanedKpisDialog({
     ? `${selectedMonth} ${selectedYear}`
     : 'All Periods';
 
+  const getReasonBadge = (reason?: string) => {
+    const config = reason ? REASON_CONFIG[reason] : null;
+    if (!config) return null;
+    const Icon = config.icon;
+    return (
+      <Badge variant="outline" className={`text-[10px] gap-0.5 border-0 ${config.color}`}>
+        <Icon className="h-2.5 w-2.5" />
+        {config.label}
+      </Badge>
+    );
+  };
+
   return (
     <>
       <Button variant="outline" onClick={handleOpenDryRun} disabled={reconcileMutation.isPending}>
         <RefreshCw className={`h-4 w-4 mr-2 ${reconcileMutation.isPending ? 'animate-spin' : ''}`} />
-        Reconcile Orphaned KPIs
+        Reconcile Workflow Statuses
       </Button>
 
       <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) { setDialogOpen(false); setDryRunResult(null); setExecuted(false); } }}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {executed ? (
                 <CheckCircle2 className="h-5 w-5 text-green-600" />
               ) : (
-                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                <Zap className="h-5 w-5 text-amber-500" />
               )}
-              {executed ? 'Reconciliation Complete' : 'Reconcile Orphaned KPIs'}
+              {executed ? 'Reconciliation Complete' : 'Workflow Status Reconciliation'}
             </DialogTitle>
             <DialogDescription>
               {executed
-                ? `${dryRunResult?.count || 0} KPI(s) were moved to Approved status.`
-                : `Scanning for KPIs stuck in statuses that no longer exist in their assigned workflow. Scope: ${scopeLabel}`
+                ? `${dryRunResult?.count || 0} KPI(s) were reconciled.`
+                : `Scanning for KPIs with orphaned statuses or stuck at terminal stages. Scope: ${scopeLabel}`
               }
             </DialogDescription>
           </DialogHeader>
@@ -151,17 +187,27 @@ export default function ReconcileOrphanedKpisDialog({
           {dryRunResult && dryRunResult.count === 0 && (
             <div className="text-center py-8">
               <CheckCircle2 className="h-10 w-10 text-green-600 mx-auto mb-2" />
-              <p className="text-muted-foreground">No orphaned KPIs found. All statuses are valid.</p>
+              <p className="text-muted-foreground">No issues found. All workflow statuses are valid.</p>
             </div>
           )}
 
           {dryRunResult && dryRunResult.count > 0 && (
             <div className="space-y-3">
-              <div className="flex items-center gap-2">
+              {/* Summary badges */}
+              <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="secondary">{dryRunResult.count} KPI(s)</Badge>
-                <span className="text-sm text-muted-foreground">
-                  will be reconciled to their correct workflow stage
-                </span>
+                {(() => {
+                  const orphaned = dryRunResult.affected.filter(a => a.reason === 'missing_stage_orphan').length;
+                  const completed = dryRunResult.affected.filter(a => a.reason === 'terminal_stage_completed').length;
+                  const unreviewed = dryRunResult.affected.filter(a => a.reason === 'terminal_stage_unreviewed').length;
+                  return (
+                    <>
+                      {orphaned > 0 && <Badge variant="outline" className="text-xs bg-amber-50 dark:bg-amber-900/20">{orphaned} orphaned</Badge>}
+                      {completed > 0 && <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-900/20">{completed} terminal→approved</Badge>}
+                      {unreviewed > 0 && <Badge variant="outline" className="text-xs bg-blue-50 dark:bg-blue-900/20">{unreviewed} terminal→reopened</Badge>}
+                    </>
+                  );
+                })()}
               </div>
 
               <div className="border rounded-md max-h-[40vh] overflow-y-auto">
@@ -170,9 +216,10 @@ export default function ReconcileOrphanedKpisDialog({
                     <TableRow>
                       <TableHead>Employee</TableHead>
                       <TableHead>KPI</TableHead>
-                      <TableHead>Current Status</TableHead>
+                      <TableHead>Current</TableHead>
                       <TableHead>→</TableHead>
-                      <TableHead>New Status</TableHead>
+                      <TableHead>Target</TableHead>
+                      <TableHead>Reason</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -188,7 +235,7 @@ export default function ReconcileOrphanedKpisDialog({
                             {getStageLabel(item.old_status)}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-muted-foreground">→</TableCell>
+                        <TableCell><ArrowRight className="h-3.5 w-3.5 text-muted-foreground" /></TableCell>
                         <TableCell>
                           {item.new_status === 'approved' ? (
                             <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 text-xs">
@@ -200,6 +247,7 @@ export default function ReconcileOrphanedKpisDialog({
                             </Badge>
                           )}
                         </TableCell>
+                        <TableCell>{getReasonBadge(item.reason)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
