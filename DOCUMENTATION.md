@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-24  
-> **Version:** 1.74.0 — Incentive Module: Added `incentive_program_mappings` table for flexible employee enrollment (by dept/BU/designation/grade/individual), ProgramEmployeeMapping UI, compute function resolves mappings before processing
+> **Version:** 1.75.0 — Incentive Config UI: Redesigned to program-centric accordion layout with inline Mapping/Slabs/DQ Rules sub-tabs per program, summary count badges
 > **Maintainer:** Lovable AI
 
 ---
