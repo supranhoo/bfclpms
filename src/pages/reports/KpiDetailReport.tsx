@@ -184,15 +184,16 @@ export default function KpiDetailReport() {
           ? kpi.review_submissions[0]
           : kpi.review_submissions;
         const isNa = sub?.is_na ?? false;
+        const isFrequencyLocked = selectedPeriod !== 'all' && isKpiLockedForPeriod(kpi.frequency, selectedPeriod, year);
         const weightage = kpi.weightage ?? 0;
-        const finalScore = isNa ? null : resolveFinalScore(sub, kpi.status);
-        const totalScore = isNa || finalScore === null ? null : finalScore * weightage;
-        const outOfScore = isNa ? null : weightage * 5;
+        const finalScore = isNa || isFrequencyLocked ? null : resolveFinalScore(sub, kpi.status);
+        const totalScore = isNa || isFrequencyLocked || finalScore === null ? null : finalScore * weightage;
+        const outOfScore = isNa || isFrequencyLocked ? null : weightage * 5;
         const percentage =
-          isNa || totalScore === null || outOfScore === null || outOfScore === 0
+          isNa || isFrequencyLocked || totalScore === null || outOfScore === null || outOfScore === 0
             ? null
             : (totalScore / outOfScore) * 100;
-        const overallRating = isNa ? null : ratingLabel(finalScore);
+        const overallRating = isNa || isFrequencyLocked ? null : ratingLabel(finalScore);
 
         return {
           kpiId: kpi.id,
@@ -217,6 +218,7 @@ export default function KpiDetailReport() {
           percentage,
           overallRating,
           isNa,
+          isFrequencyLocked,
         };
       });
 
