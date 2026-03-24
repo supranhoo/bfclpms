@@ -13,6 +13,8 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Download, Search, ChevronLeft, ChevronRight, FileSpreadsheet, Hash, AlertCircle, TrendingUp } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { FrequencyLockToggle } from '@/components/ui/FrequencyLockToggle';
+import { isKpiLockedForPeriod } from '@/lib/frequencyUtils';
 import * as XLSX from 'xlsx';
 
 const FULL_MONTHS = [
