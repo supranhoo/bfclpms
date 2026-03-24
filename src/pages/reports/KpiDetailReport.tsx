@@ -201,6 +201,7 @@ export default function KpiDetailReport() {
 
         return {
           kpiId: kpi.id,
+          employeeId: kpi.employee_id,
           employeeCode: profile?.employee_code ?? '—',
           employeeName: profile?.full_name ?? 'Unknown',
           department: (profile?.departments as any)?.name ?? '—',
@@ -210,6 +211,7 @@ export default function KpiDetailReport() {
           reviewPeriod: kpi.review_period ?? '—',
           reviewYear: kpi.review_year ?? year,
           weightage,
+          status: kpi.status ?? 'kra_set',
           selfScore: sub?.self_score ?? null,
           managerScore: sub?.manager_score ?? null,
           skipLevelScore: sub?.skip_level_score ?? null,
@@ -223,6 +225,7 @@ export default function KpiDetailReport() {
           overallRating,
           isNa,
           isFrequencyLocked,
+          isOrphaned: false,
         };
       });
 
