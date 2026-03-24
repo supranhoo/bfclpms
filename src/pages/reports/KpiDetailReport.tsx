@@ -99,6 +99,7 @@ export default function KpiDetailReport() {
   const [includeNa, setIncludeNa] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [showFreqLocked, setShowFreqLocked] = useState(false);
 
   const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
 
