@@ -53,6 +53,8 @@ export default function UserManagement() {
   const { data: departments } = useDepartments();
   const { data: designationsList } = useDesignations();
   const { data: pmsGradesList } = usePmsGrades();
+  const { data: divisions } = useDivisions();
+  const { data: businessUnits } = useBusinessUnits();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
