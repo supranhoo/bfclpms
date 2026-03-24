@@ -141,6 +141,7 @@ export default function IncentiveConfig() {
                         <TabsTrigger value="mapping">Mapping</TabsTrigger>
                         <TabsTrigger value="slabs">Slabs</TabsTrigger>
                         <TabsTrigger value="rules">DQ Rules</TabsTrigger>
+                        <TabsTrigger value="fields">Fields</TabsTrigger>
                       </TabsList>
 
                       <TabsContent value="mapping">
