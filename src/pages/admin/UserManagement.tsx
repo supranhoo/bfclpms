@@ -92,6 +92,7 @@ export default function UserManagement() {
   const [newDesignation, setNewDesignation] = useState('');
   const [newPmsGrade, setNewPmsGrade] = useState('');
   const [newManagerId, setNewManagerId] = useState('');
+  const [newDivisionId, setNewDivisionId] = useState('');  // UI-only cascading filter
 
   // Bulk Action Dialog
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
