@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-24  
-> **Version:** 1.85.0 — Added admin-controlled toggle (`show_data_owner_to_employees`) to control visibility of Data Owner and Data Entered By badges for non-admin users on KPI details
+> **Version:** 1.86.0 — Added RLS policies so employees can see Data Owner and Data Entered By names; fixed case-sensitivity bug in AuditScorecard org KPI value lookup
 > **Maintainer:** Lovable AI
 
 ---
