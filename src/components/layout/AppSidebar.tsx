@@ -105,6 +105,7 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
     { title: 'Performance Report', icon: BarChart3, path: '/reports/performance', roles: ['admin', 'manager', 'auditor'] },
     { title: 'KRA Issuance', icon: FileText, path: '/reports/kra-issuance', roles: ['admin', 'manager', 'auditor'] },
     { title: 'TNI Report', icon: GraduationCap, path: '/reports/tni', roles: ['admin', 'manager', 'auditor'] },
+    { title: 'Incentive Report', icon: Percent, path: '/reports/incentive', roles: ['admin', 'management', 'hr_pms'] },
   ],
 });
 
