@@ -117,6 +117,7 @@ export default function ManagementDashboard() {
   const defaultFiscalYear = currentMonth >= 6 ? currentYear : currentYear - 1;
   const [selectedFiscalYear, setSelectedFiscalYear] = useState(defaultFiscalYear);
   const [selectedMonths, setSelectedMonths] = useState<string[]>(FISCAL_MONTHS);
+  const { data: pendingAdjustments = 0 } = usePendingAdjustmentCount();
 
   const {
     filters,
