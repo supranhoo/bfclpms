@@ -930,6 +930,21 @@ export default function ManagementDashboard() {
         <NotificationsSummary fiscalStartYear={selectedFiscalYear} selectedMonths={selectedMonths} />
       </div>
 
+      {/* Pending Incentive Adjustments */}
+      {pendingAdjustments > 0 && (
+        <Card className="border-destructive/50 bg-destructive/5">
+          <CardContent className="pt-4 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Pending Incentive Adjustments</p>
+              <p className="text-xs text-muted-foreground">{pendingAdjustments} retroactive slab change{pendingAdjustments > 1 ? 's' : ''} awaiting payroll notification</p>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => navigate('/reports/incentive')}>
+              <Award className="h-4 w-4 mr-1" /> View Report
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Quick Actions */}
       <Card>
         <CardHeader>
