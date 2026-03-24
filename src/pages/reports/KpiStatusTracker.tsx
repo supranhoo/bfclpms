@@ -10,10 +10,11 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { Download, Search, ChevronLeft, ChevronRight, FileSpreadsheet, Clock, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Download, Search, ChevronLeft, ChevronRight, FileSpreadsheet, Clock, CheckCircle2, AlertCircle, Loader2, AlertTriangle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FrequencyLockToggle } from '@/components/ui/FrequencyLockToggle';
 import { isKpiLockedForPeriod } from '@/lib/frequencyUtils';
+import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
 import * as XLSX from 'xlsx';
 import { differenceInDays } from 'date-fns';
 
