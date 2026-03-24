@@ -320,6 +320,16 @@ const App = () => (
                     <Suspense fallback={<PageFallback />}><PendingSelfReviews /></Suspense>
                   </ProtectedRoute>
                 } />
+                <Route path="/admin/incentive-config" element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <Suspense fallback={<PageFallback />}><IncentiveConfig /></Suspense>
+                  </ProtectedRoute>
+                } />
+                <Route path="/reports/incentive" element={
+                  <ReportRoute reportKey="incentive">
+                    <Suspense fallback={<PageFallback />}><IncentiveReport /></Suspense>
+                  </ReportRoute>
+                } />
               </Route>
               <Route path="*" element={<Suspense fallback={<PageFallback />}><NotFound /></Suspense>} />
             </Routes>
