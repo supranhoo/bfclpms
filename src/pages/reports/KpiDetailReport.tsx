@@ -240,6 +240,7 @@ export default function KpiDetailReport() {
     const term = searchTerm.toLowerCase();
     return rows.filter(r => {
       if (!includeNa && r.isNa) return false;
+      if (!showFreqLocked && r.isFrequencyLocked) return false;
       if (selectedDept !== 'all' && r.department !== selectedDept) return false;
       if (selectedCategory !== 'all' && r.category !== selectedCategory) return false;
       if (term) {
@@ -252,7 +253,7 @@ export default function KpiDetailReport() {
       }
       return true;
     });
-  }, [rows, searchTerm, selectedDept, selectedCategory, includeNa]);
+  }, [rows, searchTerm, selectedDept, selectedCategory, includeNa, showFreqLocked]);
 
   // Stats
   const stats = useMemo(() => {
