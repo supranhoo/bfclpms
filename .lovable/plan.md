@@ -1,44 +1,29 @@
 
 
-## Add Dashboard Widget + Email Alert for Pending Incentive Adjustments
+## Add Division Mapping to Incentive Program Employee Mapping
 
-### What This Solves
-When a Quarterly KPI resolves and changes an employee's past-month slab (e.g., 4.9 → 3.5), the payroll preparer currently must manually check the Retroactive Adjustment tab. This adds two proactive alert mechanisms.
+### Problem
+The Employee Mapping UI has 4 tabs (Dept/BU, Designation, Grade, Individual) but no Division option. The `divisions` table and `useDivisions()` hook already exist in the codebase.
 
 ### Changes
 
-#### 1. Admin Dashboard Widget — `src/pages/admin/AdminDashboard.tsx`
+#### 1. `src/components/incentive/ProgramEmployeeMapping.tsx`
 
-Add a "Pending Incentive Adjustments" stat card (similar to "Pending Rollbacks") that:
-- Uses the existing `usePendingAdjustmentCount()` hook from `useIncentiveRecords.ts`
-- Shows count of unnotified revisions with a warning color when > 0
-- Clicks through to `/reports/incentive`
-- Import `usePendingAdjustmentCount` and add a 6th StatCard in the key stats grid
+- Import `useDivisions` from `useOrganization`
+- Add `division` to `mappingsByType` record
+- Add `division` count to summary badges
+- Change TabsList from `grid-cols-4` to `grid-cols-5`
+- Add new "Division" tab trigger between "Dept/BU" and "Designation"
+- Add `TabsContent` for divisions with checkbox list (same pattern as departments)
 
-#### 2. Email Notification — `supabase/functions/detect-retroactive-incentive-changes/index.ts`
+#### 2. `supabase/functions/compute-monthly-incentives/index.ts`
 
-After creating revision records, if `revisionsCreated > 0`:
-- Query `profiles` with role `hr_pms` or `admin` to get payroll/HR recipients
-- Call the existing `send-email-notification` edge function with a new event type `incentive_retroactive_alert`
-- Email body includes: count of affected employees, affected months, and a prompt to check the Incentive Report
+The computation function must resolve `division` mapping type. When resolving eligible employees, add logic: if mapping_type is `division`, find all business_units in that division, then all departments in those BUs, then all employees in those departments.
 
-#### 3. Email Template — `supabase/functions/send-email-notification/index.ts`
-
-Add `incentive_retroactive_alert` to the event type handler:
-- Subject: "Incentive Slab Changes Detected — Action Required"
-- Body: Summary table of revision count, affected period, and link to the report
-- Recipients: HR/PMS and admin users (passed by the detect function)
-
-#### 4. ActionItemsCards Enhancement — `src/components/management/ActionItemsCards.tsx`
-
-Add a 4th action item card for "Incentive Adjustments" using the pending count, navigating to `/reports/incentive`. Accept `pendingIncentiveAdjustments` as a new prop.
-
-Update `ManagementDashboard.tsx` to pass `pendingAdjustments` to `ActionItemsCards`.
+### No database changes needed
+The `incentive_program_mappings` table uses a text `mapping_type` column — `'division'` works without schema changes.
 
 ### Files Modified
-- `src/pages/admin/AdminDashboard.tsx` — add pending adjustments stat card
-- `src/components/management/ActionItemsCards.tsx` — add incentive adjustments action item
-- `src/pages/ManagementDashboard.tsx` — pass pending count to ActionItemsCards
-- `supabase/functions/detect-retroactive-incentive-changes/index.ts` — send email after revisions created
-- `supabase/functions/send-email-notification/index.ts` — add `incentive_retroactive_alert` template
+- `src/components/incentive/ProgramEmployeeMapping.tsx` — add Division tab
+- `supabase/functions/compute-monthly-incentives/index.ts` — resolve division mappings
 
