@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-24  
-> **Version:** 1.80.0 — Added frequency-aware filtering to reports (KPI Status Tracker, Employee Performance Summary, KPI Detail Report) to hide/show frequency-locked KPIs
+> **Version:** 1.81.0 — Fixed reconcile_workflow_statuses to handle middle-stage orphaned KPIs (not just past-terminal); added "Orphaned" / "Workflow Mismatch" badges to KPI Status Tracker, Employee Performance Summary, and KPI Detail Report; ReconcileOrphanedKpisDialog now shows correct target status per KPI
 > **Maintainer:** Lovable AI
 
 ---

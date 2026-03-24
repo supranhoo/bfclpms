@@ -14,6 +14,7 @@ import { Download, Search, Users, TrendingUp, TrendingDown, Minus, ChevronLeft, 
 import { Skeleton } from '@/components/ui/skeleton';
 import { FrequencyLockToggle } from '@/components/ui/FrequencyLockToggle';
 import { isKpiLockedForPeriod } from '@/lib/frequencyUtils';
+import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
 import * as XLSX from 'xlsx';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
@@ -73,6 +74,8 @@ interface EmployeePerformance {
   totalWeight: number;
   kpiCount: number;
   lockedKpiCount: number;
+  orphanedKpiCount: number;
+  orphanedStatuses: Set<string>;
 }
 
 export default function EmployeePerformanceSummary() {
@@ -224,6 +227,8 @@ export default function EmployeePerformanceSummary() {
             totalWeight: isLocked ? 0 : weight,
             kpiCount: isLocked ? 0 : 1,
             lockedKpiCount: isLocked ? 1 : 0,
+            orphanedKpiCount: 0,
+            orphanedStatuses: new Set<string>(),
           });
         }
       });
@@ -231,6 +236,42 @@ export default function EmployeePerformanceSummary() {
       return Array.from(employeePeriodMap.values());
     },
   });
+
+  // Bulk workflow fetch for orphan detection
+  const perfEmployeeIds = useMemo(() => {
+    if (!performanceData) return [];
+    const ids = new Set<string>();
+    performanceData.forEach(r => ids.add(r.employeeId));
+    return Array.from(ids);
+  }, [performanceData]);
+
+  const { data: perfWorkflowMap } = useBulkEmployeeWorkflows(
+    perfEmployeeIds,
+    selectedPeriod !== 'all' ? selectedPeriod : undefined,
+    selectedPeriod !== 'all' ? parseInt(selectedYear) : undefined
+  );
+
+  // Enrich performance data with orphan detection (per-employee status check)
+  const enrichedPerformanceData = useMemo(() => {
+    if (!performanceData) return [];
+    if (!perfWorkflowMap || perfWorkflowMap.size === 0) return performanceData;
+    return performanceData.map(row => {
+      const stages = perfWorkflowMap.get(row.employeeId);
+      if (!stages) return row;
+      const orphanedStatuses = new Set<string>();
+      let orphanedCount = 0;
+      Object.entries(row.statusCounts).forEach(([status, count]) => {
+        if (status !== 'approved' && status !== 'kra_set' && !stages.includes(status)) {
+          orphanedStatuses.add(status);
+          orphanedCount += count;
+        }
+      });
+      if (orphanedCount > 0) {
+        return { ...row, orphanedKpiCount: orphanedCount, orphanedStatuses };
+      }
+      return row;
+    });
+  }, [performanceData, perfWorkflowMap]);
 
   // Fetch comparison data (all periods for trend analysis)
   const { data: trendData } = useQuery({
@@ -326,10 +367,10 @@ export default function EmployeePerformanceSummary() {
 
   // Filter and sort data by percentage descending (matching Excel format)
   const filteredData = useMemo(() => {
-    if (!performanceData) return [];
+    if (!enrichedPerformanceData) return [];
     
     const term = searchTerm.toLowerCase();
-    return performanceData
+    return enrichedPerformanceData
       .filter(row => {
         // Hide employees that only have frequency-locked KPIs when toggle is off
         if (!showFreqLocked && row.kpiCount === 0 && row.lockedKpiCount > 0) return false;
@@ -350,7 +391,7 @@ export default function EmployeePerformanceSummary() {
         const pctB = b.outOfScore > 0 ? (b.totalScore / b.outOfScore) * 100 : 0;
         return pctB - pctA;
       });
-  }, [performanceData, searchTerm, selectedStatus, showFreqLocked]);
+  }, [enrichedPerformanceData, searchTerm, selectedStatus, showFreqLocked]);
 
   // Pagination
   const totalPages = Math.ceil(filteredData.length / pageSize);
@@ -366,9 +407,9 @@ export default function EmployeePerformanceSummary() {
 
   // Get unique employees for comparison
   const uniqueEmployees = useMemo(() => {
-    if (!performanceData) return [];
+    if (!enrichedPerformanceData) return [];
     const seen = new Set<string>();
-    return performanceData
+    return enrichedPerformanceData
       .filter(row => {
         if (seen.has(row.employeeId)) return false;
         seen.add(row.employeeId);
@@ -376,7 +417,7 @@ export default function EmployeePerformanceSummary() {
       })
       .map(row => ({ id: row.employeeId, name: row.fullName, code: row.employeeCode }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [performanceData]);
+  }, [enrichedPerformanceData]);
 
   // Comparison chart data
   const comparisonChartData = useMemo(() => {
@@ -703,13 +744,17 @@ export default function EmployeePerformanceSummary() {
                                           </Badge>
                                         );
                                       }
-                                      return STATUS_PRIORITY_ORDER
+                                      const badges = STATUS_PRIORITY_ORDER
                                         .filter(s => (row.statusCounts[s] || 0) > 0)
-                                        .map(s => (
-                                          <Badge key={s} variant="outline" className={`text-[11px] px-1.5 py-0 ${STATUS_COLORS[s] || 'bg-muted'}`}>
-                                            {STATUS_LABELS[s] || s}{row.statusCounts[s] > 1 ? ` (${row.statusCounts[s]})` : ''}
-                                          </Badge>
-                                        ));
+                                        .map(s => {
+                                          const isOrphaned = row.orphanedStatuses?.has(s);
+                                          return (
+                                            <Badge key={s} variant="outline" className={`text-[11px] px-1.5 py-0 ${isOrphaned ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' : (STATUS_COLORS[s] || 'bg-muted')}`}>
+                                              {isOrphaned ? '⚠ ' : ''}{STATUS_LABELS[s] || s}{row.statusCounts[s] > 1 ? ` (${row.statusCounts[s]})` : ''}
+                                            </Badge>
+                                          );
+                                        });
+                                      return badges;
                                     })()}
                                   </div>
                                 </TableCell>

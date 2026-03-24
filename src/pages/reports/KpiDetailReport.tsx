@@ -15,6 +15,7 @@ import { Download, Search, ChevronLeft, ChevronRight, FileSpreadsheet, Hash, Ale
 import { Skeleton } from '@/components/ui/skeleton';
 import { FrequencyLockToggle } from '@/components/ui/FrequencyLockToggle';
 import { isKpiLockedForPeriod } from '@/lib/frequencyUtils';
+import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
 import * as XLSX from 'xlsx';
 
 const FULL_MONTHS = [
@@ -48,6 +49,7 @@ function ratingLabel(score: number | null): string | null {
 
 interface KpiDetailRow {
   kpiId: string;
+  employeeId: string;
   employeeCode: string;
   employeeName: string;
   department: string;
@@ -57,6 +59,7 @@ interface KpiDetailRow {
   reviewPeriod: string;
   reviewYear: number;
   weightage: number;
+  status: string;
   selfScore: number | null;
   managerScore: number | null;
   skipLevelScore: number | null;
@@ -70,6 +73,7 @@ interface KpiDetailRow {
   overallRating: string | null;
   isNa: boolean;
   isFrequencyLocked: boolean;
+  isOrphaned: boolean;
 }
 
 // Compact score cell
@@ -198,6 +202,7 @@ export default function KpiDetailReport() {
 
         return {
           kpiId: kpi.id,
+          employeeId: kpi.employee_id,
           employeeCode: profile?.employee_code ?? '—',
           employeeName: profile?.full_name ?? 'Unknown',
           department: (profile?.departments as any)?.name ?? '—',
@@ -207,6 +212,7 @@ export default function KpiDetailReport() {
           reviewPeriod: kpi.review_period ?? '—',
           reviewYear: kpi.review_year ?? year,
           weightage,
+          status: kpi.status ?? 'kra_set',
           selfScore: sub?.self_score ?? null,
           managerScore: sub?.manager_score ?? null,
           skipLevelScore: sub?.skip_level_score ?? null,
@@ -220,6 +226,7 @@ export default function KpiDetailReport() {
           overallRating,
           isNa,
           isFrequencyLocked,
+          isOrphaned: false,
         };
       });
 
@@ -227,19 +234,44 @@ export default function KpiDetailReport() {
     },
   });
 
+  // Bulk workflow for orphan detection
+  const detailEmployeeIds = useMemo(() => {
+    if (!rows) return [];
+    const ids = new Set<string>();
+    rows.forEach(r => ids.add(r.employeeId));
+    return Array.from(ids);
+  }, [rows]);
+
+  const { data: detailWorkflowMap } = useBulkEmployeeWorkflows(
+    detailEmployeeIds,
+    selectedPeriod !== 'all' ? selectedPeriod : undefined,
+    selectedPeriod !== 'all' ? parseInt(selectedYear) : undefined
+  );
+
+  const enrichedRows = useMemo(() => {
+    if (!rows) return [];
+    if (!detailWorkflowMap || detailWorkflowMap.size === 0) return rows;
+    return rows.map(r => {
+      if (r.status === 'approved' || r.status === 'kra_set') return r;
+      const stages = detailWorkflowMap.get(r.employeeId);
+      if (!stages) return r;
+      return stages.includes(r.status) ? r : { ...r, isOrphaned: true };
+    });
+  }, [rows, detailWorkflowMap]);
+
   // Derived department list from data
   const departments = useMemo(() => {
-    if (!rows) return [];
+    if (!enrichedRows) return [];
     const s = new Set<string>();
-    rows.forEach(r => { if (r.department && r.department !== '—') s.add(r.department); });
+    enrichedRows.forEach(r => { if (r.department && r.department !== '—') s.add(r.department); });
     return Array.from(s).sort();
-  }, [rows]);
+  }, [enrichedRows]);
 
   // Client-side filtering
   const filteredRows = useMemo(() => {
-    if (!rows) return [];
+    if (!enrichedRows) return [];
     const term = searchTerm.toLowerCase();
-    return rows.filter(r => {
+    return enrichedRows.filter(r => {
       if (!includeNa && r.isNa) return false;
       if (!showFreqLocked && r.isFrequencyLocked) return false;
       if (selectedDept !== 'all' && r.department !== selectedDept) return false;

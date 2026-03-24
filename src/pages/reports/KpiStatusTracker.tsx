@@ -10,10 +10,11 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { Download, Search, ChevronLeft, ChevronRight, FileSpreadsheet, Clock, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Download, Search, ChevronLeft, ChevronRight, FileSpreadsheet, Clock, CheckCircle2, AlertCircle, Loader2, AlertTriangle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FrequencyLockToggle } from '@/components/ui/FrequencyLockToggle';
 import { isKpiLockedForPeriod } from '@/lib/frequencyUtils';
+import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
 import * as XLSX from 'xlsx';
 import { differenceInDays } from 'date-fns';
 
@@ -70,6 +71,7 @@ function statusBadgeClass(status: string): string {
 
 interface StatusTrackerRow {
   kpiId: string;
+  employeeId: string;
   employeeCode: string;
   employeeName: string;
   designation: string;
@@ -87,6 +89,7 @@ interface StatusTrackerRow {
   isOrgLevel: boolean;
   reviewPeriod: string;
   isFrequencyLocked: boolean;
+  isOrphaned: boolean;
 }
 
 const PAGE_SIZE = 50;
@@ -160,6 +163,7 @@ export default function KpiStatusTracker() {
 
         return {
           kpiId: kpi.id,
+          employeeId: kpi.employee_id,
           employeeCode: profile?.employee_code ?? '—',
           employeeName: profile?.full_name ?? 'Unknown',
           designation: profile?.designation ?? '—',
@@ -177,6 +181,7 @@ export default function KpiStatusTracker() {
           isOrgLevel: kpi.is_org_level ?? false,
           reviewPeriod: kpi.review_period ?? '—',
           isFrequencyLocked,
+          isOrphaned: false, // will be set after workflow data loads
         };
       });
 
@@ -191,19 +196,46 @@ export default function KpiStatusTracker() {
     },
   });
 
+  // Fetch bulk workflows for orphan detection
+  const employeeIds = useMemo(() => {
+    if (!rows) return [];
+    const ids = new Set<string>();
+    rows.forEach(r => ids.add(r.employeeId));
+    return Array.from(ids);
+  }, [rows]);
+
+  const { data: workflowMap } = useBulkEmployeeWorkflows(
+    employeeIds,
+    selectedPeriod,
+    parseInt(selectedYear)
+  );
+
+  // Enrich rows with orphan status
+  const enrichedRows = useMemo(() => {
+    if (!rows) return [];
+    if (!workflowMap) return rows;
+    return rows.map(r => {
+      if (r.status === 'approved' || r.status === 'kra_set') return r;
+      const stages = workflowMap.get(r.employeeId);
+      if (!stages) return r;
+      const isOrphaned = !stages.includes(r.status);
+      return isOrphaned ? { ...r, isOrphaned: true } : r;
+    });
+  }, [rows, workflowMap]);
+
   // Derived department list
   const departments = useMemo(() => {
-    if (!rows) return [];
+    if (!enrichedRows) return [];
     const s = new Set<string>();
-    rows.forEach(r => { if (r.department !== '—') s.add(r.department); });
+    enrichedRows.forEach(r => { if (r.department !== '—') s.add(r.department); });
     return Array.from(s).sort();
-  }, [rows]);
+  }, [enrichedRows]);
 
   // Client-side filtering
   const filteredRows = useMemo(() => {
-    if (!rows) return [];
+    if (!enrichedRows) return [];
     const term = searchTerm.toLowerCase();
-    return rows.filter(r => {
+    return enrichedRows.filter(r => {
       if (!showFreqLocked && r.isFrequencyLocked) return false;
       if (selectedDept !== 'all' && r.department !== selectedDept) return false;
       if (selectedStatus !== 'all' && r.status !== selectedStatus) return false;
@@ -217,7 +249,7 @@ export default function KpiStatusTracker() {
       }
       return true;
     });
-  }, [rows, searchTerm, selectedDept, selectedStatus, showFreqLocked]);
+  }, [enrichedRows, searchTerm, selectedDept, selectedStatus, showFreqLocked]);
 
   // Summary stats by status
   const statusCounts = useMemo(() => {
@@ -230,7 +262,8 @@ export default function KpiStatusTracker() {
   }, [filteredRows]);
 
   const approvedCount = statusCounts['approved'] ?? 0;
-  const pendingCount = filteredRows.length - approvedCount;
+  const pendingCount = filteredRows.filter(r => r.status !== 'approved' && !r.isOrphaned).length;
+  const orphanedCount = filteredRows.filter(r => r.isOrphaned).length;
 
   // Pagination
   const totalPages = Math.ceil(filteredRows.length / PAGE_SIZE);
@@ -417,6 +450,19 @@ export default function KpiStatusTracker() {
             </div>
           </CardContent>
         </Card>
+        {orphanedCount > 0 && (
+          <Card className="border-amber-300 dark:border-amber-700">
+            <CardHeader className="pb-1 pt-3 px-4">
+              <CardTitle className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5" /> Workflow Mismatch
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-3">
+              <p className="text-2xl font-semibold tabular-nums text-amber-600 dark:text-amber-400">{orphanedCount}</p>
+              <p className="text-xs text-muted-foreground">KPIs at a removed stage</p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Table */}
@@ -472,7 +518,11 @@ export default function KpiStatusTracker() {
                         <TableCell className="text-center text-xs tabular-nums">{row.weightage}</TableCell>
                         <TableCell className="text-xs">{row.frequency}</TableCell>
                         <TableCell>
-                          {row.isFrequencyLocked ? (
+                          {row.isOrphaned ? (
+                            <Badge variant="outline" className="text-xs border-0 bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+                              Orphaned
+                            </Badge>
+                          ) : row.isFrequencyLocked ? (
                             <Badge variant="outline" className="text-xs border-0 bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-400">
                               Freq. Locked
                             </Badge>
@@ -483,7 +533,9 @@ export default function KpiStatusTracker() {
                           )}
                         </TableCell>
                         <TableCell className="text-xs font-medium">
-                          {row.isFrequencyLocked ? (
+                          {row.isOrphaned ? (
+                            <span className="text-amber-600 dark:text-amber-400 italic">Workflow mismatch</span>
+                          ) : row.isFrequencyLocked ? (
                             <span className="text-muted-foreground italic">Not due</span>
                           ) : row.status === 'approved' ? (
                             <span className="text-green-600 dark:text-green-400">✓ Complete</span>
@@ -494,7 +546,7 @@ export default function KpiStatusTracker() {
                           )}
                         </TableCell>
                         <TableCell className="text-center">
-                          {row.isFrequencyLocked ? (
+                          {row.isOrphaned || row.isFrequencyLocked ? (
                             <span className="text-xs text-muted-foreground italic">N/A</span>
                           ) : row.status !== 'approved' ? (
                             <span className={`text-xs tabular-nums font-medium ${

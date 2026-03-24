@@ -94,9 +94,11 @@ export default function ReconcileOrphanedKpisDialog({
       const result = await reconcileMutation.mutateAsync({ dryRun: false });
       setDryRunResult(result);
       setExecuted(true);
+      const approvedCount = result.affected.filter(a => a.new_status === 'approved').length;
+      const rerouted = result.count - approvedCount;
       toast({
         title: 'Reconciliation complete',
-        description: `${result.count} KPI(s) have been moved to Approved.`,
+        description: `${result.count} KPI(s) reconciled${approvedCount > 0 ? ` (${approvedCount} approved` : ''}${rerouted > 0 ? `, ${rerouted} rerouted)` : approvedCount > 0 ? ')' : ''}.`,
       });
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['employee-workflow'] });
@@ -158,7 +160,7 @@ export default function ReconcileOrphanedKpisDialog({
               <div className="flex items-center gap-2">
                 <Badge variant="secondary">{dryRunResult.count} KPI(s)</Badge>
                 <span className="text-sm text-muted-foreground">
-                  will be moved to <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">Approved</Badge>
+                  will be reconciled to their correct workflow stage
                 </span>
               </div>
 
@@ -188,9 +190,15 @@ export default function ReconcileOrphanedKpisDialog({
                         </TableCell>
                         <TableCell className="text-muted-foreground">→</TableCell>
                         <TableCell>
-                          <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 text-xs">
-                            Approved
-                          </Badge>
+                          {item.new_status === 'approved' ? (
+                            <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 text-xs">
+                              Approved
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 border-0">
+                              {getStageLabel(item.new_status)}
+                            </Badge>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
