@@ -1,44 +1,59 @@
 
 
-## Add Admin-Controlled Toggle for Data Owner / Data Entered By Visibility
+## RCA: Data Owner Shows "Unknown" and "Data Entered By" Missing for Employees
 
-### Problem
-The "Data Owner" and "Data entered by" badges on the KPI Details panel are currently always visible. The user wants an admin toggle to control whether non-admin users can see this information.
+### Root Cause
 
-### Approach
-Use the existing `workflow_settings` table (same pattern as `org_kpi_employee_self_entry`, `remarks_mandatory_*`, etc.) to add a new boolean setting.
+The `profiles` table has restrictive RLS policies. A regular employee can only SELECT:
+- Their own profile row
+- Their direct reports (if they're a manager)
 
-### Changes
+When the `useOrgKpiDataOwnerNames` hook queries `org_kpi_data_owners` with a JOIN on `profiles` to get `full_name`, the join **silently returns null** because the employee cannot read the data owner's profile row. This causes:
 
-#### 1. `src/hooks/useWorkflowSettings.ts` — Add default value
-Add to `DEFAULT_VALUES`:
-```typescript
-show_data_owner_to_employees: true,
-```
+1. **"Data Owner: Unknown"** — `(row.owner as any)?.full_name || 'Unknown'` falls back to "Unknown"
+2. **"Data entered by" missing** — `entered_by_profile.full_name` is null, so `entered_by_name` is null, and the badge condition `orgKpiEnteredByName &&` evaluates to false
 
-#### 2. `src/components/review/KpiHeaderSection.tsx` — Conditionally show badges
-- Import `useWorkflowSettingValue` 
-- Read `show_data_owner_to_employees` setting
-- If `false` and user is not admin, hide the "Data Owner" and "Data entered by" badges
-- Admins always see them regardless of the setting
+### Why Previous Fix Didn't Work
 
-#### 3. `src/components/admin/WorkflowSettingsTab.tsx` — Add toggle in admin UI
-- Add a new setting row under a relevant category (e.g., "Validation" or a new "Visibility" section)
-- Label: "Show Data Owner info to employees"
-- Description: "When enabled, employees can see Data Owner and Data Entered By on KPI details"
+The `show_data_owner_to_employees` toggle was added to control visibility, but the underlying data was already null due to RLS. The toggle gate passes, but there's nothing to display.
 
-#### 4. Database migration — Seed the setting row
+### Fix: Add Profile RLS Policy for Org KPI Context
+
+Add a new SELECT policy on `profiles` that allows any authenticated user to read profiles that are referenced as org KPI data owners or org KPI value enterers. This is safe because it only exposes the `full_name` — and the data owner assignment is already public knowledge (the `org_kpi_data_owners` table has `USING (true)` for SELECT).
+
+#### 1. Database Migration — New RLS Policy
+
 ```sql
-INSERT INTO workflow_settings (category, setting_key, setting_value, label, description)
-VALUES ('validation', 'show_data_owner_to_employees', 'true', 
-        'Show Data Owner to Employees', 
-        'When enabled, employees can see Data Owner and Data Entered By badges on KPI details')
-ON CONFLICT DO NOTHING;
+-- Allow any authenticated user to view profiles of org KPI data owners
+CREATE POLICY "Authenticated users can view org kpi data owner profiles"
+  ON public.profiles FOR SELECT
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.org_kpi_data_owners
+      WHERE org_kpi_data_owners.owner_id = profiles.id
+    )
+  );
+
+-- Allow any authenticated user to view profiles of org KPI value enterers
+CREATE POLICY "Authenticated users can view org kpi value enterer profiles"
+  ON public.profiles FOR SELECT
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.org_kpi_values
+      WHERE org_kpi_values.entered_by = profiles.id
+    )
+  );
 ```
+
+#### 2. Also fix case-sensitivity bug in AuditScorecard
+
+In `src/components/review/AuditScorecard.tsx` line 123, the lookup map key uses `v.kra_name` and `v.kpi_name` WITHOUT `.toLowerCase()`, while all other scorecards and the lookup function use `.toLowerCase()`. This causes org KPI values to not match in audit view.
+
+Fix: add `.toLowerCase()` to the map key construction.
 
 ### Files Modified
-- `src/hooks/useWorkflowSettings.ts` — add default
-- `src/components/review/KpiHeaderSection.tsx` — conditional visibility
-- `src/components/admin/WorkflowSettingsTab.tsx` — add toggle control
-- DB migration — seed setting row
+- DB migration (2 new RLS policies on `profiles`)
+- `src/components/review/AuditScorecard.tsx` — fix case-sensitivity in orgKpiValuesMap key
 
