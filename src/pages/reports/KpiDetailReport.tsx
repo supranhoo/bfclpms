@@ -15,6 +15,7 @@ import { Download, Search, ChevronLeft, ChevronRight, FileSpreadsheet, Hash, Ale
 import { Skeleton } from '@/components/ui/skeleton';
 import { FrequencyLockToggle } from '@/components/ui/FrequencyLockToggle';
 import { isKpiLockedForPeriod } from '@/lib/frequencyUtils';
+import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
 import * as XLSX from 'xlsx';
 
 const FULL_MONTHS = [
