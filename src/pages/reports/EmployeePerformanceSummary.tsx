@@ -88,6 +88,7 @@ export default function EmployeePerformanceSummary() {
   const [activeTab, setActiveTab] = useState('summary');
   const [comparisonEmployee, setComparisonEmployee] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState('all');
+  const [showFreqLocked, setShowFreqLocked] = useState(false);
 
   // (review_periods query removed – month filter is now static)
 
