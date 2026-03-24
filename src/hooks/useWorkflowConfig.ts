@@ -185,10 +185,20 @@ export function useUpsertWorkflowConfig() {
         return data;
       }
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['workflow-configs'] });
       queryClient.invalidateQueries({ queryKey: ['employee-workflow'] });
       queryClient.invalidateQueries({ queryKey: ['employee-workflow-stages'] });
+      queryClient.invalidateQueries({ queryKey: ['bulk-employee-workflows'] });
+
+      // Auto-reconcile in-flight KPIs for the affected period
+      const period = variables.reviewPeriod;
+      const year = variables.reviewYear;
+      if (period && year) {
+        triggerAutoReconcile(period, year).catch(() => {
+          // Silently fail — reconciliation is best-effort
+        });
+      }
     },
   });
 }
