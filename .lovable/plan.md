@@ -1,33 +1,44 @@
 
 
-## Fix: Incentive Report Not Accessible
+## Add Dashboard Widget + Email Alert for Pending Incentive Adjustments
 
-### Root Cause
-The `ReportRoute` wrapping `/reports/incentive` checks `canView('incentive')`. This checks:
-1. DB table `report_access_config` for key `'incentive'` — **empty**
-2. Fallback `DEFAULT_CONFIGS` in `useReportAccess.ts` — **missing `'incentive'` entry**
+### What This Solves
+When a Quarterly KPI resolves and changes an employee's past-month slab (e.g., 4.9 → 3.5), the payroll preparer currently must manually check the Retroactive Adjustment tab. This adds two proactive alert mechanisms.
 
-Result: `canView('incentive')` always returns `false`, redirecting to `/dashboard`.
+### Changes
 
-### Fix
+#### 1. Admin Dashboard Widget — `src/pages/admin/AdminDashboard.tsx`
 
-#### 1. `src/hooks/useReportAccess.ts` — Add default config entry
+Add a "Pending Incentive Adjustments" stat card (similar to "Pending Rollbacks") that:
+- Uses the existing `usePendingAdjustmentCount()` hook from `useIncentiveRecords.ts`
+- Shows count of unnotified revisions with a warning color when > 0
+- Clicks through to `/reports/incentive`
+- Import `usePendingAdjustmentCount` and add a 6th StatCard in the key stats grid
 
-Add to `DEFAULT_CONFIGS`:
-```typescript
-'incentive': { view_roles: ['admin', 'management', 'hr_pms'], download_roles: ['admin'] },
-```
+#### 2. Email Notification — `supabase/functions/detect-retroactive-incentive-changes/index.ts`
 
-#### 2. Database migration — Seed `report_access_config`
+After creating revision records, if `revisionsCreated > 0`:
+- Query `profiles` with role `hr_pms` or `admin` to get payroll/HR recipients
+- Call the existing `send-email-notification` edge function with a new event type `incentive_retroactive_alert`
+- Email body includes: count of affected employees, affected months, and a prompt to check the Incentive Report
 
-Insert a row so the DB-based config takes over:
-```sql
-INSERT INTO report_access_config (report_key, report_name, view_roles, download_roles)
-VALUES ('incentive', 'Incentive Report', ARRAY['admin','management','hr_pms']::app_role[], ARRAY['admin']::app_role[])
-ON CONFLICT DO NOTHING;
-```
+#### 3. Email Template — `supabase/functions/send-email-notification/index.ts`
+
+Add `incentive_retroactive_alert` to the event type handler:
+- Subject: "Incentive Slab Changes Detected — Action Required"
+- Body: Summary table of revision count, affected period, and link to the report
+- Recipients: HR/PMS and admin users (passed by the detect function)
+
+#### 4. ActionItemsCards Enhancement — `src/components/management/ActionItemsCards.tsx`
+
+Add a 4th action item card for "Incentive Adjustments" using the pending count, navigating to `/reports/incentive`. Accept `pendingIncentiveAdjustments` as a new prop.
+
+Update `ManagementDashboard.tsx` to pass `pendingAdjustments` to `ActionItemsCards`.
 
 ### Files Modified
-- `src/hooks/useReportAccess.ts` — add `'incentive'` to `DEFAULT_CONFIGS`
-- DB migration — seed `report_access_config` row
+- `src/pages/admin/AdminDashboard.tsx` — add pending adjustments stat card
+- `src/components/management/ActionItemsCards.tsx` — add incentive adjustments action item
+- `src/pages/ManagementDashboard.tsx` — pass pending count to ActionItemsCards
+- `supabase/functions/detect-retroactive-incentive-changes/index.ts` — send email after revisions created
+- `supabase/functions/send-email-notification/index.ts` — add `incentive_retroactive_alert` template
 
