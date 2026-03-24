@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-24  
-> **Version:** 1.77.0 — Proactive incentive alerts: Admin dashboard "Incentive Adjustments" stat card, Management dashboard action item card, email notification to HR/Admin on retroactive slab changes via `detect-retroactive-incentive-changes` edge function
+> **Version:** 1.78.0 — Added Division mapping option to incentive program employee mapping UI and computation engine
 > **Maintainer:** Lovable AI
 
 ---
