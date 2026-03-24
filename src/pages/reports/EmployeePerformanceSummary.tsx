@@ -107,7 +107,7 @@ export default function EmployeePerformanceSummary() {
       while (hasMore) {
         let query = supabase
           .from('kpis')
-          .select('id, employee_id, kra_name, kpi_name, weightage, status, review_period, review_year')
+          .select('id, employee_id, kra_name, kpi_name, weightage, status, review_period, review_year, frequency')
           .eq('review_year', year)
           .range(offset, offset + batchSize - 1);
 
