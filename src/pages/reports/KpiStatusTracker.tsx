@@ -240,7 +240,7 @@ export default function KpiStatusTracker() {
   }, [filteredRows, currentPage]);
 
   // Reset page on filter change
-  useMemo(() => { setCurrentPage(1); }, [searchTerm, selectedYear, selectedPeriod, selectedDept, selectedStatus]);
+  useMemo(() => { setCurrentPage(1); }, [searchTerm, selectedYear, selectedPeriod, selectedDept, selectedStatus, showFreqLocked]);
 
   // Excel export
   const handleExport = () => {
