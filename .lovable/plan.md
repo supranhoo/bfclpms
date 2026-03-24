@@ -1,64 +1,72 @@
 
 
-## Redesign: Program-Centric Incentive Config Layout
+## Make Eligibility Data Entry Columns Dynamic (Admin-Configurable)
 
 ### Problem
-The current tab-based layout separates Programs, Mapping, Slabs, and DQ Rules into isolated tabs. Users must select a program in one tab, then switch to another tab to see its details. This is confusing — there's no contextual view of what a program contains.
+The eligibility data entry grid has hardcoded columns (Absent Days, LWP Days, Warning Letter, Suspended, Contract Worker, LTI Count, Dept LTI Count, Total Working Days, Present Days, etc.). If a new scope or field is needed (e.g., "Safety Score", "Quality Demerits"), it requires code changes. Removing unused columns is also impossible without developer intervention.
 
 ### Solution
-Replace the disconnected tab layout with a **master-detail** pattern:
+Replace hardcoded columns with a **dynamic field definition** system. Admin defines which fields appear per program, and the eligibility table stores flexible data in a JSONB column alongside the core fixed fields.
 
-**Left side / Top**: Program list (cards, not a table) with summary badges showing mapping count, slab count, and DQ rule count at a glance.
+### Approach
 
-**When a program is clicked**: Expand inline to show an accordion/sub-tabs view with all 3 sections (Mapping, Slabs, DQ Rules) for THAT program — all visible in context.
+#### 1. New DB table: `incentive_eligibility_fields`
 
-**Eligibility Data** remains a separate top-level tab since it's cross-program.
-
-### New Layout
-
-```text
-[Programs]  [Eligibility Data]     ← only 2 top tabs
-
-Programs tab:
-┌─────────────────────────────────────────────┐
-│ + New Program                               │
-├─────────────────────────────────────────────┤
-│ ┌─ CLU Incentive ─── production ── Active ┐ │
-│ │ 3 depts · 12 slabs · 4 DQ rules        │ │
-│ │ ▼ Expand                                │ │
-│ │  [Mapping] [Slabs] [DQ Rules]  ← inner  │ │
-│ │  ... content for THIS program ...       │ │
-│ └─────────────────────────────────────────┘ │
-│ ┌─ Support Function ── support ── Active ─┐ │
-│ │ 2 grades · 8 slabs · 3 DQ rules        │ │
-│ │ ► Collapsed                             │ │
-│ └─────────────────────────────────────────┘ │
-└─────────────────────────────────────────────┘
+```
+id uuid PK,
+program_id uuid FK → incentive_programs (nullable — null = global),
+field_key text NOT NULL (e.g. 'absent_days', 'safety_score'),
+field_label text NOT NULL (e.g. 'Absent Days', 'Safety Score'),
+field_type text NOT NULL ('number' | 'boolean' | 'text'),
+is_required boolean DEFAULT false,
+default_value text,
+sort_order int DEFAULT 0,
+is_active boolean DEFAULT true,
+created_at timestamptz DEFAULT now()
 ```
 
-### Changes
+Seed with the current hardcoded fields (absent_days, lwp_days, has_warning_letter, is_suspended, is_contract_worker, lti_count, department_lti_count) as default global entries. Admin can add/remove/reorder.
 
-#### `src/pages/admin/IncentiveConfig.tsx` — Full rewrite
+#### 2. Add JSONB column to `employee_incentive_eligibility`
 
-- Top-level: 2 tabs only — "Programs" and "Eligibility Data"
-- Programs tab renders a list of **expandable program cards** (using Collapsible or Accordion)
-- Each card header shows: Name, Type badge, Status badge, Effective Period, Edit/Delete buttons, and summary counts (mapped employees, slabs, DQ rules)
-- Expanding a card reveals **inner sub-tabs**: Mapping | Slabs | DQ Rules — rendering the existing components (`ProgramEmployeeMapping`, `IncentiveSlabEditor`, `DisqualificationRulesEditor`) scoped to that program
-- Only one program expanded at a time (accordion behavior)
-- Remove the old `selectedProgramId` + disabled-tab pattern entirely
+```sql
+ALTER TABLE employee_incentive_eligibility
+ADD COLUMN custom_fields jsonb DEFAULT '{}';
+```
 
-#### Summary count hooks (lightweight)
+Core fields (absent_days, lwp_days, etc.) remain as typed columns for backward compatibility. Any new admin-added fields are stored in `custom_fields` as key-value pairs.
 
-Add 3 small count queries to show in each card header:
-- Mapping count: `useProgramMappings(programId)` already exists — use `.length`
-- Slab count: quick `select('id', { count: 'exact', head: true })` from `incentive_slabs` filtered by `program_id`
-- DQ rule count: quick `select('id', { count: 'exact', head: true })` from `incentive_dq_rules` filtered by `program_id`
+#### 3. New UI: Field Configuration (sub-tab in each Program card)
 
-These can be added as `useSlabCount(programId)` and `useDqRuleCount(programId)` in `useIncentivePrograms.ts`, or fetched inline.
+Add a **"Fields"** sub-tab alongside Mapping / Slabs / DQ Rules in the program accordion. Admin can:
+- See all active fields (global + program-specific)
+- Add new field: label, type (number/boolean/text), required, default value
+- Reorder via sort_order
+- Deactivate fields (soft delete — data preserved)
 
-### Files Modified
-- `src/pages/admin/IncentiveConfig.tsx` — rewrite layout to accordion-based program cards with inline sub-tabs
-- `src/hooks/useIncentivePrograms.ts` — add `useSlabCount` and `useDqRuleCount` hooks
+#### 4. Update `EligibilityDataEntry.tsx`
 
-### No database changes needed
+- Fetch active fields from `incentive_eligibility_fields` (global + selected program)
+- Render table columns dynamically from field definitions
+- For core fields (absent_days, etc.): read/write the typed column
+- For custom fields: read/write from `custom_fields` JSONB
+- Export template includes all active field labels
+- Import maps Excel headers to field keys
+
+#### 5. Update eligibility status logic
+
+`getEligibilityStatus()` currently checks hardcoded fields. Change it to evaluate against the program's active DQ rules + field definitions, so new boolean fields can participate in disqualification if linked to a DQ rule.
+
+### Files
+
+**New:**
+- DB migration: `incentive_eligibility_fields` table + seed rows + `custom_fields` column on eligibility table
+- Field config component (small form inside program accordion)
+
+**Modified:**
+- `src/pages/admin/IncentiveConfig.tsx` — add "Fields" sub-tab per program
+- `src/components/incentive/EligibilityDataEntry.tsx` — dynamic column rendering
+- `src/hooks/useIncentiveEligibility.ts` — handle custom_fields in upsert/bulk
+- `src/hooks/useIncentivePrograms.ts` — add field CRUD hooks
+- `supabase/functions/compute-monthly-incentives/index.ts` — read custom_fields when evaluating DQ
 
