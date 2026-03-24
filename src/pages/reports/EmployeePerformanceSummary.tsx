@@ -391,7 +391,7 @@ export default function EmployeePerformanceSummary() {
         const pctB = b.outOfScore > 0 ? (b.totalScore / b.outOfScore) * 100 : 0;
         return pctB - pctA;
       });
-  }, [performanceData, searchTerm, selectedStatus, showFreqLocked]);
+  }, [enrichedPerformanceData, searchTerm, selectedStatus, showFreqLocked]);
 
   // Pagination
   const totalPages = Math.ceil(filteredData.length / pageSize);
