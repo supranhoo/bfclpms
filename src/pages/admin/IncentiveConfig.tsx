@@ -53,6 +53,7 @@ export default function IncentiveConfig() {
       <Tabs defaultValue="programs">
         <TabsList>
           <TabsTrigger value="programs">Programs</TabsTrigger>
+          <TabsTrigger value="mapping" disabled={!selectedProgramId}>Mapping</TabsTrigger>
           <TabsTrigger value="slabs" disabled={!selectedProgramId}>Slabs</TabsTrigger>
           <TabsTrigger value="rules" disabled={!selectedProgramId}>DQ Rules</TabsTrigger>
           <TabsTrigger value="eligibility">Eligibility Data</TabsTrigger>
