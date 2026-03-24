@@ -1,0 +1,180 @@
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
+
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, serviceKey);
+
+    const { review_period, review_year, program_id } = await req.json();
+    if (!review_period || !review_year) {
+      return new Response(JSON.stringify({ error: 'review_period and review_year required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // Find Q/BM KPIs approved in this period
+    const { data: resolvedKpis } = await supabase
+      .from('kpis')
+      .select('id, employee_id, frequency, review_period, review_year, weightage, status, review_submissions(self_score, manager_score, hr_pms_score, skip_level_score, auditor_score, management_score, final_score, is_na)')
+      .eq('review_period', review_period)
+      .eq('review_year', review_year)
+      .eq('status', 'approved')
+      .in('frequency', ['Quarterly', 'Bi-Monthly']);
+
+    if (!resolvedKpis?.length) {
+      return new Response(JSON.stringify({ revisions_created: 0, message: 'No Q/BM KPIs resolved this period' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // Map of frequency → cycle months (simplified mapping)
+    const getCycleMonths = (frequency: string, period: string): string[] => {
+      const allMonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      const idx = allMonths.indexOf(period);
+      if (idx === -1) return [period];
+
+      if (frequency === 'Quarterly') {
+        // Q1: Jul-Sep, Q2: Oct-Dec, Q3: Jan-Mar, Q4: Apr-Jun (fiscal year)
+        const qStart = Math.floor(idx / 3) * 3;
+        return [allMonths[qStart], allMonths[qStart + 1], allMonths[qStart + 2]].filter(Boolean);
+      }
+      if (frequency === 'Bi-Monthly') {
+        const bmStart = Math.floor(idx / 2) * 2;
+        return [allMonths[bmStart], allMonths[bmStart + 1]].filter(Boolean);
+      }
+      return [period];
+    };
+
+    // For each resolved KPI, find affected past months
+    const affectedEmployeeMonths = new Map<string, Set<string>>();
+
+    for (const kpi of resolvedKpis) {
+      const cycleMonths = getCycleMonths(kpi.frequency!, kpi.review_period!);
+      const pastMonths = cycleMonths.filter(m => m !== review_period);
+
+      for (const month of pastMonths) {
+        const key = kpi.employee_id;
+        const existing = affectedEmployeeMonths.get(key) || new Set();
+        existing.add(month);
+        affectedEmployeeMonths.set(key, existing);
+      }
+    }
+
+    // Fetch existing incentive records for affected months and recalculate
+    let revisionsCreated = 0;
+
+    // Fetch slabs for slab matching
+    let slabs: any[] = [];
+    if (program_id) {
+      const { data } = await supabase
+        .from('incentive_slabs')
+        .select('*')
+        .eq('program_id', program_id)
+        .eq('slab_category', 'pms_score')
+        .order('min_value');
+      slabs = data || [];
+    }
+
+    for (const [employeeId, months] of affectedEmployeeMonths) {
+      for (const affectedMonth of months) {
+        // Fetch existing record
+        const { data: existingRecord } = await supabase
+          .from('employee_incentive_records')
+          .select('*')
+          .eq('employee_id', employeeId)
+          .eq('review_period', affectedMonth)
+          .eq('review_year', review_year)
+          .maybeSingle();
+
+        if (!existingRecord) continue;
+
+        // Recalculate score for this month including the now-resolved Q/BM KPIs
+        let offset = 0;
+        const allKpis: any[] = [];
+        let hasMore = true;
+        while (hasMore) {
+          const { data: kpis } = await supabase
+            .from('kpis')
+            .select('id, employee_id, weightage, status, frequency, review_submissions(self_score, manager_score, hr_pms_score, skip_level_score, auditor_score, management_score, final_score, is_na)')
+            .eq('employee_id', employeeId)
+            .eq('review_period', affectedMonth)
+            .eq('review_year', review_year)
+            .range(offset, offset + 999);
+          if (kpis?.length) { allKpis.push(...kpis); offset += 1000; hasMore = kpis.length === 1000; }
+          else hasMore = false;
+        }
+
+        // Also include the resolved Q/BM KPIs that affect this month
+        const qbmForThisMonth = resolvedKpis.filter(k =>
+          k.employee_id === employeeId &&
+          getCycleMonths(k.frequency!, k.review_period!).includes(affectedMonth)
+        );
+        for (const qbm of qbmForThisMonth) {
+          if (!allKpis.find(k => k.id === qbm.id)) allKpis.push(qbm);
+        }
+
+        let totalWeightedScore = 0;
+        let totalWeight = 0;
+        for (const kpi of allKpis) {
+          const s = kpi.review_submissions;
+          if (!s || s.is_na) continue;
+          const score = (kpi.status === 'approved' ? s.final_score : null)
+            ?? s.management_score ?? s.auditor_score
+            ?? s.hr_pms_score ?? s.skip_level_score
+            ?? s.manager_score ?? s.self_score ?? null;
+          if (score !== null && kpi.weightage) {
+            totalWeightedScore += score * kpi.weightage;
+            totalWeight += kpi.weightage;
+          }
+        }
+
+        const revisedScore = totalWeight > 0 ? totalWeightedScore / totalWeight : null;
+        if (revisedScore === null) continue;
+
+        // Match new slab
+        let revisedSlabPercent = 0;
+        for (const slab of slabs) {
+          if (revisedScore >= slab.min_value && revisedScore <= slab.max_value) {
+            revisedSlabPercent = slab.incentive_percent;
+            break;
+          }
+        }
+
+        const originalScore = existingRecord.pms_score;
+        const originalSlabPercent = existingRecord.base_incentive_percent;
+
+        // Only create revision if slab changed
+        if (Math.abs(revisedSlabPercent - originalSlabPercent) > 0.001) {
+          const { error } = await supabase.from('incentive_score_revisions').insert({
+            employee_id: employeeId,
+            affected_period: affectedMonth,
+            affected_year: review_year,
+            original_score: originalScore,
+            revised_score: revisedScore,
+            original_slab_percent: originalSlabPercent,
+            revised_slab_percent: revisedSlabPercent,
+            revision_reason: 'quarterly_kpi_resolved',
+            source_period: review_period,
+          });
+          if (!error) revisionsCreated++;
+        }
+      }
+    }
+
+    return new Response(
+      JSON.stringify({ revisions_created: revisionsCreated }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  } catch (err) {
+    console.error(err);
+    return new Response(
+      JSON.stringify({ error: err.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+});
