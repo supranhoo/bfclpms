@@ -426,6 +426,7 @@ export default function UserManagement() {
     setEditRole(userRole);
     setEditManagerId(user.reporting_manager_id || '');
     setEditDepartmentId(user.department_id || '');
+    setEditDivisionId(deriveDivisionFromDept(user.department_id));
     setEditDesignation(user.designation || '');
     setEditPmsGrade(user.pms_grade || '');
     setEditEmployeeCode(user.employee_code || '');
