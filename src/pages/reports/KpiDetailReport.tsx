@@ -73,15 +73,16 @@ interface KpiDetailRow {
 }
 
 // Compact score cell
-function ScoreCell({ score, isNa }: { score: number | null; isNa: boolean }) {
+function ScoreCell({ score, isNa, isLocked }: { score: number | null; isNa: boolean; isLocked?: boolean }) {
+  if (isLocked) return <Badge variant="outline" className="text-xs px-1 py-0 bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-400 border-0">Locked</Badge>;
   if (isNa) return <Badge variant="secondary" className="text-xs px-1 py-0">N/A</Badge>;
   if (score === null) return <span className="text-muted-foreground text-xs">—</span>;
   return <span className="tabular-nums text-xs">{score}</span>;
 }
 
 // Calculated column cell
-function CalcCell({ value, isNa, format }: { value: number | null; isNa: boolean; format?: 'percent' | 'decimal' }) {
-  if (isNa || value === null) return <span className="text-muted-foreground text-xs">—</span>;
+function CalcCell({ value, isNa, isLocked, format }: { value: number | null; isNa: boolean; isLocked?: boolean; format?: 'percent' | 'decimal' }) {
+  if (isLocked || isNa || value === null) return <span className="text-muted-foreground text-xs">—</span>;
   if (format === 'percent') return <span className="tabular-nums text-xs">{value.toFixed(1)}%</span>;
   return <span className="tabular-nums text-xs">{value.toFixed(2)}</span>;
 }
