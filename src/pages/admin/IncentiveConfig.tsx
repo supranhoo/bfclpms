@@ -1,26 +1,49 @@
 import { useState } from 'react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Plus, Edit, Trash2 } from 'lucide-react';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Plus, Edit, Trash2, Users, Layers, ShieldAlert, ChevronRight } from 'lucide-react';
 import {
   useIncentivePrograms,
   useCreateProgram,
   useUpdateProgram,
   useDeleteProgram,
+  useSlabCount,
+  useDqRuleCount,
+  useMappingCount,
 } from '@/hooks/useIncentivePrograms';
 import { IncentiveSlabEditor } from '@/components/incentive/IncentiveSlabEditor';
 import { DisqualificationRulesEditor } from '@/components/incentive/DisqualificationRulesEditor';
 import { EligibilityDataEntry } from '@/components/incentive/EligibilityDataEntry';
 import { ProgramEmployeeMapping } from '@/components/incentive/ProgramEmployeeMapping';
+
+/* ── Summary badges for each program card ── */
+function ProgramSummaryBadges({ programId }: { programId: string }) {
+  const { data: mappingCount = 0 } = useMappingCount(programId);
+  const { data: slabCount = 0 } = useSlabCount(programId);
+  const { data: dqCount = 0 } = useDqRuleCount(programId);
+
+  return (
+    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+      <span className="flex items-center gap-1">
+        <Users className="h-3.5 w-3.5" /> {mappingCount} mappings
+      </span>
+      <span className="flex items-center gap-1">
+        <Layers className="h-3.5 w-3.5" /> {slabCount} slabs
+      </span>
+      <span className="flex items-center gap-1">
+        <ShieldAlert className="h-3.5 w-3.5" /> {dqCount} DQ rules
+      </span>
+    </div>
+  );
+}
 
 export default function IncentiveConfig() {
   const { data: programs = [], isLoading } = useIncentivePrograms();
@@ -28,11 +51,9 @@ export default function IncentiveConfig() {
   const updateProgram = useUpdateProgram();
   const deleteProgram = useDeleteProgram();
 
-  const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newProgram, setNewProgram] = useState({ name: '', program_type: 'support', description: '' });
-
-  const selectedProgram = programs.find((p: any) => p.id === selectedProgramId);
+  const [innerTab, setInnerTab] = useState<Record<string, string>>({});
 
   const handleCreate = () => {
     createProgram.mutate(newProgram, {
@@ -42,6 +63,9 @@ export default function IncentiveConfig() {
       },
     });
   };
+
+  const getInnerTab = (id: string) => innerTab[id] || 'mapping';
+  const setInnerTabFor = (id: string, tab: string) => setInnerTab(prev => ({ ...prev, [id]: tab }));
 
   return (
     <div className="space-y-6">
@@ -53,108 +77,90 @@ export default function IncentiveConfig() {
       <Tabs defaultValue="programs">
         <TabsList>
           <TabsTrigger value="programs">Programs</TabsTrigger>
-          <TabsTrigger value="mapping" disabled={!selectedProgramId}>Mapping</TabsTrigger>
-          <TabsTrigger value="slabs" disabled={!selectedProgramId}>Slabs</TabsTrigger>
-          <TabsTrigger value="rules" disabled={!selectedProgramId}>DQ Rules</TabsTrigger>
           <TabsTrigger value="eligibility">Eligibility Data</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="programs">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Incentive Programs</CardTitle>
-                <CardDescription>Create and manage incentive programs for Production and Support tracks</CardDescription>
-              </div>
-              <Button onClick={() => setShowCreateDialog(true)}><Plus className="h-4 w-4 mr-1" /> New Program</Button>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Effective Period</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {isLoading ? (
-                      <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
-                    ) : programs.length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No programs created yet</TableCell></TableRow>
-                    ) : (
-                      programs.map((p: any) => (
-                        <TableRow
-                          key={p.id}
-                          className={selectedProgramId === p.id ? 'bg-muted/50' : 'cursor-pointer hover:bg-muted/30'}
-                          onClick={() => setSelectedProgramId(p.id)}
+        <TabsContent value="programs" className="space-y-4">
+          <div className="flex justify-end">
+            <Button onClick={() => setShowCreateDialog(true)}>
+              <Plus className="h-4 w-4 mr-1" /> New Program
+            </Button>
+          </div>
+
+          {isLoading ? (
+            <Card><CardContent className="py-8 text-center text-muted-foreground">Loading programs...</CardContent></Card>
+          ) : programs.length === 0 ? (
+            <Card><CardContent className="py-8 text-center text-muted-foreground">No programs created yet. Click "New Program" to get started.</CardContent></Card>
+          ) : (
+            <Accordion type="single" collapsible className="space-y-3">
+              {programs.map((p: any) => (
+                <AccordionItem key={p.id} value={p.id} className="border rounded-lg bg-card shadow-sm">
+                  <AccordionTrigger className="px-4 py-3 hover:no-underline [&[data-state=open]>svg]:rotate-90">
+                    <div className="flex flex-1 items-center justify-between pr-2">
+                      <div className="flex flex-col items-start gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-base">{p.name}</span>
+                          <Badge variant={p.program_type === 'production' ? 'default' : 'secondary'} className="text-xs">
+                            {p.program_type}
+                          </Badge>
+                          <Badge variant={p.is_active ? 'default' : 'outline'} className="text-xs">
+                            {p.is_active ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </div>
+                        <ProgramSummaryBadges programId={p.id} />
+                      </div>
+                      <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                        <span className="text-xs text-muted-foreground mr-2">
+                          {p.effective_from || '—'} to {p.effective_to || 'ongoing'}
+                        </span>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => updateProgram.mutate({ id: p.id, is_active: !p.is_active })}
+                          title={p.is_active ? 'Deactivate' : 'Activate'}
                         >
-                          <TableCell className="font-medium">{p.name}</TableCell>
-                          <TableCell>
-                            <Badge variant={p.program_type === 'production' ? 'default' : 'secondary'}>
-                              {p.program_type}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={p.is_active ? 'default' : 'outline'}>
-                              {p.is_active ? 'Active' : 'Inactive'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {p.effective_from || '—'} to {p.effective_to || 'ongoing'}
-                          </TableCell>
-                          <TableCell className="flex gap-1">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={(e) => { e.stopPropagation(); updateProgram.mutate({ id: p.id, is_active: !p.is_active }); }}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={(e) => { e.stopPropagation(); deleteProgram.mutate(p.id); }}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-              {selectedProgramId && (
-                <p className="text-sm text-muted-foreground mt-2">
-                  Selected: <strong>{selectedProgram?.name}</strong> — switch to Slabs or DQ Rules tab to configure
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => deleteProgram.mutate(p.id)}
+                          title="Delete program"
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                    <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200" />
+                  </AccordionTrigger>
 
-        <TabsContent value="mapping">
-          {selectedProgramId && (
-            <ProgramEmployeeMapping programId={selectedProgramId} />
-          )}
-        </TabsContent>
+                  <AccordionContent className="px-4 pb-4">
+                    <Tabs value={getInnerTab(p.id)} onValueChange={v => setInnerTabFor(p.id, v)}>
+                      <TabsList className="mb-3">
+                        <TabsTrigger value="mapping">Mapping</TabsTrigger>
+                        <TabsTrigger value="slabs">Slabs</TabsTrigger>
+                        <TabsTrigger value="rules">DQ Rules</TabsTrigger>
+                      </TabsList>
 
-        <TabsContent value="slabs">
-          {selectedProgramId && selectedProgram && (
-            <IncentiveSlabEditor
-              programId={selectedProgramId}
-              programType={selectedProgram.program_type as 'production' | 'support'}
-            />
-          )}
-        </TabsContent>
+                      <TabsContent value="mapping">
+                        <ProgramEmployeeMapping programId={p.id} />
+                      </TabsContent>
 
-        <TabsContent value="rules">
-          {selectedProgramId && (
-            <DisqualificationRulesEditor programId={selectedProgramId} />
+                      <TabsContent value="slabs">
+                        <IncentiveSlabEditor
+                          programId={p.id}
+                          programType={p.program_type as 'production' | 'support'}
+                        />
+                      </TabsContent>
+
+                      <TabsContent value="rules">
+                        <DisqualificationRulesEditor programId={p.id} />
+                      </TabsContent>
+                    </Tabs>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
           )}
         </TabsContent>
 

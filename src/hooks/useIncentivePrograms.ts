@@ -208,3 +208,50 @@ export function useDeleteDqRule() {
     onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
   });
 }
+
+// ── Summary Counts ──
+
+export function useSlabCount(programId?: string) {
+  return useQuery({
+    queryKey: ['incentive-slab-count', programId],
+    enabled: !!programId,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('incentive_slabs')
+        .select('id', { count: 'exact', head: true })
+        .eq('program_id', programId!);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+}
+
+export function useDqRuleCount(programId?: string) {
+  return useQuery({
+    queryKey: ['incentive-dq-rule-count', programId],
+    enabled: !!programId,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('incentive_disqualification_rules')
+        .select('id', { count: 'exact', head: true })
+        .eq('program_id', programId!);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+}
+
+export function useMappingCount(programId?: string) {
+  return useQuery({
+    queryKey: ['incentive-mapping-count', programId],
+    enabled: !!programId,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('incentive_program_mappings')
+        .select('id', { count: 'exact', head: true })
+        .eq('program_id', programId!);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+}
