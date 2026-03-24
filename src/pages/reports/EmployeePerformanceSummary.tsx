@@ -73,6 +73,8 @@ interface EmployeePerformance {
   totalWeight: number;
   kpiCount: number;
   lockedKpiCount: number;
+  orphanedKpiCount: number;
+  orphanedStatuses: Set<string>;
 }
 
 export default function EmployeePerformanceSummary() {
