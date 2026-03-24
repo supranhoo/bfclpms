@@ -44,6 +44,7 @@ export function ProgramEmployeeMapping({ programId }: Props) {
 
   const mappingsByType = useMemo(() => {
     const map: Record<string, Set<string>> = {
+      division: new Set(),
       department: new Set(),
       business_unit: new Set(),
       designation: new Set(),
