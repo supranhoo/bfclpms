@@ -1008,6 +1008,31 @@ export default function UserManagement() {
                 <Separator />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
+                    <Label>Division</Label>
+                    <Select value={editDivisionId || '__all__'} onValueChange={(val) => {
+                      const newDiv = val === '__all__' ? '' : val;
+                      setEditDivisionId(newDiv);
+                      // Auto-clear department if it doesn't belong to the new division
+                      if (newDiv && editDepartmentId && editDepartmentId !== 'none') {
+                        const buIdsInDiv = new Set(businessUnits?.filter(bu => bu.division_id === newDiv).map(bu => bu.id));
+                        const dept = departments?.find(d => d.id === editDepartmentId);
+                        if (dept && dept.business_unit_id && !buIdsInDiv.has(dept.business_unit_id)) {
+                          setEditDepartmentId('none');
+                        }
+                      }
+                    }}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All divisions" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">All Divisions</SelectItem>
+                        {divisions?.map(d => (
+                          <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
                     <Label>Department</Label>
                     <Select value={editDepartmentId} onValueChange={setEditDepartmentId}>
                       <SelectTrigger>
@@ -1015,7 +1040,7 @@ export default function UserManagement() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">None</SelectItem>
-                        {departments?.map(d => (
+                        {editFilteredDepartments.map(d => (
                           <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
                         ))}
                       </SelectContent>
