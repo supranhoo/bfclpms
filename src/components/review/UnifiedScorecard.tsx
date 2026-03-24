@@ -205,6 +205,7 @@ export function UnifiedScorecard({
       return {
         ...staticConfig,
         pendingStatus: 'self_review',
+        activeReviewStage: 'self_review',
         reviewableStatuses: ['kra_set', 'self_review'],
         forwardStatus: 'self_review',
         sendBackTargets: [] as { value: string; label: string }[],
