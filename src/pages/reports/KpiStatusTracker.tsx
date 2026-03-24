@@ -71,6 +71,7 @@ function statusBadgeClass(status: string): string {
 
 interface StatusTrackerRow {
   kpiId: string;
+  employeeId: string;
   employeeCode: string;
   employeeName: string;
   designation: string;
@@ -88,6 +89,7 @@ interface StatusTrackerRow {
   isOrgLevel: boolean;
   reviewPeriod: string;
   isFrequencyLocked: boolean;
+  isOrphaned: boolean;
 }
 
 const PAGE_SIZE = 50;
