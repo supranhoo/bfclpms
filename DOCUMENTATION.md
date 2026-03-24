@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-24  
-> **Version:** 1.84.0 — Fixed review-stage mismatch bug: added `resolveActiveReviewStage` to workflowEngine so non-approve saves move KPIs to the reviewer's owned stage (not queue-entry status); extended `reconcile_workflow_statuses` RPC with CLASS 3 detection for review data existing at a later stage than the KPI's current status
+> **Version:** 1.85.0 — Added admin-controlled toggle (`show_data_owner_to_employees`) to control visibility of Data Owner and Data Entered By badges for non-admin users on KPI details
 > **Maintainer:** Lovable AI
 
 ---
