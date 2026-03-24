@@ -7,8 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { X, Search, Building2, Users, GraduationCap, UserPlus } from 'lucide-react';
-import { useDepartments, useBusinessUnits } from '@/hooks/useOrganization';
+import { X, Search, Building2, Users, GraduationCap, UserPlus, Layers } from 'lucide-react';
+import { useDepartments, useBusinessUnits, useDivisions } from '@/hooks/useOrganization';
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import { useProgramMappings, useAddProgramMapping, useRemoveProgramMapping } from '@/hooks/useIncentivePrograms';
 import { useQuery } from '@tanstack/react-query';
@@ -25,6 +25,7 @@ export function ProgramEmployeeMapping({ programId }: Props) {
 
   const { data: departments = [] } = useDepartments();
   const { data: businessUnits = [] } = useBusinessUnits();
+  const { data: divisions = [] } = useDivisions();
   const { designations, grades } = useEmployeeFilterOptions();
 
   const [empSearch, setEmpSearch] = useState('');
@@ -43,6 +44,7 @@ export function ProgramEmployeeMapping({ programId }: Props) {
 
   const mappingsByType = useMemo(() => {
     const map: Record<string, Set<string>> = {
+      division: new Set(),
       department: new Set(),
       business_unit: new Set(),
       designation: new Set(),
@@ -80,6 +82,7 @@ export function ProgramEmployeeMapping({ programId }: Props) {
   }, [allEmployees, empSearch]);
 
   const summary = [
+    mappingsByType.division.size > 0 && `${mappingsByType.division.size} division(s)`,
     mappingsByType.department.size > 0 && `${mappingsByType.department.size} dept(s)`,
     mappingsByType.business_unit.size > 0 && `${mappingsByType.business_unit.size} BU(s)`,
     mappingsByType.designation.size > 0 && `${mappingsByType.designation.size} designation(s)`,
@@ -108,7 +111,10 @@ export function ProgramEmployeeMapping({ programId }: Props) {
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="department">
-          <TabsList className="grid grid-cols-4 w-full">
+          <TabsList className="grid grid-cols-5 w-full">
+            <TabsTrigger value="division" className="text-xs">
+              <Layers className="h-3 w-3 mr-1" /> Division
+            </TabsTrigger>
             <TabsTrigger value="department" className="text-xs">
               <Building2 className="h-3 w-3 mr-1" /> Dept / BU
             </TabsTrigger>
@@ -122,6 +128,21 @@ export function ProgramEmployeeMapping({ programId }: Props) {
               <UserPlus className="h-3 w-3 mr-1" /> Individual
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="division" className="mt-3">
+            <ScrollArea className="h-60 border rounded-md p-2">
+              {divisions.map((d: any) => (
+                <label key={d.id} className="flex items-center gap-2 py-1 px-1 hover:bg-muted/50 rounded cursor-pointer">
+                  <Checkbox
+                    checked={mappingsByType.division.has(d.id)}
+                    onCheckedChange={() => toggle('division', d.id)}
+                  />
+                  <span className="text-sm">{d.name}</span>
+                </label>
+              ))}
+              {divisions.length === 0 && <p className="text-sm text-muted-foreground p-2">No divisions found</p>}
+            </ScrollArea>
+          </TabsContent>
 
           <TabsContent value="department" className="space-y-3 mt-3">
             <Label className="text-xs font-medium text-muted-foreground">Departments</Label>
