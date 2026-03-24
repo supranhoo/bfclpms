@@ -48,6 +48,7 @@ function ratingLabel(score: number | null): string | null {
 
 interface KpiDetailRow {
   kpiId: string;
+  employeeId: string;
   employeeCode: string;
   employeeName: string;
   department: string;
@@ -57,6 +58,7 @@ interface KpiDetailRow {
   reviewPeriod: string;
   reviewYear: number;
   weightage: number;
+  status: string;
   selfScore: number | null;
   managerScore: number | null;
   skipLevelScore: number | null;
@@ -70,6 +72,7 @@ interface KpiDetailRow {
   overallRating: string | null;
   isNa: boolean;
   isFrequencyLocked: boolean;
+  isOrphaned: boolean;
 }
 
 // Compact score cell
