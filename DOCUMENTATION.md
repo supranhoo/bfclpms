@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-03-23  
-> **Version:** 1.72.0 — Fix: Admin data entry now resolves period-specific workflows; auditor fallback changed to 'approved'
+> **Last Updated:** 2026-03-24  
+> **Version:** 1.73.0 — Incentive Module: 6 new tables, admin config UI (programs/slabs/DQ rules/eligibility), monthly & retroactive reports, edge functions for computation
 > **Maintainer:** Lovable AI
 
 ---

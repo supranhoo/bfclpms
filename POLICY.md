@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
-> **Last Updated:** 2026-03-22  
-> **Version:** 1.11.0
+> **Last Updated:** 2026-03-24  
+> **Version:** 1.12.0
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
