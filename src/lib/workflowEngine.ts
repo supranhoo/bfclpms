@@ -263,6 +263,37 @@ export function getVisibleTrackerStages(
 }
 
 /**
+ * Resolve the "active review stage" — the stage a reviewer OWNS while working.
+ * 
+ * This is distinct from `resolvePendingStatuses` (queue-entry status).
+ * When a reviewer saves without approving, the KPI should move to their
+ * owned stage, not stay at the queue-entry status.
+ * 
+ * Example: auditor in [kra_set, self_review, audit, management_review, approved]
+ *   - pendingStatus = 'self_review' (queue entry)
+ *   - activeReviewStage = 'audit' (reviewer-owned stage)
+ */
+export function resolveActiveReviewStage(
+  viewLevel: 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms',
+  workflowStages: string[] = DEFAULT_WORKFLOW_STAGES
+): string {
+  const stageMap: Record<string, string> = {
+    manager: 'manager_check',
+    skip_level: 'skip_level_check',
+    hr_pms: 'hr_pms_review',
+    auditor: 'audit',
+    management: 'management_review',
+  };
+  const ownedStage = stageMap[viewLevel];
+  // Only return the owned stage if it exists in the workflow
+  if (ownedStage && workflowStages.includes(ownedStage)) {
+    return ownedStage;
+  }
+  // Fallback to pendingStatus behavior
+  return resolvePendingStatuses(viewLevel, workflowStages)[0] || 'self_review';
+}
+
+/**
  * Check if a stage exists in the workflow.
  */
 export function hasStage(

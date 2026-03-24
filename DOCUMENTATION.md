@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-24  
-> **Version:** 1.83.0 — Added auto-reconcile-workflow edge function that automatically reconciles in-flight KPIs when workflow templates are changed; info banner on Workflow Configuration page
+> **Version:** 1.84.0 — Fixed review-stage mismatch bug: added `resolveActiveReviewStage` to workflowEngine so non-approve saves move KPIs to the reviewer's owned stage (not queue-entry status); extended `reconcile_workflow_statuses` RPC with CLASS 3 detection for review data existing at a later stage than the KPI's current status
 > **Maintainer:** Lovable AI
 
 ---
