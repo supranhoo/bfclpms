@@ -50,6 +50,8 @@ const STAGE_CONFIG: Record<string, { label: string; icon: typeof Clock; color: s
 export default function AdminDashboard() {
   const navigate = useNavigate();
 
+  const { data: pendingAdjustments = 0 } = usePendingAdjustmentCount();
+
   const { data: stats, isLoading } = useQuery({
     queryKey: ['admin-dashboard-stats'],
     queryFn: async (): Promise<DashboardStats> => {
