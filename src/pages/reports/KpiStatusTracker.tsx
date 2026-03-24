@@ -86,6 +86,7 @@ interface StatusTrackerRow {
   daysPending: number;
   isOrgLevel: boolean;
   reviewPeriod: string;
+  isFrequencyLocked: boolean;
 }
 
 const PAGE_SIZE = 50;
