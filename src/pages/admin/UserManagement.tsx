@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { useProfiles, useDepartments, useDesignations, usePmsGrades } from '@/hooks/useOrganization';
+import { useProfiles, useDepartments, useDesignations, usePmsGrades, useDivisions, useBusinessUnits } from '@/hooks/useOrganization';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -53,6 +53,8 @@ export default function UserManagement() {
   const { data: departments } = useDepartments();
   const { data: designationsList } = useDesignations();
   const { data: pmsGradesList } = usePmsGrades();
+  const { data: divisions } = useDivisions();
+  const { data: businessUnits } = useBusinessUnits();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -79,6 +81,7 @@ export default function UserManagement() {
   const [editEmail, setEditEmail] = useState('');
   const [editMobile, setEditMobile] = useState('');
   const [editIsActive, setEditIsActive] = useState(true);
+  const [editDivisionId, setEditDivisionId] = useState('');  // UI-only cascading filter
   // Create Dialog
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newFullName, setNewFullName] = useState('');
@@ -89,6 +92,7 @@ export default function UserManagement() {
   const [newDesignation, setNewDesignation] = useState('');
   const [newPmsGrade, setNewPmsGrade] = useState('');
   const [newManagerId, setNewManagerId] = useState('');
+  const [newDivisionId, setNewDivisionId] = useState('');  // UI-only cascading filter
 
   // Bulk Action Dialog
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
@@ -149,6 +153,32 @@ export default function UserManagement() {
       return matchesSearch && matchesRole && matchesDepartment && matchesStatus;
     }) || [];
   }, [profiles, searchQuery, roleFilter, departmentFilter, statusFilter]);
+
+  // Helper: derive division ID from a department ID
+  const deriveDivisionFromDept = (deptId: string | null): string => {
+    if (!deptId || !departments || !businessUnits) return '';
+    const dept = departments.find(d => d.id === deptId);
+    const buId = dept?.business_unit_id;
+    if (!buId) return '';
+    const bu = businessUnits.find(b => b.id === buId);
+    return bu?.division_id || '';
+  };
+
+  // Filter departments by selected division (for Edit dialog)
+  const editFilteredDepartments = useMemo(() => {
+    if (!departments) return [];
+    if (!editDivisionId) return departments;
+    const buIdsInDivision = new Set(businessUnits?.filter(bu => bu.division_id === editDivisionId).map(bu => bu.id));
+    return departments.filter(d => d.business_unit_id && buIdsInDivision.has(d.business_unit_id));
+  }, [departments, businessUnits, editDivisionId]);
+
+  // Filter departments by selected division (for Create dialog)
+  const createFilteredDepartments = useMemo(() => {
+    if (!departments) return [];
+    if (!newDivisionId) return departments;
+    const buIdsInDivision = new Set(businessUnits?.filter(bu => bu.division_id === newDivisionId).map(bu => bu.id));
+    return departments.filter(d => d.business_unit_id && buIdsInDivision.has(d.business_unit_id));
+  }, [departments, businessUnits, newDivisionId]);
 
   const totalPages = Math.ceil(filteredProfiles.length / ITEMS_PER_PAGE);
   const paginatedProfiles = filteredProfiles.slice(
@@ -396,6 +426,7 @@ export default function UserManagement() {
     setEditRole(userRole);
     setEditManagerId(user.reporting_manager_id || '');
     setEditDepartmentId(user.department_id || '');
+    setEditDivisionId(deriveDivisionFromDept(user.department_id));
     setEditDesignation(user.designation || '');
     setEditPmsGrade(user.pms_grade || '');
     setEditEmployeeCode(user.employee_code || '');
@@ -471,6 +502,7 @@ export default function UserManagement() {
     setNewDesignation('');
     setNewPmsGrade('');
     setNewManagerId('');
+    setNewDivisionId('');
   };
 
   const handleBulkUpdate = () => {
@@ -976,6 +1008,31 @@ export default function UserManagement() {
                 <Separator />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
+                    <Label>Division</Label>
+                    <Select value={editDivisionId || '__all__'} onValueChange={(val) => {
+                      const newDiv = val === '__all__' ? '' : val;
+                      setEditDivisionId(newDiv);
+                      // Auto-clear department if it doesn't belong to the new division
+                      if (newDiv && editDepartmentId && editDepartmentId !== 'none') {
+                        const buIdsInDiv = new Set(businessUnits?.filter(bu => bu.division_id === newDiv).map(bu => bu.id));
+                        const dept = departments?.find(d => d.id === editDepartmentId);
+                        if (dept && dept.business_unit_id && !buIdsInDiv.has(dept.business_unit_id)) {
+                          setEditDepartmentId('none');
+                        }
+                      }
+                    }}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All divisions" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">All Divisions</SelectItem>
+                        {divisions?.map(d => (
+                          <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
                     <Label>Department</Label>
                     <Select value={editDepartmentId} onValueChange={setEditDepartmentId}>
                       <SelectTrigger>
@@ -983,7 +1040,7 @@ export default function UserManagement() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">None</SelectItem>
-                        {departments?.map(d => (
+                        {editFilteredDepartments.map(d => (
                           <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
                         ))}
                       </SelectContent>
@@ -1136,13 +1193,37 @@ export default function UserManagement() {
                 <Separator />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
+                    <Label>Division</Label>
+                    <Select value={newDivisionId || '__all__'} onValueChange={(val) => {
+                      const newDiv = val === '__all__' ? '' : val;
+                      setNewDivisionId(newDiv);
+                      if (newDiv && newDepartmentId) {
+                        const buIdsInDiv = new Set(businessUnits?.filter(bu => bu.division_id === newDiv).map(bu => bu.id));
+                        const dept = departments?.find(d => d.id === newDepartmentId);
+                        if (dept && dept.business_unit_id && !buIdsInDiv.has(dept.business_unit_id)) {
+                          setNewDepartmentId('');
+                        }
+                      }
+                    }}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All divisions" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">All Divisions</SelectItem>
+                        {divisions?.map(d => (
+                          <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
                     <Label>Department</Label>
                     <Select value={newDepartmentId} onValueChange={setNewDepartmentId}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select department" />
                       </SelectTrigger>
                       <SelectContent>
-                        {departments?.map(d => (
+                        {createFilteredDepartments.map(d => (
                           <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
                         ))}
                       </SelectContent>
