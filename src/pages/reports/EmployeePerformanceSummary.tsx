@@ -590,6 +590,10 @@ export default function EmployeePerformanceSummary() {
                     ))}
                   </SelectContent>
                 </Select>
+                <FrequencyLockToggle
+                  checked={showFreqLocked}
+                  onCheckedChange={v => { setShowFreqLocked(v); setCurrentPage(1); }}
+                />
               </div>
             </CardContent>
           </Card>
