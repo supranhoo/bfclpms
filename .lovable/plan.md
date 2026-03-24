@@ -1,29 +1,36 @@
 
 
-## Add Division Mapping to Incentive Program Employee Mapping
+## Add Division Filter Dropdown to Edit User Dialog
 
 ### Problem
-The Employee Mapping UI has 4 tabs (Dept/BU, Designation, Grade, Individual) but no Division option. The `divisions` table and `useDivisions()` hook already exist in the codebase.
+The Edit User dialog has Department, Designation, PMS Grade, and Reporting Manager — but no Division selector. Since the org hierarchy is Division → BU → Department, adding a Division dropdown helps admin quickly narrow departments.
 
-### Changes
+### Approach
+Division is NOT stored on the profile (it's derived from dept → BU → division). The Division dropdown acts as a **cascading filter** for the Department dropdown — selecting a division filters departments to only those under that division's business units.
 
-#### 1. `src/components/incentive/ProgramEmployeeMapping.tsx`
+### Changes — `src/pages/admin/UserManagement.tsx`
 
-- Import `useDivisions` from `useOrganization`
-- Add `division` to `mappingsByType` record
-- Add `division` count to summary badges
-- Change TabsList from `grid-cols-4` to `grid-cols-5`
-- Add new "Division" tab trigger between "Dept/BU" and "Designation"
-- Add `TabsContent` for divisions with checkbox list (same pattern as departments)
+1. **Import** `useDivisions` and `useBusinessUnits` from `useOrganization`
 
-#### 2. `supabase/functions/compute-monthly-incentives/index.ts`
+2. **Add state**: `editDivisionId` (string, default `''`) — UI-only filter, not saved to DB
 
-The computation function must resolve `division` mapping type. When resolving eligible employees, add logic: if mapping_type is `division`, find all business_units in that division, then all departments in those BUs, then all employees in those departments.
+3. **Initialize on edit**: When opening the edit dialog, derive the division from the selected user's department:
+   - Find department → `business_unit_id` → find BU → `division_id` → set `editDivisionId`
+
+4. **Add Division dropdown** in the Organization section grid (before Department), making it a 3-column row:
+   - Division select with "All" option
+   - Department select (filtered by division if one is selected)
+   - Designation select (unchanged)
+
+5. **Filter departments**: When `editDivisionId` is set, filter `departments` to only those whose `business_units.divisions.id` matches
+
+6. **Auto-clear department**: When division changes, if the currently selected department doesn't belong to the new division, reset `editDepartmentId` to `'none'`
+
+7. **Same for Create User dialog**: Add division filter dropdown there too for consistency
 
 ### No database changes needed
-The `incentive_program_mappings` table uses a text `mapping_type` column — `'division'` works without schema changes.
+Division is derived from the department hierarchy — no new column on profiles.
 
 ### Files Modified
-- `src/components/incentive/ProgramEmployeeMapping.tsx` — add Division tab
-- `supabase/functions/compute-monthly-incentives/index.ts` — resolve division mappings
+- `src/pages/admin/UserManagement.tsx` — add Division dropdown as cascading filter for Department in both Edit and Create dialogs
 
