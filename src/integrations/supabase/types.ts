@@ -468,6 +468,7 @@ export type Database = {
           absent_days: number
           availability_percent: number | null
           created_at: string
+          custom_fields: Json | null
           department_lti_count: number
           employee_id: string
           entered_by: string | null
@@ -491,6 +492,7 @@ export type Database = {
           absent_days?: number
           availability_percent?: number | null
           created_at?: string
+          custom_fields?: Json | null
           department_lti_count?: number
           employee_id: string
           entered_by?: string | null
@@ -514,6 +516,7 @@ export type Database = {
           absent_days?: number
           availability_percent?: number | null
           created_at?: string
+          custom_fields?: Json | null
           department_lti_count?: number
           employee_id?: string
           entered_by?: string | null
@@ -788,6 +791,53 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "incentive_disqualification_rules_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "incentive_programs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      incentive_eligibility_fields: {
+        Row: {
+          created_at: string | null
+          default_value: string | null
+          field_key: string
+          field_label: string
+          field_type: string
+          id: string
+          is_active: boolean | null
+          is_required: boolean | null
+          program_id: string | null
+          sort_order: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          default_value?: string | null
+          field_key: string
+          field_label: string
+          field_type?: string
+          id?: string
+          is_active?: boolean | null
+          is_required?: boolean | null
+          program_id?: string | null
+          sort_order?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          default_value?: string | null
+          field_key?: string
+          field_label?: string
+          field_type?: string
+          id?: string
+          is_active?: boolean | null
+          is_required?: boolean | null
+          program_id?: string | null
+          sort_order?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "incentive_eligibility_fields_program_id_fkey"
             columns: ["program_id"]
             isOneToOne: false
             referencedRelation: "incentive_programs"
