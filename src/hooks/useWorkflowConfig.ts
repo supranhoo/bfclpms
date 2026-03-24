@@ -120,6 +120,32 @@ export function useEmployeeWorkflowStages(employeeId: string | undefined, review
   });
 }
 
+// Helper to trigger auto-reconciliation after workflow changes
+async function triggerAutoReconcile(reviewPeriod: string, reviewYear: number) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return;
+  
+  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+  const response = await fetch(
+    `https://${projectId}.supabase.co/functions/v1/auto-reconcile-workflow`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      },
+      body: JSON.stringify({ review_period: reviewPeriod, review_year: reviewYear }),
+    }
+  );
+  if (response.ok) {
+    const result = await response.json();
+    if (result.reconciled_count > 0) {
+      console.log(`Auto-reconciled ${result.reconciled_count} KPIs after workflow change`);
+    }
+  }
+}
+
 // Create or update a workflow configuration
 export function useUpsertWorkflowConfig() {
   const queryClient = useQueryClient();
