@@ -546,7 +546,7 @@ export default function KpiStatusTracker() {
                           )}
                         </TableCell>
                         <TableCell className="text-center">
-                          {row.isFrequencyLocked ? (
+                          {row.isOrphaned || row.isFrequencyLocked ? (
                             <span className="text-xs text-muted-foreground italic">N/A</span>
                           ) : row.status !== 'approved' ? (
                             <span className={`text-xs tabular-nums font-medium ${
