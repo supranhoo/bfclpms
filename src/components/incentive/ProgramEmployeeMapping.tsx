@@ -111,7 +111,10 @@ export function ProgramEmployeeMapping({ programId }: Props) {
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="department">
-          <TabsList className="grid grid-cols-4 w-full">
+          <TabsList className="grid grid-cols-5 w-full">
+            <TabsTrigger value="division" className="text-xs">
+              <Layers className="h-3 w-3 mr-1" /> Division
+            </TabsTrigger>
             <TabsTrigger value="department" className="text-xs">
               <Building2 className="h-3 w-3 mr-1" /> Dept / BU
             </TabsTrigger>
@@ -125,6 +128,21 @@ export function ProgramEmployeeMapping({ programId }: Props) {
               <UserPlus className="h-3 w-3 mr-1" /> Individual
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="division" className="mt-3">
+            <ScrollArea className="h-60 border rounded-md p-2">
+              {divisions.map((d: any) => (
+                <label key={d.id} className="flex items-center gap-2 py-1 px-1 hover:bg-muted/50 rounded cursor-pointer">
+                  <Checkbox
+                    checked={mappingsByType.division.has(d.id)}
+                    onCheckedChange={() => toggle('division', d.id)}
+                  />
+                  <span className="text-sm">{d.name}</span>
+                </label>
+              ))}
+              {divisions.length === 0 && <p className="text-sm text-muted-foreground p-2">No divisions found</p>}
+            </ScrollArea>
+          </TabsContent>
 
           <TabsContent value="department" className="space-y-3 mt-3">
             <Label className="text-xs font-medium text-muted-foreground">Departments</Label>
