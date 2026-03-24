@@ -176,7 +176,7 @@ export function useResolvedProgramEmployees(programId?: string | 'all') {
         let matched = false;
         if (directEmployeeIds.has(profile.id)) matched = true;
         if (!matched && profile.department_id && targetDeptIds.has(profile.department_id)) matched = true;
-        if (!matched && profile.designation_id && targetDesignationIds.has(profile.designation_id)) matched = true;
+        if (!matched && profile.designation && targetDesignationIds.has(profile.designation)) matched = true;
         if (!matched && (profile as any).pms_grade && targetGrades.has((profile as any).pms_grade)) matched = true;
 
         if (matched) {
