@@ -502,6 +502,7 @@ export default function UserManagement() {
     setNewDesignation('');
     setNewPmsGrade('');
     setNewManagerId('');
+    setNewDivisionId('');
   };
 
   const handleBulkUpdate = () => {
