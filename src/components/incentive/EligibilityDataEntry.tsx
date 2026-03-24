@@ -6,17 +6,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Download, Upload, Save } from 'lucide-react';
-import { useIncentiveEligibility, useUpsertEligibility, useBulkUpsertEligibility } from '@/hooks/useIncentiveEligibility';
-import { useAllEligibilityFields } from '@/hooks/useIncentivePrograms';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Download, Upload, Save, Info } from 'lucide-react';
+import { useIncentiveEligibility, useUpsertEligibility, useBulkUpsertEligibility, useResolvedProgramEmployees } from '@/hooks/useIncentiveEligibility';
+import { useAllEligibilityFields, useEligibilityFields, useIncentivePrograms } from '@/hooks/useIncentivePrograms';
 import { useAuth } from '@/contexts/AuthContext';
 import * as XLSX from 'xlsx';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-// Core fields that map directly to typed columns on the eligibility table
 const CORE_FIELD_KEYS = new Set([
   'absent_days', 'lwp_days', 'has_warning_letter', 'is_suspended',
   'is_contract_worker', 'lti_count', 'department_lti_count',
@@ -30,25 +28,26 @@ export function EligibilityDataEntry() {
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[currentDate.getMonth()]);
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedProgram, setSelectedProgram] = useState<string>('all');
 
   const { data: eligibilityData = [], isLoading } = useIncentiveEligibility(selectedMonth, selectedYear);
-  const { data: fieldDefs = [] } = useAllEligibilityFields();
-  const { data: allEmployees = [] } = useQuery({
-    queryKey: ['all-employees-for-eligibility'],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, full_name, employee_code, department_id, departments(name)')
-        .eq('is_active', true)
-        .order('employee_code');
-      return data || [];
-    },
-  });
+  const { data: programs = [] } = useIncentivePrograms();
+  const activePrograms = useMemo(() => (programs || []).filter((p: any) => p.is_active), [programs]);
+
+  // Use program-specific fields when a program is selected, otherwise all
+  const { data: programFieldDefs = [] } = useEligibilityFields(selectedProgram !== 'all' ? selectedProgram : undefined);
+  const { data: allFieldDefs = [] } = useAllEligibilityFields();
+  const fieldDefs = selectedProgram !== 'all' ? programFieldDefs : allFieldDefs;
+
+  // Resolve employees from program mappings
+  const { employees: mappedEmployees, programByEmployee, hasMappings } = useResolvedProgramEmployees(
+    selectedProgram !== 'all' ? selectedProgram : 'all'
+  );
 
   const upsertEligibility = useUpsertEligibility();
   const bulkUpsert = useBulkUpsertEligibility();
 
-  // Deduplicate fields by field_key, keeping program-specific over global
+  // Deduplicate fields by field_key
   const activeFields = useMemo(() => {
     const byKey = new Map<string, any>();
     for (const f of fieldDefs) {
@@ -60,10 +59,12 @@ export function EligibilityDataEntry() {
     return Array.from(byKey.values()).sort((a: any, b: any) => a.sort_order - b.sort_order);
   }, [fieldDefs]);
 
-  // Merge employees with existing eligibility data
+  // Merge mapped employees with existing eligibility data
   const mergedData = useMemo(() => {
     const eligMap = new Map(eligibilityData.map((e: any) => [e.employee_id, e]));
-    return allEmployees
+    const employeeList = mappedEmployees.length > 0 ? mappedEmployees : [];
+
+    return employeeList
       .filter((emp: any) => {
         if (!searchTerm) return true;
         const term = searchTerm.toLowerCase();
@@ -85,11 +86,12 @@ export function EligibilityDataEntry() {
           employee_name: emp.full_name,
           employee_code: emp.employee_code,
           department: emp.departments?.name || '—',
+          programs: programByEmployee.get(emp.id) || [],
           id: existing?.id,
           ...defaults,
         };
       });
-  }, [allEmployees, eligibilityData, searchTerm, activeFields]);
+  }, [mappedEmployees, eligibilityData, searchTerm, activeFields, programByEmployee]);
 
   const getEligibilityStatus = (row: any) => {
     if (row.absent_days >= 1) return { status: 'Disqualified', reason: `Absent ${row.absent_days} day(s)` };
@@ -123,20 +125,18 @@ export function EligibilityDataEntry() {
   };
 
   const handleExportTemplate = () => {
-    const headers: Record<string, any> = { 'Employee Code': '', 'Employee Name': '' };
-    for (const f of activeFields) {
-      headers[f.field_label] = f.field_type === 'boolean' ? 'N' : f.field_type === 'number' ? 0 : '';
-    }
     const ws = XLSX.utils.json_to_sheet(
-      allEmployees.map((emp: any) => ({
+      mergedData.map((emp: any) => ({
         'Employee Code': emp.employee_code,
-        'Employee Name': emp.full_name,
+        'Employee Name': emp.employee_name,
+        'Program': emp.programs?.join(', ') || '—',
         ...Object.fromEntries(activeFields.map((f: any) => [f.field_label, f.field_type === 'boolean' ? 'N' : f.field_type === 'number' ? 0 : ''])),
       }))
     );
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Eligibility');
-    XLSX.writeFile(wb, `eligibility_template_${selectedMonth}_${selectedYear}.xlsx`);
+    const programSuffix = selectedProgram !== 'all' ? `_${activePrograms.find((p: any) => p.id === selectedProgram)?.name || 'program'}` : '';
+    XLSX.writeFile(wb, `eligibility_template_${selectedMonth}_${selectedYear}${programSuffix}.xlsx`);
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -149,7 +149,7 @@ export function EligibilityDataEntry() {
       const json = XLSX.utils.sheet_to_json(ws) as any[];
 
       const labelToField = new Map(activeFields.map((f: any) => [f.field_label, f]));
-      const empCodeMap = new Map(allEmployees.map((emp: any) => [emp.employee_code, emp.id]));
+      const empCodeMap = new Map(mergedData.map((emp: any) => [emp.employee_code, emp.employee_id]));
 
       const rows = json
         .filter(row => empCodeMap.has(String(row['Employee Code'])))
@@ -186,7 +186,6 @@ export function EligibilityDataEntry() {
     e.target.value = '';
   };
 
-  // Local editing state
   const [editedRows, setEditedRows] = useState<Record<string, any>>({});
 
   const updateLocalRow = (empId: string, field: string, value: any) => {
@@ -204,7 +203,7 @@ export function EligibilityDataEntry() {
     <Card>
       <CardHeader>
         <CardTitle className="text-lg">Eligibility Data Entry</CardTitle>
-        <CardDescription>Enter monthly disqualification & attendance data for employees</CardDescription>
+        <CardDescription>Enter monthly disqualification & attendance data for program-mapped employees</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex gap-3 flex-wrap items-center">
@@ -216,6 +215,15 @@ export function EligibilityDataEntry() {
             <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
             <SelectContent>{[2024, 2025, 2026, 2027].map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
           </Select>
+          <Select value={selectedProgram} onValueChange={setSelectedProgram}>
+            <SelectTrigger className="w-[200px]"><SelectValue placeholder="Select Program" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Programs</SelectItem>
+              {activePrograms.map((p: any) => (
+                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Input placeholder="Search employee..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-[200px]" />
           <div className="ml-auto flex gap-2">
             <Button variant="outline" size="sm" onClick={handleExportTemplate}><Download className="h-4 w-4 mr-1" /> Template</Button>
@@ -225,12 +233,22 @@ export function EligibilityDataEntry() {
           </div>
         </div>
 
+        {!hasMappings && (
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              No employees are mapped to any incentive program. Go to the <strong>Programs</strong> tab to configure employee mappings first.
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="rounded-md border overflow-auto max-h-[600px]">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="sticky left-0 bg-background z-10">Employee</TableHead>
                 <TableHead>Dept</TableHead>
+                <TableHead>Program</TableHead>
                 {activeFields.map((f: any) => (
                   <TableHead key={f.field_key}>{f.field_label}</TableHead>
                 ))}
@@ -240,9 +258,11 @@ export function EligibilityDataEntry() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={activeFields.length + 4} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={activeFields.length + 5} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
               ) : mergedData.length === 0 ? (
-                <TableRow><TableCell colSpan={activeFields.length + 4} className="text-center py-8 text-muted-foreground">No employees found</TableCell></TableRow>
+                <TableRow><TableCell colSpan={activeFields.length + 5} className="text-center py-8 text-muted-foreground">
+                  {hasMappings ? 'No employees found for the selected program' : 'No employees mapped to incentive programs'}
+                </TableCell></TableRow>
               ) : (
                 mergedData.slice(0, 100).map((row: any) => {
                   const mergedRow = { ...row, ...editedRows[row.employee_id] };
@@ -254,6 +274,13 @@ export function EligibilityDataEntry() {
                         <div className="text-xs text-muted-foreground">{row.employee_code}</div>
                       </TableCell>
                       <TableCell className="text-xs">{row.department}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {row.programs?.map((p: string) => (
+                            <Badge key={p} variant="outline" className="text-xs">{p}</Badge>
+                          ))}
+                        </div>
+                      </TableCell>
                       {activeFields.map((f: any) => (
                         <TableCell key={f.field_key}>
                           {f.field_type === 'boolean' ? (
