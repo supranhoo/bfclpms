@@ -156,6 +156,8 @@ export default function KpiStatusTracker() {
         const deptData = profile?.departments as any;
         const division = deptData?.business_units?.divisions?.name ?? '—';
 
+        const isFrequencyLocked = isKpiLockedForPeriod(kpi.frequency, selectedPeriod, year);
+
         return {
           kpiId: kpi.id,
           employeeCode: profile?.employee_code ?? '—',
@@ -174,6 +176,7 @@ export default function KpiStatusTracker() {
           daysPending: kpi.updated_at ? differenceInDays(now, new Date(kpi.updated_at)) : 0,
           isOrgLevel: kpi.is_org_level ?? false,
           reviewPeriod: kpi.review_period ?? '—',
+          isFrequencyLocked,
         };
       });
 
