@@ -15,6 +15,7 @@ import { useKpiFilters } from '@/hooks/useKpiFilters';
 import { getKpiDueDate } from '@/lib/frequencyUtils';
 import { KpiFilterBar } from '@/components/ui/KpiFilterBar';
 import { useRollbackStatusCounts } from '@/hooks/useAllRollbackRequests';
+import { usePendingAdjustmentCount } from '@/hooks/useIncentiveRecords';
 import { PerformanceTrendChart } from '@/components/management/PerformanceTrendChart';
 import { RatingBellCurve } from '@/components/management/RatingBellCurve';
 import { TopBottomPerformers } from '@/components/management/TopBottomPerformers';
