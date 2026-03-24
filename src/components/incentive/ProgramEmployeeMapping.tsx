@@ -25,6 +25,7 @@ export function ProgramEmployeeMapping({ programId }: Props) {
 
   const { data: departments = [] } = useDepartments();
   const { data: businessUnits = [] } = useBusinessUnits();
+  const { data: divisions = [] } = useDivisions();
   const { designations, grades } = useEmployeeFilterOptions();
 
   const [empSearch, setEmpSearch] = useState('');
