@@ -1,12 +1,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Clock, RotateCcw, HelpCircle, ArrowRight } from 'lucide-react';
+import { Clock, RotateCcw, HelpCircle, ArrowRight, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface ActionItemsCardsProps {
   overdueReviews: number;
   pendingRollbacks: number;
   openQueries: number;
+  pendingIncentiveAdjustments?: number;
 }
 
 export function ActionItemsCards({ overdueReviews, pendingRollbacks, openQueries }: ActionItemsCardsProps) {
