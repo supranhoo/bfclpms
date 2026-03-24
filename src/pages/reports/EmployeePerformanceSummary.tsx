@@ -12,6 +12,8 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Download, Search, Users, TrendingUp, TrendingDown, Minus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { FrequencyLockToggle } from '@/components/ui/FrequencyLockToggle';
+import { isKpiLockedForPeriod } from '@/lib/frequencyUtils';
 import * as XLSX from 'xlsx';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
@@ -70,6 +72,7 @@ interface EmployeePerformance {
   outOfScore: number;
   totalWeight: number;
   kpiCount: number;
+  lockedKpiCount: number;
 }
 
 export default function EmployeePerformanceSummary() {
@@ -85,6 +88,7 @@ export default function EmployeePerformanceSummary() {
   const [activeTab, setActiveTab] = useState('summary');
   const [comparisonEmployee, setComparisonEmployee] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState('all');
+  const [showFreqLocked, setShowFreqLocked] = useState(false);
 
   // (review_periods query removed – month filter is now static)
 
@@ -103,7 +107,7 @@ export default function EmployeePerformanceSummary() {
       while (hasMore) {
         let query = supabase
           .from('kpis')
-          .select('id, employee_id, kra_name, kpi_name, weightage, status, review_period, review_year')
+          .select('id, employee_id, kra_name, kpi_name, weightage, status, review_period, review_year, frequency')
           .eq('review_year', year)
           .range(offset, offset + batchSize - 1);
 
@@ -170,6 +174,9 @@ export default function EmployeePerformanceSummary() {
         // Skip N/A KPIs entirely
         if (submission?.is_na) return;
 
+        // Check if frequency-locked for the selected period
+        const isLocked = selectedPeriod !== 'all' && isKpiLockedForPeriod(kpi.frequency, selectedPeriod, year);
+
         const manager = profile.reporting_manager_id 
           ? profileMap.get(profile.reporting_manager_id) 
           : null;
@@ -185,17 +192,21 @@ export default function EmployeePerformanceSummary() {
                       submission?.manager_score ?? 
                       submission?.self_score ?? 0;
         const weight = kpi.weightage || 0;
-        const weightedScore = score * weight;
-        const maxScore = weight * 5;
+        const weightedScore = isLocked ? 0 : score * weight;
+        const maxScore = isLocked ? 0 : weight * 5;
 
         const kpiStatus = kpi.status || 'kra_set';
 
         if (existing) {
-          existing.totalScore += weightedScore;
-          existing.outOfScore += maxScore;
-          existing.totalWeight += weight;
-          existing.kpiCount += 1;
-          existing.statusCounts[kpiStatus] = (existing.statusCounts[kpiStatus] || 0) + 1;
+          if (!isLocked) {
+            existing.totalScore += weightedScore;
+            existing.outOfScore += maxScore;
+            existing.totalWeight += weight;
+            existing.kpiCount += 1;
+            existing.statusCounts[kpiStatus] = (existing.statusCounts[kpiStatus] || 0) + 1;
+          } else {
+            existing.lockedKpiCount += 1;
+          }
         } else {
           employeePeriodMap.set(key, {
             employeeId: kpi.employee_id,
@@ -207,11 +218,12 @@ export default function EmployeePerformanceSummary() {
             reportingManager: manager?.full_name || '-',
             reviewPeriod: kpi.review_period || '-',
             reviewYear: kpi.review_year || year,
-            statusCounts: { [kpiStatus]: 1 },
+            statusCounts: isLocked ? {} : { [kpiStatus]: 1 },
             totalScore: weightedScore,
             outOfScore: maxScore,
-            totalWeight: weight,
-            kpiCount: 1,
+            totalWeight: isLocked ? 0 : weight,
+            kpiCount: isLocked ? 0 : 1,
+            lockedKpiCount: isLocked ? 1 : 0,
           });
         }
       });
@@ -319,6 +331,8 @@ export default function EmployeePerformanceSummary() {
     const term = searchTerm.toLowerCase();
     return performanceData
       .filter(row => {
+        // Hide employees that only have frequency-locked KPIs when toggle is off
+        if (!showFreqLocked && row.kpiCount === 0 && row.lockedKpiCount > 0) return false;
         // Status filter
         if (selectedStatus !== 'all' && !(row.statusCounts[selectedStatus] > 0)) return false;
         // Search filter
@@ -336,7 +350,7 @@ export default function EmployeePerformanceSummary() {
         const pctB = b.outOfScore > 0 ? (b.totalScore / b.outOfScore) * 100 : 0;
         return pctB - pctA;
       });
-  }, [performanceData, searchTerm, selectedStatus]);
+  }, [performanceData, searchTerm, selectedStatus, showFreqLocked]);
 
   // Pagination
   const totalPages = Math.ceil(filteredData.length / pageSize);
@@ -348,7 +362,7 @@ export default function EmployeePerformanceSummary() {
   // Reset page when filters change
   useMemo(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedYear, selectedPeriod, selectedStatus, pageSize]);
+  }, [searchTerm, selectedYear, selectedPeriod, selectedStatus, pageSize, showFreqLocked]);
 
   // Get unique employees for comparison
   const uniqueEmployees = useMemo(() => {
@@ -576,6 +590,10 @@ export default function EmployeePerformanceSummary() {
                     ))}
                   </SelectContent>
                 </Select>
+                <FrequencyLockToggle
+                  checked={showFreqLocked}
+                  onCheckedChange={v => { setShowFreqLocked(v); setCurrentPage(1); }}
+                />
               </div>
             </CardContent>
           </Card>

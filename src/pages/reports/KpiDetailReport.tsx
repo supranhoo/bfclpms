@@ -13,6 +13,8 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Download, Search, ChevronLeft, ChevronRight, FileSpreadsheet, Hash, AlertCircle, TrendingUp } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { FrequencyLockToggle } from '@/components/ui/FrequencyLockToggle';
+import { isKpiLockedForPeriod } from '@/lib/frequencyUtils';
 import * as XLSX from 'xlsx';
 
 const FULL_MONTHS = [
@@ -67,18 +69,20 @@ interface KpiDetailRow {
   percentage: number | null;
   overallRating: string | null;
   isNa: boolean;
+  isFrequencyLocked: boolean;
 }
 
 // Compact score cell
-function ScoreCell({ score, isNa }: { score: number | null; isNa: boolean }) {
+function ScoreCell({ score, isNa, isLocked }: { score: number | null; isNa: boolean; isLocked?: boolean }) {
+  if (isLocked) return <Badge variant="outline" className="text-xs px-1 py-0 bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-400 border-0">Locked</Badge>;
   if (isNa) return <Badge variant="secondary" className="text-xs px-1 py-0">N/A</Badge>;
   if (score === null) return <span className="text-muted-foreground text-xs">—</span>;
   return <span className="tabular-nums text-xs">{score}</span>;
 }
 
 // Calculated column cell
-function CalcCell({ value, isNa, format }: { value: number | null; isNa: boolean; format?: 'percent' | 'decimal' }) {
-  if (isNa || value === null) return <span className="text-muted-foreground text-xs">—</span>;
+function CalcCell({ value, isNa, isLocked, format }: { value: number | null; isNa: boolean; isLocked?: boolean; format?: 'percent' | 'decimal' }) {
+  if (isLocked || isNa || value === null) return <span className="text-muted-foreground text-xs">—</span>;
   if (format === 'percent') return <span className="tabular-nums text-xs">{value.toFixed(1)}%</span>;
   return <span className="tabular-nums text-xs">{value.toFixed(2)}</span>;
 }
@@ -96,6 +100,7 @@ export default function KpiDetailReport() {
   const [includeNa, setIncludeNa] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [showFreqLocked, setShowFreqLocked] = useState(false);
 
   const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
 
@@ -131,8 +136,10 @@ export default function KpiDetailReport() {
             kra_name,
             kpi_name,
             weightage,
+            frequency,
             review_period,
             review_year,
+            status,
             kra_categories ( name ),
             review_submissions (
               self_score,
@@ -178,15 +185,16 @@ export default function KpiDetailReport() {
           ? kpi.review_submissions[0]
           : kpi.review_submissions;
         const isNa = sub?.is_na ?? false;
+        const isFrequencyLocked = selectedPeriod !== 'all' && isKpiLockedForPeriod(kpi.frequency, selectedPeriod, year);
         const weightage = kpi.weightage ?? 0;
-        const finalScore = isNa ? null : resolveFinalScore(sub, kpi.status);
-        const totalScore = isNa || finalScore === null ? null : finalScore * weightage;
-        const outOfScore = isNa ? null : weightage * 5;
+        const finalScore = isNa || isFrequencyLocked ? null : resolveFinalScore(sub, kpi.status);
+        const totalScore = isNa || isFrequencyLocked || finalScore === null ? null : finalScore * weightage;
+        const outOfScore = isNa || isFrequencyLocked ? null : weightage * 5;
         const percentage =
-          isNa || totalScore === null || outOfScore === null || outOfScore === 0
+          isNa || isFrequencyLocked || totalScore === null || outOfScore === null || outOfScore === 0
             ? null
             : (totalScore / outOfScore) * 100;
-        const overallRating = isNa ? null : ratingLabel(finalScore);
+        const overallRating = isNa || isFrequencyLocked ? null : ratingLabel(finalScore);
 
         return {
           kpiId: kpi.id,
@@ -211,6 +219,7 @@ export default function KpiDetailReport() {
           percentage,
           overallRating,
           isNa,
+          isFrequencyLocked,
         };
       });
 
@@ -232,6 +241,7 @@ export default function KpiDetailReport() {
     const term = searchTerm.toLowerCase();
     return rows.filter(r => {
       if (!includeNa && r.isNa) return false;
+      if (!showFreqLocked && r.isFrequencyLocked) return false;
       if (selectedDept !== 'all' && r.department !== selectedDept) return false;
       if (selectedCategory !== 'all' && r.category !== selectedCategory) return false;
       if (term) {
@@ -244,7 +254,7 @@ export default function KpiDetailReport() {
       }
       return true;
     });
-  }, [rows, searchTerm, selectedDept, selectedCategory, includeNa]);
+  }, [rows, searchTerm, selectedDept, selectedCategory, includeNa, showFreqLocked]);
 
   // Stats
   const stats = useMemo(() => {
@@ -267,7 +277,7 @@ export default function KpiDetailReport() {
   }, [filteredRows, currentPage, pageSize]);
 
   // Reset page on filter change
-  useMemo(() => { setCurrentPage(1); }, [searchTerm, selectedYear, selectedPeriod, selectedDept, selectedCategory, includeNa, pageSize]);
+  useMemo(() => { setCurrentPage(1); }, [searchTerm, selectedYear, selectedPeriod, selectedDept, selectedCategory, includeNa, showFreqLocked, pageSize]);
 
   // Excel export
   const handleExport = () => {
@@ -413,6 +423,11 @@ export default function KpiDetailReport() {
                 Show N/A KPIs
               </Label>
             </div>
+
+            <FrequencyLockToggle
+              checked={showFreqLocked}
+              onCheckedChange={v => { setShowFreqLocked(v); setCurrentPage(1); }}
+            />
           </div>
         </CardContent>
       </Card>

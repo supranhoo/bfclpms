@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-24  
-> **Version:** 1.79.0 — Added Division cascading filter dropdown to Create/Edit User dialogs
+> **Version:** 1.80.0 — Added frequency-aware filtering to reports (KPI Status Tracker, Employee Performance Summary, KPI Detail Report) to hide/show frequency-locked KPIs
 > **Maintainer:** Lovable AI
 
 ---

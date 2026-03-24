@@ -12,6 +12,8 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Download, Search, ChevronLeft, ChevronRight, FileSpreadsheet, Clock, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { FrequencyLockToggle } from '@/components/ui/FrequencyLockToggle';
+import { isKpiLockedForPeriod } from '@/lib/frequencyUtils';
 import * as XLSX from 'xlsx';
 import { differenceInDays } from 'date-fns';
 
@@ -84,6 +86,7 @@ interface StatusTrackerRow {
   daysPending: number;
   isOrgLevel: boolean;
   reviewPeriod: string;
+  isFrequencyLocked: boolean;
 }
 
 const PAGE_SIZE = 50;
@@ -100,6 +103,7 @@ export default function KpiStatusTracker() {
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [showFreqLocked, setShowFreqLocked] = useState(false);
 
   const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
 
@@ -118,7 +122,7 @@ export default function KpiStatusTracker() {
           .from('kpis')
           .select(`
             id, employee_id, kra_name, kpi_name, weightage, frequency, status, updated_at,
-            review_period, review_year, is_org_level,
+            review_period, review_year, is_org_level, frequency_cycle_start,
             kra_categories ( name )
           `)
           .eq('review_year', year)
@@ -152,6 +156,8 @@ export default function KpiStatusTracker() {
         const deptData = profile?.departments as any;
         const division = deptData?.business_units?.divisions?.name ?? '—';
 
+        const isFrequencyLocked = isKpiLockedForPeriod(kpi.frequency, selectedPeriod, year);
+
         return {
           kpiId: kpi.id,
           employeeCode: profile?.employee_code ?? '—',
@@ -170,6 +176,7 @@ export default function KpiStatusTracker() {
           daysPending: kpi.updated_at ? differenceInDays(now, new Date(kpi.updated_at)) : 0,
           isOrgLevel: kpi.is_org_level ?? false,
           reviewPeriod: kpi.review_period ?? '—',
+          isFrequencyLocked,
         };
       });
 
@@ -197,6 +204,7 @@ export default function KpiStatusTracker() {
     if (!rows) return [];
     const term = searchTerm.toLowerCase();
     return rows.filter(r => {
+      if (!showFreqLocked && r.isFrequencyLocked) return false;
       if (selectedDept !== 'all' && r.department !== selectedDept) return false;
       if (selectedStatus !== 'all' && r.status !== selectedStatus) return false;
       if (term) {
@@ -209,7 +217,7 @@ export default function KpiStatusTracker() {
       }
       return true;
     });
-  }, [rows, searchTerm, selectedDept, selectedStatus]);
+  }, [rows, searchTerm, selectedDept, selectedStatus, showFreqLocked]);
 
   // Summary stats by status
   const statusCounts = useMemo(() => {
@@ -232,7 +240,7 @@ export default function KpiStatusTracker() {
   }, [filteredRows, currentPage]);
 
   // Reset page on filter change
-  useMemo(() => { setCurrentPage(1); }, [searchTerm, selectedYear, selectedPeriod, selectedDept, selectedStatus]);
+  useMemo(() => { setCurrentPage(1); }, [searchTerm, selectedYear, selectedPeriod, selectedDept, selectedStatus, showFreqLocked]);
 
   // Excel export
   const handleExport = () => {
@@ -342,6 +350,11 @@ export default function KpiStatusTracker() {
                 />
               </div>
             </div>
+
+            <FrequencyLockToggle
+              checked={showFreqLocked}
+              onCheckedChange={v => { setShowFreqLocked(v); setCurrentPage(1); }}
+            />
           </div>
         </CardContent>
       </Card>
@@ -459,12 +472,20 @@ export default function KpiStatusTracker() {
                         <TableCell className="text-center text-xs tabular-nums">{row.weightage}</TableCell>
                         <TableCell className="text-xs">{row.frequency}</TableCell>
                         <TableCell>
-                          <Badge variant="outline" className={`text-xs border-0 ${statusBadgeClass(row.status)}`}>
-                            {row.statusLabel}
-                          </Badge>
+                          {row.isFrequencyLocked ? (
+                            <Badge variant="outline" className="text-xs border-0 bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-400">
+                              Freq. Locked
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className={`text-xs border-0 ${statusBadgeClass(row.status)}`}>
+                              {row.statusLabel}
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell className="text-xs font-medium">
-                          {row.status === 'approved' ? (
+                          {row.isFrequencyLocked ? (
+                            <span className="text-muted-foreground italic">Not due</span>
+                          ) : row.status === 'approved' ? (
                             <span className="text-green-600 dark:text-green-400">✓ Complete</span>
                           ) : (
                             <span className={row.daysPending >= 7 ? 'text-destructive' : row.daysPending >= 4 ? 'text-amber-600' : ''}>
@@ -473,7 +494,9 @@ export default function KpiStatusTracker() {
                           )}
                         </TableCell>
                         <TableCell className="text-center">
-                          {row.status !== 'approved' ? (
+                          {row.isFrequencyLocked ? (
+                            <span className="text-xs text-muted-foreground italic">N/A</span>
+                          ) : row.status !== 'approved' ? (
                             <span className={`text-xs tabular-nums font-medium ${
                               row.daysPending >= 7 ? 'text-destructive' : row.daysPending >= 4 ? 'text-amber-600' : 'text-muted-foreground'
                             }`}>
