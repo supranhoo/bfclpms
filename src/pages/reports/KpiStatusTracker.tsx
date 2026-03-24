@@ -103,6 +103,7 @@ export default function KpiStatusTracker() {
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [showFreqLocked, setShowFreqLocked] = useState(false);
 
   const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
 
