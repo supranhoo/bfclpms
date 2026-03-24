@@ -196,13 +196,40 @@ export default function KpiStatusTracker() {
     },
   });
 
+  // Fetch bulk workflows for orphan detection
+  const employeeIds = useMemo(() => {
+    if (!rows) return [];
+    const ids = new Set<string>();
+    rows.forEach(r => ids.add(r.employeeId));
+    return Array.from(ids);
+  }, [rows]);
+
+  const { data: workflowMap } = useBulkEmployeeWorkflows(
+    employeeIds,
+    selectedPeriod,
+    parseInt(selectedYear)
+  );
+
+  // Enrich rows with orphan status
+  const enrichedRows = useMemo(() => {
+    if (!rows) return [];
+    if (!workflowMap) return rows;
+    return rows.map(r => {
+      if (r.status === 'approved' || r.status === 'kra_set') return r;
+      const stages = workflowMap.get(r.employeeId);
+      if (!stages) return r;
+      const isOrphaned = !stages.includes(r.status);
+      return isOrphaned ? { ...r, isOrphaned: true } : r;
+    });
+  }, [rows, workflowMap]);
+
   // Derived department list
   const departments = useMemo(() => {
-    if (!rows) return [];
+    if (!enrichedRows) return [];
     const s = new Set<string>();
-    rows.forEach(r => { if (r.department !== '—') s.add(r.department); });
+    enrichedRows.forEach(r => { if (r.department !== '—') s.add(r.department); });
     return Array.from(s).sort();
-  }, [rows]);
+  }, [enrichedRows]);
 
   // Client-side filtering
   const filteredRows = useMemo(() => {
