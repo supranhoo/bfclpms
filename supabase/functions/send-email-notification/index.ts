@@ -632,6 +632,20 @@ Reason: {{reason}}
 
 Please log in and complete the required corrections at your earliest convenience.`,
   },
+  incentive_retroactive_alert: {
+    subject: '[PMS] ⚠️ Incentive Slab Changes Detected — Action Required',
+    body: `Hi {{recipient_name}},
+
+{{revisions_count}} incentive slab change(s) have been detected due to Quarterly/Bi-Monthly KPI resolution.
+
+Source Period: {{source_period}} {{review_year}}
+Affected Employees: {{affected_employees}}
+Affected Past Months: {{affected_months}}
+
+These changes may require payroll adjustments. Please review the Incentive Report for full details.
+
+Action Required: Log in to PMS → Reports → Incentive Report → Retroactive Adjustments tab to review and process these changes.`,
+  },
 };
 
 const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string }> = {
