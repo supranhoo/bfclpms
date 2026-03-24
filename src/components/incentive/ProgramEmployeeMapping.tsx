@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { X, Search, Building2, Users, GraduationCap, UserPlus } from 'lucide-react';
-import { useDepartments, useBusinessUnits } from '@/hooks/useOrganization';
+import { useDepartments, useBusinessUnits, useDivisions } from '@/hooks/useOrganization';
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import { useProgramMappings, useAddProgramMapping, useRemoveProgramMapping } from '@/hooks/useIncentivePrograms';
 import { useQuery } from '@tanstack/react-query';
