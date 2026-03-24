@@ -494,7 +494,9 @@ export default function KpiStatusTracker() {
                           )}
                         </TableCell>
                         <TableCell className="text-center">
-                          {row.status !== 'approved' ? (
+                          {row.isFrequencyLocked ? (
+                            <span className="text-xs text-muted-foreground italic">N/A</span>
+                          ) : row.status !== 'approved' ? (
                             <span className={`text-xs tabular-nums font-medium ${
                               row.daysPending >= 7 ? 'text-destructive' : row.daysPending >= 4 ? 'text-amber-600' : 'text-muted-foreground'
                             }`}>
