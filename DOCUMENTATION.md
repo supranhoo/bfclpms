@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-24  
-> **Version:** 1.75.0 — Incentive Config UI: Redesigned to program-centric accordion layout with inline Mapping/Slabs/DQ Rules sub-tabs per program, summary count badges
+> **Version:** 1.76.0 — Dynamic eligibility fields: admin-configurable columns via `incentive_eligibility_fields` table, custom_fields JSONB on eligibility, Fields sub-tab per program, dynamic grid rendering + Excel import/export, edge function custom DQ rule support
 > **Maintainer:** Lovable AI
 
 ---
