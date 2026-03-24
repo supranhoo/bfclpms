@@ -237,6 +237,42 @@ export default function EmployeePerformanceSummary() {
     },
   });
 
+  // Bulk workflow fetch for orphan detection
+  const perfEmployeeIds = useMemo(() => {
+    if (!performanceData) return [];
+    const ids = new Set<string>();
+    performanceData.forEach(r => ids.add(r.employeeId));
+    return Array.from(ids);
+  }, [performanceData]);
+
+  const { data: perfWorkflowMap } = useBulkEmployeeWorkflows(
+    perfEmployeeIds,
+    selectedPeriod !== 'all' ? selectedPeriod : undefined,
+    selectedPeriod !== 'all' ? parseInt(selectedYear) : undefined
+  );
+
+  // Enrich performance data with orphan detection (per-employee status check)
+  const enrichedPerformanceData = useMemo(() => {
+    if (!performanceData) return [];
+    if (!perfWorkflowMap || perfWorkflowMap.size === 0) return performanceData;
+    return performanceData.map(row => {
+      const stages = perfWorkflowMap.get(row.employeeId);
+      if (!stages) return row;
+      const orphanedStatuses = new Set<string>();
+      let orphanedCount = 0;
+      Object.entries(row.statusCounts).forEach(([status, count]) => {
+        if (status !== 'approved' && status !== 'kra_set' && !stages.includes(status)) {
+          orphanedStatuses.add(status);
+          orphanedCount += count;
+        }
+      });
+      if (orphanedCount > 0) {
+        return { ...row, orphanedKpiCount: orphanedCount, orphanedStatuses };
+      }
+      return row;
+    });
+  }, [performanceData, perfWorkflowMap]);
+
   // Fetch comparison data (all periods for trend analysis)
   const { data: trendData } = useQuery({
     queryKey: ['employee-performance-trends', selectedYear],
