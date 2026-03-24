@@ -174,6 +174,9 @@ export default function EmployeePerformanceSummary() {
         // Skip N/A KPIs entirely
         if (submission?.is_na) return;
 
+        // Check if frequency-locked for the selected period
+        const isLocked = selectedPeriod !== 'all' && isKpiLockedForPeriod(kpi.frequency, selectedPeriod, year);
+
         const manager = profile.reporting_manager_id 
           ? profileMap.get(profile.reporting_manager_id) 
           : null;
@@ -189,17 +192,21 @@ export default function EmployeePerformanceSummary() {
                       submission?.manager_score ?? 
                       submission?.self_score ?? 0;
         const weight = kpi.weightage || 0;
-        const weightedScore = score * weight;
-        const maxScore = weight * 5;
+        const weightedScore = isLocked ? 0 : score * weight;
+        const maxScore = isLocked ? 0 : weight * 5;
 
         const kpiStatus = kpi.status || 'kra_set';
 
         if (existing) {
-          existing.totalScore += weightedScore;
-          existing.outOfScore += maxScore;
-          existing.totalWeight += weight;
-          existing.kpiCount += 1;
-          existing.statusCounts[kpiStatus] = (existing.statusCounts[kpiStatus] || 0) + 1;
+          if (!isLocked) {
+            existing.totalScore += weightedScore;
+            existing.outOfScore += maxScore;
+            existing.totalWeight += weight;
+            existing.kpiCount += 1;
+            existing.statusCounts[kpiStatus] = (existing.statusCounts[kpiStatus] || 0) + 1;
+          } else {
+            existing.lockedKpiCount += 1;
+          }
         } else {
           employeePeriodMap.set(key, {
             employeeId: kpi.employee_id,
@@ -211,11 +218,12 @@ export default function EmployeePerformanceSummary() {
             reportingManager: manager?.full_name || '-',
             reviewPeriod: kpi.review_period || '-',
             reviewYear: kpi.review_year || year,
-            statusCounts: { [kpiStatus]: 1 },
+            statusCounts: isLocked ? {} : { [kpiStatus]: 1 },
             totalScore: weightedScore,
             outOfScore: maxScore,
-            totalWeight: weight,
-            kpiCount: 1,
+            totalWeight: isLocked ? 0 : weight,
+            kpiCount: isLocked ? 0 : 1,
+            lockedKpiCount: isLocked ? 1 : 0,
           });
         }
       });
