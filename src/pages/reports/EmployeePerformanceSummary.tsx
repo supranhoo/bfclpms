@@ -72,6 +72,7 @@ interface EmployeePerformance {
   outOfScore: number;
   totalWeight: number;
   kpiCount: number;
+  lockedKpiCount: number;
 }
 
 export default function EmployeePerformanceSummary() {
