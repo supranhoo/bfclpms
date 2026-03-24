@@ -69,6 +69,15 @@ serve(async (req) => {
         }
       }
 
+      // Resolve division → BU → department → employees
+      if (divIds.length > 0) {
+        const { data: divBUs } = await supabase
+          .from('business_units').select('id').in('division_id', divIds);
+        if (divBUs?.length) {
+          buIds.push(...divBUs.map((b: any) => b.id));
+        }
+      }
+
       // Resolve department employees
       if (deptIds.length > 0) {
         const { data: deptEmps } = await supabase
