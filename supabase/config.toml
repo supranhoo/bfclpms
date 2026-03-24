@@ -53,3 +53,6 @@ verify_jwt = false
 
 [functions.propagate-template-change]
 verify_jwt = false
+
+[functions.auto-reconcile-workflow]
+verify_jwt = false

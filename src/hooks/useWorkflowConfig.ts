@@ -120,6 +120,32 @@ export function useEmployeeWorkflowStages(employeeId: string | undefined, review
   });
 }
 
+// Helper to trigger auto-reconciliation after workflow changes
+async function triggerAutoReconcile(reviewPeriod: string, reviewYear: number) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return;
+  
+  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+  const response = await fetch(
+    `https://${projectId}.supabase.co/functions/v1/auto-reconcile-workflow`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      },
+      body: JSON.stringify({ review_period: reviewPeriod, review_year: reviewYear }),
+    }
+  );
+  if (response.ok) {
+    const result = await response.json();
+    if (result.reconciled_count > 0) {
+      console.log(`Auto-reconciled ${result.reconciled_count} KPIs after workflow change`);
+    }
+  }
+}
+
 // Create or update a workflow configuration
 export function useUpsertWorkflowConfig() {
   const queryClient = useQueryClient();
@@ -185,10 +211,20 @@ export function useUpsertWorkflowConfig() {
         return data;
       }
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['workflow-configs'] });
       queryClient.invalidateQueries({ queryKey: ['employee-workflow'] });
       queryClient.invalidateQueries({ queryKey: ['employee-workflow-stages'] });
+      queryClient.invalidateQueries({ queryKey: ['bulk-employee-workflows'] });
+
+      // Auto-reconcile in-flight KPIs for the affected period
+      const period = variables.reviewPeriod;
+      const year = variables.reviewYear;
+      if (period && year) {
+        triggerAutoReconcile(period, year).catch(() => {
+          // Silently fail — reconciliation is best-effort
+        });
+      }
     },
   });
 }
