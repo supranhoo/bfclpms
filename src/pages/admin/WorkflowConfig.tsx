@@ -23,7 +23,8 @@ import {
   type WorkflowTemplate,
 } from '@/hooks/useWorkflowConfig';
 import { useDepartments } from '@/hooks/useOrganization';
-import { GitBranch, Users, Building2, Award, Trash2, Search, ArrowRight, Check, Plus, Pencil, Star, Archive, RotateCcw, ChevronDown, Calendar, Globe, ChevronsRight } from 'lucide-react';
+import { GitBranch, Users, Building2, Award, Trash2, Search, ArrowRight, Check, Plus, Pencil, Star, Archive, RotateCcw, ChevronDown, Calendar, Globe, ChevronsRight, Info } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import CustomWorkflowDialog from '@/components/admin/CustomWorkflowDialog';
 import ReconcileOrphanedKpisDialog from '@/components/admin/ReconcileOrphanedKpisDialog';
