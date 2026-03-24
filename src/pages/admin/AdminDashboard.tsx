@@ -199,6 +199,13 @@ export default function AdminDashboard() {
           description="Awaiting admin action"
           onClick={() => navigate('/admin/rollback-requests')}
         />
+        <StatCard
+          title="Incentive Adjustments"
+          value={pendingAdjustments}
+          icon={TrendingUp}
+          description={pendingAdjustments > 0 ? 'Slab changes detected' : 'No pending changes'}
+          onClick={() => navigate('/reports/incentive')}
+        />
       </div>
 
       {/* Reviews by Stage */}
