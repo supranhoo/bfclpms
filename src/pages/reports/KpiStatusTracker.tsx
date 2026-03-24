@@ -233,9 +233,9 @@ export default function KpiStatusTracker() {
 
   // Client-side filtering
   const filteredRows = useMemo(() => {
-    if (!rows) return [];
+    if (!enrichedRows) return [];
     const term = searchTerm.toLowerCase();
-    return rows.filter(r => {
+    return enrichedRows.filter(r => {
       if (!showFreqLocked && r.isFrequencyLocked) return false;
       if (selectedDept !== 'all' && r.department !== selectedDept) return false;
       if (selectedStatus !== 'all' && r.status !== selectedStatus) return false;
@@ -249,7 +249,7 @@ export default function KpiStatusTracker() {
       }
       return true;
     });
-  }, [rows, searchTerm, selectedDept, selectedStatus, showFreqLocked]);
+  }, [enrichedRows, searchTerm, selectedDept, selectedStatus, showFreqLocked]);
 
   // Summary stats by status
   const statusCounts = useMemo(() => {
@@ -262,7 +262,8 @@ export default function KpiStatusTracker() {
   }, [filteredRows]);
 
   const approvedCount = statusCounts['approved'] ?? 0;
-  const pendingCount = filteredRows.length - approvedCount;
+  const pendingCount = filteredRows.filter(r => r.status !== 'approved' && !r.isOrphaned).length;
+  const orphanedCount = filteredRows.filter(r => r.isOrphaned).length;
 
   // Pagination
   const totalPages = Math.ceil(filteredRows.length / PAGE_SIZE);
