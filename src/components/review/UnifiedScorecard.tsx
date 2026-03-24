@@ -237,11 +237,14 @@ export function UnifiedScorecard({
             : 'Forward';
     }
 
+    const activeStage = resolveActiveReviewStage(viewLevel, effectiveStages);
+
     return {
       ...staticConfig,
       previousScoreField: resolvedPreviousScoreField,
       actionLabel: resolvedActionLabel,
       pendingStatus: resolvePendingStatuses(viewLevel, effectiveStages)[0] || 'self_review',
+      activeReviewStage: activeStage,
       reviewableStatuses: resolveReviewableStatuses(viewLevel, effectiveStages),
       forwardStatus: resolveForwardStatus(viewLevel, effectiveStages),
       sendBackTargets: resolveSendBackTargets(viewLevel, effectiveStages),
@@ -608,7 +611,7 @@ export function UnifiedScorecard({
         throw new Error(`Unable to submit ${viewLevel} review. You may not have permission.`);
       }
 
-      const newStatus = approve ? config.forwardStatus : config.pendingStatus;
+      const newStatus = approve ? config.forwardStatus : config.activeReviewStage;
       const { data: kpiUpdateData, error: kpiError } = await supabase
         .from('kpis')
         .update({ status: newStatus as any })
@@ -900,7 +903,7 @@ export function UnifiedScorecard({
       }
       
       // Advance status
-      const newStatus = approve ? config.forwardStatus : config.pendingStatus;
+      const newStatus = approve ? config.forwardStatus : config.activeReviewStage;
       const { error: kpiError } = await supabase
         .from('kpis')
         .update({ status: newStatus as any })
@@ -969,7 +972,7 @@ export function UnifiedScorecard({
           return;
         }
         
-        const newStatus = approve ? config.forwardStatus : config.pendingStatus;
+        const newStatus = approve ? config.forwardStatus : config.activeReviewStage;
         const { error: kpiError } = await supabase
           .from('kpis')
           .update({ status: newStatus as any })
@@ -1019,7 +1022,7 @@ export function UnifiedScorecard({
         });
       }
       
-      const newStatus = approve ? config.forwardStatus : config.pendingStatus;
+      const newStatus = approve ? config.forwardStatus : config.activeReviewStage;
       const { error: kpiError } = await supabase
         .from('kpis')
         .update({ status: newStatus as any })

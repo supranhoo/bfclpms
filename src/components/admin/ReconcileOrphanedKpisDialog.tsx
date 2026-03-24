@@ -67,6 +67,12 @@ const REASON_CONFIG: Record<string, { label: string; description: string; color:
     color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
     icon: RotateCcw,
   },
+  review_stage_mismatch: {
+    label: 'Stage Mismatch',
+    description: 'Review data exists but status is behind',
+    color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400',
+    icon: Zap,
+  },
 };
 
 export default function ReconcileOrphanedKpisDialog({
