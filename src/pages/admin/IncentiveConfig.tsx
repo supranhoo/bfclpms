@@ -23,6 +23,7 @@ import { IncentiveSlabEditor } from '@/components/incentive/IncentiveSlabEditor'
 import { DisqualificationRulesEditor } from '@/components/incentive/DisqualificationRulesEditor';
 import { EligibilityDataEntry } from '@/components/incentive/EligibilityDataEntry';
 import { ProgramEmployeeMapping } from '@/components/incentive/ProgramEmployeeMapping';
+import { EligibilityFieldsConfig } from '@/components/incentive/EligibilityFieldsConfig';
 
 /* ── Summary badges for each program card ── */
 function ProgramSummaryBadges({ programId }: { programId: string }) {
