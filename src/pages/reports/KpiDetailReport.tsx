@@ -422,6 +422,11 @@ export default function KpiDetailReport() {
                 Show N/A KPIs
               </Label>
             </div>
+
+            <FrequencyLockToggle
+              checked={showFreqLocked}
+              onCheckedChange={v => { setShowFreqLocked(v); setCurrentPage(1); }}
+            />
           </div>
         </CardContent>
       </Card>
