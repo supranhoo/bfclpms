@@ -328,16 +328,3 @@ export function useDeleteEligibilityField() {
     onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
   });
 }
-  return useQuery({
-    queryKey: ['incentive-mapping-count', programId],
-    enabled: !!programId,
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from('incentive_program_mappings')
-        .select('id', { count: 'exact', head: true })
-        .eq('program_id', programId!);
-      if (error) throw error;
-      return count ?? 0;
-    },
-  });
-}
