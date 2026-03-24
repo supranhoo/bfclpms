@@ -114,7 +114,7 @@ export function useResolvedProgramEmployees(programId?: string | 'all') {
     queryFn: async () => {
       const { data } = await supabase
         .from('profiles')
-        .select('id, full_name, employee_code, department_id, designation_id, pms_grade, departments(name)')
+        .select('id, full_name, employee_code, department_id, designation, departments(name)')
         .eq('is_active', true)
         .order('employee_code');
       return data || [];
