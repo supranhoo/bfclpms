@@ -533,7 +533,9 @@ export default function KpiStatusTracker() {
                           )}
                         </TableCell>
                         <TableCell className="text-xs font-medium">
-                          {row.isFrequencyLocked ? (
+                          {row.isOrphaned ? (
+                            <span className="text-amber-600 dark:text-amber-400 italic">Workflow mismatch</span>
+                          ) : row.isFrequencyLocked ? (
                             <span className="text-muted-foreground italic">Not due</span>
                           ) : row.status === 'approved' ? (
                             <span className="text-green-600 dark:text-green-400">✓ Complete</span>
