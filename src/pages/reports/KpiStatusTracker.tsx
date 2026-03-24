@@ -518,7 +518,11 @@ export default function KpiStatusTracker() {
                         <TableCell className="text-center text-xs tabular-nums">{row.weightage}</TableCell>
                         <TableCell className="text-xs">{row.frequency}</TableCell>
                         <TableCell>
-                          {row.isFrequencyLocked ? (
+                          {row.isOrphaned ? (
+                            <Badge variant="outline" className="text-xs border-0 bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+                              Orphaned
+                            </Badge>
+                          ) : row.isFrequencyLocked ? (
                             <Badge variant="outline" className="text-xs border-0 bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-400">
                               Freq. Locked
                             </Badge>
