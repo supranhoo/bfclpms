@@ -154,6 +154,32 @@ export default function UserManagement() {
     }) || [];
   }, [profiles, searchQuery, roleFilter, departmentFilter, statusFilter]);
 
+  // Helper: derive division ID from a department ID
+  const deriveDivisionFromDept = (deptId: string | null): string => {
+    if (!deptId || !departments || !businessUnits) return '';
+    const dept = departments.find(d => d.id === deptId);
+    const buId = dept?.business_unit_id;
+    if (!buId) return '';
+    const bu = businessUnits.find(b => b.id === buId);
+    return bu?.division_id || '';
+  };
+
+  // Filter departments by selected division (for Edit dialog)
+  const editFilteredDepartments = useMemo(() => {
+    if (!departments) return [];
+    if (!editDivisionId) return departments;
+    const buIdsInDivision = new Set(businessUnits?.filter(bu => bu.division_id === editDivisionId).map(bu => bu.id));
+    return departments.filter(d => d.business_unit_id && buIdsInDivision.has(d.business_unit_id));
+  }, [departments, businessUnits, editDivisionId]);
+
+  // Filter departments by selected division (for Create dialog)
+  const createFilteredDepartments = useMemo(() => {
+    if (!departments) return [];
+    if (!newDivisionId) return departments;
+    const buIdsInDivision = new Set(businessUnits?.filter(bu => bu.division_id === newDivisionId).map(bu => bu.id));
+    return departments.filter(d => d.business_unit_id && buIdsInDivision.has(d.business_unit_id));
+  }, [departments, businessUnits, newDivisionId]);
+
   const totalPages = Math.ceil(filteredProfiles.length / ITEMS_PER_PAGE);
   const paginatedProfiles = filteredProfiles.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
