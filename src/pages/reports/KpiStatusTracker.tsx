@@ -122,7 +122,7 @@ export default function KpiStatusTracker() {
           .from('kpis')
           .select(`
             id, employee_id, kra_name, kpi_name, weightage, frequency, status, updated_at,
-            review_period, review_year, is_org_level,
+            review_period, review_year, is_org_level, frequency_cycle_start,
             kra_categories ( name )
           `)
           .eq('review_year', year)
