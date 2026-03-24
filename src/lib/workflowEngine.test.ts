@@ -7,6 +7,7 @@ import {
   resolvePendingStatuses,
   resolveForwardStatus,
   resolveReviewableStatuses,
+  resolveActiveReviewStage,
   getVisibleJourneyStages,
   canReviewKpi,
   hasStage,
@@ -343,6 +344,47 @@ describe('workflowEngine', () => {
 
     it('management still works when management_review IS present', () => {
       expect(canReviewKpi('management_review', 'management', DEFAULT_WORKFLOW_STAGES)).toBe(true);
+    });
+  });
+
+  describe('resolveActiveReviewStage', () => {
+    const SKIP_MANAGER = ['kra_set', 'self_review', 'audit', 'management_review', 'approved'];
+
+    it('returns owned stage for auditor in default pipeline', () => {
+      expect(resolveActiveReviewStage('auditor', DEFAULT_WORKFLOW_STAGES)).toBe('audit');
+    });
+
+    it('returns owned stage for auditor in skip-manager pipeline', () => {
+      // auditor's owned stage is audit, which exists in the pipeline
+      expect(resolveActiveReviewStage('auditor', SKIP_MANAGER)).toBe('audit');
+    });
+
+    it('returns owned stage for manager', () => {
+      expect(resolveActiveReviewStage('manager', DEFAULT_WORKFLOW_STAGES)).toBe('manager_check');
+    });
+
+    it('returns owned stage for management', () => {
+      expect(resolveActiveReviewStage('management', DEFAULT_WORKFLOW_STAGES)).toBe('management_review');
+    });
+
+    it('returns owned stage for hr_pms in 8-stage pipeline', () => {
+      expect(resolveActiveReviewStage('hr_pms', EIGHT_STAGE_PIPELINE)).toBe('hr_pms_review');
+    });
+
+    it('falls back to pendingStatus when owned stage not in workflow', () => {
+      // hr_pms_review not in default pipeline
+      const result = resolveActiveReviewStage('hr_pms', DEFAULT_WORKFLOW_STAGES);
+      // Should fall back to pending status behavior
+      expect(result).toBe('self_review'); // no hr_pms_review → empty pending → fallback
+    });
+
+    it('differs from pendingStatus for auditor in skip-manager workflow', () => {
+      // This is the key bug scenario: pendingStatus is self_review, activeReviewStage is audit
+      const pending = resolvePendingStatuses('auditor', SKIP_MANAGER)[0];
+      const active = resolveActiveReviewStage('auditor', SKIP_MANAGER);
+      expect(pending).toBe('self_review');
+      expect(active).toBe('audit');
+      expect(pending).not.toBe(active);
     });
   });
 });
