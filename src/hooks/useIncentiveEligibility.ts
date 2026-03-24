@@ -20,6 +20,7 @@ export interface EligibilityRow {
   production_value: number | null;
   availability_percent: number | null;
   shutdown_hours: number | null;
+  custom_fields?: Record<string, any>;
   remarks: string | null;
 }
 

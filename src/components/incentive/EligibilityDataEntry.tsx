@@ -8,12 +8,21 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Download, Upload, Save } from 'lucide-react';
 import { useIncentiveEligibility, useUpsertEligibility, useBulkUpsertEligibility } from '@/hooks/useIncentiveEligibility';
+import { useAllEligibilityFields } from '@/hooks/useIncentivePrograms';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import * as XLSX from 'xlsx';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+// Core fields that map directly to typed columns on the eligibility table
+const CORE_FIELD_KEYS = new Set([
+  'absent_days', 'lwp_days', 'has_warning_letter', 'is_suspended',
+  'is_contract_worker', 'lti_count', 'department_lti_count',
+  'total_working_days', 'present_days', 'weekly_off_days',
+  'production_value', 'availability_percent', 'shutdown_hours',
+]);
 
 export function EligibilityDataEntry() {
   const { user } = useAuth();
@@ -23,6 +32,7 @@ export function EligibilityDataEntry() {
   const [searchTerm, setSearchTerm] = useState('');
 
   const { data: eligibilityData = [], isLoading } = useIncentiveEligibility(selectedMonth, selectedYear);
+  const { data: fieldDefs = [] } = useAllEligibilityFields();
   const { data: allEmployees = [] } = useQuery({
     queryKey: ['all-employees-for-eligibility'],
     queryFn: async () => {
@@ -38,6 +48,18 @@ export function EligibilityDataEntry() {
   const upsertEligibility = useUpsertEligibility();
   const bulkUpsert = useBulkUpsertEligibility();
 
+  // Deduplicate fields by field_key, keeping program-specific over global
+  const activeFields = useMemo(() => {
+    const byKey = new Map<string, any>();
+    for (const f of fieldDefs) {
+      const existing = byKey.get(f.field_key);
+      if (!existing || (f.program_id && !existing.program_id)) {
+        byKey.set(f.field_key, f);
+      }
+    }
+    return Array.from(byKey.values()).sort((a: any, b: any) => a.sort_order - b.sort_order);
+  }, [fieldDefs]);
+
   // Merge employees with existing eligibility data
   const mergedData = useMemo(() => {
     const eligMap = new Map(eligibilityData.map((e: any) => [e.employee_id, e]));
@@ -49,30 +71,25 @@ export function EligibilityDataEntry() {
       })
       .map((emp: any) => {
         const existing = eligMap.get(emp.id);
+        const defaults: Record<string, any> = {};
+        for (const f of activeFields) {
+          if (CORE_FIELD_KEYS.has(f.field_key)) {
+            defaults[f.field_key] = existing?.[f.field_key] ?? (f.field_type === 'boolean' ? false : f.field_type === 'number' ? 0 : null);
+          } else {
+            const customFields = existing?.custom_fields as Record<string, any> || {};
+            defaults[f.field_key] = customFields[f.field_key] ?? (f.field_type === 'boolean' ? false : f.field_type === 'number' ? 0 : null);
+          }
+        }
         return {
           employee_id: emp.id,
           employee_name: emp.full_name,
           employee_code: emp.employee_code,
           department: emp.departments?.name || '—',
-          ...(existing || {
-            absent_days: 0,
-            lwp_days: 0,
-            has_warning_letter: false,
-            is_suspended: false,
-            is_contract_worker: false,
-            lti_count: 0,
-            department_lti_count: 0,
-            total_working_days: null,
-            present_days: null,
-            weekly_off_days: null,
-            production_value: null,
-            availability_percent: null,
-            shutdown_hours: null,
-          }),
           id: existing?.id,
+          ...defaults,
         };
       });
-  }, [allEmployees, eligibilityData, searchTerm]);
+  }, [allEmployees, eligibilityData, searchTerm, activeFields]);
 
   const getEligibilityStatus = (row: any) => {
     if (row.absent_days >= 1) return { status: 'Disqualified', reason: `Absent ${row.absent_days} day(s)` };
@@ -84,47 +101,37 @@ export function EligibilityDataEntry() {
   };
 
   const handleSaveRow = (row: any) => {
+    const coreData: Record<string, any> = {};
+    const customFields: Record<string, any> = {};
+    for (const f of activeFields) {
+      if (CORE_FIELD_KEYS.has(f.field_key)) {
+        coreData[f.field_key] = row[f.field_key];
+      } else {
+        customFields[f.field_key] = row[f.field_key];
+      }
+    }
     upsertEligibility.mutate({
       id: row.id,
       employee_id: row.employee_id,
       review_period: selectedMonth,
       review_year: selectedYear,
-      absent_days: row.absent_days,
-      lwp_days: row.lwp_days,
-      has_warning_letter: row.has_warning_letter,
-      is_suspended: row.is_suspended,
-      is_contract_worker: row.is_contract_worker,
-      lti_count: row.lti_count,
-      department_lti_count: row.department_lti_count,
-      total_working_days: row.total_working_days,
-      present_days: row.present_days,
-      weekly_off_days: row.weekly_off_days,
-      production_value: row.production_value,
-      availability_percent: row.availability_percent,
-      shutdown_hours: row.shutdown_hours,
+      ...coreData,
+      custom_fields: customFields,
       remarks: null,
       entered_by: user?.id,
-    });
+    } as any);
   };
 
   const handleExportTemplate = () => {
+    const headers: Record<string, any> = { 'Employee Code': '', 'Employee Name': '' };
+    for (const f of activeFields) {
+      headers[f.field_label] = f.field_type === 'boolean' ? 'N' : f.field_type === 'number' ? 0 : '';
+    }
     const ws = XLSX.utils.json_to_sheet(
       allEmployees.map((emp: any) => ({
         'Employee Code': emp.employee_code,
         'Employee Name': emp.full_name,
-        'Absent Days': 0,
-        'LWP Days': 0,
-        'Warning Letter (Y/N)': 'N',
-        'Suspended (Y/N)': 'N',
-        'Contract Worker (Y/N)': 'N',
-        'LTI Count': 0,
-        'Dept LTI Count': 0,
-        'Total Working Days': '',
-        'Present Days': '',
-        'Weekly Off Days': '',
-        'Production Value': '',
-        'Availability %': '',
-        'Shutdown Hours': '',
+        ...Object.fromEntries(activeFields.map((f: any) => [f.field_label, f.field_type === 'boolean' ? 'N' : f.field_type === 'number' ? 0 : ''])),
       }))
     );
     const wb = XLSX.utils.book_new();
@@ -141,30 +148,39 @@ export function EligibilityDataEntry() {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const json = XLSX.utils.sheet_to_json(ws) as any[];
 
+      const labelToField = new Map(activeFields.map((f: any) => [f.field_label, f]));
       const empCodeMap = new Map(allEmployees.map((emp: any) => [emp.employee_code, emp.id]));
+
       const rows = json
         .filter(row => empCodeMap.has(String(row['Employee Code'])))
-        .map(row => ({
-          employee_id: empCodeMap.get(String(row['Employee Code']))!,
-          review_period: selectedMonth,
-          review_year: selectedYear,
-          absent_days: Number(row['Absent Days']) || 0,
-          lwp_days: Number(row['LWP Days']) || 0,
-          has_warning_letter: String(row['Warning Letter (Y/N)']).toUpperCase() === 'Y',
-          is_suspended: String(row['Suspended (Y/N)']).toUpperCase() === 'Y',
-          is_contract_worker: String(row['Contract Worker (Y/N)']).toUpperCase() === 'Y',
-          lti_count: Number(row['LTI Count']) || 0,
-          department_lti_count: Number(row['Dept LTI Count']) || 0,
-          total_working_days: row['Total Working Days'] ? Number(row['Total Working Days']) : null,
-          present_days: row['Present Days'] ? Number(row['Present Days']) : null,
-          weekly_off_days: row['Weekly Off Days'] ? Number(row['Weekly Off Days']) : null,
-          production_value: row['Production Value'] ? Number(row['Production Value']) : null,
-          availability_percent: row['Availability %'] ? Number(row['Availability %']) : null,
-          shutdown_hours: row['Shutdown Hours'] ? Number(row['Shutdown Hours']) : null,
-          remarks: null,
-        }));
+        .map(row => {
+          const coreData: Record<string, any> = {};
+          const customFields: Record<string, any> = {};
+          for (const [label, value] of Object.entries(row)) {
+            const field = labelToField.get(label);
+            if (!field) continue;
+            const parsed = field.field_type === 'boolean'
+              ? String(value).toUpperCase() === 'Y'
+              : field.field_type === 'number'
+                ? (value ? Number(value) : null)
+                : value;
+            if (CORE_FIELD_KEYS.has(field.field_key)) {
+              coreData[field.field_key] = parsed;
+            } else {
+              customFields[field.field_key] = parsed;
+            }
+          }
+          return {
+            employee_id: empCodeMap.get(String(row['Employee Code']))!,
+            review_period: selectedMonth,
+            review_year: selectedYear,
+            ...coreData,
+            custom_fields: customFields,
+            remarks: null,
+          };
+        });
 
-      if (rows.length > 0) bulkUpsert.mutate(rows);
+      if (rows.length > 0) bulkUpsert.mutate(rows as any);
     };
     reader.readAsBinaryString(file);
     e.target.value = '';
@@ -215,24 +231,22 @@ export function EligibilityDataEntry() {
               <TableRow>
                 <TableHead className="sticky left-0 bg-background z-10">Employee</TableHead>
                 <TableHead>Dept</TableHead>
-                <TableHead>Absent</TableHead>
-                <TableHead>LWP</TableHead>
-                <TableHead>Warning</TableHead>
-                <TableHead>Suspended</TableHead>
-                <TableHead>Contract</TableHead>
-                <TableHead>LTI</TableHead>
+                {activeFields.map((f: any) => (
+                  <TableHead key={f.field_key}>{f.field_label}</TableHead>
+                ))}
                 <TableHead>Status</TableHead>
                 <TableHead>Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={activeFields.length + 4} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
               ) : mergedData.length === 0 ? (
-                <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No employees found</TableCell></TableRow>
+                <TableRow><TableCell colSpan={activeFields.length + 4} className="text-center py-8 text-muted-foreground">No employees found</TableCell></TableRow>
               ) : (
                 mergedData.slice(0, 100).map((row: any) => {
-                  const { status, reason } = getEligibilityStatus({ ...row, ...editedRows[row.employee_id] });
+                  const mergedRow = { ...row, ...editedRows[row.employee_id] };
+                  const { status, reason } = getEligibilityStatus(mergedRow);
                   return (
                     <TableRow key={row.employee_id}>
                       <TableCell className="sticky left-0 bg-background z-10">
@@ -240,24 +254,29 @@ export function EligibilityDataEntry() {
                         <div className="text-xs text-muted-foreground">{row.employee_code}</div>
                       </TableCell>
                       <TableCell className="text-xs">{row.department}</TableCell>
-                      <TableCell>
-                        <Input type="number" className="h-7 w-16" value={getRowValue(row, 'absent_days')} onChange={e => updateLocalRow(row.employee_id, 'absent_days', Number(e.target.value))} />
-                      </TableCell>
-                      <TableCell>
-                        <Input type="number" className="h-7 w-16" value={getRowValue(row, 'lwp_days')} onChange={e => updateLocalRow(row.employee_id, 'lwp_days', Number(e.target.value))} />
-                      </TableCell>
-                      <TableCell>
-                        <Switch checked={getRowValue(row, 'has_warning_letter')} onCheckedChange={v => updateLocalRow(row.employee_id, 'has_warning_letter', v)} />
-                      </TableCell>
-                      <TableCell>
-                        <Switch checked={getRowValue(row, 'is_suspended')} onCheckedChange={v => updateLocalRow(row.employee_id, 'is_suspended', v)} />
-                      </TableCell>
-                      <TableCell>
-                        <Switch checked={getRowValue(row, 'is_contract_worker')} onCheckedChange={v => updateLocalRow(row.employee_id, 'is_contract_worker', v)} />
-                      </TableCell>
-                      <TableCell>
-                        <Input type="number" className="h-7 w-14" value={getRowValue(row, 'lti_count')} onChange={e => updateLocalRow(row.employee_id, 'lti_count', Number(e.target.value))} />
-                      </TableCell>
+                      {activeFields.map((f: any) => (
+                        <TableCell key={f.field_key}>
+                          {f.field_type === 'boolean' ? (
+                            <Switch
+                              checked={getRowValue(row, f.field_key)}
+                              onCheckedChange={v => updateLocalRow(row.employee_id, f.field_key, v)}
+                            />
+                          ) : f.field_type === 'number' ? (
+                            <Input
+                              type="number"
+                              className="h-7 w-16"
+                              value={getRowValue(row, f.field_key) ?? ''}
+                              onChange={e => updateLocalRow(row.employee_id, f.field_key, e.target.value ? Number(e.target.value) : null)}
+                            />
+                          ) : (
+                            <Input
+                              className="h-7 w-24"
+                              value={getRowValue(row, f.field_key) ?? ''}
+                              onChange={e => updateLocalRow(row.employee_id, f.field_key, e.target.value)}
+                            />
+                          )}
+                        </TableCell>
+                      ))}
                       <TableCell>
                         <Badge variant={status === 'Eligible' ? 'default' : status === 'Disqualified' ? 'destructive' : 'secondary'}>
                           {status}
@@ -265,7 +284,7 @@ export function EligibilityDataEntry() {
                         {reason && <div className="text-xs text-muted-foreground mt-0.5">{reason}</div>}
                       </TableCell>
                       <TableCell>
-                        <Button size="icon" variant="ghost" onClick={() => handleSaveRow({ ...row, ...editedRows[row.employee_id] })} disabled={upsertEligibility.isPending}>
+                        <Button size="icon" variant="ghost" onClick={() => handleSaveRow(mergedRow)} disabled={upsertEligibility.isPending}>
                           <Save className="h-4 w-4" />
                         </Button>
                       </TableCell>
