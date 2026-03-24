@@ -681,6 +681,7 @@ const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string
   org_kpi_pending_reminder: { color: '#f97316', emoji: '⏳', title: 'Pending KPI Reminder' },
   system_auto_scored: { color: '#f97316', emoji: '⚡', title: 'System Auto-Score' },
   pending_review_reminder: { color: '#f59e0b', emoji: '🔔', title: 'Sent-Back KPI Reminder' },
+  incentive_retroactive_alert: { color: '#ef4444', emoji: '⚠️', title: 'Incentive Slab Changes' },
 };
 
 // Build KRA table HTML for batch assignment emails
