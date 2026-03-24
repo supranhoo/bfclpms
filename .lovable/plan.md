@@ -1,57 +1,64 @@
 
 
-## Add Employee Mapping to Incentive Programs
+## Redesign: Program-Centric Incentive Config Layout
 
 ### Problem
-Currently incentive programs have no way to specify which employees are enrolled. The admin needs flexible mapping: by Department/BU, by Designation/Grade, and by individual employee selection.
+The current tab-based layout separates Programs, Mapping, Slabs, and DQ Rules into isolated tabs. Users must select a program in one tab, then switch to another tab to see its details. This is confusing — there's no contextual view of what a program contains.
 
-### Approach
+### Solution
+Replace the disconnected tab layout with a **master-detail** pattern:
 
-#### 1. New DB table: `incentive_program_mappings`
+**Left side / Top**: Program list (cards, not a table) with summary badges showing mapping count, slab count, and DQ rule count at a glance.
+
+**When a program is clicked**: Expand inline to show an accordion/sub-tabs view with all 3 sections (Mapping, Slabs, DQ Rules) for THAT program — all visible in context.
+
+**Eligibility Data** remains a separate top-level tab since it's cross-program.
+
+### New Layout
+
+```text
+[Programs]  [Eligibility Data]     ← only 2 top tabs
+
+Programs tab:
+┌─────────────────────────────────────────────┐
+│ + New Program                               │
+├─────────────────────────────────────────────┤
+│ ┌─ CLU Incentive ─── production ── Active ┐ │
+│ │ 3 depts · 12 slabs · 4 DQ rules        │ │
+│ │ ▼ Expand                                │ │
+│ │  [Mapping] [Slabs] [DQ Rules]  ← inner  │ │
+│ │  ... content for THIS program ...       │ │
+│ └─────────────────────────────────────────┘ │
+│ ┌─ Support Function ── support ── Active ─┐ │
+│ │ 2 grades · 8 slabs · 3 DQ rules        │ │
+│ │ ► Collapsed                             │ │
+│ └─────────────────────────────────────────┘ │
+└─────────────────────────────────────────────┘
 ```
-id uuid PK,
-program_id uuid FK → incentive_programs,
-mapping_type text ('department' | 'business_unit' | 'designation' | 'pms_grade' | 'employee'),
-mapping_value text (dept UUID, BU UUID, designation string, grade string, or employee UUID),
-created_at timestamptz DEFAULT now()
-```
-RLS: Admin full CRUD via `has_role()`, authenticated SELECT.
 
-One program can have multiple mappings across types. During incentive computation, an employee is eligible if they match ANY mapping for that program (union logic).
+### Changes
 
-#### 2. New component: `src/components/incentive/ProgramEmployeeMapping.tsx`
+#### `src/pages/admin/IncentiveConfig.tsx` — Full rewrite
 
-Shown inside the Create/Edit Program dialog or as a section below the Programs table when a program is selected. Three sections:
+- Top-level: 2 tabs only — "Programs" and "Eligibility Data"
+- Programs tab renders a list of **expandable program cards** (using Collapsible or Accordion)
+- Each card header shows: Name, Type badge, Status badge, Effective Period, Edit/Delete buttons, and summary counts (mapped employees, slabs, DQ rules)
+- Expanding a card reveals **inner sub-tabs**: Mapping | Slabs | DQ Rules — rendering the existing components (`ProgramEmployeeMapping`, `IncentiveSlabEditor`, `DisqualificationRulesEditor`) scoped to that program
+- Only one program expanded at a time (accordion behavior)
+- Remove the old `selectedProgramId` + disabled-tab pattern entirely
 
-- **By Department/BU**: Multi-select dropdown using existing `useDepartments()` and `useBusinessUnits()` from `useOrganization.ts`
-- **By Designation/Grade**: Multi-select using `useEmployeeFilterOptions()` which already provides `designations[]` and `grades[]`
-- **Individual Employees**: Searchable employee picker (name/code), showing selected employees as chips
+#### Summary count hooks (lightweight)
 
-Each selection creates/removes rows in `incentive_program_mappings`. Shows a summary count: "12 departments, 3 grades, 5 individual employees selected".
+Add 3 small count queries to show in each card header:
+- Mapping count: `useProgramMappings(programId)` already exists — use `.length`
+- Slab count: quick `select('id', { count: 'exact', head: true })` from `incentive_slabs` filtered by `program_id`
+- DQ rule count: quick `select('id', { count: 'exact', head: true })` from `incentive_dq_rules` filtered by `program_id`
 
-#### 3. Hook additions in `useIncentivePrograms.ts`
+These can be added as `useSlabCount(programId)` and `useDqRuleCount(programId)` in `useIncentivePrograms.ts`, or fetched inline.
 
-- `useProgramMappings(programId)` — fetch all mappings for a program
-- `useUpsertProgramMapping()` — insert mapping rows
-- `useDeleteProgramMapping()` — remove mapping rows
-- `useProgramEmployeeCount(programId)` — compute resolved employee count by joining mappings against profiles
+### Files Modified
+- `src/pages/admin/IncentiveConfig.tsx` — rewrite layout to accordion-based program cards with inline sub-tabs
+- `src/hooks/useIncentivePrograms.ts` — add `useSlabCount` and `useDqRuleCount` hooks
 
-#### 4. Programs table update
-
-Add a "Mapped Employees" column showing the resolved count of employees matching the program's mappings.
-
-#### 5. Computation integration
-
-The `compute-monthly-incentives` edge function will resolve program mappings to get the list of eligible employee IDs before computing incentives, rather than processing all employees.
-
-### Files
-
-**New:**
-- `src/components/incentive/ProgramEmployeeMapping.tsx`
-- DB migration for `incentive_program_mappings` table
-
-**Modified:**
-- `src/hooks/useIncentivePrograms.ts` — add mapping CRUD hooks
-- `src/pages/admin/IncentiveConfig.tsx` — show mapping UI when program selected
-- `supabase/functions/compute-monthly-incentives/index.ts` — resolve mappings before computation
+### No database changes needed
 
