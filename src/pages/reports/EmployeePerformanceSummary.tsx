@@ -407,9 +407,9 @@ export default function EmployeePerformanceSummary() {
 
   // Get unique employees for comparison
   const uniqueEmployees = useMemo(() => {
-    if (!performanceData) return [];
+    if (!enrichedPerformanceData) return [];
     const seen = new Set<string>();
-    return performanceData
+    return enrichedPerformanceData
       .filter(row => {
         if (seen.has(row.employeeId)) return false;
         seen.add(row.employeeId);
@@ -417,7 +417,7 @@ export default function EmployeePerformanceSummary() {
       })
       .map(row => ({ id: row.employeeId, name: row.fullName, code: row.employeeCode }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [performanceData]);
+  }, [enrichedPerformanceData]);
 
   // Comparison chart data
   const comparisonChartData = useMemo(() => {
