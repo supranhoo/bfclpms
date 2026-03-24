@@ -367,10 +367,10 @@ export default function EmployeePerformanceSummary() {
 
   // Filter and sort data by percentage descending (matching Excel format)
   const filteredData = useMemo(() => {
-    if (!performanceData) return [];
+    if (!enrichedPerformanceData) return [];
     
     const term = searchTerm.toLowerCase();
-    return performanceData
+    return enrichedPerformanceData
       .filter(row => {
         // Hide employees that only have frequency-locked KPIs when toggle is off
         if (!showFreqLocked && row.kpiCount === 0 && row.lockedKpiCount > 0) return false;
