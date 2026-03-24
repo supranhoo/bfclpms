@@ -135,8 +135,10 @@ export default function KpiDetailReport() {
             kra_name,
             kpi_name,
             weightage,
+            frequency,
             review_period,
             review_year,
+            status,
             kra_categories ( name ),
             review_submissions (
               self_score,
