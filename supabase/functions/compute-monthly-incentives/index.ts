@@ -52,6 +52,7 @@ serve(async (req) => {
 
     if (mappings && mappings.length > 0) {
       const eligibleIds = new Set<string>();
+      const divIds: string[] = [];
       const deptIds: string[] = [];
       const buIds: string[] = [];
       const desigs: string[] = [];
@@ -60,6 +61,7 @@ serve(async (req) => {
       for (const m of mappings) {
         switch (m.mapping_type) {
           case 'employee': eligibleIds.add(m.mapping_value); break;
+          case 'division': divIds.push(m.mapping_value); break;
           case 'department': deptIds.push(m.mapping_value); break;
           case 'business_unit': buIds.push(m.mapping_value); break;
           case 'designation': desigs.push(m.mapping_value); break;
