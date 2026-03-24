@@ -472,9 +472,15 @@ export default function KpiStatusTracker() {
                         <TableCell className="text-center text-xs tabular-nums">{row.weightage}</TableCell>
                         <TableCell className="text-xs">{row.frequency}</TableCell>
                         <TableCell>
-                          <Badge variant="outline" className={`text-xs border-0 ${statusBadgeClass(row.status)}`}>
-                            {row.statusLabel}
-                          </Badge>
+                          {row.isFrequencyLocked ? (
+                            <Badge variant="outline" className="text-xs border-0 bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-400">
+                              Freq. Locked
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className={`text-xs border-0 ${statusBadgeClass(row.status)}`}>
+                              {row.statusLabel}
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell className="text-xs font-medium">
                           {row.status === 'approved' ? (
