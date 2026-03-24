@@ -10,7 +10,7 @@ interface ActionItemsCardsProps {
   pendingIncentiveAdjustments?: number;
 }
 
-export function ActionItemsCards({ overdueReviews, pendingRollbacks, openQueries }: ActionItemsCardsProps) {
+export function ActionItemsCards({ overdueReviews, pendingRollbacks, openQueries, pendingIncentiveAdjustments = 0 }: ActionItemsCardsProps) {
   const navigate = useNavigate();
 
   const items = [
