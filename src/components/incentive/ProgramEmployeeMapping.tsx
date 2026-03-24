@@ -82,6 +82,7 @@ export function ProgramEmployeeMapping({ programId }: Props) {
   }, [allEmployees, empSearch]);
 
   const summary = [
+    mappingsByType.division.size > 0 && `${mappingsByType.division.size} division(s)`,
     mappingsByType.department.size > 0 && `${mappingsByType.department.size} dept(s)`,
     mappingsByType.business_unit.size > 0 && `${mappingsByType.business_unit.size} BU(s)`,
     mappingsByType.designation.size > 0 && `${mappingsByType.designation.size} designation(s)`,
