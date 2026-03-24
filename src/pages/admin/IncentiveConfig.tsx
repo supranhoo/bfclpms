@@ -20,6 +20,7 @@ import {
 import { IncentiveSlabEditor } from '@/components/incentive/IncentiveSlabEditor';
 import { DisqualificationRulesEditor } from '@/components/incentive/DisqualificationRulesEditor';
 import { EligibilityDataEntry } from '@/components/incentive/EligibilityDataEntry';
+import { ProgramEmployeeMapping } from '@/components/incentive/ProgramEmployeeMapping';
 
 export default function IncentiveConfig() {
   const { data: programs = [], isLoading } = useIncentivePrograms();
