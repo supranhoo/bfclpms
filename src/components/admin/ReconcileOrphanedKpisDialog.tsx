@@ -73,6 +73,12 @@ const REASON_CONFIG: Record<string, { label: string; description: string; color:
     color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400',
     icon: Zap,
   },
+  current_stage_scored_not_forwarded: {
+    label: 'Scored Not Forwarded',
+    description: 'Score exists at current stage but KPI was not advanced',
+    color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
+    icon: ArrowRight,
+  },
 };
 
 export default function ReconcileOrphanedKpisDialog({
@@ -212,7 +218,11 @@ export default function ReconcileOrphanedKpisDialog({
                       {orphaned > 0 && <Badge variant="outline" className="text-xs bg-amber-50 dark:bg-amber-900/20">{orphaned} orphaned</Badge>}
                       {completed > 0 && <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-900/20">{completed} terminal→approved</Badge>}
                       {unreviewed > 0 && <Badge variant="outline" className="text-xs bg-blue-50 dark:bg-blue-900/20">{unreviewed} terminal→reopened</Badge>}
-                      {mismatch > 0 && <Badge variant="outline" className="text-xs bg-purple-50 dark:bg-purple-900/20">{mismatch} stage mismatch</Badge>}
+                  {mismatch > 0 && <Badge variant="outline" className="text-xs bg-purple-50 dark:bg-purple-900/20">{mismatch} stage mismatch</Badge>}
+                      {(() => {
+                        const notForwarded = dryRunResult.affected.filter(a => a.reason === 'current_stage_scored_not_forwarded').length;
+                        return notForwarded > 0 ? <Badge variant="outline" className="text-xs bg-orange-50 dark:bg-orange-900/20">{notForwarded} scored not forwarded</Badge> : null;
+                      })()}
                     </>
                   );
                 })()}

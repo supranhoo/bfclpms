@@ -437,9 +437,12 @@ export function AdminDataEntryDialog({
   const advanceWouldHaveNoEffect = roleLevel === 'self' && kpiAlreadyPastKraSet;
 
   // When switching to self-role and KPI is already in review, default advanceStatus to false
+  // When switching to auditor/management role, default advanceStatus to true to prevent stuck KPIs
   useEffect(() => {
     if (roleLevel === 'self' && kpiAlreadyPastKraSet) {
       setAdvanceStatus(false);
+    } else if (roleLevel === 'auditor' || roleLevel === 'management') {
+      setAdvanceStatus(true);
     }
   }, [roleLevel, kpiAlreadyPastKraSet]);
 
