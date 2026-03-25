@@ -178,7 +178,7 @@ export default function ReconcileOrphanedKpisDialog({
         Reconcile Workflow Statuses
       </Button>
 
-      <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) { setDialogOpen(false); setDryRunResult(null); setExecuted(false); } }}>
+      <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) { setDialogOpen(false); setDryRunResult(null); setExecuted(false); setSelectedKpiIds(new Set()); } }}>
         <DialogContent className="max-w-6xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -329,7 +329,7 @@ export default function ReconcileOrphanedKpisDialog({
                 Confirm & Reconcile {selectedKpiIds.size} of {dryRunResult.count} KPI(s)
               </Button>
             )}
-            <Button variant="outline" onClick={() => { setDialogOpen(false); setDryRunResult(null); setExecuted(false); }}>
+            <Button variant="outline" onClick={() => { setDialogOpen(false); setDryRunResult(null); setExecuted(false); setSelectedKpiIds(new Set()); }}>
               {executed ? 'Close' : 'Cancel'}
             </Button>
           </DialogFooter>
