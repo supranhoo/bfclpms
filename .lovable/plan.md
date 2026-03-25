@@ -1,27 +1,44 @@
 
 
-## Bug Fix: Two Confirmed Issues
 
-### Bug 1: Org KPI Values Fail to Match in Self-Review (Data Bug)
+## Milestone 2: Resilience & Guardrails — COMPLETED
 
-**What's broken:** `SelfReviewSheet.tsx` builds org KPI lookup keys using raw `kra_name` and `kpi_name` (e.g., `"Safety"`) but the map is populated with `.toLowerCase()` keys (e.g., `"safety"`) by the parent `UnifiedScorecard.tsx`. Result: org KPI achieved values silently fail to prefill during self-review for employees. The employee sees a blank achieved value even though data exists.
+### What was implemented
 
-**Where:** `src/components/review/SelfReviewSheet.tsx` — 6 locations (lines ~277, 280, 283, 508, 511, 514)
+1. **Edge Function Retry Wrapper** — `supabase/functions/_shared/retry.ts`
+   - 3 attempts with exponential backoff (1s, 2s, 4s)
+   - Skips retries on client errors (4xx)
+   - Applied to `send-email-notification` (all providers: SMTP, Resend, Microsoft Graph)
+   - Applied to `propagate-template-change` (batch KPI updates)
 
-**Fix:** Add `.toLowerCase()` to `kra_name` and `kpi_name` in all 6 org key constructions, matching the pattern used in every other scorecard.
+2. **1000-Row Query Limit Fix**
+   - `src/pages/reports/AuditTrailReport.tsx` — replaced `.limit(1000)` with paginated `.range()` fetching
+   - `src/pages/reports/KpiJourneyReport.tsx` — department filter dropdown now fetches in 1000-row batches
+   - Main KPI journey data already used server-side RPC with pagination (no change needed)
 
-### Bug 2: ModuleCard Missing forwardRef (Console Warning)
+3. **Session-Expired Form Recovery**
+   - `src/components/review/UnifiedScorecard.tsx` — auto-saves review drafts (score, remarks, achieved value, evidence URLs) to `sessionStorage` keyed by `review-draft-{kpiId}-{viewLevel}`
+   - Drafts restored when re-opening review sheet
+   - Drafts cleared on successful submit (all 4 success paths)
 
-**What's broken:** `ModuleHub` renders `ModuleCard` components, and React warns "Function components cannot be given refs." This happens because the Card component or a parent wrapper tries to forward a ref to ModuleCard.
+4. **PIP Letter Download**
+   - `src/components/pip/PIPDetailSheet.tsx` — replaced TODO stub with actual `generate-pip-letter` edge function invocation
+   - Downloads PDF blob, shows loading state
 
-**Where:** `src/components/modules/ModuleCard.tsx`
-
-**Fix:** Wrap the component with `React.forwardRef` so it can accept refs cleanly.
+5. **Auto-Reconcile Toast Feedback**
+   - `src/hooks/useWorkflowConfig.ts` — surfaces reconciliation count as toast notification to admin
 
 ### Files Modified
-- `src/components/review/SelfReviewSheet.tsx` — add `.toLowerCase()` to 6 org key lookups
-- `src/components/modules/ModuleCard.tsx` — wrap with `forwardRef`
+- `supabase/functions/_shared/retry.ts` — NEW shared retry utility
+- `supabase/functions/send-email-notification/index.ts` — withRetry on all send paths
+- `supabase/functions/propagate-template-change/index.ts` — withRetry on batch updates
+- `src/pages/reports/AuditTrailReport.tsx` — paginated fetching
+- `src/pages/reports/KpiJourneyReport.tsx` — paginated dept filter
+- `src/components/review/UnifiedScorecard.tsx` — sessionStorage draft save/restore
+- `src/components/pip/PIPDetailSheet.tsx` — wire generate-pip-letter
+- `src/hooks/useWorkflowConfig.ts` — toast for auto-reconcile
 
-### Risk
-- Minimal. Both are targeted fixes matching existing patterns used elsewhere in the codebase.
-
+### Risk Assessment
+- Retry wrapper: Only retries on server/transient errors (5xx, timeouts). Client errors (4xx) fail immediately. No duplicate email risk since retries happen within the same request.
+- Session recovery: Per-browser, per-KPI drafts. Cleared on success. No data leak risk.
+- Pagination: Increases initial load time for very large audit trails but ensures complete data.
