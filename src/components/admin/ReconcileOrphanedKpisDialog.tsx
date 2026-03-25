@@ -318,7 +318,7 @@ export default function ReconcileOrphanedKpisDialog({
             {!executed && dryRunResult && dryRunResult.count > 0 && (
               <Button
                 onClick={handleExecute}
-                disabled={reconcileMutation.isPending}
+                disabled={reconcileMutation.isPending || selectedKpiIds.size === 0}
                 className="gap-2"
               >
                 {reconcileMutation.isPending ? (
@@ -326,7 +326,7 @@ export default function ReconcileOrphanedKpisDialog({
                 ) : (
                   <CheckCircle2 className="h-4 w-4" />
                 )}
-                Confirm & Reconcile {dryRunResult.count} KPI(s)
+                Confirm & Reconcile {selectedKpiIds.size} of {dryRunResult.count} KPI(s)
               </Button>
             )}
             <Button variant="outline" onClick={() => { setDialogOpen(false); setDryRunResult(null); setExecuted(false); }}>
