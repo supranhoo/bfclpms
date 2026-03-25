@@ -930,14 +930,14 @@ export default function AllKpis() {
               </TableBody>
             </Table>
           </div>
-          {visibleCount < employeeData.length && (
+          {visibleCount < displayData.length && (
             <div className="flex justify-center py-4 border-t">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setVisibleCount(prev => prev + 50)}
+                onClick={() => setVisibleCount(prev => prev + 20)}
               >
-                Load more ({employeeData.length - visibleCount} remaining)
+                Load more ({displayData.length - visibleCount} remaining)
               </Button>
             </div>
           )}
