@@ -240,6 +240,20 @@ export default function ReconcileOrphanedKpisDialog({
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      {!executed && (
+                        <TableHead className="w-10">
+                          <Checkbox
+                            checked={dryRunResult.affected.length > 0 && selectedKpiIds.size === dryRunResult.affected.length}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedKpiIds(new Set(dryRunResult.affected.map(a => a.kpi_id)));
+                              } else {
+                                setSelectedKpiIds(new Set());
+                              }
+                            }}
+                          />
+                        </TableHead>
+                      )}
                       <TableHead>Employee</TableHead>
                       <TableHead>Period</TableHead>
                       <TableHead>KPI</TableHead>
@@ -251,7 +265,21 @@ export default function ReconcileOrphanedKpisDialog({
                   </TableHeader>
                   <TableBody>
                     {dryRunResult.affected.map((item) => (
-                      <TableRow key={item.kpi_id}>
+                      <TableRow key={item.kpi_id} data-state={selectedKpiIds.has(item.kpi_id) ? 'selected' : undefined}>
+                        {!executed && (
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedKpiIds.has(item.kpi_id)}
+                              onCheckedChange={(checked) => {
+                                setSelectedKpiIds(prev => {
+                                  const next = new Set(prev);
+                                  if (checked) { next.add(item.kpi_id); } else { next.delete(item.kpi_id); }
+                                  return next;
+                                });
+                              }}
+                            />
+                          </TableCell>
+                        )}
                         <TableCell className="font-medium text-sm">{item.employee_name}</TableCell>
                         <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                           {item.review_period && item.review_year ? `${item.review_period} ${item.review_year}` : '—'}
