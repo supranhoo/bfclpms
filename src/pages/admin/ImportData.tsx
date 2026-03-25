@@ -20,6 +20,7 @@ import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import * as XLSX from 'xlsx';
 import { validateFileSize, IMPORT_LIMITS, sanitizeText, normalizeRole, VALID_ROLES } from '@/lib/importValidation';
+import { scoreToRatingLevel } from '@/lib/reviewConstants';
 
 interface BackgroundImportProgress {
   id: string;
