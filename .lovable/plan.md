@@ -1,26 +1,33 @@
 
 
-## Fix: Notification Type Filter Not Applied
+## Fix: Show Status in Notification Rows
 
 ### Problem
-In `src/pages/QueryInbox.tsx` (lines 93-97), the `notificationFilters` memo only passes `search`, `readStatus`, and `dateRange` to `usePaginatedNotifications`. The `notificationType` value from the filter UI is never forwarded, so selecting "@Mentioned" or any type has no effect.
-
-The hook (`usePaginatedNotifications`) already supports a `type` filter field (lines 78-80) — it just never receives the value.
+The table has a "Status" column header, but `InboxRowItem.tsx` only renders a badge for query items (`item.type === 'query'`). For notification items, the cell is always blank, making it appear nonfunctional.
 
 ### Fix
 
-**File: `src/pages/QueryInbox.tsx` (lines 93-97)**
+**File: `src/components/inbox/InboxRowItem.tsx` (Status Badge cell, ~lines 98-107)**
 
-Add the `type` field mapped from `filters.notificationType`:
+Add a read/unread badge for notification items alongside the existing query status badge:
 
-```typescript
-const notificationFilters: NotificationFilters = useMemo(() => ({
-  search: filters.search,
-  readStatus: filters.readStatus,
-  dateRange: filters.dateRange,
-  type: filters.notificationType,
-}), [filters]);
+```tsx
+{/* Status Badge */}
+<TableCell className="w-28 hidden md:table-cell">
+  {item.type === 'query' && item.queryStatus && (
+    <Badge variant="outline" className={cn('text-xs', getQueryStatusClasses(item.queryStatus))}>
+      {item.queryStatus === 'open' && 'Open'}
+      {item.queryStatus === 'responded' && 'Responded'}
+      {item.queryStatus === 'resolved' && 'Resolved'}
+    </Badge>
+  )}
+  {item.type === 'notification' && (
+    <Badge variant="outline" className={cn('text-xs', item.isRead ? 'text-muted-foreground' : 'text-primary border-primary')}>
+      {item.isRead ? 'Read' : 'Unread'}
+    </Badge>
+  )}
+</TableCell>
 ```
 
-One line addition. No other files need changes.
+One file, one cell update. The read/unread filter already works server-side via `usePaginatedNotifications` -- this just makes the status visible in the table.
 
