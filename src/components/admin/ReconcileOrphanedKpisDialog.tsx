@@ -102,6 +102,9 @@ export default function ReconcileOrphanedKpisDialog({
         params.p_review_period = selectedMonth;
         params.p_review_year = selectedYear;
       }
+      if (kpiIds && kpiIds.length > 0) {
+        params.p_kpi_ids = kpiIds;
+      }
       const { data, error } = await supabase.rpc(
         'reconcile_workflow_statuses' as any,
         params
@@ -131,7 +134,8 @@ export default function ReconcileOrphanedKpisDialog({
 
   const handleExecute = async () => {
     try {
-      const result = await reconcileMutation.mutateAsync({ dryRun: false });
+      const kpiIds = Array.from(selectedKpiIds);
+      const result = await reconcileMutation.mutateAsync({ dryRun: false, kpiIds });
       setDryRunResult(result);
       setExecuted(true);
       const approvedCount = result.affected.filter(a => a.new_status === 'approved').length;
