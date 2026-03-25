@@ -5,6 +5,7 @@ import { Info, BarChart3, ClipboardEdit, Building2, Users, User, Zap, FastForwar
 import { KPI } from '@/hooks/useKpis';
 import { getScoreBadgeClass } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
+import { getKpiSummaryText } from '@/lib/textFormatting';
 import { AuditKpiAssignPopover } from '@/components/review/AuditKpiAssignPopover';
 import type { AuditKpiAssignment } from '@/hooks/useAuditKpiAssignments';
 

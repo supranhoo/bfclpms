@@ -14,6 +14,7 @@ import { InlineDailySubmissionRow } from '@/components/review/InlineDailySubmiss
 import { DailyBadge } from '@/components/review/DailyKpiExpandButton';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
+import { getKpiSummaryText } from '@/lib/textFormatting';
 import { canReviewKpi as workflowCanReview, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { 
   Info, Lock, CheckCircle2, Calendar, ChevronDown, ChevronUp, Undo2, Eye, 
@@ -414,7 +415,7 @@ export function KpiDetailsTable({
                     </div>
                     <div className="relative">
                       <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                        {renderBoldKpiText(kpi.kpi_name)}
+                        {renderBoldKpiText(getKpiSummaryText(kpi.kpi_name))}
                       </p>
                       <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity absolute top-0 right-0" />
                     </div>

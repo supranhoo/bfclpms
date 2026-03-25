@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { KPI, ReviewSubmission } from '@/hooks/useKpis';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
+import { getKpiSummaryText } from '@/lib/textFormatting';
 import { cn } from '@/lib/utils';
 import { canReviewKpi } from '@/lib/workflowEngine';
 import { 
@@ -292,7 +293,7 @@ export function MobileKpiCard({
         </p>
         <div className="flex items-start gap-1">
           <p className="text-[10px] text-muted-foreground line-clamp-2 whitespace-pre-wrap flex-1 min-w-0">
-            {renderBoldKpiText(kpi.kpi_name)}
+            {renderBoldKpiText(getKpiSummaryText(kpi.kpi_name))}
           </p>
           <Info className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5" />
         </div>
