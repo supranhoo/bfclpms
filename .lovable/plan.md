@@ -1,44 +1,60 @@
 
 
+## Milestone 3: Incentive Module Maturity
 
-## Milestone 2: Resilience & Guardrails — COMPLETED
+### Current State
+- `compute-monthly-incentives` edge function exists and works, but **no UI trigger** — the MonthlyIncentiveTable says "Run incentive computation first" with no button to do so
+- `detect-retroactive-incentive-changes` edge function exists and writes revision records
+- `RetroactiveAdjustmentTable` shows revisions but has no way to trigger detection
+- No dry-run preview before computing final incentives
+- Program-scoped eligibility data entry was just implemented
 
-### What was implemented
+### Implementation
 
-1. **Edge Function Retry Wrapper** — `supabase/functions/_shared/retry.ts`
-   - 3 attempts with exponential backoff (1s, 2s, 4s)
-   - Skips retries on client errors (4xx)
-   - Applied to `send-email-notification` (all providers: SMTP, Resend, Microsoft Graph)
-   - Applied to `propagate-template-change` (batch KPI updates)
+#### 1. Add Compute Button with Dry-Run Preview to MonthlyIncentiveTable
+**`src/components/incentive/MonthlyIncentiveTable.tsx`**
+- Add a "Compute Incentives" button in the toolbar
+- Add program selector dropdown (required before computing)
+- On click, first call the edge function with `dry_run: true` to get a preview
+- Show a confirmation dialog with summary: X employees, Y eligible, Z disqualified
+- On confirm, call with `dry_run: false` to write records
+- Show toast with results
 
-2. **1000-Row Query Limit Fix**
-   - `src/pages/reports/AuditTrailReport.tsx` — replaced `.limit(1000)` with paginated `.range()` fetching
-   - `src/pages/reports/KpiJourneyReport.tsx` — department filter dropdown now fetches in 1000-row batches
-   - Main KPI journey data already used server-side RPC with pagination (no change needed)
+**`supabase/functions/compute-monthly-incentives/index.ts`**
+- Add `dry_run` parameter support
+- When `dry_run: true`, return computed records WITHOUT upserting to DB
+- Return summary stats: total, eligible, disqualified, avg incentive %
 
-3. **Session-Expired Form Recovery**
-   - `src/components/review/UnifiedScorecard.tsx` — auto-saves review drafts (score, remarks, achieved value, evidence URLs) to `sessionStorage` keyed by `review-draft-{kpiId}-{viewLevel}`
-   - Drafts restored when re-opening review sheet
-   - Drafts cleared on successful submit (all 4 success paths)
+#### 2. Add Detect Retroactive Changes Button
+**`src/components/incentive/RetroactiveAdjustmentTable.tsx`**
+- Add a "Detect Changes" button that invokes `detect-retroactive-incentive-changes`
+- Add program selector (required)
+- Add month/year selector for the trigger period
+- Show toast with count of revisions created
 
-4. **PIP Letter Download**
-   - `src/components/pip/PIPDetailSheet.tsx` — replaced TODO stub with actual `generate-pip-letter` edge function invocation
-   - Downloads PDF blob, shows loading state
+#### 3. Wire edge function invocations via hooks
+**`src/hooks/useIncentiveRecords.ts`**
+- Add `useComputeIncentives` mutation hook
+  - Calls `supabase.functions.invoke('compute-monthly-incentives', { body })`
+  - Invalidates `incentive-records` query on success
+- Add `useDetectRetroactiveChanges` mutation hook
+  - Calls `supabase.functions.invoke('detect-retroactive-incentive-changes', { body })`
+  - Invalidates `incentive-revisions` query on success
 
-5. **Auto-Reconcile Toast Feedback**
-   - `src/hooks/useWorkflowConfig.ts` — surfaces reconciliation count as toast notification to admin
+#### 4. Compute Dry-Run Preview Dialog
+**`src/components/incentive/IncentiveDryRunDialog.tsx`** (new)
+- Modal showing preview of computation results before committing
+- Table with: Employee, PMS Score, Slab, Base %, DQ Reasons, Final %
+- Summary cards: Total, Eligible, Disqualified, Avg %
+- "Confirm & Compute" button to execute
+- "Cancel" to abort
 
 ### Files Modified
-- `supabase/functions/_shared/retry.ts` — NEW shared retry utility
-- `supabase/functions/send-email-notification/index.ts` — withRetry on all send paths
-- `supabase/functions/propagate-template-change/index.ts` — withRetry on batch updates
-- `src/pages/reports/AuditTrailReport.tsx` — paginated fetching
-- `src/pages/reports/KpiJourneyReport.tsx` — paginated dept filter
-- `src/components/review/UnifiedScorecard.tsx` — sessionStorage draft save/restore
-- `src/components/pip/PIPDetailSheet.tsx` — wire generate-pip-letter
-- `src/hooks/useWorkflowConfig.ts` — toast for auto-reconcile
+- `supabase/functions/compute-monthly-incentives/index.ts` — add `dry_run` param
+- `src/hooks/useIncentiveRecords.ts` — add compute + detect hooks
+- `src/components/incentive/MonthlyIncentiveTable.tsx` — add compute button + program selector
+- `src/components/incentive/IncentiveDryRunDialog.tsx` — new preview dialog
+- `src/components/incentive/RetroactiveAdjustmentTable.tsx` — add detect button
 
-### Risk Assessment
-- Retry wrapper: Only retries on server/transient errors (5xx, timeouts). Client errors (4xx) fail immediately. No duplicate email risk since retries happen within the same request.
-- Session recovery: Per-browser, per-KPI drafts. Cleared on success. No data leak risk.
-- Pagination: Increases initial load time for very large audit trails but ensures complete data.
+### No database changes needed
+
