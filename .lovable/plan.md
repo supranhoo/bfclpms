@@ -1,48 +1,52 @@
 
 
-## Add Status Toggle and Status Filter for Notifications
+## Add PDF Download to Review Timeline
 
-### What the user wants
-1. **Clickable status badge** on each notification row to toggle between Read/Unread
-2. **Status filter** visible on the notifications tab (already exists as readStatus dropdown -- need to verify it's working)
-
-### Current state
-- The readStatus filter dropdown already exists in `InboxFilters.tsx` and shows for `isNotificationTab` (lines 91-106) with All/Unread/Read options
-- The `usePaginatedNotifications` hook already applies readStatus server-side (lines 72-76)
-- `onMarkRead` prop exists on `InboxRowItem` but only marks as **read** (no toggle to unread)
-- The status badge we added shows Read/Unread but is not clickable
+### Overview
+Add a "Download PDF" button to the Review Journey card in `KpiJourneySection`. The PDF will include employee details (Name, Employee Code, Reporting Manager) plus the full KPI information and all review stage data (scores, ratings, remarks).
 
 ### Changes
 
-**File 1: `src/components/inbox/InboxRowItem.tsx`**
-- Make the Read/Unread badge clickable to toggle status
-- Add `onToggleRead` prop (or reuse `onMarkRead` with toggle behavior)
-- Replace the static badge with a clickable button-badge that calls `onMarkRead` to toggle
+**1. New export function in `src/lib/pdfExport.ts`**
 
-```tsx
-{item.type === 'notification' && (
-  <Badge
-    variant="outline"
-    className={cn('text-xs cursor-pointer hover:bg-muted transition-colors',
-      item.isRead ? 'text-muted-foreground' : 'text-primary border-primary')}
-    onClick={(e) => {
-      e.stopPropagation();
-      onMarkRead?.(item);
-    }}
-  >
-    {item.isRead ? 'Read' : 'Unread'}
-  </Badge>
-)}
+Add `exportReviewTimelinePdf()` that generates a single-page (or multi-page) PDF containing:
+- Header with company name and review period
+- Employee profile box: Name, Employee Code, Reporting Manager Name
+- KPI details: Category, KRA, KPI Name, Target, UOM, Criteria, Weightage, Frequency
+- Review stages grid (matching the UI layout): each stage shows score, rating, achieved value, and remarks
+- Uses existing drawing helpers (`drawProgressBar`, `getRatingColor`, `STAGE_COLORS`, etc.)
+
+```typescript
+export interface ReviewTimelinePdfData {
+  employeeName: string;
+  employeeCode: string;
+  reportingManagerName: string;
+  kpi: { kraName, kpiName, category, target, uom, criteria, weightage, frequency, status };
+  stages: Array<{ title, score, rating, achievedValue, remarks, status: 'completed'|'current'|'pending' }>;
+  period: string;
+  year: string;
+  companyName?: string;
+  isNA?: boolean;
+}
 ```
 
-**File 2: `src/hooks/usePaginatedNotifications.ts`**
-- Update `useMarkNotificationRead` mutation to support toggling (set `is_read` to the opposite of current value, or accept a target value)
-- Add a `useToggleNotificationRead` hook or modify existing `useMarkNotificationRead` to accept a boolean parameter
+**2. Update `src/components/review/KpiJourneySection.tsx`**
+- Add new props: `employeeName`, `employeeCode`, `reportingManagerName`
+- Add a "Download PDF" button (using `Download` icon from lucide) in the CardHeader next to "Review Journey" title
+- On click, call the new `exportReviewTimelinePdf()` with all the stage data already computed in the component
 
-**File 3: `src/pages/QueryInbox.tsx`**
-- Update the `onMarkRead` handler to toggle instead of only marking read
-- Ensure it works with the updated mutation
+**3. Update `src/components/review/KpiReviewPanel.tsx`**
+- Add and pass through `employeeName`, `employeeCode`, `reportingManagerName` props to `KpiJourneySection`
 
-### Summary
-Two functional additions: (1) clicking the status badge toggles read/unread state, (2) the existing read/unread filter dropdown (already present) correctly filters results. One small hook update + one UI interaction change.
+**4. Update all parent scorecard components that render `KpiReviewPanel`**
+- `EmployeeScorecard.tsx`, `AuditScorecard.tsx`, `ManagementScorecard.tsx`, `UnifiedScorecard.tsx`, `SelfReviewSheet.tsx`, `MentionedKpiSheet.tsx`
+- Pass employee name, code, and reporting manager name through `KpiReviewPanel`
+- For reporting manager name: use the already-fetched profile data or fetch manager name from profiles if not already available
+
+### Technical Details
+
+- The PDF uses `jsPDF` (already a project dependency) with existing color constants and drawing helpers from `pdfExport.ts`
+- Layout: Portrait A4, with a profile section at top, KPI details section, then a 2x3 or 3x2 grid of review stage panels matching `STAGE_COLORS`
+- File name format: `Review_Timeline_{EmployeeName}_{KpiName}_{Period}_{Year}.pdf`
+- The download button only appears when at least one stage has data (not all pending)
 
