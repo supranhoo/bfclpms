@@ -30,6 +30,22 @@ export function normalizeKpiText(text: string | null | undefined): string {
 export const preWrapClass = 'whitespace-pre-wrap';
 
 /**
+ * Return KPI text up to (but not including) the first "Formula" keyword.
+ * If "Formula" is absent, truncate before "Logic".
+ * If neither is found, return the full normalized text.
+ * Used on dashboard/table views where full detail is available via "View KPI Details".
+ */
+export function getKpiSummaryText(text: string | null | undefined): string {
+  if (!text) return '';
+  const normalized = normalizeKpiText(text);
+  const formulaIdx = normalized.search(/[-\s]*formula/i);
+  if (formulaIdx > 0) return normalized.slice(0, formulaIdx).trim();
+  const logicIdx = normalized.search(/[-\s]*logic/i);
+  if (logicIdx > 0) return normalized.slice(0, logicIdx).trim();
+  return normalized;
+}
+
+/**
  * Section marker pattern used for bold rendering.
  * Matches standard markers like "- Description:", "- Formula:", "- Scoring Logic:", "- Scoring:"
  * Also matches non-standard variants: "Formula -", "Scoring :-", "Formula :", "-Description:" etc.

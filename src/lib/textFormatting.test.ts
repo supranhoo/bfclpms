@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeKpiText, preWrapClass } from './textFormatting';
+import { normalizeKpiText, preWrapClass, getKpiSummaryText } from './textFormatting';
 
 describe('normalizeKpiText', () => {
   describe('messy existing data (missing newlines)', () => {
@@ -114,6 +114,34 @@ describe('normalizeKpiText', () => {
       // Should not insert newline before "(Scoring:"
       expect(result).not.toContain('\nScoring: 5');
     });
+  });
+});
+
+describe('getKpiSummaryText', () => {
+  it('truncates before Formula keyword', () => {
+    const input = 'KPI Name\n- Description: Desc\n- Formula: (A/B)*100';
+    expect(getKpiSummaryText(input)).toBe('KPI Name\n- Description: Desc');
+  });
+
+  it('truncates before Logic when no Formula', () => {
+    const input = 'KPI Name\n- Description: Desc\n- Scoring Logic: 5 for 100%';
+    expect(getKpiSummaryText(input)).toBe('KPI Name\n- Description: Desc\n- Scoring');
+  });
+
+  it('returns full text when neither Formula nor Logic present', () => {
+    const input = 'Simple KPI name';
+    expect(getKpiSummaryText(input)).toBe('Simple KPI name');
+  });
+
+  it('handles null/undefined', () => {
+    expect(getKpiSummaryText(null)).toBe('');
+    expect(getKpiSummaryText(undefined)).toBe('');
+  });
+
+  it('is case-insensitive for Formula', () => {
+    const input = 'KPI Name - FORMULA: something';
+    const result = getKpiSummaryText(input);
+    expect(result).not.toContain('FORMULA');
   });
 });
 
