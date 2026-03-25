@@ -38,6 +38,7 @@ describe('RLS Policies — Unauthenticated Access', () => {
       'workflow_templates',
       'kra_categories',
       'review_periods',
+      'system_settings',
       'modules',
       'training_needs',
       'performance_improvement_plans',
@@ -70,16 +71,6 @@ describe('RLS Policies — Unauthenticated Access', () => {
       // Should not get a permission error
       expect(error).toBeNull();
       // Data may or may not exist, but no RLS block
-      expect(data).toBeDefined();
-    });
-
-    it('should allow reading system_settings (anon key for edge functions)', async () => {
-      const { data, error } = await anonClient
-        .from('system_settings')
-        .select('setting_key')
-        .limit(1);
-
-      expect(error).toBeNull();
       expect(data).toBeDefined();
     });
   });
