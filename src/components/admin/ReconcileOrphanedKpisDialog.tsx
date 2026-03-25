@@ -96,7 +96,7 @@ export default function ReconcileOrphanedKpisDialog({
   const [selectedKpiIds, setSelectedKpiIds] = useState<Set<string>>(new Set());
 
   const reconcileMutation = useMutation({
-    mutationFn: async ({ dryRun }: { dryRun: boolean }) => {
+    mutationFn: async ({ dryRun, kpiIds }: { dryRun: boolean; kpiIds?: string[] }) => {
       const params: Record<string, unknown> = { p_dry_run: dryRun };
       if (periodMode === 'specific') {
         params.p_review_period = selectedMonth;
@@ -118,6 +118,7 @@ export default function ReconcileOrphanedKpisDialog({
     try {
       const result = await reconcileMutation.mutateAsync({ dryRun: true });
       setDryRunResult(result);
+      setSelectedKpiIds(new Set(result.affected.map(a => a.kpi_id)));
     } catch (err: any) {
       toast({
         title: 'Error',
