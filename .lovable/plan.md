@@ -1,20 +1,26 @@
 
 
-## Add "@Mentioned" to Notification Type Filter
+## Fix: Notification Type Filter Not Applied
 
-### Change
-Add `observation_mention` as a selectable option in the notification type dropdown on the Inbox Filters.
+### Problem
+In `src/pages/QueryInbox.tsx` (lines 93-97), the `notificationFilters` memo only passes `search`, `readStatus`, and `dateRange` to `usePaginatedNotifications`. The `notificationType` value from the filter UI is never forwarded, so selecting "@Mentioned" or any type has no effect.
 
-### File: `src/components/inbox/InboxFilters.tsx` (line 48)
+The hook (`usePaginatedNotifications`) already supports a `type` filter field (lines 78-80) — it just never receives the value.
 
-Add one entry to the `NOTIFICATION_TYPES` array:
+### Fix
+
+**File: `src/pages/QueryInbox.tsx` (lines 93-97)**
+
+Add the `type` field mapped from `filters.notificationType`:
 
 ```typescript
-{ value: 'observation_mention', label: '@Mentioned' },
+const notificationFilters: NotificationFilters = useMemo(() => ({
+  search: filters.search,
+  readStatus: filters.readStatus,
+  dateRange: filters.dateRange,
+  type: filters.notificationType,
+}), [filters]);
 ```
 
-Insert it after `query_responded` (line 48), before the closing bracket.
-
-### No other files affected
-The filter value is passed directly to the `usePaginatedNotifications` hook which already filters by `.eq('type', filters.notificationType)` — no backend changes needed.
+One line addition. No other files need changes.
 
