@@ -9,6 +9,7 @@ import { Clock, Building2, Users, User, Lock, Settings, ClipboardEdit } from 'lu
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { useWorkflowSetting } from '@/hooks/useWorkflowSettings';
+import { useFrequencyConfig } from '@/hooks/useFrequencyConfig';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -37,6 +38,7 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
   const weightage = kpi.weightage || 0;
   const scope = kpi.org_level_scope || 'employee';
   
+  const { config: freqConfig } = useFrequencyConfig(kpi.frequency);
   const govPerms = useReviewPeriodPermissions(selectedPeriod, selectedYear);
   const hasRestrictions = !govPerms.isLoading && (govPerms.view_only || !govPerms.edit_kpi || !govPerms.edit_scores);
 
@@ -111,12 +113,12 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
           
           {kpi.frequency === 'Bi-Monthly' && (
             <Badge variant="outline" className="text-xs border-violet-300 text-violet-700 dark:border-violet-600 dark:text-violet-400">
-              Bi-Monthly: {getCycleLabel('Bi-Monthly', selectedPeriod, selectedYear, kpi.frequency_cycle_start)}
+              Bi-Monthly: {getCycleLabel('Bi-Monthly', selectedPeriod, selectedYear, kpi.frequency_cycle_start, freqConfig)}
             </Badge>
           )}
           {kpi.frequency === 'Quarterly' && (
             <Badge variant="outline" className="text-xs border-teal-300 text-teal-700 dark:border-teal-600 dark:text-teal-400">
-              Quarterly: {getCycleLabel('Quarterly', selectedPeriod, selectedYear, kpi.frequency_cycle_start)}
+              Quarterly: {getCycleLabel('Quarterly', selectedPeriod, selectedYear, kpi.frequency_cycle_start, freqConfig)}
             </Badge>
           )}
           {onOpenTimeline && (
