@@ -186,15 +186,15 @@ export function usePaginatedNotifications(options: UsePaginatedNotificationsOpti
   };
 }
 
-export function useMarkNotificationRead() {
+export function useToggleNotificationRead() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
   return useMutation({
-    mutationFn: async (notificationId: string) => {
+    mutationFn: async ({ notificationId, isRead }: { notificationId: string; isRead: boolean }) => {
       const { error } = await supabase
         .from('notifications')
-        .update({ is_read: true })
+        .update({ is_read: !isRead })
         .eq('id', notificationId);
 
       if (error) throw error;

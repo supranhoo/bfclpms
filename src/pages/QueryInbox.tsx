@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { usePaginatedNotifications, useMarkNotificationRead, useMarkAllNotificationsRead, NotificationFilters } from '@/hooks/usePaginatedNotifications';
+import { usePaginatedNotifications, useToggleNotificationRead, useMarkAllNotificationsRead, NotificationFilters } from '@/hooks/usePaginatedNotifications';
 import { useUnreadNotificationCount } from '@/hooks/useNotifications';
 import { useSnoozeNotification, useUnsnoozeNotification } from '@/hooks/useSnoozeNotification';
 import { useRespondToQuery, useAcceptQueryResponse, useSubordinateQueries, QueryStatusExtended } from '@/hooks/useQueryWorkflow';
