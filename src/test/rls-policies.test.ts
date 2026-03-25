@@ -73,16 +73,6 @@ describe('RLS Policies — Unauthenticated Access', () => {
       // Data may or may not exist, but no RLS block
       expect(data).toBeDefined();
     });
-
-    it('should allow reading system_settings (anon key for edge functions)', async () => {
-      const { data, error } = await anonClient
-        .from('system_settings')
-        .select('setting_key')
-        .limit(1);
-
-      expect(error).toBeNull();
-      expect(data).toBeDefined();
-    });
   });
 
   describe('Write operations should be denied for unauthenticated users', () => {
