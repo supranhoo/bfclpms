@@ -24,7 +24,8 @@ import { KraIssuanceConfirmDialog } from '@/components/admin/KraIssuanceConfirmD
 import { ScoringHealthCheck } from '@/components/admin/ScoringHealthCheck';
 import { getPreviousStatus } from '@/hooks/useAdminDataEntry';
 import { getCalendarMonthsForPeriod, MONTH_NAMES } from '@/hooks/useAdminReports';
-import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building, Library, ChevronDown, ChevronRight, Edit, Building as BuildingIcon, PenLine, CalendarDays, Copy, Trash2, Undo2, Send, CheckCircle, ArrowUp } from 'lucide-react';
+import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building, Library, ChevronDown, ChevronRight, Edit, Building as BuildingIcon, PenLine, CalendarDays, Copy, Trash2, Undo2, Send, CheckCircle, ArrowUp, Search } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -63,7 +64,8 @@ export default function AllKpis() {
 
   // Scroll-to-top visibility
   const [showScrollTop, setShowScrollTop] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(50);
+  const [visibleCount, setVisibleCount] = useState(20);
+  const [searchEmployee, setSearchEmployee] = useState('');
   useEffect(() => {
     const handleScroll = () => setShowScrollTop(window.scrollY > 300);
     window.addEventListener('scroll', handleScroll);
@@ -318,7 +320,17 @@ export default function AllKpis() {
 
   // Check if any filters are active
   const hasActiveFilters = selectedManager !== 'all' || selectedDepartment !== 'all' || 
-    selectedDivision !== 'all' || selectedPeriod !== 'all' || selectedYear !== 'all';
+    selectedDivision !== 'all' || selectedPeriod !== 'all' || selectedYear !== 'all' || searchEmployee.trim() !== '';
+
+  // Filter employeeData by search term
+  const displayData = useMemo(() => {
+    if (!searchEmployee.trim()) return employeeData;
+    const term = searchEmployee.toLowerCase().trim();
+    return employeeData.filter(emp =>
+      emp.employeeName.toLowerCase().includes(term) ||
+      emp.employeeCode.toLowerCase().includes(term)
+    );
+  }, [employeeData, searchEmployee]);
 
   const resetFilters = () => {
     setSelectedManager('all');
@@ -326,7 +338,8 @@ export default function AllKpis() {
     setSelectedDivision('all');
     setSelectedPeriod('all');
     setSelectedYear('all');
-    setVisibleCount(50);
+    setSearchEmployee('');
+    setVisibleCount(20);
   };
 
   const { toast } = useToast();
