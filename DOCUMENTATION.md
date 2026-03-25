@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-25  
-> **Version:** 1.91.0 — Fixed reconciliation Branch 2b ("scored not forwarded") to respect the "completed stage" convention; manager_check/skip_level_check/hr_pms_review with their own score are now recognized as normal resting states when a subsequent reviewer stage exists, preventing mass false-positive advancement
+> **Version:** 1.92.0 — Reconciliation dialog now shows employee code in brackets after name and supports sorting by employee name (A-Z/Z-A toggle); DB function updated to include employee_code in output
 > **Maintainer:** Lovable AI
 
 ---
