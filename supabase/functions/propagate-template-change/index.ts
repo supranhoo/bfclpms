@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { withRetry } from "../_shared/retry.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -175,15 +176,17 @@ Deno.serve(async (req) => {
       // Update in batches of 100
       for (let i = 0; i < kpiIds.length; i += 100) {
         const batch = kpiIds.slice(i, i + 100);
-        const { error: updateError, count } = await adminClient
-          .from('kpis')
-          .update(updatePayload)
-          .in('id', batch);
-
-        if (updateError) {
-          errors.push({ kpi_id: batch.join(','), error: updateError.message });
-        } else {
+        try {
+          await withRetry(async () => {
+            const { error: updateError } = await adminClient
+              .from('kpis')
+              .update(updatePayload)
+              .in('id', batch);
+            if (updateError) throw updateError;
+          });
           updatedCount += batch.length;
+        } catch (retryErr: any) {
+          errors.push({ kpi_id: batch.join(','), error: retryErr.message });
         }
       }
     }

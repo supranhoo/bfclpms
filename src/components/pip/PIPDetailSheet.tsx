@@ -124,10 +124,38 @@ export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProp
     setRemarks('');
   };
 
+  const [isDownloading, setIsDownloading] = useState(false);
+
   const handleDownloadLetter = async () => {
-    if (!pip) return;
-    // TODO: Implement PDF generation via edge function
-    console.log('Download PIP letter for:', pip.id);
+    if (!pip || isDownloading) return;
+    setIsDownloading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-pip-letter', {
+        body: { pip_id: pip.id },
+      });
+      if (error) throw error;
+
+      // The edge function returns a PDF blob
+      const blob = data instanceof Blob ? data : new Blob([JSON.stringify(data)], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `PIP_Letter_${pip.employee?.employee_code || pip.id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.error('Failed to download PIP letter:', err);
+      const { toast } = await import('@/hooks/use-toast');
+      toast({
+        title: 'Download failed',
+        description: err.message || 'Could not generate PIP letter. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   if (isLoading) {
@@ -383,9 +411,9 @@ export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProp
               )}
 
               {pip.status !== 'draft' && (
-                <Button variant="outline" onClick={handleDownloadLetter}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Download Letter
+                <Button variant="outline" onClick={handleDownloadLetter} disabled={isDownloading}>
+                  {isDownloading ? <Clock className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                  {isDownloading ? 'Generating...' : 'Download Letter'}
                 </Button>
               )}
             </div>

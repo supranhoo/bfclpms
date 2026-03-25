@@ -142,6 +142,11 @@ async function triggerAutoReconcile(reviewPeriod: string, reviewYear: number) {
     const result = await response.json();
     if (result.reconciled_count > 0) {
       console.log(`Auto-reconciled ${result.reconciled_count} KPIs after workflow change`);
+      // Import toast dynamically to show feedback
+      try {
+        const { toast } = await import('sonner');
+        toast.success(`${result.reconciled_count} KPI(s) auto-reconciled due to workflow change`);
+      } catch { /* sonner not available — silent */ }
     }
   }
 }

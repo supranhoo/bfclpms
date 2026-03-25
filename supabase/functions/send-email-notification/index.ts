@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { withRetry } from "../_shared/retry.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -1399,7 +1400,7 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
           });
         }
 
-        await sendViaSmtp(
+        await withRetry(() => sendViaSmtp(
           parseValue(settingsMap.smtp_host),
           parseInt(parseValue(settingsMap.smtp_port)) || 587,
           (parseValue(settingsMap.smtp_security) || 'tls') as 'tls' | 'starttls' | 'none',
@@ -1410,7 +1411,7 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
           recipient_email,
           subject,
           html
-        );
+        ));
 
         await logEmail({ event_type, recipient_email, recipient_name, subject, status: 'sent', provider: 'smtp', metadata: logMeta });
         return new Response(JSON.stringify({ success: true, message: "Email sent via SMTP" }), {
@@ -1418,7 +1419,7 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
           headers: { "Content-Type": "application/json", ...corsHeaders },
         });
       } else if (provider === 'microsoft_graph') {
-        await sendViaMicrosoftGraph(
+        await withRetry(() => sendViaMicrosoftGraph(
           supabase,
           parseValue(settingsMap.graph_tenant_id),
           parseValue(settingsMap.graph_client_id),
@@ -1427,7 +1428,7 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
           recipient_email,
           subject,
           html
-        );
+        ));
 
         await logEmail({ event_type, recipient_email, recipient_name, subject, status: 'sent', provider: 'microsoft_graph', metadata: logMeta });
         return new Response(JSON.stringify({ success: true, message: "Email sent via Microsoft Graph" }), {
@@ -1435,7 +1436,7 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
           headers: { "Content-Type": "application/json", ...corsHeaders },
         });
       } else {
-        const emailResponse = await sendViaResend(senderEmail, senderName, recipient_email, subject, html);
+        const emailResponse = await withRetry(() => sendViaResend(senderEmail, senderName, recipient_email, subject, html));
         await logEmail({ event_type, recipient_email, recipient_name, subject, status: 'sent', provider: 'resend', metadata: logMeta });
         return new Response(JSON.stringify({ success: true, data: emailResponse }), {
           status: 200,
@@ -1443,7 +1444,7 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
         });
       }
     } catch (sendError: any) {
-      console.error("Email send failed:", sendError);
+      console.error("Email send failed after retries:", sendError);
       await logEmail({ event_type, recipient_email, recipient_name, subject, status: 'failed', error_message: sendError.message, provider, metadata: logMeta });
       return new Response(
         JSON.stringify({ error: sendError.message }),

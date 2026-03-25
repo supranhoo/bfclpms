@@ -90,17 +90,26 @@ export default function KpiJourneyReport() {
   const { data: departments } = useQuery({
     queryKey: ['kpi-journey-departments', selectedYear, selectedPeriod],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('kpis')
-        .select('employee_id, profiles!inner(department_id, departments(name))')
-        .eq('review_year', parseInt(selectedYear))
-        .eq('review_period', selectedPeriod)
-        .limit(1000);
-      if (!data) return [];
+      // Fetch departments in batches to avoid 1000-row truncation
       const names = new Set<string>();
-      for (const k of data) {
-        const dept = (k as any).profiles?.departments?.name;
-        if (dept) names.add(dept);
+      let offset = 0;
+      const batchSize = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data } = await supabase
+          .from('kpis')
+          .select('employee_id, profiles!inner(department_id, departments(name))')
+          .eq('review_year', parseInt(selectedYear))
+          .eq('review_period', selectedPeriod)
+          .range(offset, offset + batchSize - 1);
+        if (!data || data.length === 0) break;
+        for (const k of data) {
+          const dept = (k as any).profiles?.departments?.name;
+          if (dept) names.add(dept);
+        }
+        hasMore = data.length === batchSize;
+        offset += batchSize;
       }
       return [...names].sort();
     },

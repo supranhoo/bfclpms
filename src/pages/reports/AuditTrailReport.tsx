@@ -134,29 +134,40 @@ export default function AuditTrailReport() {
   const [selectedAction, setSelectedAction] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Fetch audit logs with on_behalf fields
+  // Fetch audit logs with paginated fetching to avoid 1000-row truncation
   const { data: auditLogs = [], isLoading } = useQuery({
     queryKey: ['audit-trail-report'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('kpi_audit_logs')
-        .select(`
-          id,
-          kpi_id,
-          action,
-          performed_by,
-          on_behalf_of,
-          on_behalf_role,
-          old_value,
-          new_value,
-          metadata,
-          created_at
-        `)
-        .order('created_at', { ascending: false })
-        .limit(1000);
+      const allLogs: AuditLog[] = [];
+      const batchSize = 1000;
+      let offset = 0;
+      let hasMore = true;
 
-      if (error) throw error;
-      return data as AuditLog[];
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('kpi_audit_logs')
+          .select(`
+            id,
+            kpi_id,
+            action,
+            performed_by,
+            on_behalf_of,
+            on_behalf_role,
+            old_value,
+            new_value,
+            metadata,
+            created_at
+          `)
+          .order('created_at', { ascending: false })
+          .range(offset, offset + batchSize - 1);
+
+        if (error) throw error;
+        allLogs.push(...(data as AuditLog[]));
+        hasMore = data.length === batchSize;
+        offset += batchSize;
+      }
+
+      return allLogs;
     },
   });
 
