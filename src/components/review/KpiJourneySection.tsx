@@ -1,3 +1,5 @@
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +11,37 @@ import { getVisibleJourneyStages, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflow
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { UomType } from '@/lib/qualitativeUom';
 import { exportReviewTimelinePdf, ReviewTimelinePdfData } from '@/lib/pdfExport';
+
+function useEmployeeProfileForPdf(employeeId: string | undefined) {
+  return useQuery({
+    queryKey: ['employee-pdf-profile', employeeId],
+    queryFn: async () => {
+      if (!employeeId) return null;
+      const { data: emp } = await supabase
+        .from('profiles')
+        .select('full_name, employee_code, reporting_manager_id')
+        .eq('id', employeeId)
+        .single();
+      if (!emp) return null;
+      let managerName: string | null = null;
+      if (emp.reporting_manager_id) {
+        const { data: mgr } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', emp.reporting_manager_id)
+          .single();
+        managerName = mgr?.full_name || null;
+      }
+      return {
+        fullName: emp.full_name,
+        employeeCode: emp.employee_code,
+        managerName,
+      };
+    },
+    enabled: !!employeeId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
 
 type ViewLevel = 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' | 'admin';
 type JourneyStage = 'self' | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management';
