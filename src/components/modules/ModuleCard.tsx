@@ -1,3 +1,4 @@
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
@@ -53,6 +54,7 @@ export const ModuleCard = React.forwardRef<HTMLDivElement, ModuleCardProps>(func
 
   return (
     <Card
+      ref={ref}
       className={cn(
         'relative overflow-hidden transition-all duration-300 cursor-pointer group',
         'hover:shadow-lg hover:scale-[1.02] hover:border-primary/50',
@@ -87,4 +89,4 @@ export const ModuleCard = React.forwardRef<HTMLDivElement, ModuleCardProps>(func
       </CardContent>
     </Card>
   );
-}
+});
