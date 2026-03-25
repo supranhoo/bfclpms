@@ -1,39 +1,103 @@
 
 
-## Notify Data Owner AND Employee on Org KPI Send-Back (App + Email)
+## RCA: Rating/Score Mismatch Bug
 
-### Current Gap
-When an org KPI is sent back, only the **data owner** gets an app notification. No **email** is sent to anyone, and the **employee** whose KPI was affected gets no notification at all.
+### Finding
 
-### Changes
+**21 final_rating** and **123 self_rating** records have ratings one level too high for their score. The pattern is consistent:
 
-#### 1. `src/hooks/useSendBackOrgKpiValue.ts` — Add employee notifications + email triggers
+| Score | Stored Rating | Expected Rating |
+|-------|--------------|-----------------|
+| 4     | blue         | green           |
+| 3     | green        | yellow          |
+| 2     | yellow       | red             |
 
-After the existing data owner notification block (step 3), add:
+### Root Cause
 
-**Step 3b — Get affected employees:**
-- Query `kpis` table for employees who have this org KPI (matching `category_id`, `kra_name`, `kpi_name`, `is_org_level = true`)
-- For each affected employee, insert an app notification (type: `org_kpi_sent_back`, message: "The org-level value for [kpiName] has been sent back...")
+`SelfReviewSheet.tsx` (line 370) and `AdminDataEntryDialog.tsx` (line 75) both define a local `getRatingLevel` function with **wrong thresholds**:
 
-**Step 3c — Send emails to data owners:**
-- For each data owner, call `supabase.functions.invoke('send-email-notification')` with `event_type: 'org_kpi_sent_back'`, passing `recipient_email`, `recipient_name`, `kpi_name`, `kra_name`, `reason`
+```typescript
+// WRONG (current) — shifted by 1 level
+if (score >= 4) return 'blue';   // should be 'green'
+if (score >= 3) return 'green';  // should be 'yellow'
+if (score >= 2) return 'yellow'; // should be 'red'
+return 'red';
+```
 
-**Step 3d — Send emails to affected employees:**
-- For each affected employee, call `supabase.functions.invoke('send-email-notification')` with the same event type, including the employee's email and name
-- Fetch employee profiles (email, full_name) from the kpis join
+The correct mapping (used everywhere else in the codebase — `reviewConstants.ts`, `ratingCalculation.ts`, `qualitativeUom.ts`):
 
-#### 2. `supabase/functions/send-email-notification/index.ts` — Update template
+```typescript
+if (score >= 5) return 'blue';
+if (score >= 4) return 'green';
+if (score >= 3) return 'yellow';
+return 'red';
+```
 
-The `org_kpi_sent_back` email template already exists. Update it to be context-aware:
-- If the recipient is a data owner: "Please review and resubmit the data"
-- If the recipient is an employee: "The org-level data for your KPI has been sent back for revision by the reviewer. You will be notified once the data owner resubmits."
+The 21 final_rating mismatches are downstream — when a KPI is approved with only self-review data, the wrong self_rating gets copied to final_rating.
 
-Add a `recipient_role` field to the template rendering to distinguish the two cases.
+### Fix
 
-### No database changes needed
-All tables (`kpis`, `profiles`, `notifications`, `org_kpi_data_owners`) already exist with the required columns.
+#### 1. Fix `SelfReviewSheet.tsx` — Remove local function, use canonical import
+
+- Delete the local `getRatingLevel` function (lines 370-375)
+- Import `scoreToRatingLevel` from `@/lib/reviewConstants` (already used elsewhere)
+- Replace all 15 call sites with `scoreToRatingLevel`
+
+#### 2. Fix `AdminDataEntryDialog.tsx` — Same change
+
+- Delete the local `getRatingLevel` function (lines 74-80)
+- Import `scoreToRatingLevel` from `@/lib/reviewConstants`
+- Replace call sites
+
+#### 3. Fix `ImportData.tsx` — Align mapping
+
+- The mapping here uses `>=4.5 → blue` which is different from both the wrong and correct versions
+- Replace with `scoreToRatingLevel(Math.round(numScore))` to match the canonical logic
+
+#### 4. Database repair — Fix 123 self_rating + 21 final_rating mismatches
+
+Migration to correct existing bad data:
+
+```sql
+UPDATE review_submissions
+SET self_rating = CASE
+  WHEN ROUND(self_score) >= 5 THEN 'blue'::rating_level
+  WHEN ROUND(self_score) >= 4 THEN 'green'::rating_level
+  WHEN ROUND(self_score) >= 3 THEN 'yellow'::rating_level
+  ELSE 'red'::rating_level
+END
+WHERE self_score IS NOT NULL AND self_rating IS NOT NULL
+  AND self_rating != CASE
+    WHEN ROUND(self_score) >= 5 THEN 'blue'::rating_level
+    WHEN ROUND(self_score) >= 4 THEN 'green'::rating_level
+    WHEN ROUND(self_score) >= 3 THEN 'yellow'::rating_level
+    ELSE 'red'::rating_level
+  END;
+
+-- Also fix final_rating where it was copied from bad self_rating
+UPDATE review_submissions
+SET final_rating = CASE
+  WHEN ROUND(final_score) >= 5 THEN 'blue'::rating_level
+  WHEN ROUND(final_score) >= 4 THEN 'green'::rating_level
+  WHEN ROUND(final_score) >= 3 THEN 'yellow'::rating_level
+  ELSE 'red'::rating_level
+END
+WHERE final_score IS NOT NULL AND final_rating IS NOT NULL
+  AND final_rating != CASE
+    WHEN ROUND(final_score) >= 5 THEN 'blue'::rating_level
+    WHEN ROUND(final_score) >= 4 THEN 'green'::rating_level
+    WHEN ROUND(final_score) >= 3 THEN 'yellow'::rating_level
+    ELSE 'red'::rating_level
+  END;
+```
 
 ### Files Modified
-- `src/hooks/useSendBackOrgKpiValue.ts` — add employee app notifications + email triggers for both audiences
-- `supabase/functions/send-email-notification/index.ts` — update `org_kpi_sent_back` template for dual-audience messaging
+- `src/components/review/SelfReviewSheet.tsx` — replace local `getRatingLevel` with imported `scoreToRatingLevel`
+- `src/components/admin/AdminDataEntryDialog.tsx` — same fix
+- `src/pages/admin/ImportData.tsx` — align `mapScoreToRating` with canonical logic
+- DB migration — repair 123 + 21 mismatched rating records
+
+### Risk
+- Low. The canonical function is already the standard used by all other components.
+- The data fix only updates rating columns to match their corresponding score columns — no score values are changed.
 
