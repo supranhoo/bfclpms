@@ -230,12 +230,12 @@ export default function ReconcileOrphanedKpisDialog({
               {/* Summary badges */}
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="secondary">{dryRunResult.count} KPI(s)</Badge>
+                  <Badge variant="secondary">{filteredAffected.length} KPI(s)</Badge>
                   {(() => {
-                    const orphaned = dryRunResult.affected.filter(a => a.reason === 'missing_stage_orphan').length;
-                    const completed = dryRunResult.affected.filter(a => a.reason === 'terminal_stage_completed').length;
-                    const mismatch = dryRunResult.affected.filter(a => a.reason === 'review_stage_mismatch').length;
-                    const notForwarded = dryRunResult.affected.filter(a => a.reason === 'current_stage_scored_not_forwarded').length;
+                    const orphaned = filteredAffected.filter(a => a.reason === 'missing_stage_orphan').length;
+                    const completed = filteredAffected.filter(a => a.reason === 'terminal_stage_completed').length;
+                    const mismatch = filteredAffected.filter(a => a.reason === 'review_stage_mismatch').length;
+                    const notForwarded = filteredAffected.filter(a => a.reason === 'current_stage_scored_not_forwarded').length;
                     return (
                       <>
                         {orphaned > 0 && <Badge variant="outline" className="text-xs bg-amber-50 dark:bg-amber-900/20">{orphaned} orphaned</Badge>}
