@@ -55,17 +55,19 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
   const createCategory = useCreateKraCategory();
 
   // Parse settings data
+  const currentMonthName = ['January','February','March','April','May','June','July','August','September','October','November','December'][new Date().getMonth()];
+
   const settings = useMemo(() => {
-    if (!settingsData) return { current_review_period: 'January', current_review_year: new Date().getFullYear() };
+    if (!settingsData) return { current_review_period: currentMonthName, current_review_year: new Date().getFullYear() };
     
     const periodSetting = settingsData.find(s => s.setting_key === 'current_review_period');
     const yearSetting = settingsData.find(s => s.setting_key === 'current_review_year');
     
     return {
-      current_review_period: periodSetting?.setting_value as string || 'January',
+      current_review_period: periodSetting?.setting_value as string || currentMonthName,
       current_review_year: yearSetting?.setting_value as number || new Date().getFullYear(),
     };
-  }, [settingsData]);
+  }, [settingsData, currentMonthName]);
 
   // Form state
   const [employeeId, setEmployeeId] = useState(defaultEmployeeId || '');
