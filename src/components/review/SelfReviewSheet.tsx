@@ -367,12 +367,7 @@ export function SelfReviewSheet({
     );
   };
 
-  const getRatingLevel = (score: number): RatingLevel => {
-    if (score >= 4) return 'blue';
-    if (score >= 3) return 'green';
-    if (score >= 2) return 'yellow';
-    return 'red';
-  };
+  // Use canonical scoreToRatingLevel from qualitativeUom (already imported on line 16)
 
   const handleSubmitMonthlyReview = async () => {
     if (!selectedKpi) return;
@@ -397,7 +392,7 @@ export function SelfReviewSheet({
     setIsSubmittingMonthly(true);
     try {
       const result = calculateScoreFromAchieved(effectiveScore, selectedKpi);
-      const selfRating = getRatingLevel(result.rating);
+      const selfRating = scoreToRatingLevel(result.rating);
       
       let defaultRemarks: string;
       if (hasNoEntries) {
@@ -481,7 +476,7 @@ export function SelfReviewSheet({
       ? null
       : isQualitativeKpi(selectedKpi)
         ? calculatedRatingLevel
-        : (calculatedScore !== null ? getRatingLevel(calculatedScore) : null);
+        : (calculatedScore !== null ? scoreToRatingLevel(calculatedScore) : null);
 
     await submitReview.mutateAsync({
       kpi_id: selectedKpi.id,
