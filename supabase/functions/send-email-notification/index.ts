@@ -723,6 +723,13 @@ const replacePlaceholders = (
   data: Record<string, string | number | undefined>
 ): string => {
   let result = template;
+
+  // Handle conditional blocks: {{#if_<role>}}...{{/if_<role>}}
+  const recipientRole = data.recipient_role ? String(data.recipient_role) : '';
+  result = result.replace(/\{\{#if_(\w+)\}\}([\s\S]*?)\{\{\/if_\1\}\}/g, (_match, role, content) => {
+    return recipientRole === role ? content : '';
+  });
+
   for (const [key, value] of Object.entries(data)) {
     result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), String(value || 'N/A'));
   }
