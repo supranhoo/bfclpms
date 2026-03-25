@@ -38,9 +38,9 @@ export const preWrapClass = 'whitespace-pre-wrap';
 export function getKpiSummaryText(text: string | null | undefined): string {
   if (!text) return '';
   const normalized = normalizeKpiText(text);
-  const formulaIdx = normalized.search(/formula/i);
+  const formulaIdx = normalized.search(/[-\s]*formula/i);
   if (formulaIdx > 0) return normalized.slice(0, formulaIdx).trim();
-  const logicIdx = normalized.search(/logic/i);
+  const logicIdx = normalized.search(/[-\s]*logic/i);
   if (logicIdx > 0) return normalized.slice(0, logicIdx).trim();
   return normalized;
 }
