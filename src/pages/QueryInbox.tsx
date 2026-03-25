@@ -362,7 +362,7 @@ export default function QueryInbox() {
 
     // Mark notification as read
     if (item.type === 'notification' && !item.isRead) {
-      markNotificationRead.mutate(item.id);
+      markNotificationRead.mutate({ notificationId: item.id, isRead: false });
     }
   }, [markNotificationRead]);
 
