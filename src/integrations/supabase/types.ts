@@ -3943,15 +3943,25 @@ export type Database = {
             Args: { p_is_na?: boolean; p_kpi_ratings: Json; p_remarks?: string }
             Returns: Json
           }
-      reconcile_workflow_statuses: {
-        Args: {
-          p_dry_run?: boolean
-          p_performed_by?: string
-          p_review_period?: string
-          p_review_year?: number
-        }
-        Returns: Json
-      }
+      reconcile_workflow_statuses:
+        | {
+            Args: {
+              p_dry_run?: boolean
+              p_performed_by?: string
+              p_review_period?: string
+              p_review_year?: number
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_dry_run?: boolean
+              p_performed_by?: string
+              p_review_period?: string
+              p_review_year?: number
+            }
+            Returns: Json
+          }
     }
     Enums: {
       app_role:
