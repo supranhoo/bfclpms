@@ -118,6 +118,48 @@ export function KpiJourneySection({
   const visibleStages = getVisibleStagesForLevel(viewLevel, effectiveStages);
   const globalIsNA = submission?.is_na || false;
 
+  // Fetch audit logs for the KPI
+  const { data: auditLogs = [] } = useQuery({
+    queryKey: ['kpi-journey-audit-logs', kpi.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('kpi_audit_logs')
+        .select('id, kpi_id, action, performed_by, on_behalf_of, on_behalf_role, old_value, new_value, metadata, created_at')
+        .eq('kpi_id', kpi.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!kpi.id,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Fetch performer profiles for audit logs
+  const auditUserIds = useMemo(() => {
+    const ids = auditLogs.map((l: any) => l.performed_by);
+    return [...new Set(ids)] as string[];
+  }, [auditLogs]);
+
+  const { data: auditProfiles = [] } = useQuery({
+    queryKey: ['kpi-journey-audit-profiles', auditUserIds],
+    queryFn: async () => {
+      if (auditUserIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', auditUserIds);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: auditUserIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const auditProfileMap = useMemo(
+    () => new Map(auditProfiles.map((p: any) => [p.id, p])),
+    [auditProfiles]
+  );
+
   // Resolve employee details: prefer props, fall back to fetched data
   const resolvedEmployeeName = employeeName || profileData?.fullName || '-';
   const resolvedEmployeeCode = employeeCode || profileData?.employeeCode || '-';
