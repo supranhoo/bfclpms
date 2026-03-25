@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeKpiText, preWrapClass } from './textFormatting';
+import { normalizeKpiText, preWrapClass, getKpiSummaryText } from './textFormatting';
 
 describe('normalizeKpiText', () => {
   describe('messy existing data (missing newlines)', () => {
