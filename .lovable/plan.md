@@ -1,34 +1,31 @@
 
 
-## Fix: Remove Anonymous Read Access from `system_settings`
+## Add "Scoring" as Truncation Keyword in `getKpiSummaryText`
 
-### Problem
-The `system_settings` table has an RLS policy `Allow anon to read settings` that grants unauthenticated users full read access. This table contains SMTP configuration, email templates, API keys (anon key), and operational parameters — none of which should be publicly readable.
+### Change
+Update `getKpiSummaryText` to truncate before "Scoring" as a fallback between "Formula" and "Logic".
 
-### Root Cause
-Migration `20260215055837` added `CREATE POLICY "Allow anon to read settings" ON system_settings FOR SELECT TO anon USING (true)`. This was likely added thinking DB triggers needed it, but all triggers reading `system_settings` (`send_email_on_notification`, etc.) already run as `SECURITY DEFINER` and bypass RLS entirely.
+**Priority order:** Formula → Scoring → Logic → full text
 
-### Why It's Safe to Remove
-- All client-side reads of `system_settings` happen on authenticated admin/settings pages (`useSystemSettings`, `useEmailNotificationSettings`, `useBackups`, `EmailTemplateEditor`)
-- The existing `Allow authenticated users to read settings` policy covers all legitimate use cases
-- DB trigger functions use `SECURITY DEFINER` — they don't go through RLS
-- The `app_settings` table (used on the login page) is a separate table with its own anon policy — unaffected
+### File: `src/lib/textFormatting.ts` (lines 38-46)
 
-### Changes
-
-**Database migration:**
-```sql
-DROP POLICY IF EXISTS "Allow anon to read settings" ON public.system_settings;
+```typescript
+export function getKpiSummaryText(text: string | null | undefined): string {
+  if (!text) return '';
+  const normalized = normalizeKpiText(text);
+  const formulaIdx = normalized.search(/[-\s]*formula/i);
+  if (formulaIdx > 0) return normalized.slice(0, formulaIdx).trim();
+  const scoringIdx = normalized.search(/[-\s]*scoring/i);
+  if (scoringIdx > 0) return normalized.slice(0, scoringIdx).trim();
+  const logicIdx = normalized.search(/[-\s]*logic/i);
+  if (logicIdx > 0) return normalized.slice(0, logicIdx).trim();
+  return normalized;
+}
 ```
 
-**`src/test/rls-policies.test.ts`:**
-- Move `system_settings` from the "public tables should allow unauthenticated reads" section to the "protected tables should deny unauthenticated reads" list
-- Remove the test that asserts anon can read `system_settings`
+### File: `src/lib/textFormatting.test.ts`
+Add test case for the new "Scoring" keyword truncation and update the existing "Logic" test that currently expects partial "Scoring" text in the output.
 
-### Files Modified
-- DB migration — drop the anon SELECT policy
-- `src/test/rls-policies.test.ts` — update test expectations
-
-### Risk
-None. No unauthenticated code path reads `system_settings`. All DB triggers bypass RLS via `SECURITY DEFINER`.
+### No other files affected
+The 3 dashboard/card files already call `getKpiSummaryText` — they'll automatically pick up the new behavior.
 
