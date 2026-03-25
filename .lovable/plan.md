@@ -1,16 +1,22 @@
 
 
-## Make Summary Badges Dynamic with Period Filter
+## Fix: Button Count Should Reflect Filtered Selection
 
 ### Problem
-The "827 KPI(s)" badge and the reason breakdown badges always show totals from the full dry-run result, even when a period filter is active. They should reflect the filtered count.
+When the scan runs, ALL KPIs are pre-selected (line 138). When the user filters by period, the table only shows the filtered subset, but the "Confirm & Reconcile" button still counts `selectedKpiIds.size` which includes selections from ALL periods. This is confusing — user sees 26 rows, unticks all but 1, yet the button says "802" because 776 are still selected in other periods.
 
 ### Fix in `src/components/admin/ReconcileOrphanedKpisDialog.tsx`
 
-Change the summary badges (lines 233-244) to use `filteredAffected` instead of `dryRunResult.affected` / `dryRunResult.count`:
+Two changes:
 
-- **Total badge**: `{filteredAffected.length} KPI(s)` instead of `{dryRunResult.count} KPI(s)`
-- **Reason breakdown badges**: Compute `orphaned`, `completed`, `mismatch`, `notForwarded` counts from `filteredAffected` instead of `dryRunResult.affected`
+1. **When filter changes, deselect KPIs not in the filtered view**: When `filterPeriod` changes, update `selectedKpiIds` to only keep IDs that are in the new filtered set. This way switching to "January 2026" auto-deselects all non-January KPIs.
 
-This is a ~4-line change in a single file.
+2. **Button denominator should use filtered count**: Change line 355 from `dryRunResult.count` to `filteredAffected.length` so the button reads "Confirm & Reconcile 1 of 26 KPI(s)" when filtering January.
+
+### Implementation
+- Add a `useEffect` on `filterPeriod` that intersects `selectedKpiIds` with the current `filteredAffected` IDs.
+- Update the button text to use `filteredAffected.length` as the denominator.
+
+### Files Changed
+- `src/components/admin/ReconcileOrphanedKpisDialog.tsx`
 
