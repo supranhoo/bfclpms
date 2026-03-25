@@ -1,25 +1,44 @@
 
 
-## Fix: Drop Duplicate `reconcile_workflow_statuses` Overload
+## RCA: `self_review` Missing from Branch 2b Normal Resting State Exclusion
 
 ### Root Cause
 
-Migration `20260325182832` accidentally created a second overload of `reconcile_workflow_statuses` with a different parameter order:
+The screenshot shows 77 KPIs at **Self Review** status being flagged as "Scored Not Forwarded" with a target of **Audit Review**. This is incorrect.
 
-- **Rogue overload**: `(p_dry_run boolean, p_review_period text, p_review_year integer, p_kpi_ids uuid[])`
-- **Canonical signature**: `(p_review_period text, p_review_year integer, p_dry_run boolean, p_performed_by uuid, p_kpi_ids uuid[])`
+**What happens in the architecture:**
+- Employee submits self-review → `self_score` is saved, status stays at `self_review`
+- The KPI now waits for the **manager** to act (score and forward)
+- `self_review` with a `self_score` is the **normal resting state** — the employee is done, the manager hasn't acted yet
 
-PostgreSQL treats different parameter orders as separate function overloads. PostgREST cannot choose between them when called with named parameters, producing the "Could not choose the best candidate function" error.
+**What Branch 2b does wrong:**
+The exclusion list at line 167 is:
+```sql
+IF v_kpi.current_status IN ('manager_check', 'skip_level_check', 'hr_pms_review', 'audit') THEN
+```
+
+`self_review` is **missing**. So the tool sees `self_review` + `self_score` exists → flags it as "scored not forwarded" → recommends jumping to audit. This skips the manager review entirely.
 
 ### Fix
 
-**1 file: DB migration**
+**1 file: DB migration** — Add `'self_review'` to the Branch 2b exclusion list:
 
-1. `DROP FUNCTION` the rogue 4-parameter overload: `(boolean, text, integer, uuid[])`
-2. Re-create the canonical 5-parameter function with the latest Branch 2b logic (including `audit` in the normal resting state exclusion)
+```sql
+IF v_kpi.current_status IN ('self_review', 'manager_check', 'skip_level_check', 'hr_pms_review', 'audit') THEN
+```
 
-This ensures only one function signature exists, eliminating the PostgREST ambiguity error.
+This ensures KPIs waiting for the next reviewer after the current stage's score has been entered are recognized as normal in-progress items.
+
+### Complete Exclusion Table After Fix
+
+| Status | Score field present | Meaning | Excluded? |
+|--------|-------------------|---------|-----------|
+| `self_review` | `self_score` | Employee submitted, waiting for manager | ✅ **Adding** |
+| `manager_check` | `manager_score` | Manager scored, waiting for next reviewer | ✅ Already |
+| `skip_level_check` | `skip_level_score` | Skip-level scored, waiting | ✅ Already |
+| `hr_pms_review` | `hr_pms_score` | HR scored, waiting | ✅ Already |
+| `audit` | `auditor_score` | Auditor scored, waiting | ✅ Already |
 
 ### Files Changed
-1. **DB migration** — Drop rogue overload, re-create canonical function
+1. **DB migration** — Add `'self_review'` to the IN clause in Branch 2b's normal resting state check
 
