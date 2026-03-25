@@ -1501,9 +1501,27 @@ export function exportReviewTimelinePdf(data: ReviewTimelinePdfData): void {
     doc.text('REVIEW TIMELINE', margin, y + 4);
     y += 10;
 
+    const lineH = 3.5; // line height in mm for detail text
+    const headerH = 7; // header line height
+    const performerH = 5; // performer line height
+    const padTop = 4;
+    const padBottom = 4;
+    const detailMaxW = contentWidth - 12; // inner width for detail bullets
+    const labelMaxW = contentWidth - 50; // leave room for date on right
+
     for (const log of data.auditLogs) {
-      // Estimate row height: header (10) + details (4 each) + padding (6)
-      const rowHeight = 16 + log.details.length * 4;
+      // Calculate wrapped lines for each detail
+      doc.setFontSize(6.5);
+      const wrappedDetails: string[][] = log.details.map(d =>
+        doc.splitTextToSize(`• ${d}`, detailMaxW) as string[]
+      );
+      const totalDetailLines = wrappedDetails.reduce((s, lines) => s + lines.length, 0);
+
+      // Calculate wrapped label
+      doc.setFontSize(8);
+      const wrappedLabel = doc.splitTextToSize(log.label, labelMaxW) as string[];
+
+      const rowHeight = padTop + (wrappedLabel.length * headerH) + performerH + (totalDetailLines * lineH) + padBottom;
 
       if (y + rowHeight > pageHeight - 20) {
         doc.addPage();
@@ -1515,32 +1533,39 @@ export function exportReviewTimelinePdf(data: ReviewTimelinePdfData): void {
       doc.setFillColor(250, 250, 252);
       doc.roundedRect(margin, y, contentWidth, rowHeight, 2, 2, 'FD');
 
-      // Action label (bold)
+      let innerY = y + padTop;
+
+      // Action label (bold, wrapped)
       doc.setFontSize(8);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(...COLORS.black);
-      doc.text(log.label, margin + 4, y + 7);
+      for (const line of wrappedLabel) {
+        innerY += 4;
+        doc.text(line, margin + 4, innerY);
+      }
 
-      // Date (right-aligned)
+      // Date (right-aligned, on first label line)
       doc.setFontSize(7);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(...COLORS.grayMedium);
-      doc.text(log.date, margin + contentWidth - 4, y + 7, { align: 'right' });
+      doc.text(log.date, margin + contentWidth - 4, y + padTop + 4, { align: 'right' });
 
       // Performer
+      innerY += performerH;
       doc.setFontSize(7);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(...COLORS.grayMedium);
-      doc.text(`by ${log.performerName}`, margin + 4, y + 13);
+      doc.text(`by ${log.performerName}`, margin + 4, innerY);
 
-      // Detail bullet points
-      let detailY = y + 13;
-      for (const detail of log.details) {
-        detailY += 4;
-        doc.setFontSize(6.5);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(...COLORS.black);
-        doc.text(`• ${truncateText(detail, 90)}`, margin + 6, detailY);
+      // Detail bullet points (wrapped)
+      doc.setFontSize(6.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...COLORS.black);
+      for (const lines of wrappedDetails) {
+        for (const line of lines) {
+          innerY += lineH;
+          doc.text(line, margin + 6, innerY);
+        }
       }
 
       y += rowHeight + 2;
