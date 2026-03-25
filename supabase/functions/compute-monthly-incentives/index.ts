@@ -14,7 +14,7 @@ serve(async (req) => {
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    const { review_period, review_year, program_id } = await req.json();
+    const { review_period, review_year, program_id, dry_run = false } = await req.json();
     if (!review_period || !review_year) {
       return new Response(JSON.stringify({ error: 'review_period and review_year required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
@@ -336,7 +336,29 @@ serve(async (req) => {
       computed++;
     }
 
-    // 6. Upsert records
+    // 6. Compute summary stats
+    const eligible = records.filter((r: any) => !r.is_disqualified);
+    const disqualified = records.filter((r: any) => r.is_disqualified);
+    const avgIncentive = eligible.length > 0
+      ? eligible.reduce((s: number, r: any) => s + r.final_incentive_percent, 0) / eligible.length
+      : 0;
+
+    const summary = {
+      total: records.length,
+      eligible: eligible.length,
+      disqualified: disqualified.length,
+      avg_incentive_percent: Math.round(avgIncentive * 100) / 100,
+    };
+
+    // In dry_run mode, return preview without writing
+    if (dry_run) {
+      return new Response(
+        JSON.stringify({ computed, program: program.name, dry_run: true, summary, records }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Upsert records
     if (records.length > 0) {
       const batchSize = 100;
       for (let i = 0; i < records.length; i += batchSize) {
@@ -349,7 +371,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ computed, program: program.name }),
+      JSON.stringify({ computed, program: program.name, summary }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (err) {

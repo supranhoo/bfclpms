@@ -65,3 +65,39 @@ export function usePendingAdjustmentCount() {
     },
   });
 }
+
+export function useComputeIncentives() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: async (body: { review_period: string; review_year: number; program_id: string; dry_run?: boolean }) => {
+      const { data, error } = await supabase.functions.invoke('compute-monthly-incentives', { body });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_data, variables) => {
+      if (!variables.dry_run) {
+        qc.invalidateQueries({ queryKey: ['incentive-records'] });
+        toast({ title: 'Incentives computed', description: `${_data.computed} record(s) processed` });
+      }
+    },
+    onError: (e: Error) => toast({ title: 'Computation failed', description: e.message, variant: 'destructive' }),
+  });
+}
+
+export function useDetectRetroactiveChanges() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: async (body: { review_period: string; review_year: number; program_id?: string }) => {
+      const { data, error } = await supabase.functions.invoke('detect-retroactive-incentive-changes', { body });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['incentive-revisions'] });
+      toast({ title: 'Detection complete', description: `${data.revisions_created} revision(s) found` });
+    },
+    onError: (e: Error) => toast({ title: 'Detection failed', description: e.message, variant: 'destructive' }),
+  });
+}
