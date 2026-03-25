@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS "Allow anon to read settings" ON public.system_settings;

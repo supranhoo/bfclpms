@@ -38,6 +38,7 @@ describe('RLS Policies — Unauthenticated Access', () => {
       'workflow_templates',
       'kra_categories',
       'review_periods',
+      'system_settings',
       'modules',
       'training_needs',
       'performance_improvement_plans',
