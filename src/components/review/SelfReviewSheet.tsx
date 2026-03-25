@@ -274,13 +274,13 @@ export function SelfReviewSheet({
       const scope = selectedKpi.org_level_scope || 'employee';
       let orgKey: string;
       if (scope === 'organization') {
-        orgKey = `${selectedKpi.category_id}||${selectedKpi.kra_name}||${selectedKpi.kpi_name}||null||null`;
+        orgKey = `${selectedKpi.category_id}||${selectedKpi.kra_name.toLowerCase()}||${selectedKpi.kpi_name.toLowerCase()}||null||null`;
       } else if (scope === 'department') {
         const deptId = profile?.department_id || 'null';
-        orgKey = `${selectedKpi.category_id}||${selectedKpi.kra_name}||${selectedKpi.kpi_name}||${deptId}||null`;
+        orgKey = `${selectedKpi.category_id}||${selectedKpi.kra_name.toLowerCase()}||${selectedKpi.kpi_name.toLowerCase()}||${deptId}||null`;
       } else {
         const empId = profile?.id || 'null';
-        orgKey = `${selectedKpi.category_id}||${selectedKpi.kra_name}||${selectedKpi.kpi_name}||null||${empId}`;
+        orgKey = `${selectedKpi.category_id}||${selectedKpi.kra_name.toLowerCase()}||${selectedKpi.kpi_name.toLowerCase()}||null||${empId}`;
       }
       const orgValue = selectedKpi.is_org_level ? orgKpiValuesMap.get(orgKey) || null : null;
       const prefilledValue = orgValue?.achieved_value ?? existing?.achieved_value;
@@ -505,13 +505,13 @@ export function SelfReviewSheet({
   const isSelectedKpiOrgLevel = selectedKpi?.is_org_level || false;
   const orgKey = (() => {
     const scope = selectedKpi.org_level_scope || 'employee';
-    if (scope === 'organization') return `${selectedKpi.category_id}||${selectedKpi.kra_name}||${selectedKpi.kpi_name}||null||null`;
+    if (scope === 'organization') return `${selectedKpi.category_id}||${selectedKpi.kra_name.toLowerCase()}||${selectedKpi.kpi_name.toLowerCase()}||null||null`;
     if (scope === 'department') {
       const deptId = profile?.department_id || 'null';
-      return `${selectedKpi.category_id}||${selectedKpi.kra_name}||${selectedKpi.kpi_name}||${deptId}||null`;
+      return `${selectedKpi.category_id}||${selectedKpi.kra_name.toLowerCase()}||${selectedKpi.kpi_name.toLowerCase()}||${deptId}||null`;
     }
     const empId = profile?.id || 'null';
-    return `${selectedKpi.category_id}||${selectedKpi.kra_name}||${selectedKpi.kpi_name}||null||${empId}`;
+    return `${selectedKpi.category_id}||${selectedKpi.kra_name.toLowerCase()}||${selectedKpi.kpi_name.toLowerCase()}||null||${empId}`;
   })();
   const selectedKpiOrgValue = isSelectedKpiOrgLevel ? orgKpiValuesMap.get(orgKey) || null : null;
   const hasOrgData = isSelectedKpiOrgLevel && selectedKpiOrgValue?.achieved_value != null;

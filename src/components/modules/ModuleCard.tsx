@@ -1,3 +1,4 @@
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
@@ -33,7 +34,7 @@ const iconMap: Record<string, LucideIcon> = {
   Settings,
 };
 
-export function ModuleCard({
+export const ModuleCard = React.forwardRef<HTMLDivElement, ModuleCardProps>(function ModuleCard({
   code,
   name,
   description,
@@ -41,7 +42,7 @@ export function ModuleCard({
   color,
   route,
   isComingSoon = false,
-}: ModuleCardProps) {
+}, ref) {
   const navigate = useNavigate();
   const IconComponent = iconMap[icon] || Target;
 
@@ -53,6 +54,7 @@ export function ModuleCard({
 
   return (
     <Card
+      ref={ref}
       className={cn(
         'relative overflow-hidden transition-all duration-300 cursor-pointer group',
         'hover:shadow-lg hover:scale-[1.02] hover:border-primary/50',
@@ -87,4 +89,4 @@ export function ModuleCard({
       </CardContent>
     </Card>
   );
-}
+});
