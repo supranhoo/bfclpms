@@ -33,7 +33,7 @@ const iconMap: Record<string, LucideIcon> = {
   Settings,
 };
 
-export function ModuleCard({
+export const ModuleCard = React.forwardRef<HTMLDivElement, ModuleCardProps>(function ModuleCard({
   code,
   name,
   description,
@@ -41,7 +41,7 @@ export function ModuleCard({
   color,
   route,
   isComingSoon = false,
-}: ModuleCardProps) {
+}, ref) {
   const navigate = useNavigate();
   const IconComponent = iconMap[icon] || Target;
 
