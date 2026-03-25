@@ -94,6 +94,7 @@ export default function QueryInbox() {
     search: filters.search,
     readStatus: filters.readStatus,
     dateRange: filters.dateRange,
+    type: filters.notificationType,
   }), [filters]);
 
   const {
