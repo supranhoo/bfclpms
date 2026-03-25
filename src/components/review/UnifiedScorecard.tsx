@@ -1077,6 +1077,7 @@ export function UnifiedScorecard({
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       toast({ title: approve ? 'N/A KPI approved' : 'N/A KPI confirmed' });
       setReviewSheetOpen(false);
+      clearDraft(selectedKpi.id);
       return;
     }
     
