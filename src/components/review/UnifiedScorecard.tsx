@@ -649,6 +649,7 @@ export function UnifiedScorecard({
           : 'Review saved'
       });
       setReviewSheetOpen(false);
+      if (selectedKpi) clearDraft(selectedKpi.id);
     },
     onError: (error: Error) => {
       toast({ title: 'Failed to submit review', description: error.message, variant: 'destructive' });
@@ -966,6 +967,7 @@ export function UnifiedScorecard({
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       toast({ title: 'KPI marked as N/A and forwarded' });
       setReviewSheetOpen(false);
+      clearDraft(selectedKpi.id);
       return;
     }
     
