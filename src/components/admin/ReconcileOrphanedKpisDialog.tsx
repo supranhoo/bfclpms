@@ -91,6 +91,21 @@ export default function ReconcileOrphanedKpisDialog({
   const [selectedKpiIds, setSelectedKpiIds] = useState<Set<string>>(new Set());
   const [filterPeriod, setFilterPeriod] = useState('all');
 
+  // When filter changes, narrow selection to only visible KPIs
+  const handleFilterChange = (value: string) => {
+    setFilterPeriod(value);
+    if (!dryRunResult) return;
+    const filtered = value === 'all'
+      ? dryRunResult.affected
+      : dryRunResult.affected.filter(a => a.review_period && a.review_year && `${a.review_period} ${a.review_year}` === value);
+    const filteredIds = new Set(filtered.map(a => a.kpi_id));
+    setSelectedKpiIds(prev => {
+      const next = new Set<string>();
+      prev.forEach(id => { if (filteredIds.has(id)) next.add(id); });
+      return next.size > 0 ? next : filteredIds;
+    });
+  };
+
   const periodOptions = useMemo(() => {
     if (!dryRunResult) return [];
     const set = new Set<string>();
@@ -249,7 +264,7 @@ export default function ReconcileOrphanedKpisDialog({
                 {periodOptions.length > 1 && (
                   <div className="flex items-center gap-1.5">
                     <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-                    <Select value={filterPeriod} onValueChange={setFilterPeriod}>
+                    <Select value={filterPeriod} onValueChange={handleFilterChange}>
                       <SelectTrigger className="h-8 w-[160px] text-xs">
                         <SelectValue placeholder="All Periods" />
                       </SelectTrigger>
@@ -352,7 +367,7 @@ export default function ReconcileOrphanedKpisDialog({
                 ) : (
                   <CheckCircle2 className="h-4 w-4" />
                 )}
-                Confirm & Reconcile {selectedKpiIds.size} of {dryRunResult.count} KPI(s)
+                Confirm & Reconcile {selectedKpiIds.size} of {filteredAffected.length} KPI(s)
               </Button>
             )}
             <Button variant="outline" onClick={() => { setDialogOpen(false); setDryRunResult(null); setExecuted(false); setSelectedKpiIds(new Set()); setFilterPeriod('all'); }}>
