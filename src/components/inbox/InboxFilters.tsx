@@ -46,6 +46,7 @@ const NOTIFICATION_TYPES = [
   { value: 'query_raised', label: 'Query Raised' },
   { value: 'query_resolved', label: 'Query Resolved' },
   { value: 'query_responded', label: 'Query Responded' },
+  { value: 'observation_mention', label: '@Mentioned' },
 ];
 
 export function InboxFilters({ filters, onFiltersChange, totalCount, showingCount, activeTab = 'notifications' }: InboxFiltersProps) {
