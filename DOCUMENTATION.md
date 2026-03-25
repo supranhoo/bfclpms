@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-03-24  
-> **Version:** 1.86.0 — Added RLS policies so employees can see Data Owner and Data Entered By names; fixed case-sensitivity bug in AuditScorecard org KPI value lookup
+> **Last Updated:** 2026-03-25  
+> **Version:** 1.87.0 — Repaired 25 legacy rating/score mismatches across hr_pms/management/auditor/final levels; capped score=22 anomaly; added auto_compute_rating_and_clamp_scores trigger to prevent future mismatches and enforce 0-5 score range
 > **Maintainer:** Lovable AI
 
 ---
