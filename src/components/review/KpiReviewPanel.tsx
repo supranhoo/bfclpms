@@ -25,6 +25,11 @@ interface KpiReviewPanelProps {
   selectedPeriod: string;
   selectedYear: number;
 
+  // Employee info for PDF export
+  employeeName?: string;
+  employeeCode?: string;
+  reportingManagerName?: string;
+
   // Callbacks
   onOpenQueryHistory?: () => void;
   onOpenFullHistory?: () => void;
@@ -44,6 +49,9 @@ export function KpiReviewPanel({
   currentUserId,
   selectedPeriod,
   selectedYear,
+  employeeName,
+  employeeCode,
+  reportingManagerName,
   onOpenQueryHistory,
   onOpenFullHistory,
   onOpenTimeline,
@@ -89,6 +97,9 @@ export function KpiReviewPanel({
             viewLevel={viewLevel}
             onOpenQueryHistory={onOpenQueryHistory}
             workflowStages={workflowStages}
+            employeeName={employeeName}
+            employeeCode={employeeCode}
+            reportingManagerName={reportingManagerName}
           />
           
           <KpiObservationsSection
