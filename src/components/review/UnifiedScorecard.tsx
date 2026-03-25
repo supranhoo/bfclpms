@@ -869,7 +869,42 @@ export function UnifiedScorecard({
     setMarkNaRemarks('');
     setNaOverridden(false);
     setOverrideNaRemarks('');
+
+    // Check for saved draft
+    const draftKey = `review-draft-${kpi.id}-${viewLevel}`;
+    try {
+      const savedDraft = sessionStorage.getItem(draftKey);
+      if (savedDraft) {
+        const draft = JSON.parse(savedDraft);
+        if (draft.score !== undefined) setReviewerScore(draft.score);
+        if (draft.remarks) setReviewerRemarks(draft.remarks);
+        if (draft.achievedValue !== undefined) setReviewerAchievedValue(draft.achievedValue);
+        if (draft.evidenceUrls) setReviewerEvidenceUrls(draft.evidenceUrls);
+        console.log('[draft] Restored review draft for KPI:', kpi.id);
+      }
+    } catch { /* ignore parse errors */ }
+
     setReviewSheetOpen(true);
+  };
+
+  // Auto-save draft when review state changes
+  useEffect(() => {
+    if (!reviewSheetOpen || !selectedKpi) return;
+    const draftKey = `review-draft-${selectedKpi.id}-${viewLevel}`;
+    try {
+      sessionStorage.setItem(draftKey, JSON.stringify({
+        score: reviewerScore,
+        remarks: reviewerRemarks,
+        achievedValue: reviewerAchievedValue,
+        evidenceUrls: reviewerEvidenceUrls,
+        savedAt: Date.now(),
+      }));
+    } catch { /* sessionStorage full — ignore */ }
+  }, [reviewSheetOpen, selectedKpi?.id, reviewerScore, reviewerRemarks, reviewerAchievedValue, reviewerEvidenceUrls, viewLevel]);
+
+  // Clear draft on successful submit
+  const clearDraft = (kpiId: string) => {
+    try { sessionStorage.removeItem(`review-draft-${kpiId}-${viewLevel}`); } catch { /* ignore */ }
   };
 
   // Handle submit review
