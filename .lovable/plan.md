@@ -1,25 +1,56 @@
 
 
-## Limit Table Display to 20 & Add Employee Search
+## Add Audit Log Timeline to Review Timeline PDF
+
+### Problem
+The "Review Timeline" dialog shows a full audit history (status changes, rollbacks, auto-scoring, admin overrides, etc.) from the `kpi_audit_logs` table, but the PDF export only includes the review stage cards. The user expects the PDF to match what they see in the dialog.
 
 ### Changes
 
-**File: `src/pages/admin/AllKpis.tsx`**
+**1. Update `src/components/review/KpiJourneySection.tsx`**
+- Fetch audit logs for the KPI (same query as `KpiTimeline.tsx`: from `kpi_audit_logs` ordered by `created_at desc`)
+- Fetch performer profiles for the logs
+- Pass the audit log entries as a new `auditLogs` array to the PDF export function
+- Each entry: `{ action, label, performerName, date, details[] }`
 
-1. **Reduce default visible count from 50 to 20** — Change `useState(50)` on line 66 to `useState(20)`, and update the reset logic on line 329 to also use 20.
+**2. Update `src/lib/pdfExport.ts`**
+- Extend `ReviewTimelinePdfData` with an optional `auditLogs` array:
+  ```typescript
+  auditLogs?: Array<{
+    label: string;
+    performerName: string;
+    date: string;
+    details: string[];
+  }>;
+  ```
+- After the review stages grid, add a new "REVIEW TIMELINE" section that renders each audit log entry as a compact row with:
+  - Action label (bold)
+  - "by {performer}" and date (right-aligned)
+  - Detail bullet points below
+  - Page break handling for long timelines
 
-2. **Add employee search filter** — Add a new `searchEmployee` state. Place a search input in the Filters section (the `rounded-lg border bg-card p-4` block) that filters by employee name or code. Apply the search filter to `employeeData` before slicing for display:
-   ```
-   const displayData = employeeData.filter(emp =>
-     emp.employeeName.toLowerCase().includes(searchEmployee) ||
-     emp.employeeCode.toLowerCase().includes(searchEmployee)
-   );
-   ```
+**3. Reuse `formatDetails` logic**
+- Extract the `formatDetails` function from `KpiTimeline.tsx` into a shared utility (or duplicate inline in the journey section) so the PDF gets the same detail text (status changes, scores, reasons, etc.)
 
-3. **Update the table rendering** to use `displayData` instead of `employeeData` for the row loop and the card description count.
+### Layout in PDF
+After the existing review stage cards grid:
+```
+REVIEW TIMELINE
+┌──────────────────────────────────────────────────┐
+│ PENALTY ROLLBACK              23 Mar 2026, 08:01 │
+│ by Nitesh Kumar Baldwa                           │
+│ • Admin Reason: Rollback: sent-back KPI was...   │
+│ • New Status: Self Review                        │
+├──────────────────────────────────────────────────┤
+│ Status Changed                23 Mar 2026, 08:00 │
+│ by Nitesh Kumar Baldwa                           │
+│ • New Status: Self Review                        │
+├──────────────────────────────────────────────────┤
+│ SYSTEM AUTO SCORED            21 Mar 2026, 11:49 │
+│ by Jaspal                                        │
+│ • New Status: Approved                           │
+└──────────────────────────────────────────────────┘
+```
 
-4. **Include search in active filters count** and clear it in `resetFilters`.
-
-### Layout
-The search input will be added as a full-width row above the existing 5-column filter grid, with a `Search` icon and placeholder "Search employee by name or code...".
+Each entry is a bordered row, with automatic page breaks. This matches the dialog UI the user sees.
 
