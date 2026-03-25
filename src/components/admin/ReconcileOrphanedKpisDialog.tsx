@@ -63,12 +63,6 @@ const REASON_CONFIG: Record<string, { label: string; description: string; color:
     color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
     icon: CheckCircle2,
   },
-  terminal_stage_unreviewed: {
-    label: 'Terminal Unreviewed',
-    description: 'At final stage without reviewer score',
-    color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-    icon: RotateCcw,
-  },
   review_stage_mismatch: {
     label: 'Stage Mismatch',
     description: 'Review data exists but status is behind',
@@ -225,7 +219,7 @@ export default function ReconcileOrphanedKpisDialog({
                     <>
                       {orphaned > 0 && <Badge variant="outline" className="text-xs bg-amber-50 dark:bg-amber-900/20">{orphaned} orphaned</Badge>}
                       {completed > 0 && <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-900/20">{completed} terminal→approved</Badge>}
-                      {unreviewed > 0 && <Badge variant="outline" className="text-xs bg-blue-50 dark:bg-blue-900/20">{unreviewed} terminal→reopened</Badge>}
+                      
                   {mismatch > 0 && <Badge variant="outline" className="text-xs bg-purple-50 dark:bg-purple-900/20">{mismatch} stage mismatch</Badge>}
                       {(() => {
                         const notForwarded = dryRunResult.affected.filter(a => a.reason === 'current_stage_scored_not_forwarded').length;
