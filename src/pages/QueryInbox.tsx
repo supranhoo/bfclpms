@@ -116,7 +116,7 @@ export default function QueryInbox() {
     loadMore: loadMoreSnoozed,
   } = usePaginatedNotifications({ pageSize: 20, filters: notificationFilters, showSnoozed: true });
 
-  const markNotificationRead = useMarkNotificationRead();
+  const markNotificationRead = useToggleNotificationRead();
   const markAllRead = useMarkAllNotificationsRead();
 
   const { data: unreadNotificationsCount = 0 } = useUnreadNotificationCount();
@@ -367,8 +367,8 @@ export default function QueryInbox() {
   }, [markNotificationRead]);
 
   const handleMarkRead = useCallback((item: InboxItem) => {
-    if (item.type === 'notification' && !item.isRead) {
-      markNotificationRead.mutate(item.id);
+    if (item.type === 'notification') {
+      markNotificationRead.mutate({ notificationId: item.id, isRead: item.isRead });
     }
   }, [markNotificationRead]);
 
