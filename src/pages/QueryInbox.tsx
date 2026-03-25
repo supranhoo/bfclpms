@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { usePaginatedNotifications, useMarkNotificationRead, useMarkAllNotificationsRead, NotificationFilters } from '@/hooks/usePaginatedNotifications';
+import { usePaginatedNotifications, useToggleNotificationRead, useMarkAllNotificationsRead, NotificationFilters } from '@/hooks/usePaginatedNotifications';
 import { useUnreadNotificationCount } from '@/hooks/useNotifications';
 import { useSnoozeNotification, useUnsnoozeNotification } from '@/hooks/useSnoozeNotification';
 import { useRespondToQuery, useAcceptQueryResponse, useSubordinateQueries, QueryStatusExtended } from '@/hooks/useQueryWorkflow';
@@ -116,7 +116,7 @@ export default function QueryInbox() {
     loadMore: loadMoreSnoozed,
   } = usePaginatedNotifications({ pageSize: 20, filters: notificationFilters, showSnoozed: true });
 
-  const markNotificationRead = useMarkNotificationRead();
+  const markNotificationRead = useToggleNotificationRead();
   const markAllRead = useMarkAllNotificationsRead();
 
   const { data: unreadNotificationsCount = 0 } = useUnreadNotificationCount();
@@ -362,13 +362,13 @@ export default function QueryInbox() {
 
     // Mark notification as read
     if (item.type === 'notification' && !item.isRead) {
-      markNotificationRead.mutate(item.id);
+      markNotificationRead.mutate({ notificationId: item.id, isRead: false });
     }
   }, [markNotificationRead]);
 
   const handleMarkRead = useCallback((item: InboxItem) => {
-    if (item.type === 'notification' && !item.isRead) {
-      markNotificationRead.mutate(item.id);
+    if (item.type === 'notification') {
+      markNotificationRead.mutate({ notificationId: item.id, isRead: item.isRead });
     }
   }, [markNotificationRead]);
 

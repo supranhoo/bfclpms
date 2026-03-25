@@ -117,7 +117,14 @@ export function InboxRowItem({ item, onView, onMarkRead, onNavigate, onToggleExp
           </Badge>
         )}
         {item.type === 'notification' && (
-          <Badge variant="outline" className={cn('text-xs', item.isRead ? 'text-muted-foreground' : 'text-primary border-primary')}>
+          <Badge
+            variant="outline"
+            className={cn('text-xs cursor-pointer hover:bg-muted transition-colors', item.isRead ? 'text-muted-foreground' : 'text-primary border-primary')}
+            onClick={(e) => {
+              e.stopPropagation();
+              onMarkRead?.(item);
+            }}
+          >
             {item.isRead ? 'Read' : 'Unread'}
           </Badge>
         )}
