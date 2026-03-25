@@ -60,6 +60,81 @@ export function useSendBackOrgKpiValue() {
         }));
 
         await supabase.from('notifications').insert(notifications);
+
+        // 3b. Send emails to data owners
+        const ownerIds = owners.map(o => o.owner_id);
+        const { data: ownerProfiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', ownerIds);
+
+        if (ownerProfiles) {
+          for (const profile of ownerProfiles) {
+            supabase.functions.invoke('send-email-notification', {
+              body: {
+                event_type: 'org_kpi_sent_back',
+                recipient_email: profile.email,
+                recipient_name: profile.full_name || profile.email,
+                kpi_name: kpiName,
+                kra_name: kraName,
+                send_back_reason: reason,
+                recipient_role: 'data_owner',
+              },
+            }).catch(err => console.error('Failed to send email to data owner:', err));
+          }
+        }
+      }
+
+      // 3c. Notify affected employees (those who have this org KPI)
+      const { data: affectedKpis } = await supabase
+        .from('kpis')
+        .select('employee_id')
+        .eq('category_id', categoryId)
+        .eq('kra_name', kraName)
+        .eq('kpi_name', kpiName)
+        .eq('is_org_level', true);
+
+      if (affectedKpis && affectedKpis.length > 0) {
+        const uniqueEmployeeIds = [...new Set(affectedKpis.map(k => k.employee_id))];
+
+        // Insert app notifications for employees
+        const empNotifications = uniqueEmployeeIds.map(empId => ({
+          user_id: empId,
+          type: 'org_kpi_sent_back',
+          title: 'Org KPI Data Under Revision',
+          message: `The org-level value for "${kpiName}" has been sent back for revision. You will be notified once it is resubmitted.`,
+          metadata: {
+            org_value_id: orgValueId,
+            category_id: categoryId,
+            kra_name: kraName,
+            kpi_name: kpiName,
+            reason,
+          },
+        }));
+
+        await supabase.from('notifications').insert(empNotifications);
+
+        // 3d. Send emails to affected employees
+        const { data: empProfiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', uniqueEmployeeIds);
+
+        if (empProfiles) {
+          for (const profile of empProfiles) {
+            supabase.functions.invoke('send-email-notification', {
+              body: {
+                event_type: 'org_kpi_sent_back',
+                recipient_email: profile.email,
+                recipient_name: profile.full_name || profile.email,
+                kpi_name: kpiName,
+                kra_name: kraName,
+                send_back_reason: reason,
+                recipient_role: 'employee',
+              },
+            }).catch(err => console.error('Failed to send email to employee:', err));
+          }
+        }
       }
 
       // 4. Log audit trail

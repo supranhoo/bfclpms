@@ -448,13 +448,12 @@ Please check your dashboard for updated details.`,
     subject: '[PMS] Org KPI Data Sent Back for Revision',
     body: `Hi {{recipient_name}},
 
-The org KPI data you submitted has been sent back for revision.
+{{#if_data_owner}}The org KPI data you submitted has been sent back for revision. Please review the feedback and resubmit the corrected data.{{/if_data_owner}}{{#if_employee}}The org-level data for your KPI has been sent back for revision by the reviewer. You will be notified once the data owner resubmits the corrected value.{{/if_employee}}
 
+KRA: {{kra_name}}
 KPI: {{kpi_name}}
 Period: {{review_period}} {{review_year}}
-Reason: {{send_back_reason}}
-
-Please review the feedback and resubmit the data.`,
+Reason: {{send_back_reason}}`,
   },
   password_rollout: {
     subject: '[PMS] Your Login Credentials',
