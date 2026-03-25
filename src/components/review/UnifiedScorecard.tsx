@@ -1036,6 +1036,7 @@ export function UnifiedScorecard({
         queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
         toast({ title: 'N/A overridden — KPI scored and forwarded' });
         setReviewSheetOpen(false);
+        clearDraft(selectedKpi.id);
         return;
       }
       
