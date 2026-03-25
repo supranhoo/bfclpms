@@ -24,7 +24,8 @@ import { KraIssuanceConfirmDialog } from '@/components/admin/KraIssuanceConfirmD
 import { ScoringHealthCheck } from '@/components/admin/ScoringHealthCheck';
 import { getPreviousStatus } from '@/hooks/useAdminDataEntry';
 import { getCalendarMonthsForPeriod, MONTH_NAMES } from '@/hooks/useAdminReports';
-import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building, Library, ChevronDown, ChevronRight, Edit, Building as BuildingIcon, PenLine, CalendarDays, Copy, Trash2, Undo2, Send, CheckCircle, ArrowUp } from 'lucide-react';
+import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building, Library, ChevronDown, ChevronRight, Edit, Building as BuildingIcon, PenLine, CalendarDays, Copy, Trash2, Undo2, Send, CheckCircle, ArrowUp, Search } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -63,7 +64,8 @@ export default function AllKpis() {
 
   // Scroll-to-top visibility
   const [showScrollTop, setShowScrollTop] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(50);
+  const [visibleCount, setVisibleCount] = useState(20);
+  const [searchEmployee, setSearchEmployee] = useState('');
   useEffect(() => {
     const handleScroll = () => setShowScrollTop(window.scrollY > 300);
     window.addEventListener('scroll', handleScroll);
@@ -318,7 +320,17 @@ export default function AllKpis() {
 
   // Check if any filters are active
   const hasActiveFilters = selectedManager !== 'all' || selectedDepartment !== 'all' || 
-    selectedDivision !== 'all' || selectedPeriod !== 'all' || selectedYear !== 'all';
+    selectedDivision !== 'all' || selectedPeriod !== 'all' || selectedYear !== 'all' || searchEmployee.trim() !== '';
+
+  // Filter employeeData by search term
+  const displayData = useMemo(() => {
+    if (!searchEmployee.trim()) return employeeData;
+    const term = searchEmployee.toLowerCase().trim();
+    return employeeData.filter(emp =>
+      emp.employeeName.toLowerCase().includes(term) ||
+      emp.employeeCode.toLowerCase().includes(term)
+    );
+  }, [employeeData, searchEmployee]);
 
   const resetFilters = () => {
     setSelectedManager('all');
@@ -326,7 +338,8 @@ export default function AllKpis() {
     setSelectedDivision('all');
     setSelectedPeriod('all');
     setSelectedYear('all');
-    setVisibleCount(50);
+    setSearchEmployee('');
+    setVisibleCount(20);
   };
 
   const { toast } = useToast();
@@ -483,7 +496,7 @@ export default function AllKpis() {
             <span className="text-sm font-medium text-foreground">Filters</span>
             {hasActiveFilters && (
               <Badge variant="secondary" className="text-xs">
-                {[selectedManager, selectedDepartment, selectedDivision, selectedPeriod, selectedYear].filter(v => v !== 'all').length} active
+                {[selectedManager, selectedDepartment, selectedDivision, selectedPeriod, selectedYear].filter(v => v !== 'all').length + (searchEmployee.trim() ? 1 : 0)} active
               </Badge>
             )}
           </div>
@@ -492,6 +505,15 @@ export default function AllKpis() {
               Reset
             </Button>
           )}
+        </div>
+        <div className="relative mb-3">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search employee by name or code..."
+            className="pl-10 h-9"
+            value={searchEmployee}
+            onChange={(e) => { setSearchEmployee(e.target.value); setVisibleCount(20); }}
+          />
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <Select value={selectedManager} onValueChange={setSelectedManager}>
@@ -573,7 +595,7 @@ export default function AllKpis() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">KPI Status by Employee</CardTitle>
           <CardDescription>
-            {employeeData.length} employees · {stats.totalKpis} total KPIs
+            {displayData.length} employees · {stats.totalKpis} total KPIs
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -602,7 +624,7 @@ export default function AllKpis() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {employeeData.slice(0, visibleCount).map(emp => {
+                {displayData.slice(0, visibleCount).map(emp => {
                   const isExpanded = expandedEmployees.has(emp.employeeId);
                   const employeeKpis = isExpanded ? getEmployeeKpis(emp.employeeId) : [];
                   
@@ -908,14 +930,14 @@ export default function AllKpis() {
               </TableBody>
             </Table>
           </div>
-          {visibleCount < employeeData.length && (
+          {visibleCount < displayData.length && (
             <div className="flex justify-center py-4 border-t">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setVisibleCount(prev => prev + 50)}
+                onClick={() => setVisibleCount(prev => prev + 20)}
               >
-                Load more ({employeeData.length - visibleCount} remaining)
+                Load more ({displayData.length - visibleCount} remaining)
               </Button>
             </div>
           )}
