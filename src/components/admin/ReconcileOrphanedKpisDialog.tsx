@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { RefreshCw, AlertTriangle, CheckCircle2, ArrowRight, Zap, Filter } from 'lucide-react';
+import { RefreshCw, AlertTriangle, CheckCircle2, ArrowRight, Zap, Filter, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Dialog,
@@ -25,11 +25,13 @@ import {
 } from '@/components/ui/table';
 import { getStageLabel } from '@/hooks/useWorkflowConfig';
 import { getKpiSummaryText } from '@/lib/textFormatting';
+import { formatEmployeeName } from '@/lib/utils';
 
 interface ReconcileAffectedItem {
   kpi_id: string;
   employee_name: string;
   employee_id: string;
+  employee_code: string | null;
   kpi_name: string;
   kra_name: string;
   old_status: string;
@@ -90,6 +92,7 @@ export default function ReconcileOrphanedKpisDialog({
   const [executed, setExecuted] = useState(false);
   const [selectedKpiIds, setSelectedKpiIds] = useState<Set<string>>(new Set());
   const [filterPeriod, setFilterPeriod] = useState('all');
+  const [employeeSort, setEmployeeSort] = useState<'none' | 'asc' | 'desc'>('none');
 
   // When filter changes, narrow selection to only visible KPIs
   const handleFilterChange = (value: string) => {
@@ -159,11 +162,20 @@ export default function ReconcileOrphanedKpisDialog({
 
   const filteredAffected = useMemo(() => {
     if (!dryRunResult) return [];
-    if (filterPeriod === 'all') return dryRunResult.affected;
-    return dryRunResult.affected.filter(a =>
-      a.review_period && a.review_year && `${a.review_period} ${a.review_year}` === filterPeriod
-    );
-  }, [dryRunResult, filterPeriod]);
+    let items = filterPeriod === 'all'
+      ? dryRunResult.affected
+      : dryRunResult.affected.filter(a =>
+          a.review_period && a.review_year && `${a.review_period} ${a.review_year}` === filterPeriod
+        );
+    if (employeeSort !== 'none') {
+      items = [...items].sort((a, b) => {
+        const nameA = (a.employee_name || '').toLowerCase();
+        const nameB = (b.employee_name || '').toLowerCase();
+        return employeeSort === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+      });
+    }
+    return items;
+  }, [dryRunResult, filterPeriod, employeeSort]);
 
   const reconcileMutation = useMutation({
     mutationFn: async ({ dryRun, kpiIds }: { dryRun: boolean; kpiIds?: string[] }) => {
@@ -356,7 +368,17 @@ export default function ReconcileOrphanedKpisDialog({
                           />
                         </TableHead>
                       )}
-                      <TableHead>Employee</TableHead>
+                      <TableHead>
+                        <button
+                          className="flex items-center gap-1 hover:text-foreground transition-colors"
+                          onClick={() => setEmployeeSort(prev => prev === 'none' ? 'asc' : prev === 'asc' ? 'desc' : 'none')}
+                        >
+                          Employee
+                          {employeeSort === 'none' && <ArrowUpDown className="h-3.5 w-3.5" />}
+                          {employeeSort === 'asc' && <ArrowUp className="h-3.5 w-3.5" />}
+                          {employeeSort === 'desc' && <ArrowDown className="h-3.5 w-3.5" />}
+                        </button>
+                      </TableHead>
                       <TableHead>KPI</TableHead>
                       <TableHead>Current</TableHead>
                       <TableHead>→</TableHead>
@@ -381,7 +403,7 @@ export default function ReconcileOrphanedKpisDialog({
                             />
                           </TableCell>
                         )}
-                        <TableCell className="font-medium text-sm">{item.employee_name}</TableCell>
+                        <TableCell className="font-medium text-sm">{formatEmployeeName(item.employee_name, item.employee_id, item.employee_code)}</TableCell>
                         <TableCell className="text-sm max-w-[220px]">
                           <div className="truncate">{getKpiSummaryText(item.kpi_name)}</div>
                           <div className="text-xs text-muted-foreground truncate">{item.kra_name}</div>
@@ -427,7 +449,7 @@ export default function ReconcileOrphanedKpisDialog({
                 Confirm & Reconcile {selectedKpiIds.size} of {filteredAffected.length} KPI(s)
               </Button>
             )}
-            <Button variant="outline" onClick={() => { setDialogOpen(false); setDryRunResult(null); setExecuted(false); setSelectedKpiIds(new Set()); setFilterPeriod('all'); }}>
+            <Button variant="outline" onClick={() => { setDialogOpen(false); setDryRunResult(null); setExecuted(false); setSelectedKpiIds(new Set()); setFilterPeriod('all'); setEmployeeSort('none'); }}>
               {executed ? 'Close' : 'Cancel'}
             </Button>
           </DialogFooter>
