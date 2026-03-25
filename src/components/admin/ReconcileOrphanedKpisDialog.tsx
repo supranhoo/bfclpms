@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { RefreshCw, AlertTriangle, CheckCircle2, ArrowRight, RotateCcw, Zap } from 'lucide-react';
 import {
@@ -92,13 +93,17 @@ export default function ReconcileOrphanedKpisDialog({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dryRunResult, setDryRunResult] = useState<ReconcileResult | null>(null);
   const [executed, setExecuted] = useState(false);
+  const [selectedKpiIds, setSelectedKpiIds] = useState<Set<string>>(new Set());
 
   const reconcileMutation = useMutation({
-    mutationFn: async ({ dryRun }: { dryRun: boolean }) => {
+    mutationFn: async ({ dryRun, kpiIds }: { dryRun: boolean; kpiIds?: string[] }) => {
       const params: Record<string, unknown> = { p_dry_run: dryRun };
       if (periodMode === 'specific') {
         params.p_review_period = selectedMonth;
         params.p_review_year = selectedYear;
+      }
+      if (kpiIds && kpiIds.length > 0) {
+        params.p_kpi_ids = kpiIds;
       }
       const { data, error } = await supabase.rpc(
         'reconcile_workflow_statuses' as any,
@@ -116,6 +121,7 @@ export default function ReconcileOrphanedKpisDialog({
     try {
       const result = await reconcileMutation.mutateAsync({ dryRun: true });
       setDryRunResult(result);
+      setSelectedKpiIds(new Set(result.affected.map(a => a.kpi_id)));
     } catch (err: any) {
       toast({
         title: 'Error',
@@ -128,7 +134,8 @@ export default function ReconcileOrphanedKpisDialog({
 
   const handleExecute = async () => {
     try {
-      const result = await reconcileMutation.mutateAsync({ dryRun: false });
+      const kpiIds = Array.from(selectedKpiIds);
+      const result = await reconcileMutation.mutateAsync({ dryRun: false, kpiIds });
       setDryRunResult(result);
       setExecuted(true);
       const approvedCount = result.affected.filter(a => a.new_status === 'approved').length;
@@ -171,7 +178,7 @@ export default function ReconcileOrphanedKpisDialog({
         Reconcile Workflow Statuses
       </Button>
 
-      <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) { setDialogOpen(false); setDryRunResult(null); setExecuted(false); } }}>
+      <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) { setDialogOpen(false); setDryRunResult(null); setExecuted(false); setSelectedKpiIds(new Set()); } }}>
         <DialogContent className="max-w-6xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -233,6 +240,20 @@ export default function ReconcileOrphanedKpisDialog({
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      {!executed && (
+                        <TableHead className="w-10">
+                          <Checkbox
+                            checked={dryRunResult.affected.length > 0 && selectedKpiIds.size === dryRunResult.affected.length}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedKpiIds(new Set(dryRunResult.affected.map(a => a.kpi_id)));
+                              } else {
+                                setSelectedKpiIds(new Set());
+                              }
+                            }}
+                          />
+                        </TableHead>
+                      )}
                       <TableHead>Employee</TableHead>
                       <TableHead>Period</TableHead>
                       <TableHead>KPI</TableHead>
@@ -244,7 +265,21 @@ export default function ReconcileOrphanedKpisDialog({
                   </TableHeader>
                   <TableBody>
                     {dryRunResult.affected.map((item) => (
-                      <TableRow key={item.kpi_id}>
+                      <TableRow key={item.kpi_id} data-state={selectedKpiIds.has(item.kpi_id) ? 'selected' : undefined}>
+                        {!executed && (
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedKpiIds.has(item.kpi_id)}
+                              onCheckedChange={(checked) => {
+                                setSelectedKpiIds(prev => {
+                                  const next = new Set(prev);
+                                  if (checked) { next.add(item.kpi_id); } else { next.delete(item.kpi_id); }
+                                  return next;
+                                });
+                              }}
+                            />
+                          </TableCell>
+                        )}
                         <TableCell className="font-medium text-sm">{item.employee_name}</TableCell>
                         <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                           {item.review_period && item.review_year ? `${item.review_period} ${item.review_year}` : '—'}
@@ -283,7 +318,7 @@ export default function ReconcileOrphanedKpisDialog({
             {!executed && dryRunResult && dryRunResult.count > 0 && (
               <Button
                 onClick={handleExecute}
-                disabled={reconcileMutation.isPending}
+                disabled={reconcileMutation.isPending || selectedKpiIds.size === 0}
                 className="gap-2"
               >
                 {reconcileMutation.isPending ? (
@@ -291,10 +326,10 @@ export default function ReconcileOrphanedKpisDialog({
                 ) : (
                   <CheckCircle2 className="h-4 w-4" />
                 )}
-                Confirm & Reconcile {dryRunResult.count} KPI(s)
+                Confirm & Reconcile {selectedKpiIds.size} of {dryRunResult.count} KPI(s)
               </Button>
             )}
-            <Button variant="outline" onClick={() => { setDialogOpen(false); setDryRunResult(null); setExecuted(false); }}>
+            <Button variant="outline" onClick={() => { setDialogOpen(false); setDryRunResult(null); setExecuted(false); setSelectedKpiIds(new Set()); }}>
               {executed ? 'Close' : 'Cancel'}
             </Button>
           </DialogFooter>

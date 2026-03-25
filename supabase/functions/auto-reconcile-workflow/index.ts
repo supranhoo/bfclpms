@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { review_period, review_year } = await req.json();
+    const { review_period, review_year, kpi_ids } = await req.json();
 
     if (!review_period || !review_year) {
       return new Response(
@@ -59,13 +59,18 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Run reconciliation with dry_run = false
-    const { data, error } = await adminClient.rpc("reconcile_workflow_statuses", {
+    const rpcParams: Record<string, unknown> = {
       p_review_period: review_period,
       p_review_year: review_year,
       p_dry_run: false,
       p_performed_by: user.id,
-    });
+    };
+    if (kpi_ids && Array.isArray(kpi_ids) && kpi_ids.length > 0) {
+      rpcParams.p_kpi_ids = kpi_ids;
+    }
+
+    // Run reconciliation with dry_run = false
+    const { data, error } = await adminClient.rpc("reconcile_workflow_statuses", rpcParams);
 
     if (error) {
       console.error("Reconciliation error:", error);

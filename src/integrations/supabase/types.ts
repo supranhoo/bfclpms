@@ -3946,6 +3946,7 @@ export type Database = {
       reconcile_workflow_statuses: {
         Args: {
           p_dry_run?: boolean
+          p_kpi_ids?: string[]
           p_performed_by?: string
           p_review_period?: string
           p_review_year?: number
