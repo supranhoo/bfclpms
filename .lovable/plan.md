@@ -1,68 +1,39 @@
-## Milestone 3: Incentive Module Maturity — COMPLETED
 
-### What was implemented
 
-1. **Dry-Run Support for Compute Edge Function**
-   - `supabase/functions/compute-monthly-incentives/index.ts` — added `dry_run` parameter
-   - When `dry_run: true`, returns full preview (records + summary stats) without writing to DB
-   - Summary includes: total, eligible, disqualified, avg incentive %
+## Notify Data Owner AND Employee on Org KPI Send-Back (App + Email)
 
-2. **Compute & Detect Mutation Hooks**
-   - `src/hooks/useIncentiveRecords.ts` — added `useComputeIncentives` and `useDetectRetroactiveChanges`
-   - Both invoke edge functions and invalidate relevant query caches
+### Current Gap
+When an org KPI is sent back, only the **data owner** gets an app notification. No **email** is sent to anyone, and the **employee** whose KPI was affected gets no notification at all.
 
-3. **Compute Button with Program Selector**
-   - `src/components/incentive/MonthlyIncentiveTable.tsx` — added program dropdown + "Compute" button
-   - Triggers dry-run first, opens preview dialog, then confirms
+### Changes
 
-4. **Dry-Run Preview Dialog**
-   - `src/components/incentive/IncentiveDryRunDialog.tsx` — new modal with summary cards + full result table
-   - Shows employee scores, slabs, DQ reasons before committing
+#### 1. `src/hooks/useSendBackOrgKpiValue.ts` — Add employee notifications + email triggers
 
-5. **Detect Retroactive Changes Button**
-   - `src/components/incentive/RetroactiveAdjustmentTable.tsx` — added program + month selectors + "Detect Changes" button
-   - Invokes `detect-retroactive-incentive-changes` edge function
+After the existing data owner notification block (step 3), add:
 
----
+**Step 3b — Get affected employees:**
+- Query `kpis` table for employees who have this org KPI (matching `category_id`, `kra_name`, `kpi_name`, `is_org_level = true`)
+- For each affected employee, insert an app notification (type: `org_kpi_sent_back`, message: "The org-level value for [kpiName] has been sent back...")
 
-## Milestone 2: Resilience & Guardrails — COMPLETED
+**Step 3c — Send emails to data owners:**
+- For each data owner, call `supabase.functions.invoke('send-email-notification')` with `event_type: 'org_kpi_sent_back'`, passing `recipient_email`, `recipient_name`, `kpi_name`, `kra_name`, `reason`
 
-### What was implemented
+**Step 3d — Send emails to affected employees:**
+- For each affected employee, call `supabase.functions.invoke('send-email-notification')` with the same event type, including the employee's email and name
+- Fetch employee profiles (email, full_name) from the kpis join
 
-1. **Edge Function Retry Wrapper** — `supabase/functions/_shared/retry.ts`
-   - 3 attempts with exponential backoff (1s, 2s, 4s)
-   - Skips retries on client errors (4xx)
-   - Applied to `send-email-notification` (all providers: SMTP, Resend, Microsoft Graph)
-   - Applied to `propagate-template-change` (batch KPI updates)
+#### 2. `supabase/functions/send-email-notification/index.ts` — Update template
 
-2. **1000-Row Query Limit Fix**
-   - `src/pages/reports/AuditTrailReport.tsx` — replaced `.limit(1000)` with paginated `.range()` fetching
-   - `src/pages/reports/KpiJourneyReport.tsx` — department filter dropdown now fetches in 1000-row batches
-   - Main KPI journey data already used server-side RPC with pagination (no change needed)
+The `org_kpi_sent_back` email template already exists. Update it to be context-aware:
+- If the recipient is a data owner: "Please review and resubmit the data"
+- If the recipient is an employee: "The org-level data for your KPI has been sent back for revision by the reviewer. You will be notified once the data owner resubmits."
 
-3. **Session-Expired Form Recovery**
-   - `src/components/review/UnifiedScorecard.tsx` — auto-saves review drafts (score, remarks, achieved value, evidence URLs) to `sessionStorage` keyed by `review-draft-{kpiId}-{viewLevel}`
-   - Drafts restored when re-opening review sheet
-   - Drafts cleared on successful submit (all 4 success paths)
+Add a `recipient_role` field to the template rendering to distinguish the two cases.
 
-4. **PIP Letter Download**
-   - `src/components/pip/PIPDetailSheet.tsx` — replaced TODO stub with actual `generate-pip-letter` edge function invocation
-   - Downloads PDF blob, shows loading state
-
-5. **Auto-Reconcile Toast Feedback**
-   - `src/hooks/useWorkflowConfig.ts` — surfaces reconciliation count as toast notification to admin
+### No database changes needed
+All tables (`kpis`, `profiles`, `notifications`, `org_kpi_data_owners`) already exist with the required columns.
 
 ### Files Modified
-- `supabase/functions/_shared/retry.ts` — NEW shared retry utility
-- `supabase/functions/send-email-notification/index.ts` — withRetry on all send paths
-- `supabase/functions/propagate-template-change/index.ts` — withRetry on batch updates
-- `src/pages/reports/AuditTrailReport.tsx` — paginated fetching
-- `src/pages/reports/KpiJourneyReport.tsx` — paginated dept filter
-- `src/components/review/UnifiedScorecard.tsx` — sessionStorage draft save/restore
-- `src/components/pip/PIPDetailSheet.tsx` — wire generate-pip-letter
-- `src/hooks/useWorkflowConfig.ts` — toast for auto-reconcile
+- `src/hooks/useSendBackOrgKpiValue.ts` — add employee app notifications + email triggers for both audiences
+- `supabase/functions/send-email-notification/index.ts` — update `org_kpi_sent_back` template for dual-audience messaging
 
-### Risk Assessment
-- Retry wrapper: Only retries on server/transient errors (5xx, timeouts). Client errors (4xx) fail immediately. No duplicate email risk since retries happen within the same request.
-- Session recovery: Per-browser, per-KPI drafts. Cleared on success. No data leak risk.
-- Pagination: Increases initial load time for very large audit trails but ensures complete data.
