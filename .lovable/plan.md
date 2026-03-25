@@ -1,42 +1,38 @@
 
 
-## Truncate KPI Text Before "Formula" / "Logic" on All Dashboard Views
+## Daily KPI Monthly Submission — Silent Failure & Missing Feedback
 
-### What Changes
-Add a utility `getKpiSummaryText(text)` that returns all text **before** the first occurrence of "Formula" (case-insensitive). If "Formula" is not found, truncate before "Logic". If neither is found, return the full text. This only affects dashboard/table/card views — the "View KPI Details" panel remains unchanged.
+### Bugs Found
 
-### Utility
+**Bug 1: `handleSubmitMonthlyReview` silently swallows errors**
+`SelfReviewSheet.tsx` line 392-423 — the `try/finally` block has no `catch`. If `submitReview.mutateAsync` throws (RLS error, network failure, governance lock), the error is swallowed, the sheet closes (`onOpenChange(false)`), and the user sees no feedback. They believe the monthly submission succeeded when it didn't.
 
-**`src/lib/textFormatting.ts`** — Add new function:
-```typescript
-export function getKpiSummaryText(text: string | null | undefined): string {
-  if (!text) return '';
-  const normalized = normalizeKpiText(text);
-  // Find first occurrence of "Formula" (case-insensitive)
-  const formulaIdx = normalized.search(/formula/i);
-  if (formulaIdx > 0) return normalized.slice(0, formulaIdx).trim();
-  // Fallback: find "Logic"
-  const logicIdx = normalized.search(/logic/i);
-  if (logicIdx > 0) return normalized.slice(0, logicIdx).trim();
-  return normalized;
-}
-```
+**Bug 2: `performSubPeriodSubmit` drops `evidence_urls`**
+`SelfReviewSheet.tsx` line 437-448 — passes `evidence_url` (single legacy URL) but never passes `evidence_urls` (the array). The hook's upsert logic falls back to an empty array, silently dropping all uploaded evidence files for daily/weekly sub-period submissions made through the SelfReviewSheet.
 
-### Files to Update (display only — replace `kpi.kpi_name` rendering)
+**Bug 3: `handleSubmitReview` (monthly non-daily) also has no error handling**
+`SelfReviewSheet.tsx` line 481 — `submitReview.mutateAsync` is awaited with no try/catch. If it fails, the unhandled rejection crashes silently. The sheet closes on success (line 491) but there's no user feedback on failure.
 
-| File | What | Line area |
-|------|------|-----------|
-| `src/components/review/KpiDetailsTable.tsx` | Main KPI table row | ~416-418 |
-| `src/components/review/MobileKpiCard.tsx` | Review mobile card | ~294-296 |
-| `src/components/dashboard/MobileKpiCard.tsx` | Dashboard mobile card | ~97 |
+**Bug 4: `performSubPeriodSubmit` doesn't reset `selfEvidenceUrls`**
+Line 449 resets `selectedSubPeriod`, `achievedValue`, `calculatedScore`, `selfRemarks`, and `resubmitReason` — but NOT `selfEvidenceUrls`. After submission, stale evidence URLs persist in state and will be silently attached to the next submission.
 
-In each file:
-- Import `getKpiSummaryText` from `@/lib/textFormatting`
-- Replace `renderBoldKpiText(kpi.kpi_name)` with `renderBoldKpiText(getKpiSummaryText(kpi.kpi_name))`
-- No changes to any detail/sheet/panel views
+### Fixes
 
-### No database changes needed
+#### `src/components/review/SelfReviewSheet.tsx`
+
+1. **Bug 1** — Add `catch` block to `handleSubmitMonthlyReview`:
+   - Show destructive toast with error message
+   - Do NOT close the sheet on error (remove `onOpenChange(false)` from try, keep it only on success path after the await)
+
+2. **Bug 2** — Add `evidence_urls: selfEvidenceUrls` to the `performSubPeriodSubmit` mutation call (line 443, alongside `evidence_url`)
+
+3. **Bug 3** — Wrap `handleSubmitReview`'s `submitReview.mutateAsync` in try/catch with error toast
+
+4. **Bug 4** — Add `setSelfEvidenceUrls([])` to the reset on line 449
+
+### Files Modified
+- `src/components/review/SelfReviewSheet.tsx` — 4 targeted fixes (error handling + evidence_urls + state reset)
 
 ### Risk
-- None. Display-only change. Full text remains in "View KPI Details".
+Minimal. All fixes are additive (error feedback) or corrective (missing parameter, missing state reset). No behavioral changes to success paths.
 
