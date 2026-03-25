@@ -1264,6 +1264,12 @@ export interface ReviewTimelinePdfData {
   year: string;
   companyName?: string;
   isNA?: boolean;
+  auditLogs?: Array<{
+    label: string;
+    performerName: string;
+    date: string;
+    details: string[];
+  }>;
 }
 
 const TIMELINE_STAGE_COLORS: Record<string, { border: [number, number, number]; bg: [number, number, number]; text: [number, number, number] }> = {
