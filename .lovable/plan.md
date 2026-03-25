@@ -1,5 +1,29 @@
+## Milestone 3: Incentive Module Maturity — COMPLETED
 
+### What was implemented
 
+1. **Dry-Run Support for Compute Edge Function**
+   - `supabase/functions/compute-monthly-incentives/index.ts` — added `dry_run` parameter
+   - When `dry_run: true`, returns full preview (records + summary stats) without writing to DB
+   - Summary includes: total, eligible, disqualified, avg incentive %
+
+2. **Compute & Detect Mutation Hooks**
+   - `src/hooks/useIncentiveRecords.ts` — added `useComputeIncentives` and `useDetectRetroactiveChanges`
+   - Both invoke edge functions and invalidate relevant query caches
+
+3. **Compute Button with Program Selector**
+   - `src/components/incentive/MonthlyIncentiveTable.tsx` — added program dropdown + "Compute" button
+   - Triggers dry-run first, opens preview dialog, then confirms
+
+4. **Dry-Run Preview Dialog**
+   - `src/components/incentive/IncentiveDryRunDialog.tsx` — new modal with summary cards + full result table
+   - Shows employee scores, slabs, DQ reasons before committing
+
+5. **Detect Retroactive Changes Button**
+   - `src/components/incentive/RetroactiveAdjustmentTable.tsx` — added program + month selectors + "Detect Changes" button
+   - Invokes `detect-retroactive-incentive-changes` edge function
+
+---
 
 ## Milestone 2: Resilience & Guardrails — COMPLETED
 
