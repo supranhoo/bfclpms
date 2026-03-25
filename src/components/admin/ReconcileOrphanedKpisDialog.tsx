@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { RefreshCw, AlertTriangle, CheckCircle2, ArrowRight, RotateCcw, Zap } from 'lucide-react';
+import { RefreshCw, AlertTriangle, CheckCircle2, ArrowRight, Zap } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
