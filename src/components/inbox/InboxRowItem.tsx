@@ -116,6 +116,11 @@ export function InboxRowItem({ item, onView, onMarkRead, onNavigate, onToggleExp
             {item.queryStatus === 'resolved' && 'Resolved'}
           </Badge>
         )}
+        {item.type === 'notification' && (
+          <Badge variant="outline" className={cn('text-xs', item.isRead ? 'text-muted-foreground' : 'text-primary border-primary')}>
+            {item.isRead ? 'Read' : 'Unread'}
+          </Badge>
+        )}
       </TableCell>
 
       {/* From User */}
