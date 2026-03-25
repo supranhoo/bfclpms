@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-25  
-> **Version:** 1.90.0 — Added audit log timeline to Review Timeline PDF export; PDF now includes full KPI audit history (status changes, rollbacks, admin overrides, scores) matching the Review Timeline dialog UI
+> **Version:** 1.91.0 — Fixed reconciliation Branch 2b ("scored not forwarded") to respect the "completed stage" convention; manager_check/skip_level_check/hr_pms_review with their own score are now recognized as normal resting states when a subsequent reviewer stage exists, preventing mass false-positive advancement
 > **Maintainer:** Lovable AI
 
 ---
@@ -4118,6 +4118,10 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 
 **Rollback History:**
 - 2026-03-23: Rolled back 16 KPIs across 8 employees (100012, 100426, 100840, 100856, 101680, 101773, 101902) that were incorrectly auto-scored zero despite being sent-back cases. Root cause: initial rollback only checked `kpi_queries`, missing auditor/management send-backs recorded only in `kpi_audit_logs`.
+
+---
+
+- 2026-03-25: v1.91.0 — Fixed `reconcile_workflow_statuses` DB function Branch 2b. The "scored not forwarded" logic now checks whether the current status is the expected "completed stage" resting state per system architecture convention. Statuses `manager_check`, `skip_level_check`, and `hr_pms_review` with their own score are skipped when a subsequent non-approved reviewer stage exists in the workflow. This prevents false-positive reconciliation of hundreds of correctly-waiting KPIs. Branches 1 (orphaned), 2a (terminal completed), and 2c (review-stage mismatch) remain unchanged.
 
 ---
 
