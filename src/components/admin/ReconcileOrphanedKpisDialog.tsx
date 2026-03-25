@@ -22,6 +22,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { getStageLabel } from '@/hooks/useWorkflowConfig';
+import { getKpiSummaryText } from '@/lib/textFormatting';
 
 interface ReconcileAffectedItem {
   kpi_id: string;
@@ -171,7 +172,7 @@ export default function ReconcileOrphanedKpisDialog({
       </Button>
 
       <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) { setDialogOpen(false); setDryRunResult(null); setExecuted(false); } }}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-6xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {executed ? (
@@ -228,11 +229,12 @@ export default function ReconcileOrphanedKpisDialog({
                 })()}
               </div>
 
-              <div className="border rounded-md max-h-[40vh] overflow-y-auto">
+              <div className="border rounded-md max-h-[50vh] overflow-y-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Employee</TableHead>
+                      <TableHead>Period</TableHead>
                       <TableHead>KPI</TableHead>
                       <TableHead>Current</TableHead>
                       <TableHead>→</TableHead>
@@ -244,9 +246,12 @@ export default function ReconcileOrphanedKpisDialog({
                     {dryRunResult.affected.map((item) => (
                       <TableRow key={item.kpi_id}>
                         <TableCell className="font-medium text-sm">{item.employee_name}</TableCell>
-                        <TableCell className="text-sm">
-                          <div>{item.kpi_name}</div>
-                          <div className="text-xs text-muted-foreground">{item.kra_name}</div>
+                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                          {item.review_period && item.review_year ? `${item.review_period} ${item.review_year}` : '—'}
+                        </TableCell>
+                        <TableCell className="text-sm max-w-[220px]">
+                          <div className="truncate">{getKpiSummaryText(item.kpi_name)}</div>
+                          <div className="text-xs text-muted-foreground truncate">{item.kra_name}</div>
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className="text-xs">
