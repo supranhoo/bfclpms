@@ -1,13 +1,47 @@
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ReviewStageCard, StageStatus } from './ReviewStageCard';
 import { KPI, ReviewSubmission, KpiQuery } from '@/hooks/useKpis';
-import { User, Briefcase, Shield, MessageSquare, History, UserCheck, ClipboardCheck, AlertTriangle } from 'lucide-react';
+import { User, Briefcase, Shield, MessageSquare, History, UserCheck, ClipboardCheck, AlertTriangle, Download } from 'lucide-react';
 import { getVisibleJourneyStages, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { UomType } from '@/lib/qualitativeUom';
+import { exportReviewTimelinePdf, ReviewTimelinePdfData } from '@/lib/pdfExport';
+
+function useEmployeeProfileForPdf(employeeId: string | undefined) {
+  return useQuery({
+    queryKey: ['employee-pdf-profile', employeeId],
+    queryFn: async () => {
+      if (!employeeId) return null;
+      const { data: emp } = await supabase
+        .from('profiles')
+        .select('full_name, employee_code, reporting_manager_id')
+        .eq('id', employeeId)
+        .single();
+      if (!emp) return null;
+      let managerName: string | null = null;
+      if (emp.reporting_manager_id) {
+        const { data: mgr } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', emp.reporting_manager_id)
+          .single();
+        managerName = mgr?.full_name || null;
+      }
+      return {
+        fullName: emp.full_name,
+        employeeCode: emp.employee_code,
+        managerName,
+      };
+    },
+    enabled: !!employeeId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
 
 type ViewLevel = 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' | 'admin';
 type JourneyStage = 'self' | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management';
@@ -19,6 +53,9 @@ interface KpiJourneySectionProps {
   viewLevel: ViewLevel;
   onOpenQueryHistory?: () => void;
   workflowStages?: string[];
+  employeeName?: string;
+  employeeCode?: string;
+  reportingManagerName?: string;
 }
 
 // Determine the status of each review stage based on KPI status and view level
@@ -68,11 +105,20 @@ export function KpiJourneySection({
   viewLevel,
   onOpenQueryHistory,
   workflowStages,
+  employeeName,
+  employeeCode,
+  reportingManagerName,
 }: KpiJourneySectionProps) {
+  const { data: profileData } = useEmployeeProfileForPdf(kpi.employee_id);
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
   const kpiStatus = kpi.status || 'kra_set';
   const visibleStages = getVisibleStagesForLevel(viewLevel, effectiveStages);
   const globalIsNA = submission?.is_na || false;
+
+  // Resolve employee details: prefer props, fall back to fetched data
+  const resolvedEmployeeName = employeeName || profileData?.fullName || '-';
+  const resolvedEmployeeCode = employeeCode || profileData?.employeeCode || '-';
+  const resolvedManagerName = reportingManagerName || profileData?.managerName || '-';
 
   // Recalculate score from achieved value using current KPI thresholds
   // This ensures consistent ratings across all stages regardless of when the score was stored
@@ -190,13 +236,61 @@ export function KpiJourneySection({
   const stageCount = visibleStages.length;
   const gridCols = stageCount <= 4 ? 'grid-cols-2 lg:grid-cols-4' : stageCount <= 6 ? 'grid-cols-2 lg:grid-cols-3 xl:grid-cols-6' : 'grid-cols-2 lg:grid-cols-4';
 
+  const hasAnyData = visibleStages.some(stage => {
+    const status = getStageStatus(stage, kpiStatus, viewLevel, effectiveStages);
+    return status !== 'pending';
+  });
+
+  const handleDownloadPdf = () => {
+    const pdfData: ReviewTimelinePdfData = {
+      employeeName: resolvedEmployeeName,
+      employeeCode: resolvedEmployeeCode,
+      reportingManagerName: resolvedManagerName,
+      kpi: {
+        kraName: kpi.kra_name || '',
+        kpiName: kpi.kpi_name || '',
+        category: kpi.kra_categories?.name || '-',
+        target: kpi.target_value,
+        uom: kpi.uom,
+        criteria: kpi.criteria,
+        weightage: kpi.weightage,
+        frequency: kpi.frequency,
+        status: kpi.status || 'kra_set',
+      },
+      stages: visibleStages.map(stage => {
+        const data = stageData[stage];
+        const status = getStageStatus(stage, kpiStatus, viewLevel, effectiveStages);
+        return {
+          title: data.title,
+          score: data.score,
+          rating: data.rating,
+          achievedValue: data.achievedValue,
+          remarks: data.remarks,
+          status,
+        };
+      }),
+      period: kpi.review_period || '',
+      year: String(kpi.review_year || new Date().getFullYear()),
+      isNA: globalIsNA,
+    };
+    exportReviewTimelinePdf(pdfData);
+  };
+
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-          <History className="h-4 w-4" />
-          Review Journey
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <History className="h-4 w-4" />
+            Review Journey
+          </CardTitle>
+          {hasAnyData && (
+            <Button variant="ghost" size="sm" onClick={handleDownloadPdf} className="h-7 text-xs gap-1">
+              <Download className="h-3.5 w-3.5" />
+              PDF
+            </Button>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Auto-Advance Warning Banner */}

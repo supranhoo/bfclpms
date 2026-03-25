@@ -1234,3 +1234,266 @@ export function generateBulkScorecardPdf(
 
   doc.save(`Scorecard_Report_${options.period}_${options.year}.pdf`);
 }
+
+// ============= Review Timeline PDF =============
+
+export interface ReviewTimelinePdfData {
+  employeeName: string;
+  employeeCode: string;
+  reportingManagerName: string;
+  kpi: {
+    kraName: string;
+    kpiName: string;
+    category: string;
+    target: string | number | null;
+    uom: string | null;
+    criteria: string | null;
+    weightage: number | null;
+    frequency: string | null;
+    status: string;
+  };
+  stages: Array<{
+    title: string;
+    score: number | null;
+    rating: string | null;
+    achievedValue: number | null;
+    remarks: string | null;
+    status: 'completed' | 'current' | 'pending';
+  }>;
+  period: string;
+  year: string;
+  companyName?: string;
+  isNA?: boolean;
+}
+
+const TIMELINE_STAGE_COLORS: Record<string, { border: [number, number, number]; bg: [number, number, number]; text: [number, number, number] }> = {
+  'Self': STAGE_COLORS.self,
+  'Manager': STAGE_COLORS.manager,
+  'Skip-Level': STAGE_COLORS.skipLevel,
+  'HR PMS': STAGE_COLORS.hrPms,
+  'Auditor': STAGE_COLORS.auditor,
+  'Management': STAGE_COLORS.management,
+};
+
+export function exportReviewTimelinePdf(data: ReviewTimelinePdfData): void {
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 14;
+  const contentWidth = pageWidth - margin * 2;
+  let y = 15;
+
+  // Header
+  doc.setFillColor(...COLORS.primary);
+  doc.rect(0, 0, pageWidth, 28, 'F');
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.white);
+  doc.text(data.companyName || 'Review Timeline Report', margin, 12);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Period: ${data.period} ${data.year}`, margin, 20);
+  doc.text(`Generated: ${format(new Date(), 'dd MMM yyyy')}`, pageWidth - margin, 20, { align: 'right' });
+  y = 36;
+
+  // Employee Profile Box
+  const profileBoxHeight = 28;
+  doc.setFillColor(...COLORS.grayLight);
+  doc.setDrawColor(220, 220, 220);
+  doc.roundedRect(margin, y, contentWidth, profileBoxHeight, 3, 3, 'FD');
+
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.grayMedium);
+  doc.text('EMPLOYEE DETAILS', margin + 5, y + 8);
+
+  const profileFields = [
+    { label: 'Name', value: data.employeeName || '-' },
+    { label: 'Employee Code', value: data.employeeCode || '-' },
+    { label: 'Reporting Manager', value: data.reportingManagerName || '-' },
+  ];
+  const colW = contentWidth / 3;
+  profileFields.forEach((field, i) => {
+    const fieldX = margin + 5 + i * colW;
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...COLORS.grayMedium);
+    doc.text(field.label, fieldX, y + 15);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...COLORS.black);
+    doc.text(truncateText(field.value, 28), fieldX, y + 22);
+  });
+  y += profileBoxHeight + 8;
+
+  // KPI Details Box
+  const kpiBoxHeight = 42;
+  doc.setFillColor(250, 250, 252);
+  doc.setDrawColor(220, 220, 220);
+  doc.roundedRect(margin, y, contentWidth, kpiBoxHeight, 3, 3, 'FD');
+
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.grayMedium);
+  doc.text('KPI DETAILS', margin + 5, y + 8);
+
+  const kpiRow1 = [
+    { label: 'Category', value: data.kpi.category || '-' },
+    { label: 'KRA', value: data.kpi.kraName || '-' },
+    { label: 'KPI Name', value: data.kpi.kpiName || '-' },
+    { label: 'Status', value: data.kpi.status || '-' },
+  ];
+  const kpiRow2 = [
+    { label: 'Target', value: data.kpi.target != null ? String(data.kpi.target) : '-' },
+    { label: 'UOM', value: data.kpi.uom || '-' },
+    { label: 'Criteria', value: data.kpi.criteria || '-' },
+    { label: 'Weightage', value: data.kpi.weightage != null ? `${data.kpi.weightage}%` : '-' },
+  ];
+
+  const kpiColW = contentWidth / 4;
+  kpiRow1.forEach((field, i) => {
+    const fieldX = margin + 5 + i * kpiColW;
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...COLORS.grayMedium);
+    doc.text(field.label, fieldX, y + 15);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...COLORS.black);
+    doc.text(truncateText(field.value, 22), fieldX, y + 21);
+  });
+  kpiRow2.forEach((field, i) => {
+    const fieldX = margin + 5 + i * kpiColW;
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...COLORS.grayMedium);
+    doc.text(field.label, fieldX, y + 29);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...COLORS.black);
+    doc.text(truncateText(field.value, 22), fieldX, y + 35);
+  });
+  y += kpiBoxHeight + 8;
+
+  // N/A Banner
+  if (data.isNA) {
+    doc.setFillColor(254, 249, 195);
+    doc.roundedRect(margin, y, contentWidth, 10, 2, 2, 'F');
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(146, 64, 14);
+    doc.text('This KPI has been marked as Not Applicable (N/A)', margin + 5, y + 7);
+    y += 14;
+  }
+
+  // Review Stages Section
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.black);
+  doc.text('REVIEW JOURNEY', margin, y + 4);
+  y += 8;
+
+  const stagesPerRow = Math.min(data.stages.length, 3);
+  const stageCardW = (contentWidth - (stagesPerRow - 1) * 4) / stagesPerRow;
+  const stageCardH = 38;
+
+  data.stages.forEach((stage, i) => {
+    const col = i % stagesPerRow;
+    const row = Math.floor(i / stagesPerRow);
+    const stageX = margin + col * (stageCardW + 4);
+    const stageY = y + row * (stageCardH + 4);
+
+    // Check if we need a new page
+    if (stageY + stageCardH > doc.internal.pageSize.getHeight() - 20) {
+      doc.addPage();
+      y = 15;
+    }
+
+    const colors = TIMELINE_STAGE_COLORS[stage.title] || STAGE_COLORS.self;
+    const isPending = stage.status === 'pending';
+
+    // Card background
+    doc.setFillColor(...(isPending ? COLORS.grayLight : colors.bg));
+    doc.setDrawColor(...(isPending ? COLORS.gray : colors.border));
+    doc.roundedRect(stageX, stageY, stageCardW, stageCardH, 2, 2, 'FD');
+
+    // Status indicator dot
+    const dotColor: [number, number, number] = stage.status === 'completed'
+      ? COLORS.success
+      : stage.status === 'current'
+        ? COLORS.warning
+        : COLORS.gray;
+    doc.setFillColor(...dotColor);
+    doc.circle(stageX + 6, stageY + 7, 2, 'F');
+
+    // Title
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...(isPending ? COLORS.grayMedium : colors.text));
+    doc.text(stage.title, stageX + 12, stageY + 8);
+
+    // Status label
+    const statusLabel = stage.status === 'completed' ? 'Completed' : stage.status === 'current' ? 'In Progress' : 'Pending';
+    doc.setFontSize(6);
+    doc.setFont('helvetica', 'normal');
+    doc.text(statusLabel, stageX + stageCardW - 5, stageY + 8, { align: 'right' });
+
+    if (!isPending) {
+      // Score
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...COLORS.grayMedium);
+      doc.text('Score:', stageX + 5, stageY + 16);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...(isPending ? COLORS.grayMedium : colors.text));
+      doc.text(formatScore(stage.score), stageX + 20, stageY + 16);
+
+      // Rating
+      if (stage.rating) {
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...COLORS.grayMedium);
+        doc.text('Rating:', stageX + 35, stageY + 16);
+        doc.setFont('helvetica', 'bold');
+        doc.text(truncateText(stage.rating, 12), stageX + 52, stageY + 16);
+      }
+
+      // Achieved Value
+      if (stage.achievedValue !== null) {
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...COLORS.grayMedium);
+        doc.text(`Achieved: ${formatScore(stage.achievedValue)}`, stageX + 5, stageY + 23);
+      }
+
+      // Remarks
+      if (stage.remarks) {
+        doc.setFontSize(6);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...COLORS.grayMedium);
+        doc.text(truncateText(stage.remarks, 55), stageX + 5, stageY + 30);
+      }
+    }
+  });
+
+  // Calculate final y after stages
+  const totalRows = Math.ceil(data.stages.length / stagesPerRow);
+  y += totalRows * (stageCardH + 4) + 4;
+
+  // Footer
+  const pageCount = doc.getNumberOfPages();
+  for (let p = 1; p <= pageCount; p++) {
+    doc.setPage(p);
+    doc.setFontSize(7);
+    doc.setTextColor(...COLORS.grayMedium);
+    doc.text(
+      `Page ${p} of ${pageCount}  •  Generated: ${format(new Date(), 'dd MMM yyyy')}`,
+      pageWidth / 2,
+      doc.internal.pageSize.getHeight() - 8,
+      { align: 'center' }
+    );
+  }
+
+  const safeName = (data.employeeName || 'Employee').replace(/[^a-zA-Z0-9]/g, '_');
+  const safeKpi = (data.kpi.kpiName || 'KPI').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 30);
+  doc.save(`Review_Timeline_${safeName}_${safeKpi}_${data.period}_${data.year}.pdf`);
+}

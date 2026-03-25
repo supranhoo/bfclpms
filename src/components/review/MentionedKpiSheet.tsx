@@ -134,6 +134,8 @@ export function MentionedKpiSheet({ kpiId, employeeId, open, onOpenChange }: Men
                 currentUserId={user?.id}
                 selectedPeriod={kpi.review_period || ''}
                 selectedYear={kpi.review_year || new Date().getFullYear()}
+                employeeName={employee?.full_name || undefined}
+                employeeCode={employee?.employee_code || undefined}
               />
             ) : (
               <p className="text-sm text-muted-foreground text-center py-8">

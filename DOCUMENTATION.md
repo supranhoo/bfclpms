@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-25  
-> **Version:** 1.88.0 — Fixed silent failure in daily KPI monthly submission (added error toasts), restored dropped evidence_urls in sub-period submissions, added stale evidence state reset
+> **Version:** 1.89.0 — Added PDF download to Review Timeline (KpiJourneySection) with employee details, KPI info, and review stage data; self-contained profile fetch for reporting manager name
 > **Maintainer:** Lovable AI
 
 ---

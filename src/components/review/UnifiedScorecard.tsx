@@ -1564,6 +1564,8 @@ export function UnifiedScorecard({
                 workflowStages={effectiveStages}
                 orgKpiEnteredByName={getOrgKpiValue(selectedKpi)?.entered_by_name}
                 orgKpiDataOwnerNames={getOwnerNamesForKpi(dataOwnerNamesMap, selectedKpi)}
+                employeeName={employee.full_name || undefined}
+                employeeCode={employee.employee_code || undefined}
               />
               
               
