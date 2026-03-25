@@ -1,31 +1,20 @@
 
 
-## Add "Scoring" as Truncation Keyword in `getKpiSummaryText`
+## Add "@Mentioned" to Notification Type Filter
 
 ### Change
-Update `getKpiSummaryText` to truncate before "Scoring" as a fallback between "Formula" and "Logic".
+Add `observation_mention` as a selectable option in the notification type dropdown on the Inbox Filters.
 
-**Priority order:** Formula → Scoring → Logic → full text
+### File: `src/components/inbox/InboxFilters.tsx` (line 48)
 
-### File: `src/lib/textFormatting.ts` (lines 38-46)
+Add one entry to the `NOTIFICATION_TYPES` array:
 
 ```typescript
-export function getKpiSummaryText(text: string | null | undefined): string {
-  if (!text) return '';
-  const normalized = normalizeKpiText(text);
-  const formulaIdx = normalized.search(/[-\s]*formula/i);
-  if (formulaIdx > 0) return normalized.slice(0, formulaIdx).trim();
-  const scoringIdx = normalized.search(/[-\s]*scoring/i);
-  if (scoringIdx > 0) return normalized.slice(0, scoringIdx).trim();
-  const logicIdx = normalized.search(/[-\s]*logic/i);
-  if (logicIdx > 0) return normalized.slice(0, logicIdx).trim();
-  return normalized;
-}
+{ value: 'observation_mention', label: '@Mentioned' },
 ```
 
-### File: `src/lib/textFormatting.test.ts`
-Add test case for the new "Scoring" keyword truncation and update the existing "Logic" test that currently expects partial "Scoring" text in the output.
+Insert it after `query_responded` (line 48), before the closing bracket.
 
 ### No other files affected
-The 3 dashboard/card files already call `getKpiSummaryText` — they'll automatically pick up the new behavior.
+The filter value is passed directly to the `usePaginatedNotifications` hook which already filters by `.eq('type', filters.notificationType)` — no backend changes needed.
 
