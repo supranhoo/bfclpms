@@ -117,6 +117,34 @@ describe('normalizeKpiText', () => {
   });
 });
 
+describe('getKpiSummaryText', () => {
+  it('truncates before Formula keyword', () => {
+    const input = 'KPI Name\n- Description: Desc\n- Formula: (A/B)*100';
+    expect(getKpiSummaryText(input)).toBe('KPI Name\n- Description: Desc');
+  });
+
+  it('truncates before Logic when no Formula', () => {
+    const input = 'KPI Name\n- Description: Desc\n- Scoring Logic: 5 for 100%';
+    expect(getKpiSummaryText(input)).toBe('KPI Name\n- Description: Desc\n- Scoring');
+  });
+
+  it('returns full text when neither Formula nor Logic present', () => {
+    const input = 'Simple KPI name';
+    expect(getKpiSummaryText(input)).toBe('Simple KPI name');
+  });
+
+  it('handles null/undefined', () => {
+    expect(getKpiSummaryText(null)).toBe('');
+    expect(getKpiSummaryText(undefined)).toBe('');
+  });
+
+  it('is case-insensitive for Formula', () => {
+    const input = 'KPI Name - FORMULA: something';
+    const result = getKpiSummaryText(input);
+    expect(result).not.toContain('FORMULA');
+  });
+});
+
 describe('preWrapClass', () => {
   it('exports the correct tailwind class', () => {
     expect(preWrapClass).toBe('whitespace-pre-wrap');
