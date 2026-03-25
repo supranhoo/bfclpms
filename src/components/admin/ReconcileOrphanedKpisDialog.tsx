@@ -138,10 +138,10 @@ export default function ReconcileOrphanedKpisDialog({
       });
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['employee-workflow'] });
-    } catch {
+    } catch (err: any) {
       toast({
         title: 'Error',
-        description: 'Failed to reconcile workflow statuses.',
+        description: err?.message || 'Failed to reconcile workflow statuses.',
         variant: 'destructive',
       });
     }
