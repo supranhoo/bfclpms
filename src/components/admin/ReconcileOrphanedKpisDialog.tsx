@@ -115,10 +115,10 @@ export default function ReconcileOrphanedKpisDialog({
     try {
       const result = await reconcileMutation.mutateAsync({ dryRun: true });
       setDryRunResult(result);
-    } catch {
+    } catch (err: any) {
       toast({
         title: 'Error',
-        description: 'Failed to scan for workflow status issues.',
+        description: err?.message || 'Failed to scan for workflow status issues.',
         variant: 'destructive',
       });
       setDialogOpen(false);
