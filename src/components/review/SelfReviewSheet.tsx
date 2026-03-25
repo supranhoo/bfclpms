@@ -367,12 +367,7 @@ export function SelfReviewSheet({
     );
   };
 
-  const getRatingLevel = (score: number): RatingLevel => {
-    if (score >= 4) return 'blue';
-    if (score >= 3) return 'green';
-    if (score >= 2) return 'yellow';
-    return 'red';
-  };
+  // Use canonical scoreToRatingLevel from qualitativeUom (already imported on line 16)
 
   const handleSubmitMonthlyReview = async () => {
     if (!selectedKpi) return;

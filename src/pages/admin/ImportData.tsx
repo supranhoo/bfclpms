@@ -36,16 +36,12 @@ interface BackgroundImportProgress {
 
 type RatingLevel = 'red' | 'yellow' | 'green' | 'blue';
 
-// Map numeric rating (0-5) to rating level enum
+// Map numeric rating (0-5) to rating level enum — uses canonical scoreToRatingLevel
 const mapScoreToRating = (score: number | string | null | undefined): RatingLevel | null => {
   if (score === null || score === undefined || score === '') return null;
   const numScore = typeof score === 'string' ? parseFloat(score) : score;
   if (isNaN(numScore)) return null;
-  
-  if (numScore >= 4.5) return 'blue';    // Exceptional (5)
-  if (numScore >= 3.5) return 'green';   // Good (4)
-  if (numScore >= 2.5) return 'yellow';  // Average (3)
-  return 'red';                           // Below (1-2)
+  return scoreToRatingLevel(Math.round(numScore));
 };
 
 // Determine KPI status based on review data

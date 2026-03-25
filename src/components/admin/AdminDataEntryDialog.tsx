@@ -71,13 +71,8 @@ function isQualitativeKpi(kpi: KPI | null): boolean {
   return kpi?.uom_type === 'binary' || kpi?.uom_type === 'tiered';
 }
 
-// Helper: derive rating level from numeric score (matches SelfReviewSheet.getRatingLevel)
-function getRatingLevel(score: number): RatingLevel {
-  if (score >= 4) return 'blue';
-  if (score >= 3) return 'green';
-  if (score >= 2) return 'yellow';
-  return 'red';
-}
+// Use canonical scoreToRatingLevel from qualitativeUom (already imported on line 30)
+const getRatingLevel = scoreToRatingLevel;
 
 // Helper: extract review month/year from KPI review_period string
 function parseReviewPeriod(kpi: KPI): { month: string; year: number } {
