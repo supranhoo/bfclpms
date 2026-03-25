@@ -822,6 +822,8 @@ export function EmployeeScorecard({
                 workflowStages={effectiveStages}
                 orgKpiEnteredByName={getOrgKpiValue(selectedKpi)?.entered_by_name}
                 orgKpiDataOwnerNames={getOwnerNamesForKpi(dataOwnerNamesMap, selectedKpi)}
+                employeeName={employee.full_name || undefined}
+                employeeCode={employee.employee_code || undefined}
               />
               
               {/* N/A Confirmation Card - Show when KPI is marked as N/A (with override option) */}
