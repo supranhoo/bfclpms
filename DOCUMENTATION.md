@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-25  
-> **Version:** 1.87.0 — Repaired 25 legacy rating/score mismatches across hr_pms/management/auditor/final levels; capped score=22 anomaly; added auto_compute_rating_and_clamp_scores trigger to prevent future mismatches and enforce 0-5 score range
+> **Version:** 1.88.0 — Fixed silent failure in daily KPI monthly submission (added error toasts), restored dropped evidence_urls in sub-period submissions, added stale evidence state reset
 > **Maintainer:** Lovable AI
 
 ---

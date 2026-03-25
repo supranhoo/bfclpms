@@ -418,6 +418,12 @@ export function SelfReviewSheet({
 
       setShowMonthlySubmitConfirm(false);
       onOpenChange(false);
+    } catch (error: any) {
+      toast({
+        title: 'Monthly Submission Failed',
+        description: error?.message || 'An unexpected error occurred. Please try again.',
+        variant: 'destructive',
+      });
     } finally {
       setIsSubmittingMonthly(false);
     }
@@ -441,12 +447,13 @@ export function SelfReviewSheet({
       achieved_value: isNa ? null : (isQualitativeKpi(selectedKpi) ? calculatedScore : safeParseFloat(achievedValue)),
       remarks: selfRemarks || null,
       evidence_url: selfEvidenceUrls.length > 0 ? selfEvidenceUrls[0] : null,
+      evidence_urls: selfEvidenceUrls,
       review_month: selectedPeriod,
       review_year: selectedYear,
       update_reason: updateReason,
       is_resubmission: isResubmission,
     });
-    setSelectedSubPeriod(null); setAchievedValue(''); setCalculatedScore(null); setSelfRemarks(''); setResubmitReason('');
+    setSelectedSubPeriod(null); setAchievedValue(''); setCalculatedScore(null); setSelfRemarks(''); setResubmitReason(''); setSelfEvidenceUrls([]);
   };
 
   const handleSubmitReview = async () => {
@@ -478,17 +485,25 @@ export function SelfReviewSheet({
         ? calculatedRatingLevel
         : (calculatedScore !== null ? scoreToRatingLevel(calculatedScore) : null);
 
-    await submitReview.mutateAsync({
-      kpi_id: selectedKpi.id,
-      achieved_value: isNa ? null : (isQualitativeKpi(selectedKpi) ? calculatedScore : (safeParseFloat(achievedValue) ?? 0)),
-      self_rating: selfRating,
-      self_score: isNa ? null : calculatedScore,
-      self_remarks: selfRemarks,
-      self_evidence_url: selfEvidenceUrls.length > 0 ? selfEvidenceUrls[0] : null,
-      self_evidence_urls: selfEvidenceUrls,
-      is_na: isNa,
-    });
-    onOpenChange(false);
+    try {
+      await submitReview.mutateAsync({
+        kpi_id: selectedKpi.id,
+        achieved_value: isNa ? null : (isQualitativeKpi(selectedKpi) ? calculatedScore : (safeParseFloat(achievedValue) ?? 0)),
+        self_rating: selfRating,
+        self_score: isNa ? null : calculatedScore,
+        self_remarks: selfRemarks,
+        self_evidence_url: selfEvidenceUrls.length > 0 ? selfEvidenceUrls[0] : null,
+        self_evidence_urls: selfEvidenceUrls,
+        is_na: isNa,
+      });
+      onOpenChange(false);
+    } catch (error: any) {
+      toast({
+        title: 'Submission Failed',
+        description: error?.message || 'An unexpected error occurred. Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   // Governance permissions — must be called before any early return to satisfy Rules of Hooks
