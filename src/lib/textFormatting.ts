@@ -40,6 +40,8 @@ export function getKpiSummaryText(text: string | null | undefined): string {
   const normalized = normalizeKpiText(text);
   const formulaIdx = normalized.search(/[-\s]*formula/i);
   if (formulaIdx > 0) return normalized.slice(0, formulaIdx).trim();
+  const scoringIdx = normalized.search(/[-\s]*scoring/i);
+  if (scoringIdx > 0) return normalized.slice(0, scoringIdx).trim();
   const logicIdx = normalized.search(/[-\s]*logic/i);
   if (logicIdx > 0) return normalized.slice(0, logicIdx).trim();
   return normalized;

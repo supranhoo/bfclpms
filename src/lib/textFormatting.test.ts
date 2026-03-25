@@ -123,9 +123,14 @@ describe('getKpiSummaryText', () => {
     expect(getKpiSummaryText(input)).toBe('KPI Name\n- Description: Desc');
   });
 
-  it('truncates before Logic when no Formula', () => {
+  it('truncates before Scoring when no Formula', () => {
     const input = 'KPI Name\n- Description: Desc\n- Scoring Logic: 5 for 100%';
-    expect(getKpiSummaryText(input)).toBe('KPI Name\n- Description: Desc\n- Scoring');
+    expect(getKpiSummaryText(input)).toBe('KPI Name\n- Description: Desc');
+  });
+
+  it('truncates before Logic when no Formula or Scoring', () => {
+    const input = 'KPI Name\n- Description: Desc\n- Logic: some logic';
+    expect(getKpiSummaryText(input)).toBe('KPI Name\n- Description: Desc');
   });
 
   it('returns full text when neither Formula nor Logic present', () => {
