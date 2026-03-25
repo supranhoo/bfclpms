@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +12,8 @@ import { getVisibleJourneyStages, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflow
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { UomType } from '@/lib/qualitativeUom';
 import { exportReviewTimelinePdf, ReviewTimelinePdfData } from '@/lib/pdfExport';
+import { statusLabels } from '@/lib/reviewConstants';
+import { format } from 'date-fns';
 
 function useEmployeeProfileForPdf(employeeId: string | undefined) {
   return useQuery({

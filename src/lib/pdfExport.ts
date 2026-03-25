@@ -1485,6 +1485,68 @@ export function exportReviewTimelinePdf(data: ReviewTimelinePdfData): void {
   const totalRows = Math.ceil(data.stages.length / stagesPerRow);
   y += totalRows * (stageCardH + 4) + 4;
 
+  // Audit Log Timeline Section
+  if (data.auditLogs && data.auditLogs.length > 0) {
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    // Check if we need a new page
+    if (y + 30 > pageHeight - 20) {
+      doc.addPage();
+      y = 15;
+    }
+
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...COLORS.black);
+    doc.text('REVIEW TIMELINE', margin, y + 4);
+    y += 10;
+
+    for (const log of data.auditLogs) {
+      // Estimate row height: header (10) + details (4 each) + padding (6)
+      const rowHeight = 16 + log.details.length * 4;
+
+      if (y + rowHeight > pageHeight - 20) {
+        doc.addPage();
+        y = 15;
+      }
+
+      // Row border
+      doc.setDrawColor(220, 220, 220);
+      doc.setFillColor(250, 250, 252);
+      doc.roundedRect(margin, y, contentWidth, rowHeight, 2, 2, 'FD');
+
+      // Action label (bold)
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...COLORS.black);
+      doc.text(log.label, margin + 4, y + 7);
+
+      // Date (right-aligned)
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...COLORS.grayMedium);
+      doc.text(log.date, margin + contentWidth - 4, y + 7, { align: 'right' });
+
+      // Performer
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...COLORS.grayMedium);
+      doc.text(`by ${log.performerName}`, margin + 4, y + 13);
+
+      // Detail bullet points
+      let detailY = y + 13;
+      for (const detail of log.details) {
+        detailY += 4;
+        doc.setFontSize(6.5);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...COLORS.black);
+        doc.text(`• ${truncateText(detail, 90)}`, margin + 6, detailY);
+      }
+
+      y += rowHeight + 2;
+    }
+  }
+
   // Footer
   const pageCount = doc.getNumberOfPages();
   for (let p = 1; p <= pageCount; p++) {
