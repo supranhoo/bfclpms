@@ -1,43 +1,25 @@
 
 
-## Fix: Add `audit` to Branch 2b Normal Resting State Exclusion
+## Fix: Drop Duplicate `reconcile_workflow_statuses` Overload
 
 ### Root Cause
 
-The previous fix (Branch 2b) excluded `manager_check`, `skip_level_check`, and `hr_pms_review` from the "scored not forwarded" detection. But it missed `audit`.
+Migration `20260325182832` accidentally created a second overload of `reconcile_workflow_statuses` with a different parameter order:
 
-**Evidence from `AuditScorecard.tsx` line 298:**
-```tsx
-const newStatus = approve ? resolveForwardStatus('auditor', effectiveStages) : 'audit';
-```
+- **Rogue overload**: `(p_dry_run boolean, p_review_period text, p_review_year integer, p_kpi_ids uuid[])`
+- **Canonical signature**: `(p_review_period text, p_review_year integer, p_dry_run boolean, p_performed_by uuid, p_kpi_ids uuid[])`
 
-When an auditor scores WITHOUT approving, status = `audit` and `auditor_score` is saved. This is the normal "auditor is reviewing" state. Only when the auditor clicks Approve does the status advance to `management_review`.
-
-Branch 2b sees `audit` + `auditor_score` and incorrectly flags it as "scored not forwarded."
+PostgreSQL treats different parameter orders as separate function overloads. PostgREST cannot choose between them when called with named parameters, producing the "Could not choose the best candidate function" error.
 
 ### Fix
 
-**1 file: DB migration** — In the `reconcile_workflow_statuses` function, change line:
-```sql
-IF v_kpi.current_status IN ('manager_check', 'skip_level_check', 'hr_pms_review') THEN
-```
-to:
-```sql
-IF v_kpi.current_status IN ('manager_check', 'skip_level_check', 'hr_pms_review', 'audit') THEN
-```
+**1 file: DB migration**
 
-This adds `audit` to the normal resting state exclusion. `management_review` does NOT need exclusion because it's always the terminal non-approved stage (caught by Branch 2a instead).
+1. `DROP FUNCTION` the rogue 4-parameter overload: `(boolean, text, integer, uuid[])`
+2. Re-create the canonical 5-parameter function with the latest Branch 2b logic (including `audit` in the normal resting state exclusion)
 
-### Why Only `audit` Is Missing
-
-| Status | Approve action sets status to | Save-without-approve sets status to | Excluded? |
-|--------|------------------------------|-------------------------------------|-----------|
-| `manager_check` | `manager_check` (own stage) | N/A | ✅ Already |
-| `skip_level_check` | next stage | `skip_level_check` | ✅ Already |
-| `hr_pms_review` | next stage | `hr_pms_review` | ✅ Already |
-| `audit` | `management_review` | `audit` | ❌ **Missing** |
-| `management_review` | `approved` | `management_review` | N/A (handled by Branch 2a as terminal) |
+This ensures only one function signature exists, eliminating the PostgREST ambiguity error.
 
 ### Files Changed
-1. **DB migration** — Add `'audit'` to the IN clause in Branch 2b's normal resting state check
+1. **DB migration** — Drop rogue overload, re-create canonical function
 
