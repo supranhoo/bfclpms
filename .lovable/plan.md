@@ -1,33 +1,48 @@
 
 
-## Fix: Show Status in Notification Rows
+## Add Status Toggle and Status Filter for Notifications
 
-### Problem
-The table has a "Status" column header, but `InboxRowItem.tsx` only renders a badge for query items (`item.type === 'query'`). For notification items, the cell is always blank, making it appear nonfunctional.
+### What the user wants
+1. **Clickable status badge** on each notification row to toggle between Read/Unread
+2. **Status filter** visible on the notifications tab (already exists as readStatus dropdown -- need to verify it's working)
 
-### Fix
+### Current state
+- The readStatus filter dropdown already exists in `InboxFilters.tsx` and shows for `isNotificationTab` (lines 91-106) with All/Unread/Read options
+- The `usePaginatedNotifications` hook already applies readStatus server-side (lines 72-76)
+- `onMarkRead` prop exists on `InboxRowItem` but only marks as **read** (no toggle to unread)
+- The status badge we added shows Read/Unread but is not clickable
 
-**File: `src/components/inbox/InboxRowItem.tsx` (Status Badge cell, ~lines 98-107)**
+### Changes
 
-Add a read/unread badge for notification items alongside the existing query status badge:
+**File 1: `src/components/inbox/InboxRowItem.tsx`**
+- Make the Read/Unread badge clickable to toggle status
+- Add `onToggleRead` prop (or reuse `onMarkRead` with toggle behavior)
+- Replace the static badge with a clickable button-badge that calls `onMarkRead` to toggle
 
 ```tsx
-{/* Status Badge */}
-<TableCell className="w-28 hidden md:table-cell">
-  {item.type === 'query' && item.queryStatus && (
-    <Badge variant="outline" className={cn('text-xs', getQueryStatusClasses(item.queryStatus))}>
-      {item.queryStatus === 'open' && 'Open'}
-      {item.queryStatus === 'responded' && 'Responded'}
-      {item.queryStatus === 'resolved' && 'Resolved'}
-    </Badge>
-  )}
-  {item.type === 'notification' && (
-    <Badge variant="outline" className={cn('text-xs', item.isRead ? 'text-muted-foreground' : 'text-primary border-primary')}>
-      {item.isRead ? 'Read' : 'Unread'}
-    </Badge>
-  )}
-</TableCell>
+{item.type === 'notification' && (
+  <Badge
+    variant="outline"
+    className={cn('text-xs cursor-pointer hover:bg-muted transition-colors',
+      item.isRead ? 'text-muted-foreground' : 'text-primary border-primary')}
+    onClick={(e) => {
+      e.stopPropagation();
+      onMarkRead?.(item);
+    }}
+  >
+    {item.isRead ? 'Read' : 'Unread'}
+  </Badge>
+)}
 ```
 
-One file, one cell update. The read/unread filter already works server-side via `usePaginatedNotifications` -- this just makes the status visible in the table.
+**File 2: `src/hooks/usePaginatedNotifications.ts`**
+- Update `useMarkNotificationRead` mutation to support toggling (set `is_read` to the opposite of current value, or accept a target value)
+- Add a `useToggleNotificationRead` hook or modify existing `useMarkNotificationRead` to accept a boolean parameter
+
+**File 3: `src/pages/QueryInbox.tsx`**
+- Update the `onMarkRead` handler to toggle instead of only marking read
+- Ensure it works with the updated mutation
+
+### Summary
+Two functional additions: (1) clicking the status badge toggles read/unread state, (2) the existing read/unread filter dropdown (already present) correctly filters results. One small hook update + one UI interaction change.
 
