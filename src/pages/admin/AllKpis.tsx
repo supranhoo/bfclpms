@@ -496,7 +496,7 @@ export default function AllKpis() {
             <span className="text-sm font-medium text-foreground">Filters</span>
             {hasActiveFilters && (
               <Badge variant="secondary" className="text-xs">
-                {[selectedManager, selectedDepartment, selectedDivision, selectedPeriod, selectedYear].filter(v => v !== 'all').length} active
+                {[selectedManager, selectedDepartment, selectedDivision, selectedPeriod, selectedYear].filter(v => v !== 'all').length + (searchEmployee.trim() ? 1 : 0)} active
               </Badge>
             )}
           </div>
@@ -505,6 +505,15 @@ export default function AllKpis() {
               Reset
             </Button>
           )}
+        </div>
+        <div className="relative mb-3">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search employee by name or code..."
+            className="pl-10 h-9"
+            value={searchEmployee}
+            onChange={(e) => { setSearchEmployee(e.target.value); setVisibleCount(20); }}
+          />
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <Select value={selectedManager} onValueChange={setSelectedManager}>
@@ -586,7 +595,7 @@ export default function AllKpis() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">KPI Status by Employee</CardTitle>
           <CardDescription>
-            {employeeData.length} employees · {stats.totalKpis} total KPIs
+            {displayData.length} employees · {stats.totalKpis} total KPIs
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -615,7 +624,7 @@ export default function AllKpis() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {employeeData.slice(0, visibleCount).map(emp => {
+                {displayData.slice(0, visibleCount).map(emp => {
                   const isExpanded = expandedEmployees.has(emp.employeeId);
                   const employeeKpis = isExpanded ? getEmployeeKpis(emp.employeeId) : [];
                   
