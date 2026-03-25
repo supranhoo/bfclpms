@@ -243,9 +243,9 @@ export function KpiJourneySection({
 
   const handleDownloadPdf = () => {
     const pdfData: ReviewTimelinePdfData = {
-      employeeName: employeeName || '-',
-      employeeCode: employeeCode || '-',
-      reportingManagerName: reportingManagerName || '-',
+      employeeName: resolvedEmployeeName,
+      employeeCode: resolvedEmployeeCode,
+      reportingManagerName: resolvedManagerName,
       kpi: {
         kraName: kpi.kra_name || '',
         kpiName: kpi.kpi_name || '',
