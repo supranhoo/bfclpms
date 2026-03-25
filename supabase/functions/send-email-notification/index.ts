@@ -448,13 +448,12 @@ Please check your dashboard for updated details.`,
     subject: '[PMS] Org KPI Data Sent Back for Revision',
     body: `Hi {{recipient_name}},
 
-The org KPI data you submitted has been sent back for revision.
+{{#if_data_owner}}The org KPI data you submitted has been sent back for revision. Please review the feedback and resubmit the corrected data.{{/if_data_owner}}{{#if_employee}}The org-level data for your KPI has been sent back for revision by the reviewer. You will be notified once the data owner resubmits the corrected value.{{/if_employee}}
 
+KRA: {{kra_name}}
 KPI: {{kpi_name}}
 Period: {{review_period}} {{review_year}}
-Reason: {{send_back_reason}}
-
-Please review the feedback and resubmit the data.`,
+Reason: {{send_back_reason}}`,
   },
   password_rollout: {
     subject: '[PMS] Your Login Credentials',
@@ -724,6 +723,13 @@ const replacePlaceholders = (
   data: Record<string, string | number | undefined>
 ): string => {
   let result = template;
+
+  // Handle conditional blocks: {{#if_<role>}}...{{/if_<role>}}
+  const recipientRole = data.recipient_role ? String(data.recipient_role) : '';
+  result = result.replace(/\{\{#if_(\w+)\}\}([\s\S]*?)\{\{\/if_\1\}\}/g, (_match, role, content) => {
+    return recipientRole === role ? content : '';
+  });
+
   for (const [key, value] of Object.entries(data)) {
     result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), String(value || 'N/A'));
   }
