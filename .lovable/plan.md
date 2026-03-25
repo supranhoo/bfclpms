@@ -1,22 +1,22 @@
 
 
-## Fix: Button Count Should Reflect Filtered Selection
+## Show All Periods in Filter (Including Zero-Mismatch Months)
 
 ### Problem
-When the scan runs, ALL KPIs are pre-selected (line 138). When the user filters by period, the table only shows the filtered subset, but the "Confirm & Reconcile" button still counts `selectedKpiIds.size` which includes selections from ALL periods. This is confusing — user sees 26 rows, unticks all but 1, yet the button says "802" because 776 are still selected in other periods.
+Currently, `periodOptions` is derived only from `dryRunResult.affected`, so months with zero mismatches never appear in the dropdown. The user wants all active review periods shown, with a visual indicator when a month has no issues.
 
-### Fix in `src/components/admin/ReconcileOrphanedKpisDialog.tsx`
+### Changes to `src/components/admin/ReconcileOrphanedKpisDialog.tsx`
 
-Two changes:
+1. **Import `useDistinctKpiPeriods`** from `src/hooks/useKpis.ts` to fetch all existing review period+year combinations from the database.
 
-1. **When filter changes, deselect KPIs not in the filtered view**: When `filterPeriod` changes, update `selectedKpiIds` to only keep IDs that are in the new filtered set. This way switching to "January 2026" auto-deselects all non-January KPIs.
+2. **Merge all periods into dropdown options**: Combine the periods from `useDistinctKpiPeriods` with the periods from `dryRunResult.affected`. Build a list of `{ label, count }` objects where `count` is the number of affected KPIs for that period.
 
-2. **Button denominator should use filtered count**: Change line 355 from `dryRunResult.count` to `filteredAffected.length` so the button reads "Confirm & Reconcile 1 of 26 KPI(s)" when filtering January.
+3. **Show count in dropdown items**: Each `SelectItem` will display the period name plus a count badge, e.g. `"February 2026 (801)"` or `"March 2026 (0)"`. Zero-count items get a green checkmark or "(0 issues)" indicator to signal no mismatches.
 
-### Implementation
-- Add a `useEffect` on `filterPeriod` that intersects `selectedKpiIds` with the current `filteredAffected` IDs.
-- Update the button text to use `filteredAffected.length` as the denominator.
+4. **Always show the filter** (remove the `periodOptions.length > 1` guard) since all periods will now be listed regardless of whether they have issues.
 
-### Files Changed
+5. **Sort periods chronologically** using month order + year, consistent with existing sorting in `useDistinctKpiPeriods`.
+
+### Single file change
 - `src/components/admin/ReconcileOrphanedKpisDialog.tsx`
 
