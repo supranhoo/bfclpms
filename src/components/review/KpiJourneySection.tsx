@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +12,8 @@ import { getVisibleJourneyStages, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflow
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { UomType } from '@/lib/qualitativeUom';
 import { exportReviewTimelinePdf, ReviewTimelinePdfData } from '@/lib/pdfExport';
+import { statusLabels } from '@/lib/reviewConstants';
+import { format } from 'date-fns';
 
 function useEmployeeProfileForPdf(employeeId: string | undefined) {
   return useQuery({
@@ -114,6 +117,48 @@ export function KpiJourneySection({
   const kpiStatus = kpi.status || 'kra_set';
   const visibleStages = getVisibleStagesForLevel(viewLevel, effectiveStages);
   const globalIsNA = submission?.is_na || false;
+
+  // Fetch audit logs for the KPI
+  const { data: auditLogs = [] } = useQuery({
+    queryKey: ['kpi-journey-audit-logs', kpi.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('kpi_audit_logs')
+        .select('id, kpi_id, action, performed_by, on_behalf_of, on_behalf_role, old_value, new_value, metadata, created_at')
+        .eq('kpi_id', kpi.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!kpi.id,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Fetch performer profiles for audit logs
+  const auditUserIds = useMemo(() => {
+    const ids = auditLogs.map((l: any) => l.performed_by);
+    return [...new Set(ids)] as string[];
+  }, [auditLogs]);
+
+  const { data: auditProfiles = [] } = useQuery({
+    queryKey: ['kpi-journey-audit-profiles', auditUserIds],
+    queryFn: async () => {
+      if (auditUserIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', auditUserIds);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: auditUserIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const auditProfileMap = useMemo(
+    () => new Map(auditProfiles.map((p: any) => [p.id, p])),
+    [auditProfiles]
+  );
 
   // Resolve employee details: prefer props, fall back to fetched data
   const resolvedEmployeeName = employeeName || profileData?.fullName || '-';
@@ -241,6 +286,81 @@ export function KpiJourneySection({
     return status !== 'pending';
   });
 
+  // Format audit log details (same logic as KpiTimeline.tsx formatDetails)
+  const formatAuditDetails = (log: any): string[] => {
+    const details: string[] = [];
+    if (log.metadata?.reason) details.push(`Admin Reason: ${String(log.metadata.reason)}`);
+    if (log.new_value) {
+      if (log.new_value.source === 'org_kpi_data_owner') {
+        if (log.new_value.is_na) details.push('Marked as N/A');
+        else if (log.new_value.achieved_value !== undefined && log.new_value.achieved_value !== null)
+          details.push(`Achieved Value: ${log.new_value.achieved_value}`);
+        if (log.new_value.self_score) details.push(`Score: ${log.new_value.self_score}`);
+        if (log.new_value.self_rating) details.push(`Rating: ${log.new_value.self_rating}`);
+      } else {
+        if (log.new_value.self_score) details.push(`Self Score: ${log.new_value.self_score}`);
+        if (log.new_value.manager_score) details.push(`Manager Score: ${log.new_value.manager_score}`);
+        if (log.new_value.auditor_score) details.push(`Auditor Score: ${log.new_value.auditor_score}`);
+        if (log.new_value.management_score) details.push(`Management Score: ${log.new_value.management_score}`);
+        if (log.new_value.self_rating) details.push(`Rating: ${log.new_value.self_rating}`);
+        if (log.new_value.manager_rating) details.push(`Rating: ${log.new_value.manager_rating}`);
+        if (log.new_value.auditor_rating) details.push(`Rating: ${log.new_value.auditor_rating}`);
+        if (log.new_value.management_rating) details.push(`Rating: ${log.new_value.management_rating}`);
+      }
+      if (log.new_value.reason) details.push(`Reason: ${log.new_value.reason}`);
+      if (log.new_value.resolution_notes) details.push(`Resolution: ${log.new_value.resolution_notes}`);
+      if (log.new_value.target) details.push(`Sent to: ${log.new_value.target}`);
+      if (log.new_value.status) {
+        const label = statusLabels[String(log.new_value.status)] || String(log.new_value.status).replace(/_/g, ' ');
+        details.push(`New Status: ${label}`);
+      }
+      if (log.new_value.na_remarks) details.push(`N/A Remarks: ${log.new_value.na_remarks}`);
+      if (log.new_value.self_remarks) details.push(`Self Remarks: ${log.new_value.self_remarks}`);
+      if (log.new_value.manager_remarks) details.push(`Manager Remarks: ${log.new_value.manager_remarks}`);
+      if (log.new_value.auditor_remarks) details.push(`Auditor Remarks: ${log.new_value.auditor_remarks}`);
+      if (log.new_value.management_remarks) details.push(`Management Remarks: ${log.new_value.management_remarks}`);
+    }
+    return details;
+  };
+
+  const actionLabelMap: Record<string, string> = {
+    SELF_REVIEW_SUBMITTED: 'Self Review Submitted',
+    MANAGER_APPROVED: 'Manager Approved',
+    MANAGER_REVIEWED: 'Manager Reviewed',
+    QUERY_RAISED: 'Query Raised',
+    QUERY_RESOLVED: 'Query Resolved',
+    AUDITOR_REVIEWED: 'Auditor Reviewed',
+    AUDITOR_APPROVED: 'Auditor Approved',
+    AUDITOR_SENT_BACK_TO_MANAGER: 'Sent Back to Manager',
+    AUDITOR_SENT_BACK_TO_EMPLOYEE: 'Sent Back to Employee',
+    MANAGEMENT_REVIEWED: 'Management Reviewed',
+    MANAGEMENT_APPROVED: 'Management Approved',
+    MANAGEMENT_SENT_BACK_TO_AUDITOR: 'Sent Back to Auditor',
+    MANAGER_SENT_BACK_TO_EMPLOYEE: 'Sent Back to Employee',
+    MANAGEMENT_SENT_BACK_TO_MANAGER: 'Sent Back to Manager',
+    MANAGEMENT_SENT_BACK_TO_EMPLOYEE: 'Sent Back to Employee',
+    KPI_CREATED: 'KPI Created',
+    KPI_UPDATED: 'KPI Updated',
+    STATUS_CHANGED: 'Status Changed',
+    STATUS_TRANSITION: 'Status Changed',
+    MANAGER_NA_CONFIRMED: 'Manager Confirmed N/A',
+    AUDITOR_NA_CONFIRMED: 'Auditor Confirmed N/A',
+    MANAGEMENT_NA_CONFIRMED: 'Management Confirmed N/A',
+    ADMIN_DATA_ENTRY_SELF: 'Admin Entered Self Data',
+    ADMIN_DATA_ENTRY_MANAGER: 'Admin Entered Manager Data',
+    ADMIN_DATA_ENTRY_AUDITOR: 'Admin Entered Auditor Data',
+    ADMIN_DATA_ENTRY_MANAGEMENT: 'Admin Entered Management Data',
+    ADMIN_DAILY_ENTRY_OVERRIDE: 'Admin Daily Entry Override',
+    ADMIN_STATUS_OVERRIDE: 'Admin Status Override',
+    ADMIN_OVERRIDE: 'Admin Override',
+    MANAGER_DAILY_OVERRIDE: 'Manager Daily Override',
+    ADMIN_STATUS_STEP_BACK: 'Admin Status Step Back',
+    AUDITOR_FORWARDED: 'Auditor Forwarded',
+    MANAGER_FORWARDED: 'Manager Forwarded',
+    ORG_KPI_PROPAGATED: 'Org KPI Data Entered',
+    ORG_KPI_VALUE_UPDATED: 'Org KPI Value Updated',
+  };
+
   const handleDownloadPdf = () => {
     const pdfData: ReviewTimelinePdfData = {
       employeeName: resolvedEmployeeName,
@@ -272,6 +392,15 @@ export function KpiJourneySection({
       period: kpi.review_period || '',
       year: String(kpi.review_year || new Date().getFullYear()),
       isNA: globalIsNA,
+      auditLogs: auditLogs.map((log: any) => {
+        const performer = auditProfileMap.get(log.performed_by);
+        return {
+          label: actionLabelMap[log.action] || log.action.replace(/_/g, ' '),
+          performerName: performer?.full_name || performer?.email || 'System',
+          date: format(new Date(log.created_at), 'dd MMM yyyy, hh:mm a'),
+          details: formatAuditDetails(log),
+        };
+      }),
     };
     exportReviewTimelinePdf(pdfData);
   };

@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-25  
-> **Version:** 1.89.0 — Added PDF download to Review Timeline (KpiJourneySection) with employee details, KPI info, and review stage data; self-contained profile fetch for reporting manager name
+> **Version:** 1.90.0 — Added audit log timeline to Review Timeline PDF export; PDF now includes full KPI audit history (status changes, rollbacks, admin overrides, scores) matching the Review Timeline dialog UI
 > **Maintainer:** Lovable AI
 
 ---
