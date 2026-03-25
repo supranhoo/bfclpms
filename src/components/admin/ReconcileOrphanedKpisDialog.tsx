@@ -107,7 +107,19 @@ export default function ReconcileOrphanedKpisDialog({
     });
   };
 
-  const { data: distinctPeriods } = useDistinctKpiPeriods();
+  // Fetch all review periods from DB for complete dropdown
+  const { data: allReviewPeriods } = useQuery({
+    queryKey: ['review-periods-for-reconcile'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('review_periods')
+        .select('period_name, review_year')
+        .order('review_year', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: dialogOpen,
+  });
 
   const MONTH_ORDER = ['January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'];
@@ -128,16 +140,12 @@ export default function ReconcileOrphanedKpisDialog({
   // Merge all DB periods with affected periods, sorted chronologically
   const periodOptions = useMemo(() => {
     const allKeys = new Set<string>();
-    // Add periods from DB
-    if (distinctPeriods) {
-      distinctPeriods.periods.forEach(p => {
-        distinctPeriods.years.forEach(y => {
-          const key = `${p} ${y}`;
-          // Only include if KPIs actually exist for this combo
-          allKeys.add(key);
-        });
-      });
-    }
+    // Add periods from review_periods table
+    allReviewPeriods?.forEach(rp => {
+      if (rp.period_name && rp.review_year) {
+        allKeys.add(`${rp.period_name} ${rp.review_year}`);
+      }
+    });
     // Add periods from dry-run (ensures affected periods always appear)
     affectedCountMap.forEach((_, key) => allKeys.add(key));
 
@@ -148,7 +156,7 @@ export default function ReconcileOrphanedKpisDialog({
       if (yearDiff !== 0) return yearDiff;
       return MONTH_ORDER.indexOf(mA) - MONTH_ORDER.indexOf(mB);
     });
-  }, [distinctPeriods, affectedCountMap]);
+  }, [allReviewPeriods, affectedCountMap]);
 
   const filteredAffected = useMemo(() => {
     if (!dryRunResult) return [];
