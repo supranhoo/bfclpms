@@ -200,6 +200,7 @@ export default function ReconcileOrphanedKpisDialog({
     setDryRunResult(null);
     setExecuted(false);
     setFilterPeriod('all');
+    setEmployeeSort('none');
     setDialogOpen(true);
     try {
       const result = await reconcileMutation.mutateAsync({ dryRun: true });
@@ -261,7 +262,7 @@ export default function ReconcileOrphanedKpisDialog({
         Reconcile Workflow Statuses
       </Button>
 
-      <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) { setDialogOpen(false); setDryRunResult(null); setExecuted(false); setSelectedKpiIds(new Set()); setFilterPeriod('all'); } }}>
+      <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) { setDialogOpen(false); setDryRunResult(null); setExecuted(false); setSelectedKpiIds(new Set()); setFilterPeriod('all'); setEmployeeSort('none'); } }}>
         <DialogContent className="max-w-6xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
