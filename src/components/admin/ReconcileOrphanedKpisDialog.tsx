@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { RefreshCw, AlertTriangle, CheckCircle2, ArrowRight, Zap } from 'lucide-react';
+import { RefreshCw, AlertTriangle, CheckCircle2, ArrowRight, Zap, Filter } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -88,6 +89,24 @@ export default function ReconcileOrphanedKpisDialog({
   const [dryRunResult, setDryRunResult] = useState<ReconcileResult | null>(null);
   const [executed, setExecuted] = useState(false);
   const [selectedKpiIds, setSelectedKpiIds] = useState<Set<string>>(new Set());
+  const [filterPeriod, setFilterPeriod] = useState('all');
+
+  const periodOptions = useMemo(() => {
+    if (!dryRunResult) return [];
+    const set = new Set<string>();
+    dryRunResult.affected.forEach(a => {
+      if (a.review_period && a.review_year) set.add(`${a.review_period} ${a.review_year}`);
+    });
+    return Array.from(set).sort();
+  }, [dryRunResult]);
+
+  const filteredAffected = useMemo(() => {
+    if (!dryRunResult) return [];
+    if (filterPeriod === 'all') return dryRunResult.affected;
+    return dryRunResult.affected.filter(a =>
+      a.review_period && a.review_year && `${a.review_period} ${a.review_year}` === filterPeriod
+    );
+  }, [dryRunResult, filterPeriod]);
 
   const reconcileMutation = useMutation({
     mutationFn: async ({ dryRun, kpiIds }: { dryRun: boolean; kpiIds?: string[] }) => {
@@ -111,6 +130,7 @@ export default function ReconcileOrphanedKpisDialog({
   const handleOpenDryRun = async () => {
     setDryRunResult(null);
     setExecuted(false);
+    setFilterPeriod('all');
     setDialogOpen(true);
     try {
       const result = await reconcileMutation.mutateAsync({ dryRun: true });
@@ -172,7 +192,7 @@ export default function ReconcileOrphanedKpisDialog({
         Reconcile Workflow Statuses
       </Button>
 
-      <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) { setDialogOpen(false); setDryRunResult(null); setExecuted(false); setSelectedKpiIds(new Set()); } }}>
+      <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) { setDialogOpen(false); setDryRunResult(null); setExecuted(false); setSelectedKpiIds(new Set()); setFilterPeriod('all'); } }}>
         <DialogContent className="max-w-6xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -208,26 +228,40 @@ export default function ReconcileOrphanedKpisDialog({
           {dryRunResult && dryRunResult.count > 0 && (
             <div className="space-y-3">
               {/* Summary badges */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant="secondary">{dryRunResult.count} KPI(s)</Badge>
-                {(() => {
-                  const orphaned = dryRunResult.affected.filter(a => a.reason === 'missing_stage_orphan').length;
-                  const completed = dryRunResult.affected.filter(a => a.reason === 'terminal_stage_completed').length;
-                  const unreviewed = dryRunResult.affected.filter(a => a.reason === 'terminal_stage_unreviewed').length;
-                  const mismatch = dryRunResult.affected.filter(a => a.reason === 'review_stage_mismatch').length;
-                  return (
-                    <>
-                      {orphaned > 0 && <Badge variant="outline" className="text-xs bg-amber-50 dark:bg-amber-900/20">{orphaned} orphaned</Badge>}
-                      {completed > 0 && <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-900/20">{completed} terminal→approved</Badge>}
-                      
-                  {mismatch > 0 && <Badge variant="outline" className="text-xs bg-purple-50 dark:bg-purple-900/20">{mismatch} stage mismatch</Badge>}
-                      {(() => {
-                        const notForwarded = dryRunResult.affected.filter(a => a.reason === 'current_stage_scored_not_forwarded').length;
-                        return notForwarded > 0 ? <Badge variant="outline" className="text-xs bg-orange-50 dark:bg-orange-900/20">{notForwarded} scored not forwarded</Badge> : null;
-                      })()}
-                    </>
-                  );
-                })()}
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant="secondary">{dryRunResult.count} KPI(s)</Badge>
+                  {(() => {
+                    const orphaned = dryRunResult.affected.filter(a => a.reason === 'missing_stage_orphan').length;
+                    const completed = dryRunResult.affected.filter(a => a.reason === 'terminal_stage_completed').length;
+                    const mismatch = dryRunResult.affected.filter(a => a.reason === 'review_stage_mismatch').length;
+                    const notForwarded = dryRunResult.affected.filter(a => a.reason === 'current_stage_scored_not_forwarded').length;
+                    return (
+                      <>
+                        {orphaned > 0 && <Badge variant="outline" className="text-xs bg-amber-50 dark:bg-amber-900/20">{orphaned} orphaned</Badge>}
+                        {completed > 0 && <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-900/20">{completed} terminal→approved</Badge>}
+                        {mismatch > 0 && <Badge variant="outline" className="text-xs bg-purple-50 dark:bg-purple-900/20">{mismatch} stage mismatch</Badge>}
+                        {notForwarded > 0 && <Badge variant="outline" className="text-xs bg-orange-50 dark:bg-orange-900/20">{notForwarded} scored not forwarded</Badge>}
+                      </>
+                    );
+                  })()}
+                </div>
+                {periodOptions.length > 1 && (
+                  <div className="flex items-center gap-1.5">
+                    <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                    <Select value={filterPeriod} onValueChange={setFilterPeriod}>
+                      <SelectTrigger className="h-8 w-[160px] text-xs">
+                        <SelectValue placeholder="All Periods" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Periods</SelectItem>
+                        {periodOptions.map(p => (
+                          <SelectItem key={p} value={p}>{p}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
 
               <div className="border rounded-md max-h-[50vh] overflow-y-auto">
@@ -237,19 +271,20 @@ export default function ReconcileOrphanedKpisDialog({
                       {!executed && (
                         <TableHead className="w-10">
                           <Checkbox
-                            checked={dryRunResult.affected.length > 0 && selectedKpiIds.size === dryRunResult.affected.length}
+                            checked={filteredAffected.length > 0 && filteredAffected.every(a => selectedKpiIds.has(a.kpi_id))}
                             onCheckedChange={(checked) => {
-                              if (checked) {
-                                setSelectedKpiIds(new Set(dryRunResult.affected.map(a => a.kpi_id)));
-                              } else {
-                                setSelectedKpiIds(new Set());
-                              }
+                              setSelectedKpiIds(prev => {
+                                const next = new Set(prev);
+                                filteredAffected.forEach(a => {
+                                  if (checked) { next.add(a.kpi_id); } else { next.delete(a.kpi_id); }
+                                });
+                                return next;
+                              });
                             }}
                           />
                         </TableHead>
                       )}
                       <TableHead>Employee</TableHead>
-                      <TableHead>Period</TableHead>
                       <TableHead>KPI</TableHead>
                       <TableHead>Current</TableHead>
                       <TableHead>→</TableHead>
@@ -258,7 +293,7 @@ export default function ReconcileOrphanedKpisDialog({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {dryRunResult.affected.map((item) => (
+                    {filteredAffected.map((item) => (
                       <TableRow key={item.kpi_id} data-state={selectedKpiIds.has(item.kpi_id) ? 'selected' : undefined}>
                         {!executed && (
                           <TableCell>
@@ -275,9 +310,6 @@ export default function ReconcileOrphanedKpisDialog({
                           </TableCell>
                         )}
                         <TableCell className="font-medium text-sm">{item.employee_name}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                          {item.review_period && item.review_year ? `${item.review_period} ${item.review_year}` : '—'}
-                        </TableCell>
                         <TableCell className="text-sm max-w-[220px]">
                           <div className="truncate">{getKpiSummaryText(item.kpi_name)}</div>
                           <div className="text-xs text-muted-foreground truncate">{item.kra_name}</div>
@@ -323,7 +355,7 @@ export default function ReconcileOrphanedKpisDialog({
                 Confirm & Reconcile {selectedKpiIds.size} of {dryRunResult.count} KPI(s)
               </Button>
             )}
-            <Button variant="outline" onClick={() => { setDialogOpen(false); setDryRunResult(null); setExecuted(false); setSelectedKpiIds(new Set()); }}>
+            <Button variant="outline" onClick={() => { setDialogOpen(false); setDryRunResult(null); setExecuted(false); setSelectedKpiIds(new Set()); setFilterPeriod('all'); }}>
               {executed ? 'Close' : 'Cancel'}
             </Button>
           </DialogFooter>
