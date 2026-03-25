@@ -109,10 +109,16 @@ export function KpiJourneySection({
   employeeCode,
   reportingManagerName,
 }: KpiJourneySectionProps) {
+  const { data: profileData } = useEmployeeProfileForPdf(kpi.employee_id);
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
   const kpiStatus = kpi.status || 'kra_set';
   const visibleStages = getVisibleStagesForLevel(viewLevel, effectiveStages);
   const globalIsNA = submission?.is_na || false;
+
+  // Resolve employee details: prefer props, fall back to fetched data
+  const resolvedEmployeeName = employeeName || profileData?.fullName || '-';
+  const resolvedEmployeeCode = employeeCode || profileData?.employeeCode || '-';
+  const resolvedManagerName = reportingManagerName || profileData?.managerName || '-';
 
   // Recalculate score from achieved value using current KPI thresholds
   // This ensures consistent ratings across all stages regardless of when the score was stored
