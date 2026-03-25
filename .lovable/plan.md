@@ -1,85 +1,27 @@
 
 
-## Brainstorm: Program-Scoped Eligibility Data Entry
+## Bug Fix: Two Confirmed Issues
 
-### Current Problem
+### Bug 1: Org KPI Values Fail to Match in Self-Review (Data Bug)
 
-The Eligibility Data Entry grid loads **ALL active employees** regardless of whether they're mapped to any incentive program. This means:
-- Admin sees 500+ employees when only 50 might be in the "Support Function" program
-- No way to know which employees actually need eligibility data
-- Data entry is tedious and error-prone — admin doesn't know who to fill data for
+**What's broken:** `SelfReviewSheet.tsx` builds org KPI lookup keys using raw `kra_name` and `kpi_name` (e.g., `"Safety"`) but the map is populated with `.toLowerCase()` keys (e.g., `"safety"`) by the parent `UnifiedScorecard.tsx`. Result: org KPI achieved values silently fail to prefill during self-review for employees. The employee sees a blank achieved value even though data exists.
 
-### Proposed UX Flow
+**Where:** `src/components/review/SelfReviewSheet.tsx` — 6 locations (lines ~277, 280, 283, 508, 511, 514)
 
-```text
-┌─────────────────────────────────────────────────────────┐
-│  Eligibility Data Entry                                 │
-│  Enter monthly disqualification & attendance data       │
-│                                                         │
-│  [March ▼] [2026 ▼] [All Programs ▼] [Search...]       │
-│                                    ▲                    │
-│                                    │                    │
-│                         NEW: Program filter dropdown    │
-│                         Options:                        │
-│                         • All Programs (current behavior)│
-│                         • Support Function              │
-│                         • Production & Maintenance      │
-│                         • (any active program)          │
-│                                                         │
-│  ┌──────────┬──────┬──────┬─────┬─────┬────────┬──────┐ │
-│  │ Employee │ Dept │ Program │ ... │ Status │ Action │ │
-│  ├──────────┼──────┼─────────┼─────┼────────┼────────┤ │
-│  │ John     │ HR   │ Support │ ... │ Eligible│  💾   │ │
-│  │ Jane     │ Ops  │ Prod&M  │ ... │ Eligible│  💾   │ │
-│  └──────────┴──────┴─────────┴─────┴────────┴────────┘ │
-└─────────────────────────────────────────────────────────┘
-```
+**Fix:** Add `.toLowerCase()` to `kra_name` and `kpi_name` in all 6 org key constructions, matching the pattern used in every other scorecard.
 
-### Key Design Decisions
+### Bug 2: ModuleCard Missing forwardRef (Console Warning)
 
-**1. Add Program Filter Dropdown**
-- Fetch all active `incentive_programs`
-- Default: "All Programs" (shows only employees mapped to ANY program, not all employees)
-- Selecting a specific program filters to only employees mapped to that program
-- Uses the same mapping resolution logic already in `compute-monthly-incentives` (division → BU → dept → employee)
+**What's broken:** `ModuleHub` renders `ModuleCard` components, and React warns "Function components cannot be given refs." This happens because the Card component or a parent wrapper tries to forward a ref to ModuleCard.
 
-**2. Show Program Name Column**
-- Add a "Program" column showing which program(s) the employee belongs to
-- If mapped to multiple programs, show as comma-separated badges
+**Where:** `src/components/modules/ModuleCard.tsx`
 
-**3. Dynamic Fields Per Program**
-- Eligibility fields can be global OR program-specific (`program_id` column on `incentive_eligibility_fields`)
-- When a specific program is selected, show only that program's fields + global fields
-- When "All Programs" is selected, show all active fields (current behavior)
-
-**4. Stop Showing ALL Employees by Default**
-- Current: queries ALL active profiles
-- New: resolve mapped employees from `incentive_program_mappings` first, then only show those
-- If no mappings exist for any program, show an info banner: "No employees mapped to incentive programs. Go to Programs tab to configure mappings."
-
-**5. Excel Template & Import Scoped to Program**
-- Template export only includes employees from the selected program filter
-- Import validates that employee codes belong to the filtered set
-
-### Implementation
-
-#### 1. New hook: `useResolvedProgramEmployees`
-- Takes optional `programId` (or "all")
-- Fetches `incentive_program_mappings` for the program(s)
-- Resolves division/BU/dept/designation/grade/employee mappings to profile IDs (same logic as compute edge function)
-- Returns `{ employeeIds: string[], programByEmployee: Map<string, string[]> }`
-
-#### 2. `src/components/incentive/EligibilityDataEntry.tsx`
-- Add program selector dropdown (fetched from `useIncentivePrograms`)
-- Replace the "all active profiles" query with `useResolvedProgramEmployees`
-- Add "Program" column to table
-- Scope template export and import to filtered employees
-- Show info banner when no employees are mapped
-
-#### 3. No database changes needed
-The mapping resolution uses existing tables (`incentive_program_mappings`, `profiles`, `departments`, `business_units`).
+**Fix:** Wrap the component with `React.forwardRef` so it can accept refs cleanly.
 
 ### Files Modified
-- `src/components/incentive/EligibilityDataEntry.tsx` — add program filter, scoped employee list, program column
-- `src/hooks/useIncentiveEligibility.ts` — add `useResolvedProgramEmployees` hook
+- `src/components/review/SelfReviewSheet.tsx` — add `.toLowerCase()` to 6 org key lookups
+- `src/components/modules/ModuleCard.tsx` — wrap with `forwardRef`
+
+### Risk
+- Minimal. Both are targeted fixes matching existing patterns used elsewhere in the codebase.
 
