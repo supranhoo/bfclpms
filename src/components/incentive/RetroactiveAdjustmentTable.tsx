@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -6,8 +6,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Download, Bell } from 'lucide-react';
+import { Download, Bell, Search, Loader2 } from 'lucide-react';
 import { useIncentiveRevisions, useMarkPayrollNotified } from '@/hooks/useIncentiveRevisions';
+import { useDetectRetroactiveChanges } from '@/hooks/useIncentiveRecords';
+import { useIncentivePrograms } from '@/hooks/useIncentivePrograms';
 import * as XLSX from 'xlsx';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -15,9 +17,23 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 export function RetroactiveAdjustmentTable() {
   const [affectedYear, setAffectedYear] = useState(new Date().getFullYear());
   const [slabChangeOnly, setSlabChangeOnly] = useState(false);
+  const [detectMonth, setDetectMonth] = useState(MONTHS[new Date().getMonth()]);
+  const [detectProgram, setDetectProgram] = useState<string>('');
+
+  const { data: programs = [] } = useIncentivePrograms();
+  const activePrograms = (programs as any[]).filter((p: any) => p.is_active);
 
   const { data: revisions = [], isLoading } = useIncentiveRevisions({ affectedYear, slabChangeOnly });
   const markNotified = useMarkPayrollNotified();
+  const detectChanges = useDetectRetroactiveChanges();
+
+  const handleDetect = () => {
+    detectChanges.mutate({
+      review_period: detectMonth,
+      review_year: affectedYear,
+      ...(detectProgram ? { program_id: detectProgram } : {}),
+    });
+  };
 
   const handleExport = () => {
     const exportData = (revisions as any[]).map((r: any) => ({
@@ -68,6 +84,20 @@ export function RetroactiveAdjustmentTable() {
               <Badge variant="destructive">{pendingCount} pending notification{pendingCount > 1 ? 's' : ''}</Badge>
             )}
             <div className="ml-auto flex gap-2">
+              <Select value={detectProgram} onValueChange={setDetectProgram}>
+                <SelectTrigger className="w-[160px]"><SelectValue placeholder="Program" /></SelectTrigger>
+                <SelectContent>
+                  {activePrograms.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={detectMonth} onValueChange={setDetectMonth}>
+                <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
+                <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+              </Select>
+              <Button variant="outline" size="sm" onClick={handleDetect} disabled={detectChanges.isPending}>
+                {detectChanges.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Search className="h-4 w-4 mr-1" />}
+                Detect Changes
+              </Button>
               <Button variant="outline" size="sm" onClick={handleExport}><Download className="h-4 w-4 mr-1" /> Export</Button>
               <Button size="sm" onClick={handleMarkAllNotified} disabled={markNotified.isPending || pendingCount === 0}>
                 <Bell className="h-4 w-4 mr-1" /> Mark All Notified
