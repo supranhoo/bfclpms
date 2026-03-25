@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useDistinctKpiPeriods } from '@/hooks/useKpis';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -106,14 +107,48 @@ export default function ReconcileOrphanedKpisDialog({
     });
   };
 
-  const periodOptions = useMemo(() => {
-    if (!dryRunResult) return [];
-    const set = new Set<string>();
+  const { data: distinctPeriods } = useDistinctKpiPeriods();
+
+  const MONTH_ORDER = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+
+  // Count affected KPIs per period from dry-run results
+  const affectedCountMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!dryRunResult) return map;
     dryRunResult.affected.forEach(a => {
-      if (a.review_period && a.review_year) set.add(`${a.review_period} ${a.review_year}`);
+      if (a.review_period && a.review_year) {
+        const key = `${a.review_period} ${a.review_year}`;
+        map.set(key, (map.get(key) || 0) + 1);
+      }
     });
-    return Array.from(set).sort();
+    return map;
   }, [dryRunResult]);
+
+  // Merge all DB periods with affected periods, sorted chronologically
+  const periodOptions = useMemo(() => {
+    const allKeys = new Set<string>();
+    // Add periods from DB
+    if (distinctPeriods) {
+      distinctPeriods.periods.forEach(p => {
+        distinctPeriods.years.forEach(y => {
+          const key = `${p} ${y}`;
+          // Only include if KPIs actually exist for this combo
+          allKeys.add(key);
+        });
+      });
+    }
+    // Add periods from dry-run (ensures affected periods always appear)
+    affectedCountMap.forEach((_, key) => allKeys.add(key));
+
+    return Array.from(allKeys).sort((a, b) => {
+      const [mA, yA] = a.split(/ (\d+)$/);
+      const [mB, yB] = b.split(/ (\d+)$/);
+      const yearDiff = Number(yA) - Number(yB);
+      if (yearDiff !== 0) return yearDiff;
+      return MONTH_ORDER.indexOf(mA) - MONTH_ORDER.indexOf(mB);
+    });
+  }, [distinctPeriods, affectedCountMap]);
 
   const filteredAffected = useMemo(() => {
     if (!dryRunResult) return [];
@@ -261,18 +296,33 @@ export default function ReconcileOrphanedKpisDialog({
                     );
                   })()}
                 </div>
-                {periodOptions.length > 1 && (
+                {dryRunResult && periodOptions.length > 0 && (
                   <div className="flex items-center gap-1.5">
                     <Filter className="h-3.5 w-3.5 text-muted-foreground" />
                     <Select value={filterPeriod} onValueChange={handleFilterChange}>
-                      <SelectTrigger className="h-8 w-[160px] text-xs">
+                      <SelectTrigger className="h-8 w-[220px] text-xs">
                         <SelectValue placeholder="All Periods" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All Periods</SelectItem>
-                        {periodOptions.map(p => (
-                          <SelectItem key={p} value={p}>{p}</SelectItem>
-                        ))}
+                        <SelectItem value="all">All Periods ({dryRunResult.count})</SelectItem>
+                        {periodOptions.map(p => {
+                          const count = affectedCountMap.get(p) || 0;
+                          return (
+                            <SelectItem key={p} value={p}>
+                              <span className="flex items-center gap-1.5">
+                                {p}
+                                {count === 0 ? (
+                                  <span className="inline-flex items-center gap-0.5 text-green-600 dark:text-green-400">
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    <span className="text-[10px]">0 issues</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground">({count})</span>
+                                )}
+                              </span>
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                   </div>
