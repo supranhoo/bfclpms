@@ -392,7 +392,7 @@ export function SelfReviewSheet({
     setIsSubmittingMonthly(true);
     try {
       const result = calculateScoreFromAchieved(effectiveScore, selectedKpi);
-      const selfRating = getRatingLevel(result.rating);
+      const selfRating = scoreToRatingLevel(result.rating);
       
       let defaultRemarks: string;
       if (hasNoEntries) {
@@ -476,7 +476,7 @@ export function SelfReviewSheet({
       ? null
       : isQualitativeKpi(selectedKpi)
         ? calculatedRatingLevel
-        : (calculatedScore !== null ? getRatingLevel(calculatedScore) : null);
+        : (calculatedScore !== null ? scoreToRatingLevel(calculatedScore) : null);
 
     await submitReview.mutateAsync({
       kpi_id: selectedKpi.id,
