@@ -5,9 +5,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Download, CheckCircle2, DollarSign } from 'lucide-react';
-import { useIncentiveRecords, useConfirmIncentiveRecords, useMarkIncentivePaid } from '@/hooks/useIncentiveRecords';
+import { Download, CheckCircle2, DollarSign, Calculator, Loader2 } from 'lucide-react';
+import { useIncentiveRecords, useConfirmIncentiveRecords, useMarkIncentivePaid, useComputeIncentives } from '@/hooks/useIncentiveRecords';
+import { useIncentivePrograms } from '@/hooks/useIncentivePrograms';
 import { useAuth } from '@/contexts/AuthContext';
+import { IncentiveDryRunDialog } from './IncentiveDryRunDialog';
 import * as XLSX from 'xlsx';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -20,10 +22,17 @@ export function MonthlyIncentiveTable() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [eligibilityFilter, setEligibilityFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedProgram, setSelectedProgram] = useState<string>('');
+  const [dryRunResult, setDryRunResult] = useState<any>(null);
+  const [showPreview, setShowPreview] = useState(false);
+
+  const { data: programs = [] } = useIncentivePrograms();
+  const activePrograms = (programs as any[]).filter((p: any) => p.is_active);
 
   const { data: records = [], isLoading } = useIncentiveRecords(selectedMonth, selectedYear);
   const confirmRecords = useConfirmIncentiveRecords();
   const markPaid = useMarkIncentivePaid();
+  const computeIncentives = useComputeIncentives();
 
   const filteredRecords = useMemo(() => {
     return (records as any[]).filter(r => {
@@ -80,6 +89,34 @@ export function MonthlyIncentiveTable() {
     if (confirmedIds.length > 0) markPaid.mutate(confirmedIds);
   };
 
+  const handleCompute = async () => {
+    if (!selectedProgram) return;
+    try {
+      const result = await computeIncentives.mutateAsync({
+        review_period: selectedMonth,
+        review_year: selectedYear,
+        program_id: selectedProgram,
+        dry_run: true,
+      });
+      setDryRunResult(result);
+      setShowPreview(true);
+    } catch { /* error handled by hook */ }
+  };
+
+  const handleConfirmCompute = async () => {
+    if (!selectedProgram) return;
+    try {
+      await computeIncentives.mutateAsync({
+        review_period: selectedMonth,
+        review_year: selectedYear,
+        program_id: selectedProgram,
+        dry_run: false,
+      });
+      setShowPreview(false);
+      setDryRunResult(null);
+    } catch { /* error handled by hook */ }
+  };
+
   return (
     <div className="space-y-4">
       {/* Summary Cards */}
@@ -134,7 +171,17 @@ export function MonthlyIncentiveTable() {
               </SelectContent>
             </Select>
             <Input placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-[180px]" />
+            <Select value={selectedProgram} onValueChange={setSelectedProgram}>
+              <SelectTrigger className="w-[180px]"><SelectValue placeholder="Select Program" /></SelectTrigger>
+              <SelectContent>
+                {activePrograms.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
             <div className="ml-auto flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleCompute} disabled={!selectedProgram || computeIncentives.isPending}>
+                {computeIncentives.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Calculator className="h-4 w-4 mr-1" />}
+                Compute
+              </Button>
               <Button variant="outline" size="sm" onClick={handleExport}><Download className="h-4 w-4 mr-1" /> Export</Button>
               <Button size="sm" onClick={handleConfirmAll} disabled={confirmRecords.isPending}><CheckCircle2 className="h-4 w-4 mr-1" /> Confirm All</Button>
               <Button size="sm" variant="secondary" onClick={handleMarkAllPaid} disabled={markPaid.isPending}><DollarSign className="h-4 w-4 mr-1" /> Mark Paid</Button>
@@ -202,6 +249,14 @@ export function MonthlyIncentiveTable() {
           </div>
         </CardContent>
       </Card>
+
+      <IncentiveDryRunDialog
+        open={showPreview}
+        onOpenChange={setShowPreview}
+        result={dryRunResult}
+        onConfirm={handleConfirmCompute}
+        isConfirming={computeIncentives.isPending}
+      />
     </div>
   );
 }
