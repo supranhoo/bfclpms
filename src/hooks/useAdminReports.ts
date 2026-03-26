@@ -133,7 +133,7 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number, so
       const { data, error } = await supabase
         .from('profiles')
         .select(`
-          id, full_name, employee_code, pms_grade, designation, department_id,
+          id, full_name, employee_code, pms_grade, designation, department_id, is_active,
           departments (id, name, business_units (id, name, divisions (id, name)))
         `)
         .order('full_name');
@@ -208,7 +208,7 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number, so
     }
 
     // Build full rows
-    let allRows: EmployeeMatrixRow[] = profiles.map((p: any) => {
+    let allRows: EmployeeMatrixRow[] = profiles.filter((p: any) => p.is_active !== false).map((p: any) => {
       const dept = p.departments;
       const bu = dept?.business_units;
       const div = bu?.divisions;
