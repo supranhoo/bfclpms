@@ -2,7 +2,9 @@ import { useState, useMemo, useCallback } from 'react';
 import { useReportAccess } from '@/hooks/useReportAccess';
 import { useAllKpis, useReviewSubmissions } from '@/hooks/useKpis';
 import { useProfiles, useKraCategories } from '@/hooks/useOrganization';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -21,14 +23,36 @@ const ratingColors = {
 export default function PerformanceReport() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('performance');
+  const { user, effectiveRole } = useAuth();
   const [categorySortBy, setCategorySortBy] = useState<'weightage-desc' | 'weightage-asc' | 'score-desc' | 'score-asc'>('score-desc');
   const { data: allKpis, isLoading: kpisLoading } = useAllKpis();
   const { data: profiles } = useProfiles();
   const { data: categories } = useKraCategories();
-  const kpiIds = allKpis?.map(k => k.id) || [];
+
+  // Determine scope: managers/employees see only team KPIs; org-wide roles see everything
+  const isOrgWideRole = ['admin', 'management', 'auditor', 'hr_pms'].includes(effectiveRole || '');
+  const scopeLabel = isOrgWideRole ? 'Organization Performance' : 'Team Performance';
+
+  // Filter KPIs based on role scope
+  const scopedKpis = useMemo(() => {
+    if (!allKpis) return [];
+    if (isOrgWideRole) return allKpis;
+    // For managers/employees: exclude own KPIs and org-level KPIs
+    return allKpis.filter(k =>
+      k.employee_id !== user?.id && !(k as any).is_org_level
+    );
+  }, [allKpis, isOrgWideRole, user?.id]);
+
+  const kpiIds = scopedKpis.map(k => k.id);
   const { data: submissions } = useReviewSubmissions(kpiIds);
 
   const submissionMap = useMemo(() => new Map(submissions?.map(s => [s.kpi_id, s])), [submissions]);
+
+  // Derive employee count from scoped KPIs, not from profiles
+  const distinctEmployeeCount = useMemo(() => {
+    const ids = new Set(scopedKpis.map(k => k.employee_id));
+    return ids.size;
+  }, [scopedKpis]);
 
   // Calculate rating distribution
   const ratingDistribution = { red: 0, yellow: 0, green: 0, blue: 0 };
@@ -46,7 +70,7 @@ export default function PerformanceReport() {
 
   // Category performance
   const categoryPerformance = categories?.map(cat => {
-    const catKpis = allKpis?.filter(k => k.category_id === cat.id) || [];
+    const catKpis = scopedKpis.filter(k => k.category_id === cat.id);
     let totalScore = 0;
     let count = 0;
     catKpis.forEach(kpi => {
@@ -57,21 +81,20 @@ export default function PerformanceReport() {
         count++;
       }
     });
-    // Calculate dynamic weightage from KPIs
     const dynamicWeightage = catKpis.reduce((sum, kpi) => sum + (kpi.weightage || 0), 0);
     return {
       name: cat.name,
       avgScore: count > 0 ? Math.round(totalScore / count) : 0,
       kpiCount: catKpis.length,
       color: cat.color,
-      weightage: dynamicWeightage,  // Dynamic from KPIs
+      weightage: dynamicWeightage,
     };
   }) || [];
 
-  const totalKpis = allKpis?.length || 0;
-  const approvedKpis = allKpis?.filter(k => k.status === 'approved').length || 0;
+  const totalKpis = scopedKpis.length;
+  const approvedKpis = scopedKpis.filter(k => k.status === 'approved').length;
   const avgScore = submissions?.length ? Math.round(submissions.reduce((sum, s) => {
-    const kpi = allKpis?.find(k => k.id === (s as any).kpi_id);
+    const kpi = scopedKpis.find(k => k.id === (s as any).kpi_id);
     return sum + ((kpi?.status === 'approved' ? s.final_score : null) ?? s.management_score ?? s.auditor_score ?? s.hr_pms_score ?? s.skip_level_score ?? s.manager_score ?? s.self_score ?? 0);
   }, 0) / submissions.length) : 0;
 
@@ -99,15 +122,20 @@ export default function PerformanceReport() {
     <div className="space-y-6">
       <PageHeader
         title="Performance Report"
-        description="Organization-wide performance analytics"
+        description={scopeLabel}
         backTo="/reports"
         actions={
-          canExport ? (
-            <Button variant="outline" onClick={handleExportExcel}>
-              <Download className="h-4 w-4 mr-2" />
-              Export Excel
-            </Button>
-          ) : undefined
+          <div className="flex items-center gap-2">
+            <Badge variant={isOrgWideRole ? 'default' : 'secondary'}>
+              {scopeLabel}
+            </Badge>
+            {canExport && (
+              <Button variant="outline" onClick={handleExportExcel}>
+                <Download className="h-4 w-4 mr-2" />
+                Export Excel
+              </Button>
+            )}
+          </div>
         }
       />
 
@@ -124,7 +152,7 @@ export default function PerformanceReport() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Employees</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent><div className="text-3xl font-bold">{profiles?.length || 0}</div></CardContent>
+          <CardContent><div className="text-3xl font-bold">{distinctEmployeeCount}</div></CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
