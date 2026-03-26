@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-03-25  
-> **Version:** 1.93.0 — Fixed critical stage-parsing regression in reconcile_workflow_statuses; plain string array parsing restored via jsonb_array_elements_text()
+> **Last Updated:** 2026-03-26  
+> **Version:** 1.94.0 — Fixed type mismatch (text vs review_status enum) in reconcile_workflow_statuses; added ::text cast on SELECT and ::review_status cast on UPDATE
 > **Maintainer:** Lovable AI
 
 ---
