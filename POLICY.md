@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-26  
-> **Version:** 1.13.0 — Added Employee Profile with Job Descriptions & Skill Competency policies
+> **Version:** 1.14.0 — Added Employee Development admin hub policy (JD management by designation, competency assessment by employee)
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

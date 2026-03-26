@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-26  
-> **Version:** 1.96.0 — Enhanced Employee Profile: 4-tab layout (Overview/Skill Competency/KRA Summary/Settings), hero header with org info, new employee_job_descriptions and skill_competencies tables, designation-based JD, competency matrix with radar chart and gap analysis
+> **Version:** 1.97.0 — KRA Summary grouped by unique KRA with expandable KPI rows; Employee Development admin page (/admin/employee-development) with JD Manager and Competency Manager tabs
 > **Maintainer:** Lovable AI
 
 ---
