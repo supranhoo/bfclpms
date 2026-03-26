@@ -1,20 +1,32 @@
 
 
-## Fix: KRA Library Search — KPIs Not Scrollable / Not Visible
+## Fix: KRA Library Search Results Still Not Scrolling
 
 ### Root Cause
-The `ScrollArea` in `KraLibrarySearchPanel.tsx` has `max-h-[240px]` (line 209), which is far too small to display 17 KPIs under a KRA. With each row ~28px tall, only ~8 items fit before clipping — and the remaining KPIs are hidden with no visible scrollbar.
+
+The Radix `ScrollArea` component requires the **root element** to have a **concrete height constraint** that the internal `Viewport` can measure against. Setting `max-h-[400px]` on the `ScrollArea` root alone doesn't reliably trigger the internal scrollbar because the Viewport uses `h-full w-full` and inherits the unconstrained content height.
 
 ### Fix — `src/components/admin/KraLibrarySearchPanel.tsx`
 
-1. **Increase scroll area height**: Change `max-h-[240px]` → `max-h-[400px]` to accommodate larger result sets while still being bounded
-2. **Add KPI count summary below KRA row**: Show a small hint like "Click ▸ to expand 17 KPIs" when collapsed, so it's clear there are items to reveal
+Replace the Radix `ScrollArea` wrapper with a simple `div` that uses native CSS overflow scrolling. This is more reliable for dynamic content:
+
+**Current (line 209):**
+```tsx
+<ScrollArea className="max-h-[400px]">
+```
+
+**After:**
+```tsx
+<div className="max-h-[400px] overflow-y-auto">
+```
+
+And remove the closing `</ScrollArea>` tag (replace with `</div>`), and remove the `ScrollArea` import since it's no longer used.
 
 ### Risk Assessment
 - **Data Impact**: None
-- **Workflow Impact**: None  
-- **Regression Risk**: Zero — CSS height change only
+- **Workflow Impact**: None
+- **Regression Risk**: Zero — swapping scroll container implementation only, content unchanged
 
 ### Files Changed
-1. **`src/components/admin/KraLibrarySearchPanel.tsx`** — Increase `ScrollArea` max-height from 240px to 400px
+1. **`src/components/admin/KraLibrarySearchPanel.tsx`** — Replace Radix ScrollArea with native overflow-y-auto div
 
