@@ -176,8 +176,8 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number, so
   const isLoading = profilesLoading || kpisLoading;
 
   // Build the matrix and apply filters
-  const { rows, allFilteredRows, totalCount, totalEmployees, mappedEmployees, coveragePercent } = useMemo(() => {
-    if (!profiles || !kpis) return { rows: [], allFilteredRows: [], totalCount: 0, totalEmployees: 0, mappedEmployees: 0, coveragePercent: 0 };
+  const { rows, allFilteredRows, orgFilteredRows, totalCount, totalEmployees, mappedEmployees, coveragePercent } = useMemo(() => {
+    if (!profiles || !kpis) return { rows: [], allFilteredRows: [], orgFilteredRows: [], totalCount: 0, totalEmployees: 0, mappedEmployees: 0, coveragePercent: 0 };
 
     // Build employee → fiscal-month-index set
     const employeeMonths = new Map<string, Set<number>>();
@@ -238,7 +238,7 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number, so
       };
     });
 
-    // Apply filters
+    // Apply org hierarchy + search filters first (for cascading grade/designation options)
     if (filters.divisionId) {
       allRows = allRows.filter(r => r.divisionId === filters.divisionId);
     }
@@ -248,17 +248,22 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number, so
     if (filters.departmentId) {
       allRows = allRows.filter(r => r.departmentId === filters.departmentId);
     }
-    if (filters.grade) {
-      allRows = allRows.filter(r => r.grade === filters.grade);
-    }
-    if (filters.designation) {
-      allRows = allRows.filter(r => r.designation === filters.designation);
-    }
     if (filters.search) {
       const q = filters.search.toLowerCase();
       allRows = allRows.filter(r =>
         r.name.toLowerCase().includes(q) || r.code.toLowerCase().includes(q)
       );
+    }
+
+    // Snapshot before grade/designation filters for cascading options
+    const orgFilteredRows = [...allRows];
+
+    // Apply grade/designation filters
+    if (filters.grade) {
+      allRows = allRows.filter(r => r.grade === filters.grade);
+    }
+    if (filters.designation) {
+      allRows = allRows.filter(r => r.designation === filters.designation);
     }
 
     const totalCount = allRows.length;
@@ -283,12 +288,13 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number, so
     const start = (page - 1) * PAGE_SIZE;
     const rows = allRows.slice(start, start + PAGE_SIZE);
 
-    return { rows, allFilteredRows, totalCount, totalEmployees: totalCount, mappedEmployees: mappedCount, coveragePercent };
+    return { rows, allFilteredRows, orgFilteredRows, totalCount, totalEmployees: totalCount, mappedEmployees: mappedCount, coveragePercent };
   }, [profiles, kpis, filters, page, sort]);
 
   return {
     rows,
     allFilteredRows,
+    orgFilteredRows,
     totalCount,
     totalEmployees,
     mappedEmployees,
