@@ -282,7 +282,7 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+      <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Copy className="h-5 w-5" />
@@ -295,6 +295,8 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
 
         <ScrollArea className="flex-1 min-h-0 pr-4" type="always">
           <div className="space-y-6 py-2">
+            {/* Steps 1 & 3 side by side */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Step 1: Source Employee */}
             <div className="space-y-3">
               <Label className="text-sm font-semibold">Step 1: Source Employee & Period</Label>
