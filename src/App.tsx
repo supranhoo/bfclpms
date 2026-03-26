@@ -67,6 +67,7 @@ const BottleneckReport = lazy(() => import("./pages/reports/BottleneckReport"));
 const KpiStatusTracker = lazy(() => import("./pages/reports/KpiStatusTracker"));
 const KpiJourneyReport = lazy(() => import("./pages/reports/KpiJourneyReport"));
 const IncentiveReport = lazy(() => import("./pages/reports/IncentiveReport"));
+const VarianceReport = lazy(() => import("./pages/reports/VarianceReport"));
 
 // Layout components
 import { ReportRoute } from "./components/layout/ReportRoute";
