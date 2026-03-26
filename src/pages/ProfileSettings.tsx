@@ -32,66 +32,45 @@ export default function ProfileSettings() {
     const load = async () => {
       setLoading(true);
       try {
-        const promises: Promise<any>[] = [];
-
         // 1. Department hierarchy
         if (profile.department_id) {
-          promises.push(
-            supabase.from('departments').select('id, name, business_unit_id').eq('id', profile.department_id).maybeSingle()
-              .then(async ({ data: dept }) => {
-                setDepartment(dept);
-                if (dept?.business_unit_id) {
-                  const { data: bu } = await supabase.from('business_units').select('id, name, division_id').eq('id', dept.business_unit_id).maybeSingle();
-                  setBusinessUnit(bu);
-                  if (bu?.division_id) {
-                    const { data: div } = await supabase.from('divisions').select('id, name').eq('id', bu.division_id).maybeSingle();
-                    setDivision(div);
-                  }
-                }
-              })
-          );
-          // Sub-branch
-          promises.push(
-            supabase.from('sub_branches').select('id, name').eq('department_id', profile.department_id).limit(1).maybeSingle()
-              .then(({ data }) => setSubBranch(data))
-          );
+          const { data: dept } = await supabase.from('departments').select('id, name, business_unit_id').eq('id', profile.department_id).maybeSingle();
+          setDepartment(dept);
+          if (dept?.business_unit_id) {
+            const { data: bu } = await supabase.from('business_units').select('id, name, division_id').eq('id', dept.business_unit_id).maybeSingle();
+            setBusinessUnit(bu);
+            if (bu?.division_id) {
+              const { data: div } = await supabase.from('divisions').select('id, name').eq('id', bu.division_id).maybeSingle();
+              setDivision(div);
+            }
+          }
+          const { data: sb } = await supabase.from('sub_branches').select('id, name').eq('department_id', profile.department_id).limit(1).maybeSingle();
+          setSubBranch(sb);
         }
 
         // 2. Manager
         if (profile.reporting_manager_id) {
-          promises.push(
-            supabase.from('profiles').select('full_name, designation, avatar_url, employee_code').eq('id', profile.reporting_manager_id).maybeSingle()
-              .then(({ data }) => setManager(data))
-          );
+          const { data: mgr } = await supabase.from('profiles').select('full_name, designation, avatar_url, employee_code').eq('id', profile.reporting_manager_id).maybeSingle();
+          setManager(mgr);
         }
 
         // 3. Job description
         if (profile.designation) {
-          promises.push(
-            supabase.from('employee_job_descriptions').select('*').eq('designation', profile.designation).maybeSingle()
-              .then(({ data }) => setJobDesc(data))
-          );
+          const { data: jd } = await supabase.from('employee_job_descriptions').select('*').eq('designation', profile.designation).maybeSingle();
+          setJobDesc(jd);
         }
 
         // 4. Competencies
-        promises.push(
-          supabase.from('skill_competencies').select('*').eq('employee_id', user.id).order('category').order('skill_name')
-            .then(({ data }) => setCompetencies(data || []))
-        );
+        const { data: comps } = await supabase.from('skill_competencies').select('*').eq('employee_id', user.id).order('category').order('skill_name');
+        setCompetencies(comps || []);
 
-        // 5. KPIs for current period
-        promises.push(
-          supabase.from('kpis').select('id, category_id, kra_name, kpi_name, weightage, status, review_period, review_year').eq('employee_id', user.id).order('created_at', { ascending: false })
-            .then(({ data }) => setKpis(data || []))
-        );
+        // 5. KPIs
+        const { data: kpiData } = await supabase.from('kpis').select('id, category_id, kra_name, kpi_name, weightage, status, review_period, review_year').eq('employee_id', user.id).order('created_at', { ascending: false });
+        setKpis(kpiData || []);
 
         // 6. Categories
-        promises.push(
-          supabase.from('categories').select('id, name')
-            .then(({ data }) => setCategories(data || []))
-        );
-
-        await Promise.all(promises);
+        const { data: cats } = await supabase.from('kra_categories').select('id, name');
+        setCategories(cats || []);
       } catch (err) {
         console.error('Failed to load profile data', err);
       } finally {
