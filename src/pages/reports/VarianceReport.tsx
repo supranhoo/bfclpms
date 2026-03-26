@@ -93,11 +93,11 @@ export default function VarianceReport() {
         month: kpi.review_period || month,
         auditorScore,
         managementScore,
-        variance: Math.abs(auditorScore - managementScore),
+        variance: auditorScore - managementScore,
       });
     }
 
-    return result.sort((a, b) => b.variance - a.variance);
+    return result.sort((a, b) => Math.abs(b.variance) - Math.abs(a.variance));
   }, [rawData, month]);
 
   const filtered = useMemo(() => {
@@ -118,9 +118,9 @@ export default function VarianceReport() {
 
   const avgVariance =
     filtered.length > 0
-      ? +(filtered.reduce((s, r) => s + r.variance, 0) / filtered.length).toFixed(2)
+      ? +(filtered.reduce((s, r) => s + Math.abs(r.variance), 0) / filtered.length).toFixed(2)
       : 0;
-  const maxVariance = filtered.length > 0 ? Math.max(...filtered.map((r) => r.variance)) : 0;
+  const maxVariance = filtered.length > 0 ? Math.max(...filtered.map((r) => Math.abs(r.variance))) : 0;
 
   const handleExport = () => {
     if (!filtered.length) return;
@@ -281,8 +281,12 @@ export default function VarianceReport() {
                         <TableCell className="text-center">{r.auditorScore.toFixed(2)}</TableCell>
                         <TableCell className="text-center">{r.managementScore.toFixed(2)}</TableCell>
                         <TableCell className="text-center">
-                          <Badge variant={r.variance >= 1 ? 'destructive' : 'secondary'}>
-                            {r.variance.toFixed(2)}
+                          <Badge className={
+                            r.variance > 0
+                              ? 'bg-green-100 text-green-800 hover:bg-green-100 border-green-200'
+                              : 'bg-red-100 text-red-800 hover:bg-red-100 border-red-200'
+                          }>
+                            {r.variance > 0 ? '+' : ''}{r.variance.toFixed(2)}
                           </Badge>
                         </TableCell>
                       </TableRow>
