@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-26  
-> **Version:** 1.97.0 — KRA Summary grouped by unique KRA with expandable KPI rows; Employee Development admin page (/admin/employee-development) with JD Manager and Competency Manager tabs
+> **Version:** 1.98.0 — KRA Library Quick Search panel in Assign KRA dialog with hierarchical checkbox selection
 > **Maintainer:** Lovable AI
 
 ---
