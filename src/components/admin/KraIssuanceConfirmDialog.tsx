@@ -10,13 +10,15 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, CheckCircle, AlertTriangle, Send, Info, Plus, Trash2, Save } from 'lucide-react';
+import { Loader2, CheckCircle, AlertTriangle, Send, Info, Plus, Trash2, Save, Pencil } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { sendKraAssignmentNotifications, KraNotificationItem } from '@/lib/kraNotifications';
 import { AdminKpiCreateDialog } from './AdminKpiCreateDialog';
+import { AdminKpiEditDialog } from './AdminKpiEditDialog';
+import { KPI } from '@/hooks/useKpis';
 import { getAllPeriodsForMonth } from '@/lib/frequencyUtils';
 
 interface KraIssuanceConfirmDialogProps {
