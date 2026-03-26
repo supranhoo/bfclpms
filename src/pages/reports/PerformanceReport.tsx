@@ -23,14 +23,36 @@ const ratingColors = {
 export default function PerformanceReport() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('performance');
+  const { user, effectiveRole } = useAuth();
   const [categorySortBy, setCategorySortBy] = useState<'weightage-desc' | 'weightage-asc' | 'score-desc' | 'score-asc'>('score-desc');
   const { data: allKpis, isLoading: kpisLoading } = useAllKpis();
   const { data: profiles } = useProfiles();
   const { data: categories } = useKraCategories();
-  const kpiIds = allKpis?.map(k => k.id) || [];
+
+  // Determine scope: managers/employees see only team KPIs; org-wide roles see everything
+  const isOrgWideRole = ['admin', 'management', 'auditor', 'hr_pms'].includes(effectiveRole || '');
+  const scopeLabel = isOrgWideRole ? 'Organization Performance' : 'Team Performance';
+
+  // Filter KPIs based on role scope
+  const scopedKpis = useMemo(() => {
+    if (!allKpis) return [];
+    if (isOrgWideRole) return allKpis;
+    // For managers/employees: exclude own KPIs and org-level KPIs
+    return allKpis.filter(k =>
+      k.employee_id !== user?.id && !(k as any).is_org_level
+    );
+  }, [allKpis, isOrgWideRole, user?.id]);
+
+  const kpiIds = scopedKpis.map(k => k.id);
   const { data: submissions } = useReviewSubmissions(kpiIds);
 
   const submissionMap = useMemo(() => new Map(submissions?.map(s => [s.kpi_id, s])), [submissions]);
+
+  // Derive employee count from scoped KPIs, not from profiles
+  const distinctEmployeeCount = useMemo(() => {
+    const ids = new Set(scopedKpis.map(k => k.employee_id));
+    return ids.size;
+  }, [scopedKpis]);
 
   // Calculate rating distribution
   const ratingDistribution = { red: 0, yellow: 0, green: 0, blue: 0 };
