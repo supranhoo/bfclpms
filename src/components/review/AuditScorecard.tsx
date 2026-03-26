@@ -375,6 +375,8 @@ export function AuditScorecard({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+      queryClient.invalidateQueries({ queryKey: ['kpi-timeline'] });
+      queryClient.invalidateQueries({ queryKey: ['kpi-journey-audit-logs'] });
       toast({ title: 'KPI sent back successfully' });
       setSendBackDialogOpen(false);
     },

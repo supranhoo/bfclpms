@@ -131,7 +131,7 @@ export function KpiJourneySection({
       return data || [];
     },
     enabled: !!kpi.id,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 1000,
   });
 
   // Fetch performer profiles for audit logs
