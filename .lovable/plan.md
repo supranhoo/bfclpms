@@ -1,39 +1,23 @@
 
 
-## RCA: Quick Search Library Selection Not Auto-Filling All Fields
+## Make KPI Name Fully Visible in Admin KPI Editor
 
-### Root Cause
+### Problem
+The KPI Name textarea uses `rows={1}` and `min-h-[36px]`, so long KPI names (with formulas, scoring logic) are truncated to a single line. The user must manually resize to see the full content.
 
-The issue is in the **callback handlers** in `AdminKpiCreateDialog.tsx` (lines 345-406):
+### Fix — `src/components/admin/AdminKpiEditorForm.tsx` (line 453-454)
 
-| Selection Level | What Gets Filled | What's Missing |
-|---|---|---|
-| **Category** (line 345-349) | `categoryId` only | KRA name, KPI name, all metrics (UOM, target, thresholds, etc.) |
-| **KRA** (line 350-354) | `categoryId` + `kraName` | KPI name, all metrics |
-| **KPI** (line 355-406) | Everything | Nothing — works correctly |
+Change the textarea from `rows={1}` with small min-height to `rows={3}` with a taller min-height so multiline KPI names are visible by default:
 
-When admin selects a **Category** or **KRA** from search results, the handler only sets identity fields but does NOT look up the first available KPI under that selection to auto-fill metrics. The full auto-fill logic (UOM, target, thresholds, frequency, weightage, etc.) only exists in the `onSelectKpi` handler.
-
-### Fix — `AdminKpiCreateDialog.tsx`
-
-**`onSelectKra` handler (lines 350-354)**: After setting `categoryId` + `kraName`, find the first matching template (or existing KPI) for that category+KRA combo and auto-fill: KPI name, UOM, UOM type, criteria, target, weightage, frequency, thresholds (R0-R5), qualitative options, threshold mode, source of data, and resubmit reason.
-
-**`onSelectCategory` handler (lines 345-349)**: After setting `categoryId`, find the first matching template (or existing KPI) for that category and auto-fill: KRA name, KPI name, and all metric fields listed above.
-
-Both handlers will reuse the exact same field-mapping logic already present in `onSelectKpi` (lines 363-404), extracted into a helper function to avoid duplication.
-
-### Implementation Detail
-
-Create a local `applyEntryFields(source)` function that takes a template or KPI record and calls all the setters (setUomType, setUom, setCriteria, setTargetValue, setWeightage, setFrequency, setR5-R0, etc.). All three handlers call this function after finding the best match:
-- `onSelectKpi`: exact match (existing behavior)
-- `onSelectKra`: first template/KPI matching `category_id + kra_name`
-- `onSelectCategory`: first template/KPI matching `category_id`
+- `rows={1}` → `rows={3}`
+- `min-h-[36px]` → `min-h-[80px]`
+- Keep `resize-y` so admin can still adjust
 
 ### Risk Assessment
-- **Data Impact**: None — read-only lookup, no schema changes
-- **Workflow Impact**: None — additive improvement to existing auto-fill
-- **Regression Risk**: Zero — extracting existing logic into a helper; `onSelectKpi` behavior unchanged
+- **Data Impact**: None
+- **Workflow Impact**: None
+- **Regression Risk**: Zero — cosmetic change only
 
 ### Files Changed
-1. **`src/components/admin/AdminKpiCreateDialog.tsx`** — Extract field-mapping helper; update `onSelectCategory` and `onSelectKra` handlers to auto-fill all fields from first matching entry
+1. **`src/components/admin/AdminKpiEditorForm.tsx`** — Increase KPI Name textarea rows and min-height
 
