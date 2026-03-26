@@ -450,8 +450,8 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
         <Textarea
           value={formData.kpi_name}
           onChange={(e) => setFormData(prev => ({ ...prev, kpi_name: e.target.value }))}
-          rows={1}
-          className="min-h-[36px] resize-y"
+          rows={3}
+          className="min-h-[80px] resize-y"
         />
       </div>
 
