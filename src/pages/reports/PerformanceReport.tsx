@@ -152,7 +152,7 @@ export default function PerformanceReport() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Employees</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent><div className="text-3xl font-bold">{profiles?.length || 0}</div></CardContent>
+          <CardContent><div className="text-3xl font-bold">{distinctEmployeeCount}</div></CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
