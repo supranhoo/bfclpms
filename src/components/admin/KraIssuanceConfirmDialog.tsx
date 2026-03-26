@@ -51,6 +51,7 @@ export function KraIssuanceConfirmDialog({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [isAddKraOpen, setIsAddKraOpen] = useState(false);
+  const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
 
   // Fetch all KPIs for this employee/period
   const { data: kpis, isLoading } = useQuery({
