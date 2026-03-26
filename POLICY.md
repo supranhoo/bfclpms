@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-26  
-> **Version:** 1.16.0 — KRA Library Quick Search auto-fills now render as editable fields
+> **Version:** 1.17.0 — Fix send-back records not appearing in timeline history (cache invalidation)
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
