@@ -1,28 +1,23 @@
 
 
-## Enlarge KRA Issuance Confirmation Dialog + Add Edit KPI Button
+## Merge Category + KRA into Single Column
 
-### Problem
-The dialog is already `max-w-5xl` but feels constrained. User wants more space and an "Edit KPI" option using the existing Admin KPI Editor.
+### Change — `src/components/admin/KraIssuanceConfirmDialog.tsx`
 
-### Changes — 1 file: `src/components/admin/KraIssuanceConfirmDialog.tsx`
+Combine the "Category" and "KRA" columns into one "Category / KRA" column. The category badge renders on top, KRA name below it. This frees ~130px+ of horizontal space for the KPI column.
 
-1. **Increase dialog size**: Change `max-w-5xl` → `max-w-7xl` (1280px) to give more room for the 9-column table
-2. **Add Edit button per row**: Add a new "Actions" column with a pencil icon button that opens the `AdminKpiEditDialog` for the selected KPI
-3. **Wire AdminKpiEditDialog**: 
-   - Import `AdminKpiEditDialog` and the `KPI` type
-   - Add state for `editingKpi` (the KPI to edit)
-   - When edit button clicked, fetch full KPI data and open the editor
-   - On editor close, invalidate queries to refresh the table
-4. **Fetch full KPI objects**: The current query only selects limited fields. Add a secondary fetch (or expand the select) to get the full KPI record when editing, since `AdminKpiEditDialog` expects a full `KPI` object
+**Header**: Remove separate Category and KRA `<TableHead>`, replace with single `<TableHead>Category / KRA</TableHead>` with `min-w-[200px]`
 
-### Table Layout After Change
+**Cell**: Stack category badge and KRA name vertically:
+```tsx
+<TableCell className="align-top">
+  <Badge variant="outline" className="text-xs mb-1">{getCategoryName(kpi.category_id)}</Badge>
+  <div className="font-medium whitespace-normal leading-snug">{kpi.kra_name}</div>
+</TableCell>
+```
 
-| ✓ | # | Category | KRA | KPI | UOM | Target | Weightage | Frequency | Actions |
-|---|---|----------|-----|-----|-----|--------|-----------|-----------|---------|
-
-The Actions column will contain a small pencil icon button per row.
+**KPI column**: Increase from `min-w-[200px]` to `min-w-[300px]` to use the reclaimed space.
 
 ### Files Changed
-1. **`src/components/admin/KraIssuanceConfirmDialog.tsx`** — Widen to `max-w-7xl`, add Actions column with Edit KPI button, integrate `AdminKpiEditDialog`
+1. **`src/components/admin/KraIssuanceConfirmDialog.tsx`** — Merge Category + KRA into one column, widen KPI column
 
