@@ -284,7 +284,7 @@ export function KpiJourneySection({
   const hasAnyData = visibleStages.some(stage => {
     const status = getStageStatus(stage, kpiStatus, viewLevel, effectiveStages);
     return status !== 'pending';
-  });
+  }) || auditLogs.length > 0;
 
   // Format audit log details (same logic as KpiTimeline.tsx formatDetails)
   const formatAuditDetails = (log: any): string[] => {
