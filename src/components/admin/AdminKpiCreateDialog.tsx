@@ -327,6 +327,30 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
 
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i);
 
+  const applySourceFields = (source: any, isTemplate: boolean) => {
+    if (isTemplate) {
+      setSelectedTemplateId(source.id);
+    } else {
+      setSelectedTemplateId(null);
+    }
+    if (source.uom_type) setUomType(source.uom_type as UomType);
+    if (source.uom) setUom(source.uom);
+    if (source.criteria) setCriteria(source.criteria);
+    if (source.target_value != null) setTargetValue(String(source.target_value));
+    if (source.weightage != null) setWeightage(String(source.weightage));
+    if (source.frequency) setFrequency(source.frequency);
+    if (source.source_of_data) setSourceOfData(source.source_of_data);
+    if (source.r5) setR5(source.r5);
+    if (source.r4) setR4(source.r4);
+    if (source.r3) setR3(source.r3);
+    if (source.r2) setR2(source.r2);
+    if (source.r1) setR1(source.r1);
+    if (source.r0) setR0(source.r0);
+    if (source.qualitative_options) setQualitativeOptions(source.qualitative_options as QualitativeOption[]);
+    if (source.threshold_mode) setThresholdMode(source.threshold_mode as 'absolute' | 'ratio');
+    if (source.require_resubmit_reason != null) setRequireResubmitReason(source.require_resubmit_reason);
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="max-w-4xl max-h-[92vh]">
@@ -344,13 +368,41 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
               categories={categories}
               onSelectCategory={(catId) => {
                 setCategoryId(catId);
-                setKraName('');
-                setKpiName('');
+                // Find first matching template or KPI for this category and auto-fill all fields
+                const tpl = (templates || []).find(t => t.is_active && t.category_id === catId);
+                if (tpl) {
+                  setKraName(tpl.kra_name);
+                  setKpiName(tpl.kpi_name);
+                  applySourceFields(tpl, true);
+                } else {
+                  const existing = (allKpis || []).find(k => k.category_id === catId);
+                  if (existing) {
+                    setKraName(existing.kra_name);
+                    setKpiName(existing.kpi_name);
+                    applySourceFields(existing, false);
+                  } else {
+                    setKraName('');
+                    setKpiName('');
+                  }
+                }
               }}
               onSelectKra={(catId, kra) => {
                 setCategoryId(catId);
                 setKraName(kra);
-                setKpiName('');
+                // Find first matching template or KPI for this category+KRA and auto-fill all fields
+                const tpl = (templates || []).find(t => t.is_active && t.category_id === catId && t.kra_name === kra);
+                if (tpl) {
+                  setKpiName(tpl.kpi_name);
+                  applySourceFields(tpl, true);
+                } else {
+                  const existing = (allKpis || []).find(k => k.category_id === catId && k.kra_name === kra);
+                  if (existing) {
+                    setKpiName(existing.kpi_name);
+                    applySourceFields(existing, false);
+                  } else {
+                    setKpiName('');
+                  }
+                }
               }}
               onSelectKpi={(catId, kra, kpi) => {
                 setCategoryId(catId);
@@ -361,46 +413,13 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                   t => t.is_active && t.category_id === catId && t.kra_name === kra && t.kpi_name === kpi
                 );
                 if (tpl) {
-                  setSelectedTemplateId(tpl.id);
-                  if (tpl.uom_type) setUomType(tpl.uom_type as UomType);
-                  if (tpl.uom) setUom(tpl.uom);
-                  if (tpl.criteria) setCriteria(tpl.criteria);
-                  if (tpl.target_value != null) setTargetValue(String(tpl.target_value));
-                  if (tpl.weightage != null) setWeightage(String(tpl.weightage));
-                  if (tpl.frequency) setFrequency(tpl.frequency);
-                  if (tpl.source_of_data) setSourceOfData(tpl.source_of_data);
-                  if (tpl.r5) setR5(tpl.r5);
-                  if (tpl.r4) setR4(tpl.r4);
-                  if (tpl.r3) setR3(tpl.r3);
-                  if (tpl.r2) setR2(tpl.r2);
-                  if (tpl.r1) setR1(tpl.r1);
-                  if (tpl.r0) setR0(tpl.r0);
-                  if (tpl.qualitative_options) setQualitativeOptions(tpl.qualitative_options as QualitativeOption[]);
-                  if (tpl.threshold_mode) setThresholdMode(tpl.threshold_mode as 'absolute' | 'ratio');
-                  if (tpl.require_resubmit_reason != null) setRequireResubmitReason(tpl.require_resubmit_reason);
+                  applySourceFields(tpl, true);
                 } else {
-                  // Try existing KPI data
                   const existing = (allKpis || []).find(
                     k => k.category_id === catId && k.kra_name === kra && k.kpi_name === kpi
                   );
                   if (existing) {
-                    setSelectedTemplateId(null);
-                    if (existing.uom_type) setUomType(existing.uom_type as UomType);
-                    if (existing.uom) setUom(existing.uom);
-                    if (existing.criteria) setCriteria(existing.criteria);
-                    if (existing.target_value != null) setTargetValue(String(existing.target_value));
-                    if (existing.weightage != null) setWeightage(String(existing.weightage));
-                    if (existing.frequency) setFrequency(existing.frequency);
-                    if (existing.source_of_data) setSourceOfData(existing.source_of_data);
-                    if (existing.r5) setR5(existing.r5);
-                    if (existing.r4) setR4(existing.r4);
-                    if (existing.r3) setR3(existing.r3);
-                    if (existing.r2) setR2(existing.r2);
-                    if (existing.r1) setR1(existing.r1);
-                    if (existing.r0) setR0(existing.r0);
-                    if (existing.qualitative_options) setQualitativeOptions(existing.qualitative_options as QualitativeOption[]);
-                    if (existing.threshold_mode) setThresholdMode(existing.threshold_mode as 'absolute' | 'ratio');
-                    if (existing.require_resubmit_reason != null) setRequireResubmitReason(existing.require_resubmit_reason);
+                    applySourceFields(existing, false);
                   }
                 }
               }}

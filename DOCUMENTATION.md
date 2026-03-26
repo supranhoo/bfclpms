@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-26  
-> **Version:** 1.98.0 — KRA Library Quick Search panel in Assign KRA dialog with hierarchical checkbox selection
+> **Version:** 1.99.0 — KRA Library Quick Search auto-fills all fields (UOM, targets, thresholds) when selecting Category or KRA level
 > **Maintainer:** Lovable AI
 
 ---
