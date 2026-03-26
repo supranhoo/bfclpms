@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ScrollArea } from '@/components/ui/scroll-area';
+
 import { Search, FolderOpen, ChevronRight, ChevronDown, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -206,7 +206,7 @@ export function KraLibrarySearchPanel({
 
       {showPanel && (
         <div className="rounded-md border bg-muted/30">
-          <ScrollArea className="max-h-[400px]">
+          <div className="max-h-[400px] overflow-y-auto pr-2">
             {!hasResults ? (
               <div className="p-4 text-center text-sm text-muted-foreground">
                 No matches found — create manually below
@@ -322,7 +322,7 @@ export function KraLibrarySearchPanel({
                 })}
               </div>
             )}
-          </ScrollArea>
+          </div>
         </div>
       )}
     </div>
