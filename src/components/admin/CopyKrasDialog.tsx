@@ -300,8 +300,8 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
               {/* Step 1: Source Employee */}
               <div className="space-y-3">
                 <Label className="text-sm font-semibold">Step 1: Source Employee & Period</Label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <div className="sm:col-span-1 space-y-1">
+                <div className="space-y-2">
+                  <div className="space-y-1">
                     <Input
                       placeholder="Search employee..."
                       value={sourceSearch}
@@ -309,7 +309,7 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
                       className="text-sm"
                     />
                     {sourceSearch && !sourceEmployeeId && (
-                      <div className="border rounded-md max-h-32 overflow-y-auto">
+                      <div className="border rounded-md max-h-48 overflow-y-auto">
                         {filteredSourceEmployees.slice(0, 20).map(emp => (
                           <button
                             key={emp.id}
@@ -335,18 +335,20 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
                       </div>
                     )}
                   </div>
-                  <Select value={sourcePeriod} onValueChange={setSourcePeriod}>
-                    <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Select value={String(sourceYear)} onValueChange={v => setSourceYear(Number(v))}>
-                    <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Select value={sourcePeriod} onValueChange={setSourcePeriod}>
+                      <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Select value={String(sourceYear)} onValueChange={v => setSourceYear(Number(v))}>
+                      <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
 
@@ -354,27 +356,27 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
               {selectedKraIds.size > 0 && (
                 <div className="space-y-3">
                   <Label className="text-sm font-semibold">Step 3: Target Employee(s) & Period</Label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <div className="sm:col-span-1">
-                      <Input
-                        placeholder="Search target employees..."
-                        value={targetSearch}
-                        onChange={(e) => setTargetSearch(e.target.value)}
-                        className="text-sm"
-                      />
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="Search target employees..."
+                      value={targetSearch}
+                      onChange={(e) => setTargetSearch(e.target.value)}
+                      className="text-sm"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <Select value={targetPeriod} onValueChange={setTargetPeriod}>
+                        <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Select value={String(targetYear)} onValueChange={v => setTargetYear(Number(v))}>
+                        <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <Select value={targetPeriod} onValueChange={setTargetPeriod}>
-                      <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <Select value={String(targetYear)} onValueChange={v => setTargetYear(Number(v))}>
-                      <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
                   </div>
 
                   <div className="border rounded-lg max-h-64 overflow-y-auto">
