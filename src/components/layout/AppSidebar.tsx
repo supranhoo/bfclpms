@@ -96,6 +96,7 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
     { title: 'Weightage Matrix', icon: Percent, path: '/admin/kpi-weightage', roles: ['admin'] },
     { title: 'Pending Reviews', icon: ClipboardCheck, path: '/admin/pending-reviews', roles: ['admin'] },
     { title: 'Incentive Config', icon: Percent, path: '/admin/incentive-config', roles: ['admin'] },
+    { title: 'Employee Development', icon: GraduationCap, path: '/admin/employee-development', roles: ['admin', 'hr_pms'] },
   ],
   dataEntry: [
     { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', roles: ['employee', 'manager', 'auditor', 'management', 'hr_pms'] },

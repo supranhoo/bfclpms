@@ -48,6 +48,7 @@ const KpiMappingMatrix = lazy(() => import("./pages/admin/KpiMappingMatrix"));
 const KpiWeightageDashboard = lazy(() => import("./pages/admin/KpiWeightageDashboard"));
 const PendingSelfReviews = lazy(() => import("./pages/admin/PendingSelfReviews"));
 const IncentiveConfig = lazy(() => import("./pages/admin/IncentiveConfig"));
+const EmployeeDevelopment = lazy(() => import("./pages/admin/EmployeeDevelopment"));
 
 // Report pages
 const PerformanceReport = lazy(() => import("./pages/reports/PerformanceReport"));
@@ -323,6 +324,11 @@ const App = () => (
                 <Route path="/admin/incentive-config" element={
                   <ProtectedRoute allowedRoles={['admin']}>
                     <Suspense fallback={<PageFallback />}><IncentiveConfig /></Suspense>
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/employee-development" element={
+                  <ProtectedRoute allowedRoles={['admin', 'hr_pms']}>
+                    <Suspense fallback={<PageFallback />}><EmployeeDevelopment /></Suspense>
                   </ProtectedRoute>
                 } />
                 <Route path="/reports/incentive" element={
