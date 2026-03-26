@@ -288,12 +288,13 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number, so
     const start = (page - 1) * PAGE_SIZE;
     const rows = allRows.slice(start, start + PAGE_SIZE);
 
-    return { rows, allFilteredRows, totalCount, totalEmployees: totalCount, mappedEmployees: mappedCount, coveragePercent };
+    return { rows, allFilteredRows, orgFilteredRows, totalCount, totalEmployees: totalCount, mappedEmployees: mappedCount, coveragePercent };
   }, [profiles, kpis, filters, page, sort]);
 
   return {
     rows,
     allFilteredRows,
+    orgFilteredRows,
     totalCount,
     totalEmployees,
     mappedEmployees,
