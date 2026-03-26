@@ -10,13 +10,15 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, CheckCircle, AlertTriangle, Send, Info, Plus, Trash2, Save } from 'lucide-react';
+import { Loader2, CheckCircle, AlertTriangle, Send, Info, Plus, Trash2, Save, Pencil } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { sendKraAssignmentNotifications, KraNotificationItem } from '@/lib/kraNotifications';
 import { AdminKpiCreateDialog } from './AdminKpiCreateDialog';
+import { AdminKpiEditDialog } from './AdminKpiEditDialog';
+import { KPI } from '@/hooks/useKpis';
 import { getAllPeriodsForMonth } from '@/lib/frequencyUtils';
 
 interface KraIssuanceConfirmDialogProps {
@@ -49,6 +51,7 @@ export function KraIssuanceConfirmDialog({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [isAddKraOpen, setIsAddKraOpen] = useState(false);
+  const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
 
   // Fetch all KPIs for this employee/period
   const { data: kpis, isLoading } = useQuery({
@@ -250,7 +253,7 @@ export function KraIssuanceConfirmDialog({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
-        <DialogContent className="max-w-5xl max-h-[95vh] flex flex-col">
+        <DialogContent className="max-w-7xl max-h-[95vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Send className="h-5 w-5 text-primary" />
@@ -365,6 +368,7 @@ export function KraIssuanceConfirmDialog({
                     <TableHead className="text-center w-20">Target</TableHead>
                     <TableHead className="text-center w-28">Weightage</TableHead>
                     <TableHead className="text-center w-24">Frequency</TableHead>
+                    <TableHead className="text-center w-16">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -410,6 +414,24 @@ export function KraIssuanceConfirmDialog({
                         </div>
                       </TableCell>
                       <TableCell className="text-center text-sm">{kpi.frequency || '-'}</TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          title="Edit KPI"
+                          onClick={async () => {
+                            const { data } = await supabase
+                              .from('kpis')
+                              .select('*')
+                              .eq('id', kpi.id)
+                              .single();
+                            if (data) setEditingKpi(data as unknown as KPI);
+                          }}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -465,6 +487,16 @@ export function KraIssuanceConfirmDialog({
         defaultEmployeeId={employeeId}
         defaultReviewPeriod={reviewPeriod}
         defaultReviewYear={reviewYear}
+      />
+
+      {/* Edit KPI Dialog */}
+      <AdminKpiEditDialog
+        isOpen={!!editingKpi}
+        onClose={() => {
+          setEditingKpi(null);
+          queryClient.invalidateQueries({ queryKey: ['issuance-kpis'] });
+        }}
+        kpi={editingKpi}
       />
 
       {/* Delete Confirmation */}
