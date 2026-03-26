@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-26  
-> **Version:** 1.15.0 — Added Variance Report policy (Audit vs Management score discrepancy report)
+> **Version:** 1.16.0 — KRA Library Quick Search auto-fills now render as editable fields
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

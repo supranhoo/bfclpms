@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-26  
-> **Version:** 2.0.0 — Added Variance Report (Audit vs Management score differences)
+> **Version:** 2.1.0 — KRA Library Quick Search selections now auto-switch to editable mode
 > **Maintainer:** Lovable AI
 
 ---
