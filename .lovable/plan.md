@@ -1,27 +1,18 @@
 
 
-## Show Positive Variance in Green on Variance Report
+## Fix Variance Calculation Direction
 
 ### Change
-Currently, variance is stored as `Math.abs(auditorScore - managementScore)` and always displayed with a red/grey badge. The user wants **positive variance** (Auditor > Management) in **green** and negative variance (Management > Auditor) in **red**.
+Currently variance = `auditorScore - managementScore`. User wants it reversed: **variance = managementScore - auditorScore**. Green when positive (management > auditor), red when negative (management < auditor).
 
-### Implementation
+### Implementation — `src/pages/reports/VarianceReport.tsx`
 
-**File: `src/pages/reports/VarianceReport.tsx`**
-
-1. **Store signed variance** — Change `variance: Math.abs(...)` to `variance: auditorScore - managementScore` (line 96)
-2. **Sort by absolute value** — Update sort to `Math.abs(b.variance) - Math.abs(a.variance)` (line 100)
-3. **Update summary cards** — Use `Math.abs()` for avg/max calculations since they reference `r.variance` directly
-4. **Color the badge** — Replace the single badge logic (line 284) with:
-   - Green badge (`bg-green-100 text-green-800`) when variance > 0 (Auditor scored higher)
-   - Red/destructive badge when variance < 0 (Management scored higher)
-   - Show absolute value with a +/- prefix
-5. **Update Excel export** — Show signed variance in the export as well
+1. **Line 96**: Change `variance: auditorScore - managementScore` → `variance: managementScore - auditorScore`
+2. **Badge colors** already use `r.variance > 0` for green and `< 0` for red — no change needed there since the sign flip handles it automatically
 
 ### Risk Assessment
-- **Data Impact**: None — display-only change
-- **Regression Risk**: Zero — cosmetic update to one report
+- **Data/Workflow/Regression**: Zero — display-only sign flip
 
 ### Files Changed
-1. `src/pages/reports/VarianceReport.tsx` — Signed variance + green/red badge coloring
+1. `src/pages/reports/VarianceReport.tsx` — one-line change
 
