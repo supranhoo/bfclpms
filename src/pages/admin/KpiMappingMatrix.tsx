@@ -11,7 +11,6 @@ import { Pagination, PaginationContent, PaginationItem, PaginationLink, Paginati
 import { Check, X, Download, RotateCcw, Search, Users, Percent, UserCheck, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useKpiMappingMatrix, type KpiMappingFilters, type EmployeeMatrixRow, type MatrixSortConfig } from '@/hooks/useAdminReports';
 import { useDivisions, useBusinessUnits, useDepartments } from '@/hooks/useOrganization';
-import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import * as XLSX from 'xlsx';
 
 // Fiscal order: Jul–Jun
@@ -46,11 +45,19 @@ export default function KpiMappingMatrix() {
     return sort.direction === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
   };
 
-  const { rows, allFilteredRows, totalCount, totalEmployees, mappedEmployees, coveragePercent, isLoading, totalPages } = useKpiMappingMatrix(filters, page, sort);
+  const { rows, allFilteredRows, orgFilteredRows, totalCount, totalEmployees, mappedEmployees, coveragePercent, isLoading, totalPages } = useKpiMappingMatrix(filters, page, sort);
   const { data: divisions } = useDivisions();
   const { data: businessUnits } = useBusinessUnits();
   const { data: departments } = useDepartments();
-  const { grades, designations } = useEmployeeFilterOptions();
+
+  // Derive cascading grade/designation options from org-filtered rows
+  const grades = useMemo(() => {
+    return [...new Set(orgFilteredRows.map(r => r.grade).filter(Boolean))].sort();
+  }, [orgFilteredRows]);
+
+  const designations = useMemo(() => {
+    return [...new Set(orgFilteredRows.map(r => r.designation).filter(Boolean))].sort();
+  }, [orgFilteredRows]);
 
   // Cascading filters
   const filteredBUs = useMemo(() => {
