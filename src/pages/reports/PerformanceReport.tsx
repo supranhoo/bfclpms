@@ -70,7 +70,7 @@ export default function PerformanceReport() {
 
   // Category performance
   const categoryPerformance = categories?.map(cat => {
-    const catKpis = allKpis?.filter(k => k.category_id === cat.id) || [];
+    const catKpis = scopedKpis.filter(k => k.category_id === cat.id);
     let totalScore = 0;
     let count = 0;
     catKpis.forEach(kpi => {
@@ -81,14 +81,13 @@ export default function PerformanceReport() {
         count++;
       }
     });
-    // Calculate dynamic weightage from KPIs
     const dynamicWeightage = catKpis.reduce((sum, kpi) => sum + (kpi.weightage || 0), 0);
     return {
       name: cat.name,
       avgScore: count > 0 ? Math.round(totalScore / count) : 0,
       kpiCount: catKpis.length,
       color: cat.color,
-      weightage: dynamicWeightage,  // Dynamic from KPIs
+      weightage: dynamicWeightage,
     };
   }) || [];
 
