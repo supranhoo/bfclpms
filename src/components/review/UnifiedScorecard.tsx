@@ -782,6 +782,8 @@ export function UnifiedScorecard({
       queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       queryClient.invalidateQueries({ queryKey: ['kpi-queries'] });
+      queryClient.invalidateQueries({ queryKey: ['kpi-timeline'] });
+      queryClient.invalidateQueries({ queryKey: ['kpi-journey-audit-logs'] });
       toast({ title: 'KPI sent back successfully' });
       setSendBackDialogOpen(false);
       setReviewSheetOpen(false);
