@@ -1,52 +1,35 @@
 
 
-## New Report: Variance Report (Audit vs Management Score)
+## Make Category/KRA/KPI Editable After Quick Search Library Selection
 
-### Overview
-A new report showing KPIs where Auditor and Management scores differ. Columns: Employee Code, Employee Name, Department, KPI Name, Month, Auditor Score, Management Score, Variance. Filters: Month + Year. Only KPIs with score differences are displayed.
+### Problem
+When selecting from the KRA Library Quick Search panel, the Category, KRA, and KPI fields are auto-filled but remain in **combobox/dropdown mode**. The user cannot directly edit the text values — they would need to manually click "+ Enter custom KRA/KPI name" to switch to editable text inputs. This defeats the purpose of the quick search auto-fill workflow.
 
-### Data Source
-Query `kpis` joined with `review_submissions` (for `auditor_score` and `management_score`), `profiles` (employee details), `departments`. Filter WHERE both scores are non-null AND `auditor_score != management_score`. No new database tables or RPC needed — a simple client-side query with Supabase `.select()`.
+### Root Cause
+In `AdminKpiCreateDialog.tsx`, the `onSelectCategory`, `onSelectKra`, and `onSelectKpi` callbacks set the field values (`setCategoryId`, `setKraName`, `setKpiName`) but do **not** set `isCustomKra = true` and `isCustomKpi = true`. Since those flags stay `false`, the fields render as read-only combobox buttons instead of editable `<Input>` / `<Textarea>` components.
 
-### Files Changed
+### Fix — `src/components/admin/AdminKpiCreateDialog.tsx`
 
-1. **`src/pages/reports/VarianceReport.tsx`** (NEW)
-   - Month/Year selectors (same pattern as KpiDetailReport)
-   - Search filter for employee name/code
-   - Table: Code | Name | Department | Category | KRA | KPI | Month | Auditor Score | Mgmt Score | Variance (abs diff)
-   - Summary cards: Total Variance KPIs, Avg Variance, Max Variance
-   - Excel export with XLSX
-   - Pagination
+In the three Quick Search callbacks (lines 369-425):
 
-2. **`src/App.tsx`**
-   - Add lazy import for `VarianceReport`
-   - Add route `/reports/variance` wrapped in `<ReportRoute reportKey="variance">`
+1. **`onSelectKra`** callback: Add `setIsCustomKra(true)` after setting `setKraName(kra)`, and add `setIsCustomKpi(true)` after setting `setKpiName(...)` so both KRA and KPI fields become editable text inputs.
 
-3. **`src/pages/reports/ReportsHub.tsx`**
-   - Add card entry with `reportKey: 'variance'`, path `/reports/variance`, icon `TrendingUp` (or `AlertTriangle`)
+2. **`onSelectKpi`** callback: Add `setIsCustomKra(true)` and `setIsCustomKpi(true)` so both fields are immediately editable after selection.
 
-4. **`DOCUMENTATION.md`** + **`POLICY.md`** — Document new report
+3. **`onSelectCategory`** callback: When a category is selected and KRA/KPI are auto-filled from a matching template, also set `setIsCustomKra(true)` and `setIsCustomKpi(true)`.
 
-### Query Logic (client-side)
-```typescript
-// Fetch KPIs for selected month/year with review_submissions
-const { data } = await supabase
-  .from('kpis')
-  .select(`id, kra_name, kpi_name, category_id, employee_id,
-    review_submissions(auditor_score, management_score),
-    profiles!kpis_employee_id_fkey(employee_code, full_name, department_id,
-      departments(name))`)
-  .eq('review_period', month)
-  .eq('review_year', year);
+Category itself uses a Popover-Command combobox that already allows re-selection, so no change needed there.
 
-// Client-side filter: only rows where both scores exist AND differ
-rows.filter(r => r.auditorScore !== null && r.mgmtScore !== null 
-  && r.auditorScore !== r.mgmtScore);
-```
+### Result
+After selecting any item from Quick Search Library, all auto-filled fields (KRA name, KPI name, targets, thresholds, etc.) will be **immediately editable** inline — the admin can modify any value before assignment.
 
 ### Risk Assessment
-- **Data Impact**: None — read-only queries on existing tables
-- **Workflow Impact**: None — additive report page
-- **Regression Risk**: Zero — no changes to existing components
-- **Schema Impact**: None — no database changes
+- **Data Impact**: None — form state only, no schema changes
+- **Workflow Impact**: None — additive UX improvement, existing manual flow unchanged
+- **Regression Risk**: Zero — only adding two `setState` calls in existing callbacks
+
+### Files Changed
+1. **`src/components/admin/AdminKpiCreateDialog.tsx`** — Set `isCustomKra(true)` and `isCustomKpi(true)` in Quick Search Library callbacks
+2. **`DOCUMENTATION.md`** — Version history update
+3. **`POLICY.md`** — Version history update
 
