@@ -1,23 +1,17 @@
 
 
-## Merge Category + KRA into Single Column
+## Filter Inactive Employees from KPI Mapping Matrix
 
-### Change — `src/components/admin/KraIssuanceConfirmDialog.tsx`
+### Problem
+The KPI Mapping Matrix shows all employees including inactive ones. There's no `is_active` filter in the profiles query or row building logic.
 
-Combine the "Category" and "KRA" columns into one "Category / KRA" column. The category badge renders on top, KRA name below it. This frees ~130px+ of horizontal space for the KPI column.
+### Fix — `src/hooks/useAdminReports.ts`
 
-**Header**: Remove separate Category and KRA `<TableHead>`, replace with single `<TableHead>Category / KRA</TableHead>` with `min-w-[200px]`
+1. **Add `is_active` to the profiles SELECT**: Include `is_active` in the query fields
+2. **Filter inactive profiles during row building**: Skip profiles where `is_active === false` before building `allRows`
 
-**Cell**: Stack category badge and KRA name vertically:
-```tsx
-<TableCell className="align-top">
-  <Badge variant="outline" className="text-xs mb-1">{getCategoryName(kpi.category_id)}</Badge>
-  <div className="font-medium whitespace-normal leading-snug">{kpi.kra_name}</div>
-</TableCell>
-```
-
-**KPI column**: Increase from `min-w-[200px]` to `min-w-[300px]` to use the reclaimed space.
+This matches the pattern used in `useKpiWeightageMatrix` which already filters inactive employees by default.
 
 ### Files Changed
-1. **`src/components/admin/KraIssuanceConfirmDialog.tsx`** — Merge Category + KRA into one column, widen KPI column
+1. **`src/hooks/useAdminReports.ts`** — Add `is_active` to profiles query SELECT and filter out inactive employees in the `useMemo` row-building logic
 
