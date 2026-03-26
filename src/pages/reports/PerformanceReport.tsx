@@ -91,10 +91,10 @@ export default function PerformanceReport() {
     };
   }) || [];
 
-  const totalKpis = allKpis?.length || 0;
-  const approvedKpis = allKpis?.filter(k => k.status === 'approved').length || 0;
+  const totalKpis = scopedKpis.length;
+  const approvedKpis = scopedKpis.filter(k => k.status === 'approved').length;
   const avgScore = submissions?.length ? Math.round(submissions.reduce((sum, s) => {
-    const kpi = allKpis?.find(k => k.id === (s as any).kpi_id);
+    const kpi = scopedKpis.find(k => k.id === (s as any).kpi_id);
     return sum + ((kpi?.status === 'approved' ? s.final_score : null) ?? s.management_score ?? s.auditor_score ?? s.hr_pms_score ?? s.skip_level_score ?? s.manager_score ?? s.self_score ?? 0);
   }, 0) / submissions.length) : 0;
 
