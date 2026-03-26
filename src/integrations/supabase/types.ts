@@ -3948,8 +3948,8 @@ export type Database = {
           p_dry_run?: boolean
           p_kpi_ids?: string[]
           p_performed_by?: string
-          p_review_period?: string
-          p_review_year?: number
+          p_review_period: string
+          p_review_year: number
         }
         Returns: Json
       }
