@@ -361,9 +361,8 @@ export function KraIssuanceConfirmDialog({
                       />
                     </TableHead>
                     <TableHead className="w-8">#</TableHead>
-                    <TableHead className="min-w-[130px]">Category</TableHead>
-                    <TableHead className="min-w-[200px]">KRA</TableHead>
-                    <TableHead className="min-w-[200px]">KPI</TableHead>
+                    <TableHead className="min-w-[200px]">Category / KRA</TableHead>
+                    <TableHead className="min-w-[300px]">KPI</TableHead>
                     <TableHead className="text-center w-20">UOM</TableHead>
                     <TableHead className="text-center w-20">Target</TableHead>
                     <TableHead className="text-center w-28">Weightage</TableHead>
@@ -382,11 +381,11 @@ export function KraIssuanceConfirmDialog({
                       </TableCell>
                       <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
                       <TableCell className="align-top">
-                        <Badge variant="outline" className="text-xs shrink-0">
+                        <Badge variant="outline" className="text-xs mb-1">
                           {getCategoryName(kpi.category_id)}
                         </Badge>
+                        <div className="font-medium whitespace-normal leading-snug">{kpi.kra_name}</div>
                       </TableCell>
-                      <TableCell className="align-top font-medium whitespace-normal leading-snug">{kpi.kra_name}</TableCell>
                       <TableCell className="align-top whitespace-normal leading-snug text-muted-foreground">{kpi.kpi_name}</TableCell>
                       <TableCell className="text-center text-sm">{kpi.uom || '-'}</TableCell>
                       <TableCell className="text-center text-sm">{kpi.target_value ?? '-'}</TableCell>
