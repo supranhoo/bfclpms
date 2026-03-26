@@ -368,6 +368,7 @@ export function KraIssuanceConfirmDialog({
                     <TableHead className="text-center w-20">Target</TableHead>
                     <TableHead className="text-center w-28">Weightage</TableHead>
                     <TableHead className="text-center w-24">Frequency</TableHead>
+                    <TableHead className="text-center w-16">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -413,6 +414,24 @@ export function KraIssuanceConfirmDialog({
                         </div>
                       </TableCell>
                       <TableCell className="text-center text-sm">{kpi.frequency || '-'}</TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          title="Edit KPI"
+                          onClick={async () => {
+                            const { data } = await supabase
+                              .from('kpis')
+                              .select('*')
+                              .eq('id', kpi.id)
+                              .single();
+                            if (data) setEditingKpi(data as unknown as KPI);
+                          }}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -468,6 +487,16 @@ export function KraIssuanceConfirmDialog({
         defaultEmployeeId={employeeId}
         defaultReviewPeriod={reviewPeriod}
         defaultReviewYear={reviewYear}
+      />
+
+      {/* Edit KPI Dialog */}
+      <AdminKpiEditDialog
+        isOpen={!!editingKpi}
+        onClose={() => {
+          setEditingKpi(null);
+          queryClient.invalidateQueries({ queryKey: ['issuance-kpis'] });
+        }}
+        kpi={editingKpi}
       />
 
       {/* Delete Confirmation */}
