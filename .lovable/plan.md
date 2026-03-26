@@ -1,104 +1,69 @@
 
 
-## Enhanced Employee Profile with Skill Competency & JD
+## Brainstorm: KRA Summary Dedup + Admin JD & Competency Management
 
-### Overview
-Transform the current narrow settings page into a comprehensive employee profile with 4 tabs: Overview, KRA Summary, Skill Competency, and Settings. Requires 2 new database tables for JD and competencies.
+### 1. KRA Summary — Show Unique KRAs Only
 
-### Database Changes (2 new tables)
+**Current Problem**: The KRA Summary tab shows every individual KPI row (same as Dashboard). This is redundant.
 
-**Table 1: `employee_job_descriptions`**
-- `id` uuid PK
-- `designation` text NOT NULL (links to designation name, not per-employee)
-- `role_purpose` text
-- `key_responsibilities` jsonb (array of strings)
-- `required_skills` jsonb (array of strings)  
-- `qualifications` text
-- `created_by` uuid
-- `created_at`, `updated_at` timestamps
-- RLS: Admins can manage, authenticated can read
+**Proposed Change**: Group KPIs by unique `kra_name` and show a KRA-level summary instead:
 
-**Table 2: `skill_competencies`**
-- `id` uuid PK
-- `employee_id` uuid NOT NULL (references profiles)
-- `skill_name` text NOT NULL
-- `category` text (e.g. "Technical", "Behavioral", "Leadership")
-- `required_level` integer (1-5 scale)
-- `current_level` integer (1-5 scale)
-- `assessed_by` uuid
-- `assessed_at` timestamp
-- `review_year` integer
-- `review_period` text
-- `remarks` text
-- `created_at`, `updated_at` timestamps
-- RLS: Employee can view own, manager can view/update team, admin full access
+| # | Category | KRA Name | KPIs Count | Total Weightage | Status |
+|---|----------|----------|------------|-----------------|--------|
 
-### Page Redesign — `src/pages/ProfileSettings.tsx`
+- **Grouping logic**: Deduplicate by `kra_name` (or `category_id + kra_name` combo)
+- **KPIs Count**: Number of KPIs under that KRA
+- **Total Weightage**: Sum of all KPI weightages under that KRA
+- **Status**: Derived — "Completed" if all KPIs approved, "In Progress" if mixed, "Pending" if none started
+- **Expandable rows** (optional): Click a KRA row to expand and see its child KPIs inline (accordion style)
+- Stats cards update: "Total KRAs" instead of "Total KPIs", plus "Total KPIs" as secondary stat
 
-**Hero Header** (full width, replaces current narrow layout):
-- Large avatar with upload overlay (reuse existing logic)
-- Name, Designation, Department badge
-- Info chips: Employee Code, PMS Grade, Division, Reporting Manager
-- Date of Joining
+**File**: `KraSummaryTab.tsx` — add `useMemo` grouping logic, update table columns
 
-**4-Tab Layout** using existing `Tabs` component:
+---
 
-**Tab 1 — Overview** (default)
-- **Organization Info Card**: Division > BU > Department > Sub-Branch hierarchy, Designation, PMS Grade, Employee Code, Joining Date
-- **Reporting Structure Card**: Manager avatar + name (fetched via `reporting_manager_id`)
-- **Job Description Card**: Role Purpose, Key Responsibilities list, Required Skills badges, Qualifications — pulled from `employee_job_descriptions` by matching the employee's designation
+### 2. Admin Hub for JD & Skill Competency Management
 
-**Tab 2 — Skill Competency**
-- **Competency Matrix Table**: Skill Name, Category, Required Level (star/bar), Current Level (star/bar), Gap indicator
-- **Visual Summary**: Radar/spider chart showing competency areas (using Recharts, already in project)
-- **Gap Analysis Card**: Skills below required level highlighted, training recommendations if linked to TNI
-- Managers/Admins can assess via inline editing; employees see read-only view
+**Current Gap**: The `employee_job_descriptions` and `skill_competencies` tables exist but there's no admin UI to manage them.
 
-**Tab 3 — KRA Summary**
-- Table of assigned KPIs for current review period: Category, KRA, KPI, Weightage, Status badge
-- Summary stats: Total KPIs, Total Weightage, Status breakdown
-- Data from existing `useKpis` hook filtered by `employee_id`
+**Proposed New Admin Page**: `/admin/employee-profiles` or add as a tab in an existing admin page (e.g., User Management or a new "Employee Development" page)
 
-**Tab 4 — Settings** (existing functionality relocated)
-- Contact Information (email, mobile inline edit — existing code)
-- Change Password (existing form — existing code)
+**Two sections/tabs**:
 
-### Data Queries (no new hooks needed initially, queries in component)
-- Profile: already in AuthContext (`profile`)
-- Department hierarchy: `departments` JOIN `business_units` JOIN `divisions`
-- Manager: secondary `profiles` query by `reporting_manager_id`
-- KPIs: query `kpis` table filtered by employee_id + current review period
-- JD: query `employee_job_descriptions` by designation match
-- Competencies: query `skill_competencies` by employee_id
+#### A. Job Descriptions Manager (designation-based)
+- **Table view**: List all designations with JD status (configured / not configured)
+- **CRUD dialog**: Create/Edit JD per designation
+  - Role Purpose (textarea)
+  - Key Responsibilities (dynamic list — add/remove items)
+  - Required Skills (tag input)
+  - Qualifications (textarea)
+- **Bulk import** (future): CSV upload for JDs
+- **Coverage indicator**: "X of Y designations have JDs configured"
 
-### New Components
-1. `src/components/profile/ProfileHero.tsx` — Hero header with avatar, name, org chips
-2. `src/components/profile/OrganizationInfoCard.tsx` — Org hierarchy display
-3. `src/components/profile/ReportingStructureCard.tsx` — Manager card
-4. `src/components/profile/JobDescriptionCard.tsx` — Role Purpose, Key Responsibilities, Skills
-5. `src/components/profile/SkillCompetencyTab.tsx` — Competency matrix table + radar chart + gap analysis
-6. `src/components/profile/KraSummaryTab.tsx` — KPI table for current period
-7. `src/components/profile/ProfileSettingsTab.tsx` — Relocated email/mobile/password forms
+#### B. Skill Competency Manager (employee-based)
+- **Employee selector**: Search/filter employees
+- **Per-employee competency grid**: Add/edit skills with Required Level and Current Level (1-5 sliders)
+- **Category grouping**: Technical, Behavioral, Leadership, etc.
+- **Bulk assessment**: Assess multiple employees on the same skill set
+- **Import from designation**: Auto-populate required skills from the employee's JD as competency rows
 
-### Admin Management (future, but schema supports it now)
-- JDs are designation-based: Admin creates JD per designation, all employees with that designation see it
-- Competency assessments: Manager/Admin can assess skills per employee per review period
-- Links to existing TNI (Training Needs Identification) module for gap-based recommendations
+**Route**: `/admin/employee-development` — new page accessible to `admin` and `hr_pms` roles
+**Sidebar entry**: Under Admin section, "Employee Development" with a GraduationCap icon
 
-### Files Changed
-1. **Migration** — Create `employee_job_descriptions` and `skill_competencies` tables with RLS
-2. **`src/pages/ProfileSettings.tsx`** — Complete redesign: hero + 4-tab layout
-3. **`src/components/profile/ProfileHero.tsx`** (new)
-4. **`src/components/profile/OrganizationInfoCard.tsx`** (new)
-5. **`src/components/profile/ReportingStructureCard.tsx`** (new)
-6. **`src/components/profile/JobDescriptionCard.tsx`** (new)
-7. **`src/components/profile/SkillCompetencyTab.tsx`** (new)
-8. **`src/components/profile/KraSummaryTab.tsx`** (new)
-9. **`src/components/profile/ProfileSettingsTab.tsx`** (new) — Extracted existing settings code
+### Files to Change
+
+1. **`src/components/profile/KraSummaryTab.tsx`** — Group by unique KRA, show KRA-level summary with expandable KPI details
+2. **`src/pages/admin/EmployeeDevelopment.tsx`** (new) — Admin page with JD + Competency tabs
+3. **`src/components/admin/JdManagerTab.tsx`** (new) — CRUD for job descriptions by designation
+4. **`src/components/admin/CompetencyManagerTab.tsx`** (new) — Per-employee competency assessment
+5. **`src/components/admin/JdFormDialog.tsx`** (new) — Create/Edit JD dialog
+6. **`src/components/admin/CompetencyAssessmentDialog.tsx`** (new) — Assess skills for an employee
+7. **`src/App.tsx`** — Add route for `/admin/employee-development`
+8. **`src/components/layout/AppSidebar.tsx`** — Add sidebar link
+9. **`DOCUMENTATION.md`** + **`POLICY.md`** — Update
 
 ### Risk Assessment
-- **Data Impact**: Two new tables, no changes to existing schemas. JD is designation-based (not per-employee), keeping data normalized
-- **Workflow Impact**: None — existing settings functionality preserved in Settings tab
-- **Regression Risk**: Low — self-contained page, existing avatar/email/password logic extracted but unchanged
-- **Security**: RLS enforces employee can only see own competencies; managers see team; admins see all
+- **Data Impact**: None — reads/writes to existing `employee_job_descriptions` and `skill_competencies` tables with existing RLS
+- **Workflow Impact**: None — new admin functionality, no changes to existing flows
+- **Regression Risk**: Low — KRA Summary change is cosmetic grouping only; admin page is entirely new
 
