@@ -135,10 +135,18 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
       </div>
       </div>
 
-      {/* Reporting Manager */}
-      {employeeProfile?.managerName && (
+      {/* Employee & Reporting Manager */}
+      {(employeeProfile?.full_name || employeeProfile?.managerName) && (
         <div className="text-xs text-muted-foreground text-right -mt-1 mb-2">
-          👤 Reporting Manager: {employeeProfile.managerName}
+          {employeeProfile?.full_name && (
+            <span>👤 Employee: {employeeProfile.full_name}</span>
+          )}
+          {employeeProfile?.full_name && employeeProfile?.managerName && (
+            <span className="mx-1.5">|</span>
+          )}
+          {employeeProfile?.managerName && (
+            <span>👤 Reporting Manager: {employeeProfile.managerName}</span>
+          )}
         </div>
       )}
 
