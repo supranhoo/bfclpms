@@ -1,35 +1,45 @@
 
 
-## Fix: Sent-Back Records Not Appearing in Timeline History
+## Fix: PDF Download Button Missing After Send-Back
 
 ### Root Cause
 
-The audit log record **does exist** in the database (`AUDITOR_SENT_BACK_TO_EMPLOYEE` at `2026-03-26 15:00:48`). The issue is **stale query cache** — the send-back mutation in `AuditScorecard.tsx` (and other scorecards) does NOT invalidate the timeline/audit-log query keys after a successful send-back.
+The PDF button is guarded by `hasAnyData`, which checks if any visible stage has status !== `'pending'`. After a send-back (e.g., auditor sends back to employee), the KPI status resets to `self_review`. With `self_review` as the current status, the `getStageStatus` function returns:
+- Self → `current`
+- Auditor → `pending`
+- Management → `pending`
 
-**Specific gaps:**
+So `hasAnyData` should be `true` (Self is "current", not "pending"). However, looking more closely, the real issue is that the screenshot shows **all three** stages as "Pending" — this means the KPI status might be at an even earlier state like `kra_set`, or the workflow stages mapping doesn't match.
 
-| Scorecard | Invalidates on send-back | Missing invalidations |
-|---|---|---|
-| `AuditScorecard.tsx` | `['kpis']`, `['review-submissions']` | `['kpi-timeline']`, `['kpi-journey-audit-logs']` |
-| `ManagementScorecard.tsx` | `['kpis']`, `['review-submissions']` | `['kpi-timeline']`, `['kpi-journey-audit-logs']` |
-| `UnifiedScorecard.tsx` | `['kpis']`, `['review-submissions']` | `['kpi-timeline']`, `['kpi-journey-audit-logs']` |
+**More likely cause**: The KPI has audit log entries (send-back records exist in the DB), so even when all stages show "pending", the PDF button should still appear if there's meaningful history to export.
 
-Additionally, `KpiJourneySection.tsx` uses `staleTime: 5 * 60 * 1000` (5 min), which prevents refetch even after invalidation from other flows.
+### Fix — `src/components/review/KpiJourneySection.tsx`
 
-### Fix
+Expand the `hasAnyData` check to also consider whether audit logs exist:
 
-1. **`src/components/review/AuditScorecard.tsx`** — Add `queryClient.invalidateQueries({ queryKey: ['kpi-timeline'] })` and `queryClient.invalidateQueries({ queryKey: ['kpi-journey-audit-logs'] })` to the send-back mutation's `onSuccess`
+```typescript
+// Current (line 284-287):
+const hasAnyData = visibleStages.some(stage => {
+  const status = getStageStatus(stage, kpiStatus, viewLevel, effectiveStages);
+  return status !== 'pending';
+});
 
-2. **`src/components/review/ManagementScorecard.tsx`** — Same invalidation additions in the send-back `onSuccess`
+// Fixed:
+const hasAnyData = visibleStages.some(stage => {
+  const status = getStageStatus(stage, kpiStatus, viewLevel, effectiveStages);
+  return status !== 'pending';
+}) || auditLogs.length > 0;
+```
 
-3. **`src/components/review/UnifiedScorecard.tsx`** — Same invalidation additions in the send-back `onSuccess`
-
-4. **`src/components/review/KpiJourneySection.tsx`** — Reduce `staleTime` from `5 * 60 * 1000` to `30 * 1000` (30 seconds) for audit logs query, so timeline data stays reasonably fresh
-
-5. **`DOCUMENTATION.md`** / **`POLICY.md`** — Version history update
+This ensures the PDF button is visible whenever there's any audit trail history — even if all stages currently show as "pending" after a send-back.
 
 ### Risk Assessment
-- **Data Impact**: None — read-only cache invalidation
-- **Workflow Impact**: None — additive fix
-- **Regression Risk**: Zero — only adding cache invalidation calls and reducing staleTime
+- **Data Impact**: None — read-only visibility logic
+- **Workflow Impact**: None — additive condition
+- **Regression Risk**: Zero — only makes the button visible in more cases
+
+### Files Changed
+1. **`src/components/review/KpiJourneySection.tsx`** — Add `|| auditLogs.length > 0` to `hasAnyData`
+2. **`DOCUMENTATION.md`** — Version history update
+3. **`POLICY.md`** — Version history update
 
