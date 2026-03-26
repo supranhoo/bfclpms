@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-26  
-> **Version:** 1.95.0 — Scoped Performance Report by role: managers see only team KPIs (excluding own and org-level); employee count derived from KPI data instead of profiles; added scope indicator badge
+> **Version:** 1.96.0 — Enhanced Employee Profile: 4-tab layout (Overview/Skill Competency/KRA Summary/Settings), hero header with org info, new employee_job_descriptions and skill_competencies tables, designation-based JD, competency matrix with radar chart and gap analysis
 > **Maintainer:** Lovable AI
 
 ---
