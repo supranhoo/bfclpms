@@ -631,6 +631,42 @@ export type Database = {
           },
         ]
       }
+      employee_job_descriptions: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          designation: string
+          id: string
+          key_responsibilities: Json | null
+          qualifications: string | null
+          required_skills: Json | null
+          role_purpose: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          designation: string
+          id?: string
+          key_responsibilities?: Json | null
+          qualifications?: string | null
+          required_skills?: Json | null
+          role_purpose?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          designation?: string
+          id?: string
+          key_responsibilities?: Json | null
+          qualifications?: string | null
+          required_skills?: Json | null
+          role_purpose?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       employee_working_days: {
         Row: {
           created_at: string | null
@@ -3225,6 +3261,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      skill_competencies: {
+        Row: {
+          assessed_at: string | null
+          assessed_by: string | null
+          category: string | null
+          created_at: string
+          current_level: number | null
+          employee_id: string
+          id: string
+          remarks: string | null
+          required_level: number | null
+          review_period: string | null
+          review_year: number | null
+          skill_name: string
+          updated_at: string
+        }
+        Insert: {
+          assessed_at?: string | null
+          assessed_by?: string | null
+          category?: string | null
+          created_at?: string
+          current_level?: number | null
+          employee_id: string
+          id?: string
+          remarks?: string | null
+          required_level?: number | null
+          review_period?: string | null
+          review_year?: number | null
+          skill_name: string
+          updated_at?: string
+        }
+        Update: {
+          assessed_at?: string | null
+          assessed_by?: string | null
+          category?: string | null
+          created_at?: string
+          current_level?: number | null
+          employee_id?: string
+          id?: string
+          remarks?: string | null
+          required_level?: number | null
+          review_period?: string | null
+          review_year?: number | null
+          skill_name?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       sub_branches: {
         Row: {
