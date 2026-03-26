@@ -282,7 +282,7 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+      <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Copy className="h-5 w-5" />
@@ -295,61 +295,122 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
 
         <ScrollArea className="flex-1 min-h-0 pr-4" type="always">
           <div className="space-y-6 py-2">
-            {/* Step 1: Source Employee */}
-            <div className="space-y-3">
-              <Label className="text-sm font-semibold">Step 1: Source Employee & Period</Label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                {/* Employee search/select */}
-                <div className="sm:col-span-1 space-y-1">
-                  <Input
-                    placeholder="Search employee..."
-                    value={sourceSearch}
-                    onChange={(e) => setSourceSearch(e.target.value)}
-                    className="text-sm"
-                  />
-                  {sourceSearch && !sourceEmployeeId && (
-                    <div className="border rounded-md max-h-32 overflow-y-auto">
-                      {filteredSourceEmployees.slice(0, 20).map(emp => (
-                        <button
-                          key={emp.id}
-                          className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted/50 flex items-center gap-2"
-                          onClick={() => {
-                            setSourceEmployeeId(emp.id);
-                            setSourceSearch(emp.name);
-                            setSelectedKraIds(new Set());
-                          }}
-                        >
-                          <span>{emp.name}</span>
-                          {emp.code && <Badge variant="outline" className="text-xs">{emp.code}</Badge>}
+            {/* Steps 1 & 3 side by side */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Step 1: Source Employee */}
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold">Step 1: Source Employee & Period</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="sm:col-span-1 space-y-1">
+                    <Input
+                      placeholder="Search employee..."
+                      value={sourceSearch}
+                      onChange={(e) => setSourceSearch(e.target.value)}
+                      className="text-sm"
+                    />
+                    {sourceSearch && !sourceEmployeeId && (
+                      <div className="border rounded-md max-h-32 overflow-y-auto">
+                        {filteredSourceEmployees.slice(0, 20).map(emp => (
+                          <button
+                            key={emp.id}
+                            className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted/50 flex items-center gap-2"
+                            onClick={() => {
+                              setSourceEmployeeId(emp.id);
+                              setSourceSearch(emp.name);
+                              setSelectedKraIds(new Set());
+                            }}
+                          >
+                            <span>{emp.name}</span>
+                            {emp.code && <Badge variant="outline" className="text-xs">{emp.code}</Badge>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {sourceEmployee && (
+                      <div className="flex items-center gap-1">
+                        <Badge variant="secondary" className="text-xs">{sourceEmployee.name}</Badge>
+                        <button className="text-xs text-muted-foreground underline" onClick={() => { setSourceEmployeeId(''); setSourceSearch(''); setSelectedKraIds(new Set()); }}>
+                          Change
                         </button>
-                      ))}
+                      </div>
+                    )}
+                  </div>
+                  <Select value={sourcePeriod} onValueChange={setSourcePeriod}>
+                    <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Select value={String(sourceYear)} onValueChange={v => setSourceYear(Number(v))}>
+                    <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Step 3: Target Employees */}
+              {selectedKraIds.size > 0 && (
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold">Step 3: Target Employee(s) & Period</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className="sm:col-span-1">
+                      <Input
+                        placeholder="Search target employees..."
+                        value={targetSearch}
+                        onChange={(e) => setTargetSearch(e.target.value)}
+                        className="text-sm"
+                      />
                     </div>
-                  )}
-                  {sourceEmployee && (
-                    <div className="flex items-center gap-1">
-                      <Badge variant="secondary" className="text-xs">{sourceEmployee.name}</Badge>
-                      <button className="text-xs text-muted-foreground underline" onClick={() => { setSourceEmployeeId(''); setSourceSearch(''); setSelectedKraIds(new Set()); }}>
-                        Change
-                      </button>
-                    </div>
+                    <Select value={targetPeriod} onValueChange={setTargetPeriod}>
+                      <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Select value={String(targetYear)} onValueChange={v => setTargetYear(Number(v))}>
+                      <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="border rounded-lg max-h-64 overflow-y-auto">
+                    {filteredTargetEmployees.slice(0, 50).map(emp => {
+                      const dupCount = duplicateCounts[emp.id] || 0;
+                      return (
+                        <label key={emp.id} className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer border-b last:border-0">
+                          <Checkbox
+                            checked={targetEmployeeIds.includes(emp.id)}
+                            onCheckedChange={() => toggleTargetEmployee(emp.id)}
+                          />
+                          <span className="text-sm font-medium">{emp.name}</span>
+                          {emp.code && <Badge variant="outline" className="text-xs">{emp.code}</Badge>}
+                          <span className="text-xs text-muted-foreground ml-auto">{emp.department}</span>
+                          {dupCount > 0 && targetEmployeeIds.includes(emp.id) && (
+                            <Badge variant="secondary" className="text-xs shrink-0">{dupCount} dup</Badge>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{targetEmployeeIds.length} employee(s) selected</p>
+
+                  {totalDuplicates > 0 && (
+                    <Alert variant="default" className="border-amber-500/50 bg-amber-500/5">
+                      <AlertTriangle className="h-4 w-4 text-amber-500" />
+                      <AlertDescription className="text-sm">
+                        {totalDuplicates} duplicate KRA(s) will be skipped (already assigned for the target period).
+                      </AlertDescription>
+                    </Alert>
                   )}
                 </div>
-                <Select value={sourcePeriod} onValueChange={setSourcePeriod}>
-                  <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Select value={String(sourceYear)} onValueChange={v => setSourceYear(Number(v))}>
-                  <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+              )}
             </div>
 
-            {/* Step 2: Select KRAs */}
+            {/* Step 2: Select KRAs — full width */}
             {sourceEmployeeId && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -368,7 +429,7 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
                 ) : sourceKpis.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-4 text-center">No KRAs found for this employee/period.</p>
                 ) : (
-                  <div className="border rounded-lg max-h-48 overflow-y-auto">
+                  <div className="border rounded-lg max-h-64 overflow-y-auto">
                     {sourceKpis.map(kpi => (
                       <label key={kpi.id} className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer border-b last:border-0">
                         <Checkbox
@@ -385,66 +446,6 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
                       </label>
                     ))}
                   </div>
-                )}
-              </div>
-            )}
-
-            {/* Step 3: Target Employees */}
-            {selectedKraIds.size > 0 && (
-              <div className="space-y-3">
-                <Label className="text-sm font-semibold">Step 3: Target Employee(s) & Period</Label>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <div className="sm:col-span-1">
-                    <Input
-                      placeholder="Search target employees..."
-                      value={targetSearch}
-                      onChange={(e) => setTargetSearch(e.target.value)}
-                      className="text-sm"
-                    />
-                  </div>
-                  <Select value={targetPeriod} onValueChange={setTargetPeriod}>
-                    <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Select value={String(targetYear)} onValueChange={v => setTargetYear(Number(v))}>
-                    <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="border rounded-lg max-h-48 overflow-y-auto">
-                  {filteredTargetEmployees.slice(0, 50).map(emp => {
-                    const dupCount = duplicateCounts[emp.id] || 0;
-                    return (
-                      <label key={emp.id} className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer border-b last:border-0">
-                        <Checkbox
-                          checked={targetEmployeeIds.includes(emp.id)}
-                          onCheckedChange={() => toggleTargetEmployee(emp.id)}
-                        />
-                        <span className="text-sm font-medium">{emp.name}</span>
-                        {emp.code && <Badge variant="outline" className="text-xs">{emp.code}</Badge>}
-                        <span className="text-xs text-muted-foreground ml-auto">{emp.department}</span>
-                        {dupCount > 0 && targetEmployeeIds.includes(emp.id) && (
-                          <Badge variant="secondary" className="text-xs shrink-0">{dupCount} dup</Badge>
-                        )}
-                      </label>
-                    );
-                  })}
-                </div>
-                <p className="text-xs text-muted-foreground">{targetEmployeeIds.length} employee(s) selected</p>
-
-                {totalDuplicates > 0 && (
-                  <Alert variant="default" className="border-amber-500/50 bg-amber-500/5">
-                    <AlertTriangle className="h-4 w-4 text-amber-500" />
-                    <AlertDescription className="text-sm">
-                      {totalDuplicates} duplicate KRA(s) will be skipped (already assigned for the target period).
-                    </AlertDescription>
-                  </Alert>
                 )}
               </div>
             )}
