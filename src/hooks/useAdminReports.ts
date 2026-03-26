@@ -238,7 +238,7 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number, so
       };
     });
 
-    // Apply filters
+    // Apply org hierarchy + search filters first (for cascading grade/designation options)
     if (filters.divisionId) {
       allRows = allRows.filter(r => r.divisionId === filters.divisionId);
     }
@@ -248,17 +248,22 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number, so
     if (filters.departmentId) {
       allRows = allRows.filter(r => r.departmentId === filters.departmentId);
     }
-    if (filters.grade) {
-      allRows = allRows.filter(r => r.grade === filters.grade);
-    }
-    if (filters.designation) {
-      allRows = allRows.filter(r => r.designation === filters.designation);
-    }
     if (filters.search) {
       const q = filters.search.toLowerCase();
       allRows = allRows.filter(r =>
         r.name.toLowerCase().includes(q) || r.code.toLowerCase().includes(q)
       );
+    }
+
+    // Snapshot before grade/designation filters for cascading options
+    const orgFilteredRows = [...allRows];
+
+    // Apply grade/designation filters
+    if (filters.grade) {
+      allRows = allRows.filter(r => r.grade === filters.grade);
+    }
+    if (filters.designation) {
+      allRows = allRows.filter(r => r.designation === filters.designation);
     }
 
     const totalCount = allRows.length;
