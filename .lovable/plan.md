@@ -1,23 +1,20 @@
 
 
-## Make KPI Name Fully Visible in Admin KPI Editor
+## Fix: KRA Library Search — KPIs Not Scrollable / Not Visible
 
-### Problem
-The KPI Name textarea uses `rows={1}` and `min-h-[36px]`, so long KPI names (with formulas, scoring logic) are truncated to a single line. The user must manually resize to see the full content.
+### Root Cause
+The `ScrollArea` in `KraLibrarySearchPanel.tsx` has `max-h-[240px]` (line 209), which is far too small to display 17 KPIs under a KRA. With each row ~28px tall, only ~8 items fit before clipping — and the remaining KPIs are hidden with no visible scrollbar.
 
-### Fix — `src/components/admin/AdminKpiEditorForm.tsx` (line 453-454)
+### Fix — `src/components/admin/KraLibrarySearchPanel.tsx`
 
-Change the textarea from `rows={1}` with small min-height to `rows={3}` with a taller min-height so multiline KPI names are visible by default:
-
-- `rows={1}` → `rows={3}`
-- `min-h-[36px]` → `min-h-[80px]`
-- Keep `resize-y` so admin can still adjust
+1. **Increase scroll area height**: Change `max-h-[240px]` → `max-h-[400px]` to accommodate larger result sets while still being bounded
+2. **Add KPI count summary below KRA row**: Show a small hint like "Click ▸ to expand 17 KPIs" when collapsed, so it's clear there are items to reveal
 
 ### Risk Assessment
 - **Data Impact**: None
-- **Workflow Impact**: None
-- **Regression Risk**: Zero — cosmetic change only
+- **Workflow Impact**: None  
+- **Regression Risk**: Zero — CSS height change only
 
 ### Files Changed
-1. **`src/components/admin/AdminKpiEditorForm.tsx`** — Increase KPI Name textarea rows and min-height
+1. **`src/components/admin/KraLibrarySearchPanel.tsx`** — Increase `ScrollArea` max-height from 240px to 400px
 
