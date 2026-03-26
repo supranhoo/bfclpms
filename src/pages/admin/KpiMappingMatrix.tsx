@@ -82,8 +82,9 @@ export default function KpiMappingMatrix() {
     setFilters(prev => {
       const next = { ...prev, [key]: value };
       // Clear cascading
-      if (key === 'divisionId') { next.businessUnitId = ''; next.departmentId = ''; }
-      if (key === 'businessUnitId') { next.departmentId = ''; }
+      if (key === 'divisionId') { next.businessUnitId = ''; next.departmentId = ''; next.grade = ''; next.designation = ''; }
+      if (key === 'businessUnitId') { next.departmentId = ''; next.grade = ''; next.designation = ''; }
+      if (key === 'departmentId') { next.grade = ''; next.designation = ''; }
       return next;
     });
   };
