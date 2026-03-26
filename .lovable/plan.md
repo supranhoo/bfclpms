@@ -1,45 +1,18 @@
 
 
-## RCA: Why Ashish Kataria (200226) Sees 84 KPIs / 54 Employees on Performance Report
+## Enlarge Copy KRAs Dialog to Full-Width Two-Panel Layout
 
-### Finding: No Data Leak — But Misleading Aggregation
+### Problem
+The dialog is `max-w-2xl` (672px) — too cramped for a 3-step workflow involving source selection, KRA picking, and multi-employee targeting. Lists are capped at `max-h-48` (192px), forcing excessive scrolling.
 
-There is **no security issue**. The data shown is exactly what RLS permits for Ashish's `manager` role. However, the Performance Report aggregates unrelated data sources into what looks like a team performance view.
+### Fix — 1 file: `src/components/admin/CopyKrasDialog.tsx`
 
-### Data Breakdown
+1. **Widen dialog**: Change `max-w-2xl` → `max-w-5xl` (1024px) at line 285
+2. **Increase height**: Change `max-h-[85vh]` → `max-h-[90vh]`
+3. **Expand KRA list**: Change `max-h-48` → `max-h-64` (line 371) for the source KPI list
+4. **Expand target employee list**: Change `max-h-48` → `max-h-64` (line 420) for the target employee list
+5. **Two-column layout for Steps 1+3**: Wrap source employee selector (Step 1) and target employee selector (Step 3) side-by-side using `grid grid-cols-1 lg:grid-cols-2 gap-6` so users can see source and target simultaneously
+6. **KRA selection spans full width** between the two columns (Step 2)
 
-| Source | KPIs | Employees | Why Visible |
-|--------|------|-----------|-------------|
-| Own KPIs | 60 | 1 (himself) | `employee_id = auth.uid()` policy |
-| Org-level KPIs (data owner) | ~24 | ~14 | Ashish is a data owner for org-level KPIs — the `Data owners can view assigned org-level KPIs` policy |
-| Direct reports' KPIs | 0 | 0 | His 20 reports have **zero KPIs assigned** |
-| **Total** | **~84** | mixed | Matches screenshot |
-
-The "54 Employees" count comes from `useProfiles()` which returns profiles visible via RLS: 1 (self) + 20 (direct reports) + 10 (skip-level reports) + ~12 (org data owner profiles) + ~6 (org value enterer profiles) ≈ 49-54 after dedup.
-
-### The Problem
-
-The Performance Report page (`PerformanceReport.tsx`) treats **all visible KPIs** as a single performance dataset. For Ashish, this means:
-- His own 60 personal KPIs dominate the rating distribution and category charts
-- 24 org-level KPIs (which he manages as data owner, not as a reviewer) are mixed in
-- The "54 Employees" stat is from profiles, not from KPI data — creating a false impression
-
-### Recommended Fix
-
-**Scope the Performance Report to show only team data (direct reports' KPIs) for managers**, excluding own KPIs and org-level data owner KPIs.
-
-**File: `src/pages/reports/PerformanceReport.tsx`**
-
-1. Import `useAuth` and get the current user's ID and role
-2. For `manager` role: filter `allKpis` to exclude KPIs where `employee_id === currentUserId` and exclude org-level KPIs (`is_org_level === true`)
-3. For `admin`/`management`/`auditor` roles: show all KPIs (current behavior)
-4. Update the "Employees" stat to count distinct employees from the **filtered KPIs**, not from `useProfiles()`
-5. Add a small badge/indicator showing "Team Performance" vs "Organization Performance" based on role
-
-### Why His Reports Show 0 KPIs
-
-Ashish's 20 direct reports genuinely have **zero KPIs assigned** in the system. This is a separate data issue — KRAs haven't been issued to his team. Once KPIs are assigned, they'll appear correctly via the manager RLS policy.
-
-### Files Changed
-1. **`src/pages/reports/PerformanceReport.tsx`** — Filter KPIs by role scope; derive employee count from KPI data instead of profiles
+This matches the existing `max-w-5xl` pattern used by AdminKpiEditorForm.
 
