@@ -93,7 +93,7 @@ export default function VarianceReport() {
         month: kpi.review_period || month,
         auditorScore,
         managementScore,
-        variance: auditorScore - managementScore,
+        variance: managementScore - auditorScore,
       });
     }
 
