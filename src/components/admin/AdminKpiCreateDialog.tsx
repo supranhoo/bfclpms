@@ -373,12 +373,16 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                 if (tpl) {
                   setKraName(tpl.kra_name);
                   setKpiName(tpl.kpi_name);
+                  setIsCustomKra(true);
+                  setIsCustomKpi(true);
                   applySourceFields(tpl, true);
                 } else {
                   const existing = (allKpis || []).find(k => k.category_id === catId);
                   if (existing) {
                     setKraName(existing.kra_name);
                     setKpiName(existing.kpi_name);
+                    setIsCustomKra(true);
+                    setIsCustomKpi(true);
                     applySourceFields(existing, false);
                   } else {
                     setKraName('');
@@ -389,15 +393,18 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
               onSelectKra={(catId, kra) => {
                 setCategoryId(catId);
                 setKraName(kra);
+                setIsCustomKra(true);
                 // Find first matching template or KPI for this category+KRA and auto-fill all fields
                 const tpl = (templates || []).find(t => t.is_active && t.category_id === catId && t.kra_name === kra);
                 if (tpl) {
                   setKpiName(tpl.kpi_name);
+                  setIsCustomKpi(true);
                   applySourceFields(tpl, true);
                 } else {
                   const existing = (allKpis || []).find(k => k.category_id === catId && k.kra_name === kra);
                   if (existing) {
                     setKpiName(existing.kpi_name);
+                    setIsCustomKpi(true);
                     applySourceFields(existing, false);
                   } else {
                     setKpiName('');
@@ -408,6 +415,8 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                 setCategoryId(catId);
                 setKraName(kra);
                 setKpiName(kpi);
+                setIsCustomKra(true);
+                setIsCustomKpi(true);
                 // Apply template fields
                 const tpl = (templates || []).find(
                   t => t.is_active && t.category_id === catId && t.kra_name === kra && t.kpi_name === kpi
