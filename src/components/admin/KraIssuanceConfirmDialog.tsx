@@ -253,7 +253,7 @@ export function KraIssuanceConfirmDialog({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
-        <DialogContent className="max-w-5xl max-h-[95vh] flex flex-col">
+        <DialogContent className="max-w-7xl max-h-[95vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Send className="h-5 w-5 text-primary" />
