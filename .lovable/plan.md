@@ -1,18 +1,27 @@
 
 
-## Enlarge Copy KRAs Dialog to Full-Width Two-Panel Layout
+## Fix Cramped Internal Layout in Copy KRAs Dialog
 
 ### Problem
-The dialog is `max-w-2xl` (672px) — too cramped for a 3-step workflow involving source selection, KRA picking, and multi-employee targeting. Lists are capped at `max-h-48` (192px), forcing excessive scrolling.
+The outer dialog is `max-w-5xl` but the inner structure crams the search input + month + year into a `sm:grid-cols-3` within a half-width `lg:grid-cols-2` column. This makes each field very narrow and unusable.
 
-### Fix — 1 file: `src/components/admin/CopyKrasDialog.tsx`
+### Fix — `src/components/admin/CopyKrasDialog.tsx`
 
-1. **Widen dialog**: Change `max-w-2xl` → `max-w-5xl` (1024px) at line 285
-2. **Increase height**: Change `max-h-[85vh]` → `max-h-[90vh]`
-3. **Expand KRA list**: Change `max-h-48` → `max-h-64` (line 371) for the source KPI list
-4. **Expand target employee list**: Change `max-h-48` → `max-h-64` (line 420) for the target employee list
-5. **Two-column layout for Steps 1+3**: Wrap source employee selector (Step 1) and target employee selector (Step 3) side-by-side using `grid grid-cols-1 lg:grid-cols-2 gap-6` so users can see source and target simultaneously
-6. **KRA selection spans full width** between the two columns (Step 2)
+**Step 1 (Source Employee) layout changes:**
+1. Make search input full-width (remove `sm:col-span-1`, use own row)
+2. Put Month + Year selects on a second row as `grid-cols-2`
+3. Expand search dropdown `max-h-32` → `max-h-48` for better visibility
 
-This matches the existing `max-w-5xl` pattern used by AdminKpiEditorForm.
+**Step 3 (Target Employees) layout changes:**
+1. Same pattern — search input full-width on its own row
+2. Month + Year on a second row as `grid-cols-2`
+
+**Both steps** currently use `grid grid-cols-1 sm:grid-cols-3 gap-2` which creates 3 cramped columns. Change to stacked rows:
+- Row 1: Search input (full width)
+- Row 2: Month + Year (2 columns)
+
+This keeps the two-panel side-by-side layout but makes each panel's fields properly sized.
+
+### Files Changed
+1. **`src/components/admin/CopyKrasDialog.tsx`** — Restructure Step 1 and Step 3 internal grids from 3-column to stacked rows
 
