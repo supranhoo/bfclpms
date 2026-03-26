@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-26  
-> **Version:** 1.14.0 — Added Employee Development admin hub policy (JD management by designation, competency assessment by employee)
+> **Version:** 1.15.0 — Added Variance Report policy (Audit vs Management score discrepancy report)
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -582,6 +582,7 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 | 1.8.0 | 2026-03-07 | Sent-Back KPI Governance Bypass (§3.5): Employees can edit and resubmit KPIs that were sent back by a reviewer, even when Edit KPI / Self Review governance permissions are disabled. Fresh KPIs remain locked. |
 | 1.7.0 | 2026-03-05 | Effective Month Selection Policy (§23): KRA assignment dialogs now require explicit month/year selection instead of deriving from non-existent system setting. Multi-month frequencies auto-resolve to terminal month via `getActiveMonthForCycle`. |
 | 1.6.0 | 2026-03-05 | Bug bounty fixes (BUG-001–BUG-009): full 7-role coverage in User Management, email validation hardening, XSS sanitization in PolicyRenderer, SendBack character limit, stable React keys, pagination reset on filter, server-side unread notification count, Dashboard lazy-loading of allSubmissions |
+| 1.15.0 | 2026-03-26 | Variance Report: New report at `/reports/variance` showing KPIs where Audit and Management scores differ. Access controlled via `report_access_config` with `reportKey="variance"`. Only KPIs with both scores present and differing are shown. |
 | 1.13.0 | 2026-03-24 | Incentive Program Employee Mapping: New `incentive_program_mappings` table with flexible enrollment by department, BU, designation, PMS grade, or individual employee. Admin UI with ProgramEmployeeMapping component. Compute edge function resolves mappings before processing. Union logic — employee matching ANY mapping is eligible. |
 | 1.12.0 | 2026-03-24 | Incentive Module (§23): Two tracks (Production & Support), configurable slabs/DQ rules, eligibility data entry, retroactive adjustment detection for Q/BM KPIs, monthly & retroactive reports |
 | 1.5.0 | 2026-03-05 | Frequency Period Auto-Resolution Policy (§22): KPI import/creation auto-resolves multi-month frequency periods to terminal month. DB trigger blocks INSERT of KPIs with locked-month review_period for non-admin users |
