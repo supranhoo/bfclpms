@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-26  
-> **Version:** 1.94.0 — Fixed type mismatch (text vs review_status enum) in reconcile_workflow_statuses; added ::text cast on SELECT and ::review_status cast on UPDATE
+> **Version:** 1.95.0 — Scoped Performance Report by role: managers see only team KPIs (excluding own and org-level); employee count derived from KPI data instead of profiles; added scope indicator badge
 > **Maintainer:** Lovable AI
 
 ---
