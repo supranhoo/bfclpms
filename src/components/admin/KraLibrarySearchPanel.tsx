@@ -206,7 +206,7 @@ export function KraLibrarySearchPanel({
 
       {showPanel && (
         <div className="rounded-md border bg-muted/30">
-          <ScrollArea className="max-h-[240px]">
+          <ScrollArea className="max-h-[400px]">
             {!hasResults ? (
               <div className="p-4 text-center text-sm text-muted-foreground">
                 No matches found — create manually below
