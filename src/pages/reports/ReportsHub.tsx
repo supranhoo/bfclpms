@@ -147,6 +147,14 @@ const reports: ReportCard[] = [
     color: 'text-emerald-600',
     reportKey: 'kpi-journey',
   },
+  {
+    title: 'Variance Report',
+    description: 'KPIs where Audit and Management scores differ — highlights review-level discrepancies',
+    icon: TrendingUp,
+    path: '/reports/variance',
+    color: 'text-orange-600',
+    reportKey: 'variance',
+  },
 ];
 
 export default function ReportsHub() {

@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-26  
-> **Version:** 1.99.0 — KRA Library Quick Search auto-fills all fields (UOM, targets, thresholds) when selecting Category or KRA level
+> **Version:** 2.0.0 — Added Variance Report (Audit vs Management score differences)
 > **Maintainer:** Lovable AI
 
 ---
@@ -4126,6 +4126,10 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 ---
 
 - 2026-03-26: v1.93.0 — Fixed critical stage-parsing regression in `reconcile_workflow_statuses`. Recent migrations had introduced object-based parsing (`s->>'key'`) expecting `[{key, order, enabled}]` format, but workflow templates store stages as plain string arrays (`["kra_set","self_review",...]`). This caused `v_stage_keys` to always be NULL, silently skipping every KPI. Fixed by using `jsonb_array_elements_text()` to correctly parse string arrays. All branch logic (1-orphaned, 2a-terminal, 2b-scored-not-forwarded, 3-mismatch) and normal resting state exclusions (`self_review`, `manager_check`, `skip_level_check`, `hr_pms_review`, `audit`) remain intact.
+
+---
+
+- 2026-03-26: v2.0.0 — Added Variance Report (`/reports/variance`). Shows KPIs where Auditor and Management scores differ. Columns: Employee Code, Name, Department, Category, KRA, KPI, Month, Auditor Score, Management Score, Variance. Filters: Month + Year + search. Summary cards: Total Variance KPIs, Avg Variance, Max Variance. Excel export supported. Route guarded by `ReportRoute` with `reportKey="variance"`.
 
 ---
 
