@@ -176,8 +176,8 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number, so
   const isLoading = profilesLoading || kpisLoading;
 
   // Build the matrix and apply filters
-  const { rows, allFilteredRows, totalCount, totalEmployees, mappedEmployees, coveragePercent } = useMemo(() => {
-    if (!profiles || !kpis) return { rows: [], allFilteredRows: [], totalCount: 0, totalEmployees: 0, mappedEmployees: 0, coveragePercent: 0 };
+  const { rows, allFilteredRows, orgFilteredRows, totalCount, totalEmployees, mappedEmployees, coveragePercent } = useMemo(() => {
+    if (!profiles || !kpis) return { rows: [], allFilteredRows: [], orgFilteredRows: [], totalCount: 0, totalEmployees: 0, mappedEmployees: 0, coveragePercent: 0 };
 
     // Build employee → fiscal-month-index set
     const employeeMonths = new Map<string, Set<number>>();
