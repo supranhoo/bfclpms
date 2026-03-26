@@ -1,45 +1,27 @@
 
 
-## Fix: PDF Download Button Missing After Send-Back
+## Show Positive Variance in Green on Variance Report
 
-### Root Cause
+### Change
+Currently, variance is stored as `Math.abs(auditorScore - managementScore)` and always displayed with a red/grey badge. The user wants **positive variance** (Auditor > Management) in **green** and negative variance (Management > Auditor) in **red**.
 
-The PDF button is guarded by `hasAnyData`, which checks if any visible stage has status !== `'pending'`. After a send-back (e.g., auditor sends back to employee), the KPI status resets to `self_review`. With `self_review` as the current status, the `getStageStatus` function returns:
-- Self → `current`
-- Auditor → `pending`
-- Management → `pending`
+### Implementation
 
-So `hasAnyData` should be `true` (Self is "current", not "pending"). However, looking more closely, the real issue is that the screenshot shows **all three** stages as "Pending" — this means the KPI status might be at an even earlier state like `kra_set`, or the workflow stages mapping doesn't match.
+**File: `src/pages/reports/VarianceReport.tsx`**
 
-**More likely cause**: The KPI has audit log entries (send-back records exist in the DB), so even when all stages show "pending", the PDF button should still appear if there's meaningful history to export.
-
-### Fix — `src/components/review/KpiJourneySection.tsx`
-
-Expand the `hasAnyData` check to also consider whether audit logs exist:
-
-```typescript
-// Current (line 284-287):
-const hasAnyData = visibleStages.some(stage => {
-  const status = getStageStatus(stage, kpiStatus, viewLevel, effectiveStages);
-  return status !== 'pending';
-});
-
-// Fixed:
-const hasAnyData = visibleStages.some(stage => {
-  const status = getStageStatus(stage, kpiStatus, viewLevel, effectiveStages);
-  return status !== 'pending';
-}) || auditLogs.length > 0;
-```
-
-This ensures the PDF button is visible whenever there's any audit trail history — even if all stages currently show as "pending" after a send-back.
+1. **Store signed variance** — Change `variance: Math.abs(...)` to `variance: auditorScore - managementScore` (line 96)
+2. **Sort by absolute value** — Update sort to `Math.abs(b.variance) - Math.abs(a.variance)` (line 100)
+3. **Update summary cards** — Use `Math.abs()` for avg/max calculations since they reference `r.variance` directly
+4. **Color the badge** — Replace the single badge logic (line 284) with:
+   - Green badge (`bg-green-100 text-green-800`) when variance > 0 (Auditor scored higher)
+   - Red/destructive badge when variance < 0 (Management scored higher)
+   - Show absolute value with a +/- prefix
+5. **Update Excel export** — Show signed variance in the export as well
 
 ### Risk Assessment
-- **Data Impact**: None — read-only visibility logic
-- **Workflow Impact**: None — additive condition
-- **Regression Risk**: Zero — only makes the button visible in more cases
+- **Data Impact**: None — display-only change
+- **Regression Risk**: Zero — cosmetic update to one report
 
 ### Files Changed
-1. **`src/components/review/KpiJourneySection.tsx`** — Add `|| auditLogs.length > 0` to `hasAnyData`
-2. **`DOCUMENTATION.md`** — Version history update
-3. **`POLICY.md`** — Version history update
+1. `src/pages/reports/VarianceReport.tsx` — Signed variance + green/red badge coloring
 
