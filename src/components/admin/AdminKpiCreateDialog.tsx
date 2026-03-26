@@ -327,6 +327,30 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
 
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i);
 
+  const applySourceFields = (source: any, isTemplate: boolean) => {
+    if (isTemplate) {
+      setSelectedTemplateId(source.id);
+    } else {
+      setSelectedTemplateId(null);
+    }
+    if (source.uom_type) setUomType(source.uom_type as UomType);
+    if (source.uom) setUom(source.uom);
+    if (source.criteria) setCriteria(source.criteria);
+    if (source.target_value != null) setTargetValue(String(source.target_value));
+    if (source.weightage != null) setWeightage(String(source.weightage));
+    if (source.frequency) setFrequency(source.frequency);
+    if (source.source_of_data) setSourceOfData(source.source_of_data);
+    if (source.r5) setR5(source.r5);
+    if (source.r4) setR4(source.r4);
+    if (source.r3) setR3(source.r3);
+    if (source.r2) setR2(source.r2);
+    if (source.r1) setR1(source.r1);
+    if (source.r0) setR0(source.r0);
+    if (source.qualitative_options) setQualitativeOptions(source.qualitative_options as QualitativeOption[]);
+    if (source.threshold_mode) setThresholdMode(source.threshold_mode as 'absolute' | 'ratio');
+    if (source.require_resubmit_reason != null) setRequireResubmitReason(source.require_resubmit_reason);
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="max-w-4xl max-h-[92vh]">
