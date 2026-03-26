@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-25  
-> **Version:** 1.92.0 — Reconciliation dialog now shows employee code in brackets after name and supports sorting by employee name (A-Z/Z-A toggle); DB function updated to include employee_code in output
+> **Version:** 1.93.0 — Fixed critical stage-parsing regression in reconcile_workflow_statuses; plain string array parsing restored via jsonb_array_elements_text()
 > **Maintainer:** Lovable AI
 
 ---
@@ -4122,6 +4122,10 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 ---
 
 - 2026-03-25: v1.91.0 — Fixed `reconcile_workflow_statuses` DB function Branch 2b. The "scored not forwarded" logic now checks whether the current status is the expected "completed stage" resting state per system architecture convention. Statuses `manager_check`, `skip_level_check`, and `hr_pms_review` with their own score are skipped when a subsequent non-approved reviewer stage exists in the workflow. This prevents false-positive reconciliation of hundreds of correctly-waiting KPIs. Branches 1 (orphaned), 2a (terminal completed), and 2c (review-stage mismatch) remain unchanged.
+
+---
+
+- 2026-03-26: v1.93.0 — Fixed critical stage-parsing regression in `reconcile_workflow_statuses`. Recent migrations had introduced object-based parsing (`s->>'key'`) expecting `[{key, order, enabled}]` format, but workflow templates store stages as plain string arrays (`["kra_set","self_review",...]`). This caused `v_stage_keys` to always be NULL, silently skipping every KPI. Fixed by using `jsonb_array_elements_text()` to correctly parse string arrays. All branch logic (1-orphaned, 2a-terminal, 2b-scored-not-forwarded, 3-mismatch) and normal resting state exclusions (`self_review`, `manager_check`, `skip_level_check`, `hr_pms_review`, `audit`) remain intact.
 
 ---
 
