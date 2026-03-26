@@ -122,15 +122,20 @@ export default function PerformanceReport() {
     <div className="space-y-6">
       <PageHeader
         title="Performance Report"
-        description="Organization-wide performance analytics"
+        description={scopeLabel}
         backTo="/reports"
         actions={
-          canExport ? (
-            <Button variant="outline" onClick={handleExportExcel}>
-              <Download className="h-4 w-4 mr-2" />
-              Export Excel
-            </Button>
-          ) : undefined
+          <div className="flex items-center gap-2">
+            <Badge variant={isOrgWideRole ? 'default' : 'secondary'}>
+              {scopeLabel}
+            </Badge>
+            {canExport && (
+              <Button variant="outline" onClick={handleExportExcel}>
+                <Download className="h-4 w-4 mr-2" />
+                Export Excel
+              </Button>
+            )}
+          </div>
         }
       />
 
