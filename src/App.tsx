@@ -337,6 +337,11 @@ const App = () => (
                     <Suspense fallback={<PageFallback />}><IncentiveReport /></Suspense>
                   </ReportRoute>
                 } />
+                <Route path="/reports/variance" element={
+                  <ReportRoute reportKey="variance">
+                    <Suspense fallback={<PageFallback />}><VarianceReport /></Suspense>
+                  </ReportRoute>
+                } />
               </Route>
               <Route path="*" element={<Suspense fallback={<PageFallback />}><NotFound /></Suspense>} />
             </Routes>
