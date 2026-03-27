@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-27  
-> **Version:** 2.4.3 — Made incentive program name & details editable via Edit dialog
+> **Version:** 2.4.4 — Dynamic incentive program types with "Plant Incentive" and custom type creation from frontend
 > **Maintainer:** Lovable AI
 
 ---
