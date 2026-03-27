@@ -10,6 +10,7 @@ import { useIncentiveRecords, useConfirmIncentiveRecords, useMarkIncentivePaid, 
 import { useIncentivePrograms } from '@/hooks/useIncentivePrograms';
 import { useAuth } from '@/contexts/AuthContext';
 import { IncentiveDryRunDialog } from './IncentiveDryRunDialog';
+import { IncentiveStatusOverride, IncentiveStatusBadge } from './IncentiveStatusOverride';
 import * as XLSX from 'xlsx';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -20,6 +21,7 @@ export function MonthlyIncentiveTable() {
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[currentDate.getMonth()]);
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [incentiveStatusFilter, setIncentiveStatusFilter] = useState<string>('all');
   const [eligibilityFilter, setEligibilityFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProgram, setSelectedProgram] = useState<string>('');
@@ -37,6 +39,7 @@ export function MonthlyIncentiveTable() {
   const filteredRecords = useMemo(() => {
     return (records as any[]).filter(r => {
       if (statusFilter !== 'all' && r.status !== statusFilter) return false;
+      if (incentiveStatusFilter !== 'all' && r.incentive_status !== incentiveStatusFilter) return false;
       if (eligibilityFilter === 'eligible' && r.is_disqualified) return false;
       if (eligibilityFilter === 'disqualified' && !r.is_disqualified) return false;
       if (eligibilityFilter === 'prorata' && r.pro_rata_factor >= 1) return false;
@@ -48,7 +51,7 @@ export function MonthlyIncentiveTable() {
       }
       return true;
     });
-  }, [records, statusFilter, eligibilityFilter, searchTerm]);
+  }, [records, statusFilter, incentiveStatusFilter, eligibilityFilter, searchTerm]);
 
   const summaryStats = useMemo(() => {
     const total = records.length;
