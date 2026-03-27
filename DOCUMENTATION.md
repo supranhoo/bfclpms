@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-03-26  
-> **Version:** 2.2.0 — Fix send-back records not appearing in timeline history (cache invalidation)
+> **Last Updated:** 2026-03-27  
+> **Version:** 2.3.0 — New report: Same KPI — Manager vs Team comparison
 > **Maintainer:** Lovable AI
 
 ---

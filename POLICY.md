@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
-> **Last Updated:** 2026-03-26  
-> **Version:** 1.17.0 — Fix send-back records not appearing in timeline history (cache invalidation)
+> **Last Updated:** 2026-03-27  
+> **Version:** 1.18.0 — New report: Same KPI — Manager vs Team comparison
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
