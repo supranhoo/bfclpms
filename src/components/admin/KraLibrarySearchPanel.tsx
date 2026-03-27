@@ -205,11 +205,6 @@ export function KraLibrarySearchPanel({
                             <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
                           )}
                         </button>
-                        <Checkbox
-                          checked={selectedId === `cat-${catId}`}
-                          onCheckedChange={() => handleSelectCategory(catId)}
-                          className="shrink-0"
-                        />
                         <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
                         <div className="flex items-center gap-1.5 min-w-0">
                           <div
@@ -242,11 +237,6 @@ export function KraLibrarySearchPanel({
                                   <ChevronRight className="h-3 w-3 text-muted-foreground" />
                                 )}
                               </button>
-                              <Checkbox
-                                checked={selectedId === `kra-${catId}-${kraName}`}
-                                onCheckedChange={() => handleSelectKra(catId, kraName)}
-                                className="shrink-0"
-                              />
                               <span className="text-sm text-foreground truncate">
                                 <span className="text-muted-foreground text-xs mr-1">KRA:</span>
                                 {kraName}
