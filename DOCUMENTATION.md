@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-27  
-> **Version:** 2.4.0 — Monthly self-review & team KRA review reminder email (cron: 1st of every month at 8 AM UTC)
+> **Version:** 2.4.1 — Monthly review reminder: added disregard notice for completed reviews including team review
 > **Maintainer:** Lovable AI
 
 ---
@@ -4134,6 +4134,10 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 ---
 
 - 2026-03-27: v2.4.0 — Added Monthly Self-Review & Team KRA Review Reminder. New edge function `send-monthly-review-reminder` runs on 1st of every month at 8 AM UTC via pg_cron. Sends common reminder email to all employees with active KRAs for the previous month. Review period = last month, year = current calendar year. New event type `monthly_review_reminder` added to email notification settings with admin toggle. Template added to `send-email-notification` DEFAULT_TEMPLATES.
+
+---
+
+- 2026-03-27: v2.4.1 — Updated monthly review reminder email disregard notice to: "If you have already completed your review and team's review (if applicable), please disregard this reminder."
 
 ---
 
