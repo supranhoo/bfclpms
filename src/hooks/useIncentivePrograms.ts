@@ -36,7 +36,7 @@ export function useUpdateProgram() {
   const qc = useQueryClient();
   const { toast } = useToast();
   return useMutation({
-    mutationFn: async ({ id, ...values }: { id: string; name?: string; program_type?: string; description?: string; is_active?: boolean; effective_from?: string | null; effective_to?: string | null }) => {
+    mutationFn: async ({ id, ...values }: { id: string; name?: string; program_type?: string; description?: string; is_active?: boolean; effective_from?: string | null; effective_to?: string | null; incentive_base?: string; min_kra_score?: number; no_kra_eligible?: boolean }) => {
       const { error } = await supabase.from('incentive_programs').update(values).eq('id', id);
       if (error) throw error;
     },
