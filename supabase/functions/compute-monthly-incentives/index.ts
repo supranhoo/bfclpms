@@ -337,6 +337,32 @@ serve(async (req) => {
 
       const finalPercent = isDQ ? 0 : basePercent * (1 - ltiPenalty / 100) * proRata;
 
+      // Determine incentive_status
+      let incentiveStatus = 'hold';
+      if (isDQ) {
+        incentiveStatus = 'forfeited';
+      } else {
+        // Check KRA approval for support programs
+        if (program.program_type === 'support') {
+          const empKpis = kpiMap.get(emp.id) || [];
+          const allApproved = empKpis.length > 0 && empKpis.every((k: any) => k.status === 'approved');
+          const noKra = empKpis.length === 0;
+          if (allApproved) {
+            incentiveStatus = 'finalised';
+          } else if (noKra && program.no_kra_eligible) {
+            incentiveStatus = 'finalised';
+          } else {
+            incentiveStatus = 'hold';
+          }
+        } else {
+          // Production: finalised if production data exists
+          incentiveStatus = elig?.production_value !== null && elig?.production_value !== undefined ? 'finalised' : 'hold';
+        }
+      }
+
+      // Check if record already has a manual override — if so, don't revert it
+      const existingOverride = existingRecords?.find((er: any) => er.employee_id === emp.id && er.status_overridden_by);
+
       records.push({
         employee_id: emp.id,
         program_id: program_id,
@@ -352,6 +378,7 @@ serve(async (req) => {
         pro_rata_factor: proRata,
         final_incentive_percent: Math.round(finalPercent * 100) / 100,
         status: 'draft',
+        incentive_status: existingOverride ? existingOverride.incentive_status : incentiveStatus,
         computed_at: new Date().toISOString(),
       });
       computed++;
