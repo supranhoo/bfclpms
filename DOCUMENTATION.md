@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-27  
-> **Version:** 2.3.0 — New report: Same KPI — Manager vs Team comparison
+> **Version:** 2.3.1 — Fix: KRA Library search now correctly populates KRA/KPI names
 > **Maintainer:** Lovable AI
 
 ---

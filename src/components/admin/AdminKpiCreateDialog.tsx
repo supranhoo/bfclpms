@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -180,8 +180,15 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
     return [...fromTemplates, ...fromExisting];
   }, [templates, allKpis, categoryId, kraName]);
 
+  // Ref to skip cascading resets when KRA Library search sets values
+  const skipResetRef = useRef(false);
+
   // Reset KRA/KPI when category changes
   useEffect(() => {
+    if (skipResetRef.current) {
+      skipResetRef.current = false;
+      return;
+    }
     setKraName('');
     setKpiName('');
     setIsCustomKra(false);
@@ -190,6 +197,10 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
 
   // Reset KPI when KRA changes
   useEffect(() => {
+    if (skipResetRef.current) {
+      skipResetRef.current = false;
+      return;
+    }
     setKpiName('');
     setIsCustomKpi(false);
   }, [kraName]);
@@ -367,6 +378,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
               allKpis={allKpis}
               categories={categories}
               onSelectCategory={(catId) => {
+                skipResetRef.current = true;
                 setCategoryId(catId);
                 // Find first matching template or KPI for this category and auto-fill all fields
                 const tpl = (templates || []).find(t => t.is_active && t.category_id === catId);
@@ -391,6 +403,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                 }
               }}
               onSelectKra={(catId, kra) => {
+                skipResetRef.current = true;
                 setCategoryId(catId);
                 setKraName(kra);
                 setIsCustomKra(true);
@@ -412,6 +425,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                 }
               }}
               onSelectKpi={(catId, kra, kpi) => {
+                skipResetRef.current = true;
                 setCategoryId(catId);
                 setKraName(kra);
                 setKpiName(kpi);

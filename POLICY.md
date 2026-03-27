@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-27  
-> **Version:** 1.18.0 — New report: Same KPI — Manager vs Team comparison
+> **Version:** 1.18.1 — Fix: KRA Library search now correctly populates KRA/KPI names
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
