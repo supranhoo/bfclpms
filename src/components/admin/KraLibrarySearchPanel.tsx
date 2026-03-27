@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 
 import { Search, FolderOpen, ChevronRight, ChevronDown, Sparkles } from 'lucide-react';
-import { cn } from '@/lib/utils';
+
 
 interface KpiEntry {
   id: string;
