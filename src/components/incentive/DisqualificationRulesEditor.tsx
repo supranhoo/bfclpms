@@ -6,7 +6,8 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, Plus, Save } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Trash2, Plus, Save, Pencil, X } from 'lucide-react';
 import { useDisqualificationRules, useUpsertDqRule, useDeleteDqRule } from '@/hooks/useIncentivePrograms';
 
 interface Props {
@@ -22,13 +23,107 @@ const RULE_TYPES = [
   { value: 'lti', label: 'LTI (Lost Time Injury)', defaultConfig: { lti_1_penalty_percent: 50, lti_2_plus_penalty_percent: 100, scope: 'department' } },
 ];
 
+function ConfigSummary({ ruleType, config }: { ruleType: string; config: any }) {
+  switch (ruleType) {
+    case 'absence':
+      return <span className="text-sm text-muted-foreground">Threshold: <strong>{config.threshold_days ?? 0}</strong> day(s)</span>;
+    case 'lwp':
+      return <span className="text-sm text-muted-foreground">Max LWP: <strong>{config.max_lwp_days ?? 0}</strong> day(s)</span>;
+    case 'warning':
+      return <span className="text-sm text-muted-foreground">Disqualify: <strong>{config.disqualify ? 'Yes' : 'No'}</strong></span>;
+    case 'suspension':
+      return <span className="text-sm text-muted-foreground">Disqualify: <strong>{config.disqualify ? 'Yes' : 'No'}</strong></span>;
+    case 'contract':
+      return <span className="text-sm text-muted-foreground">Ineligible: <strong>{config.ineligible ? 'Yes' : 'No'}</strong></span>;
+    case 'lti':
+      return (
+        <span className="text-sm text-muted-foreground">
+          1 LTI: <strong>{config.lti_1_penalty_percent ?? 0}%</strong>,{' '}
+          2+ LTI: <strong>{config.lti_2_plus_penalty_percent ?? 0}%</strong>,{' '}
+          Scope: <strong>{config.scope ?? 'department'}</strong>
+        </span>
+      );
+    default:
+      return <code className="text-xs bg-muted px-2 py-1 rounded">{JSON.stringify(config)}</code>;
+  }
+}
+
+function RuleConfigEditor({ ruleType, config, onChange }: { ruleType: string; config: any; onChange: (c: any) => void }) {
+  const update = (key: string, value: any) => onChange({ ...config, [key]: value });
+
+  switch (ruleType) {
+    case 'absence':
+      return (
+        <div className="flex items-center gap-2">
+          <Label className="text-xs whitespace-nowrap">Threshold Days</Label>
+          <Input type="number" min={0} className="h-8 w-20" value={config.threshold_days ?? 0} onChange={e => update('threshold_days', Number(e.target.value))} />
+        </div>
+      );
+    case 'lwp':
+      return (
+        <div className="flex items-center gap-2">
+          <Label className="text-xs whitespace-nowrap">Max LWP Days</Label>
+          <Input type="number" min={0} className="h-8 w-20" value={config.max_lwp_days ?? 0} onChange={e => update('max_lwp_days', Number(e.target.value))} />
+        </div>
+      );
+    case 'warning':
+      return (
+        <div className="flex items-center gap-2">
+          <Label className="text-xs whitespace-nowrap">Disqualify</Label>
+          <Switch checked={!!config.disqualify} onCheckedChange={v => update('disqualify', v)} />
+        </div>
+      );
+    case 'suspension':
+      return (
+        <div className="flex items-center gap-2">
+          <Label className="text-xs whitespace-nowrap">Disqualify</Label>
+          <Switch checked={!!config.disqualify} onCheckedChange={v => update('disqualify', v)} />
+        </div>
+      );
+    case 'contract':
+      return (
+        <div className="flex items-center gap-2">
+          <Label className="text-xs whitespace-nowrap">Ineligible</Label>
+          <Switch checked={!!config.ineligible} onCheckedChange={v => update('ineligible', v)} />
+        </div>
+      );
+    case 'lti':
+      return (
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1">
+            <Label className="text-xs whitespace-nowrap">1 LTI Penalty %</Label>
+            <Input type="number" min={0} max={100} className="h-8 w-20" value={config.lti_1_penalty_percent ?? 0} onChange={e => update('lti_1_penalty_percent', Number(e.target.value))} />
+          </div>
+          <div className="flex items-center gap-1">
+            <Label className="text-xs whitespace-nowrap">2+ LTI Penalty %</Label>
+            <Input type="number" min={0} max={100} className="h-8 w-20" value={config.lti_2_plus_penalty_percent ?? 0} onChange={e => update('lti_2_plus_penalty_percent', Number(e.target.value))} />
+          </div>
+          <div className="flex items-center gap-1">
+            <Label className="text-xs whitespace-nowrap">Scope</Label>
+            <Select value={config.scope ?? 'department'} onValueChange={v => update('scope', v)}>
+              <SelectTrigger className="h-8 w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="department">Department</SelectItem>
+                <SelectItem value="company">Company</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      );
+    default:
+      return <code className="text-xs bg-muted px-2 py-1 rounded">{JSON.stringify(config)}</code>;
+  }
+}
+
 export function DisqualificationRulesEditor({ programId }: Props) {
   const { data: rules = [], isLoading } = useDisqualificationRules(programId);
   const upsertRule = useUpsertDqRule();
   const deleteRule = useDeleteDqRule();
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editConfig, setEditConfig] = useState<string>('');
+  const [editConfig, setEditConfig] = useState<any>({});
 
   const existingTypes = rules.map((r: any) => r.rule_type);
   const availableTypes = RULE_TYPES.filter(t => !existingTypes.includes(t.value));
@@ -42,14 +137,14 @@ export function DisqualificationRulesEditor({ programId }: Props) {
     });
   };
 
+  const handleStartEdit = (rule: any) => {
+    setEditingId(rule.id);
+    setEditConfig({ ...(rule.rule_config as any) });
+  };
+
   const handleSaveConfig = (ruleId: string, programId: string, ruleType: string) => {
-    try {
-      const parsed = JSON.parse(editConfig);
-      upsertRule.mutate({ id: ruleId, program_id: programId, rule_type: ruleType, rule_config: parsed });
-      setEditingId(null);
-    } catch {
-      // invalid JSON
-    }
+    upsertRule.mutate({ id: ruleId, program_id: programId, rule_type: ruleType, rule_config: editConfig });
+    setEditingId(null);
   };
 
   const handleToggleActive = (rule: any) => {
@@ -89,23 +184,20 @@ export function DisqualificationRulesEditor({ programId }: Props) {
                         </TableCell>
                         <TableCell>
                           {editingId === rule.id ? (
-                            <div className="flex gap-2">
-                              <Input
-                                value={editConfig}
-                                onChange={e => setEditConfig(e.target.value)}
-                                className="h-8 font-mono text-xs"
-                              />
+                            <div className="flex items-center gap-2">
+                              <RuleConfigEditor ruleType={rule.rule_type} config={editConfig} onChange={setEditConfig} />
                               <Button size="sm" variant="outline" onClick={() => handleSaveConfig(rule.id, rule.program_id, rule.rule_type)}>
                                 <Save className="h-3 w-3" />
                               </Button>
+                              <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
+                                <X className="h-3 w-3" />
+                              </Button>
                             </div>
                           ) : (
-                            <code
-                              className="text-xs bg-muted px-2 py-1 rounded cursor-pointer"
-                              onClick={() => { setEditingId(rule.id); setEditConfig(JSON.stringify(rule.rule_config, null, 0)); }}
-                            >
-                              {JSON.stringify(rule.rule_config)}
-                            </code>
+                            <div className="flex items-center gap-2 cursor-pointer" onClick={() => handleStartEdit(rule)}>
+                              <ConfigSummary ruleType={rule.rule_type} config={rule.rule_config} />
+                              <Pencil className="h-3 w-3 text-muted-foreground" />
+                            </div>
                           )}
                         </TableCell>
                         <TableCell>

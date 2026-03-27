@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-27  
-> **Version:** 2.4.4 — Dynamic incentive program types with "Plant Incentive" and custom type creation from frontend
+> **Version:** 2.4.5 — DQ rules editor: replaced raw JSON config with structured form fields per rule type
 > **Maintainer:** Lovable AI
 
 ---

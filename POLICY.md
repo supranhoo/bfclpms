@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-27  
-> **Version:** 1.19.4 — Incentive program types now dynamic; "Plant Incentive" added; admins can create custom types
+> **Version:** 1.19.5 — DQ rules config now uses friendly form fields (number inputs, switches, selects) instead of raw JSON
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
