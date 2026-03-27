@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-27  
-> **Version:** 2.3.1 — Fix: KRA Library search now correctly populates KRA/KPI names
+> **Version:** 2.3.2 — KRA Library search: KPI-only selection (removed category/KRA checkboxes)
 > **Maintainer:** Lovable AI
 
 ---

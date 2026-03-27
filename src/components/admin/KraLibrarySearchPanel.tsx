@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 
 import { Search, FolderOpen, ChevronRight, ChevronDown, Sparkles } from 'lucide-react';
-import { cn } from '@/lib/utils';
+
 
 interface KpiEntry {
   id: string;
@@ -29,8 +29,6 @@ interface KraLibrarySearchPanelProps {
   templates: any[] | undefined;
   allKpis: any[] | undefined;
   categories: { id: string; name: string; color: string | null; weightage: number }[] | undefined;
-  onSelectCategory: (categoryId: string) => void;
-  onSelectKra: (categoryId: string, kraName: string) => void;
   onSelectKpi: (categoryId: string, kraName: string, kpiName: string) => void;
 }
 
@@ -38,12 +36,10 @@ export function KraLibrarySearchPanel({
   templates,
   allKpis,
   categories,
-  onSelectCategory,
-  onSelectKra,
   onSelectKpi,
 }: KraLibrarySearchPanelProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [expandedKras, setExpandedKras] = useState<Set<string>>(new Set());
 
@@ -142,31 +138,9 @@ export function KraLibrarySearchPanel({
     });
   };
 
-  const handleSelectCategory = (catId: string) => {
-    const id = `cat-${catId}`;
-    setSelectedId(prev => prev === id ? null : id);
-    if (selectedId !== id) {
-      onSelectCategory(catId);
-      setSearchTerm('');
-    }
-  };
-
-  const handleSelectKra = (catId: string, kraName: string) => {
-    const id = `kra-${catId}-${kraName}`;
-    setSelectedId(prev => prev === id ? null : id);
-    if (selectedId !== id) {
-      onSelectKra(catId, kraName);
-      setSearchTerm('');
-    }
-  };
-
   const handleSelectKpi = (catId: string, kraName: string, kpiName: string) => {
-    const id = `kpi-${catId}-${kraName}-${kpiName}`;
-    setSelectedId(prev => prev === id ? null : id);
-    if (selectedId !== id) {
-      onSelectKpi(catId, kraName, kpiName);
-      setSearchTerm('');
-    }
+    onSelectKpi(catId, kraName, kpiName);
+    setSearchTerm('');
   };
 
   const hasResults = groupedResults && groupedResults.size > 0;
@@ -231,11 +205,6 @@ export function KraLibrarySearchPanel({
                             <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
                           )}
                         </button>
-                        <Checkbox
-                          checked={selectedId === `cat-${catId}`}
-                          onCheckedChange={() => handleSelectCategory(catId)}
-                          className="shrink-0"
-                        />
                         <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
                         <div className="flex items-center gap-1.5 min-w-0">
                           <div
@@ -268,11 +237,6 @@ export function KraLibrarySearchPanel({
                                   <ChevronRight className="h-3 w-3 text-muted-foreground" />
                                 )}
                               </button>
-                              <Checkbox
-                                checked={selectedId === `kra-${catId}-${kraName}`}
-                                onCheckedChange={() => handleSelectKra(catId, kraName)}
-                                className="shrink-0"
-                              />
                               <span className="text-sm text-foreground truncate">
                                 <span className="text-muted-foreground text-xs mr-1">KRA:</span>
                                 {kraName}
@@ -289,7 +253,6 @@ export function KraLibrarySearchPanel({
                                 className="flex items-center gap-2 rounded-sm px-2 py-1 pl-8 hover:bg-accent/50 cursor-pointer"
                               >
                                 <Checkbox
-                                  checked={selectedId === `kpi-${catId}-${kraName}-${kpi.kpi_name}`}
                                   onCheckedChange={() => handleSelectKpi(catId, kraName, kpi.kpi_name)}
                                   className="shrink-0"
                                 />
