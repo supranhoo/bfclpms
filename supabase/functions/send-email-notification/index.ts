@@ -646,6 +646,23 @@ These changes may require payroll adjustments. Please review the Incentive Repor
 
 Action Required: Log in to PMS → Reports → Incentive Report → Retroactive Adjustments tab to review and process these changes.`,
   },
+  monthly_review_reminder: {
+    subject: '[PMS] Monthly Reminder: Complete Your Self-Review & Team KRA Review — {{review_period}} {{review_year}}',
+    body: `Dear {{recipient_name}},
+
+This is a friendly reminder that KRAs for {{review_period}} {{review_year}} require your attention.
+
+📋 Self-Review
+Please log in and complete your self-assessment for any pending KPIs at your earliest convenience.
+
+👥 Team KRA Review (If Applicable)
+If you are a reporting manager, kindly review your team members' KPIs to ensure timely feedback and keep the review cycle on track.
+
+Timely completion of reviews helps maintain a smooth and transparent appraisal process for everyone.
+
+Best regards,
+{{company_name}} PMS System`,
+  },
 };
 
 const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string }> = {
@@ -682,6 +699,7 @@ const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string
   system_auto_scored: { color: '#f97316', emoji: '⚡', title: 'System Auto-Score' },
   pending_review_reminder: { color: '#f59e0b', emoji: '🔔', title: 'Sent-Back KPI Reminder' },
   incentive_retroactive_alert: { color: '#ef4444', emoji: '⚠️', title: 'Incentive Slab Changes' },
+  monthly_review_reminder: { color: '#3b82f6', emoji: '📋', title: 'Monthly Review Reminder' },
 };
 
 // Build KRA table HTML for batch assignment emails
