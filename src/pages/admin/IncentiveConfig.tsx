@@ -4,7 +4,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -19,11 +18,13 @@ import {
   useDqRuleCount,
   useMappingCount,
 } from '@/hooks/useIncentivePrograms';
+import { useIncentiveProgramTypes } from '@/hooks/useIncentiveProgramTypes';
 import { IncentiveSlabEditor } from '@/components/incentive/IncentiveSlabEditor';
 import { DisqualificationRulesEditor } from '@/components/incentive/DisqualificationRulesEditor';
 import { EligibilityDataEntry } from '@/components/incentive/EligibilityDataEntry';
 import { ProgramEmployeeMapping } from '@/components/incentive/ProgramEmployeeMapping';
 import { EligibilityFieldsConfig } from '@/components/incentive/EligibilityFieldsConfig';
+import { ProgramTypeSelector } from '@/components/incentive/ProgramTypeSelector';
 
 /* ── Summary badges for each program card ── */
 function ProgramSummaryBadges({ programId }: { programId: string }) {
@@ -47,7 +48,7 @@ function ProgramSummaryBadges({ programId }: { programId: string }) {
 }
 
 export default function IncentiveConfig() {
-  const { data: programs = [], isLoading } = useIncentivePrograms();
+  const { data: programTypes = [] } = useIncentiveProgramTypes();
   const createProgram = useCreateProgram();
   const updateProgram = useUpdateProgram();
   const deleteProgram = useDeleteProgram();
