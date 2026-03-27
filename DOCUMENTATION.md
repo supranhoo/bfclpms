@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-27  
-> **Version:** 2.3.2 — KRA Library search: KPI-only selection (removed category/KRA checkboxes)
+> **Version:** 2.4.0 — Monthly self-review & team KRA review reminder email (cron: 1st of every month at 8 AM UTC)
 > **Maintainer:** Lovable AI
 
 ---
@@ -4130,6 +4130,10 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 ---
 
 - 2026-03-26: v2.0.0 — Added Variance Report (`/reports/variance`). Shows KPIs where Auditor and Management scores differ. Columns: Employee Code, Name, Department, Category, KRA, KPI, Month, Auditor Score, Management Score, Variance. Filters: Month + Year + search. Summary cards: Total Variance KPIs, Avg Variance, Max Variance. Excel export supported. Route guarded by `ReportRoute` with `reportKey="variance"`.
+
+---
+
+- 2026-03-27: v2.4.0 — Added Monthly Self-Review & Team KRA Review Reminder. New edge function `send-monthly-review-reminder` runs on 1st of every month at 8 AM UTC via pg_cron. Sends common reminder email to all employees with active KRAs for the previous month. Review period = last month, year = current calendar year. New event type `monthly_review_reminder` added to email notification settings with admin toggle. Template added to `send-email-notification` DEFAULT_TEMPLATES.
 
 ---
 

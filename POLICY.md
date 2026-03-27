@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-27  
-> **Version:** 1.18.1 — Fix: KRA Library search now correctly populates KRA/KPI names
+> **Version:** 1.19.0 — Monthly self-review & team KRA review reminder (cron: 1st of every month at 8 AM)
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -582,6 +582,7 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 | 1.8.0 | 2026-03-07 | Sent-Back KPI Governance Bypass (§3.5): Employees can edit and resubmit KPIs that were sent back by a reviewer, even when Edit KPI / Self Review governance permissions are disabled. Fresh KPIs remain locked. |
 | 1.7.0 | 2026-03-05 | Effective Month Selection Policy (§23): KRA assignment dialogs now require explicit month/year selection instead of deriving from non-existent system setting. Multi-month frequencies auto-resolve to terminal month via `getActiveMonthForCycle`. |
 | 1.6.0 | 2026-03-05 | Bug bounty fixes (BUG-001–BUG-009): full 7-role coverage in User Management, email validation hardening, XSS sanitization in PolicyRenderer, SendBack character limit, stable React keys, pagination reset on filter, server-side unread notification count, Dashboard lazy-loading of allSubmissions |
+| 1.19.0 | 2026-03-27 | Monthly Review Reminder: automated email on 1st of every month at 8 AM to all employees with active KRAs for previous month. Reminds self-review and team KRA review. Configurable via `monthly_review_reminder` event toggle. |
 | 1.18.2 | 2026-03-27 | KRA Library Quick Search: removed category/KRA selection checkboxes; only KPI-level selection remains, auto-filling all fields |
 | 1.15.0 | 2026-03-26 | Variance Report: New report at `/reports/variance` showing KPIs where Audit and Management scores differ. Access controlled via `report_access_config` with `reportKey="variance"`. Only KPIs with both scores present and differing are shown. |
 | 1.13.0 | 2026-03-24 | Incentive Program Employee Mapping: New `incentive_program_mappings` table with flexible enrollment by department, BU, designation, PMS grade, or individual employee. Admin UI with ProgramEmployeeMapping component. Compute edge function resolves mappings before processing. Union logic — employee matching ANY mapping is eligible. |
