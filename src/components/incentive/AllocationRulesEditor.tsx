@@ -58,11 +58,14 @@ export function AllocationRulesEditor({ programId }: Props) {
         {/* Source label totals */}
         {Object.keys(sourceTotals).length > 0 && (
           <div className="flex gap-2 flex-wrap">
-            {Object.entries(sourceTotals).map(([label, total]) => (
-              <Badge key={label} variant={Math.abs(total - 100) < 0.01 ? 'default' : 'destructive'}>
-                {label}: {total}%{Math.abs(total - 100) >= 0.01 && ' ⚠'}
-              </Badge>
-            ))}
+            {Object.entries(sourceTotals).map(([label, total]) => {
+              const numTotal = Number(total);
+              return (
+                <Badge key={label} variant={Math.abs(numTotal - 100) < 0.01 ? 'default' : 'destructive'}>
+                  {label}: {numTotal}%{Math.abs(numTotal - 100) >= 0.01 && ' ⚠'}
+                </Badge>
+              );
+            })}
           </div>
         )}
 
