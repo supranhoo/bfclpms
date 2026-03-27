@@ -174,6 +174,16 @@ export function MonthlyIncentiveTable() {
               </SelectContent>
             </Select>
             <Input placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-[180px]" />
+            <Select value={incentiveStatusFilter} onValueChange={setIncentiveStatusFilter}>
+              <SelectTrigger className="w-[140px]"><SelectValue placeholder="Incentive Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Incentive</SelectItem>
+                <SelectItem value="hold">Hold</SelectItem>
+                <SelectItem value="finalised">Finalised</SelectItem>
+                <SelectItem value="forfeited">Forfeited</SelectItem>
+                <SelectItem value="released">Released</SelectItem>
+              </SelectContent>
+            </Select>
             <Select value={selectedProgram} onValueChange={setSelectedProgram}>
               <SelectTrigger className="w-[180px]"><SelectValue placeholder="Select Program" /></SelectTrigger>
               <SelectContent>
@@ -204,8 +214,8 @@ export function MonthlyIncentiveTable() {
                   <TableHead>LTI Penalty</TableHead>
                   <TableHead>Pro-rata</TableHead>
                   <TableHead>Final %</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
+                   <TableHead>Status</TableHead>
+                   <TableHead>Incentive Status</TableHead>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
