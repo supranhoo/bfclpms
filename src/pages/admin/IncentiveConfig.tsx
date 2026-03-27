@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Plus, Edit, Trash2, Users, Layers, ShieldAlert, ChevronRight } from 'lucide-react';
@@ -25,6 +26,10 @@ import { EligibilityDataEntry } from '@/components/incentive/EligibilityDataEntr
 import { ProgramEmployeeMapping } from '@/components/incentive/ProgramEmployeeMapping';
 import { EligibilityFieldsConfig } from '@/components/incentive/EligibilityFieldsConfig';
 import { ProgramTypeSelector } from '@/components/incentive/ProgramTypeSelector';
+import { ProductionTargetGrid } from '@/components/incentive/ProductionTargetGrid';
+import { BusinessUnitManager } from '@/components/incentive/BusinessUnitManager';
+import { AllocationRulesEditor } from '@/components/incentive/AllocationRulesEditor';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 /* ── Summary badges for each program card ── */
 function ProgramSummaryBadges({ programId }: { programId: string }) {
@@ -81,6 +86,7 @@ export default function IncentiveConfig() {
       <Tabs defaultValue="programs">
         <TabsList>
           <TabsTrigger value="programs">Programs</TabsTrigger>
+          <TabsTrigger value="production">Production Data</TabsTrigger>
           <TabsTrigger value="eligibility">Eligibility Data</TabsTrigger>
         </TabsList>
 
@@ -145,6 +151,8 @@ export default function IncentiveConfig() {
                         <TabsTrigger value="slabs">Slabs</TabsTrigger>
                         <TabsTrigger value="rules">DQ Rules</TabsTrigger>
                         <TabsTrigger value="fields">Fields</TabsTrigger>
+                        <TabsTrigger value="sub-units">BU Sub-Units</TabsTrigger>
+                        <TabsTrigger value="allocation">Allocation</TabsTrigger>
                       </TabsList>
 
                       <TabsContent value="mapping">
@@ -165,12 +173,24 @@ export default function IncentiveConfig() {
                       <TabsContent value="fields">
                         <EligibilityFieldsConfig programId={p.id} />
                       </TabsContent>
+
+                      <TabsContent value="sub-units">
+                        <BusinessUnitManager />
+                      </TabsContent>
+
+                      <TabsContent value="allocation">
+                        <AllocationRulesEditor programId={p.id} />
+                      </TabsContent>
                     </Tabs>
                   </AccordionContent>
                 </AccordionItem>
               ))}
             </Accordion>
           )}
+        </TabsContent>
+
+        <TabsContent value="production">
+          <ProductionTargetGrid />
         </TabsContent>
 
         <TabsContent value="eligibility">
