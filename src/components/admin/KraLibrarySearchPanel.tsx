@@ -36,8 +36,6 @@ export function KraLibrarySearchPanel({
   templates,
   allKpis,
   categories,
-  onSelectCategory,
-  onSelectKra,
   onSelectKpi,
 }: KraLibrarySearchPanelProps) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -140,31 +138,9 @@ export function KraLibrarySearchPanel({
     });
   };
 
-  const handleSelectCategory = (catId: string) => {
-    const id = `cat-${catId}`;
-    setSelectedId(prev => prev === id ? null : id);
-    if (selectedId !== id) {
-      onSelectCategory(catId);
-      setSearchTerm('');
-    }
-  };
-
-  const handleSelectKra = (catId: string, kraName: string) => {
-    const id = `kra-${catId}-${kraName}`;
-    setSelectedId(prev => prev === id ? null : id);
-    if (selectedId !== id) {
-      onSelectKra(catId, kraName);
-      setSearchTerm('');
-    }
-  };
-
   const handleSelectKpi = (catId: string, kraName: string, kpiName: string) => {
-    const id = `kpi-${catId}-${kraName}-${kpiName}`;
-    setSelectedId(prev => prev === id ? null : id);
-    if (selectedId !== id) {
-      onSelectKpi(catId, kraName, kpiName);
-      setSearchTerm('');
-    }
+    onSelectKpi(catId, kraName, kpiName);
+    setSearchTerm('');
   };
 
   const hasResults = groupedResults && groupedResults.size > 0;
