@@ -1,37 +1,34 @@
 
 
-## Add Binary Polarity (Inverted Scoring) Toggle to KRA Assignment Dialog
+## Make Program Name & Details Editable via Edit Dialog
 
 ### Problem
-The "Assign New KRA" dialog (`AdminKpiCreateDialog.tsx`) hardcodes `BINARY_OPTIONS` (Yes=5, No=0) for binary KPIs. There is no option to select inverted polarity (No=5, Yes=0) for safety-type KPIs like LTI — unlike the Admin KPI Editor and Template forms which already have this toggle.
+The Edit (pencil) icon on each program card currently toggles `is_active` status instead of opening an edit form. Program names like "PortI ncentive" (typos) cannot be corrected.
 
 ### Change
-Replace the static "Binary Scoring" display (lines 1001-1010) with a Binary Polarity selector matching the pattern used in `AdminKpiEditorForm.tsx`. Also update the save logic (line 312) to use the selected polarity's options instead of always using `BINARY_OPTIONS`.
+Add an Edit Program dialog (reusing the same form as Create) that opens when the pencil icon is clicked, pre-populated with current program data (name, type, description, effective dates, active status). On save, call `updateProgram.mutate()`.
 
-### Implementation — `src/components/admin/AdminKpiCreateDialog.tsx`
+### Implementation — `src/pages/admin/IncentiveConfig.tsx`
 
-**1. Add state for binary polarity**
-- Add `import { BINARY_OPTIONS_INVERTED, isBinaryInverted } from '@/lib/qualitativeUom'` (BINARY_OPTIONS already imported)
-- Add state: `const [binaryInverted, setBinaryInverted] = useState(false)`
-- When KPI is selected from library search and has inverted qualitative_options, set `setBinaryInverted(true)`
+**1. Add edit state**
+- `const [editProgram, setEditProgram] = useState<any>(null)` — when set, opens edit dialog
 
-**2. Replace static Binary Scoring display (lines 1001-1010)** with:
-- A polarity selector (Standard/Inverted dropdown) + dynamic badge display
-- Pattern: copy from `AdminKpiEditorForm.tsx` lines 658-697
+**2. Replace Edit button action (line 117-124)**
+- Change `onClick` from toggling `is_active` to: `setEditProgram(p)` — opens the edit dialog pre-filled
 
-**3. Update save payload (line 312)**
-- Change: `qualitative_options: uomType === 'binary' ? BINARY_OPTIONS : ...`
-- To: `qualitative_options: uomType === 'binary' ? (binaryInverted ? BINARY_OPTIONS_INVERTED : BINARY_OPTIONS) : ...`
+**3. Add Edit Program Dialog**
+- Mirror the Create dialog structure but pre-fill fields from `editProgram`
+- Fields: Name, Program Type, Description, Effective From, Effective To, Active toggle
+- On save: `updateProgram.mutate({ id: editProgram.id, name, program_type, description, effective_from, effective_to, is_active })`
 
-**4. Sync from library selection**
-- In the `onSelectKpi` handler, when setting qualitative_options from a library KPI, also set `setBinaryInverted(isBinaryInverted(source.qualitative_options))`
+**4. Documentation** — Update `DOCUMENTATION.md` and `POLICY.md` version history
 
-### Files
-1. `src/components/admin/AdminKpiCreateDialog.tsx` — add polarity state, UI toggle, save logic
+### Files Changed
+1. `src/pages/admin/IncentiveConfig.tsx` — add edit state, edit dialog, update button handler
 2. `DOCUMENTATION.md` — version history
 3. `POLICY.md` — version history
 
 ### Risk Assessment
-- **Data Impact**: None — additive change to existing field
-- **Regression Risk**: Zero — only changes what was previously hardcoded to standard polarity
+- **Data Impact**: None — uses existing `useUpdateProgram` mutation
+- **Regression Risk**: Zero — replaces a toggle with a proper edit form
 
