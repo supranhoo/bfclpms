@@ -261,6 +261,9 @@ function EditProgramForm({ program, onSave, onCancel, isPending }: {
   const [effectiveFrom, setEffectiveFrom] = useState(program.effective_from || '');
   const [effectiveTo, setEffectiveTo] = useState(program.effective_to || '');
   const [isActive, setIsActive] = useState(program.is_active ?? true);
+  const [incentiveBase, setIncentiveBase] = useState(program.incentive_base || 'basic_salary');
+  const [minKraScore, setMinKraScore] = useState(String(program.min_kra_score ?? 3));
+  const [noKraEligible, setNoKraEligible] = useState(program.no_kra_eligible ?? true);
 
   return (
     <>
@@ -287,9 +290,31 @@ function EditProgramForm({ program, onSave, onCancel, isPending }: {
             <Input type="date" value={effectiveTo} onChange={e => setEffectiveTo(e.target.value)} />
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between">
           <Label>Active</Label>
-          <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} className="h-4 w-4" />
+          <Switch checked={isActive} onCheckedChange={setIsActive} />
+        </div>
+        <div>
+          <Label>Incentive Base</Label>
+          <Select value={incentiveBase} onValueChange={setIncentiveBase}>
+            <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="basic_salary">Basic Salary</SelectItem>
+              <SelectItem value="gross_salary">Gross Salary</SelectItem>
+              <SelectItem value="ctc">CTC</SelectItem>
+              <SelectItem value="fixed">Fixed Amount</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Min KRA Score</Label>
+            <Input type="number" step="0.1" value={minKraScore} onChange={e => setMinKraScore(e.target.value)} />
+          </div>
+          <div className="flex items-center justify-between pt-6">
+            <Label className="text-sm">No-KRA Eligible</Label>
+            <Switch checked={noKraEligible} onCheckedChange={setNoKraEligible} />
+          </div>
         </div>
       </div>
       <DialogFooter>
@@ -302,6 +327,9 @@ function EditProgramForm({ program, onSave, onCancel, isPending }: {
             effective_from: effectiveFrom || null,
             effective_to: effectiveTo || null,
             is_active: isActive,
+            incentive_base: incentiveBase,
+            min_kra_score: parseFloat(minKraScore) || 3,
+            no_kra_eligible: noKraEligible,
           })}
           disabled={!name || isPending}
         >
