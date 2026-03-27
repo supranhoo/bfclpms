@@ -84,6 +84,7 @@ export function useUpsertSlab() {
   return useMutation({
     mutationFn: async (values: {
       id?: string; program_id: string; business_unit_id?: string | null;
+      department_id?: string | null; applicable_designations?: string[] | null;
       slab_category: string; sub_category?: string | null;
       min_value: number; max_value: number; incentive_percent: number;
       rating_label?: string | null; sort_order?: number;
