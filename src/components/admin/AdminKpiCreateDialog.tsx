@@ -13,7 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { UomTypeSelector } from './UomTypeSelector';
 import { TieredOptionsBuilder } from './TieredOptionsBuilder';
-import { UomType, QualitativeOption, BINARY_OPTIONS } from '@/lib/qualitativeUom';
+import { UomType, QualitativeOption, BINARY_OPTIONS, BINARY_OPTIONS_INVERTED, isBinaryInverted } from '@/lib/qualitativeUom';
 import { Badge } from '@/components/ui/badge';
 import { UOM_OPTIONS } from '@/lib/uomConstants';
 import { getCycleOptionsForFrequency, MULTI_MONTH_FREQUENCIES } from '@/lib/frequencyCycleOptions';
@@ -48,6 +48,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [isCustomKra, setIsCustomKra] = useState(false);
   const [isCustomKpi, setIsCustomKpi] = useState(false);
+  const [binaryInverted, setBinaryInverted] = useState(false);
   const [isCustomCategory, setIsCustomCategory] = useState(false);
   const [customCategoryName, setCustomCategoryName] = useState('');
   const [customCategoryWeightage, setCustomCategoryWeightage] = useState('');
@@ -309,7 +310,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
           is_org_level: isOrgLevel,
           org_level_scope: isOrgLevel ? orgLevelScope as any : null,
           uom_type: uomType,
-          qualitative_options: uomType === 'tiered' ? qualitativeOptions : (uomType === 'binary' ? BINARY_OPTIONS : null),
+          qualitative_options: uomType === 'tiered' ? qualitativeOptions : (uomType === 'binary' ? (binaryInverted ? BINARY_OPTIONS_INVERTED : BINARY_OPTIONS) : null),
           sub_frequency: null,
           frequency_cycle_start: (frequencyCycleStart && frequencyCycleStart !== 'system_default') ? frequencyCycleStart : null,
           is_frequency_locked: false,
@@ -357,7 +358,12 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
     if (source.r2) setR2(source.r2);
     if (source.r1) setR1(source.r1);
     if (source.r0) setR0(source.r0);
-    if (source.qualitative_options) setQualitativeOptions(source.qualitative_options as QualitativeOption[]);
+    if (source.qualitative_options) {
+      setQualitativeOptions(source.qualitative_options as QualitativeOption[]);
+      setBinaryInverted(isBinaryInverted(source.qualitative_options as QualitativeOption[]));
+    } else {
+      setBinaryInverted(false);
+    }
     if (source.threshold_mode) setThresholdMode(source.threshold_mode as 'absolute' | 'ratio');
     if (source.require_resubmit_reason != null) setRequireResubmitReason(source.require_resubmit_reason);
   };
@@ -998,15 +1004,32 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                         </div>
                       )}
                     </div>
-                    <div className="p-4 bg-muted/50 rounded-lg">
-                      <Label className="text-sm font-medium mb-2 block">Binary Scoring</Label>
-                      <div className="flex gap-4">
-                        <Badge className="bg-blue-500 text-white">Yes = R5 (5)</Badge>
-                        <Badge className="bg-red-500 text-white">No = R0 (0)</Badge>
+                    <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Binary Polarity</Label>
+                        <Select value={binaryInverted ? 'inverted' : 'standard'} onValueChange={(v) => setBinaryInverted(v === 'inverted')}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="standard">Standard (Yes = Good)</SelectItem>
+                            <SelectItem value="inverted">Inverted (No = Good)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          {binaryInverted
+                            ? 'Inverted: "No" scores R5 (5), "Yes" scores R0 (0) — for safety KPIs like LTI.'
+                            : 'Standard: "Yes" scores R5 (5), "No" scores R0 (0).'}
+                        </p>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Fixed scoring: Yes achieves maximum rating, No achieves minimum rating.
-                      </p>
+                      <div className="flex gap-4">
+                        <Badge className={binaryInverted ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'}>
+                          Yes = R{binaryInverted ? '0 (0)' : '5 (5)'}
+                        </Badge>
+                        <Badge className={binaryInverted ? 'bg-blue-500 text-white' : 'bg-red-500 text-white'}>
+                          No = R{binaryInverted ? '5 (5)' : '0 (0)'}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
                 )}
