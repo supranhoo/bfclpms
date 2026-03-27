@@ -378,6 +378,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
               allKpis={allKpis}
               categories={categories}
               onSelectCategory={(catId) => {
+                skipResetRef.current = true;
                 setCategoryId(catId);
                 // Find first matching template or KPI for this category and auto-fill all fields
                 const tpl = (templates || []).find(t => t.is_active && t.category_id === catId);
@@ -402,6 +403,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                 }
               }}
               onSelectKra={(catId, kra) => {
+                skipResetRef.current = true;
                 setCategoryId(catId);
                 setKraName(kra);
                 setIsCustomKra(true);
@@ -423,6 +425,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                 }
               }}
               onSelectKpi={(catId, kra, kpi) => {
+                skipResetRef.current = true;
                 setCategoryId(catId);
                 setKraName(kra);
                 setKpiName(kpi);
