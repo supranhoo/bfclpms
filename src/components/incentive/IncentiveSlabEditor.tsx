@@ -90,9 +90,6 @@ export function IncentiveSlabEditor({ programId, programType }: Props) {
               ))}
             </SelectContent>
           </Select>
-              ))}
-            </SelectContent>
-          </Select>
           {programType === 'production' && (
             <Select value={selectedBU || 'all'} onValueChange={(v) => setSelectedBU(v === 'all' ? null : v)}>
               <SelectTrigger className="w-[180px]"><SelectValue placeholder="All BUs" /></SelectTrigger>
