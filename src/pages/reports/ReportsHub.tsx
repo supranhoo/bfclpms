@@ -155,6 +155,14 @@ const reports: ReportCard[] = [
     color: 'text-orange-600',
     reportKey: 'variance',
   },
+  {
+    title: 'Same KPI — Manager vs Team',
+    description: 'Compare scores on shared KPIs between managers and their direct reports — only mismatches shown',
+    icon: Users,
+    path: '/reports/manager-team-kpi',
+    color: 'text-indigo-500',
+    reportKey: 'manager-team-kpi',
+  },
 ];
 
 export default function ReportsHub() {
