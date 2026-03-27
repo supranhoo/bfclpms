@@ -1,17 +1,25 @@
 
 
-## Add Month Name to Manager Team KPI Excel Export
+## Fix: KRA Library Search Clears KRA/KPI Names on Selection
 
-### Change
-Add a "Month" column to the Excel export in `ManagerTeamKpiReport.tsx` so each row includes the selected review month.
+### Root Cause
+When `onSelectKpi` fires, it calls `setCategoryId`, `setKraName`, `setKpiName` in sequence. However, two `useEffect` hooks react to these state changes:
+1. `useEffect([categoryId])` → resets `kraName` and `kpiName` to `''`
+2. `useEffect([kraName])` → resets `kpiName` to `''`
 
-### Implementation — `src/pages/reports/ManagerTeamKpiReport.tsx`
+These cascading resets wipe out the KRA and KPI names that were just set by the library search selection.
 
-1. **Line 155-164**: Add `'Month': month` to the export mapping object, placed before Employee Code
+### Fix — `src/components/admin/AdminKpiCreateDialog.tsx`
+
+1. Add a `useRef` flag: `const skipResetRef = useRef(false)`
+2. In both useEffects, check `if (skipResetRef.current) { skipResetRef.current = false; return; }` before resetting
+3. In `onSelectCategory`, `onSelectKra`, and `onSelectKpi` handlers, set `skipResetRef.current = true` before calling `setCategoryId`/`setKraName`
+4. For the `kraName` useEffect, also guard with the ref since `setKraName` from the library should not wipe `kpiName`
 
 ### Risk Assessment
-- Zero risk — one-line addition to export mapping
+- **Data Impact**: None
+- **Regression Risk**: Zero — only prevents spurious resets; manual dropdown selection still resets as before since the ref won't be set
 
 ### Files Changed
-1. `src/pages/reports/ManagerTeamKpiReport.tsx`
+1. `src/components/admin/AdminKpiCreateDialog.tsx` — Add skip-reset ref guard
 
