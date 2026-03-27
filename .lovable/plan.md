@@ -1,25 +1,27 @@
 
 
-## Fix: KRA Library Search Clears KRA/KPI Names on Selection
+## Simplify KRA Library Search: KPI-Only Selection
 
-### Root Cause
-When `onSelectKpi` fires, it calls `setCategoryId`, `setKraName`, `setKpiName` in sequence. However, two `useEffect` hooks react to these state changes:
-1. `useEffect([categoryId])` → resets `kraName` and `kpiName` to `''`
-2. `useEffect([kraName])` → resets `kpiName` to `''`
+### Change
+Remove the checkbox/select option from Category and KRA rows in the search panel. Only KPI rows should be selectable. When a KPI is selected, the system auto-fills Category, KRA, KPI name, and all structural fields (which it already does).
 
-These cascading resets wipe out the KRA and KPI names that were just set by the library search selection.
+### Implementation
 
-### Fix — `src/components/admin/AdminKpiCreateDialog.tsx`
+**File 1: `src/components/admin/KraLibrarySearchPanel.tsx`**
+1. Remove `onSelectCategory` and `onSelectKra` from props interface
+2. Remove `Checkbox` from Category rows — keep them as expand/collapse only
+3. Remove `Checkbox` from KRA rows — keep them as expand/collapse only
+4. Keep `Checkbox` + "Apply" button on KPI rows as-is
+5. Remove `handleSelectCategory` and `handleSelectKra` functions
+6. Remove the `cat-` and `kra-` prefixed selectedId tracking (only `kpi-` needed)
 
-1. Add a `useRef` flag: `const skipResetRef = useRef(false)`
-2. In both useEffects, check `if (skipResetRef.current) { skipResetRef.current = false; return; }` before resetting
-3. In `onSelectCategory`, `onSelectKra`, and `onSelectKpi` handlers, set `skipResetRef.current = true` before calling `setCategoryId`/`setKraName`
-4. For the `kraName` useEffect, also guard with the ref since `setKraName` from the library should not wipe `kpiName`
+**File 2: `src/components/admin/AdminKpiCreateDialog.tsx`**
+1. Remove `onSelectCategory` and `onSelectKra` handler props from `<KraLibrarySearchPanel>`
+2. Keep `onSelectKpi` handler unchanged — it already fills everything (category, KRA, KPI, targets, thresholds, etc.)
+
+**File 3: `DOCUMENTATION.md` / `POLICY.md`** — Version history update
 
 ### Risk Assessment
 - **Data Impact**: None
-- **Regression Risk**: Zero — only prevents spurious resets; manual dropdown selection still resets as before since the ref won't be set
-
-### Files Changed
-1. `src/components/admin/AdminKpiCreateDialog.tsx` — Add skip-reset ref guard
+- **Regression Risk**: Zero — removing unused selection paths; KPI selection (the working path) is untouched
 
