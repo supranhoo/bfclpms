@@ -153,6 +153,7 @@ export default function ManagerTeamKpiReport() {
     if (!filtered.length) return;
     const ws = XLSX.utils.json_to_sheet(
       filtered.map((r) => ({
+        'Month': month,
         'Employee Code': r.employeeCode,
         'Employee Name': r.employeeName,
         Department: r.department,
