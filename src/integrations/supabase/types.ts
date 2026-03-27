@@ -913,6 +913,27 @@ export type Database = {
           },
         ]
       }
+      incentive_program_types: {
+        Row: {
+          created_at: string
+          id: string
+          label: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label: string
+          value: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string
+          value?: string
+        }
+        Relationships: []
+      }
       incentive_programs: {
         Row: {
           created_at: string

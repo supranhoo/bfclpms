@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-27  
-> **Version:** 1.19.3 — Incentive program details now editable via Edit dialog
+> **Version:** 1.19.4 — Incentive program types now dynamic; "Plant Incentive" added; admins can create custom types
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

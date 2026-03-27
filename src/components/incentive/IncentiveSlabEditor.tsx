@@ -12,7 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 interface Props {
   programId: string;
-  programType: 'production' | 'support';
+  programType: string;
 }
 
 const SLAB_CATEGORIES = [
