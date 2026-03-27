@@ -15,7 +15,7 @@ interface Props {
   programType: string;
 }
 
-const SLAB_CATEGORIES = [
+const SLAB_CATEGORIES_BASE = [
   { value: 'pms_score', label: 'PMS Score' },
   { value: 'production', label: 'Production' },
   { value: 'availability', label: 'Availability' },
@@ -32,16 +32,25 @@ export function IncentiveSlabEditor({ programId, programType }: Props) {
       return data || [];
     },
   });
+  const { data: departments = [] } = useQuery({
+    queryKey: ['departments-list'],
+    queryFn: async () => {
+      const { data } = await supabase.from('departments').select('id, name').order('name');
+      return data || [];
+    },
+  });
   const upsertSlab = useUpsertSlab();
   const deleteSlab = useDeleteSlab();
 
   const [selectedCategory, setSelectedCategory] = useState('pms_score');
   const [selectedBU, setSelectedBU] = useState<string | null>(null);
+  const [selectedDept, setSelectedDept] = useState<string | null>(null);
   const [newRow, setNewRow] = useState({ min_value: '', max_value: '', incentive_percent: '', rating_label: '', sub_category: '' });
 
   const filteredSlabs = slabs.filter((s: any) => {
     if (s.slab_category !== selectedCategory) return false;
     if (selectedBU && s.business_unit_id !== selectedBU) return false;
+    if (selectedDept && s.department_id !== selectedDept) return false;
     return true;
   });
 
@@ -51,6 +60,7 @@ export function IncentiveSlabEditor({ programId, programType }: Props) {
       program_id: programId,
       slab_category: selectedCategory,
       business_unit_id: selectedBU || null,
+      department_id: selectedDept || null,
       sub_category: newRow.sub_category || null,
       min_value: parseFloat(newRow.min_value),
       max_value: parseFloat(newRow.max_value),
@@ -61,9 +71,9 @@ export function IncentiveSlabEditor({ programId, programType }: Props) {
     setNewRow({ min_value: '', max_value: '', incentive_percent: '', rating_label: '', sub_category: '' });
   };
 
-  const categories = programType === 'support'
-    ? SLAB_CATEGORIES.filter(c => c.value === 'pms_score')
-    : SLAB_CATEGORIES;
+  const SLAB_CATEGORIES = programType === 'support'
+    ? SLAB_CATEGORIES_BASE.filter(c => c.value === 'pms_score')
+    : SLAB_CATEGORIES_BASE;
 
   return (
     <Card>
@@ -75,7 +85,7 @@ export function IncentiveSlabEditor({ programId, programType }: Props) {
           <Select value={selectedCategory} onValueChange={setSelectedCategory}>
             <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
             <SelectContent>
-              {categories.map(c => (
+              {SLAB_CATEGORIES.map(c => (
                 <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
               ))}
             </SelectContent>
@@ -91,6 +101,15 @@ export function IncentiveSlabEditor({ programId, programType }: Props) {
               </SelectContent>
             </Select>
           )}
+          <Select value={selectedDept || 'all'} onValueChange={(v) => setSelectedDept(v === 'all' ? null : v)}>
+            <SelectTrigger className="w-[180px]"><SelectValue placeholder="All Departments" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
+              {departments.map((d: any) => (
+                <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="rounded-md border overflow-auto">

@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-27  
-> **Version:** 2.4.5 — DQ rules editor: replaced raw JSON config with structured form fields per rule type
+> **Version:** 2.5.0 — Production incentive configuration: BU sub-units, production targets grid, allocation rules, incentive status with manual override
 > **Maintainer:** Lovable AI
 
 ---
@@ -4140,6 +4140,16 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - 2026-03-27: v2.4.3 — Made incentive program name & details (type, description, effective dates, active status) editable via Edit Program dialog. Pencil icon now opens edit form instead of toggling active status.
 - 2026-03-27: v2.4.2 — Added binary polarity (Standard/Inverted) toggle to Assign New KRA dialog; inverted scoring auto-detected from library selection.
 - 2026-03-27: v2.4.1 — Updated monthly review reminder email disregard notice to: "If you have already completed your review and team's review (if applicable), please disregard this reminder."
+
+---
+
+- 2026-03-27: v2.5.0 — Production Incentive Configuration Phase 2:
+  - **New tables:** `business_unit_sub_units` (furnaces, lines), `production_targets` (monthly target/achieved data), `incentive_allocation_rules` (weighted splits for common employees)
+  - **Altered tables:** `incentive_programs` (+incentive_base, min_kra_score, no_kra_eligible), `incentive_slabs` (+department_id, applicable_designations), `employee_incentive_records` (+incentive_status, status_override_reason, status_overridden_by, status_overridden_at)
+  - **New components:** `ProductionTargetGrid` (flat filter-driven data entry), `BusinessUnitManager` (inline sub-unit CRUD), `AllocationRulesEditor` (weighted % distribution with 100% validation), `IncentiveStatusOverride` (manual status change with reason)
+  - **Updated:** `IncentiveConfig` page with Production Data tab and BU/Allocation sub-tabs; `IncentiveSlabEditor` with department filter; `MonthlyIncentiveTable` with Incentive Status column and manual override popover; Edit Program dialog with incentive_base, min_kra_score, no_kra_eligible fields
+  - **Edge function:** `compute-monthly-incentives` now auto-determines incentive_status (hold/finalised/forfeited) based on DQ rules and KRA approval; respects manual overrides (won't revert status_overridden_by records)
+  - **Status logic:** hold (KRA pending), finalised (KRA approved/no-KRA eligible), forfeited (DQ triggered), released (manual override from hold)
 
 ---
 

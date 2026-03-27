@@ -306,6 +306,47 @@ export type Database = {
           },
         ]
       }
+      business_unit_sub_units: {
+        Row: {
+          business_unit_id: string
+          capacity: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          label: string
+          product_types: string[] | null
+          sort_order: number
+        }
+        Insert: {
+          business_unit_id: string
+          capacity?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label: string
+          product_types?: string[] | null
+          sort_order?: number
+        }
+        Update: {
+          business_unit_id?: string
+          capacity?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label?: string
+          product_types?: string[] | null
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_unit_sub_units_business_unit_id_fkey"
+            columns: ["business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       business_units: {
         Row: {
           code: string | null
@@ -550,6 +591,7 @@ export type Database = {
           employee_id: string
           final_incentive_percent: number
           id: string
+          incentive_status: string
           is_disqualified: boolean
           is_retroactive_adjustment: boolean
           lti_penalty_percent: number
@@ -562,6 +604,9 @@ export type Database = {
           review_period: string
           review_year: number
           status: string
+          status_overridden_at: string | null
+          status_overridden_by: string | null
+          status_override_reason: string | null
           updated_at: string
         }
         Insert: {
@@ -575,6 +620,7 @@ export type Database = {
           employee_id: string
           final_incentive_percent?: number
           id?: string
+          incentive_status?: string
           is_disqualified?: boolean
           is_retroactive_adjustment?: boolean
           lti_penalty_percent?: number
@@ -587,6 +633,9 @@ export type Database = {
           review_period: string
           review_year: number
           status?: string
+          status_overridden_at?: string | null
+          status_overridden_by?: string | null
+          status_override_reason?: string | null
           updated_at?: string
         }
         Update: {
@@ -600,6 +649,7 @@ export type Database = {
           employee_id?: string
           final_incentive_percent?: number
           id?: string
+          incentive_status?: string
           is_disqualified?: boolean
           is_retroactive_adjustment?: boolean
           lti_penalty_percent?: number
@@ -612,6 +662,9 @@ export type Database = {
           review_period?: string
           review_year?: number
           status?: string
+          status_overridden_at?: string | null
+          status_overridden_by?: string | null
+          status_override_reason?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -793,6 +846,54 @@ export type Database = {
         }
         Relationships: []
       }
+      incentive_allocation_rules: {
+        Row: {
+          allocation_pct: number
+          created_at: string
+          id: string
+          program_id: string
+          sort_order: number
+          source_label: string
+          target_bu_id: string | null
+          target_sub_unit: string | null
+        }
+        Insert: {
+          allocation_pct?: number
+          created_at?: string
+          id?: string
+          program_id: string
+          sort_order?: number
+          source_label: string
+          target_bu_id?: string | null
+          target_sub_unit?: string | null
+        }
+        Update: {
+          allocation_pct?: number
+          created_at?: string
+          id?: string
+          program_id?: string
+          sort_order?: number
+          source_label?: string
+          target_bu_id?: string | null
+          target_sub_unit?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "incentive_allocation_rules_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "incentive_programs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incentive_allocation_rules_target_bu_id_fkey"
+            columns: ["target_bu_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       incentive_disqualification_rules: {
         Row: {
           created_at: string
@@ -942,8 +1043,11 @@ export type Database = {
           effective_from: string | null
           effective_to: string | null
           id: string
+          incentive_base: string
           is_active: boolean
+          min_kra_score: number
           name: string
+          no_kra_eligible: boolean
           program_type: string
           updated_at: string
         }
@@ -954,8 +1058,11 @@ export type Database = {
           effective_from?: string | null
           effective_to?: string | null
           id?: string
+          incentive_base?: string
           is_active?: boolean
+          min_kra_score?: number
           name: string
+          no_kra_eligible?: boolean
           program_type?: string
           updated_at?: string
         }
@@ -966,8 +1073,11 @@ export type Database = {
           effective_from?: string | null
           effective_to?: string | null
           id?: string
+          incentive_base?: string
           is_active?: boolean
+          min_kra_score?: number
           name?: string
+          no_kra_eligible?: boolean
           program_type?: string
           updated_at?: string
         }
@@ -1026,8 +1136,10 @@ export type Database = {
       }
       incentive_slabs: {
         Row: {
+          applicable_designations: string[] | null
           business_unit_id: string | null
           created_at: string
+          department_id: string | null
           id: string
           incentive_percent: number
           max_value: number
@@ -1040,8 +1152,10 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          applicable_designations?: string[] | null
           business_unit_id?: string | null
           created_at?: string
+          department_id?: string | null
           id?: string
           incentive_percent?: number
           max_value: number
@@ -1054,8 +1168,10 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          applicable_designations?: string[] | null
           business_unit_id?: string | null
           created_at?: string
+          department_id?: string | null
           id?: string
           incentive_percent?: number
           max_value?: number
@@ -1073,6 +1189,13 @@ export type Database = {
             columns: ["business_unit_id"]
             isOneToOne: false
             referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incentive_slabs_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
             referencedColumns: ["id"]
           },
           {
@@ -2707,6 +2830,92 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      production_targets: {
+        Row: {
+          achieved_value: number
+          business_unit_id: string | null
+          created_at: string
+          department_id: string | null
+          division_id: string | null
+          id: string
+          incentive_percent: number
+          month: string
+          program_id: string
+          remarks: string | null
+          slab_category: string
+          sub_unit_label: string | null
+          target_value: number
+          updated_at: string
+          updated_by: string | null
+          year: number
+        }
+        Insert: {
+          achieved_value?: number
+          business_unit_id?: string | null
+          created_at?: string
+          department_id?: string | null
+          division_id?: string | null
+          id?: string
+          incentive_percent?: number
+          month: string
+          program_id: string
+          remarks?: string | null
+          slab_category?: string
+          sub_unit_label?: string | null
+          target_value?: number
+          updated_at?: string
+          updated_by?: string | null
+          year: number
+        }
+        Update: {
+          achieved_value?: number
+          business_unit_id?: string | null
+          created_at?: string
+          department_id?: string | null
+          division_id?: string | null
+          id?: string
+          incentive_percent?: number
+          month?: string
+          program_id?: string
+          remarks?: string | null
+          slab_category?: string
+          sub_unit_label?: string | null
+          target_value?: number
+          updated_at?: string
+          updated_by?: string | null
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "production_targets_business_unit_id_fkey"
+            columns: ["business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_targets_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_targets_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_targets_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "incentive_programs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
