@@ -212,7 +212,15 @@ serve(async (req) => {
       }
     }
 
-    // 5. Compute incentive for each employee
+    // 5. Fetch existing records to check for manual overrides
+    const { data: existingRecords } = await supabase
+      .from('employee_incentive_records')
+      .select('employee_id, incentive_status, status_overridden_by')
+      .eq('review_period', review_period)
+      .eq('review_year', review_year)
+      .eq('program_id', program_id);
+
+    // 6. Compute incentive for each employee
     const records: any[] = [];
     let computed = 0;
 
