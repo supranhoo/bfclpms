@@ -253,7 +253,6 @@ export function KraLibrarySearchPanel({
                                 className="flex items-center gap-2 rounded-sm px-2 py-1 pl-8 hover:bg-accent/50 cursor-pointer"
                               >
                                 <Checkbox
-                                  checked={selectedId === `kpi-${catId}-${kraName}-${kpi.kpi_name}`}
                                   onCheckedChange={() => handleSelectKpi(catId, kraName, kpi.kpi_name)}
                                   className="shrink-0"
                                 />
