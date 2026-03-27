@@ -54,6 +54,7 @@ export default function IncentiveConfig() {
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newProgram, setNewProgram] = useState({ name: '', program_type: 'support', description: '' });
+  const [editProgram, setEditProgram] = useState<any>(null);
   const [innerTab, setInnerTab] = useState<Record<string, string>>({});
 
   const handleCreate = () => {
@@ -117,8 +118,8 @@ export default function IncentiveConfig() {
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => updateProgram.mutate({ id: p.id, is_active: !p.is_active })}
-                          title={p.is_active ? 'Deactivate' : 'Activate'}
+                          onClick={() => setEditProgram(p)}
+                          title="Edit program"
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -207,6 +208,96 @@ export default function IncentiveConfig() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Edit Program Dialog */}
+      <Dialog open={!!editProgram} onOpenChange={open => { if (!open) setEditProgram(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Incentive Program</DialogTitle>
+          </DialogHeader>
+          {editProgram && (
+            <EditProgramForm
+              program={editProgram}
+              onSave={(values) => {
+                updateProgram.mutate({ id: editProgram.id, ...values }, {
+                  onSuccess: () => setEditProgram(null),
+                });
+              }}
+              onCancel={() => setEditProgram(null)}
+              isPending={updateProgram.isPending}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+/* ── Edit Program Form (extracted for clean state reset) ── */
+function EditProgramForm({ program, onSave, onCancel, isPending }: {
+  program: any;
+  onSave: (values: any) => void;
+  onCancel: () => void;
+  isPending: boolean;
+}) {
+  const [name, setName] = useState(program.name || '');
+  const [programType, setProgramType] = useState(program.program_type || 'support');
+  const [description, setDescription] = useState(program.description || '');
+  const [effectiveFrom, setEffectiveFrom] = useState(program.effective_from || '');
+  const [effectiveTo, setEffectiveTo] = useState(program.effective_to || '');
+  const [isActive, setIsActive] = useState(program.is_active ?? true);
+
+  return (
+    <>
+      <div className="space-y-4">
+        <div>
+          <Label>Program Name</Label>
+          <Input value={name} onChange={e => setName(e.target.value)} placeholder="Program name" />
+        </div>
+        <div>
+          <Label>Type</Label>
+          <Select value={programType} onValueChange={setProgramType}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="support">Support Functions</SelectItem>
+              <SelectItem value="production">Production & Maintenance</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label>Description</Label>
+          <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional description" />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Effective From</Label>
+            <Input type="date" value={effectiveFrom} onChange={e => setEffectiveFrom(e.target.value)} />
+          </div>
+          <div>
+            <Label>Effective To</Label>
+            <Input type="date" value={effectiveTo} onChange={e => setEffectiveTo(e.target.value)} />
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Label>Active</Label>
+          <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} className="h-4 w-4" />
+        </div>
+      </div>
+      <DialogFooter>
+        <Button variant="outline" onClick={onCancel}>Cancel</Button>
+        <Button
+          onClick={() => onSave({
+            name,
+            program_type: programType,
+            description: description || null,
+            effective_from: effectiveFrom || null,
+            effective_to: effectiveTo || null,
+            is_active: isActive,
+          })}
+          disabled={!name || isPending}
+        >
+          Save Changes
+        </Button>
+      </DialogFooter>
+    </>
   );
 }

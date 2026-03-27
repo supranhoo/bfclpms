@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-27  
-> **Version:** 1.19.2 — Binary polarity toggle added to KRA assignment dialog
+> **Version:** 1.19.3 — Incentive program details now editable via Edit dialog
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -582,6 +582,7 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 | 1.8.0 | 2026-03-07 | Sent-Back KPI Governance Bypass (§3.5): Employees can edit and resubmit KPIs that were sent back by a reviewer, even when Edit KPI / Self Review governance permissions are disabled. Fresh KPIs remain locked. |
 | 1.7.0 | 2026-03-05 | Effective Month Selection Policy (§23): KRA assignment dialogs now require explicit month/year selection instead of deriving from non-existent system setting. Multi-month frequencies auto-resolve to terminal month via `getActiveMonthForCycle`. |
 | 1.6.0 | 2026-03-05 | Bug bounty fixes (BUG-001–BUG-009): full 7-role coverage in User Management, email validation hardening, XSS sanitization in PolicyRenderer, SendBack character limit, stable React keys, pagination reset on filter, server-side unread notification count, Dashboard lazy-loading of allSubmissions |
+| 1.19.3 | 2026-03-27 | Incentive program name, type, description, effective dates, and active status now editable via Edit Program dialog (pencil icon opens form instead of toggling active) |
 | 1.19.2 | 2026-03-27 | Binary Polarity toggle added to Assign New KRA dialog — admins can select Standard (Yes=5) or Inverted (No=5) scoring for binary KPIs; auto-detected from library selection |
 | 1.19.1 | 2026-03-27 | Monthly Review Reminder: updated disregard notice to "If you have already completed your review and team's review (if applicable), please disregard this reminder." |
 | 1.19.0 | 2026-03-27 | Monthly Review Reminder: automated email on 1st of every month at 8 AM to all employees with active KRAs for previous month. Reminds self-review and team KRA review. Configurable via `monthly_review_reminder` event toggle. |
