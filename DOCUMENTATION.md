@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-27  
-> **Version:** 2.4.5 — DQ rules editor: replaced raw JSON config with structured form fields per rule type
+> **Version:** 2.5.0 — Production incentive configuration: BU sub-units, production targets grid, allocation rules, incentive status with manual override
 > **Maintainer:** Lovable AI
 
 ---
