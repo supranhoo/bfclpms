@@ -660,6 +660,8 @@ If you are a reporting manager, kindly review your team members' KPIs to ensure 
 
 Timely completion of reviews helps maintain a smooth and transparent appraisal process for everyone.
 
+Note: If you have already completed your review and team's review (if applicable), please disregard this reminder.
+
 Best regards,
 {{company_name}} PMS System`,
   },
