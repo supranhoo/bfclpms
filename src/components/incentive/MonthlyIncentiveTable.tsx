@@ -216,12 +216,13 @@ export function MonthlyIncentiveTable() {
                   <TableHead>Final %</TableHead>
                    <TableHead>Status</TableHead>
                    <TableHead>Incentive Status</TableHead>
+                </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
                 ) : filteredRecords.length === 0 ? (
-                  <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No records found. Run incentive computation first.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">No records found. Run incentive computation first.</TableCell></TableRow>
                 ) : (
                   filteredRecords.map((r: any) => (
                     <TableRow key={r.id}>
@@ -253,6 +254,9 @@ export function MonthlyIncentiveTable() {
                         <Badge variant={r.status === 'paid' ? 'default' : r.status === 'confirmed' ? 'secondary' : 'outline'}>
                           {r.status}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <IncentiveStatusOverride recordId={r.id} currentStatus={r.incentive_status || 'hold'} />
                       </TableCell>
                     </TableRow>
                   ))
