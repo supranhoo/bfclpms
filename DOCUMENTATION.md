@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-27  
-> **Version:** 2.4.1 — Monthly review reminder: added disregard notice for completed reviews including team review
+> **Version:** 2.4.2 — Added binary polarity (inverted scoring) toggle to KRA assignment dialog
 > **Maintainer:** Lovable AI
 
 ---
@@ -4137,6 +4137,7 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 
 ---
 
+- 2026-03-27: v2.4.2 — Added binary polarity (Standard/Inverted) toggle to Assign New KRA dialog; inverted scoring auto-detected from library selection.
 - 2026-03-27: v2.4.1 — Updated monthly review reminder email disregard notice to: "If you have already completed your review and team's review (if applicable), please disregard this reminder."
 
 ---
