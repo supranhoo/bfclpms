@@ -39,7 +39,7 @@ export function KraLibrarySearchPanel({
   onSelectKpi,
 }: KraLibrarySearchPanelProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [expandedKras, setExpandedKras] = useState<Set<string>>(new Set());
 
