@@ -56,3 +56,6 @@ verify_jwt = false
 
 [functions.auto-reconcile-workflow]
 verify_jwt = false
+
+[functions.send-monthly-review-reminder]
+verify_jwt = false
