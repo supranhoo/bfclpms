@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-27  
-> **Version:** 1.19.1 — Monthly review reminder: disregard notice updated to include team review
+> **Version:** 1.19.2 — Binary polarity toggle added to KRA assignment dialog
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
