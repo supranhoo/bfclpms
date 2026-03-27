@@ -29,8 +29,6 @@ interface KraLibrarySearchPanelProps {
   templates: any[] | undefined;
   allKpis: any[] | undefined;
   categories: { id: string; name: string; color: string | null; weightage: number }[] | undefined;
-  onSelectCategory: (categoryId: string) => void;
-  onSelectKra: (categoryId: string, kraName: string) => void;
   onSelectKpi: (categoryId: string, kraName: string, kpiName: string) => void;
 }
 
