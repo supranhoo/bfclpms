@@ -142,52 +142,52 @@ const App = () => (
                 
                 {/* Admin-protected routes */}
                 <Route path="/admin" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-dashboard">
                     <AdminDashboard />
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/users" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-users">
                     <UserManagement />
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/kpis" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-kpis">
                     <AllKpis />
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/organization" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-organization">
                     <Organization />
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/categories" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-categories">
                     <Categories />
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/review-periods" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-review-periods">
                     <ReviewPeriods />
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/governance-explainer" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-governance">
                     <GovernanceExplainer />
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/import" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-import">
                     <ImportData />
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/settings" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-settings">
                     <SystemSettings />
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/workflow-config" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-workflow">
                     <WorkflowConfig />
                   </ProtectedRoute>
                 } />
@@ -197,17 +197,17 @@ const App = () => (
                   </DataOwnerRoute>
                 } />
                 <Route path="/admin/org-kpi-overview" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-org-kpi-overview">
                     <OrgKpiOverview />
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/templates" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-templates">
                     <KRALibrary />
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/bundles" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-bundles">
                     <TemplateBundles />
                   </ProtectedRoute>
                 } />
@@ -289,47 +289,47 @@ const App = () => (
                   </ReportRoute>
                 } />
                 <Route path="/admin/pip" element={
-                  <ProtectedRoute allowedRoles={['manager', 'admin', 'management']}>
+                  <ProtectedRoute allowedRoles={['manager', 'admin', 'management']} menuKey="admin-pip">
                     <PIPManagement />
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/observations" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-observations">
                     <ObservationsOverview />
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/email-logs" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-email-logs">
                     <EmailLogs />
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/rollback-requests" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-rollback-requests">
                     <Suspense fallback={<PageFallback />}><RollbackRequests /></Suspense>
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/kpi-mapping" element={
-                  <ProtectedRoute allowedRoles={['admin', 'manager', 'auditor', 'hr_pms', 'management']}>
+                  <ProtectedRoute allowedRoles={['admin', 'manager', 'auditor', 'hr_pms', 'management']} menuKey="admin-kpi-mapping">
                     <Suspense fallback={<PageFallback />}><KpiMappingMatrix /></Suspense>
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/kpi-weightage" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-kpi-weightage">
                     <Suspense fallback={<PageFallback />}><KpiWeightageDashboard /></Suspense>
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/pending-reviews" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-pending-reviews">
                     <Suspense fallback={<PageFallback />}><PendingSelfReviews /></Suspense>
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/incentive-config" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-incentive">
                     <Suspense fallback={<PageFallback />}><IncentiveConfig /></Suspense>
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/employee-development" element={
-                  <ProtectedRoute allowedRoles={['admin', 'hr_pms']}>
+                  <ProtectedRoute allowedRoles={['admin', 'hr_pms']} menuKey="admin-employee-development">
                     <Suspense fallback={<PageFallback />}><EmployeeDevelopment /></Suspense>
                   </ProtectedRoute>
                 } />
