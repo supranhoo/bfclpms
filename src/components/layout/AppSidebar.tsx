@@ -245,11 +245,11 @@ export function AppSidebar() {
         />
 
         {/* Manager Section — also shown for skip_level managers */}
-        {(effectiveRole === 'manager' || effectiveRole === 'management' || effectiveRole === 'admin' || effectiveRole === 'skip_level') && (
+        {(effectiveRole === 'manager' || effectiveRole === 'management' || effectiveRole === 'admin' || effectiveRole === 'skip_level') && canAccess('team-reviews') && (
           <CollapsibleSidebarGroup
             label="Manager"
             items={[
-              { title: 'Team Reviews', icon: Users, path: '/dashboard?view=team', roles: ['manager', 'admin', 'management', 'skip_level'] },
+              { title: 'Team Reviews', icon: Users, path: '/dashboard?view=team', menuKey: 'team-reviews', roles: ['manager', 'admin', 'management', 'skip_level'] },
             ]}
             isOpen={openSections.has('manager')}
             onToggle={() => toggleSection('manager')}
