@@ -1,9 +1,11 @@
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { 
   Users, 
   Target, 
@@ -17,11 +19,13 @@ import {
   ArrowRight,
   Undo2,
   Grid3X3,
+  ChevronDown,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { FixCorruptedScoresDialog } from '@/components/admin/FixCorruptedScoresDialog';
 import { usePendingAdjustmentCount } from '@/hooks/useIncentiveRecords';
+import { useAuditorWorkloadSummary } from '@/hooks/useAuditorWorkloadSummary';
 
 interface StageCount {
   stage: string;
