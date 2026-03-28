@@ -4156,6 +4156,13 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
   - **Fix:** Added `hasResolvedWorkflow()` guard in stat card, displayMembers filter, and auditor workload stats — employees without RPC-resolved workflows are skipped in all audit-related computations
   - **Impact:** Stat card, filter, and auditor workload bar now show consistent, accurate numbers
 
+- 2026-03-28: v2.6.0 — Feature: DB-driven Menu Access Rights
+  - **New table:** `menu_access_config` — stores per-menu-item role visibility with RLS (admin CRUD, authenticated read)
+  - **New hook:** `useMenuAccess` — fetches menu configs, provides `canAccess(menuKey)` check with hardcoded fallback
+  - **New component:** `MenuAccessTab` — checkbox grid in System Settings for admins to toggle role visibility per sidebar menu item
+  - **Updated:** `SystemSettings` (new "Menu Access" section), `AppSidebar` (DB-driven `filterByRole`), `CollapsibleSidebarGroup` (added `menuKey` to MenuItem type)
+  - **Safety guard:** Admin always retains access to System Settings regardless of config
+
 ---
 
 *This documentation is automatically maintained alongside the codebase.*
