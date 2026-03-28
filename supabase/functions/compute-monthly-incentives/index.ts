@@ -212,6 +212,33 @@ serve(async (req) => {
       }
     }
 
+    // 5a. Fetch vessel rates and monthly vessel entries for vessel-based programs
+    let vesselRateMap = new Map<string, number>();
+    let vesselEntryMap = new Map<string, number>();
+    if (program.incentive_base === 'fixed') {
+      const { data: vRates } = await supabase
+        .from('incentive_vessel_rates')
+        .select('employee_id, rate_per_vessel')
+        .eq('program_id', program_id);
+      if (vRates) {
+        for (const vr of vRates) {
+          vesselRateMap.set(vr.employee_id, vr.rate_per_vessel);
+        }
+      }
+
+      const { data: vEntries } = await supabase
+        .from('vessel_monthly_entries')
+        .select('employee_id, vessels_handled')
+        .eq('program_id', program_id)
+        .eq('month', review_period)
+        .eq('year', review_year);
+      if (vEntries) {
+        for (const ve of vEntries) {
+          vesselEntryMap.set(ve.employee_id, ve.vessels_handled);
+        }
+      }
+    }
+
     // 5. Fetch existing records to check for manual overrides
     const { data: existingRecords } = await supabase
       .from('employee_incentive_records')
