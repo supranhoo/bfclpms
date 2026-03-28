@@ -2057,7 +2057,7 @@ export default function ImportData() {
                     </TableHeader>
                     <TableBody>
                       {employeeData.slice(0, 10).map((row, i) => (
-                        <TableRow key={i}>
+                        <TableRow key={i} className={employeeRowErrors.has(i) ? 'bg-destructive/10' : ''}>
                           <TableCell>{row.employeeCode}</TableCell>
                           <TableCell>{row.fullName}</TableCell>
                           <TableCell>{row.email}</TableCell>
@@ -2080,6 +2080,13 @@ export default function ImportData() {
                           <TableCell>{row.level || '-'}</TableCell>
                           <TableCell>{row.managerEmployeeId || '-'}</TableCell>
                           <TableCell>{row.managerName || '-'}</TableCell>
+                          <TableCell>
+                            {employeeRowErrors.has(i) ? (
+                              <Badge variant="destructive" className="text-xs">Error</Badge>
+                            ) : (
+                              <Badge variant="secondary" className="text-xs">Valid</Badge>
+                            )}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
