@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
-> **Last Updated:** 2026-03-27  
-> **Version:** 1.20.0 — Production incentive: BU sub-units, production targets, allocation rules, incentive status with manual override
+> **Last Updated:** 2026-03-28  
+> **Version:** 1.21.0 — Approved KPI final_score immutability policy
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

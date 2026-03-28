@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-28  
-> **Version:** 2.6.9 — Add multi-column sorting to Team Vs Manager report
+> **Version:** 2.7.0 — Fix: Admin data entry no longer overwrites final_score on approved KPIs
 > **Maintainer:** Lovable AI
 
 ---
@@ -4195,6 +4195,16 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Root cause:** `profiles.designation` is a plain text field, not a FK to a `designations` table
 - **Fix:** Removed relational lookup, read `designation` directly from profile row
 - **Batched fetching retained:** `.range()` pagination ensures all KPIs load for months with 1,000+ records
+
+---
+
+### v2.7.0 — Fix: Approved KPI final_score drift from admin data entry (2026-03-28)
+
+- **Bug fix:** Admin data entry on already-approved KPIs was overwriting `final_score` with the newly entered role-level score (e.g., auditor score of 2 replacing HR PMS approval score of 1)
+- **Root cause:** `useAdminDataEntry.ts` did not check current KPI status before advancing workflow. `resolveForwardStatus()` returned `'approved'` for roles past the terminal stage, triggering `final_score` sync with the wrong reviewer's score
+- **Fix:** Added guard — if KPI is already `approved`, skip status advancement and `final_score` sync entirely. Admin edits on approved KPIs now only update role-specific fields
+- **Data correction:** Fixed 5 affected KPIs (employees 100801, 101178, 200570) where `final_score` had drifted from the terminal workflow reviewer (HR PMS) score
+- **Invariant established:** `final_score` on approved KPIs is immutable from unrelated admin data entry. Only the approval transition itself (or explicit recompute) may set `final_score`
 
 ---
 
