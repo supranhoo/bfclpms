@@ -36,7 +36,7 @@ export function ProductionTargetGrid() {
   const [localRows, setLocalRows] = useState<LocalRow[]>([]);
 
   const { data: programs = [] } = useIncentivePrograms();
-  const productionPrograms = (programs as any[]).filter((p: any) => p.program_type !== 'support' && p.is_active);
+  const productionPrograms = (programs as any[]).filter((p: any) => p.is_active);
 
   const { data: businessUnits = [] } = useQuery({
     queryKey: ['business-units'],
