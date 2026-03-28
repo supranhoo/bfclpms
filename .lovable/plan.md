@@ -1,49 +1,132 @@
 
 
-## RCA: "Pending Audit" Stat Card Shows 278 but Filter Shows Only 5 Employees
+## Add Sidebar Menu Access Rights to System Settings
 
-### Root Cause Found
+### What You Asked For
+Create a "Menu Access" configuration in System Settings (similar to Report Access) where admins can control which roles can see which sidebar menu items and sub-menus.
 
-**Data Investigation Results:**
-- February 2026 has **320 KPIs at `manager_check`** status and **16 at `audit`** status. There are **zero** KPIs at `hr_pms_review` or `skip_level_check`.
-- 18 of the 26 employees with `manager_check` KPIs have workflows where `audit` follows directly after `manager_check` (confirmed via the `get_bulk_employee_workflows` RPC).
-- These 18 employees' ~270 KPIs at `manager_check` are correctly "pending audit."
+### Approach
 
-**The Bug — Stat Card vs Filter Mismatch:**
+**Database**: Two new tables mirroring the report access pattern:
+- `menu_access_config` — stores each menu item with its allowed roles
+- `menu_access_user_overrides` — per-user overrides (optional, same pattern as reports)
 
-The **stat card** (line 697-710) counts **KPIs** using `resolveReviewableStatuses('auditor', stages)` — correctly finding 278 KPIs at `manager_check` as "pending audit."
+**Seeding**: A migration seeds all current sidebar menu items (from `getStaticMenuItems`) with their current hardcoded role arrays as defaults.
 
-The **filter** (line 566-568) uses the **same logic** to find employee IDs with pending KPIs. However, the filter iterates `periodKpis` (ALL KPIs across all employees), while the stat card only iterates `relevantKpis` (KPIs restricted to the 43 audit-panel employees). The filter adds employee IDs from ALL matching KPIs, then intersects with `demographicFilteredMembers` (43 employees). This should work — but the subtle issue is:
+**Hook**: `useMenuAccess` — fetches menu configs, provides `canAccessMenu(menuKey)` check. Falls back to current hardcoded roles if DB is empty.
 
-**`periodKpis` may be stale or partially loaded relative to `workflowMap`.** The `displayMembers` memo depends on `workflowMap`, but `getStages()` is a closure over the current `workflowMap` ref — not a stable dependency. When `workflowMap` updates, the stat card memo (which lists `workflowMap` as a dependency at line 768) recomputes correctly, but the `displayMembers` memo may not recompute if the closure captures a stale `workflowMap` reference.
+**Admin UI**: New "Menu Access" tab in System Settings (next to "Report Access") with:
+- Table listing all menu items grouped by section (Main, Manager, Admin, Reports, etc.)
+- Checkboxes per role for each menu item (same UX as ReportAccessTab)
+- Save per row
+- Optional: User-level overrides section
 
-**Additionally**, the stat card includes `'audit'` status in its `else` fallthrough logic — KPIs at statuses NOT matching `'audit'`, `'management_review'`, or `'approved'` ALL fall into the `else` branch and get checked against `resolveReviewableStatuses`. This means KPIs at `'kra_set'`, `'self_review'`, etc. also enter this branch but don't match the reviewable check. However, the stat count of 278 is inflated because the stat card's `else` clause catches too broadly — it counts KPIs at `manager_check` for employees whose `getStages()` **falls back to DEFAULT_WORKFLOW_STAGES** (when `workflowMap` hasn't returned for them yet), where `manager_check` IS the preceding audit stage.
+**Sidebar Integration**: `AppSidebar.tsx` replaces hardcoded `roles` arrays with DB-driven config from `useMenuAccess`. The `filterByRole` callback checks `canAccessMenu(item.key)` instead of `item.roles.includes(effectiveRole)`.
 
-### Confirmed Root Cause
+### Implementation
 
-The stat card and filter both use `getStages()`, but `getStages()` falls back to `DEFAULT_WORKFLOW_STAGES` (6-stage: `[kra_set, self_review, manager_check, audit, management_review, approved]`) when `workflowMap` doesn't have an entry. In this 6-stage default, `manager_check` precedes `audit`, so ALL `manager_check` KPIs count as "pending audit."
+#### 1. Database Migration
+```sql
+CREATE TABLE public.menu_access_config (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  menu_key TEXT UNIQUE NOT NULL,        -- e.g. 'dashboard', 'team-reviews', 'admin-users'
+  menu_name TEXT NOT NULL,              -- Display name: 'My Dashboard', 'User Management'
+  section TEXT NOT NULL,                -- 'main', 'manager', 'admin', 'reports', etc.
+  allowed_roles TEXT[] NOT NULL DEFAULT '{}',
+  display_order INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
 
-But `demographicFilteredMembers` (baseMembers) = `stageFilteredProfiles`, which uses the **full RPC** to correctly resolve workflows. Only 43 employees have `audit` in their real workflow. The remaining employees with `manager_check` KPIs DON'T have `audit` in their workflow — their KPIs shouldn't count as "pending audit" but DO in the stat card due to the DEFAULT fallback.
+ALTER TABLE public.menu_access_config ENABLE ROW LEVEL SECURITY;
 
-**In short: The stat card overcounts because `getStages()` falls back to a 6-stage default that includes `audit`, counting `manager_check` KPIs from employees whose REAL workflow doesn't have an `audit` stage.**
+-- Admin-only CRUD, authenticated read
+CREATE POLICY "Anyone authenticated can read menu config"
+  ON public.menu_access_config FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Admins can manage menu config"
+  ON public.menu_access_config FOR ALL TO authenticated
+  USING (public.has_role(auth.uid(), 'admin'))
+  WITH CHECK (public.has_role(auth.uid(), 'admin'));
 
-### Fix
+-- Seed with current hardcoded defaults (all menu items from AppSidebar)
+INSERT INTO public.menu_access_config (menu_key, menu_name, section, allowed_roles, display_order) VALUES
+  ('dashboard', 'My Dashboard', 'main', '{admin,manager,employee,auditor,management,hr_pms,skip_level}', 1),
+  ('inbox', 'Inbox', 'main', '{employee,manager,admin,auditor,management,hr_pms,skip_level}', 2),
+  ('pms-policy', 'PMS Policy', 'main', '{admin,manager,employee,auditor,management,hr_pms}', 3),
+  ('team-reviews', 'Team Reviews', 'manager', '{manager,admin,management,skip_level}', 10),
+  ('hr-pms-review', 'HR PMS Review', 'hr_pms', '{hr_pms,admin}', 20),
+  ('management-dashboard', 'Management Dashboard', 'management', '{management,admin}', 30),
+  ('management-review', 'Management Review', 'management', '{management,admin}', 31),
+  ('audit-panel', 'Audit Panel', 'audit', '{auditor,admin}', 40),
+  -- Admin items (50+)
+  ('admin-dashboard', 'Admin Dashboard', 'admin', '{admin}', 50),
+  ('admin-users', 'User Management', 'admin', '{admin}', 51),
+  ('admin-templates', 'KRA Library', 'admin', '{admin}', 52),
+  ('admin-bundles', 'KRA Bundles', 'admin', '{admin}', 53),
+  ('admin-kpis', 'All KRAs', 'admin', '{admin}', 54),
+  ('admin-org-kpi-data', 'Org KPI Data Entry', 'admin', '{admin}', 55),
+  ('admin-org-kpi-overview', 'Org KPI Overview', 'admin', '{admin}', 56),
+  ('admin-pip', 'PIP Management', 'admin', '{admin}', 57),
+  ('admin-workflow', 'Workflow Config', 'admin', '{admin}', 58),
+  ('admin-organization', 'Organization', 'admin', '{admin}', 59),
+  ('admin-categories', 'KRA Categories', 'admin', '{admin}', 60),
+  ('admin-review-periods', 'Review Periods', 'admin', '{admin}', 61),
+  ('admin-import', 'Import Data', 'admin', '{admin}', 62),
+  ('admin-settings', 'System Settings', 'admin', '{admin}', 63),
+  ('admin-audit-logs', 'Audit Logs', 'admin', '{admin}', 64),
+  ('admin-observations', 'Observations', 'admin', '{admin}', 65),
+  ('admin-rollback', 'Rollback Requests', 'admin', '{admin}', 66),
+  ('admin-email-logs', 'Email Logs', 'admin', '{admin}', 67),
+  ('admin-kpi-mapping', 'KPI Mapping', 'admin', '{admin}', 68),
+  ('admin-weightage', 'Weightage Matrix', 'admin', '{admin}', 69),
+  ('admin-pending-reviews', 'Pending Reviews', 'admin', '{admin}', 70),
+  ('admin-incentive', 'Incentive Config', 'admin', '{admin}', 71),
+  ('admin-development', 'Employee Development', 'admin', '{admin,hr_pms}', 72),
+  -- Reports (100+)
+  ('reports-hub', 'View Reports', 'reports', '{admin,manager,auditor,management}', 100),
+  ('reports-performance', 'Performance Report', 'reports', '{admin,manager,auditor}', 101),
+  ('reports-kra-issuance', 'KRA Issuance', 'reports', '{admin,manager,auditor}', 102),
+  ('reports-tni', 'TNI Report', 'reports', '{admin,manager,auditor}', 103),
+  ('reports-incentive', 'Incentive Report', 'reports', '{admin,management,hr_pms}', 104),
+  ('reports-manager-team', 'Manager Team KPI', 'reports', '{admin,manager,management,hr_pms}', 105)
+ON CONFLICT (menu_key) DO NOTHING;
+```
 
-**File: `src/components/review/EmployeeSelectorGrid.tsx`**
+#### 2. New Hook: `src/hooks/useMenuAccess.ts`
+- Fetches `menu_access_config` with 5-min staleTime
+- Provides `canAccess(menuKey: string): boolean` — checks if `effectiveRole` is in `allowed_roles`
+- Provides `getMenuRoles(menuKey: string): AppRole[]` — returns allowed roles for a menu item
+- Update mutation for admin to save role changes
+- Falls back to hardcoded roles when DB row doesn't exist
 
-1. **Stat card fix**: In the audit stats computation (line 697-710), restrict `relevantKpis` to only employees whose `workflowMap` entry actually includes `audit` — don't rely on `getStages()` fallback. Add a guard: `if (!workflowMap?.has(k.employee_id)) return;` to skip employees without resolved workflows.
+#### 3. New Component: `src/components/admin/MenuAccessTab.tsx`
+- Same layout as `ReportAccessTab` — table with menu items grouped by section
+- Columns: Menu Item | Section | Allowed Roles (checkboxes) | Save
+- Section headers as visual group separators
+- No user-override section initially (can add later if needed)
 
-2. **Filter fix**: Apply the same guard in the `displayMembers` filter for the audit `pending` branch — skip KPIs where `workflowMap` doesn't have the employee (avoiding false matches from the 6-stage default fallback).
+#### 4. System Settings Integration
+- Add `{ key: 'menu-access', label: 'Menu Access', icon: Menu }` to `SETTINGS_SECTIONS`
+- Render `<MenuAccessTab />` when selected
 
-3. **Alternatively (better)**: Change `getStages()` to return `null` when `workflowMap` doesn't have the employee, and skip those KPIs in both stat and filter computations. This ensures consistency — only employees with RPC-resolved workflows are counted.
+#### 5. Sidebar Integration (`AppSidebar.tsx`)
+- Import `useMenuAccess`
+- Each menu item gets a `menuKey` property
+- `filterByRole` checks `canAccess(item.menuKey)` instead of `item.roles.includes(effectiveRole)`
+- Admin always retains access to System Settings (hardcoded safety guard)
 
 ### Files Changed
 | File | Action |
 |------|--------|
-| `src/components/review/EmployeeSelectorGrid.tsx` | Fix stat card and filter to skip employees without resolved workflows |
+| Migration SQL | Create `menu_access_config` table + seed data |
+| `src/hooks/useMenuAccess.ts` | New — hook for menu access config |
+| `src/components/admin/MenuAccessTab.tsx` | New — admin UI for managing menu access |
+| `src/pages/admin/SystemSettings.tsx` | Update — add Menu Access section |
+| `src/components/layout/AppSidebar.tsx` | Update — use DB-driven menu access |
+| `DOCUMENTATION.md` | Update — document menu access feature |
 
 ### Risk Assessment
-- **Regression**: Zero — only changes audit stat/filter logic, guarded by `viewLevel === 'audit'`
-- **Data**: Read-only, no schema changes
-- **Accuracy**: Stat card and filter will now show consistent, correct numbers
+- **Data**: Additive — new table with seed data matching current hardcoded values. Zero behavioral change until admin modifies config.
+- **Regression**: Safety guard ensures admin always keeps System Settings access (prevents lockout).
+- **Security**: RLS ensures only admins can modify, all authenticated users can read.
 
