@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-28  
-> **Version:** 2.6.8 — Add Mgr Code sorting to Team Vs Manager report
+> **Version:** 2.6.9 — Add multi-column sorting to Team Vs Manager report
 > **Maintainer:** Lovable AI
 
 ---
