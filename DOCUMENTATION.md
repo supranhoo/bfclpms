@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-28  
-> **Version:** 2.5.1 — Bugfix: audit stat card overcounting due to DEFAULT_WORKFLOW_STAGES fallback
+> **Version:** 2.6.0 — Feature: DB-driven Menu Access Rights in System Settings
 > **Maintainer:** Lovable AI
 
 ---
