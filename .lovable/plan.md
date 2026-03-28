@@ -1,40 +1,27 @@
 
 
-## RCA: All Entity Validation Falsely Reports "Does Not Exist"
+## Fix: All Program Names Not Shown in Production Data Dropdown
 
 ### Root Cause
-**Stale closure in `useCallback`** — Line 749 of `ImportData.tsx`:
+The **ProductionTargetGrid** filters programs with `p.program_type !== 'support'`. This relies on the `program_type` column matching specific string values. However, `program_type` stores a dynamic slug (e.g., `plant_incentive`, `production_maintenance`) from the `incentive_program_types` table — not a standardized value.
 
-```javascript
-const handleEmployeeFileUpload = useCallback((event) => {
-  // ... uses departments, divisions, businessUnits, designations, profiles, allowUpdateExisting
-}, [toast]);  // ← BUG: missing all data dependencies
-```
+If a program was created with a custom type or if the `program_type` column is null/empty, the filter still passes. But if a program has `is_active = false` or if the `program_type` is literally `'support'`, it gets excluded.
 
-The dependency array only includes `toast`. When the user uploads a file, the callback captures the **initial render values** of `departments`, `divisions`, `businessUnits`, `designations`, and `profiles` — which are `undefined` (still loading from the database). So `(divisions || []).map(...)` produces an **empty Set**, and every single entity lookup fails.
+More critically, the **VesselDataEntryGrid** only shows programs where `incentive_base === 'fixed'` — so non-fixed programs are intentionally excluded there.
 
-**DRI exists in the system** (confirmed by screenshot), but the validation Set is empty, so it reports "does not exist".
-
-The same bug affects the duplicate-code check (`existingCodes`) and `allowUpdateExisting` toggle — they also use stale values.
+The real issue is likely that some programs have `is_active` set to `false`, or the `program_type` field is set to `'support'` when it shouldn't be.
 
 ### Fix
-Add the missing dependencies to the `useCallback` dependency array:
-
-```javascript
-}, [toast, departments, divisions, businessUnits, designations, profiles, allowUpdateExisting]);
-```
-
-This is a one-line fix on line 749 of `src/pages/admin/ImportData.tsx`.
-
-Additionally, the same issue exists in the re-validation block around line 1893-1900 (the `allowUpdateExisting` toggle handler) — but that block reads the data inline at toggle time, so it should work correctly. Will verify and fix if needed.
+1. **ProductionTargetGrid**: Remove the `program_type !== 'support'` filter — show **all active programs** in the dropdown, since production data can apply to any program type
+2. **VesselDataEntryGrid**: Keep the `incentive_base === 'fixed'` filter (only vessel-rate programs need vessel entry), but this is already correct
 
 ### Files Changed
 | File | Action |
 |------|--------|
-| `src/pages/admin/ImportData.tsx` | Add missing dependencies to `useCallback` on line 749 |
+| `src/components/incentive/ProductionTargetGrid.tsx` | Change filter from `p.program_type !== 'support' && p.is_active` to just `p.is_active` |
 
 ### Risk Assessment
-- **Regression**: Zero — this only corrects the closure to use current data
+- **Regression**: Zero — support programs will now appear in the dropdown but that's correct since admins should be able to enter production data for any program
 - **Data**: No schema changes
 - **Security**: No change
 
