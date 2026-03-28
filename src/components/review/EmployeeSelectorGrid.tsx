@@ -1304,14 +1304,14 @@ export function EmployeeSelectorGrid({
       {renderStatsCards()}
 
       {/* Auditor Workload Summary (audit view only) */}
-      {viewLevel === 'audit' && auditorWorkloadStats.length > 0 && (
+      {viewLevel === 'audit' && (auditorWorkloadStats.length > 0 || unassignedStats) && (
         <div className="space-y-2">
           <button
             onClick={() => setAuditorWorkloadExpanded(prev => !prev)}
             className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
             <Users className="h-4 w-4" />
-            Auditor Workload ({auditorWorkloadStats.length})
+            Auditor Workload ({auditorWorkloadStats.length}{unassignedStats ? ' + unassigned' : ''})
             {auditorWorkloadExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </button>
           {auditorWorkloadExpanded && (
