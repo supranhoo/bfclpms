@@ -151,7 +151,7 @@ export default function TeamVsManagerScoreReport() {
         employeeId: empId,
         employeeCode: p.employee_code || '—',
         employeeName: p.full_name || '—',
-        designation: p.designations?.name || '—',
+        designation: p.designation || '—',
         department: p.departments?.name || '—',
         month,
         year,
