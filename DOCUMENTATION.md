@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-28  
-> **Version:** 2.6.5 — Employee Import Validation Guards
+> **Version:** 2.6.6 — Partial Employee Import with Error Report Download
 > **Maintainer:** Lovable AI
 
 ---
