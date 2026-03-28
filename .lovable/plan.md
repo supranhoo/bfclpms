@@ -1,28 +1,29 @@
 
 
-## Fix: "Team Vs Manager Score" Missing from Report Access Settings
+## Fix: Team Vs Manager Score Report Shows No Data
 
 ### Root Cause
-The `report_access_config` database table doesn't have a row for `team-vs-manager-score`. The `ReportAccessTab` UI only displays rows from this table. The fallback in `useReportAccess.ts` handles runtime permission checks but doesn't populate the admin settings UI.
+Two issues:
+
+1. **1000-row default limit**: February 2026 has **1,534 KPIs** but the Supabase client returns at most 1,000 rows by default. The query silently truncates results, potentially returning an incomplete or empty-looking dataset.
+
+2. **RLS restriction**: The report queries `kpis` via the client SDK. Unless the logged-in user's role has a matching SELECT policy (or a `report_access_override`), the query returns zero rows — hence "No data found."
 
 ### Fix
-Run a migration to insert the missing row into `report_access_config`:
 
-```sql
-INSERT INTO report_access_config (report_key, report_name, view_roles, download_roles)
-VALUES ('team-vs-manager-score', 'Team Vs Manager Monthly Score Summary', 
-        ARRAY['admin','manager','management','hr_pms']::text[], 
-        ARRAY['admin']::text[])
-ON CONFLICT (report_key) DO NOTHING;
-```
+#### 1. Paginate the KPI query to bypass the 1000-row limit
+Split the fetch into batches using `.range(offset, offset + 999)` in a loop until all rows are fetched. This is the same pattern used in `useEmployeeScoresForPeriod`.
+
+#### 2. Ensure report-access-override RLS kicks in
+The `has_report_access_override` function checks `report_access_user_overrides` and `report_access_config` to grant org-wide SELECT on `kpis`. Verify the current admin user's role is in `view_roles` for this report key. The config already has `admin` in `view_roles`, so admins should see data — but if the additive SELECT policy on `kpis` only checks `report_access_user_overrides` (not the role-based config), we need to confirm and potentially add user-level override or fix the policy.
 
 ### Files Changed
 | File | Action |
 |------|--------|
-| Migration SQL | Insert `team-vs-manager-score` row into `report_access_config` |
+| `src/pages/reports/TeamVsManagerScoreReport.tsx` | Add batched fetching with `.range()` to retrieve all 1500+ KPIs; add error logging |
 
 ### Risk Assessment
-- **Data**: Additive — single row insert, no existing data affected
-- **Regression**: Zero
-- **Security**: No change — matches existing default permissions
+- **Data**: Read-only, no schema changes
+- **Regression**: Zero — only affects this report's data fetching
+- **Security**: No change — uses existing RLS policies
 
