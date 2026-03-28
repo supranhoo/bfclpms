@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-28  
-> **Version:** 2.6.0 — Feature: DB-driven Menu Access Rights in System Settings
+> **Version:** 2.6.1 — Feature: Employee-level Menu Access Overrides
 > **Maintainer:** Lovable AI
 
 ---
@@ -4162,6 +4162,12 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
   - **New component:** `MenuAccessTab` — checkbox grid in System Settings for admins to toggle role visibility per sidebar menu item
   - **Updated:** `SystemSettings` (new "Menu Access" section), `AppSidebar` (DB-driven `filterByRole`), `CollapsibleSidebarGroup` (added `menuKey` to MenuItem type)
   - **Safety guard:** Admin always retains access to System Settings regardless of config
+
+- 2026-03-28: v2.6.1 — Feature: Employee-level Menu Access Overrides
+  - **New table:** `menu_access_user_overrides` — per-user menu grants with RLS (admin write, authenticated read)
+  - **Updated hook:** `useMenuAccess` — now fetches user overrides, checks them first in `canAccess()`, adds `grantUserMenuAccess` and `revokeUserMenuAccess` mutations
+  - **Updated component:** `MenuAccessTab` — added employee override section with search, grant, and revoke UI below role grid
+  - **Pattern:** Mirrors `report_access_user_overrides` from Report Access system
 
 ---
 

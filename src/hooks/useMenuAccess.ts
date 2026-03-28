@@ -14,6 +14,14 @@ export interface MenuAccessConfig {
   updated_at: string;
 }
 
+export interface MenuAccessUserOverride {
+  id: string;
+  menu_key: string;
+  user_id: string;
+  granted_by: string | null;
+  created_at: string;
+}
+
 // Hardcoded fallback matching AppSidebar defaults
 const DEFAULT_MENU_ROLES: Record<string, AppRole[]> = {
   'dashboard': ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms', 'skip_level'],
@@ -44,13 +52,33 @@ export function useMenuAccess() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const { data: userOverrides = [], isLoading: overridesLoading } = useQuery({
+    queryKey: ['menu-access-user-overrides'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('menu_access_user_overrides')
+        .select('*');
+      if (error) throw error;
+      return (data || []) as MenuAccessUserOverride[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
   const configMap = new Map(configs.map(c => [c.menu_key, c]));
 
   const canAccess = (menuKey: string): boolean => {
-    if (!effectiveRole) return false;
+    if (!effectiveRole && !user) return false;
     // Safety: admin always has System Settings access
     if (menuKey === 'admin-settings' && effectiveRole === 'admin') return true;
 
+    // Check user-level override first
+    if (user) {
+      const hasOverride = userOverrides.some(o => o.menu_key === menuKey && o.user_id === user.id);
+      if (hasOverride) return true;
+    }
+
+    // Fall back to role-based config
+    if (!effectiveRole) return false;
     const config = configMap.get(menuKey);
     if (config) {
       return config.allowed_roles.includes(effectiveRole);
@@ -80,5 +108,44 @@ export function useMenuAccess() {
     },
   });
 
-  return { configs, isLoading, canAccess, getMenuRoles, updateMenuAccess };
+  const grantUserMenuAccess = useMutation({
+    mutationFn: async ({ menuKey, userId }: { menuKey: string; userId: string }) => {
+      const { error } = await supabase
+        .from('menu_access_user_overrides')
+        .upsert({
+          menu_key: menuKey,
+          user_id: userId,
+          granted_by: user?.id,
+        }, { onConflict: 'menu_key,user_id' });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['menu-access-user-overrides'] });
+    },
+  });
+
+  const revokeUserMenuAccess = useMutation({
+    mutationFn: async ({ menuKey, userId }: { menuKey: string; userId: string }) => {
+      const { error } = await supabase
+        .from('menu_access_user_overrides')
+        .delete()
+        .eq('menu_key', menuKey)
+        .eq('user_id', userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['menu-access-user-overrides'] });
+    },
+  });
+
+  return {
+    configs,
+    userOverrides,
+    isLoading: isLoading || overridesLoading,
+    canAccess,
+    getMenuRoles,
+    updateMenuAccess,
+    grantUserMenuAccess,
+    revokeUserMenuAccess,
+  };
 }
