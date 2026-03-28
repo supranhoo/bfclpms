@@ -9,7 +9,9 @@ import { useTeamMembers, useProfiles, useSkipLevelTeamMembers, useProfilesByWork
 import { useKpisByPeriodRanges, KPI } from '@/hooks/useKpis';
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
+import { useEmployeeScoresForPeriod } from '@/hooks/useEmployeeScoresForPeriod';
 import { resolvePendingStatuses, resolveReviewableStatuses, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
+import { getScoreBadgeClass } from '@/lib/reviewConstants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
