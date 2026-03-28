@@ -4322,6 +4322,10 @@ export type Database = {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
       }
+      has_menu_access_override: {
+        Args: { _menu_key: string; _user_id: string }
+        Returns: boolean
+      }
       has_report_access_override: {
         Args: { _user_id: string }
         Returns: boolean
