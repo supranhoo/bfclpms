@@ -201,6 +201,7 @@ export function EmployeeSelectorGrid({
   const { data: auditorWorkloadMap } = useAuditorWorkloadSummary(viewLevel === 'audit');
 
   // Fix 1 & 3: Use multi-period hook so YTD/QTD/custom modes fetch ALL relevant months
+  const { data: periodKpis } = useKpisByPeriodRanges(periodSelection.periodRanges);
 
   // Compute overall weighted scores per employee for this period
   const employeeScoreMap = useEmployeeScoresForPeriod(periodKpis);
