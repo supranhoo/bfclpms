@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-28  
-> **Version:** 2.9.0 — Data repair: Corrected final_score for 100750 Jan 2026 (workflow-aware terminal score)
+> **Version:** 2.10.0 — KPI Detail Report: workflow-aware score column filtering
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4226,6 +4226,17 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Root cause:** Approval logic used generic COALESCE fallback chain instead of resolving the employee's month-specific workflow (`self_l1_l2_hr_pms`) to identify HR PMS as the terminal reviewer
 - **Data correction:** Set `final_score = 0`, `final_rating = 'red'` for this single KPI. No other employees or months affected. December 2025 and earlier untouched
 - **Scope:** January 2026 only, 1 row
+
+---
+
+### v2.10.0 — KPI Detail Report: workflow-aware score column filtering (2026-03-28)
+
+- **Bug fix:** KPI Detail Report displayed scores for roles not in the employee's month-specific workflow (e.g., auditor score shown when `audit` stage absent from workflow)
+- **Root cause:** `enrichedRows` memo only used workflow map for orphan detection, not for filtering out-of-workflow score columns
+- **Fix:** Extended `enrichedRows` to blank `skipLevelScore`, `hrPmsScore`, `auditorScore`, `managementScore` when their corresponding stage is absent from the employee's workflow. For non-approved KPIs, `finalScore` is recalculated using only in-workflow scores. Derived values (`totalScore`, `percentage`, `overallRating`) are recomputed accordingly
+- **Export consistency:** Excel export uses `filteredRows` derived from `enrichedRows`, so exported data matches the UI
+- **Dependency fix:** `filteredRows` memo now correctly depends on `enrichedRows` instead of raw `rows`
+- **Invariant:** Reports must not display scores for workflow stages that do not exist in the employee's resolved workflow
 
 ---
 

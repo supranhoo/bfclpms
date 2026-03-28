@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-28  
-> **Version:** 1.22.0 — Out-of-workflow admin data entry guard
+> **Version:** 1.23.0 — Report workflow-aware score display invariant
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
