@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-28  
-> **Version:** 2.6.6 — Partial Employee Import with Error Report Download
+> **Version:** 2.6.7 — Fix Team Vs Manager Score Report Query
 > **Maintainer:** Lovable AI
 
 ---
