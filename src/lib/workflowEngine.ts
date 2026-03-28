@@ -165,28 +165,39 @@ export function resolvePendingStatuses(
 export function resolveForwardStatus(
   viewLevel: 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms',
   workflowStages: string[] = DEFAULT_WORKFLOW_STAGES
-): string {
+): string | null {
+  // Map each role to the stage it owns in the workflow
+  const roleStageMap: Record<string, string> = {
+    manager: 'manager_check',
+    skip_level: 'skip_level_check',
+    hr_pms: 'hr_pms_review',
+    auditor: 'audit',
+    management: 'management_review',
+  };
+
+  const ownedStage = roleStageMap[viewLevel];
+
+  // GUARD: If the role's stage does not exist in this workflow, return null.
+  // Callers must handle null (e.g., skip status advancement).
+  if (ownedStage && !workflowStages.includes(ownedStage)) {
+    return null;
+  }
+
   switch (viewLevel) {
     case 'manager': {
       const next = resolveNextStatus('manager_check', workflowStages);
       return next === 'approved' ? 'approved' : 'manager_check';
     }
     case 'skip_level':
-      // Use resolveNextStatus so skip_level advances past its own stage
-      // even if future templates place 'approved' directly after skip_level_check.
       return resolveNextStatus('skip_level_check', workflowStages) || 'approved';
     case 'hr_pms':
-      // FIXED: was hardcoded to 'hr_pms_review' (the CURRENT stage, not the next).
-      // resolveNextStatus advances past hr_pms_review to whatever follows:
-      //   → 'approved' for templates ending at hr_pms_review
-      //   → 'audit'    for templates that include an audit stage after hr_pms
       return resolveNextStatus('hr_pms_review', workflowStages) || 'approved';
     case 'auditor':
       return resolveNextStatus('audit', workflowStages) || 'approved';
     case 'management':
       return 'approved';
     default:
-      return 'approved';
+      return null;
   }
 }
 

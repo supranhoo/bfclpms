@@ -1,7 +1,8 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-28  
-> **Version:** 2.7.0 — Fix: Admin data entry no longer overwrites final_score on approved KPIs
+> **Version:** 2.8.0 — Fix: Admin data entry for out-of-workflow roles no longer auto-approves KPIs
+> **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
 ---
@@ -4205,6 +4206,17 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix:** Added guard — if KPI is already `approved`, skip status advancement and `final_score` sync entirely. Admin edits on approved KPIs now only update role-specific fields
 - **Data correction:** Fixed 5 affected KPIs (employees 100801, 101178, 200570) where `final_score` had drifted from the terminal workflow reviewer (HR PMS) score
 - **Invariant established:** `final_score` on approved KPIs is immutable from unrelated admin data entry. Only the approval transition itself (or explicit recompute) may set `final_score`
+
+---
+
+### v2.8.0 — Fix: Out-of-workflow admin data entry no longer auto-approves KPIs (2026-03-28)
+
+- **Bug fix:** Admin entering data for a role not in the employee's workflow (e.g., auditor on a workflow without `audit` stage) caused `resolveForwardStatus` to fall back to `'approved'`, incorrectly finalizing the KPI with the wrong score
+- **Root cause:** `resolveForwardStatus()` returned `'approved'` as fallback when a role's stage was missing from the workflow stages array. No upstream validation checked whether the role existed in the employee's workflow before advancing status
+- **Fix 1 — Workflow membership guard in `useAdminDataEntry.ts`:** Before calling `resolveForwardStatus`, validates that the admin-entered role maps to a stage present in the employee's workflow. If absent, sets `newStatus = null` — saving role-specific fields without status advancement or `final_score` sync
+- **Fix 2 — Hardened `resolveForwardStatus` in `workflowEngine.ts`:** Now returns `null` (instead of `'approved'` fallback) when the role's owned stage is not in the workflow stages array. Defense-in-depth so no caller can accidentally auto-approve via a non-workflow role
+- **Data correction (Jan 2026 only):** Reverted 3 incorrectly approved KPIs (employees 100801, 100316, 100860) back to `manager_check` status with `final_score`/`final_rating` cleared. These KPIs re-enter the HR PMS review stage. December 2025 and earlier months are untouched
+- **Invariant:** Admin data entry for a role whose stage is absent from the employee's workflow MUST NOT advance status or sync `final_score`
 
 ---
 

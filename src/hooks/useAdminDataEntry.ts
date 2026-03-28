@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { resolveForwardStatus } from '@/lib/workflowEngine';
+import { resolveForwardStatus, hasStage } from '@/lib/workflowEngine';
 import type { Database } from '@/integrations/supabase/types';
 
 type RatingLevel = Database['public']['Enums']['rating_level'];
@@ -269,7 +269,24 @@ export function useAdminSubmitReviewData() {
             const { data: stagesData } = await supabase
               .rpc('get_employee_workflow', rpcParams as any);
             const stages = (stagesData as string[]) || undefined;
-            newStatus = resolveForwardStatus(role_level, stages);
+
+            // GUARD: Validate that the admin-entered role actually exists in this
+            // employee's workflow. If not, save role-specific fields but do NOT
+            // advance status or sync final_score (prevents out-of-workflow auto-approval).
+            const ROLE_TO_STAGE: Record<string, string> = {
+              manager: 'manager_check',
+              skip_level: 'skip_level_check',
+              hr_pms: 'hr_pms_review',
+              auditor: 'audit',
+              management: 'management_review',
+            };
+            const requiredStage = ROLE_TO_STAGE[role_level];
+            if (requiredStage && stages && !stages.includes(requiredStage)) {
+              console.info(`[AdminDataEntry] Role "${role_level}" (stage "${requiredStage}") not in employee workflow [${stages.join(',')}] — skipping status advancement`);
+              newStatus = null;
+            } else {
+              newStatus = resolveForwardStatus(role_level, stages);
+            }
           }
         }
 
