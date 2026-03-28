@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Download, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Download, Search, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getScoreBadgeClass, getScoreLabel } from '@/lib/reviewConstants';
 import * as XLSX from 'xlsx';
@@ -41,6 +41,8 @@ export default function TeamVsManagerScoreReport() {
   const [year, setYear] = useState(now.getFullYear());
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
+  const [sortField, setSortField] = useState<'name' | 'mgrCode'>('name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const { canDownload } = useReportAccess();
 
   const { data: rawData, isLoading } = useQuery({
@@ -162,8 +164,14 @@ export default function TeamVsManagerScoreReport() {
       });
     });
 
-    return result.sort((a, b) => a.employeeName.localeCompare(b.employeeName));
-  }, [rawData, managerProfiles, month, year]);
+    const dir = sortDir === 'asc' ? 1 : -1;
+    return result.sort((a, b) => {
+      if (sortField === 'mgrCode') {
+        return a.managerCode.localeCompare(b.managerCode) * dir;
+      }
+      return a.employeeName.localeCompare(b.employeeName) * dir;
+    });
+  }, [rawData, managerProfiles, month, year, sortField, sortDir]);
 
   const filtered = useMemo(() => {
     if (!search) return rows;
@@ -270,7 +278,25 @@ export default function TeamVsManagerScoreReport() {
                       <TableHead>Month</TableHead>
                       <TableHead>Year</TableHead>
                       <TableHead className="text-center">Avg Final Score</TableHead>
-                      <TableHead>Mgr Code</TableHead>
+                      <TableHead
+                        className="cursor-pointer select-none hover:text-foreground transition-colors"
+                        onClick={() => {
+                          if (sortField === 'mgrCode') {
+                            setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+                          } else {
+                            setSortField('mgrCode');
+                            setSortDir('asc');
+                          }
+                          setPage(0);
+                        }}
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          Mgr Code
+                          {sortField === 'mgrCode'
+                            ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)
+                            : <ArrowUpDown className="h-3 w-3 text-muted-foreground" />}
+                        </span>
+                      </TableHead>
                       <TableHead>Manager Name</TableHead>
                       <TableHead className="text-center">Mgr Avg Final Score</TableHead>
                     </TableRow>
