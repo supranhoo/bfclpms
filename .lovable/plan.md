@@ -1,36 +1,59 @@
 
 
-## Revised Plan: Ensure Final Score Consistency Across All Layers
+## Fix: Admin Data Entry Allows Out-of-Workflow Role Advancement + Data Repair (Jan 2026+)
 
-### The Gap You Identified
-The previous plan fixes the **stored** `final_score` and prevents future drift, but it does NOT fix the **display fallback chains** used when `final_score` is NULL (non-approved KPIs). These chains blindly pick the highest-available reviewer score (Management → Auditor → HR PMS → ...) regardless of which reviewer is actually relevant for that employee's workflow.
+### Root Cause
+When an admin enters data for a role (e.g., auditor) that does NOT exist in the employee's workflow, `resolveForwardStatus` falls back to `'approved'`, incorrectly finalizing the KPI with the wrong score.
 
-This means:
-- **Dashboard cards** (e.g., `useEmployeeScoresForPeriod.getBestScore`) show a generic fallback score
-- **KPI detail view** (`KpiDetailsTable`, `KpiReviewPanel`, `KpiHistoryCard`) also uses the same generic chain
-- Neither checks which workflow stage is the terminal one for that employee
+### Scope Constraint
+Data repair applies to **January 2026 onwards only**. December 2025 and earlier months are untouched.
 
-### What Must Be Added to the Plan
+### Implementation
 
-#### A. Approved KPIs (status = 'approved')
-Already covered by the original plan: fix the stored `final_score` to match the terminal workflow reviewer. Once fixed, all display layers already trust `final_score` when `status === 'approved'`, so dashboards and detail views will match automatically.
+#### 1. Add workflow membership guard in `useAdminDataEntry.ts`
+Before calling `resolveForwardStatus`, validate that the admin-entered role's stage exists in the employee's workflow. If not, set `newStatus = null` (save role-specific fields but do NOT advance status or sync final_score).
 
-**No additional display-layer change needed for approved KPIs** — the data fix is sufficient.
+```text
+Role → Stage mapping:
+  manager    → manager_check
+  skip_level → skip_level_check
+  hr_pms     → hr_pms_review
+  auditor    → audit
+  management → management_review
+```
 
-#### B. Non-Approved / In-Progress KPIs
-The generic fallback chain (`management ?? auditor ?? hr_pms ?? ...`) is actually **correct behavior** for in-progress KPIs. It shows the "best available score so far" — which is the most recent reviewer who has scored. This is intentional and matches what users expect to see while reviews are in flight.
+If the mapped stage is not in the workflow stages array, skip advancement entirely.
 
-**No change needed for in-progress KPIs** — the current cascading fallback is appropriate.
+#### 2. Harden `resolveForwardStatus` in `workflowEngine.ts`
+For each role case, check if the role's own stage exists in `workflowStages` first. If not, return `'approved'` only if no stage exists — change to return `null` instead, so callers must handle the missing-stage case explicitly.
 
-### Conclusion
-The original plan **IS sufficient** to ensure dashboard and detail view consistency, because:
+#### 3. Corrective data migration (Jan 2026+ only)
+Run an UPDATE (via insert tool) to fix approved KPIs where:
+- `review_year = 2026 AND review_period IN ('January', 'February', 'March')`
+- The employee's workflow does NOT include the `audit` stage
+- But `final_score` was set from `auditor_score`
 
-1. **Approved KPIs**: The data migration will fix `final_score` to match the terminal workflow reviewer. All display layers already use `final_score` when `status === 'approved'`.
-2. **In-progress KPIs**: The cascading fallback (highest available reviewer score) is correct behavior — it shows the latest review-level score available.
-3. **Future protection**: The guard on admin data entry + approval sync from terminal stage prevents drift going forward.
+Reset these KPIs:
+- `status` back to the last legitimate workflow stage (the stage before the terminal one)
+- Clear `final_score` and `final_rating` so they re-enter the proper workflow
 
-The only scenario where dashboard ≠ detail view would be if `final_score` is **wrong in the database** — which is exactly what the corrective migration fixes.
+Affected employees (confirmed from earlier RCA): 100801, 100316, 100860 — January 2026 only.
 
-### No Plan Changes Required
-The approved plan already covers this. No revision needed. Proceed with implementation as-is.
+#### 4. Update documentation
+- `DOCUMENTATION.md` version bump
+- `POLICY.md` — add invariant: admin data entry must not advance status for out-of-workflow roles
+
+### Files Changed
+| File | Action |
+|------|--------|
+| `src/hooks/useAdminDataEntry.ts` | Add workflow membership check before status advancement |
+| `src/lib/workflowEngine.ts` | `resolveForwardStatus` returns `null` when role stage not in workflow |
+| Data update (insert tool) | Fix 3 affected KPIs, Jan 2026+ only |
+| `DOCUMENTATION.md` | Version history |
+| `POLICY.md` | New invariant |
+
+### Risk Assessment
+- **Data**: Only Jan 2026+ affected rows; Dec and earlier untouched
+- **Regression**: Low — restricts an invalid path; legitimate in-workflow admin entries unaffected
+- **Workflow**: Fixed KPIs re-enter proper review pipeline
 
