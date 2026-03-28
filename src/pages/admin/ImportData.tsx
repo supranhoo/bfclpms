@@ -1951,16 +1951,44 @@ export default function ImportData() {
             </CardContent>
           </Card>
 
-          {employeeErrors.length > 0 && (
+          {employeeRowErrors.size > 0 && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Validation Errors</AlertTitle>
+              <AlertTitle>Validation Issues ({employeeRowErrors.size} row{employeeRowErrors.size > 1 ? 's' : ''} will be skipped)</AlertTitle>
               <AlertDescription>
                 <ul className="list-disc list-inside mt-2 max-h-32 overflow-auto">
-                  {employeeErrors.map((err, i) => (
-                    <li key={i}>{err}</li>
+                  {Array.from(employeeRowErrors.entries()).map(([idx, errs]) => (
+                    <li key={idx}>Row {idx + 2}: {errs.join('; ')}</li>
                   ))}
                 </ul>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => {
+                    const exportData = Array.from(employeeRowErrors.entries()).map(([idx, errs]) => {
+                      const row = employeeData[idx];
+                      return {
+                        'Row Number': idx + 2,
+                        'Employee Code': row?.employeeCode || '',
+                        'Full Name': row?.fullName || '',
+                        'Department': row?.department || '',
+                        'Designation': row?.designation || '',
+                        'Division': row?.division || '',
+                        'Business Unit': row?.businessUnit || '',
+                        'Error': errs.join('; '),
+                      };
+                    });
+                    const ws = XLSX.utils.json_to_sheet(exportData);
+                    ws['!cols'] = [{ wch: 12 }, { wch: 16 }, { wch: 24 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 60 }];
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, 'Validation Errors');
+                    XLSX.writeFile(wb, `employee-validation-errors-${new Date().toISOString().split('T')[0]}.xlsx`);
+                  }}
+                >
+                  <Download className="h-4 w-4 mr-1.5" />
+                  Download Error Report
+                </Button>
               </AlertDescription>
             </Alert>
           )}
@@ -1978,12 +2006,25 @@ export default function ImportData() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle>Preview</CardTitle>
-                  <CardDescription>{employeeData.length} employees to import</CardDescription>
+                  <CardDescription>
+                    {employeeData.length} total rows
+                    {employeeRowErrors.size > 0 && (
+                      <span className="text-destructive ml-1">
+                        ({employeeRowErrors.size} will be skipped due to errors)
+                      </span>
+                    )}
+                  </CardDescription>
                 </div>
-                <Button onClick={handleEmployeeImport} disabled={isImportingEmployees || employeeErrors.length > 0}>
+                <Button
+                  onClick={handleEmployeeImport}
+                  disabled={isImportingEmployees || (employeeData.length - employeeRowErrors.size) === 0}
+                >
                   {isImportingEmployees ? (
                     <><Loader2 className="h-4 w-4 animate-spin mr-2" />Processing {employeeImportProgress.current}/{employeeImportProgress.total}...</>
-                  ) : `Import ${employeeData.length} Employees`}
+                  ) : employeeRowErrors.size > 0
+                    ? `Import ${employeeData.length - employeeRowErrors.size} of ${employeeData.length} Employees`
+                    : `Import ${employeeData.length} Employees`
+                  }
                 </Button>
               </CardHeader>
               {isImportingEmployees && (
