@@ -188,10 +188,15 @@ export function EmployeeSelectorGrid({
   const [selectedGrade, setSelectedGrade] = useState<string | null>(null);
   const [selectedManager, setSelectedManager] = useState<string | null>(null);
   const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
+  const [auditorFilter, setAuditorFilter] = useState<string | null>(null);
+  const [auditorWorkloadExpanded, setAuditorWorkloadExpanded] = useState(true);
 
   // Audit assignments: fetch current user's assigned employees
   const { data: myAssignedEmployeeIds } = useMyAuditAssignments();
   const { data: myKpiLevelData } = useMyKpiLevelAssignments();
+
+  // Auditor workload summary (only for audit view)
+  const { data: auditorWorkloadMap } = useAuditorWorkloadSummary(viewLevel === 'audit');
 
   // Fix 1 & 3: Use multi-period hook so YTD/QTD/custom modes fetch ALL relevant months
   const { data: periodKpis } = useKpisByPeriodRanges(periodSelection.periodRanges);
