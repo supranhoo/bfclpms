@@ -1,43 +1,28 @@
 
 
-## New Report: Team Vs Manager Monthly Score Summary
+## Fix: "Team Vs Manager Score" Missing from Report Access Settings
 
-### What You Asked For
-A new report showing each employee's average final score alongside their reporting manager's average final score for the selected month, with columns: Employee Code, Employee Name, Designation, Department, Month, Year, Avg Final Score, Reporting Manager Code, Reporting Manager Name, Manager Avg Final Score.
+### Root Cause
+The `report_access_config` database table doesn't have a row for `team-vs-manager-score`. The `ReportAccessTab` UI only displays rows from this table. The fallback in `useReportAccess.ts` handles runtime permission checks but doesn't populate the admin settings UI.
 
-### Technical Approach
+### Fix
+Run a migration to insert the missing row into `report_access_config`:
 
-#### 1. New Report Page: `src/pages/reports/TeamVsManagerScoreReport.tsx`
-Pattern follows existing reports (ManagerTeamKpiReport, EmployeePerformanceSummary):
-- Month/Year selectors, search bar, pagination, Excel download
-- **Data query**: Fetch all KPIs for the selected period with `review_submissions(final_score, is_na)` and employee profiles (full_name, employee_code, designation, department, reporting_manager_id)
-- **Computation**:
-  - Group KPIs by employee_id
-  - For each employee: compute weighted avg of `final_score` across non-N/A KPIs (using weightage)
-  - Look up reporting manager's profile (name, code)
-  - Compute the manager's own weighted avg final score from their KPIs in the same period
-- **Table columns**: Employee Code | Employee Name | Designation | Department | Month | Year | Avg Final Score | Reporting Manager Code | Reporting Manager Name | Manager Avg Final Score
-- Color-coded score badges using existing `getScoreBadgeClass`
-- Excel export with all columns
-
-#### 2. Register in ReportsHub
-Add card entry in `src/pages/reports/ReportsHub.tsx` with reportKey `team-vs-manager-score`.
-
-#### 3. Register Route in App.tsx
-Add lazy import + route `/reports/team-vs-manager-score` wrapped in `ReportRoute`.
-
-#### 4. Register Report Access
-Add `team-vs-manager-score` to the report access config so admins can control visibility.
+```sql
+INSERT INTO report_access_config (report_key, report_name, view_roles, download_roles)
+VALUES ('team-vs-manager-score', 'Team Vs Manager Monthly Score Summary', 
+        ARRAY['admin','manager','management','hr_pms']::text[], 
+        ARRAY['admin']::text[])
+ON CONFLICT (report_key) DO NOTHING;
+```
 
 ### Files Changed
 | File | Action |
 |------|--------|
-| `src/pages/reports/TeamVsManagerScoreReport.tsx` | **New** — full report page |
-| `src/pages/reports/ReportsHub.tsx` | Add report card entry |
-| `src/App.tsx` | Add lazy import + route |
+| Migration SQL | Insert `team-vs-manager-score` row into `report_access_config` |
 
 ### Risk Assessment
-- **Data**: Read-only, no schema changes
-- **Regression**: Zero — additive new page only
-- **Security**: Protected by ReportRoute + report_access_config
+- **Data**: Additive — single row insert, no existing data affected
+- **Regression**: Zero
+- **Security**: No change — matches existing default permissions
 
