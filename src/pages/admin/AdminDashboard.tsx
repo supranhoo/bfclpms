@@ -54,7 +54,50 @@ const STAGE_CONFIG: Record<string, { label: string; icon: typeof Clock; color: s
 export default function AdminDashboard() {
   const navigate = useNavigate();
 
+  const [auditorOpen, setAuditorOpen] = useState(true);
+
   const { data: pendingAdjustments = 0 } = usePendingAdjustmentCount();
+
+  const { data: workloadMap } = useAuditorWorkloadSummary(true);
+
+  // Fetch KPIs at audit stage to compute per-auditor stats
+  const { data: auditKpis } = useQuery({
+    queryKey: ['admin-audit-kpis-for-workload'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('kpis')
+        .select('id, status')
+        .in('status', ['audit', 'management_review', 'approved']);
+      if (error) throw error;
+      return data || [];
+    },
+    staleTime: 60_000,
+  });
+
+  const auditorStats = useMemo(() => {
+    if (!workloadMap || workloadMap.size === 0) return [];
+    const kpiStatusMap = new Map((auditKpis || []).map(k => [k.id, k.status]));
+
+    return [...workloadMap.values()].map(entry => {
+      let pending = 0, inAudit = 0, done = 0;
+      entry.kpiIds.forEach(kpiId => {
+        const status = kpiStatusMap.get(kpiId);
+        if (status === 'audit') pending++;
+        else if (status === 'management_review') done++;
+        else if (status === 'approved') done++;
+      });
+      // KPIs assigned via employee-level but not individually tracked count as pending
+      return {
+        auditorId: entry.auditorId,
+        auditorName: entry.auditorName,
+        employeeCode: entry.employeeCode,
+        employeeCount: entry.employeeIds.size,
+        pending,
+        inAudit: pending, // "in audit" = same as pending at audit stage
+        done,
+      };
+    }).sort((a, b) => b.pending - a.pending);
+  }, [workloadMap, auditKpis]);
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['admin-dashboard-stats'],
