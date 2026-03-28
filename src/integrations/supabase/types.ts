@@ -2022,6 +2022,30 @@ export type Database = {
         }
         Relationships: []
       }
+      menu_access_user_overrides: {
+        Row: {
+          created_at: string | null
+          granted_by: string | null
+          id: string
+          menu_key: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          granted_by?: string | null
+          id?: string
+          menu_key: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          granted_by?: string | null
+          id?: string
+          menu_key?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       modules: {
         Row: {
           code: string
