@@ -746,7 +746,7 @@ export default function ImportData() {
       }
     };
     reader.readAsArrayBuffer(file);
-  }, [toast]);
+  }, [toast, departments, divisions, businessUnits, designations, profiles, allowUpdateExisting]);
 
   const handleImport = async () => {
     if (importData.length === 0) return;
