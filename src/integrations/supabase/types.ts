@@ -1207,6 +1207,44 @@ export type Database = {
           },
         ]
       }
+      incentive_vessel_rates: {
+        Row: {
+          created_at: string | null
+          employee_id: string
+          id: string
+          program_id: string
+          rate_per_vessel: number
+          remarks: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          employee_id: string
+          id?: string
+          program_id: string
+          rate_per_vessel?: number
+          remarks?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          employee_id?: string
+          id?: string
+          program_id?: string
+          rate_per_vessel?: number
+          remarks?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "incentive_vessel_rates_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "incentive_programs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kpi_audit_logs: {
         Row: {
           action: string
