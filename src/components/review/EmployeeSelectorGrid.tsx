@@ -9,7 +9,9 @@ import { useTeamMembers, useProfiles, useSkipLevelTeamMembers, useProfilesByWork
 import { useKpisByPeriodRanges, KPI } from '@/hooks/useKpis';
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
+import { useEmployeeScoresForPeriod } from '@/hooks/useEmployeeScoresForPeriod';
 import { resolvePendingStatuses, resolveReviewableStatuses, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
+import { getScoreBadgeClass } from '@/lib/reviewConstants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -201,7 +203,9 @@ export function EmployeeSelectorGrid({
   // Fix 1 & 3: Use multi-period hook so YTD/QTD/custom modes fetch ALL relevant months
   const { data: periodKpis } = useKpisByPeriodRanges(periodSelection.periodRanges);
 
-  // Determine which employees to show based on view level and role
+  // Compute overall weighted scores per employee for this period
+  const employeeScoreMap = useEmployeeScoresForPeriod(periodKpis);
+
   const isFullAccess = role === 'admin' || role === 'auditor' || role === 'management' || role === 'hr_pms';
 
   // Fix 2: Derive employee IDs from the full visible list, not just periodKpis.
@@ -1239,7 +1243,10 @@ export function EmployeeSelectorGrid({
                     {formatEmployeeName(member.full_name, member.email, member.employee_code)}
                   </p>
                 )}
-                <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0 ml-2" />
+                <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                  <EmployeeScoreBadge score={employeeScoreMap.get(member.id) ?? undefined} />
+                  <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                </div>
               </div>
               <p className="text-sm text-muted-foreground truncate">
                 {member.designation || member.email}
@@ -1569,5 +1576,29 @@ function EmployeeProgressBar({ done, inProgress, total, clearedKraSet }: { done:
         {clearedKraSet}/{total}
       </span>
     </div>
+  );
+}
+
+// Compact score badge for employee cards
+function EmployeeScoreBadge({ score }: { score: number | null | undefined }) {
+  if (score === null || score === undefined) {
+    return (
+      <span className="inline-flex items-center justify-center h-7 min-w-[2rem] px-1.5 rounded-md bg-muted text-muted-foreground text-xs font-semibold">
+        —
+      </span>
+    );
+  }
+
+  const rounded = Math.round(score);
+  const clamped = Math.min(5, Math.max(0, rounded));
+  const badgeClass = getScoreBadgeClass(clamped);
+
+  return (
+    <span
+      className={`inline-flex items-center justify-center h-7 min-w-[2rem] px-1.5 rounded-md text-xs font-bold ${badgeClass}`}
+      title={`Overall Score: ${score}`}
+    >
+      {score.toFixed(1)}
+    </span>
   );
 }
