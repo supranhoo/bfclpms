@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-28  
-> **Version:** 2.6.5 — Employee Import Validation Guards
+> **Version:** 2.6.6 — Partial Employee Import with Error Report Download
 > **Maintainer:** Lovable AI
 
 ---
@@ -4177,6 +4177,13 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - 2026-03-28: v2.6.5 — Employee Import Validation Guards
   - **Duplicate code check:** Import blocks rows whose `employeeCode` already exists in the system (prevents silent overwrites)
   - **Entity existence validation:** Department, Division, Business Unit, and Designation values in the upload are validated against system master data; non-existent entities produce clear error messages
+
+- 2026-03-28: v2.6.6 — Partial Employee Import with Error Report Download
+  - **Partial import:** Valid rows are imported even when some rows have validation errors (no longer all-or-nothing blocking)
+  - **Per-row error tagging:** Each row is independently validated; errored rows are skipped with status 'skipped' in results
+  - **Error report download:** Downloadable Excel report of errored rows with Row Number, Employee Code, Name, Department, Designation, Division, BU, and Error columns
+  - **Updated button label:** Import button shows "Import X of Y Employees" when some rows have errors
+  - **Preview table status column:** Errored rows highlighted in red with Error/Valid badges
   - **Update toggle:** "Allow updating existing employees" checkbox lets admin opt-in to update mode when re-importing
   - **Validation runs at parse time** (before Import button) so all errors are visible upfront in the preview
 

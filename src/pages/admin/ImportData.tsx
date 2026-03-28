@@ -346,6 +346,7 @@ export default function ImportData() {
   const [employeeImportResults, setEmployeeImportResults] = useState<ImportRowResult[] | null>(null);
   const [kpiImportResults, setKpiImportResults] = useState<ImportRowResult[] | null>(null);
   const [allowUpdateExisting, setAllowUpdateExisting] = useState(false);
+  const [employeeRowErrors, setEmployeeRowErrors] = useState<Map<number, string[]>>(new Map());
 
   // Normalize KPI row to handle different column name variations
   const normalizeKpiRow = (rawRow: Record<string, any>): KpiImportRow => {
@@ -692,8 +693,8 @@ export default function ImportData() {
         // Normalize all rows
         const jsonData = rawData.map(normalizeEmployeeRow);
 
-        // Validate data - email is only required for new users, not updates
-        const validationErrors: string[] = [];
+        // Validate data - per-row error tagging for partial import
+        const perRowErrors = new Map<number, string[]>();
 
         // Build lookup sets for entity validation (case-insensitive)
         const deptNames = new Set((departments || []).map(d => d.name.toLowerCase()));
@@ -703,40 +704,41 @@ export default function ImportData() {
         const existingCodes = new Set((profiles || []).map(p => p.employee_code?.toLowerCase()).filter(Boolean));
 
         jsonData.forEach((row, index) => {
+          const rowErrs: string[] = [];
           if (!row.employeeCode && !row.fullName) {
-            validationErrors.push(`Row ${index + 2}: Missing employee code and full name`);
+            rowErrs.push('Missing employee code and full name');
           }
-          // Duplicate employee code check
           if (row.employeeCode && !allowUpdateExisting && existingCodes.has(row.employeeCode.toLowerCase())) {
-            validationErrors.push(`Row ${index + 2}: Employee code '${row.employeeCode}' already exists in the system`);
+            rowErrs.push(`Employee code '${row.employeeCode}' already exists in the system`);
           }
-          // Email validation only if provided (it's optional for updates)
           if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
-            validationErrors.push(`Row ${index + 2}: Invalid email format`);
+            rowErrs.push('Invalid email format');
           }
-          // Length validations
           if (row.fullName && row.fullName.length > 200) {
-            validationErrors.push(`Row ${index + 2}: Full name exceeds 200 characters`);
+            rowErrs.push('Full name exceeds 200 characters');
           }
           if (row.designation && row.designation.length > 100) {
-            validationErrors.push(`Row ${index + 2}: Designation exceeds 100 characters`);
+            rowErrs.push('Designation exceeds 100 characters');
           }
-          // Entity existence checks
           if (row.department && !deptNames.has(row.department.toLowerCase())) {
-            validationErrors.push(`Row ${index + 2}: Department '${row.department}' does not exist in the system`);
+            rowErrs.push(`Department '${row.department}' does not exist in the system`);
           }
           if (row.division && !divNames.has(row.division.toLowerCase())) {
-            validationErrors.push(`Row ${index + 2}: Division '${row.division}' does not exist in the system`);
+            rowErrs.push(`Division '${row.division}' does not exist in the system`);
           }
           if (row.businessUnit && !buNames.has(row.businessUnit.toLowerCase())) {
-            validationErrors.push(`Row ${index + 2}: Business Unit '${row.businessUnit}' does not exist in the system`);
+            rowErrs.push(`Business Unit '${row.businessUnit}' does not exist in the system`);
           }
           if (row.designation && !desigNames.has(row.designation.toLowerCase())) {
-            validationErrors.push(`Row ${index + 2}: Designation '${row.designation}' does not exist in the system`);
+            rowErrs.push(`Designation '${row.designation}' does not exist in the system`);
+          }
+          if (rowErrs.length > 0) {
+            perRowErrors.set(index, rowErrs);
           }
         });
 
-        setEmployeeErrors(validationErrors);
+        setEmployeeRowErrors(perRowErrors);
+        setEmployeeErrors([]); // Clear legacy flat errors
         setEmployeeData(jsonData);
         setEmployeeImportSuccess(0);
       } catch (error) {
@@ -1178,6 +1180,13 @@ export default function ImportData() {
   const handleEmployeeImport = async () => {
     if (employeeData.length === 0) return;
 
+    // Calculate valid rows (skip rows with validation errors)
+    const validIndices = employeeData.map((_, i) => i).filter(i => !employeeRowErrors.has(i));
+    if (validIndices.length === 0) {
+      toast({ title: 'No valid rows to import', description: 'All rows have validation errors.', variant: 'destructive' });
+      return;
+    }
+
     setIsImportingEmployees(true);
     setEmployeeImportProgress({ current: 0, total: employeeData.length });
     setEmployeeImportResults(null);
@@ -1185,6 +1194,20 @@ export default function ImportData() {
     const importErrors: string[] = [];
     const rowResults: ImportRowResult[] = [];
     const BATCH_SIZE = 5;
+
+    // Pre-populate skipped rows from validation errors
+    employeeData.forEach((row, idx) => {
+      if (employeeRowErrors.has(idx)) {
+        const errs = employeeRowErrors.get(idx)!;
+        rowResults.push({
+          row: idx + 2,
+          employeeCode: row.employeeCode || '',
+          employeeName: row.fullName || '',
+          status: 'skipped',
+          message: errs.join('; '),
+        });
+      }
+    });
 
     // Process a single employee row
     const processEmployee = async (row: EmployeeImportRow) => {
@@ -1293,16 +1316,18 @@ export default function ImportData() {
       }
     };
 
-    // Process in batches of BATCH_SIZE concurrently
-    for (let i = 0; i < employeeData.length; i += BATCH_SIZE) {
-      const batch = employeeData.slice(i, i + BATCH_SIZE);
+    // Process only valid rows in batches of BATCH_SIZE concurrently
+    const validRows = validIndices.map(i => ({ row: employeeData[i], globalIdx: i }));
+    for (let i = 0; i < validRows.length; i += BATCH_SIZE) {
+      const batch = validRows.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
-        batch.map(row => processEmployee(row))
+        batch.map(item => processEmployee(item.row))
       );
 
       results.forEach((result, idx) => {
-        const row = batch[idx];
-        const globalIdx = i + idx;
+        const item = batch[idx];
+        const row = item.row;
+        const globalIdx = item.globalIdx;
         if (result.status === 'fulfilled') {
           successCount++;
           rowResults.push({ row: globalIdx + 2, employeeCode: row.employeeCode || '', employeeName: row.fullName || '', status: 'success', message: 'Imported successfully' });
@@ -1312,7 +1337,7 @@ export default function ImportData() {
         }
       });
 
-      setEmployeeImportProgress({ current: Math.min(i + BATCH_SIZE, employeeData.length), total: employeeData.length });
+      setEmployeeImportProgress({ current: Math.min(i + BATCH_SIZE, validRows.length), total: employeeData.length });
     }
 
     // Track users with explicit roles from import (non-employee roles)
@@ -1865,44 +1890,28 @@ export default function ImportData() {
                     checked={allowUpdateExisting}
                     onCheckedChange={(checked) => {
                       setAllowUpdateExisting(checked === true);
-                      // Re-trigger validation if data is already loaded
+                      // Re-trigger per-row validation if data is already loaded
                       if (employeeData.length > 0) {
                         const deptNames = new Set((departments || []).map(d => d.name.toLowerCase()));
                         const divNames = new Set((divisions || []).map(d => d.name.toLowerCase()));
                         const buNames = new Set((businessUnits || []).map(d => d.name.toLowerCase()));
                         const desigNames = new Set((designations || []).map(d => d.name.toLowerCase()));
                         const existingCodes = new Set((profiles || []).map(p => p.employee_code?.toLowerCase()).filter(Boolean));
-                        const validationErrors: string[] = [];
+                        const newRowErrors = new Map<number, string[]>();
                         employeeData.forEach((row, index) => {
-                          if (!row.employeeCode && !row.fullName) {
-                            validationErrors.push(`Row ${index + 2}: Missing employee code and full name`);
-                          }
-                          if (row.employeeCode && !(checked === true) && existingCodes.has(row.employeeCode.toLowerCase())) {
-                            validationErrors.push(`Row ${index + 2}: Employee code '${row.employeeCode}' already exists in the system`);
-                          }
-                          if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
-                            validationErrors.push(`Row ${index + 2}: Invalid email format`);
-                          }
-                          if (row.fullName && row.fullName.length > 200) {
-                            validationErrors.push(`Row ${index + 2}: Full name exceeds 200 characters`);
-                          }
-                          if (row.designation && row.designation.length > 100) {
-                            validationErrors.push(`Row ${index + 2}: Designation exceeds 100 characters`);
-                          }
-                          if (row.department && !deptNames.has(row.department.toLowerCase())) {
-                            validationErrors.push(`Row ${index + 2}: Department '${row.department}' does not exist in the system`);
-                          }
-                          if (row.division && !divNames.has(row.division.toLowerCase())) {
-                            validationErrors.push(`Row ${index + 2}: Division '${row.division}' does not exist in the system`);
-                          }
-                          if (row.businessUnit && !buNames.has(row.businessUnit.toLowerCase())) {
-                            validationErrors.push(`Row ${index + 2}: Business Unit '${row.businessUnit}' does not exist in the system`);
-                          }
-                          if (row.designation && !desigNames.has(row.designation.toLowerCase())) {
-                            validationErrors.push(`Row ${index + 2}: Designation '${row.designation}' does not exist in the system`);
-                          }
+                          const rowErrs: string[] = [];
+                          if (!row.employeeCode && !row.fullName) rowErrs.push('Missing employee code and full name');
+                          if (row.employeeCode && !(checked === true) && existingCodes.has(row.employeeCode.toLowerCase())) rowErrs.push(`Employee code '${row.employeeCode}' already exists`);
+                          if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) rowErrs.push('Invalid email format');
+                          if (row.fullName && row.fullName.length > 200) rowErrs.push('Full name exceeds 200 characters');
+                          if (row.designation && row.designation.length > 100) rowErrs.push('Designation exceeds 100 characters');
+                          if (row.department && !deptNames.has(row.department.toLowerCase())) rowErrs.push(`Department '${row.department}' does not exist`);
+                          if (row.division && !divNames.has(row.division.toLowerCase())) rowErrs.push(`Division '${row.division}' does not exist`);
+                          if (row.businessUnit && !buNames.has(row.businessUnit.toLowerCase())) rowErrs.push(`Business Unit '${row.businessUnit}' does not exist`);
+                          if (row.designation && !desigNames.has(row.designation.toLowerCase())) rowErrs.push(`Designation '${row.designation}' does not exist`);
+                          if (rowErrs.length > 0) newRowErrors.set(index, rowErrs);
                         });
-                        setEmployeeErrors(validationErrors);
+                        setEmployeeRowErrors(newRowErrors);
                       }
                     }}
                   />
@@ -1942,16 +1951,44 @@ export default function ImportData() {
             </CardContent>
           </Card>
 
-          {employeeErrors.length > 0 && (
+          {employeeRowErrors.size > 0 && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Validation Errors</AlertTitle>
+              <AlertTitle>Validation Issues ({employeeRowErrors.size} row{employeeRowErrors.size > 1 ? 's' : ''} will be skipped)</AlertTitle>
               <AlertDescription>
                 <ul className="list-disc list-inside mt-2 max-h-32 overflow-auto">
-                  {employeeErrors.map((err, i) => (
-                    <li key={i}>{err}</li>
+                  {Array.from(employeeRowErrors.entries()).map(([idx, errs]) => (
+                    <li key={idx}>Row {idx + 2}: {errs.join('; ')}</li>
                   ))}
                 </ul>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => {
+                    const exportData = Array.from(employeeRowErrors.entries()).map(([idx, errs]) => {
+                      const row = employeeData[idx];
+                      return {
+                        'Row Number': idx + 2,
+                        'Employee Code': row?.employeeCode || '',
+                        'Full Name': row?.fullName || '',
+                        'Department': row?.department || '',
+                        'Designation': row?.designation || '',
+                        'Division': row?.division || '',
+                        'Business Unit': row?.businessUnit || '',
+                        'Error': errs.join('; '),
+                      };
+                    });
+                    const ws = XLSX.utils.json_to_sheet(exportData);
+                    ws['!cols'] = [{ wch: 12 }, { wch: 16 }, { wch: 24 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 60 }];
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, 'Validation Errors');
+                    XLSX.writeFile(wb, `employee-validation-errors-${new Date().toISOString().split('T')[0]}.xlsx`);
+                  }}
+                >
+                  <Download className="h-4 w-4 mr-1.5" />
+                  Download Error Report
+                </Button>
               </AlertDescription>
             </Alert>
           )}
@@ -1969,12 +2006,25 @@ export default function ImportData() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle>Preview</CardTitle>
-                  <CardDescription>{employeeData.length} employees to import</CardDescription>
+                  <CardDescription>
+                    {employeeData.length} total rows
+                    {employeeRowErrors.size > 0 && (
+                      <span className="text-destructive ml-1">
+                        ({employeeRowErrors.size} will be skipped due to errors)
+                      </span>
+                    )}
+                  </CardDescription>
                 </div>
-                <Button onClick={handleEmployeeImport} disabled={isImportingEmployees || employeeErrors.length > 0}>
+                <Button
+                  onClick={handleEmployeeImport}
+                  disabled={isImportingEmployees || (employeeData.length - employeeRowErrors.size) === 0}
+                >
                   {isImportingEmployees ? (
                     <><Loader2 className="h-4 w-4 animate-spin mr-2" />Processing {employeeImportProgress.current}/{employeeImportProgress.total}...</>
-                  ) : `Import ${employeeData.length} Employees`}
+                  ) : employeeRowErrors.size > 0
+                    ? `Import ${employeeData.length - employeeRowErrors.size} of ${employeeData.length} Employees`
+                    : `Import ${employeeData.length} Employees`
+                  }
                 </Button>
               </CardHeader>
               {isImportingEmployees && (
@@ -2002,11 +2052,12 @@ export default function ImportData() {
                         <TableHead>Level</TableHead>
                         <TableHead>Manager ID</TableHead>
                         <TableHead>Manager Name</TableHead>
+                        <TableHead>Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {employeeData.slice(0, 10).map((row, i) => (
-                        <TableRow key={i}>
+                        <TableRow key={i} className={employeeRowErrors.has(i) ? 'bg-destructive/10' : ''}>
                           <TableCell>{row.employeeCode}</TableCell>
                           <TableCell>{row.fullName}</TableCell>
                           <TableCell>{row.email}</TableCell>
@@ -2029,6 +2080,13 @@ export default function ImportData() {
                           <TableCell>{row.level || '-'}</TableCell>
                           <TableCell>{row.managerEmployeeId || '-'}</TableCell>
                           <TableCell>{row.managerName || '-'}</TableCell>
+                          <TableCell>
+                            {employeeRowErrors.has(i) ? (
+                              <Badge variant="destructive" className="text-xs">Error</Badge>
+                            ) : (
+                              <Badge variant="secondary" className="text-xs">Valid</Badge>
+                            )}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
