@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-28  
-> **Version:** 2.6.3 — Fix: Menu Override RLS for Incentive Tables
+> **Version:** 2.6.4 — Add Vessel Monthly Data Entry Grid + Computation
 > **Maintainer:** Lovable AI
 
 ---

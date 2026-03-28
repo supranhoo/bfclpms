@@ -4054,6 +4054,53 @@ export type Database = {
           },
         ]
       }
+      vessel_monthly_entries: {
+        Row: {
+          created_at: string | null
+          employee_id: string
+          id: string
+          month: string
+          program_id: string
+          remarks: string | null
+          updated_at: string | null
+          updated_by: string | null
+          vessels_handled: number
+          year: number
+        }
+        Insert: {
+          created_at?: string | null
+          employee_id: string
+          id?: string
+          month: string
+          program_id: string
+          remarks?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+          vessels_handled?: number
+          year: number
+        }
+        Update: {
+          created_at?: string | null
+          employee_id?: string
+          id?: string
+          month?: string
+          program_id?: string
+          remarks?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+          vessels_handled?: number
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vessel_monthly_entries_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "incentive_programs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workflow_config: {
         Row: {
           config_type: string
