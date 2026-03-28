@@ -21,6 +21,7 @@ interface MenuItem {
   icon: LucideIcon;
   path: string;
   roles: string[];
+  menuKey?: string;
   showBadge?: boolean;
 }
 
