@@ -244,105 +244,99 @@ export function AppSidebar() {
           inboxBadgeCount={inboxBadgeCount}
         />
 
-        {/* Manager Section — also shown for skip_level managers */}
-        {(effectiveRole === 'manager' || effectiveRole === 'management' || effectiveRole === 'admin' || effectiveRole === 'skip_level') && canAccess('team-reviews') && (
-          <CollapsibleSidebarGroup
-            label="Manager"
-            items={[
-              { title: 'Team Reviews', icon: Users, path: '/dashboard?view=team', menuKey: 'team-reviews', roles: ['manager', 'admin', 'management', 'skip_level'] },
-            ]}
-            isOpen={openSections.has('manager')}
-            onToggle={() => toggleSection('manager')}
-            filterByRole={filterByRole}
-            currentPath={location.pathname + location.search}
-            onNavigate={handleNavigation}
-            hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'manager'}
-          />
-        )}
+        {/* Manager Section */}
+        <CollapsibleSidebarGroup
+          label="Manager"
+          items={[
+            { title: 'Team Reviews', icon: Users, path: '/dashboard?view=team', menuKey: 'team-reviews', roles: ['manager', 'admin', 'management', 'skip_level'] },
+          ]}
+          isOpen={openSections.has('manager')}
+          onToggle={() => toggleSection('manager')}
+          filterByRole={filterByRole}
+          currentPath={location.pathname + location.search}
+          onNavigate={handleNavigation}
+          hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'manager'}
+        />
 
         {/* Management Section */}
-        {(effectiveRole === 'management' || effectiveRole === 'admin') && (
-          <CollapsibleSidebarGroup
-            label="Management"
-            items={menuItems.management}
-            isOpen={openSections.has('management')}
-            onToggle={() => toggleSection('management')}
-            filterByRole={filterByRole}
-            currentPath={location.pathname + location.search}
-            onNavigate={handleNavigation}
-            hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'management'}
-          />
-        )}
+        <CollapsibleSidebarGroup
+          label="Management"
+          items={menuItems.management}
+          isOpen={openSections.has('management')}
+          onToggle={() => toggleSection('management')}
+          filterByRole={filterByRole}
+          currentPath={location.pathname + location.search}
+          onNavigate={handleNavigation}
+          hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'management'}
+        />
 
         {/* HR PMS Section */}
-        {(effectiveRole === 'hr_pms' || effectiveRole === 'admin') && (
-          <CollapsibleSidebarGroup
-            label="HR PMS"
-            items={menuItems.hr_pms}
-            isOpen={openSections.has('hr_pms')}
-            onToggle={() => toggleSection('hr_pms')}
-            filterByRole={filterByRole}
-            currentPath={location.pathname + location.search}
-            onNavigate={handleNavigation}
-            hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'hr_pms'}
-          />
-        )}
+        <CollapsibleSidebarGroup
+          label="HR PMS"
+          items={menuItems.hr_pms}
+          isOpen={openSections.has('hr_pms')}
+          onToggle={() => toggleSection('hr_pms')}
+          filterByRole={filterByRole}
+          currentPath={location.pathname + location.search}
+          onNavigate={handleNavigation}
+          hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'hr_pms'}
+        />
 
         {/* Audit Section */}
-        {(effectiveRole === 'auditor' || effectiveRole === 'admin') && (
-          <CollapsibleSidebarGroup
-            label="Audit"
-            items={menuItems.audit}
-            isOpen={openSections.has('audit')}
-            onToggle={() => toggleSection('audit')}
-            filterByRole={filterByRole}
-            currentPath={location.pathname + location.search}
-            onNavigate={handleNavigation}
-            hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'audit'}
-          />
-        )}
+        <CollapsibleSidebarGroup
+          label="Audit"
+          items={menuItems.audit}
+          isOpen={openSections.has('audit')}
+          onToggle={() => toggleSection('audit')}
+          filterByRole={filterByRole}
+          currentPath={location.pathname + location.search}
+          onNavigate={handleNavigation}
+          hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'audit'}
+        />
 
-        {/* Data Entry section for data owners (non-admins) */}
-        {effectiveRole !== 'admin' && isDataOwner && (
-          <CollapsibleSidebarGroup
-            label="Data Entry"
-            items={menuItems.dataEntry}
-            isOpen={openSections.has('dataEntry')}
-            onToggle={() => toggleSection('dataEntry')}
-            filterByRole={filterByRole}
-            currentPath={location.pathname + location.search}
-            onNavigate={handleNavigation}
-            hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'dataEntry'}
-          />
-        )}
+        {/* Data Entry section for data owners or users with override */}
+        <CollapsibleSidebarGroup
+          label="Data Entry"
+          items={menuItems.dataEntry}
+          isOpen={openSections.has('dataEntry')}
+          onToggle={() => toggleSection('dataEntry')}
+          filterByRole={(items) => {
+            // For data entry, also require isDataOwner OR have a user override
+            return items.filter(item => {
+              if (!effectiveRole) return false;
+              if (effectiveRole === 'admin') return false; // admins see it in Administration
+              if (item.menuKey && canAccess(item.menuKey)) return isDataOwner || true;
+              return false;
+            });
+          }}
+          currentPath={location.pathname + location.search}
+          onNavigate={handleNavigation}
+          hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'dataEntry'}
+        />
 
         {/* Administration Section */}
-        {effectiveRole === 'admin' && (
-          <CollapsibleSidebarGroup
-            label="Administration"
-            items={menuItems.admin}
-            isOpen={openSections.has('admin')}
-            onToggle={() => toggleSection('admin')}
-            filterByRole={filterByRole}
-            currentPath={location.pathname + location.search}
-            onNavigate={handleNavigation}
-            hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'admin'}
-          />
-        )}
+        <CollapsibleSidebarGroup
+          label="Administration"
+          items={menuItems.admin}
+          isOpen={openSections.has('admin')}
+          onToggle={() => toggleSection('admin')}
+          filterByRole={filterByRole}
+          currentPath={location.pathname + location.search}
+          onNavigate={handleNavigation}
+          hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'admin'}
+        />
 
         {/* Reports Section */}
-        {(effectiveRole === 'admin' || effectiveRole === 'manager' || effectiveRole === 'auditor' || effectiveRole === 'management') && (
-          <CollapsibleSidebarGroup
-            label="Reports"
-            items={menuItems.reports}
-            isOpen={openSections.has('reports')}
-            onToggle={() => toggleSection('reports')}
-            filterByRole={filterByRole}
-            currentPath={location.pathname + location.search}
-            onNavigate={handleNavigation}
-            hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'reports'}
-          />
-        )}
+        <CollapsibleSidebarGroup
+          label="Reports"
+          items={menuItems.reports}
+          isOpen={openSections.has('reports')}
+          onToggle={() => toggleSection('reports')}
+          filterByRole={filterByRole}
+          currentPath={location.pathname + location.search}
+          onNavigate={handleNavigation}
+          hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'reports'}
+        />
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-4 space-y-3">
