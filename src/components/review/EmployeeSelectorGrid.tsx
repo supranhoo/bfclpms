@@ -1578,3 +1578,27 @@ function EmployeeProgressBar({ done, inProgress, total, clearedKraSet }: { done:
     </div>
   );
 }
+
+// Compact score badge for employee cards
+function EmployeeScoreBadge({ score }: { score: number | null | undefined }) {
+  if (score === null || score === undefined) {
+    return (
+      <span className="inline-flex items-center justify-center h-7 min-w-[2rem] px-1.5 rounded-md bg-muted text-muted-foreground text-xs font-semibold">
+        —
+      </span>
+    );
+  }
+
+  const rounded = Math.round(score);
+  const clamped = Math.min(5, Math.max(0, rounded));
+  const badgeClass = getScoreBadgeClass(clamped);
+
+  return (
+    <span
+      className={`inline-flex items-center justify-center h-7 min-w-[2rem] px-1.5 rounded-md text-xs font-bold ${badgeClass}`}
+      title={`Overall Score: ${score}`}
+    >
+      {score.toFixed(1)}
+    </span>
+  );
+}
