@@ -502,6 +502,7 @@ export function EmployeeSelectorGrid({
     const unassignedEmployeeIds = new Set(unassignedKpis.map(k => k.employee_id));
     let uPending = 0, uInAudit = 0, uForwarded = 0;
     unassignedKpis.forEach(k => {
+      if (!hasResolvedWorkflow(k.employee_id)) return;
       const stages = getStages(k.employee_id);
       const auditIdx = stages.indexOf('audit');
       if (auditIdx === -1) return;
