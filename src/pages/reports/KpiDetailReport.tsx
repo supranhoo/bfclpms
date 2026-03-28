@@ -250,12 +250,57 @@ export default function KpiDetailReport() {
 
   const enrichedRows = useMemo(() => {
     if (!rows) return [];
-    if (!detailWorkflowMap || detailWorkflowMap.size === 0) return rows;
     return rows.map(r => {
-      if (r.status === 'approved' || r.status === 'kra_set') return r;
-      const stages = detailWorkflowMap.get(r.employeeId);
-      if (!stages) return r;
-      return stages.includes(r.status) ? r : { ...r, isOrphaned: true };
+      const stages = detailWorkflowMap?.get(r.employeeId);
+
+      // Workflow-aware score filtering: blank scores for roles not in the employee's workflow
+      const skipLevelScore = stages && !stages.includes('skip_level_check') ? null : r.skipLevelScore;
+      const hrPmsScore = stages && !stages.includes('hr_pms_review') ? null : r.hrPmsScore;
+      const auditorScore = stages && !stages.includes('audit') ? null : r.auditorScore;
+      const managementScore = stages && !stages.includes('management_review') ? null : r.managementScore;
+
+      // Orphan detection
+      const isOrphaned = !!(stages && r.status !== 'approved' && r.status !== 'kra_set' && !stages.includes(r.status));
+
+      // Check if any score was blanked
+      const scoresChanged = (
+        skipLevelScore !== r.skipLevelScore ||
+        hrPmsScore !== r.hrPmsScore ||
+        auditorScore !== r.auditorScore ||
+        managementScore !== r.managementScore
+      );
+
+      // Recalculate finalScore for non-approved KPIs when out-of-workflow scores were blanked
+      let finalScore = r.finalScore;
+      if (scoresChanged && r.status !== 'approved') {
+        finalScore = managementScore ?? auditorScore ?? hrPmsScore ?? skipLevelScore ?? r.managerScore ?? r.selfScore ?? null;
+        if (r.isNa || r.isFrequencyLocked) finalScore = null;
+      }
+
+      // Recalculate derived values when finalScore changed
+      if (finalScore !== r.finalScore || scoresChanged) {
+        const totalScore = r.isNa || r.isFrequencyLocked || finalScore === null ? null : finalScore * r.weightage;
+        const outOfScore = r.isNa || r.isFrequencyLocked ? null : r.weightage * 5;
+        const percentage = r.isNa || r.isFrequencyLocked || totalScore === null || outOfScore === null || outOfScore === 0
+          ? null : (totalScore / outOfScore) * 100;
+        const overallRating = r.isNa || r.isFrequencyLocked ? null : ratingLabel(finalScore);
+
+        return {
+          ...r,
+          skipLevelScore,
+          hrPmsScore,
+          auditorScore,
+          managementScore,
+          finalScore,
+          totalScore,
+          outOfScore,
+          percentage,
+          overallRating,
+          isOrphaned,
+        };
+      }
+
+      return { ...r, skipLevelScore, hrPmsScore, auditorScore, managementScore, isOrphaned };
     });
   }, [rows, detailWorkflowMap]);
 
@@ -286,7 +331,7 @@ export default function KpiDetailReport() {
       }
       return true;
     });
-  }, [rows, searchTerm, selectedDept, selectedCategory, includeNa, showFreqLocked]);
+  }, [enrichedRows, searchTerm, selectedDept, selectedCategory, includeNa, showFreqLocked]);
 
   // Stats
   const stats = useMemo(() => {
