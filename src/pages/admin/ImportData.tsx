@@ -693,8 +693,8 @@ export default function ImportData() {
         // Normalize all rows
         const jsonData = rawData.map(normalizeEmployeeRow);
 
-        // Validate data - email is only required for new users, not updates
-        const validationErrors: string[] = [];
+        // Validate data - per-row error tagging for partial import
+        const perRowErrors = new Map<number, string[]>();
 
         // Build lookup sets for entity validation (case-insensitive)
         const deptNames = new Set((departments || []).map(d => d.name.toLowerCase()));
@@ -704,40 +704,41 @@ export default function ImportData() {
         const existingCodes = new Set((profiles || []).map(p => p.employee_code?.toLowerCase()).filter(Boolean));
 
         jsonData.forEach((row, index) => {
+          const rowErrs: string[] = [];
           if (!row.employeeCode && !row.fullName) {
-            validationErrors.push(`Row ${index + 2}: Missing employee code and full name`);
+            rowErrs.push('Missing employee code and full name');
           }
-          // Duplicate employee code check
           if (row.employeeCode && !allowUpdateExisting && existingCodes.has(row.employeeCode.toLowerCase())) {
-            validationErrors.push(`Row ${index + 2}: Employee code '${row.employeeCode}' already exists in the system`);
+            rowErrs.push(`Employee code '${row.employeeCode}' already exists in the system`);
           }
-          // Email validation only if provided (it's optional for updates)
           if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
-            validationErrors.push(`Row ${index + 2}: Invalid email format`);
+            rowErrs.push('Invalid email format');
           }
-          // Length validations
           if (row.fullName && row.fullName.length > 200) {
-            validationErrors.push(`Row ${index + 2}: Full name exceeds 200 characters`);
+            rowErrs.push('Full name exceeds 200 characters');
           }
           if (row.designation && row.designation.length > 100) {
-            validationErrors.push(`Row ${index + 2}: Designation exceeds 100 characters`);
+            rowErrs.push('Designation exceeds 100 characters');
           }
-          // Entity existence checks
           if (row.department && !deptNames.has(row.department.toLowerCase())) {
-            validationErrors.push(`Row ${index + 2}: Department '${row.department}' does not exist in the system`);
+            rowErrs.push(`Department '${row.department}' does not exist in the system`);
           }
           if (row.division && !divNames.has(row.division.toLowerCase())) {
-            validationErrors.push(`Row ${index + 2}: Division '${row.division}' does not exist in the system`);
+            rowErrs.push(`Division '${row.division}' does not exist in the system`);
           }
           if (row.businessUnit && !buNames.has(row.businessUnit.toLowerCase())) {
-            validationErrors.push(`Row ${index + 2}: Business Unit '${row.businessUnit}' does not exist in the system`);
+            rowErrs.push(`Business Unit '${row.businessUnit}' does not exist in the system`);
           }
           if (row.designation && !desigNames.has(row.designation.toLowerCase())) {
-            validationErrors.push(`Row ${index + 2}: Designation '${row.designation}' does not exist in the system`);
+            rowErrs.push(`Designation '${row.designation}' does not exist in the system`);
+          }
+          if (rowErrs.length > 0) {
+            perRowErrors.set(index, rowErrs);
           }
         });
 
-        setEmployeeErrors(validationErrors);
+        setEmployeeRowErrors(perRowErrors);
+        setEmployeeErrors([]); // Clear legacy flat errors
         setEmployeeData(jsonData);
         setEmployeeImportSuccess(0);
       } catch (error) {
