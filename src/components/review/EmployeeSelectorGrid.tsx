@@ -480,6 +480,7 @@ export function EmployeeSelectorGrid({
       );
       let pending = 0, inAudit = 0, forwarded = 0;
       relevantKpis.forEach(k => {
+        if (!hasResolvedWorkflow(k.employee_id)) return;
         const stages = getStages(k.employee_id);
         const auditIdx = stages.indexOf('audit');
         if (auditIdx === -1) return;
@@ -569,6 +570,8 @@ export function EmployeeSelectorGrid({
             }
           }
         } else if (viewLevel === 'audit') {
+          // Guard: skip employees without resolved workflows to avoid DEFAULT fallback overcounting
+          if (!hasResolvedWorkflow(kpi.employee_id)) return;
           if (statusFilter === 'pending' && reviewableStatuses.includes(kpi.status || '')) {
             employeeIds.add(kpi.employee_id);
           } else if (statusFilter === 'in_audit' && kpi.status === 'audit') {
@@ -702,6 +705,8 @@ export function EmployeeSelectorGrid({
     } else if (viewLevel === 'audit') {
       let pending = 0, inAudit = 0, forwarded = 0;
       relevantKpis.forEach(k => {
+        // Guard: skip employees without resolved workflows to avoid DEFAULT_WORKFLOW_STAGES fallback overcounting
+        if (!hasResolvedWorkflow(k.employee_id)) return;
         const stages = getStages(k.employee_id);
         const auditIdx = stages.indexOf('audit');
         if (auditIdx === -1) return;
