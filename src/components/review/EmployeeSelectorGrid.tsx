@@ -464,11 +464,15 @@ export function EmployeeSelectorGrid({
   const displayMembers = useMemo(() => {
     let filtered = demographicFilteredMembers ? [...demographicFilteredMembers] : undefined;
 
-    // Auditor filter: restrict to employees assigned to a specific auditor
-    if (viewLevel === 'audit' && auditorFilter && auditorWorkloadMap) {
-      const entry = auditorWorkloadMap.get(auditorFilter);
-      if (entry) {
-        filtered = filtered?.filter(m => entry.employeeIds.has(m.id));
+    // Auditor filter: restrict to employees assigned to a specific auditor or unassigned
+    if (viewLevel === 'audit' && auditorFilter) {
+      if (auditorFilter === '__unassigned__' && unassignedStats) {
+        filtered = filtered?.filter(m => unassignedStats.employeeIds.has(m.id));
+      } else if (auditorFilter !== '__unassigned__' && auditorWorkloadMap) {
+        const entry = auditorWorkloadMap.get(auditorFilter);
+        if (entry) {
+          filtered = filtered?.filter(m => entry.employeeIds.has(m.id));
+        }
       }
     }
 
