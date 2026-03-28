@@ -1180,6 +1180,13 @@ export default function ImportData() {
   const handleEmployeeImport = async () => {
     if (employeeData.length === 0) return;
 
+    // Calculate valid rows (skip rows with validation errors)
+    const validIndices = employeeData.map((_, i) => i).filter(i => !employeeRowErrors.has(i));
+    if (validIndices.length === 0) {
+      toast({ title: 'No valid rows to import', description: 'All rows have validation errors.', variant: 'destructive' });
+      return;
+    }
+
     setIsImportingEmployees(true);
     setEmployeeImportProgress({ current: 0, total: employeeData.length });
     setEmployeeImportResults(null);
@@ -1187,6 +1194,20 @@ export default function ImportData() {
     const importErrors: string[] = [];
     const rowResults: ImportRowResult[] = [];
     const BATCH_SIZE = 5;
+
+    // Pre-populate skipped rows from validation errors
+    employeeData.forEach((row, idx) => {
+      if (employeeRowErrors.has(idx)) {
+        const errs = employeeRowErrors.get(idx)!;
+        rowResults.push({
+          row: idx + 2,
+          employeeCode: row.employeeCode || '',
+          employeeName: row.fullName || '',
+          status: 'skipped',
+          message: errs.join('; '),
+        });
+      }
+    });
 
     // Process a single employee row
     const processEmployee = async (row: EmployeeImportRow) => {
