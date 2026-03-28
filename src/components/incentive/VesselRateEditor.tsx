@@ -177,7 +177,7 @@ export function VesselRateEditor({ programId, minKraScore = 3 }: Props) {
                       {editingId === r.id ? (
                         <div className="flex gap-1">
                           <Button size="icon" variant="ghost" onClick={() => saveEdit(r)} title="Save">
-                            <Check className="h-4 w-4 text-green-600" />
+                            <Check className="h-4 w-4 text-primary" />
                           </Button>
                           <Button size="icon" variant="ghost" onClick={() => setEditingId(null)} title="Cancel">
                             <X className="h-4 w-4" />
