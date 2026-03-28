@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-03-27  
-> **Version:** 2.5.0 — Production incentive configuration: BU sub-units, production targets grid, allocation rules, incentive status with manual override
+> **Last Updated:** 2026-03-28  
+> **Version:** 2.5.1 — Bugfix: audit stat card overcounting due to DEFAULT_WORKFLOW_STAGES fallback
 > **Maintainer:** Lovable AI
 
 ---
@@ -4150,6 +4150,11 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
   - **Updated:** `IncentiveConfig` page with Production Data tab and BU/Allocation sub-tabs; `IncentiveSlabEditor` with department filter; `MonthlyIncentiveTable` with Incentive Status column and manual override popover; Edit Program dialog with incentive_base, min_kra_score, no_kra_eligible fields
   - **Edge function:** `compute-monthly-incentives` now auto-determines incentive_status (hold/finalised/forfeited) based on DQ rules and KRA approval; respects manual overrides (won't revert status_overridden_by records)
   - **Status logic:** hold (KRA pending), finalised (KRA approved/no-KRA eligible), forfeited (DQ triggered), released (manual override from hold)
+
+- 2026-03-28: v2.5.1 — Bugfix: Audit stat card overcounting
+  - **Root cause:** `getStages()` fallback to `DEFAULT_WORKFLOW_STAGES` (6-stage pipeline including `audit`) caused `manager_check` KPIs from employees whose real workflow has NO audit stage to be counted as "Pending Audit"
+  - **Fix:** Added `hasResolvedWorkflow()` guard in stat card, displayMembers filter, and auditor workload stats — employees without RPC-resolved workflows are skipped in all audit-related computations
+  - **Impact:** Stat card, filter, and auditor workload bar now show consistent, accurate numbers
 
 ---
 
