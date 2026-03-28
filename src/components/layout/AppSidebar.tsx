@@ -5,6 +5,7 @@ import { useOpenQueryCount } from '@/hooks/useOpenQueryCount';
 import { useUnreadNotificationCount } from '@/hooks/useNotifications';
 import { useAppSettings } from '@/hooks/useAppSettings';
 import { useIsAnyOrgKpiDataOwner } from '@/hooks/useOrgKpiDataOwner';
+import { useMenuAccess } from '@/hooks/useMenuAccess';
 import {
   Sidebar,
   SidebarContent,
@@ -56,57 +57,57 @@ import { CollapsibleSidebarGroup } from './CollapsibleSidebarGroup';
 // NOTE: Keep role arrays in sync with ALL_APP_ROLES in src/lib/roles.ts
 const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
   main: [
-    { title: 'My Dashboard', icon: Home, path: '/dashboard', roles: ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms', 'skip_level'] },
-    { title: 'Inbox', icon: MessageSquare, path: '/queries', roles: ['employee', 'manager', 'admin', 'auditor', 'management', 'hr_pms', 'skip_level'], showBadge: true },
-    { title: 'PMS Policy', icon: FileText, path: '/pms-policy', roles: [...new Set(['admin', ...policyVisibleRoles])] },
+    { title: 'My Dashboard', icon: Home, path: '/dashboard', menuKey: 'dashboard', roles: ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms', 'skip_level'] },
+    { title: 'Inbox', icon: MessageSquare, path: '/queries', menuKey: 'inbox', roles: ['employee', 'manager', 'admin', 'auditor', 'management', 'hr_pms', 'skip_level'], showBadge: true },
+    { title: 'PMS Policy', icon: FileText, path: '/pms-policy', menuKey: 'pms-policy', roles: [...new Set(['admin', ...policyVisibleRoles])] },
   ],
   manager: [
-    { title: 'Team Reviews', icon: Users, path: '/dashboard?view=team', roles: ['manager', 'admin', 'management'] },
+    { title: 'Team Reviews', icon: Users, path: '/dashboard?view=team', menuKey: 'team-reviews', roles: ['manager', 'admin', 'management'] },
   ],
   hr_pms: [
-    { title: 'HR PMS Review', icon: ClipboardCheck, path: '/dashboard?view=hr_pms', roles: ['hr_pms', 'admin'] },
+    { title: 'HR PMS Review', icon: ClipboardCheck, path: '/dashboard?view=hr_pms', menuKey: 'hr-pms-review', roles: ['hr_pms', 'admin'] },
   ],
   management: [
-    { title: 'Management Dashboard', icon: LayoutDashboard, path: '/management-dashboard', roles: ['management', 'admin'] },
-    { title: 'Management Review', icon: Briefcase, path: '/dashboard?view=management', roles: ['management', 'admin'] },
+    { title: 'Management Dashboard', icon: LayoutDashboard, path: '/management-dashboard', menuKey: 'management-dashboard', roles: ['management', 'admin'] },
+    { title: 'Management Review', icon: Briefcase, path: '/dashboard?view=management', menuKey: 'management-review', roles: ['management', 'admin'] },
   ],
   audit: [
-    { title: 'Audit Panel', icon: Shield, path: '/dashboard?view=audit', roles: ['auditor', 'admin'] },
+    { title: 'Audit Panel', icon: Shield, path: '/dashboard?view=audit', menuKey: 'audit-panel', roles: ['auditor', 'admin'] },
   ],
   admin: [
-    { title: 'Admin Dashboard', icon: LayoutDashboard, path: '/admin', roles: ['admin'] },
-    { title: 'User Management', icon: Users, path: '/admin/users', roles: ['admin'] },
-    { title: 'KRA Library', icon: Library, path: '/admin/templates', roles: ['admin'] },
-    { title: 'KRA Bundles', icon: Package, path: '/admin/bundles', roles: ['admin'] },
-    { title: 'All KRAs', icon: Target, path: '/admin/kpis', roles: ['admin'] },
-    { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', roles: ['admin'] },
-    { title: 'Org KPI Overview', icon: Eye, path: '/admin/org-kpi-overview', roles: ['admin'] },
-    { title: 'PIP Management', icon: UserX, path: '/admin/pip', roles: ['admin'] },
-    { title: 'Workflow Config', icon: GitBranch, path: '/admin/workflow-config', roles: ['admin'] },
-    { title: 'Organization', icon: Building2, path: '/admin/organization', roles: ['admin'] },
-    { title: 'KRA Categories', icon: ClipboardList, path: '/admin/categories', roles: ['admin'] },
-    { title: 'Review Periods', icon: Calendar, path: '/admin/review-periods', roles: ['admin'] },
-    { title: 'Import Data', icon: Upload, path: '/admin/import', roles: ['admin'] },
-    { title: 'System Settings', icon: Settings, path: '/admin/settings', roles: ['admin'] },
-    { title: 'Audit Logs', icon: History, path: '/audit-logs', roles: ['admin'] },
-    { title: 'Observations', icon: Eye, path: '/admin/observations', roles: ['admin'] },
-    { title: 'Rollback Requests', icon: Undo2, path: '/admin/rollback-requests', roles: ['admin'] },
-    { title: 'Email Logs', icon: Mail, path: '/admin/email-logs', roles: ['admin'] },
-    { title: 'KPI Mapping', icon: Target, path: '/admin/kpi-mapping', roles: ['admin'] },
-    { title: 'Weightage Matrix', icon: Percent, path: '/admin/kpi-weightage', roles: ['admin'] },
-    { title: 'Pending Reviews', icon: ClipboardCheck, path: '/admin/pending-reviews', roles: ['admin'] },
-    { title: 'Incentive Config', icon: Percent, path: '/admin/incentive-config', roles: ['admin'] },
-    { title: 'Employee Development', icon: GraduationCap, path: '/admin/employee-development', roles: ['admin', 'hr_pms'] },
+    { title: 'Admin Dashboard', icon: LayoutDashboard, path: '/admin', menuKey: 'admin-dashboard', roles: ['admin'] },
+    { title: 'User Management', icon: Users, path: '/admin/users', menuKey: 'admin-users', roles: ['admin'] },
+    { title: 'KRA Library', icon: Library, path: '/admin/templates', menuKey: 'admin-templates', roles: ['admin'] },
+    { title: 'KRA Bundles', icon: Package, path: '/admin/bundles', menuKey: 'admin-bundles', roles: ['admin'] },
+    { title: 'All KRAs', icon: Target, path: '/admin/kpis', menuKey: 'admin-kpis', roles: ['admin'] },
+    { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', menuKey: 'admin-org-kpi-data', roles: ['admin'] },
+    { title: 'Org KPI Overview', icon: Eye, path: '/admin/org-kpi-overview', menuKey: 'admin-org-kpi-overview', roles: ['admin'] },
+    { title: 'PIP Management', icon: UserX, path: '/admin/pip', menuKey: 'admin-pip', roles: ['admin'] },
+    { title: 'Workflow Config', icon: GitBranch, path: '/admin/workflow-config', menuKey: 'admin-workflow', roles: ['admin'] },
+    { title: 'Organization', icon: Building2, path: '/admin/organization', menuKey: 'admin-organization', roles: ['admin'] },
+    { title: 'KRA Categories', icon: ClipboardList, path: '/admin/categories', menuKey: 'admin-categories', roles: ['admin'] },
+    { title: 'Review Periods', icon: Calendar, path: '/admin/review-periods', menuKey: 'admin-review-periods', roles: ['admin'] },
+    { title: 'Import Data', icon: Upload, path: '/admin/import', menuKey: 'admin-import', roles: ['admin'] },
+    { title: 'System Settings', icon: Settings, path: '/admin/settings', menuKey: 'admin-settings', roles: ['admin'] },
+    { title: 'Audit Logs', icon: History, path: '/audit-logs', menuKey: 'admin-audit-logs', roles: ['admin'] },
+    { title: 'Observations', icon: Eye, path: '/admin/observations', menuKey: 'admin-observations', roles: ['admin'] },
+    { title: 'Rollback Requests', icon: Undo2, path: '/admin/rollback-requests', menuKey: 'admin-rollback', roles: ['admin'] },
+    { title: 'Email Logs', icon: Mail, path: '/admin/email-logs', menuKey: 'admin-email-logs', roles: ['admin'] },
+    { title: 'KPI Mapping', icon: Target, path: '/admin/kpi-mapping', menuKey: 'admin-kpi-mapping', roles: ['admin'] },
+    { title: 'Weightage Matrix', icon: Percent, path: '/admin/kpi-weightage', menuKey: 'admin-weightage', roles: ['admin'] },
+    { title: 'Pending Reviews', icon: ClipboardCheck, path: '/admin/pending-reviews', menuKey: 'admin-pending-reviews', roles: ['admin'] },
+    { title: 'Incentive Config', icon: Percent, path: '/admin/incentive-config', menuKey: 'admin-incentive', roles: ['admin'] },
+    { title: 'Employee Development', icon: GraduationCap, path: '/admin/employee-development', menuKey: 'admin-development', roles: ['admin', 'hr_pms'] },
   ],
   dataEntry: [
-    { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', roles: ['employee', 'manager', 'auditor', 'management', 'hr_pms'] },
+    { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', menuKey: 'data-entry', roles: ['employee', 'manager', 'auditor', 'management', 'hr_pms'] },
   ],
   reports: [
-    { title: 'View Reports', icon: BarChart3, path: '/reports', roles: ['admin', 'manager', 'auditor', 'management'] },
-    { title: 'Performance Report', icon: BarChart3, path: '/reports/performance', roles: ['admin', 'manager', 'auditor'] },
-    { title: 'KRA Issuance', icon: FileText, path: '/reports/kra-issuance', roles: ['admin', 'manager', 'auditor'] },
-    { title: 'TNI Report', icon: GraduationCap, path: '/reports/tni', roles: ['admin', 'manager', 'auditor'] },
-    { title: 'Incentive Report', icon: Percent, path: '/reports/incentive', roles: ['admin', 'management', 'hr_pms'] },
+    { title: 'View Reports', icon: BarChart3, path: '/reports', menuKey: 'reports-hub', roles: ['admin', 'manager', 'auditor', 'management'] },
+    { title: 'Performance Report', icon: BarChart3, path: '/reports/performance', menuKey: 'reports-performance', roles: ['admin', 'manager', 'auditor'] },
+    { title: 'KRA Issuance', icon: FileText, path: '/reports/kra-issuance', menuKey: 'reports-kra-issuance', roles: ['admin', 'manager', 'auditor'] },
+    { title: 'TNI Report', icon: GraduationCap, path: '/reports/tni', menuKey: 'reports-tni', roles: ['admin', 'manager', 'auditor'] },
+    { title: 'Incentive Report', icon: Percent, path: '/reports/incentive', menuKey: 'reports-incentive', roles: ['admin', 'management', 'hr_pms'] },
   ],
 });
 
@@ -135,6 +136,7 @@ export function AppSidebar() {
   const { data: unreadNotificationCount } = useUnreadNotificationCount();
   const { data: appSettings } = useAppSettings();
   const { data: isDataOwner } = useIsAnyOrgKpiDataOwner();
+  const { canAccess } = useMenuAccess();
 
   const policyVisibleRoles = appSettings?.pms_policy_visible_roles || ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms'];
   const menuItems = getStaticMenuItems(policyVisibleRoles);
@@ -167,8 +169,15 @@ export function AppSidebar() {
   const displayOrgName = appSettings?.organization_name || 'Performance Management';
 
   const filterByRole = useCallback((items: typeof menuItems.main) => {
-    return items.filter(item => effectiveRole && item.roles.includes(effectiveRole));
-  }, [effectiveRole]);
+    return items.filter(item => {
+      if (!effectiveRole) return false;
+      // Use DB-driven access if menuKey exists, else fallback to hardcoded roles
+      if ('menuKey' in item && item.menuKey) {
+        return canAccess(item.menuKey);
+      }
+      return item.roles.includes(effectiveRole);
+    });
+  }, [effectiveRole, canAccess]);
 
   const toggleSection = useCallback((section: string) => {
     setOpenSections(prev => {
@@ -236,11 +245,11 @@ export function AppSidebar() {
         />
 
         {/* Manager Section — also shown for skip_level managers */}
-        {(effectiveRole === 'manager' || effectiveRole === 'management' || effectiveRole === 'admin' || effectiveRole === 'skip_level') && (
+        {(effectiveRole === 'manager' || effectiveRole === 'management' || effectiveRole === 'admin' || effectiveRole === 'skip_level') && canAccess('team-reviews') && (
           <CollapsibleSidebarGroup
             label="Manager"
             items={[
-              { title: 'Team Reviews', icon: Users, path: '/dashboard?view=team', roles: ['manager', 'admin', 'management', 'skip_level'] },
+              { title: 'Team Reviews', icon: Users, path: '/dashboard?view=team', menuKey: 'team-reviews', roles: ['manager', 'admin', 'management', 'skip_level'] },
             ]}
             isOpen={openSections.has('manager')}
             onToggle={() => toggleSection('manager')}

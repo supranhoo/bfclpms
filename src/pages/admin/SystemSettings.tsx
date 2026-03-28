@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle, Mail, Building2, CalendarDays, SlidersHorizontal, Database, KeyRound, Upload, Shield } from 'lucide-react';
+import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle, Mail, Building2, CalendarDays, SlidersHorizontal, Database, KeyRound, Upload, Shield, Menu } from 'lucide-react';
 import { useScoreCalculationMode, useUpdateSystemSetting, ScoreCalculationMode, useAutoRolloverSetting, useRolloverLogs, useDailyAggregationMethod, DailyAggregationMethod, useSystemSetting } from '@/hooks/useSystemSettings';
 import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
@@ -19,6 +19,7 @@ import { FrequencyCycleSettings } from '@/components/admin/FrequencyCycleSetting
 import { RolloverDialog } from '@/components/admin/RolloverDialog';
 import { PasswordPolicyTab } from '@/components/admin/PasswordPolicyTab';
 import { ReportAccessTab } from '@/components/admin/ReportAccessTab';
+import { MenuAccessTab } from '@/components/admin/MenuAccessTab';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -32,6 +33,7 @@ const SETTINGS_SECTIONS = [
   { key: 'cycles', label: 'Cycles', icon: CalendarDays },
   { key: 'controls', label: 'Controls', icon: SlidersHorizontal },
   { key: 'reports', label: 'Report Access', icon: Shield },
+  { key: 'menu-access', label: 'Menu Access', icon: Menu },
   { key: 'email', label: 'Email', icon: Mail },
   { key: 'templates', label: 'Templates', icon: FileText },
   { key: 'passwords', label: 'Passwords', icon: KeyRound },
@@ -450,6 +452,8 @@ export default function SystemSettings() {
         return <WorkflowSettingsTab />;
       case 'reports':
         return <ReportAccessTab />;
+      case 'menu-access':
+        return <MenuAccessTab />;
       case 'email':
         return <EmailNotificationSettings />;
       case 'templates':
