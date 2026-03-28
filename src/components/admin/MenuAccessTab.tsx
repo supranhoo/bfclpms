@@ -1,14 +1,18 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Save, Menu } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Save, Menu, UserPlus, Trash2, Search } from 'lucide-react';
 import { useMenuAccess, type MenuAccessConfig } from '@/hooks/useMenuAccess';
 import { ALL_APP_ROLES, type AppRole } from '@/lib/roles';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 const ROLE_LABELS: Record<AppRole, string> = {
   admin: 'Admin',
@@ -32,19 +36,60 @@ const SECTION_LABELS: Record<string, string> = {
 };
 
 export function MenuAccessTab() {
-  const { configs, isLoading, updateMenuAccess } = useMenuAccess();
+  const { configs, userOverrides, isLoading, updateMenuAccess, grantUserMenuAccess, revokeUserMenuAccess } = useMenuAccess();
   const { toast } = useToast();
   const [editedConfigs, setEditedConfigs] = useState<Record<string, AppRole[]>>({});
   const [savingKey, setSavingKey] = useState<string | null>(null);
+
+  // Employee override form state
+  const [overrideSearch, setOverrideSearch] = useState('');
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [selectedMenuKey, setSelectedMenuKey] = useState('');
+
+  // Fetch profiles for employee selector
+  const { data: profiles = [] } = useQuery({
+    queryKey: ['profiles-for-menu-access'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, employee_code, email')
+        .order('full_name');
+      if (error) throw error;
+      return data || [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const filteredProfiles = useMemo(() => {
+    if (!overrideSearch) return profiles.slice(0, 20);
+    const q = overrideSearch.toLowerCase();
+    return profiles.filter(p =>
+      (p.full_name?.toLowerCase().includes(q)) ||
+      (p.employee_code?.toLowerCase().includes(q)) ||
+      (p.email?.toLowerCase().includes(q))
+    ).slice(0, 20);
+  }, [profiles, overrideSearch]);
+
+  // Enrich overrides with profile names and menu names
+  const enrichedOverrides = useMemo(() => {
+    const configMap = new Map(configs.map(c => [c.menu_key, c.menu_name]));
+    return userOverrides.map(o => {
+      const profile = profiles.find(p => p.id === o.user_id);
+      return {
+        ...o,
+        userName: profile?.full_name || profile?.email || 'Unknown',
+        employeeCode: profile?.employee_code || '',
+        menuName: configMap.get(o.menu_key) || o.menu_key,
+      };
+    });
+  }, [userOverrides, profiles, configs]);
 
   const getEditedRoles = (config: MenuAccessConfig): AppRole[] => {
     return editedConfigs[config.menu_key] ?? config.allowed_roles;
   };
 
   const toggleRole = (menuKey: string, role: AppRole, currentRoles: AppRole[]) => {
-    // Safety: never remove admin from admin-settings
     if (menuKey === 'admin-settings' && role === 'admin') return;
-
     const updated = currentRoles.includes(role)
       ? currentRoles.filter(r => r !== role)
       : [...currentRoles, role];
@@ -76,6 +121,31 @@ export function MenuAccessTab() {
     }
   };
 
+  const handleGrantAccess = async () => {
+    if (!selectedUserId || !selectedMenuKey) {
+      toast({ title: 'Missing fields', description: 'Select both an employee and a menu item', variant: 'destructive' });
+      return;
+    }
+    try {
+      await grantUserMenuAccess.mutateAsync({ menuKey: selectedMenuKey, userId: selectedUserId });
+      toast({ title: 'Access Granted', description: 'Employee menu access override added' });
+      setSelectedUserId('');
+      setSelectedMenuKey('');
+      setOverrideSearch('');
+    } catch {
+      toast({ title: 'Error', description: 'Failed to grant access', variant: 'destructive' });
+    }
+  };
+
+  const handleRevokeAccess = async (menuKey: string, userId: string) => {
+    try {
+      await revokeUserMenuAccess.mutateAsync({ menuKey, userId });
+      toast({ title: 'Revoked', description: 'Employee menu access removed' });
+    } catch {
+      toast({ title: 'Error', description: 'Failed to revoke access', variant: 'destructive' });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -95,6 +165,7 @@ export function MenuAccessTab() {
 
   return (
     <div className="space-y-6">
+      {/* Role-based access grid */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -171,6 +242,123 @@ export function MenuAccessTab() {
               </TableBody>
             </Table>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Employee-level overrides */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <UserPlus className="h-5 w-5" />
+            Employee-Level Overrides
+          </CardTitle>
+          <CardDescription>
+            Grant specific menu items to individual employees regardless of their role.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Grant form */}
+          <div className="flex flex-col sm:flex-row gap-3 items-end">
+            <div className="flex-1 space-y-1.5">
+              <label className="text-sm font-medium">Employee</label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name or code..."
+                  value={overrideSearch}
+                  onChange={e => setOverrideSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              {overrideSearch && (
+                <div className="border rounded-md max-h-40 overflow-y-auto bg-background">
+                  {filteredProfiles.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        setSelectedUserId(p.id);
+                        setOverrideSearch(
+                          p.employee_code
+                            ? `${p.full_name || p.email} (${p.employee_code})`
+                            : (p.full_name || p.email || '')
+                        );
+                      }}
+                      className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted transition-colors"
+                    >
+                      {p.full_name || p.email}
+                      {p.employee_code && <span className="text-muted-foreground ml-1">({p.employee_code})</span>}
+                    </button>
+                  ))}
+                  {filteredProfiles.length === 0 && (
+                    <p className="text-xs text-muted-foreground px-3 py-2">No results</p>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="w-full sm:w-56 space-y-1.5">
+              <label className="text-sm font-medium">Menu Item</label>
+              <Select value={selectedMenuKey} onValueChange={setSelectedMenuKey}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select menu..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {configs.map(c => (
+                    <SelectItem key={c.menu_key} value={c.menu_key}>
+                      {c.menu_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={handleGrantAccess} disabled={!selectedUserId || !selectedMenuKey || grantUserMenuAccess.isPending}>
+              <UserPlus className="h-4 w-4 mr-1" />
+              Grant
+            </Button>
+          </div>
+
+          {/* Active overrides table */}
+          {enrichedOverrides.length > 0 ? (
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Menu Item</TableHead>
+                    <TableHead>Granted</TableHead>
+                    <TableHead className="w-[80px] text-center">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {enrichedOverrides.map(o => (
+                    <TableRow key={o.id}>
+                      <TableCell className="font-medium">
+                        {o.userName}
+                        {o.employeeCode && <span className="text-muted-foreground ml-1 text-xs">({o.employeeCode})</span>}
+                      </TableCell>
+                      <TableCell>{o.menuName}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {new Date(o.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-destructive hover:text-destructive"
+                          onClick={() => handleRevokeAccess(o.menu_key, o.user_id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              No employee-level overrides configured yet.
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>
