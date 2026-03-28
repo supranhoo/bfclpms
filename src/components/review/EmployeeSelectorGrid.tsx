@@ -708,7 +708,43 @@ export function EmployeeSelectorGrid({
     }
   }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipLevelMembers]);
 
-  // Smart period detection: auto-switch to a period with KPIs if current period has none
+  // Auditor workload stats: compute pending/in-audit/forwarded per auditor
+  const auditorWorkloadStats = useMemo(() => {
+    if (viewLevel !== 'audit' || !auditorWorkloadMap || !periodKpis) return [];
+
+    return [...auditorWorkloadMap.entries()].map(([auditorId, entry]) => {
+      // Collect all KPI IDs for this auditor (employee-level + KPI-level)
+      const relevantKpis = periodKpis.filter(k => 
+        entry.employeeIds.has(k.employee_id) || entry.kpiIds.has(k.id)
+      );
+
+      let pending = 0, inAudit = 0, forwarded = 0;
+      relevantKpis.forEach(k => {
+        const stages = getStages(k.employee_id);
+        const auditIdx = stages.indexOf('audit');
+        if (auditIdx === -1) return;
+        if (k.status === 'audit') inAudit++;
+        else if (['management_review', 'approved'].includes(k.status || '')) forwarded++;
+        else {
+          const auditReviewable = resolveReviewableStatuses('auditor', stages);
+          if (auditReviewable.includes(k.status || '') && k.status !== 'audit') pending++;
+        }
+      });
+
+      return {
+        auditorId,
+        name: entry.auditorName,
+        employeeCode: entry.employeeCode,
+        employeeCount: entry.employeeIds.size,
+        pending,
+        inAudit,
+        forwarded,
+        total: pending + inAudit + forwarded,
+      };
+    }).sort((a, b) => b.pending - a.pending || a.name.localeCompare(b.name));
+  }, [viewLevel, auditorWorkloadMap, periodKpis, workflowMap]);
+
+
   const handleEmployeeClick = async (member: EmployeeProfile) => {
     const empKpis = periodKpis?.filter(k => k.employee_id === member.id) || [];
     
