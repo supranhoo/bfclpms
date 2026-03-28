@@ -163,6 +163,14 @@ const reports: ReportCard[] = [
     color: 'text-indigo-500',
     reportKey: 'manager-team-kpi',
   },
+  {
+    title: 'Team Vs Manager Monthly Score',
+    description: 'Employee and manager weighted average final scores side-by-side for the selected month',
+    icon: BarChart3,
+    path: '/reports/team-vs-manager-score',
+    color: 'text-fuchsia-500',
+    reportKey: 'team-vs-manager-score',
+  },
 ];
 
 export default function ReportsHub() {
