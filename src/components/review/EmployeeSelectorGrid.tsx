@@ -225,6 +225,11 @@ export function EmployeeSelectorGrid({
     return workflowMap?.get(employeeId) || DEFAULT_WORKFLOW_STAGES;
   };
 
+  // Helper: check if an employee has a resolved workflow (not just the default fallback)
+  const hasResolvedWorkflow = (employeeId: string): boolean => {
+    return workflowMap?.has(employeeId) ?? false;
+  };
+
   // Helper: map viewLevel to workflow engine's viewLevel format
   const getEngineViewLevel = (forRelationship?: 'direct' | 'indirect'): 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' => {
     // In merged team view, indirect reports use skip_level engine level
@@ -475,6 +480,7 @@ export function EmployeeSelectorGrid({
       );
       let pending = 0, inAudit = 0, forwarded = 0;
       relevantKpis.forEach(k => {
+        if (!hasResolvedWorkflow(k.employee_id)) return;
         const stages = getStages(k.employee_id);
         const auditIdx = stages.indexOf('audit');
         if (auditIdx === -1) return;
@@ -496,6 +502,7 @@ export function EmployeeSelectorGrid({
     const unassignedEmployeeIds = new Set(unassignedKpis.map(k => k.employee_id));
     let uPending = 0, uInAudit = 0, uForwarded = 0;
     unassignedKpis.forEach(k => {
+      if (!hasResolvedWorkflow(k.employee_id)) return;
       const stages = getStages(k.employee_id);
       const auditIdx = stages.indexOf('audit');
       if (auditIdx === -1) return;
@@ -564,6 +571,8 @@ export function EmployeeSelectorGrid({
             }
           }
         } else if (viewLevel === 'audit') {
+          // Guard: skip employees without resolved workflows to avoid DEFAULT fallback overcounting
+          if (!hasResolvedWorkflow(kpi.employee_id)) return;
           if (statusFilter === 'pending' && reviewableStatuses.includes(kpi.status || '')) {
             employeeIds.add(kpi.employee_id);
           } else if (statusFilter === 'in_audit' && kpi.status === 'audit') {
@@ -697,6 +706,8 @@ export function EmployeeSelectorGrid({
     } else if (viewLevel === 'audit') {
       let pending = 0, inAudit = 0, forwarded = 0;
       relevantKpis.forEach(k => {
+        // Guard: skip employees without resolved workflows to avoid DEFAULT_WORKFLOW_STAGES fallback overcounting
+        if (!hasResolvedWorkflow(k.employee_id)) return;
         const stages = getStages(k.employee_id);
         const auditIdx = stages.indexOf('audit');
         if (auditIdx === -1) return;
