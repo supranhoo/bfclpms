@@ -1195,6 +1195,9 @@ export default function ImportData() {
       );
 
       if (existingEmployee) {
+        if (!allowUpdateExisting) {
+          throw new Error(`Employee code '${row.employeeCode}' already exists. Enable 'Allow updating existing employees' to update.`);
+        }
         // Update existing profile
         const departmentId = departments?.find(d => 
           d.name.toLowerCase() === row.department?.toLowerCase()
