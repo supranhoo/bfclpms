@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-28  
-> **Version:** 2.6.2 — Feature: Per-Vessel Incentive Rate Configuration
+> **Version:** 2.6.3 — Fix: Menu Override RLS for Incentive Tables
 > **Maintainer:** Lovable AI
 
 ---
@@ -4168,6 +4168,11 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
   - **Updated hook:** `useMenuAccess` — now fetches user overrides, checks them first in `canAccess()`, adds `grantUserMenuAccess` and `revokeUserMenuAccess` mutations
   - **Updated component:** `MenuAccessTab` — added employee override section with search, grant, and revoke UI below role grid
   - **Pattern:** Mirrors `report_access_user_overrides` from Report Access system
+
+- 2026-03-28: v2.6.3 — Fix: Menu Override RLS for Incentive Tables
+  - **New function:** `has_menu_access_override(uuid, text)` — SECURITY DEFINER helper checking `menu_access_user_overrides`
+  - **New RLS policies:** Additive INSERT/UPDATE/DELETE policies on 12 incentive-related tables allowing users with `admin-incentive` menu override
+  - **Affected tables:** `incentive_vessel_rates`, `incentive_programs`, `incentive_slabs`, `incentive_program_mappings`, `employee_incentive_records`, `incentive_eligibility_fields`, `employee_incentive_eligibility`, `incentive_disqualification_rules`, `incentive_allocation_rules`, `incentive_program_types`, `incentive_score_revisions`, `production_targets`, `business_unit_sub_units`
 
 ---
 
