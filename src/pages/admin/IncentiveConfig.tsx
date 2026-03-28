@@ -29,6 +29,7 @@ import { ProgramTypeSelector } from '@/components/incentive/ProgramTypeSelector'
 import { ProductionTargetGrid } from '@/components/incentive/ProductionTargetGrid';
 import { BusinessUnitManager } from '@/components/incentive/BusinessUnitManager';
 import { AllocationRulesEditor } from '@/components/incentive/AllocationRulesEditor';
+import { VesselRateEditor } from '@/components/incentive/VesselRateEditor';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 /* ── Summary badges for each program card ── */
@@ -153,6 +154,7 @@ export default function IncentiveConfig() {
                         <TabsTrigger value="fields">Fields</TabsTrigger>
                         <TabsTrigger value="sub-units">BU Sub-Units</TabsTrigger>
                         <TabsTrigger value="allocation">Allocation</TabsTrigger>
+                        <TabsTrigger value="vessel-rates">Vessel Rates</TabsTrigger>
                       </TabsList>
 
                       <TabsContent value="mapping">
@@ -180,6 +182,10 @@ export default function IncentiveConfig() {
 
                       <TabsContent value="allocation">
                         <AllocationRulesEditor programId={p.id} />
+                      </TabsContent>
+
+                      <TabsContent value="vessel-rates">
+                        <VesselRateEditor programId={p.id} minKraScore={p.min_kra_score} />
                       </TabsContent>
                     </Tabs>
                   </AccordionContent>
