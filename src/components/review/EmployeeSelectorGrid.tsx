@@ -460,15 +460,74 @@ export function EmployeeSelectorGrid({
     return filtered;
   }, [baseMembers, searchQuery, selectedDepartment, selectedDesignation, selectedGrade, selectedManager]);
 
+  // Auditor workload stats: compute pending/in-audit/forwarded per auditor + unassigned
+  const { auditorWorkloadStats, unassignedStats } = useMemo(() => {
+    if (viewLevel !== 'audit' || !auditorWorkloadMap || !periodKpis) return { auditorWorkloadStats: [], unassignedStats: null };
+
+    const allAssignedEmployeeIds = new Set<string>();
+    auditorWorkloadMap.forEach(entry => {
+      entry.employeeIds.forEach(id => allAssignedEmployeeIds.add(id));
+    });
+
+    const stats = [...auditorWorkloadMap.entries()].map(([auditorId, entry]) => {
+      const relevantKpis = periodKpis.filter(k => 
+        entry.employeeIds.has(k.employee_id) || entry.kpiIds.has(k.id)
+      );
+      let pending = 0, inAudit = 0, forwarded = 0;
+      relevantKpis.forEach(k => {
+        const stages = getStages(k.employee_id);
+        const auditIdx = stages.indexOf('audit');
+        if (auditIdx === -1) return;
+        if (k.status === 'audit') inAudit++;
+        else if (['management_review', 'approved'].includes(k.status || '')) forwarded++;
+        else {
+          const auditReviewable = resolveReviewableStatuses('auditor', stages);
+          if (auditReviewable.includes(k.status || '') && k.status !== 'audit') pending++;
+        }
+      });
+      return {
+        auditorId, name: entry.auditorName, employeeCode: entry.employeeCode,
+        employeeCount: entry.employeeIds.size, pending, inAudit, forwarded,
+        total: pending + inAudit + forwarded,
+      };
+    }).sort((a, b) => b.pending - a.pending || a.name.localeCompare(b.name));
+
+    const unassignedKpis = periodKpis.filter(k => !allAssignedEmployeeIds.has(k.employee_id));
+    const unassignedEmployeeIds = new Set(unassignedKpis.map(k => k.employee_id));
+    let uPending = 0, uInAudit = 0, uForwarded = 0;
+    unassignedKpis.forEach(k => {
+      const stages = getStages(k.employee_id);
+      const auditIdx = stages.indexOf('audit');
+      if (auditIdx === -1) return;
+      if (k.status === 'audit') uInAudit++;
+      else if (['management_review', 'approved'].includes(k.status || '')) uForwarded++;
+      else {
+        const auditReviewable = resolveReviewableStatuses('auditor', stages);
+        if (auditReviewable.includes(k.status || '') && k.status !== 'audit') uPending++;
+      }
+    });
+    const uTotal = uPending + uInAudit + uForwarded;
+    const unassigned = uTotal > 0 ? {
+      employeeCount: unassignedEmployeeIds.size, pending: uPending, inAudit: uInAudit,
+      forwarded: uForwarded, total: uTotal, employeeIds: unassignedEmployeeIds,
+    } : null;
+
+    return { auditorWorkloadStats: stats, unassignedStats: unassigned };
+  }, [viewLevel, auditorWorkloadMap, periodKpis, workflowMap]);
+
   // Filter members further by status for display
   const displayMembers = useMemo(() => {
     let filtered = demographicFilteredMembers ? [...demographicFilteredMembers] : undefined;
 
-    // Auditor filter: restrict to employees assigned to a specific auditor
-    if (viewLevel === 'audit' && auditorFilter && auditorWorkloadMap) {
-      const entry = auditorWorkloadMap.get(auditorFilter);
-      if (entry) {
-        filtered = filtered?.filter(m => entry.employeeIds.has(m.id));
+    // Auditor filter: restrict to employees assigned to a specific auditor or unassigned
+    if (viewLevel === 'audit' && auditorFilter) {
+      if (auditorFilter === '__unassigned__' && unassignedStats) {
+        filtered = filtered?.filter(m => unassignedStats.employeeIds.has(m.id));
+      } else if (auditorFilter !== '__unassigned__' && auditorWorkloadMap) {
+        const entry = auditorWorkloadMap.get(auditorFilter);
+        if (entry) {
+          filtered = filtered?.filter(m => entry.employeeIds.has(m.id));
+        }
       }
     }
 
@@ -578,7 +637,7 @@ export function EmployeeSelectorGrid({
     });
 
     return filtered;
-  }, [demographicFilteredMembers, statusFilter, periodKpis, viewLevel, workflowMap, skipLevelMembers, myAssignedEmployeeIds, myKpiLevelData, auditorFilter, auditorWorkloadMap]);
+  }, [demographicFilteredMembers, statusFilter, periodKpis, viewLevel, workflowMap, skipLevelMembers, myAssignedEmployeeIds, myKpiLevelData, auditorFilter, auditorWorkloadMap, unassignedStats]);
 
   // Split display members into assigned/others for audit view
   const { assignedMembers, otherMembers } = useMemo(() => {
@@ -708,41 +767,6 @@ export function EmployeeSelectorGrid({
     }
   }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipLevelMembers]);
 
-  // Auditor workload stats: compute pending/in-audit/forwarded per auditor
-  const auditorWorkloadStats = useMemo(() => {
-    if (viewLevel !== 'audit' || !auditorWorkloadMap || !periodKpis) return [];
-
-    return [...auditorWorkloadMap.entries()].map(([auditorId, entry]) => {
-      // Collect all KPI IDs for this auditor (employee-level + KPI-level)
-      const relevantKpis = periodKpis.filter(k => 
-        entry.employeeIds.has(k.employee_id) || entry.kpiIds.has(k.id)
-      );
-
-      let pending = 0, inAudit = 0, forwarded = 0;
-      relevantKpis.forEach(k => {
-        const stages = getStages(k.employee_id);
-        const auditIdx = stages.indexOf('audit');
-        if (auditIdx === -1) return;
-        if (k.status === 'audit') inAudit++;
-        else if (['management_review', 'approved'].includes(k.status || '')) forwarded++;
-        else {
-          const auditReviewable = resolveReviewableStatuses('auditor', stages);
-          if (auditReviewable.includes(k.status || '') && k.status !== 'audit') pending++;
-        }
-      });
-
-      return {
-        auditorId,
-        name: entry.auditorName,
-        employeeCode: entry.employeeCode,
-        employeeCount: entry.employeeIds.size,
-        pending,
-        inAudit,
-        forwarded,
-        total: pending + inAudit + forwarded,
-      };
-    }).sort((a, b) => b.pending - a.pending || a.name.localeCompare(b.name));
-  }, [viewLevel, auditorWorkloadMap, periodKpis, workflowMap]);
 
 
   const handleEmployeeClick = async (member: EmployeeProfile) => {
@@ -1280,14 +1304,14 @@ export function EmployeeSelectorGrid({
       {renderStatsCards()}
 
       {/* Auditor Workload Summary (audit view only) */}
-      {viewLevel === 'audit' && auditorWorkloadStats.length > 0 && (
+      {viewLevel === 'audit' && (auditorWorkloadStats.length > 0 || unassignedStats) && (
         <div className="space-y-2">
           <button
             onClick={() => setAuditorWorkloadExpanded(prev => !prev)}
             className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
             <Users className="h-4 w-4" />
-            Auditor Workload ({auditorWorkloadStats.length})
+            Auditor Workload ({auditorWorkloadStats.length}{unassignedStats ? ' + unassigned' : ''})
             {auditorWorkloadExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </button>
           {auditorWorkloadExpanded && (
@@ -1340,6 +1364,35 @@ export function EmployeeSelectorGrid({
                   </div>
                 </button>
               ))}
+              {unassignedStats && (
+                <button
+                  onClick={() => setAuditorFilter(prev => prev === '__unassigned__' ? null : '__unassigned__')}
+                  className={`shrink-0 rounded-lg border px-3 py-2 text-left transition-all min-w-[140px] ${
+                    auditorFilter === '__unassigned__'
+                      ? 'border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/30'
+                      : 'border-amber-300 bg-amber-50 hover:border-amber-400 dark:border-amber-700 dark:bg-amber-900/20'
+                  }`}
+                >
+                  <div className="font-medium text-xs text-amber-700 dark:text-amber-400 truncate flex items-center gap-1">
+                    ⚠ Unassigned
+                  </div>
+                  <div className="text-[10px] text-amber-600 dark:text-amber-500 mt-0.5">
+                    {unassignedStats.employeeCount} emp
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    {unassignedStats.pending > 0 && (
+                      <span className="inline-flex items-center rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 text-[10px] font-medium">
+                        {unassignedStats.pending} pending
+                      </span>
+                    )}
+                    {unassignedStats.inAudit > 0 && (
+                      <span className="inline-flex items-center rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 text-[10px] font-medium">
+                        {unassignedStats.inAudit} audit
+                      </span>
+                    )}
+                  </div>
+                </button>
+              )}
             </div>
           )}
         </div>
