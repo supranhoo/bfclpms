@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-28  
-> **Version:** 2.6.4 — Add Vessel Monthly Data Entry Grid + Computation
+> **Version:** 2.6.5 — Employee Import Validation Guards
 > **Maintainer:** Lovable AI
 
 ---
@@ -4173,6 +4173,12 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
   - **New function:** `has_menu_access_override(uuid, text)` — SECURITY DEFINER helper checking `menu_access_user_overrides`
   - **New RLS policies:** Additive INSERT/UPDATE/DELETE policies on 12 incentive-related tables allowing users with `admin-incentive` menu override
   - **Affected tables:** `incentive_vessel_rates`, `incentive_programs`, `incentive_slabs`, `incentive_program_mappings`, `employee_incentive_records`, `incentive_eligibility_fields`, `employee_incentive_eligibility`, `incentive_disqualification_rules`, `incentive_allocation_rules`, `incentive_program_types`, `incentive_score_revisions`, `production_targets`, `business_unit_sub_units`
+
+- 2026-03-28: v2.6.5 — Employee Import Validation Guards
+  - **Duplicate code check:** Import blocks rows whose `employeeCode` already exists in the system (prevents silent overwrites)
+  - **Entity existence validation:** Department, Division, Business Unit, and Designation values in the upload are validated against system master data; non-existent entities produce clear error messages
+  - **Update toggle:** "Allow updating existing employees" checkbox lets admin opt-in to update mode when re-importing
+  - **Validation runs at parse time** (before Import button) so all errors are visible upfront in the preview
 
 ---
 
