@@ -1,55 +1,45 @@
 
 
-## Add Auditor Workload Summary to Admin Dashboard
+## Fix: Show Unassigned KPIs in Auditor Workload Bar
 
-### What You Asked For
-Show auditor-wise pending KPI breakdown on the Admin Dashboard (`/admin/dashboard`) so admins can see how many KPIs are pending with each auditor — same data as the audit view's workload bar but displayed on the admin's own dashboard page.
+### Problem
+The "Pending Audit" stat card shows 293, but the Auditor Workload cards only total ~31. The difference (~262 KPIs) belongs to employees **not assigned to any auditor**. The current workload bar has no visibility into this gap.
 
-### Current State
-- The auditor workload bar already works on the **Audit Panel** (`/dashboard?view=audit`) inside `EmployeeSelectorGrid`
-- The **Admin Dashboard** (`/admin/dashboard`) shows overall stats (total employees, KPIs by stage, etc.) but has no auditor-level breakdown
-- The `useAuditorWorkloadSummary` hook already fetches all auditor-to-employee/KPI mappings
+### Solution
+Add an **"Unassigned"** card at the end of the Auditor Workload bar showing how many pending/in-audit KPIs belong to employees with no auditor assignment. This makes the numbers reconcile and highlights assignment gaps.
 
-### Approach
-Add a new **"Audit Workload by Auditor"** card section on the Admin Dashboard page, below the "KPIs by Review Stage" section. It reuses the existing `useAuditorWorkloadSummary` hook and cross-references with KPI stage data to show per-auditor pending/in-audit/forwarded counts.
-
-### UI Design
+### UI (reference: your screenshot)
 
 ```text
-┌─────────────────────────────────────────────────────────┐
-│  Audit Workload by Auditor                    ▼ collapse│
-├─────────────────────────────────────────────────────────┤
-│ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐     │
-│ │ Auditor001   │ │ Auditor002   │ │ Auditor003   │ ... │
-│ │ 12 employees │ │ 8 employees  │ │ 15 employees │     │
-│ │ 45 pending   │ │ 32 pending   │ │ 78 pending   │     │
-│ │ 12 in audit  │ │ 5 in audit   │ │ 20 in audit  │     │
-│ │ 8 done       │ │ 22 done      │ │ 10 done      │     │
-│ └──────────────┘ └──────────────┘ └──────────────┘     │
-└─────────────────────────────────────────────────────────┘
+Auditor Workload (4)
+┌─────────────┐ ┌──────────────────┐ ┌──────────────────┐ ... ┌──────────────────┐
+│ All Auditors│ │ Auditor002       │ │ Auditor001       │     │ ⚠ Unassigned     │
+│             │ │ 9 emp            │ │ 11 emp           │     │ 34 emp           │
+│             │ │ 7 pending 2 audit│ │ 7 pending 2 audit│     │ 262 pending      │
+└─────────────┘ └──────────────────┘ └──────────────────┘     └──────────────────┘
 ```
 
-Compact cards in a horizontal scrollable row (consistent with the audit dashboard pattern). Clicking an auditor card navigates admin to `/dashboard?view=audit` with that auditor pre-selected.
+- The **Unassigned** card has an amber/warning style to draw attention
+- Clicking it filters the grid to show only unassigned employees (so admin can then assign them)
+- The card appears only when there are unassigned KPIs (count > 0)
 
 ### Implementation
 
-#### 1. Update `AdminDashboard.tsx`
-- Import `useAuditorWorkloadSummary` hook
-- Fetch all KPIs at audit stage to compute per-auditor pending/in-audit/forwarded counts
-- Render a new collapsible Card section "Audit Workload by Auditor" after the "KPIs by Review Stage" card
-- Each auditor shown as a compact card with employee count + status badges
-- Click navigates to `/dashboard?view=audit`
+**File: `src/components/review/EmployeeSelectorGrid.tsx`**
 
-#### 2. No other file changes
-The hook already exists. No DB changes needed.
+1. **Compute unassigned stats** — In the `auditorWorkloadStats` useMemo, after computing per-auditor stats, also compute an "unassigned" bucket: filter `periodKpis` for employees NOT in any auditor's `employeeIds` set, count their pending/in-audit/forwarded KPIs.
+
+2. **Render Unassigned card** — After the auditor cards in the workload bar, add an amber-styled card for unassigned KPIs (if count > 0).
+
+3. **Filter support** — When `auditorFilter` is set to `'__unassigned__'`, filter `displayMembers` to employees not in any auditor's assignment set.
 
 ### Files Changed
 | File | Action |
 |------|--------|
-| `src/pages/admin/AdminDashboard.tsx` | Update — add auditor workload card section |
+| `src/components/review/EmployeeSelectorGrid.tsx` | Update — add unassigned computation + card + filter |
 
 ### Risk Assessment
-- **Regression**: Zero — purely additive new section on admin dashboard
-- **Data**: Read-only, reuses existing hook
-- **Performance**: Hook has 60s staleTime, minimal additional queries
+- **Regression**: Zero — purely additive logic within the existing audit-only conditional block
+- **Data**: Read-only, no schema changes
+- **Accuracy**: Uses the same `periodKpis` + workflow resolution as the main stat cards, ensuring numbers reconcile
 
