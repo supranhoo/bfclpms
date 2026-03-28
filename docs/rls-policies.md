@@ -458,3 +458,4 @@
 | `is_period_locked(text, int)` | SECURITY DEFINER | Checks if review period is locked |
 | `check_template_has_active_kpis(uuid)` | SECURITY DEFINER | Checks if workflow template has in-progress KPIs |
 | `has_report_access_override(uuid)` | SECURITY DEFINER | Checks if user has any report access override in `report_access_user_overrides` |
+| `has_menu_access_override(uuid, text)` | SECURITY DEFINER | Checks if user has a menu access override for a given menu key in `menu_access_user_overrides` |
