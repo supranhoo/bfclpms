@@ -201,9 +201,10 @@ export function EmployeeSelectorGrid({
   const { data: auditorWorkloadMap } = useAuditorWorkloadSummary(viewLevel === 'audit');
 
   // Fix 1 & 3: Use multi-period hook so YTD/QTD/custom modes fetch ALL relevant months
-  const { data: periodKpis } = useKpisByPeriodRanges(periodSelection.periodRanges);
 
-  // Determine which employees to show based on view level and role
+  // Compute overall weighted scores per employee for this period
+  const employeeScoreMap = useEmployeeScoresForPeriod(periodKpis);
+
   const isFullAccess = role === 'admin' || role === 'auditor' || role === 'management' || role === 'hr_pms';
 
   // Fix 2: Derive employee IDs from the full visible list, not just periodKpis.
