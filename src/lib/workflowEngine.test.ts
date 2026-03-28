@@ -113,8 +113,8 @@ describe('workflowEngine', () => {
     it('skip_level advances PAST skip_level_check to the next stage', () => {
       // In 8-stage: skip_level_check → hr_pms_review
       expect(resolveForwardStatus('skip_level', EIGHT_STAGE_PIPELINE)).toBe('hr_pms_review');
-      // In default 6-stage: no skip_level_check → fallback 'approved'
-      expect(resolveForwardStatus('skip_level', DEFAULT_WORKFLOW_STAGES)).toBe('approved');
+      // In default 6-stage: no skip_level_check → null (out-of-workflow guard)
+      expect(resolveForwardStatus('skip_level', DEFAULT_WORKFLOW_STAGES)).toBeNull();
     });
 
     it('hr_pms advances PAST hr_pms_review to the next stage (CORE BUG FIX)', () => {
@@ -144,6 +144,17 @@ describe('workflowEngine', () => {
     it('management always returns approved', () => {
       expect(resolveForwardStatus('management')).toBe('approved');
       expect(resolveForwardStatus('management', EIGHT_STAGE_PIPELINE)).toBe('approved');
+    });
+
+    it('returns null when role stage is not in workflow (out-of-workflow guard)', () => {
+      // auditor on a workflow without 'audit' stage
+      const noAuditWorkflow = ['kra_set', 'self_review', 'manager_check', 'hr_pms_review', 'approved'];
+      expect(resolveForwardStatus('auditor', noAuditWorkflow)).toBeNull();
+      // management on a workflow without 'management_review'
+      const noMgmtWorkflow = ['kra_set', 'self_review', 'manager_check', 'audit', 'approved'];
+      expect(resolveForwardStatus('management', noMgmtWorkflow)).toBeNull();
+      // hr_pms on default 6-stage (no hr_pms_review)
+      expect(resolveForwardStatus('hr_pms', DEFAULT_WORKFLOW_STAGES)).toBeNull();
     });
   });
 
