@@ -694,9 +694,21 @@ export default function ImportData() {
 
         // Validate data - email is only required for new users, not updates
         const validationErrors: string[] = [];
+
+        // Build lookup sets for entity validation (case-insensitive)
+        const deptNames = new Set((departments || []).map(d => d.name.toLowerCase()));
+        const divNames = new Set((divisions || []).map(d => d.name.toLowerCase()));
+        const buNames = new Set((businessUnits || []).map(d => d.name.toLowerCase()));
+        const desigNames = new Set((designations || []).map(d => d.name.toLowerCase()));
+        const existingCodes = new Set((profiles || []).map(p => p.employee_code?.toLowerCase()).filter(Boolean));
+
         jsonData.forEach((row, index) => {
           if (!row.employeeCode && !row.fullName) {
             validationErrors.push(`Row ${index + 2}: Missing employee code and full name`);
+          }
+          // Duplicate employee code check
+          if (row.employeeCode && !allowUpdateExisting && existingCodes.has(row.employeeCode.toLowerCase())) {
+            validationErrors.push(`Row ${index + 2}: Employee code '${row.employeeCode}' already exists in the system`);
           }
           // Email validation only if provided (it's optional for updates)
           if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
@@ -708,6 +720,19 @@ export default function ImportData() {
           }
           if (row.designation && row.designation.length > 100) {
             validationErrors.push(`Row ${index + 2}: Designation exceeds 100 characters`);
+          }
+          // Entity existence checks
+          if (row.department && !deptNames.has(row.department.toLowerCase())) {
+            validationErrors.push(`Row ${index + 2}: Department '${row.department}' does not exist in the system`);
+          }
+          if (row.division && !divNames.has(row.division.toLowerCase())) {
+            validationErrors.push(`Row ${index + 2}: Division '${row.division}' does not exist in the system`);
+          }
+          if (row.businessUnit && !buNames.has(row.businessUnit.toLowerCase())) {
+            validationErrors.push(`Row ${index + 2}: Business Unit '${row.businessUnit}' does not exist in the system`);
+          }
+          if (row.designation && !desigNames.has(row.designation.toLowerCase())) {
+            validationErrors.push(`Row ${index + 2}: Designation '${row.designation}' does not exist in the system`);
           }
         });
 
