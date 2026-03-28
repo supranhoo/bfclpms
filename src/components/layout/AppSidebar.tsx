@@ -136,6 +136,7 @@ export function AppSidebar() {
   const { data: unreadNotificationCount } = useUnreadNotificationCount();
   const { data: appSettings } = useAppSettings();
   const { data: isDataOwner } = useIsAnyOrgKpiDataOwner();
+  const { canAccess } = useMenuAccess();
 
   const policyVisibleRoles = appSettings?.pms_policy_visible_roles || ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms'];
   const menuItems = getStaticMenuItems(policyVisibleRoles);
@@ -168,8 +169,15 @@ export function AppSidebar() {
   const displayOrgName = appSettings?.organization_name || 'Performance Management';
 
   const filterByRole = useCallback((items: typeof menuItems.main) => {
-    return items.filter(item => effectiveRole && item.roles.includes(effectiveRole));
-  }, [effectiveRole]);
+    return items.filter(item => {
+      if (!effectiveRole) return false;
+      // Use DB-driven access if menuKey exists, else fallback to hardcoded roles
+      if ('menuKey' in item && item.menuKey) {
+        return canAccess(item.menuKey);
+      }
+      return item.roles.includes(effectiveRole);
+    });
+  }, [effectiveRole, canAccess]);
 
   const toggleSection = useCallback((section: string) => {
     setOpenSections(prev => {
