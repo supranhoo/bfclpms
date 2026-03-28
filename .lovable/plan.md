@@ -1,54 +1,49 @@
 
 
-## Add Vessel Count Entry for Port Incentive
+## Add Validation Guards to Employee Import
 
-### The Gap
-- **Production Data tab** already handles target/achieved entry for production, availability, maintenance, and metal_recovery categories — that's working.
-- **Missing**: There is no place to enter "vessels handled" per employee per month for Port Incentive programs. The vessel rate is configured (₹ per vessel), but there's no monthly entry for actual vessel count.
+### What You Asked For
+1. If an uploaded employee code already exists in the system, show an error (don't silently overwrite)
+2. If dept, BU, division, or designation doesn't exist in the system, block the import row with a clear error message instead of silently creating or ignoring them
 
-### Solution
-Add a **"Vessel Data"** section on the Production Data tab (or as a separate card below the existing grid) that appears when a vessel-rate program is selected. This section lets admin enter monthly vessels handled per mapped employee.
+### Current State
+- Employee import **silently updates** existing employees when their code matches — no warning
+- `department` is resolved to `department_id` but if not found, it just sets `null` — no error
+- `division`, `businessUnit`, `designation` values from the import file are **completely ignored** during processing (never validated or stored properly)
+- There is a `designations` table in the system (managed under Organization Structure)
 
 ### Implementation
 
-#### 1. Database Migration
-Create `vessel_monthly_entries` table:
-```
-id, program_id, employee_id, month, year, vessels_handled (integer),
-remarks, updated_by, created_at, updated_at
-UNIQUE(program_id, employee_id, month, year)
-```
-RLS: admin + menu override users can CRUD; authenticated can read.
+#### 1. Add Pre-Import Validation (ImportData.tsx — `handleEmployeeFileUpload`)
+After parsing Excel rows, add validation checks:
 
-#### 2. New Hook: `useVesselMonthlyEntries.ts`
-- `useVesselMonthlyEntries(programId, month, year)` — fetches entries joined with profiles
-- `useUpsertVesselEntries()` — upsert mutation
+- **Duplicate employee code check**: For each row, check if `employeeCode` already exists in `profiles`. If yes, add validation error: `"Row X: Employee code 'CODE' already exists in the system"`
+- **Department existence check**: If `department` is provided, verify it exists in `departments` list. If not: `"Row X: Department 'NAME' does not exist in the system"`
+- **Division existence check**: If `division` is provided, verify it exists in `divisions` list. If not: `"Row X: Division 'NAME' does not exist in the system"`
+- **Business Unit existence check**: If `businessUnit` is provided, verify it exists in `businessUnits` list. If not: `"Row X: Business Unit 'NAME' does not exist in the system"`
+- **Designation existence check**: If `designation` is provided, verify it exists in `designations` list. If not: `"Row X: Designation 'NAME' does not exist in the system"`
 
-#### 3. New Component: `VesselDataEntryGrid.tsx`
-- Shows mapped employees (from `incentive_program_mappings` + `incentive_vessel_rates`) with their configured rate
-- Columns: Employee Name, Code, Rate/Vessel, Vessels Handled (input), Total Amount (computed = rate × vessels), Remarks
-- Month/Year selector (shared with production grid)
-- Save All button
+These checks run at file parse time (before the Import button is clicked), so the user sees all errors upfront in the preview.
 
-#### 4. Update `IncentiveConfig.tsx` — Production Data Tab
-- Below `ProductionTargetGrid`, render `VesselDataEntryGrid` when any vessel-rate programs exist
-- Or add a sub-tab/toggle to switch between "Production Targets" and "Vessel Entries"
+#### 2. Fetch Designations Data (ImportData.tsx)
+Import and use `useDesignations` hook alongside existing `useDivisions`, `useBusinessUnits`, `useDepartments`.
 
-#### 5. Update `compute-monthly-incentives` Edge Function
-- For vessel-based programs: look up `vessel_monthly_entries` for the month → multiply by employee's rate from `incentive_vessel_rates` → that's the incentive amount (subject to KRA ≥ 3 gate)
+#### 3. Update `handleEmployeeImport` — Resolve Division/BU/Designation
+Currently only `department_id` is resolved. Add:
+- Resolve `division` → find matching division, link via BU → department hierarchy
+- Resolve `businessUnit` → find matching BU
+- Resolve `designation` → store the designation string (already stored as text on profiles, but validate it exists in the designations table)
+
+#### 4. Add Toggle for Update vs Create-Only Mode (Optional Enhancement)
+Add a checkbox: "Allow updating existing employees". When unchecked (default), duplicate codes are errors. When checked, existing employees get updated (current behavior).
 
 ### Files Changed
 | File | Action |
 |------|--------|
-| Database migration | Create `vessel_monthly_entries` table with RLS |
-| `src/hooks/useVesselMonthlyEntries.ts` | New — fetch/upsert vessel entries |
-| `src/components/incentive/VesselDataEntryGrid.tsx` | New — monthly vessel count entry grid per employee |
-| `src/pages/admin/IncentiveConfig.tsx` | Add vessel entry grid to Production Data tab |
-| `supabase/functions/compute-monthly-incentives/index.ts` | Use vessel entries in calculation |
-| `DOCUMENTATION.md` | Document vessel data entry |
+| `src/pages/admin/ImportData.tsx` | Add validation for existing codes, dept/BU/div/designation existence checks; fetch designations; add update-mode toggle |
 
 ### Risk Assessment
-- **Data**: Additive — new table, no changes to existing schema
-- **Regression**: Zero — production grid unchanged; vessel grid only appears for relevant programs
-- **Security**: RLS with admin + menu override access
+- **Data**: Zero — validation-only change; no schema modifications
+- **Regression**: Existing imports that relied on silent updates will now show errors by default (intentional behavior change per user request)
+- **Security**: No change
 
