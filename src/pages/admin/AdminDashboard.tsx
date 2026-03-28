@@ -1,9 +1,11 @@
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { 
   Users, 
   Target, 
@@ -17,11 +19,13 @@ import {
   ArrowRight,
   Undo2,
   Grid3X3,
+  ChevronDown,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { FixCorruptedScoresDialog } from '@/components/admin/FixCorruptedScoresDialog';
 import { usePendingAdjustmentCount } from '@/hooks/useIncentiveRecords';
+import { useAuditorWorkloadSummary } from '@/hooks/useAuditorWorkloadSummary';
 
 interface StageCount {
   stage: string;
@@ -50,7 +54,50 @@ const STAGE_CONFIG: Record<string, { label: string; icon: typeof Clock; color: s
 export default function AdminDashboard() {
   const navigate = useNavigate();
 
+  const [auditorOpen, setAuditorOpen] = useState(true);
+
   const { data: pendingAdjustments = 0 } = usePendingAdjustmentCount();
+
+  const { data: workloadMap } = useAuditorWorkloadSummary(true);
+
+  // Fetch KPIs at audit stage to compute per-auditor stats
+  const { data: auditKpis } = useQuery({
+    queryKey: ['admin-audit-kpis-for-workload'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('kpis')
+        .select('id, status')
+        .in('status', ['audit', 'management_review', 'approved']);
+      if (error) throw error;
+      return data || [];
+    },
+    staleTime: 60_000,
+  });
+
+  const auditorStats = useMemo(() => {
+    if (!workloadMap || workloadMap.size === 0) return [];
+    const kpiStatusMap = new Map((auditKpis || []).map(k => [k.id, k.status]));
+
+    return [...workloadMap.values()].map(entry => {
+      let pending = 0, inAudit = 0, done = 0;
+      entry.kpiIds.forEach(kpiId => {
+        const status = kpiStatusMap.get(kpiId);
+        if (status === 'audit') pending++;
+        else if (status === 'management_review') done++;
+        else if (status === 'approved') done++;
+      });
+      // KPIs assigned via employee-level but not individually tracked count as pending
+      return {
+        auditorId: entry.auditorId,
+        auditorName: entry.auditorName,
+        employeeCode: entry.employeeCode,
+        employeeCount: entry.employeeIds.size,
+        pending,
+        inAudit: pending, // "in audit" = same as pending at audit stage
+        done,
+      };
+    }).sort((a, b) => b.pending - a.pending);
+  }, [workloadMap, auditKpis]);
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['admin-dashboard-stats'],
@@ -244,7 +291,59 @@ export default function AdminDashboard() {
         </CardContent>
       </Card>
 
-      {/* Quick Actions */}
+      {/* Auditor Workload */}
+      {auditorStats.length > 0 && (
+        <Collapsible open={auditorOpen} onOpenChange={setAuditorOpen}>
+          <Card>
+            <CardHeader>
+              <CollapsibleTrigger className="flex items-center justify-between w-full">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="h-5 w-5" />
+                    Audit Workload by Auditor
+                  </CardTitle>
+                  <CardDescription>KPI distribution across the audit team</CardDescription>
+                </div>
+                <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${auditorOpen ? 'rotate-180' : ''}`} />
+              </CollapsibleTrigger>
+            </CardHeader>
+            <CollapsibleContent>
+              <CardContent>
+                <div className="flex gap-3 overflow-x-auto pb-2">
+                  {auditorStats.map(a => (
+                    <div
+                      key={a.auditorId}
+                      className="flex-shrink-0 min-w-[160px] p-3 rounded-lg border bg-card hover:border-primary/50 transition-colors cursor-pointer"
+                      onClick={() => navigate('/dashboard?view=audit')}
+                    >
+                      <div className="font-medium text-sm truncate">{a.auditorName}</div>
+                      {a.employeeCode && (
+                        <div className="text-xs text-muted-foreground">{a.employeeCode}</div>
+                      )}
+                      <div className="mt-2 space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Employees</span>
+                          <Badge variant="secondary" className="text-xs px-1.5 py-0">{a.employeeCount}</Badge>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Pending</span>
+                          <Badge variant="default" className="text-xs px-1.5 py-0">{a.pending}</Badge>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Done</span>
+                          <Badge variant="outline" className="text-xs px-1.5 py-0">{a.done}</Badge>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+      )}
+
+
       <Card>
         <CardHeader>
           <CardTitle>Quick Actions</CardTitle>
