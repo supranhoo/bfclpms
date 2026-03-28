@@ -30,6 +30,23 @@ function formatStages(stages: string[]): string {
   return stages.map(s => getStageLabel(s)).join(' → ');
 }
 
+function deriveMonth(reviewPeriod: string | null | undefined): string {
+  if (!reviewPeriod) return 'All Months';
+  const p = reviewPeriod.trim();
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  if (months.includes(p)) return p;
+  const qMap: Record<string, string> = { 'Q1': 'January–March', 'Q2': 'April–June', 'Q3': 'July–September', 'Q4': 'October–December' };
+  if (qMap[p]) return qMap[p];
+  const hMap: Record<string, string> = { 'H1': 'January–June', 'H2': 'July–December' };
+  if (hMap[p]) return hMap[p];
+  const biMonthly: Record<string, string> = {
+    'Jan-Feb': 'January, February', 'Mar-Apr': 'March, April', 'May-Jun': 'May, June',
+    'Jul-Aug': 'July, August', 'Sep-Oct': 'September, October', 'Nov-Dec': 'November, December',
+  };
+  if (biMonthly[p]) return biMonthly[p];
+  return p;
+}
+
 function getTemplateById(templates: WorkflowTemplate[], id: string) {
   return templates.find(t => t.id === id);
 }
@@ -91,12 +108,13 @@ export function WorkflowConfigExport({
         'Scope': c.review_period ? 'Period-Specific' : 'Global',
         'Review Period': c.review_period || '—',
         'Review Year': c.review_year ?? '—',
+        'Month': deriveMonth(c.review_period),
       };
     });
     const ws2 = XLSX.utils.aoa_to_sheet([]);
     addHeader(ws2, allTemplates.length, configs.length);
     XLSX.utils.sheet_add_json(ws2, empRows.length ? empRows : [{ 'Employee Name': 'No employee overrides configured' }], { origin: 'A4' });
-    ws2['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 28 }, { wch: 12 }, { wch: 18 }, { wch: 22 }, { wch: 22 }, { wch: 50 }, { wch: 16 }, { wch: 14 }, { wch: 12 }];
+    ws2['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 28 }, { wch: 12 }, { wch: 18 }, { wch: 22 }, { wch: 22 }, { wch: 50 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 20 }];
     XLSX.utils.book_append_sheet(wb, ws2, 'Employee Overrides');
 
     // --- Sheet 3: Department Assignments ---
@@ -110,12 +128,13 @@ export function WorkflowConfigExport({
         'Scope': c.review_period ? 'Period-Specific' : 'Global',
         'Review Period': c.review_period || '—',
         'Review Year': c.review_year ?? '—',
+        'Month': deriveMonth(c.review_period),
       };
     });
     const ws3 = XLSX.utils.aoa_to_sheet([]);
     addHeader(ws3, allTemplates.length, configs.length);
     XLSX.utils.sheet_add_json(ws3, deptRows.length ? deptRows : [{ 'Department': 'No department assignments configured' }], { origin: 'A4' });
-    ws3['!cols'] = [{ wch: 22 }, { wch: 22 }, { wch: 50 }, { wch: 16 }, { wch: 14 }, { wch: 12 }];
+    ws3['!cols'] = [{ wch: 22 }, { wch: 22 }, { wch: 50 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 20 }];
     XLSX.utils.book_append_sheet(wb, ws3, 'Department Assignments');
 
     // --- Sheet 4: PMS Grade Assignments ---
@@ -131,12 +150,13 @@ export function WorkflowConfigExport({
         'Scope': c.review_period ? 'Period-Specific' : 'Global',
         'Review Period': c.review_period || '—',
         'Review Year': c.review_year ?? '—',
+        'Month': deriveMonth(c.review_period),
       };
     });
     const ws4 = XLSX.utils.aoa_to_sheet([]);
     addHeader(ws4, allTemplates.length, configs.length);
     XLSX.utils.sheet_add_json(ws4, gradeRows.length ? gradeRows : [{ 'PMS Grade': 'No PMS grade assignments configured' }], { origin: 'A4' });
-    ws4['!cols'] = [{ wch: 14 }, { wch: 16 }, { wch: 22 }, { wch: 50 }, { wch: 16 }, { wch: 14 }, { wch: 12 }];
+    ws4['!cols'] = [{ wch: 14 }, { wch: 16 }, { wch: 22 }, { wch: 50 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 20 }];
     XLSX.utils.book_append_sheet(wb, ws4, 'PMS Grade Assignments');
 
     XLSX.writeFile(wb, `Workflow_Configuration_Report.xlsx`);
