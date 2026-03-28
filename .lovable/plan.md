@@ -1,49 +1,39 @@
 
 
-## Add Validation Guards to Employee Import
+## Partial Import with Error Report Download
 
 ### What You Asked For
-1. If an uploaded employee code already exists in the system, show an error (don't silently overwrite)
-2. If dept, BU, division, or designation doesn't exist in the system, block the import row with a clear error message instead of silently creating or ignoring them
+1. Import valid rows even when some rows have errors (don't block the entire import)
+2. Provide a downloadable Excel report of errored rows with error details
 
-### Current State
-- Employee import **silently updates** existing employees when their code matches — no warning
-- `department` is resolved to `department_id` but if not found, it just sets `null` — no error
-- `division`, `businessUnit`, `designation` values from the import file are **completely ignored** during processing (never validated or stored properly)
-- There is a `designations` table in the system (managed under Organization Structure)
+### Current Problem
+The Import button is disabled when `employeeErrors.length > 0`, meaning **any** validation error blocks the entire file. There's no way to import the valid rows and skip the bad ones.
 
 ### Implementation
 
-#### 1. Add Pre-Import Validation (ImportData.tsx — `handleEmployeeFileUpload`)
-After parsing Excel rows, add validation checks:
+#### 1. Change Validation from Blocking to Per-Row Tagging
+Instead of collecting errors into a flat array that disables the button, tag each row with its validation errors. This allows:
+- Valid rows → proceed to import
+- Invalid rows → skip with error message
 
-- **Duplicate employee code check**: For each row, check if `employeeCode` already exists in `profiles`. If yes, add validation error: `"Row X: Employee code 'CODE' already exists in the system"`
-- **Department existence check**: If `department` is provided, verify it exists in `departments` list. If not: `"Row X: Department 'NAME' does not exist in the system"`
-- **Division existence check**: If `division` is provided, verify it exists in `divisions` list. If not: `"Row X: Division 'NAME' does not exist in the system"`
-- **Business Unit existence check**: If `businessUnit` is provided, verify it exists in `businessUnits` list. If not: `"Row X: Business Unit 'NAME' does not exist in the system"`
-- **Designation existence check**: If `designation` is provided, verify it exists in `designations` list. If not: `"Row X: Designation 'NAME' does not exist in the system"`
+**In `handleEmployeeFileUpload`**: Build a `Map<number, string[]>` of row-index → errors. Store this alongside `employeeData`. Update button to show "Import X of Y Employees (Z skipped)".
 
-These checks run at file parse time (before the Import button is clicked), so the user sees all errors upfront in the preview.
+#### 2. Update `handleEmployeeImport` to Skip Invalid Rows
+Before processing each row, check if it has validation errors. If yes, add it to `rowResults` as `skipped` with the error message. Only process clean rows.
 
-#### 2. Fetch Designations Data (ImportData.tsx)
-Import and use `useDesignations` hook alongside existing `useDivisions`, `useBusinessUnits`, `useDepartments`.
+#### 3. Add Error Report Download Button
+After file upload (before import), if there are errored rows, show a "Download Error Report" button that exports an Excel file with columns: Row Number, Employee Code, Name, Department, Designation, Error Message.
 
-#### 3. Update `handleEmployeeImport` — Resolve Division/BU/Designation
-Currently only `department_id` is resolved. Add:
-- Resolve `division` → find matching division, link via BU → department hierarchy
-- Resolve `businessUnit` → find matching BU
-- Resolve `designation` → store the designation string (already stored as text on profiles, but validate it exists in the designations table)
-
-#### 4. Add Toggle for Update vs Create-Only Mode (Optional Enhancement)
-Add a checkbox: "Allow updating existing employees". When unchecked (default), duplicate codes are errors. When checked, existing employees get updated (current behavior).
+#### 4. Update Button Label
+Change from `Import ${employeeData.length} Employees` to show valid vs total count, e.g. "Import 45 of 50 Employees".
 
 ### Files Changed
 | File | Action |
 |------|--------|
-| `src/pages/admin/ImportData.tsx` | Add validation for existing codes, dept/BU/div/designation existence checks; fetch designations; add update-mode toggle |
+| `src/pages/admin/ImportData.tsx` | Change validation to per-row; allow partial import; add error download |
 
 ### Risk Assessment
-- **Data**: Zero — validation-only change; no schema modifications
-- **Regression**: Existing imports that relied on silent updates will now show errors by default (intentional behavior change per user request)
+- **Data**: Zero — only valid rows are imported, same logic
+- **Regression**: Low — validation is still enforced per row; just no longer all-or-nothing
 - **Security**: No change
 
