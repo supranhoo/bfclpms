@@ -4189,4 +4189,13 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 
 ---
 
+### v2.6.7 — Fix Team Vs Manager Score Report Query (2026-03-28)
+
+- **Bug fix:** Report query referenced invalid `designations(name)` relation on `profiles` table, causing PGRST200 error and blank report
+- **Root cause:** `profiles.designation` is a plain text field, not a FK to a `designations` table
+- **Fix:** Removed relational lookup, read `designation` directly from profile row
+- **Batched fetching retained:** `.range()` pagination ensures all KPIs load for months with 1,000+ records
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*
