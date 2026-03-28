@@ -2052,6 +2052,7 @@ export default function ImportData() {
                         <TableHead>Level</TableHead>
                         <TableHead>Manager ID</TableHead>
                         <TableHead>Manager Name</TableHead>
+                        <TableHead>Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
