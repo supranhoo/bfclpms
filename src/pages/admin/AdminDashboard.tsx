@@ -291,7 +291,59 @@ export default function AdminDashboard() {
         </CardContent>
       </Card>
 
-      {/* Quick Actions */}
+      {/* Auditor Workload */}
+      {auditorStats.length > 0 && (
+        <Collapsible open={auditorOpen} onOpenChange={setAuditorOpen}>
+          <Card>
+            <CardHeader>
+              <CollapsibleTrigger className="flex items-center justify-between w-full">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="h-5 w-5" />
+                    Audit Workload by Auditor
+                  </CardTitle>
+                  <CardDescription>KPI distribution across the audit team</CardDescription>
+                </div>
+                <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${auditorOpen ? 'rotate-180' : ''}`} />
+              </CollapsibleTrigger>
+            </CardHeader>
+            <CollapsibleContent>
+              <CardContent>
+                <div className="flex gap-3 overflow-x-auto pb-2">
+                  {auditorStats.map(a => (
+                    <div
+                      key={a.auditorId}
+                      className="flex-shrink-0 min-w-[160px] p-3 rounded-lg border bg-card hover:border-primary/50 transition-colors cursor-pointer"
+                      onClick={() => navigate('/dashboard?view=audit')}
+                    >
+                      <div className="font-medium text-sm truncate">{a.auditorName}</div>
+                      {a.employeeCode && (
+                        <div className="text-xs text-muted-foreground">{a.employeeCode}</div>
+                      )}
+                      <div className="mt-2 space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Employees</span>
+                          <Badge variant="secondary" className="text-xs px-1.5 py-0">{a.employeeCount}</Badge>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Pending</span>
+                          <Badge variant="default" className="text-xs px-1.5 py-0">{a.pending}</Badge>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Done</span>
+                          <Badge variant="outline" className="text-xs px-1.5 py-0">{a.done}</Badge>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+      )}
+
+
       <Card>
         <CardHeader>
           <CardTitle>Quick Actions</CardTitle>
