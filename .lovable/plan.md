@@ -1,55 +1,54 @@
 
 
-## Fix: RLS Policy Blocks Non-Admin Users from Managing Vessel Rates
+## Add Vessel Count Entry for Port Incentive
 
-### Root Cause
-The `incentive_vessel_rates` table has RLS policies that only allow users with the `admin` role to insert/update/delete. Employee 101715 has a **menu access override** granting UI access to Incentive Config, but the database-level RLS still requires the `admin` role — so the insert fails.
+### The Gap
+- **Production Data tab** already handles target/achieved entry for production, availability, maintenance, and metal_recovery categories — that's working.
+- **Missing**: There is no place to enter "vessels handled" per employee per month for Port Incentive programs. The vessel rate is configured (₹ per vessel), but there's no monthly entry for actual vessel count.
 
-### Fix
-Add RLS policies that also permit users who have a menu access override for `admin-incentive`. This mirrors the pattern used for report access overrides (`has_report_access_override`).
+### Solution
+Add a **"Vessel Data"** section on the Production Data tab (or as a separate card below the existing grid) that appears when a vessel-rate program is selected. This section lets admin enter monthly vessels handled per mapped employee.
 
 ### Implementation
 
 #### 1. Database Migration
-Create a `SECURITY DEFINER` function to check menu access overrides, then add alternative INSERT/UPDATE/DELETE policies:
-
-```sql
--- Function to check if user has a menu access override
-CREATE OR REPLACE FUNCTION public.has_menu_access_override(_user_id uuid, _menu_key text)
-RETURNS boolean
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
-AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.menu_access_user_overrides
-    WHERE user_id = _user_id AND menu_key = _menu_key AND is_granted = true
-  )
-$$;
-
--- Add override-based policies for incentive_vessel_rates
-CREATE POLICY "Menu override users can insert vessel rates"
-  ON public.incentive_vessel_rates FOR INSERT
-  WITH CHECK (public.has_menu_access_override(auth.uid(), 'admin-incentive'));
-
-CREATE POLICY "Menu override users can update vessel rates"
-  ON public.incentive_vessel_rates FOR UPDATE
-  USING (public.has_menu_access_override(auth.uid(), 'admin-incentive'))
-  WITH CHECK (public.has_menu_access_override(auth.uid(), 'admin-incentive'));
-
-CREATE POLICY "Menu override users can delete vessel rates"
-  ON public.incentive_vessel_rates FOR DELETE
-  USING (public.has_menu_access_override(auth.uid(), 'admin-incentive'));
+Create `vessel_monthly_entries` table:
 ```
+id, program_id, employee_id, month, year, vessels_handled (integer),
+remarks, updated_by, created_at, updated_at
+UNIQUE(program_id, employee_id, month, year)
+```
+RLS: admin + menu override users can CRUD; authenticated can read.
 
-#### 2. Also fix related incentive tables
-The same issue will apply to all incentive-related tables. Check and add override policies for: `incentive_programs`, `incentive_slabs`, `incentive_program_mappings`, `incentive_records`, `incentive_eligibility_fields`, `incentive_eligibility_data`, `incentive_dq_rules`, `incentive_allocation_rules`, `production_targets`, `business_unit_sub_units`, `incentive_program_types`, `incentive_score_revisions`.
+#### 2. New Hook: `useVesselMonthlyEntries.ts`
+- `useVesselMonthlyEntries(programId, month, year)` — fetches entries joined with profiles
+- `useUpsertVesselEntries()` — upsert mutation
+
+#### 3. New Component: `VesselDataEntryGrid.tsx`
+- Shows mapped employees (from `incentive_program_mappings` + `incentive_vessel_rates`) with their configured rate
+- Columns: Employee Name, Code, Rate/Vessel, Vessels Handled (input), Total Amount (computed = rate × vessels), Remarks
+- Month/Year selector (shared with production grid)
+- Save All button
+
+#### 4. Update `IncentiveConfig.tsx` — Production Data Tab
+- Below `ProductionTargetGrid`, render `VesselDataEntryGrid` when any vessel-rate programs exist
+- Or add a sub-tab/toggle to switch between "Production Targets" and "Vessel Entries"
+
+#### 5. Update `compute-monthly-incentives` Edge Function
+- For vessel-based programs: look up `vessel_monthly_entries` for the month → multiply by employee's rate from `incentive_vessel_rates` → that's the incentive amount (subject to KRA ≥ 3 gate)
 
 ### Files Changed
 | File | Action |
 |------|--------|
-| Database migration | Add `has_menu_access_override` function + additive RLS policies on incentive tables |
+| Database migration | Create `vessel_monthly_entries` table with RLS |
+| `src/hooks/useVesselMonthlyEntries.ts` | New — fetch/upsert vessel entries |
+| `src/components/incentive/VesselDataEntryGrid.tsx` | New — monthly vessel count entry grid per employee |
+| `src/pages/admin/IncentiveConfig.tsx` | Add vessel entry grid to Production Data tab |
+| `supabase/functions/compute-monthly-incentives/index.ts` | Use vessel entries in calculation |
+| `DOCUMENTATION.md` | Document vessel data entry |
 
 ### Risk Assessment
-- **Regression**: Zero — additive policies; existing admin access unchanged
-- **Security**: Scoped to users explicitly granted `admin-incentive` override by an admin
-- **Data**: No schema changes, only new RLS policies
+- **Data**: Additive — new table, no changes to existing schema
+- **Regression**: Zero — production grid unchanged; vessel grid only appears for relevant programs
+- **Security**: RLS with admin + menu override access
 
