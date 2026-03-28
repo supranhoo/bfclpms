@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-28  
-> **Version:** 2.8.0 — Fix: Admin data entry for out-of-workflow roles no longer auto-approves KPIs
+> **Version:** 2.9.0 — Data repair: Corrected final_score for 100750 Jan 2026 (workflow-aware terminal score)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4217,6 +4217,15 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix 2 — Hardened `resolveForwardStatus` in `workflowEngine.ts`:** Now returns `null` (instead of `'approved'` fallback) when the role's owned stage is not in the workflow stages array. Defense-in-depth so no caller can accidentally auto-approve via a non-workflow role
 - **Data correction (Jan 2026 only):** Reverted 3 incorrectly approved KPIs (employees 100801, 100316, 100860) back to `manager_check` status with `final_score`/`final_rating` cleared. These KPIs re-enter the HR PMS review stage. December 2025 and earlier months are untouched
 - **Invariant:** Admin data entry for a role whose stage is absent from the employee's workflow MUST NOT advance status or sync `final_score`
+
+---
+
+### v2.9.0 — Data repair: Corrected final_score for 100750 Jan 2026 (2026-03-28)
+
+- **Bug fix:** Employee 100750 (Gaurav Tiwari) — "Adherence to Critical Mechanical Spares Inventory Levels" had `final_score = 5` (from `skip_level_score`) instead of terminal reviewer `hr_pms_score = 0`
+- **Root cause:** Approval logic used generic COALESCE fallback chain instead of resolving the employee's month-specific workflow (`self_l1_l2_hr_pms`) to identify HR PMS as the terminal reviewer
+- **Data correction:** Set `final_score = 0`, `final_rating = 'red'` for this single KPI. No other employees or months affected. December 2025 and earlier untouched
+- **Scope:** January 2026 only, 1 row
 
 ---
 
