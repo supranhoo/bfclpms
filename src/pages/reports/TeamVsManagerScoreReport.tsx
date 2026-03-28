@@ -41,8 +41,32 @@ export default function TeamVsManagerScoreReport() {
   const [year, setYear] = useState(now.getFullYear());
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
-  const [sortField, setSortField] = useState<'name' | 'mgrCode'>('name');
+  const [sortField, setSortField] = useState<'name' | 'mgrCode' | 'empCode' | 'department' | 'avgScore'>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  const toggleSort = (field: typeof sortField) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+    setPage(0);
+  };
+
+  const renderSortableHeader = (label: string, field: typeof sortField, className?: string) => (
+    <TableHead
+      className={`cursor-pointer select-none hover:text-foreground transition-colors ${className || ''}`}
+      onClick={() => toggleSort(field)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {sortField === field
+          ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)
+          : <ArrowUpDown className="h-3 w-3 text-muted-foreground" />}
+      </span>
+    </TableHead>
+  );
   const { canDownload } = useReportAccess();
 
   const { data: rawData, isLoading } = useQuery({
