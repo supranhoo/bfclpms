@@ -1279,7 +1279,73 @@ export function EmployeeSelectorGrid({
       {/* Stats Cards */}
       {renderStatsCards()}
 
-      {/* Filters */}
+      {/* Auditor Workload Summary (audit view only) */}
+      {viewLevel === 'audit' && auditorWorkloadStats.length > 0 && (
+        <div className="space-y-2">
+          <button
+            onClick={() => setAuditorWorkloadExpanded(prev => !prev)}
+            className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Users className="h-4 w-4" />
+            Auditor Workload ({auditorWorkloadStats.length})
+            {auditorWorkloadExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          </button>
+          {auditorWorkloadExpanded && (
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              <button
+                onClick={() => setAuditorFilter(null)}
+                className={`shrink-0 rounded-lg border px-3 py-2 text-xs transition-all ${
+                  !auditorFilter
+                    ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary/30'
+                    : 'border-border bg-card text-foreground hover:border-primary/50'
+                }`}
+              >
+                <div className="font-medium">All Auditors</div>
+              </button>
+              {auditorWorkloadStats.map(a => (
+                <button
+                  key={a.auditorId}
+                  onClick={() => setAuditorFilter(prev => prev === a.auditorId ? null : a.auditorId)}
+                  className={`shrink-0 rounded-lg border px-3 py-2 text-left transition-all min-w-[140px] ${
+                    auditorFilter === a.auditorId
+                      ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
+                      : 'border-border bg-card hover:border-primary/50'
+                  }`}
+                >
+                  <div className="font-medium text-xs text-foreground truncate">
+                    {a.employeeCode ? `${a.employeeCode} - ` : ''}{a.name}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">
+                    {a.employeeCount} emp
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    {a.pending > 0 && (
+                      <span className="inline-flex items-center rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 text-[10px] font-medium">
+                        {a.pending} pending
+                      </span>
+                    )}
+                    {a.inAudit > 0 && (
+                      <span className="inline-flex items-center rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 text-[10px] font-medium">
+                        {a.inAudit} audit
+                      </span>
+                    )}
+                    {a.forwarded > 0 && (
+                      <span className="inline-flex items-center rounded-full bg-green-500/10 text-green-600 dark:text-green-400 px-1.5 py-0.5 text-[10px] font-medium">
+                        {a.forwarded} done
+                      </span>
+                    )}
+                    {a.total === 0 && (
+                      <span className="text-[10px] text-muted-foreground">No KPIs</span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+
       <EmployeeFilters
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
