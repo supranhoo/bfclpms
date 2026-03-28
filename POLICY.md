@@ -470,6 +470,14 @@ Draft → Pending HR Approval → Active → [Extended] → Completed / Cancelle
 - Override users gain full SELECT access to `kpis`, `review_submissions`, `profiles` via `has_report_access_override()` function
 - Read-only (SELECT only), explicitly admin-granted
 
+### 17.3 Workflow-Aware Score Display (Invariant)
+
+- **Reports MUST NOT display scores for workflow stages that do not exist in the employee's resolved workflow.**
+- If a role's stage (e.g., `audit`, `management_review`, `skip_level_check`, `hr_pms_review`) is absent from the employee's month-specific workflow, the corresponding score column MUST show `—` (null), even if a value exists in the database (e.g., from admin data entry for a non-workflow role).
+- For non-approved KPIs, `finalScore` must be recalculated using only in-workflow scores after blanking out-of-workflow scores.
+- For approved KPIs, `final_score` from the database is authoritative (already validated at approval time).
+- This invariant applies to all reports displaying per-role scores: KPI Detail Report, and should be extended to other reports as needed.
+
 ---
 
 ## 18. Admin Configurable Settings Reference
