@@ -1243,7 +1243,10 @@ export function EmployeeSelectorGrid({
                     {formatEmployeeName(member.full_name, member.email, member.employee_code)}
                   </p>
                 )}
-                <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0 ml-2" />
+                <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                  <EmployeeScoreBadge score={employeeScoreMap.get(member.id) ?? undefined} />
+                  <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                </div>
               </div>
               <p className="text-sm text-muted-foreground truncate">
                 {member.designation || member.email}
