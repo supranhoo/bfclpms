@@ -171,6 +171,9 @@ Deno.serve(async (req) => {
 
     if (upsertError) {
       console.error('Failed to upsert profile:', upsertError)
+      return new Response(JSON.stringify({ error: `Failed to create profile: ${upsertError.message}` }), {
+        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
     }
 
     // Step 4: Fetch and return the profile
