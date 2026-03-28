@@ -298,32 +298,14 @@ export default function TeamVsManagerScoreReport() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Emp Code</TableHead>
+                      {renderSortableHeader('Emp Code', 'empCode')}
                       <TableHead>Employee Name</TableHead>
                       <TableHead>Designation</TableHead>
-                      <TableHead>Department</TableHead>
+                      {renderSortableHeader('Department', 'department')}
                       <TableHead>Month</TableHead>
                       <TableHead>Year</TableHead>
-                      <TableHead className="text-center">Avg Final Score</TableHead>
-                      <TableHead
-                        className="cursor-pointer select-none hover:text-foreground transition-colors"
-                        onClick={() => {
-                          if (sortField === 'mgrCode') {
-                            setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-                          } else {
-                            setSortField('mgrCode');
-                            setSortDir('asc');
-                          }
-                          setPage(0);
-                        }}
-                      >
-                        <span className="inline-flex items-center gap-1">
-                          Mgr Code
-                          {sortField === 'mgrCode'
-                            ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)
-                            : <ArrowUpDown className="h-3 w-3 text-muted-foreground" />}
-                        </span>
-                      </TableHead>
+                      {renderSortableHeader('Avg Final Score', 'avgScore', 'text-center')}
+                      {renderSortableHeader('Mgr Code', 'mgrCode')}
                       <TableHead>Manager Name</TableHead>
                       <TableHead className="text-center">Mgr Avg Final Score</TableHead>
                     </TableRow>
