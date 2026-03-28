@@ -4220,4 +4220,13 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 
 ---
 
+### v2.9.0 — Data repair: Corrected final_score for 100750 Jan 2026 (2026-03-28)
+
+- **Bug fix:** Employee 100750 (Gaurav Tiwari) — "Adherence to Critical Mechanical Spares Inventory Levels" had `final_score = 5` (from `skip_level_score`) instead of terminal reviewer `hr_pms_score = 0`
+- **Root cause:** Approval logic used generic COALESCE fallback chain instead of resolving the employee's month-specific workflow (`self_l1_l2_hr_pms`) to identify HR PMS as the terminal reviewer
+- **Data correction:** Set `final_score = 0`, `final_rating = 'red'` for this single KPI. No other employees or months affected. December 2025 and earlier untouched
+- **Scope:** January 2026 only, 1 row
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*
