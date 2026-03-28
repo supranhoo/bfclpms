@@ -464,6 +464,14 @@ export function EmployeeSelectorGrid({
   const displayMembers = useMemo(() => {
     let filtered = demographicFilteredMembers ? [...demographicFilteredMembers] : undefined;
 
+    // Auditor filter: restrict to employees assigned to a specific auditor
+    if (viewLevel === 'audit' && auditorFilter && auditorWorkloadMap) {
+      const entry = auditorWorkloadMap.get(auditorFilter);
+      if (entry) {
+        filtered = filtered?.filter(m => entry.employeeIds.has(m.id));
+      }
+    }
+
     // Status-based filtering using per-employee workflow resolution
     if (statusFilter === 'my_assigned' && viewLevel === 'audit') {
       filtered = filtered?.filter(m => 
