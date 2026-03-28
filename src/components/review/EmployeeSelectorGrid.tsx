@@ -225,6 +225,11 @@ export function EmployeeSelectorGrid({
     return workflowMap?.get(employeeId) || DEFAULT_WORKFLOW_STAGES;
   };
 
+  // Helper: check if an employee has a resolved workflow (not just the default fallback)
+  const hasResolvedWorkflow = (employeeId: string): boolean => {
+    return workflowMap?.has(employeeId) ?? false;
+  };
+
   // Helper: map viewLevel to workflow engine's viewLevel format
   const getEngineViewLevel = (forRelationship?: 'direct' | 'indirect'): 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' => {
     // In merged team view, indirect reports use skip_level engine level
