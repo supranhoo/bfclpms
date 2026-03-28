@@ -190,10 +190,13 @@ export default function TeamVsManagerScoreReport() {
 
     const dir = sortDir === 'asc' ? 1 : -1;
     return result.sort((a, b) => {
-      if (sortField === 'mgrCode') {
-        return a.managerCode.localeCompare(b.managerCode) * dir;
+      switch (sortField) {
+        case 'mgrCode': return a.managerCode.localeCompare(b.managerCode) * dir;
+        case 'empCode': return a.employeeCode.localeCompare(b.employeeCode) * dir;
+        case 'department': return a.department.localeCompare(b.department) * dir;
+        case 'avgScore': return ((a.avgFinalScore ?? -Infinity) - (b.avgFinalScore ?? -Infinity)) * dir;
+        default: return a.employeeName.localeCompare(b.employeeName) * dir;
       }
-      return a.employeeName.localeCompare(b.employeeName) * dir;
     });
   }, [rawData, managerProfiles, month, year, sortField, sortDir]);
 
