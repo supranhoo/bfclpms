@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-28  
-> **Version:** 2.6.6 — Partial Employee Import with Error Report Download
+> **Version:** 2.6.7 — Fix Team Vs Manager Score Report Query
 > **Maintainer:** Lovable AI
 
 ---
@@ -4186,6 +4186,15 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
   - **Preview table status column:** Errored rows highlighted in red with Error/Valid badges
   - **Update toggle:** "Allow updating existing employees" checkbox lets admin opt-in to update mode when re-importing
   - **Validation runs at parse time** (before Import button) so all errors are visible upfront in the preview
+
+---
+
+### v2.6.7 — Fix Team Vs Manager Score Report Query (2026-03-28)
+
+- **Bug fix:** Report query referenced invalid `designations(name)` relation on `profiles` table, causing PGRST200 error and blank report
+- **Root cause:** `profiles.designation` is a plain text field, not a FK to a `designations` table
+- **Fix:** Removed relational lookup, read `designation` directly from profile row
+- **Batched fetching retained:** `.range()` pagination ensures all KPIs load for months with 1,000+ records
 
 ---
 
