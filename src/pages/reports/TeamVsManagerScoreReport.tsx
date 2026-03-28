@@ -46,22 +46,37 @@ export default function TeamVsManagerScoreReport() {
   const { data: rawData, isLoading } = useQuery({
     queryKey: ['team-vs-manager-score-report', month, year],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('kpis')
-        .select(`
-          id, employee_id, weightage,
-          review_submissions(final_score, is_na),
-          profiles!kpis_employee_id_fkey(
-            employee_code, full_name, reporting_manager_id,
-            departments(name),
-            designations(name)
-          )
-        `)
-        .eq('review_period', month)
-        .eq('review_year', year);
+      const BATCH = 1000;
+      const allRows: any[] = [];
+      let from = 0;
 
-      if (error) throw error;
-      return data || [];
+      while (true) {
+        const { data, error } = await supabase
+          .from('kpis')
+          .select(`
+            id, employee_id, weightage,
+            review_submissions(final_score, is_na),
+            profiles!kpis_employee_id_fkey(
+              employee_code, full_name, reporting_manager_id,
+              departments(name),
+              designations(name)
+            )
+          `)
+          .eq('review_period', month)
+          .eq('review_year', year)
+          .range(from, from + BATCH - 1);
+
+        if (error) {
+          console.error('Team vs Manager report fetch error:', error);
+          throw error;
+        }
+        if (!data || data.length === 0) break;
+        allRows.push(...data);
+        if (data.length < BATCH) break;
+        from += BATCH;
+      }
+
+      return allRows;
     },
   });
 
