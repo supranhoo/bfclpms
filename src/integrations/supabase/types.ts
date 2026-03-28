@@ -1989,6 +1989,39 @@ export type Database = {
         }
         Relationships: []
       }
+      menu_access_config: {
+        Row: {
+          allowed_roles: string[]
+          created_at: string | null
+          display_order: number
+          id: string
+          menu_key: string
+          menu_name: string
+          section: string
+          updated_at: string | null
+        }
+        Insert: {
+          allowed_roles?: string[]
+          created_at?: string | null
+          display_order?: number
+          id?: string
+          menu_key: string
+          menu_name: string
+          section: string
+          updated_at?: string | null
+        }
+        Update: {
+          allowed_roles?: string[]
+          created_at?: string | null
+          display_order?: number
+          id?: string
+          menu_key?: string
+          menu_name?: string
+          section?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       modules: {
         Row: {
           code: string
