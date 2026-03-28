@@ -1,53 +1,91 @@
 
 
-## Add Employee-Level Menu Access Overrides
+## Port Incentive: Per-Vessel Fixed Amount Configuration
 
 ### What You Asked For
-Allow admins to grant specific menu items to individual employees, similar to how Report Access has per-user overrides alongside role-based defaults.
+Configure "Port Incentive" with two criteria:
+1. Monthly KRA rating minimum 3 (auto-fetched from system)
+2. Fixed incentive amount per vessel (default ₹10,000), applicable to 3-4 employees with employee-wise varying amounts
 
-### Approach
-Mirror the exact `report_access_user_overrides` pattern for menu access.
+### Current State
+- `min_kra_score` already exists on `incentive_programs` — set to 3 for this program. KRA scores are already fetched from the system during computation.
+- `incentive_base = 'fixed'` exists but only supports a single fixed amount. There is **no per-employee, per-vessel rate** configuration.
+- The current slab system is percentage-based, not suited for "₹X per vessel per employee."
+
+### What's Needed
+A new **Vessel Rate Configuration** table and UI tab to store per-employee fixed amounts per vessel for this program type.
 
 ### Implementation
 
 #### 1. Database Migration
-Create `menu_access_user_overrides` table:
 ```sql
-CREATE TABLE public.menu_access_user_overrides (
+CREATE TABLE public.incentive_vessel_rates (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  menu_key TEXT NOT NULL,
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  granted_by UUID REFERENCES auth.users(id),
+  program_id UUID NOT NULL REFERENCES incentive_programs(id) ON DELETE CASCADE,
+  employee_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  rate_per_vessel NUMERIC NOT NULL DEFAULT 10000,
+  remarks TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE (menu_key, user_id)
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (program_id, employee_id)
 );
--- RLS: authenticated read, admin-only write
+-- RLS: authenticated read, admin write
 ```
 
-#### 2. Hook Update: `useMenuAccess.ts`
-- Fetch `menu_access_user_overrides` (same pattern as `useReportAccess`)
-- Update `canAccess()`: check user overrides first — if user has an override for that menu_key, grant access regardless of role
-- Add `grantUserMenuAccess` and `revokeUserMenuAccess` mutations
-- Export `userOverrides` data
+#### 2. New Hook: `src/hooks/useIncentiveVesselRates.ts`
+- `useVesselRates(programId)` — fetch all rates with employee profile join
+- `useUpsertVesselRate()` — upsert rate per employee
+- `useDeleteVesselRate()` — remove an employee's rate
 
-#### 3. UI Update: `MenuAccessTab.tsx`
-Add a second card below the role-based grid (same layout as ReportAccessTab's user override section):
-- **Grant form**: Employee search + menu item selector + "Grant Access" button
-- **Active overrides table**: Shows user name, menu item, granted date, with revoke button
+#### 3. New Component: `src/components/incentive/VesselRateEditor.tsx`
+UI within the Port Incentive program accordion:
 
-#### 4. Sidebar Integration
-`AppSidebar.tsx` — update `canAccess` check (already delegated to hook) — no sidebar code changes needed since the hook handles it.
+```text
+┌─────────────────────────────────────────────────────┐
+│  Vessel Rate Configuration                          │
+│  Per-employee fixed amount per vessel handled       │
+│                                                     │
+│  ┌──────────────┬────────────┬──────────┬────────┐  │
+│  │ Employee     │ Code       │ Rate/Vessel│Actions│  │
+│  ├──────────────┼────────────┼──────────┼────────┤  │
+│  │ John Doe     │ EMP001     │ ₹12,000  │ ✎  🗑  │  │
+│  │ Jane Smith   │ EMP002     │ ₹10,000  │ ✎  🗑  │  │
+│  │ Ravi Kumar   │ EMP003     │ ₹8,000   │ ✎  🗑  │  │
+│  └──────────────┴────────────┴──────────┴────────┘  │
+│                                                     │
+│  [+ Add Employee]  ← employee search + rate input   │
+│                                                     │
+│  ℹ Min KRA Score: 3.0 (auto-fetched from system)    │
+│  ℹ Incentive Base: Fixed Amount per Vessel          │
+└─────────────────────────────────────────────────────┘
+```
+
+- Employee search dropdown (from profiles, filtered to mapped employees)
+- Rate per vessel input (₹, default 10,000)
+- Inline edit and delete
+- Info banner showing that KRA rating ≥ 3 is enforced automatically
+
+#### 4. IncentiveConfig.tsx Update
+Add a "Vessel Rates" tab inside the program accordion, visible when `incentive_base === 'fixed'` or `program_type` matches port/vessel-related types.
 
 ### Files Changed
 | File | Action |
 |------|--------|
-| Migration SQL | Create `menu_access_user_overrides` table + RLS |
-| `src/hooks/useMenuAccess.ts` | Add user override queries, mutations, and canAccess logic |
-| `src/components/admin/MenuAccessTab.tsx` | Add employee override grant/revoke UI section |
-| `DOCUMENTATION.md` | Update menu access docs |
+| Migration SQL | Create `incentive_vessel_rates` table |
+| `src/hooks/useIncentiveVesselRates.ts` | New — CRUD hook for vessel rates |
+| `src/components/incentive/VesselRateEditor.tsx` | New — per-employee rate grid UI |
+| `src/pages/admin/IncentiveConfig.tsx` | Update — add "Vessel Rates" tab |
+| `DOCUMENTATION.md` | Update — document vessel rate feature |
+
+### Program Setup Summary
+For the "Port Incentive" program, admin should:
+1. Set `Incentive Base = Fixed Amount` and `Min KRA Score = 3.0` in Edit Program
+2. Map 3-4 employees via Mapping tab
+3. Configure per-employee vessel rates in the new Vessel Rates tab
+4. Monthly computation will: fetch KRA score from system → check ≥ 3 → multiply rate × vessels handled
 
 ### Risk Assessment
-- **Data**: Additive — new table, no existing data affected
-- **Regression**: Zero — existing role-based logic unchanged; user overrides are additive (grant-only)
-- **Security**: RLS admin-only write, authenticated read. Safety guard for admin-settings unchanged.
+- **Data**: Additive — new table, no changes to existing schema
+- **Regression**: Zero — new tab only appears for relevant programs
+- **Security**: RLS admin-only write, authenticated read
 
