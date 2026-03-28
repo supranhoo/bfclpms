@@ -139,6 +139,7 @@ export default function ImportData() {
   const { data: divisions } = useDivisions();
   const { data: businessUnits } = useBusinessUnits();
   const { data: departments } = useDepartments();
+  const { data: designations } = useDesignations();
   const createKpi = useCreateKpi();
   const { toast } = useToast();
 
