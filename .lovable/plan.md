@@ -1,45 +1,36 @@
 
 
-## Fix: Show Unassigned KPIs in Auditor Workload Bar
+## Add Month Column to Workflow Configuration Excel Export
 
-### Problem
-The "Pending Audit" stat card shows 293, but the Auditor Workload cards only total ~31. The difference (~262 KPIs) belongs to employees **not assigned to any auditor**. The current workload bar has no visibility into this gap.
+### What You Asked For
+Add a "Month" column to all relevant sheets in the Workflow Configuration Excel export so admins can filter/review month-wise workflow assignments. No UI changes needed.
 
-### Solution
-Add an **"Unassigned"** card at the end of the Auditor Workload bar showing how many pending/in-audit KPIs belong to employees with no auditor assignment. This makes the numbers reconcile and highlights assignment gaps.
+### Current State
+The export has `Review Period` (e.g., "January", "Q1") and `Review Year` columns across sheets 2-4 (Employee Overrides, Department Assignments, PMS Grade Assignments). There is no standalone "Month" column for quick month-level filtering.
 
-### UI (reference: your screenshot)
-
-```text
-Auditor Workload (4)
-┌─────────────┐ ┌──────────────────┐ ┌──────────────────┐ ... ┌──────────────────┐
-│ All Auditors│ │ Auditor002       │ │ Auditor001       │     │ ⚠ Unassigned     │
-│             │ │ 9 emp            │ │ 11 emp           │     │ 34 emp           │
-│             │ │ 7 pending 2 audit│ │ 7 pending 2 audit│     │ 262 pending      │
-└─────────────┘ └──────────────────┘ └──────────────────┘     └──────────────────┘
-```
-
-- The **Unassigned** card has an amber/warning style to draw attention
-- Clicking it filters the grid to show only unassigned employees (so admin can then assign them)
-- The card appears only when there are unassigned KPIs (count > 0)
+### Approach
+For period-specific configs, derive the month(s) from the `review_period` value. For monthly periods the month is the period itself; for bi-monthly/quarterly/half-yearly, list the constituent months. For global configs (no period), show "All".
 
 ### Implementation
 
-**File: `src/components/review/EmployeeSelectorGrid.tsx`**
+**File: `src/components/admin/WorkflowConfigExport.tsx`**
 
-1. **Compute unassigned stats** — In the `auditorWorkloadStats` useMemo, after computing per-auditor stats, also compute an "unassigned" bucket: filter `periodKpis` for employees NOT in any auditor's `employeeIds` set, count their pending/in-audit/forwarded KPIs.
+1. Add a helper function `deriveMonth(reviewPeriod: string | null): string` that maps period names to month(s):
+   - Monthly names → return as-is (e.g., "January")
+   - Bi-monthly like "Jan-Feb" → "January, February"
+   - Quarterly like "Q1" → "January–March"
+   - If null (global) → "All Months"
 
-2. **Render Unassigned card** — After the auditor cards in the workload bar, add an amber-styled card for unassigned KPIs (if count > 0).
+2. Add a `'Month'` column after `'Review Year'` in all three config sheets (Employee Overrides, Department Assignments, PMS Grade Assignments) using the helper.
 
-3. **Filter support** — When `auditorFilter` is set to `'__unassigned__'`, filter `displayMembers` to employees not in any auditor's assignment set.
+3. Update `!cols` widths to include the new column (wch: 20).
 
 ### Files Changed
 | File | Action |
 |------|--------|
-| `src/components/review/EmployeeSelectorGrid.tsx` | Update — add unassigned computation + card + filter |
+| `src/components/admin/WorkflowConfigExport.tsx` | Update — add Month column to sheets 2, 3, 4 |
 
 ### Risk Assessment
-- **Regression**: Zero — purely additive logic within the existing audit-only conditional block
-- **Data**: Read-only, no schema changes
-- **Accuracy**: Uses the same `periodKpis` + workflow resolution as the main stat cards, ensuring numbers reconcile
+- **Regression**: Zero — export-only change, no UI or data impact
+- **Data**: Read-only derivation from existing `review_period` field
 
