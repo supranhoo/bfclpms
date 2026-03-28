@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-28  
-> **Version:** 2.8.0 — Fix: Admin data entry for out-of-workflow roles no longer auto-approves KPIs
+> **Version:** 2.9.0 — Data repair: Corrected final_score for 100750 Jan 2026 (workflow-aware terminal score)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
