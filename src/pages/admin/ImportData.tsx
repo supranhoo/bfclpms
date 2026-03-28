@@ -345,6 +345,7 @@ export default function ImportData() {
   const [employeeImportProgress, setEmployeeImportProgress] = useState({ current: 0, total: 0 });
   const [employeeImportResults, setEmployeeImportResults] = useState<ImportRowResult[] | null>(null);
   const [kpiImportResults, setKpiImportResults] = useState<ImportRowResult[] | null>(null);
+  const [allowUpdateExisting, setAllowUpdateExisting] = useState(false);
 
   // Normalize KPI row to handle different column name variations
   const normalizeKpiRow = (rawRow: Record<string, any>): KpiImportRow => {
