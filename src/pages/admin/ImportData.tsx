@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useProfiles, useKraCategories, useDepartments, useDivisions, useBusinessUnits } from '@/hooks/useOrganization';
+import { useProfiles, useKraCategories, useDepartments, useDivisions, useBusinessUnits, useDesignations } from '@/hooks/useOrganization';
 import { useCreateKpi } from '@/hooks/useKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -139,6 +139,7 @@ export default function ImportData() {
   const { data: divisions } = useDivisions();
   const { data: businessUnits } = useBusinessUnits();
   const { data: departments } = useDepartments();
+  const { data: designations } = useDesignations();
   const createKpi = useCreateKpi();
   const { toast } = useToast();
 
@@ -344,6 +345,7 @@ export default function ImportData() {
   const [employeeImportProgress, setEmployeeImportProgress] = useState({ current: 0, total: 0 });
   const [employeeImportResults, setEmployeeImportResults] = useState<ImportRowResult[] | null>(null);
   const [kpiImportResults, setKpiImportResults] = useState<ImportRowResult[] | null>(null);
+  const [allowUpdateExisting, setAllowUpdateExisting] = useState(false);
 
   // Normalize KPI row to handle different column name variations
   const normalizeKpiRow = (rawRow: Record<string, any>): KpiImportRow => {
@@ -692,9 +694,21 @@ export default function ImportData() {
 
         // Validate data - email is only required for new users, not updates
         const validationErrors: string[] = [];
+
+        // Build lookup sets for entity validation (case-insensitive)
+        const deptNames = new Set((departments || []).map(d => d.name.toLowerCase()));
+        const divNames = new Set((divisions || []).map(d => d.name.toLowerCase()));
+        const buNames = new Set((businessUnits || []).map(d => d.name.toLowerCase()));
+        const desigNames = new Set((designations || []).map(d => d.name.toLowerCase()));
+        const existingCodes = new Set((profiles || []).map(p => p.employee_code?.toLowerCase()).filter(Boolean));
+
         jsonData.forEach((row, index) => {
           if (!row.employeeCode && !row.fullName) {
             validationErrors.push(`Row ${index + 2}: Missing employee code and full name`);
+          }
+          // Duplicate employee code check
+          if (row.employeeCode && !allowUpdateExisting && existingCodes.has(row.employeeCode.toLowerCase())) {
+            validationErrors.push(`Row ${index + 2}: Employee code '${row.employeeCode}' already exists in the system`);
           }
           // Email validation only if provided (it's optional for updates)
           if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
@@ -706,6 +720,19 @@ export default function ImportData() {
           }
           if (row.designation && row.designation.length > 100) {
             validationErrors.push(`Row ${index + 2}: Designation exceeds 100 characters`);
+          }
+          // Entity existence checks
+          if (row.department && !deptNames.has(row.department.toLowerCase())) {
+            validationErrors.push(`Row ${index + 2}: Department '${row.department}' does not exist in the system`);
+          }
+          if (row.division && !divNames.has(row.division.toLowerCase())) {
+            validationErrors.push(`Row ${index + 2}: Division '${row.division}' does not exist in the system`);
+          }
+          if (row.businessUnit && !buNames.has(row.businessUnit.toLowerCase())) {
+            validationErrors.push(`Row ${index + 2}: Business Unit '${row.businessUnit}' does not exist in the system`);
+          }
+          if (row.designation && !desigNames.has(row.designation.toLowerCase())) {
+            validationErrors.push(`Row ${index + 2}: Designation '${row.designation}' does not exist in the system`);
           }
         });
 
@@ -1168,6 +1195,9 @@ export default function ImportData() {
       );
 
       if (existingEmployee) {
+        if (!allowUpdateExisting) {
+          throw new Error(`Employee code '${row.employeeCode}' already exists. Enable 'Allow updating existing employees' to update.`);
+        }
         // Update existing profile
         const departmentId = departments?.find(d => 
           d.name.toLowerCase() === row.department?.toLowerCase()
@@ -1828,6 +1858,57 @@ export default function ImportData() {
                     onChange={handleEmployeeFileUpload}
                     className="cursor-pointer"
                   />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="allow-update-existing"
+                    checked={allowUpdateExisting}
+                    onCheckedChange={(checked) => {
+                      setAllowUpdateExisting(checked === true);
+                      // Re-trigger validation if data is already loaded
+                      if (employeeData.length > 0) {
+                        const deptNames = new Set((departments || []).map(d => d.name.toLowerCase()));
+                        const divNames = new Set((divisions || []).map(d => d.name.toLowerCase()));
+                        const buNames = new Set((businessUnits || []).map(d => d.name.toLowerCase()));
+                        const desigNames = new Set((designations || []).map(d => d.name.toLowerCase()));
+                        const existingCodes = new Set((profiles || []).map(p => p.employee_code?.toLowerCase()).filter(Boolean));
+                        const validationErrors: string[] = [];
+                        employeeData.forEach((row, index) => {
+                          if (!row.employeeCode && !row.fullName) {
+                            validationErrors.push(`Row ${index + 2}: Missing employee code and full name`);
+                          }
+                          if (row.employeeCode && !(checked === true) && existingCodes.has(row.employeeCode.toLowerCase())) {
+                            validationErrors.push(`Row ${index + 2}: Employee code '${row.employeeCode}' already exists in the system`);
+                          }
+                          if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
+                            validationErrors.push(`Row ${index + 2}: Invalid email format`);
+                          }
+                          if (row.fullName && row.fullName.length > 200) {
+                            validationErrors.push(`Row ${index + 2}: Full name exceeds 200 characters`);
+                          }
+                          if (row.designation && row.designation.length > 100) {
+                            validationErrors.push(`Row ${index + 2}: Designation exceeds 100 characters`);
+                          }
+                          if (row.department && !deptNames.has(row.department.toLowerCase())) {
+                            validationErrors.push(`Row ${index + 2}: Department '${row.department}' does not exist in the system`);
+                          }
+                          if (row.division && !divNames.has(row.division.toLowerCase())) {
+                            validationErrors.push(`Row ${index + 2}: Division '${row.division}' does not exist in the system`);
+                          }
+                          if (row.businessUnit && !buNames.has(row.businessUnit.toLowerCase())) {
+                            validationErrors.push(`Row ${index + 2}: Business Unit '${row.businessUnit}' does not exist in the system`);
+                          }
+                          if (row.designation && !desigNames.has(row.designation.toLowerCase())) {
+                            validationErrors.push(`Row ${index + 2}: Designation '${row.designation}' does not exist in the system`);
+                          }
+                        });
+                        setEmployeeErrors(validationErrors);
+                      }
+                    }}
+                  />
+                  <Label htmlFor="allow-update-existing" className="text-sm cursor-pointer">
+                    Allow updating existing employees
+                  </Label>
                 </div>
               </div>
 
