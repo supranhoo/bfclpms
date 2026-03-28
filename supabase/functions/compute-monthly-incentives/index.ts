@@ -372,10 +372,31 @@ serve(async (req) => {
 
       const finalPercent = isDQ ? 0 : basePercent * (1 - ltiPenalty / 100) * proRata;
 
+      // Vessel-based incentive calculation
+      let vesselAmount: number | null = null;
+      const vesselRate = vesselRateMap.get(emp.id);
+      const vesselsHandled = vesselEntryMap.get(emp.id);
+      if (program.incentive_base === 'fixed' && vesselRate !== undefined) {
+        // Check KRA score gate
+        if (pmsScore !== null && pmsScore < (program.min_kra_score || 3)) {
+          isDQ = true;
+          dqReasons.push(`KRA score ${pmsScore.toFixed(2)} below minimum ${program.min_kra_score}`);
+          vesselAmount = 0;
+        } else if (pmsScore === null && !program.no_kra_eligible) {
+          // No KRA and not eligible without KRA
+          vesselAmount = 0;
+        } else {
+          vesselAmount = (vesselsHandled || 0) * vesselRate;
+        }
+      }
+
       // Determine incentive_status
       let incentiveStatus = 'hold';
       if (isDQ) {
         incentiveStatus = 'forfeited';
+      } else if (program.incentive_base === 'fixed' && vesselRate !== undefined) {
+        // Vessel-based: finalised if vessel entry exists
+        incentiveStatus = vesselsHandled !== undefined && vesselsHandled > 0 ? 'finalised' : 'hold';
       } else {
         // Check KRA approval for support programs
         if (program.program_type === 'support') {
@@ -404,14 +425,14 @@ serve(async (req) => {
         review_period,
         review_year,
         pms_score: pmsScore,
-        production_value: elig?.production_value || null,
+        production_value: vesselAmount !== null ? vesselAmount : (elig?.production_value || null),
         matched_slab_id: matchedSlab?.id || null,
-        base_incentive_percent: basePercent,
+        base_incentive_percent: vesselAmount !== null ? 0 : basePercent,
         is_disqualified: isDQ,
         disqualification_reasons: dqReasons.length > 0 ? dqReasons : null,
         lti_penalty_percent: ltiPenalty,
         pro_rata_factor: proRata,
-        final_incentive_percent: Math.round(finalPercent * 100) / 100,
+        final_incentive_percent: vesselAmount !== null ? 0 : Math.round(finalPercent * 100) / 100,
         status: 'draft',
         incentive_status: existingOverride ? existingOverride.incentive_status : incentiveStatus,
         computed_at: new Date().toISOString(),
