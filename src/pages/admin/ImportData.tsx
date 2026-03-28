@@ -1913,7 +1913,6 @@ export default function ImportData() {
                         });
                         setEmployeeRowErrors(newRowErrors);
                       }
-                      }
                     }}
                   />
                   <Label htmlFor="allow-update-existing" className="text-sm cursor-pointer">
