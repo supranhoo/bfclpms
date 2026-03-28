@@ -245,24 +245,32 @@ export function useAdminSubmitReviewData() {
           }
           // If already at self_review or beyond, leave newStatus = null → no status update
         } else {
-          // Fetch KPI's review period context for accurate workflow resolution
+          // Fetch KPI's current status and review period context
           const { data: kpiPeriod } = await supabase
             .from('kpis')
-            .select('review_period, review_year')
+            .select('status, review_period, review_year')
             .eq('id', kpi_id)
             .single();
 
-          const rpcParams: Record<string, unknown> = { employee_uuid: employee_id };
-          if (kpiPeriod?.review_period && kpiPeriod?.review_year) {
-            rpcParams.p_review_period = kpiPeriod.review_period;
-            rpcParams.p_review_year = kpiPeriod.review_year;
-          }
+          // GUARD: If KPI is already approved, do NOT re-advance or re-sync final_score.
+          // Admin data entry on approved KPIs should only update role-specific fields.
+          const currentKpiStatus = kpiPeriod?.status || 'kra_set';
+          if (currentKpiStatus === 'approved') {
+            console.info('[AdminDataEntry] KPI already approved — skipping status advancement and final_score sync');
+            newStatus = null; // prevent any status/final_score changes
+          } else {
+            const rpcParams: Record<string, unknown> = { employee_uuid: employee_id };
+            if (kpiPeriod?.review_period && kpiPeriod?.review_year) {
+              rpcParams.p_review_period = kpiPeriod.review_period;
+              rpcParams.p_review_year = kpiPeriod.review_year;
+            }
 
-          // Fetch employee's workflow stages to determine correct forward status
-          const { data: stagesData } = await supabase
-            .rpc('get_employee_workflow', rpcParams as any);
-          const stages = (stagesData as string[]) || undefined;
-          newStatus = resolveForwardStatus(role_level, stages);
+            // Fetch employee's workflow stages to determine correct forward status
+            const { data: stagesData } = await supabase
+              .rpc('get_employee_workflow', rpcParams as any);
+            const stages = (stagesData as string[]) || undefined;
+            newStatus = resolveForwardStatus(role_level, stages);
+          }
         }
 
         if (newStatus) {
