@@ -1316,16 +1316,18 @@ export default function ImportData() {
       }
     };
 
-    // Process in batches of BATCH_SIZE concurrently
-    for (let i = 0; i < employeeData.length; i += BATCH_SIZE) {
-      const batch = employeeData.slice(i, i + BATCH_SIZE);
+    // Process only valid rows in batches of BATCH_SIZE concurrently
+    const validRows = validIndices.map(i => ({ row: employeeData[i], globalIdx: i }));
+    for (let i = 0; i < validRows.length; i += BATCH_SIZE) {
+      const batch = validRows.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
-        batch.map(row => processEmployee(row))
+        batch.map(item => processEmployee(item.row))
       );
 
       results.forEach((result, idx) => {
-        const row = batch[idx];
-        const globalIdx = i + idx;
+        const item = batch[idx];
+        const row = item.row;
+        const globalIdx = item.globalIdx;
         if (result.status === 'fulfilled') {
           successCount++;
           rowResults.push({ row: globalIdx + 2, employeeCode: row.employeeCode || '', employeeName: row.fullName || '', status: 'success', message: 'Imported successfully' });
@@ -1335,7 +1337,7 @@ export default function ImportData() {
         }
       });
 
-      setEmployeeImportProgress({ current: Math.min(i + BATCH_SIZE, employeeData.length), total: employeeData.length });
+      setEmployeeImportProgress({ current: Math.min(i + BATCH_SIZE, validRows.length), total: employeeData.length });
     }
 
     // Track users with explicit roles from import (non-employee roles)
