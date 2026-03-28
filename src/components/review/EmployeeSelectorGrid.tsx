@@ -1364,6 +1364,35 @@ export function EmployeeSelectorGrid({
                   </div>
                 </button>
               ))}
+              {unassignedStats && (
+                <button
+                  onClick={() => setAuditorFilter(prev => prev === '__unassigned__' ? null : '__unassigned__')}
+                  className={`shrink-0 rounded-lg border px-3 py-2 text-left transition-all min-w-[140px] ${
+                    auditorFilter === '__unassigned__'
+                      ? 'border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/30'
+                      : 'border-amber-300 bg-amber-50 hover:border-amber-400 dark:border-amber-700 dark:bg-amber-900/20'
+                  }`}
+                >
+                  <div className="font-medium text-xs text-amber-700 dark:text-amber-400 truncate flex items-center gap-1">
+                    ⚠ Unassigned
+                  </div>
+                  <div className="text-[10px] text-amber-600 dark:text-amber-500 mt-0.5">
+                    {unassignedStats.employeeCount} emp
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    {unassignedStats.pending > 0 && (
+                      <span className="inline-flex items-center rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 text-[10px] font-medium">
+                        {unassignedStats.pending} pending
+                      </span>
+                    )}
+                    {unassignedStats.inAudit > 0 && (
+                      <span className="inline-flex items-center rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 text-[10px] font-medium">
+                        {unassignedStats.inAudit} audit
+                      </span>
+                    )}
+                  </div>
+                </button>
+              )}
             </div>
           )}
         </div>
