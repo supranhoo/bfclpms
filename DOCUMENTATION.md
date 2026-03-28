@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-28  
-> **Version:** 2.6.1 — Feature: Employee-level Menu Access Overrides
+> **Version:** 2.6.2 — Feature: Per-Vessel Incentive Rate Configuration
 > **Maintainer:** Lovable AI
 
 ---
