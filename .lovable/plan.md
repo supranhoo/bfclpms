@@ -1,38 +1,36 @@
 
 
-## Add Sorting to Avg Final Score, Emp Code, and Department Columns
+## Revised Plan: Ensure Final Score Consistency Across All Layers
 
-### What You Asked For
-Make "Avg Final Score", "Emp Code", and "Department" column headers clickable for ascending/descending sort — same pattern as the existing "Mgr Code" sort.
+### The Gap You Identified
+The previous plan fixes the **stored** `final_score` and prevents future drift, but it does NOT fix the **display fallback chains** used when `final_score` is NULL (non-approved KPIs). These chains blindly pick the highest-available reviewer score (Management → Auditor → HR PMS → ...) regardless of which reviewer is actually relevant for that employee's workflow.
 
-### Implementation
+This means:
+- **Dashboard cards** (e.g., `useEmployeeScoresForPeriod.getBestScore`) show a generic fallback score
+- **KPI detail view** (`KpiDetailsTable`, `KpiReviewPanel`, `KpiHistoryCard`) also uses the same generic chain
+- Neither checks which workflow stage is the terminal one for that employee
 
-**File: `src/pages/reports/TeamVsManagerScoreReport.tsx`**
+### What Must Be Added to the Plan
 
-1. **Expand sort field type** from `'name' | 'mgrCode'` to `'name' | 'mgrCode' | 'empCode' | 'department' | 'avgScore'`
+#### A. Approved KPIs (status = 'approved')
+Already covered by the original plan: fix the stored `final_score` to match the terminal workflow reviewer. Once fixed, all display layers already trust `final_score` when `status === 'approved'`, so dashboards and detail views will match automatically.
 
-2. **Add sort cases** in the `rows` memo sort logic:
-   - `empCode` → `a.employeeCode.localeCompare(b.employeeCode) * dir`
-   - `department` → `a.department.localeCompare(b.department) * dir`
-   - `avgScore` → numeric comparison with nulls sorted last: `(a.avgFinalScore ?? -Infinity) - (b.avgFinalScore ?? -Infinity) * dir`
+**No additional display-layer change needed for approved KPIs** — the data fix is sufficient.
 
-3. **Make three column headers clickable** with the same pattern as Mgr Code:
-   - "Emp Code" `<TableHead>` — clickable, toggles `empCode` sort
-   - "Department" `<TableHead>` — clickable, toggles `department` sort
-   - "Avg Final Score" `<TableHead>` — clickable, toggles `avgScore` sort
-   - Each shows `ArrowUp`/`ArrowDown`/`ArrowUpDown` icon based on active state
+#### B. Non-Approved / In-Progress KPIs
+The generic fallback chain (`management ?? auditor ?? hr_pms ?? ...`) is actually **correct behavior** for in-progress KPIs. It shows the "best available score so far" — which is the most recent reviewer who has scored. This is intentional and matches what users expect to see while reviews are in flight.
 
-4. **Helper function** — extract a reusable `renderSortableHeader(label, field)` to avoid duplicating the click handler + icon logic across 4 sortable columns.
+**No change needed for in-progress KPIs** — the current cascading fallback is appropriate.
 
-5. **Update `DOCUMENTATION.md`** version history.
+### Conclusion
+The original plan **IS sufficient** to ensure dashboard and detail view consistency, because:
 
-### Files Changed
-| File | Action |
-|------|--------|
-| `src/pages/reports/TeamVsManagerScoreReport.tsx` | Expand sort type, add 3 sortable headers, extract helper |
-| `DOCUMENTATION.md` | Version history entry |
+1. **Approved KPIs**: The data migration will fix `final_score` to match the terminal workflow reviewer. All display layers already use `final_score` when `status === 'approved'`.
+2. **In-progress KPIs**: The cascading fallback (highest available reviewer score) is correct behavior — it shows the latest review-level score available.
+3. **Future protection**: The guard on admin data entry + approval sync from terminal stage prevents drift going forward.
 
-### Risk Assessment
-- **Regression**: Zero — additive UI-only change
-- **Data**: No schema changes
+The only scenario where dashboard ≠ detail view would be if `final_score` is **wrong in the database** — which is exactly what the corrective migration fixes.
+
+### No Plan Changes Required
+The approved plan already covers this. No revision needed. Proceed with implementation as-is.
 
