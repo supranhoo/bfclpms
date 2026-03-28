@@ -708,12 +708,17 @@ export function EmployeeSelectorGrid({
     }
   }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipLevelMembers]);
 
-  // Auditor workload stats: compute pending/in-audit/forwarded per auditor
-  const auditorWorkloadStats = useMemo(() => {
-    if (viewLevel !== 'audit' || !auditorWorkloadMap || !periodKpis) return [];
+  // Auditor workload stats: compute pending/in-audit/forwarded per auditor + unassigned
+  const { auditorWorkloadStats, unassignedStats } = useMemo(() => {
+    if (viewLevel !== 'audit' || !auditorWorkloadMap || !periodKpis) return { auditorWorkloadStats: [], unassignedStats: null };
 
-    return [...auditorWorkloadMap.entries()].map(([auditorId, entry]) => {
-      // Collect all KPI IDs for this auditor (employee-level + KPI-level)
+    // Collect all employee IDs assigned to ANY auditor
+    const allAssignedEmployeeIds = new Set<string>();
+    auditorWorkloadMap.forEach(entry => {
+      entry.employeeIds.forEach(id => allAssignedEmployeeIds.add(id));
+    });
+
+    const stats = [...auditorWorkloadMap.entries()].map(([auditorId, entry]) => {
       const relevantKpis = periodKpis.filter(k => 
         entry.employeeIds.has(k.employee_id) || entry.kpiIds.has(k.id)
       );
@@ -742,6 +747,33 @@ export function EmployeeSelectorGrid({
         total: pending + inAudit + forwarded,
       };
     }).sort((a, b) => b.pending - a.pending || a.name.localeCompare(b.name));
+
+    // Compute unassigned stats
+    const unassignedKpis = periodKpis.filter(k => !allAssignedEmployeeIds.has(k.employee_id));
+    const unassignedEmployeeIds = new Set(unassignedKpis.map(k => k.employee_id));
+    let uPending = 0, uInAudit = 0, uForwarded = 0;
+    unassignedKpis.forEach(k => {
+      const stages = getStages(k.employee_id);
+      const auditIdx = stages.indexOf('audit');
+      if (auditIdx === -1) return;
+      if (k.status === 'audit') uInAudit++;
+      else if (['management_review', 'approved'].includes(k.status || '')) uForwarded++;
+      else {
+        const auditReviewable = resolveReviewableStatuses('auditor', stages);
+        if (auditReviewable.includes(k.status || '') && k.status !== 'audit') uPending++;
+      }
+    });
+    const uTotal = uPending + uInAudit + uForwarded;
+    const unassigned = uTotal > 0 ? {
+      employeeCount: unassignedEmployeeIds.size,
+      pending: uPending,
+      inAudit: uInAudit,
+      forwarded: uForwarded,
+      total: uTotal,
+      employeeIds: unassignedEmployeeIds,
+    } : null;
+
+    return { auditorWorkloadStats: stats, unassignedStats: unassigned };
   }, [viewLevel, auditorWorkloadMap, periodKpis, workflowMap]);
 
 
