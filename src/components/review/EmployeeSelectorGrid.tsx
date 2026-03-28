@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMyAuditAssignments } from '@/hooks/useAuditAssignments';
 import { useMyKpiLevelAssignments } from '@/hooks/useMyKpiLevelAssignments';
+import { useAuditorWorkloadSummary } from '@/hooks/useAuditorWorkloadSummary';
 import { AuditAssignmentDialog } from '@/components/admin/AuditAssignmentDialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTeamMembers, useProfiles, useSkipLevelTeamMembers, useProfilesByWorkflowStage } from '@/hooks/useOrganization';
@@ -18,7 +19,7 @@ import { EmployeeFilters } from '@/components/review/EmployeeFilters';
 import { EmployeeContactCard } from '@/components/review/EmployeeContactCard';
 import { supabase } from '@/integrations/supabase/client';
 import { formatEmployeeName } from '@/lib/utils';
-import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2, Download } from 'lucide-react';
+import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2, Download, ChevronDown, ChevronUp } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { ViewMode } from './ViewModeToggle';
 
@@ -187,10 +188,15 @@ export function EmployeeSelectorGrid({
   const [selectedGrade, setSelectedGrade] = useState<string | null>(null);
   const [selectedManager, setSelectedManager] = useState<string | null>(null);
   const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
+  const [auditorFilter, setAuditorFilter] = useState<string | null>(null);
+  const [auditorWorkloadExpanded, setAuditorWorkloadExpanded] = useState(true);
 
   // Audit assignments: fetch current user's assigned employees
   const { data: myAssignedEmployeeIds } = useMyAuditAssignments();
   const { data: myKpiLevelData } = useMyKpiLevelAssignments();
+
+  // Auditor workload summary (only for audit view)
+  const { data: auditorWorkloadMap } = useAuditorWorkloadSummary(viewLevel === 'audit');
 
   // Fix 1 & 3: Use multi-period hook so YTD/QTD/custom modes fetch ALL relevant months
   const { data: periodKpis } = useKpisByPeriodRanges(periodSelection.periodRanges);
@@ -458,6 +464,14 @@ export function EmployeeSelectorGrid({
   const displayMembers = useMemo(() => {
     let filtered = demographicFilteredMembers ? [...demographicFilteredMembers] : undefined;
 
+    // Auditor filter: restrict to employees assigned to a specific auditor
+    if (viewLevel === 'audit' && auditorFilter && auditorWorkloadMap) {
+      const entry = auditorWorkloadMap.get(auditorFilter);
+      if (entry) {
+        filtered = filtered?.filter(m => entry.employeeIds.has(m.id));
+      }
+    }
+
     // Status-based filtering using per-employee workflow resolution
     if (statusFilter === 'my_assigned' && viewLevel === 'audit') {
       filtered = filtered?.filter(m => 
@@ -564,7 +578,7 @@ export function EmployeeSelectorGrid({
     });
 
     return filtered;
-  }, [demographicFilteredMembers, statusFilter, periodKpis, viewLevel, workflowMap, skipLevelMembers, myAssignedEmployeeIds, myKpiLevelData]);
+  }, [demographicFilteredMembers, statusFilter, periodKpis, viewLevel, workflowMap, skipLevelMembers, myAssignedEmployeeIds, myKpiLevelData, auditorFilter, auditorWorkloadMap]);
 
   // Split display members into assigned/others for audit view
   const { assignedMembers, otherMembers } = useMemo(() => {
@@ -694,7 +708,43 @@ export function EmployeeSelectorGrid({
     }
   }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipLevelMembers]);
 
-  // Smart period detection: auto-switch to a period with KPIs if current period has none
+  // Auditor workload stats: compute pending/in-audit/forwarded per auditor
+  const auditorWorkloadStats = useMemo(() => {
+    if (viewLevel !== 'audit' || !auditorWorkloadMap || !periodKpis) return [];
+
+    return [...auditorWorkloadMap.entries()].map(([auditorId, entry]) => {
+      // Collect all KPI IDs for this auditor (employee-level + KPI-level)
+      const relevantKpis = periodKpis.filter(k => 
+        entry.employeeIds.has(k.employee_id) || entry.kpiIds.has(k.id)
+      );
+
+      let pending = 0, inAudit = 0, forwarded = 0;
+      relevantKpis.forEach(k => {
+        const stages = getStages(k.employee_id);
+        const auditIdx = stages.indexOf('audit');
+        if (auditIdx === -1) return;
+        if (k.status === 'audit') inAudit++;
+        else if (['management_review', 'approved'].includes(k.status || '')) forwarded++;
+        else {
+          const auditReviewable = resolveReviewableStatuses('auditor', stages);
+          if (auditReviewable.includes(k.status || '') && k.status !== 'audit') pending++;
+        }
+      });
+
+      return {
+        auditorId,
+        name: entry.auditorName,
+        employeeCode: entry.employeeCode,
+        employeeCount: entry.employeeIds.size,
+        pending,
+        inAudit,
+        forwarded,
+        total: pending + inAudit + forwarded,
+      };
+    }).sort((a, b) => b.pending - a.pending || a.name.localeCompare(b.name));
+  }, [viewLevel, auditorWorkloadMap, periodKpis, workflowMap]);
+
+
   const handleEmployeeClick = async (member: EmployeeProfile) => {
     const empKpis = periodKpis?.filter(k => k.employee_id === member.id) || [];
     
@@ -1229,7 +1279,73 @@ export function EmployeeSelectorGrid({
       {/* Stats Cards */}
       {renderStatsCards()}
 
-      {/* Filters */}
+      {/* Auditor Workload Summary (audit view only) */}
+      {viewLevel === 'audit' && auditorWorkloadStats.length > 0 && (
+        <div className="space-y-2">
+          <button
+            onClick={() => setAuditorWorkloadExpanded(prev => !prev)}
+            className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Users className="h-4 w-4" />
+            Auditor Workload ({auditorWorkloadStats.length})
+            {auditorWorkloadExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          </button>
+          {auditorWorkloadExpanded && (
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              <button
+                onClick={() => setAuditorFilter(null)}
+                className={`shrink-0 rounded-lg border px-3 py-2 text-xs transition-all ${
+                  !auditorFilter
+                    ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary/30'
+                    : 'border-border bg-card text-foreground hover:border-primary/50'
+                }`}
+              >
+                <div className="font-medium">All Auditors</div>
+              </button>
+              {auditorWorkloadStats.map(a => (
+                <button
+                  key={a.auditorId}
+                  onClick={() => setAuditorFilter(prev => prev === a.auditorId ? null : a.auditorId)}
+                  className={`shrink-0 rounded-lg border px-3 py-2 text-left transition-all min-w-[140px] ${
+                    auditorFilter === a.auditorId
+                      ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
+                      : 'border-border bg-card hover:border-primary/50'
+                  }`}
+                >
+                  <div className="font-medium text-xs text-foreground truncate">
+                    {a.employeeCode ? `${a.employeeCode} - ` : ''}{a.name}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">
+                    {a.employeeCount} emp
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    {a.pending > 0 && (
+                      <span className="inline-flex items-center rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 text-[10px] font-medium">
+                        {a.pending} pending
+                      </span>
+                    )}
+                    {a.inAudit > 0 && (
+                      <span className="inline-flex items-center rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 text-[10px] font-medium">
+                        {a.inAudit} audit
+                      </span>
+                    )}
+                    {a.forwarded > 0 && (
+                      <span className="inline-flex items-center rounded-full bg-green-500/10 text-green-600 dark:text-green-400 px-1.5 py-0.5 text-[10px] font-medium">
+                        {a.forwarded} done
+                      </span>
+                    )}
+                    {a.total === 0 && (
+                      <span className="text-[10px] text-muted-foreground">No KPIs</span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+
       <EmployeeFilters
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
