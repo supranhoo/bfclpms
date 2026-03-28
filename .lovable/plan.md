@@ -1,59 +1,40 @@
 
 
-## Fix: Admin Data Entry Allows Out-of-Workflow Role Advancement + Data Repair (Jan 2026+)
+## Corrected Fix: Final Score Mismatch — Month-Wise Workflow Resolution
+
+### What Was Wrong With the Previous Plan
+The previous plan incorrectly listed 100801's 5S and other KPIs as needing correction. In reality, **all 100801 January KPIs are correct** — `final_score` already matches the terminal `hr_pms_score`. The 5S KPI has `hr_pms_score = 1`, `final_score = 1` — perfectly aligned.
+
+### Actual Issue (Confirmed via Data Query)
+Only **1 KPI** has a genuine mismatch in January 2026:
+
+| Employee | Code | KPI | Workflow | Terminal Score (hr_pms) | Current final_score | Correct final_score |
+|----------|------|-----|----------|------------------------|--------------------|--------------------|
+| Gaurav Tiwari | 100750 | Adherence to Critical Mechanical Spares Inventory Levels | self_l1_l2_hr_pms | 0 | 5 | 0 |
+
+The `final_score = 5` came from `skip_level_score = 5` being used instead of `hr_pms_score = 0` (the actual terminal reviewer).
 
 ### Root Cause
-When an admin enters data for a role (e.g., auditor) that does NOT exist in the employee's workflow, `resolveForwardStatus` falls back to `'approved'`, incorrectly finalizing the KPI with the wrong score.
-
-### Scope Constraint
-Data repair applies to **January 2026 onwards only**. December 2025 and earlier months are untouched.
+When the KPI was approved, the approval logic used the generic COALESCE fallback chain rather than resolving the employee's month-specific workflow to identify the correct terminal reviewer.
 
 ### Implementation
 
-#### 1. Add workflow membership guard in `useAdminDataEntry.ts`
-Before calling `resolveForwardStatus`, validate that the admin-entered role's stage exists in the employee's workflow. If not, set `newStatus = null` (save role-specific fields but do NOT advance status or sync final_score).
+#### 1. Data repair — single targeted UPDATE
+Fix the 1 affected KPI for 100750, January 2026 only. Set `final_score = hr_pms_score = 0`, `final_rating = 'red'`.
 
-```text
-Role → Stage mapping:
-  manager    → manager_check
-  skip_level → skip_level_check
-  hr_pms     → hr_pms_review
-  auditor    → audit
-  management → management_review
-```
+No changes to 100801, 100316, 100860, or any December 2025 or earlier data.
 
-If the mapped stage is not in the workflow stages array, skip advancement entirely.
-
-#### 2. Harden `resolveForwardStatus` in `workflowEngine.ts`
-For each role case, check if the role's own stage exists in `workflowStages` first. If not, return `'approved'` only if no stage exists — change to return `null` instead, so callers must handle the missing-stage case explicitly.
-
-#### 3. Corrective data migration (Jan 2026+ only)
-Run an UPDATE (via insert tool) to fix approved KPIs where:
-- `review_year = 2026 AND review_period IN ('January', 'February', 'March')`
-- The employee's workflow does NOT include the `audit` stage
-- But `final_score` was set from `auditor_score`
-
-Reset these KPIs:
-- `status` back to the last legitimate workflow stage (the stage before the terminal one)
-- Clear `final_score` and `final_rating` so they re-enter the proper workflow
-
-Affected employees (confirmed from earlier RCA): 100801, 100316, 100860 — January 2026 only.
-
-#### 4. Update documentation
-- `DOCUMENTATION.md` version bump
-- `POLICY.md` — add invariant: admin data entry must not advance status for out-of-workflow roles
+#### 2. Update documentation
+- `DOCUMENTATION.md` version history noting the narrowed scope of the data repair
 
 ### Files Changed
 | File | Action |
 |------|--------|
-| `src/hooks/useAdminDataEntry.ts` | Add workflow membership check before status advancement |
-| `src/lib/workflowEngine.ts` | `resolveForwardStatus` returns `null` when role stage not in workflow |
-| Data update (insert tool) | Fix 3 affected KPIs, Jan 2026+ only |
-| `DOCUMENTATION.md` | Version history |
-| `POLICY.md` | New invariant |
+| Data update (insert tool) | Fix 1 KPI for 100750, Jan 2026 |
+| `DOCUMENTATION.md` | Version history entry |
 
 ### Risk Assessment
-- **Data**: Only Jan 2026+ affected rows; Dec and earlier untouched
-- **Regression**: Low — restricts an invalid path; legitimate in-workflow admin entries unaffected
-- **Workflow**: Fixed KPIs re-enter proper review pipeline
+- **Data**: 1 row only; all other employees unaffected
+- **Regression**: Zero — no code logic changes
+- **Scope**: January 2026 only; December 2025 and earlier untouched
 
