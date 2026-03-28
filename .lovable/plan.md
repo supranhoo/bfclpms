@@ -1,57 +1,66 @@
 
 
-## RCA: Employee 100386 Not Shown + Missing Employees
+## Add Overall Score to Employee Cards Across All Dashboards
 
-### Finding 1: Employee 100386 Does Not Exist in the System
-Employee code **100386** has **no auth user** and **no profile record** anywhere in the database. The import either:
-- Was never attempted (row was skipped due to validation error)
-- Failed and the error was dismissed/not noticed in the import results
+### What You Asked For
+Display each employee's overall weighted performance score (e.g., 4.2, 5, 3.5) directly on their card tile across all reviewer dashboards — Team Reviews, Self Review, Manager Review, Skip Mgr Review, Audit, HR PMS, and Management.
 
-**Action needed from you**: Re-import this employee. If a validation error appears, that will reveal why it was skipped originally.
+### Current State
+Employee cards in `EmployeeSelectorGrid` show name, designation, manager, progress bar, and status badges. No score is displayed. The `periodKpis` fetched via `SLIM_KPI_SELECT` do **not** include `review_submissions`, so score data is unavailable in the current dataset.
 
-### Finding 2: 6 Employees Have Auth Users But No Profiles (Orphaned)
-These employees were created in the authentication system but their profile records were never written. This is the "auth created, profile upsert failed" bug in the `create-employee` edge function — the upsert error is logged but the function still returns HTTP 200, so the import reports "success" even though the profile is missing.
+### Proposed UI
 
-| Employee Code | Name | Email |
-|---|---|---|
-| 100003 | Bishnu Prasad Upadhaya | bishnu@bfclalloys.com |
-| 100275 | Shambhu Kumar | rockingraja7870@gmail.com |
-| 101126 | Sunehri Yadav | sunehribhanker@gmail.com |
-| 101655 | Pratik Raj Srivastava | srivastavapratik592@gmail.com |
-| 200209 | Akshata Anant Shet | shetanant@yahoo.com |
-| 200302 | Poonam Anil Kumar | poonam.pathak204@gmail.com |
-
-Plus 4 test accounts (admin@test.com, vivek@test.com, admin@test.in, ankit.choudhary@bfclalloys.com) — these can be ignored.
-
-### Root Cause: Silent Profile Upsert Failure
-In `supabase/functions/create-employee/index.ts` line 172-174:
-```typescript
-if (upsertError) {
-  console.error('Failed to upsert profile:', upsertError)
-  // ← BUG: does NOT return an error response, falls through to fetch
-}
+```text
+┌──────────────────────────────────────────────┐
+│  [Avatar]  Ankit Choudhary (101785)    →     │
+│            Senior Manager              ┌───┐ │
+│            Manager: Jaspal (101125)    │4.2│ │
+│  ██████████████████████░░░  6/10       └───┘ │
+│  [Direct] [6 pending]                        │
+└──────────────────────────────────────────────┘
 ```
-The function logs the error but continues. The subsequent `select` on line 177 then fails too (no profile exists), but this may also be swallowed depending on timing.
 
-### Fix Plan
+The score badge sits in the top-right area of the card, next to the arrow icon. It uses the canonical color coding from `getScoreBadgeClass`:
+- **5** = Blue
+- **4** = Green  
+- **3** = Yellow
+- **2** = Light pink
+- **1** = Red
+- **0** = Deep maroon
+- **No score** = Gray "—"
 
-#### 1. Fix `create-employee` to fail on profile upsert error
-Return HTTP 500 instead of continuing when the profile upsert fails. This ensures the import correctly reports the row as failed.
+The score shown is the **weighted average** of all non-N/A KPIs for that employee in the selected period, using the 8-stage fallback chain (final → management → auditor → hr_pms → skip_level → manager → self).
 
-#### 2. Repair the 6 orphaned employees
-Create a migration that inserts profile records for the 6 orphaned auth users using data from their `raw_user_meta_data`.
+### Technical Approach
 
-#### 3. Add orphan detection to import results
-After the import batch completes, do a quick check to verify all "successful" rows actually have profiles, and flag any that don't.
+#### 1. New Hook: `useEmployeeScoresForPeriod`
+A lightweight hook that fetches scores for all visible employees in a single batch query.
+
+**Query**: For all KPI IDs in `periodKpis`, fetch `review_submissions` (kpi_id, final_score, management_score, auditor_score, hr_pms_score, skip_level_score, manager_score, self_score, is_na). This is a single query batched in chunks of 500 IDs.
+
+**Computation**: For each employee, calculate weighted average score:
+- Filter out KPIs where `is_na = true` or no submission exists
+- Apply 8-stage fallback chain to get the best available score per KPI
+- Compute: `sum(score × weightage) / sum(weightage)`
+- Return `Map<employeeId, number | null>`
+
+#### 2. Modify `EmployeeSelectorGrid`
+- Call the new hook with `periodKpis` KPI IDs
+- Pass the score map into `renderEmployeeCard`
+- Add a compact score badge (circular, color-coded) in the card's top-right corner, between the employee name row and the arrow icon
+
+#### 3. Score Badge Component
+Reuse the existing color utilities from `reviewConstants.ts` (`getScoreBadgeClass`). Display as a small rounded pill showing the numeric score to 1 decimal place (e.g., "4.2"). If no score data exists, show a muted "—".
 
 ### Files Changed
 | File | Action |
-|---|---|
-| `supabase/functions/create-employee/index.ts` | Return error response on profile upsert failure |
-| Migration SQL | Insert profiles for 6 orphaned auth users |
+|------|--------|
+| `src/hooks/useEmployeeScoresForPeriod.ts` | **New** — batch-fetch submissions and compute weighted avg per employee |
+| `src/components/review/EmployeeSelectorGrid.tsx` | Import hook, pass scores to card renderer, add score badge to card layout |
 
 ### Risk Assessment
-- **Data**: Additive — inserts missing profiles, no existing data modified
-- **Regression**: Low — making a silent failure loud is strictly safer
-- **Security**: No change
+- **Performance**: One additional query for submissions, batched. Cached with 5-minute staleTime. Lightweight computation done client-side via `useMemo`.
+- **Data**: Read-only — no schema changes
+- **Regression**: Zero — additive UI change only, existing badges/progress bars untouched
+- **Security**: Submissions already accessible via existing RLS policies (same user context)
 
