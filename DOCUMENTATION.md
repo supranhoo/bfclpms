@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.13.4 — Added DESCRIPTION_THRESHOLD_MISMATCH detection: parses KPI name for "Rating N: X%" patterns and flags when configured thresholds don't match described percentages
+> **Version:** 2.13.5 — Fixed PostgREST "could not choose best candidate function" error for reconcile_workflow_statuses by dropping rogue overload
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
