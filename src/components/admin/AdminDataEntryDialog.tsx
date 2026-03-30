@@ -292,6 +292,7 @@ export function AdminDataEntryDialog({
       setScore('');
       setRemarks('');
       setIsNa(false);
+      setOriginalIsNa(false);
       setCalculatedScore(null);
       setCalculatedRatingLevel(null);
       setEvidenceUrls([]);
