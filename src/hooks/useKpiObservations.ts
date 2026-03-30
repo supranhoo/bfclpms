@@ -56,10 +56,12 @@ export interface UpdateObservationInput {
   title?: string;
   description?: string;
   evidence_url?: string;
+  evidence_urls?: string[];
   is_applied?: boolean;
   reviewed_by?: string;
   reviewed_at?: string;
   visibility?: ObservationVisibility;
+  mentionedUserIds?: string[];
 }
 
 // Fetch observations for a single KPI
