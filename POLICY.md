@@ -712,3 +712,13 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Rationale:** The `is_na` flag is a KPI-level applicability marker. However, clearing scores across all levels when any single level is marked N/A causes data loss for already-completed reviews. The admin dialog must only send the `is_na` flag when it has been explicitly toggled (changed from its original state), preventing accidental re-clears on subsequent edits.
 
 **Invariant:** The N/A clearing block in `useAdminDataEntry.ts` must never reference scoring fields for roles other than the active `role_level` parameter. The `AdminDataEntryDialog` must track the original `is_na` state and only include `is_na` in the mutation payload when the value differs from the original.
+
+---
+
+## §36. Slab Categories Zero-Hardcoding Invariant
+
+**Rule:** Incentive slab categories (e.g., PMS Score, Production, Availability, Maintenance, Metal Recovery) must be stored in the `incentive_slab_categories` master-data table and never hardcoded in UI components or hooks. Admins can add/remove categories via the `SlabCategorySelector` inline input.
+
+**Rationale:** Hardcoded category lists require code deployments to change and risk drift between environments. The DB-driven approach allows admins to extend categories (e.g., "Safety Score", "Quality") without developer intervention.
+
+**Invariant:** No component or hook may define a static array of slab category values. All slab category lists must be sourced from the `incentive_slab_categories` table via the `useIncentiveSlabCategories` hook.
