@@ -1,56 +1,99 @@
 
 
-## Plan: KPI Scorecard Detail Report (Flat Table, No Row Limit)
+## RCA: Admin N/A Toggle Clears All Levels' Scores
 
-### What We're Building
-A new report at `/reports/kpi-scorecard-detail` — a flat table with **one row per KPI** showing employee details and all stage scores. No pagination limit on data fetch; all KPIs for the selected period are loaded using the same batch-fetch loop as the existing KPI Detail Report.
+### Root Cause
 
-### Columns
-Employee Code, Name, Designation, Department, Month, Category, KRA, KPI, Weightage, Self, Manager, Skip-Level, HR PMS, Auditor, Management, Final Score, Status
+**File: `src/hooks/useAdminDataEntry.ts` lines 144-164**
 
-### Data Fetching Strategy
-- Reuse the proven batch-fetch pattern from `KpiDetailReport.tsx` (loop with `range(offset, offset+999)` until fewer than 1000 rows returned) — this bypasses the Supabase 1000-row default limit
-- Fetch `profiles` (with `designation`, `departments`) in a single query
-- Join client-side into flat rows
+When the admin toggles N/A for **any** role level (e.g., management), the code unconditionally clears **every** scoring field across **all** levels:
 
-### Features
-- Month/Year selectors, department filter, search (name/code/KPI)
-- Sortable column headers (reuse pattern from `KpiDetailsTable`)
-- Client-side pagination for UI performance (default 100 rows per page)
-- Excel export of **all filtered rows** (not just current page) via `xlsx`
-- Report access controlled via `kpi-scorecard-detail` key
+```typescript
+if (is_na) {
+  updateFields.final_score = null;
+  updateFields.self_score = null;      // ← WRONG: wipes self
+  updateFields.self_rating = null;
+  updateFields.manager_score = null;   // ← WRONG: wipes manager
+  updateFields.auditor_score = null;   // ← WRONG: wipes auditor
+  // ... ALL levels cleared
+}
+```
 
-### Files to Create/Modify
+This is a **KPI-level** applicability flag (`is_na` on `review_submissions`), not a role-level flag. The original design intent was: "marking N/A means the entire KPI is excluded from scoring." But the problem is the admin dialog **always passes `is_na`** (line 539: `is_na: isNa`), even when the toggle hasn't changed. So if admin enters a management score with the N/A toggle left ON from a previous state, it re-clears everything.
+
+**Additionally**: The N/A toggle in the dialog initializes from `existingSubmission.is_na` (line 300), which is a **KPI-wide** flag. If an admin previously marked N/A at any level, the toggle shows ON for all subsequent role entries, causing unintentional score wipes.
+
+### The Two Bugs
+
+1. **Blast-radius bug**: When `is_na = true`, all levels' scores are cleared — not just the level being edited. If admin intends to mark only management as N/A, self/auditor scores should be preserved.
+
+2. **Sticky toggle bug**: The N/A toggle reflects the KPI-wide `is_na` state, not the role being edited. Admin opening the dialog for management sees N/A toggled ON because a previous entry set it — and submitting passes `is_na: true` again, re-wiping everything.
+
+### Fix
+
+**File: `src/hooks/useAdminDataEntry.ts`**
+
+1. **Only clear the current role's fields when marking N/A** — not all levels. Use `buildUpdateFields` with null values for the active role only.
+2. **Only send `is_na` when it actually changed** — compare against `oldSubmission.is_na` and only include it in updateFields if toggled.
+3. When `is_na` is being set to `true`, clear the **current role's** score/rating/achieved fields and set `final_score`/`final_rating` to null. Do NOT touch other roles' fields.
+4. When `is_na` is being set to `false` (un-marking), only clear the `is_na` flag itself.
+
+**File: `src/components/admin/AdminDataEntryDialog.tsx`**
+
+5. Track the **original** `is_na` state on dialog open. Only pass `is_na` to the mutation when it differs from the original, preventing accidental re-clears.
+
+### Exact Code Changes
+
+**`useAdminDataEntry.ts` lines 144-167** — Replace the N/A handling block:
+
+```typescript
+if (is_na !== undefined) {
+  updateFields.is_na = is_na;
+  updateFields.na_marked_by_role = is_na ? 'admin' : null;
+  if (is_na) {
+    // Only clear the CURRENT role's fields + final score
+    const roleClearFields = buildUpdateFields(role_level, {
+      achieved_value: null,
+      rating: null,
+      score: null,
+      remarks: null,
+    });
+    Object.assign(updateFields, roleClearFields);
+    updateFields.final_score = null;
+    updateFields.final_rating = null;
+  }
+}
+```
+
+**`AdminDataEntryDialog.tsx`** — Track original N/A state:
+
+```typescript
+const [originalIsNa, setOriginalIsNa] = useState(false);
+// On load: setOriginalIsNa(existingSubmission.is_na === true);
+// On submit: only include is_na if isNa !== originalIsNa
+```
+
+### Data Repair
+
+SQL to restore the wiped self and auditor scores for this specific KPI from audit logs (the `old_value` JSON contains the pre-wipe data).
+
+### Impact Assessment
+
+| Surface | Impact |
+|---------|--------|
+| Normal score entry (no N/A) | Zero — `is_na` block not entered |
+| Marking entire KPI as N/A | Still clears current role + final — correct |
+| Editing a different role after N/A | No longer wipes other roles' scores |
+| Dashboard/Reports | Correct — final_score reflects actual state |
+| Weighted averages | Correct — `is_na` exclusion logic unchanged |
+
+### Files Modified
 
 | File | Change |
 |------|--------|
-| `src/pages/reports/KpiScorecardDetail.tsx` | **New** — full report page |
-| `src/pages/reports/ReportsHub.tsx` | Add card entry |
-| `src/App.tsx` | Add lazy route `/reports/kpi-scorecard-detail` |
-| `src/hooks/useReportAccess.ts` | Add `kpi-scorecard-detail` to `DEFAULT_CONFIGS` |
-| `DOCUMENTATION.md` | v2.15.7 changelog |
-
-### Technical Details
-
-```text
-Data flow:
-  supabase.from('kpis')
-    .select('id, employee_id, kra_name, kpi_name, weightage, review_period,
-             review_year, status, frequency,
-             kra_categories(name),
-             review_submissions(self_score, manager_score, skip_level_score,
-                                hr_pms_score, auditor_score, management_score,
-                                final_score, is_na)')
-    .eq('review_year', year)
-    .range(offset, offset + 999)
-  → loop until batch < 1000
-
-  profiles: id, employee_code, full_name, designation, departments(name)
-  → Map by id, join client-side
-```
-
-### Risk Assessment
-- **Regression**: Zero — new page only, existing reports untouched
-- **Performance**: Batch fetch proven in KPI Detail Report for 1500+ KPIs
-- **Row limit**: Explicitly handled via the while-loop pattern — no 1000-row cap
+| `src/hooks/useAdminDataEntry.ts` | Scope N/A clearing to current role only |
+| `src/components/admin/AdminDataEntryDialog.tsx` | Track original N/A state; conditional `is_na` pass |
+| DB data repair | Restore wiped scores from audit log for affected KPI |
+| `DOCUMENTATION.md` | v2.15.8 changelog |
+| `POLICY.md` | Add invariant: N/A toggle must not clear unrelated role scores |
 
