@@ -628,7 +628,7 @@ export function useAdminStatusStepBack() {
       }
 
       // Clear auditor fields if target is before audit
-      if (targetIdx < FULL_STATUS_ORDER.indexOf('audit')) {
+      if (targetIdx <= FULL_STATUS_ORDER.indexOf('audit')) {
         clearFields.auditor_rating = null;
         clearFields.auditor_score = null;
         clearFields.auditor_remarks = null;
