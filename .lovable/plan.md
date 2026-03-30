@@ -1,49 +1,51 @@
 
 
-## RCA: Propagate Button Disabled for Scoped Org KPIs After Unlock
+## RCA: "Cannot propagate blank data" Error for Employee-Scoped Org KPIs
 
 ### Root Cause
 
-In `OrgKpiEntryCard.tsx` line 669, the Propagate button's disabled check is:
+In `src/pages/admin/OrgKpiDataEntry.tsx` line 547, the blank-data guard is:
 
 ```typescript
-disabled={isPropagating || (!isNa && achievedValue.trim() === '')}
+if (!values.isNa && values.achievedValue === null) {
+  toast({ title: 'Cannot propagate blank data', ... });
+  return;
+}
 ```
 
-This checks the **top-level** `achievedValue` state. For department-scoped and employee-scoped KPIs, the top-level `achievedValue` is always empty (`''`) because actual values live in `scopedValues` (per-department or per-employee rows). The `buildCardData` in `OrgKpiDataEntry.tsx` (line 327-328) looks up `existing` using `||null||null` key, which only finds org-scope rows. For employee/department scoped KPIs, this returns nothing, so `data.achievedValue` is `null` and `achievedValue` state is `''`.
+This checks the **top-level** `values.achievedValue`, which is always `null` for employee-scoped and department-scoped KPIs. The actual data lives in `values.scopedValues`. The guard fires before the code ever reaches the scoped propagation loop at line 572, blocking all propagation for scoped KPIs — even when every row has data entered.
 
-**Result**: The Propagate button is permanently disabled for all scoped KPIs, regardless of whether scoped rows have values.
+This is the same class of bug as the Propagate button disabled issue (v2.13.8) — the code assumes org-scope data shape for all scopes.
 
-### CAPA
+### Fix
 
-**Corrective -- File: `src/components/admin/OrgKpiEntryCard.tsx`** (line 669)
+**File: `src/pages/admin/OrgKpiDataEntry.tsx` (line 546-554)**
 
-Replace the simple `achievedValue.trim() === ''` check with scope-aware logic:
-- For `organization` scope: keep existing check (`achievedValue.trim() === ''`)
-- For `department`/`employee` scope: check if at least one `scopedValues` row has a non-null `achievedValue` or is marked N/A
+Replace the flat blank-data guard with scope-aware logic:
 
-```typescript
-const hasAnyValue = data.scope === 'organization'
-  ? (isNa || achievedValue.trim() !== '')
-  : (isNa || scopedValues.some(sv => sv.achievedValue !== null || sv.isNa));
-
-// Then on the button:
-disabled={isPropagating || !hasAnyValue}
+```text
+IF scope === 'organization':
+  Block if !values.isNa && values.achievedValue === null
+ELSE (department/employee):
+  Block if !values.isNa && (!values.scopedValues || 
+    !values.scopedValues.some(sv => sv.achievedValue !== null || sv.isNa))
 ```
 
-**Preventive -- File: `POLICY.md`**
+This allows propagation when at least one scoped row has data, matching the approved "only edited rows" propagation rule (the existing `continue` guard at line 574 already skips blank rows).
 
-Add invariant: "The Propagate button must use scope-aware validation. For scoped KPIs, check scopedValues; for org-scope, check the top-level achievedValue."
+**File: `DOCUMENTATION.md`** — Version history v2.13.9
+
+**File: `POLICY.md`** — Add to §29: "The blank-data propagation guard must also be scope-aware."
 
 ### Files Changed
 | File | Change |
 |------|--------|
-| `src/components/admin/OrgKpiEntryCard.tsx` | Fix Propagate button disabled check to be scope-aware |
-| `DOCUMENTATION.md` | Version history v2.13.8 |
-| `POLICY.md` | Add scope-aware propagation validation invariant |
+| `src/pages/admin/OrgKpiDataEntry.tsx` | Make blank-data guard scope-aware (lines 546-554) |
+| `DOCUMENTATION.md` | Version history v2.13.9 |
+| `POLICY.md` | Extend §29 scope-aware invariant |
 
 ### Risk Assessment
-- **Regression**: Zero -- only relaxes the disabled check for scoped KPIs that have values
-- **Scope**: Propagate button enablement only; propagation logic itself is unchanged
-- **Edge cases**: The `handleCardSaveAndPropagate` in `OrgKpiDataEntry.tsx` already has its own blank-data guard (line 547), so even if the button is enabled with partial data, the handler correctly filters to only propagate rows with values
+- **Regression**: Zero — only relaxes guard for scoped KPIs that have data in scopedValues
+- **Scope**: Propagation guard only; propagation logic unchanged
+- **Safety net**: Line 574 already skips individual blank rows during scoped propagation
 
