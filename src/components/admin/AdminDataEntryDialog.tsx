@@ -298,8 +298,9 @@ export function AdminDataEntryDialog({
       return;
     }
 
-    setIsNa(existingSubmission.is_na === true);
-
+    const naState = existingSubmission.is_na === true;
+    setIsNa(naState);
+    setOriginalIsNa(naState);
     // Get values based on role level — map DB rating back to dropdown value using score
     const loadLevel = (
       achievedVal: number | null,
