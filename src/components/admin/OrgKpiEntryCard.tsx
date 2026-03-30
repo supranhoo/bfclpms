@@ -99,7 +99,7 @@ const scopeIcons = {
   employee: User,
 };
 
-export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, governanceLocked, employeeKpiIds, onSave, onSaveAndPropagate, onUnlock, onRollback, onBulkRollback, onOpenImpact, onRemoveFromOrg }: OrgKpiEntryCardProps) {
+export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, governanceLocked, employeeKpiIds, sentBackMap, onSave, onSaveAndPropagate, onUnlock, onRollback, onBulkRollback, onOpenImpact, onRemoveFromOrg }: OrgKpiEntryCardProps) {
   const isLocked = (data.status === 'propagated' && !isAdmin) || (governanceLocked === true);
   const isPropagated = data.status === 'propagated';
   const [isUnlocking, setIsUnlocking] = useState(false);
@@ -114,6 +114,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
   const [evidenceUrl, setEvidenceUrl] = useState(data.evidenceUrl);
   const [scopedValues, setScopedValues] = useState<ScopedRow[]>(data.scopedRows || []);
   const [isNa, setIsNa] = useState(data.isNa ?? false);
+  const [selectedScopeIds, setSelectedScopeIds] = useState<string[]>([]);
 
   // Fetch observations for employee-scoped KPIs (React Query deduplicates with OrgKpiObservationsSummary)
   const isEmployeeScope = data.scope === 'employee';
