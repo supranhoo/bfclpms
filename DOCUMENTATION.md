@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.13.0 — Scoring Health Check: threshold-vs-target sanity detection
+> **Version:** 2.13.1 — Scoring Health Check: smarter threshold-vs-target detection with UOM/mode awareness
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4257,6 +4257,15 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix (Rollback-awareness):** Branch 3 now checks `kpi_audit_logs` for rollback/send-back events targeting the current status that are newer than `review_submissions.updated_at`. If found, the downstream score is treated as stale and skipped.
 - **Fix (Workflow-aware sync):** Approval final_score/final_rating now uses a `CASE v_terminal_stage` expression mapping to the correct terminal reviewer's score, with an `ELSE` fallback to the original COALESCE chain for safety
 - **Invariant:** Reconciliation must be cycle-aware (POLICY.md §17.5)
+
+---
+
+### v2.13.1 — Scoring Health Check: smarter threshold-vs-target detection (2026-03-30)
+
+- **Improvement:** `THRESHOLD_TARGET_MISMATCH` detection now skips KPIs with `threshold_mode = 'ratio'` (thresholds are relative to target by design)
+- **Improvement:** Suppresses false positives for percentage UOM KPIs where target = 100 (R5 cannot logically exceed 100%)
+- **Improvement:** Replaced prescriptive suggestions ("set R5 to 140% of target") with neutral guidance ("verify this is intentional, review threshold mode")
+- **Improvement:** UOM label now included in diagnostic messages for admin context
 
 ---
 
