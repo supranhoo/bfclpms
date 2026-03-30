@@ -662,7 +662,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
             )}
           </div>
           {!isLocked && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {saveStatus === 'saving' && (
                 <span className="text-xs text-muted-foreground flex items-center gap-1">
                   <Loader2 className="h-3 w-3 animate-spin" />Saving...
@@ -673,6 +673,51 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                   <CheckCircle2 className="h-3 w-3" />Saved
                 </span>
               )}
+
+              {/* Propagate Selected button — only when selections exist */}
+              {selectedScopeIds.length > 0 && data.scope !== 'organization' && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1" disabled={isPropagating}>
+                      {isPropagating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUpRight className="h-3.5 w-3.5" />}
+                      Propagate Selected ({selectedScopeIds.length})
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Propagate Selected</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will propagate values for {selectedScopeIds.length} selected {data.scopeLabel?.toLowerCase() || 'scope'}(s) to employee scorecards.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    {/* Sent-back warning */}
+                    {sentBackMap && selectedScopeIds.some(id => sentBackMap.has(id)) && (
+                      <Alert variant="default" className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/30 py-2">
+                        <Undo2 className="h-4 w-4 text-amber-600" />
+                        <AlertDescription className="text-xs text-amber-700 dark:text-amber-400">
+                          <p className="font-medium mb-1">The following have KPIs that were sent back:</p>
+                          <ul className="list-disc pl-4 space-y-0.5">
+                            {selectedScopeIds.filter(id => sentBackMap.has(id)).map(id => {
+                              const row = scopedValues.find(r => r.scopeId === id);
+                              const info = sentBackMap.get(id);
+                              return <li key={id}>{row?.scopeName || id} — {info?.reason}</li>;
+                            })}
+                          </ul>
+                          <p className="mt-1">Propagating will overwrite their current review data.</p>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => handleSaveAndPropagate(selectedScopeIds)}>
+                        Propagate Selected
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+
+              {/* Main Propagate All button */}
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button size="sm" className="h-7 text-xs" disabled={isPropagating || !(data.scope === 'organization' ? (isNa || achievedValue.trim() !== '') : (isNa || scopedValues.some(sv => sv.achievedValue !== null || sv.isNa)))}>
@@ -688,6 +733,23 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                       The entry will be <strong>locked for editing</strong> afterward. Only an admin can unlock it.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
+                  {/* Sent-back warning for bulk propagation */}
+                  {sentBackMap && sentBackMap.size > 0 && data.scope !== 'organization' && (
+                    <Alert variant="default" className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/30 py-2">
+                      <Undo2 className="h-4 w-4 text-amber-600" />
+                      <AlertDescription className="text-xs text-amber-700 dark:text-amber-400">
+                        <p className="font-medium mb-1">{sentBackMap.size} employee(s) have KPIs that were sent back:</p>
+                        <ul className="list-disc pl-4 space-y-0.5">
+                          {Array.from(sentBackMap.entries()).slice(0, 5).map(([id, info]) => {
+                            const row = scopedValues.find(r => r.scopeId === id);
+                            return <li key={id}>{row?.scopeName || id} — {info.reason}</li>;
+                          })}
+                          {sentBackMap.size > 5 && <li>...and {sentBackMap.size - 5} more</li>}
+                        </ul>
+                        <p className="mt-1">Propagating will overwrite their current review data.</p>
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction onClick={() => handleSaveAndPropagate()}>
