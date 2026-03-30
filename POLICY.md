@@ -627,3 +627,15 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 | 1.2.0 | 2026-03-02 | Fixed auto-rollover cron job authentication (§20) — added X-Cron-Secret header |
 | 1.1.0 | 2026-03-02 | Added Admin NA Score Clearing Policy (§19) — admin NA toggle now clears all scoring fields |
 | 1.0.0 | 2026-03-02 | Initial POLICY.md creation — documented all existing business rules, workflow policies, configurable settings, and the new mandatory remarks feature |
+
+---
+
+## §29. Scope-Aware Propagation Validation Invariant
+
+**Rule:** The Propagate button in Org KPI Data Entry must use scope-aware validation:
+- **Organization scope:** enabled when top-level `achievedValue` is non-empty OR entry is marked N/A
+- **Department/Employee scope:** enabled when at least one `scopedValues` row has a non-null `achievedValue` OR is marked N/A
+
+**Rationale:** Scoped KPIs store values in per-department/per-employee rows, not in the top-level field. Checking only the top-level field permanently disables propagation for all scoped entries.
+
+**Invariant:** Any future refactor of the Propagate button must preserve scope-aware validation logic.

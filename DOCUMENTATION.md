@@ -4314,4 +4314,13 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 
 ---
 
+### v2.13.8 — Fix Propagate button disabled for scoped Org KPIs (2026-03-30)
+
+- **Bug fix:** Propagate button was permanently disabled for department-scoped and employee-scoped Org KPIs, even after Unlock → Edit
+- **Root cause:** The disabled check used top-level `achievedValue` which is always empty for scoped KPIs — actual values live in `scopedValues` array
+- **Fix:** Replaced with scope-aware validation: org-scope checks `achievedValue`, department/employee scope checks if any `scopedValues` row has a value or is N/A
+- **Invariant:** Propagate button must use scope-aware validation (POLICY.md §29)
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*
