@@ -455,7 +455,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               uom={data.uom}
               criteria={data.criteria ?? undefined}
               employeeObservations={employeeObservations}
-              sentBackMap={sentBackMap}
+              sentBackMap={effectiveSentBackMap}
               selectedIds={selectedScopeIds}
               onSelectionChange={setSelectedScopeIds}
               onPropagateRow={(scopeId) => handleSaveAndPropagate([scopeId])}
@@ -702,15 +702,15 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     {/* Sent-back warning */}
-                    {sentBackMap && selectedScopeIds.some(id => sentBackMap.has(id)) && (
+                    {effectiveSentBackMap && selectedScopeIds.some(id => effectiveSentBackMap?.has(id)) && (
                       <Alert variant="default" className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/30 py-2">
                         <Undo2 className="h-4 w-4 text-amber-600" />
                         <AlertDescription className="text-xs text-amber-700 dark:text-amber-400">
                           <p className="font-medium mb-1">The following have KPIs that were sent back:</p>
                           <ul className="list-disc pl-4 space-y-0.5">
-                            {selectedScopeIds.filter(id => sentBackMap.has(id)).map(id => {
+                            {selectedScopeIds.filter(id => effectiveSentBackMap?.has(id)).map(id => {
                               const row = scopedValues.find(r => r.scopeId === id);
-                              const info = sentBackMap.get(id);
+                              const info = effectiveSentBackMap?.get(id);
                               return <li key={id}>{row?.scopeName || id} — {info?.reason}</li>;
                             })}
                           </ul>
@@ -745,17 +745,17 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   {/* Sent-back warning for bulk propagation */}
-                  {sentBackMap && sentBackMap.size > 0 && data.scope !== 'organization' && (
+                  {effectiveSentBackMap && effectiveSentBackMap.size > 0 && data.scope !== 'organization' && (
                     <Alert variant="default" className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/30 py-2">
                       <Undo2 className="h-4 w-4 text-amber-600" />
                       <AlertDescription className="text-xs text-amber-700 dark:text-amber-400">
-                        <p className="font-medium mb-1">{sentBackMap.size} employee(s) have KPIs that were sent back:</p>
+                        <p className="font-medium mb-1">{effectiveSentBackMap?.size} employee(s) have KPIs that were sent back:</p>
                         <ul className="list-disc pl-4 space-y-0.5">
                           {Array.from(sentBackMap.entries()).slice(0, 5).map(([id, info]) => {
                             const row = scopedValues.find(r => r.scopeId === id);
                             return <li key={id}>{row?.scopeName || id} — {info.reason}</li>;
                           })}
-                          {sentBackMap.size > 5 && <li>...and {sentBackMap.size - 5} more</li>}
+                          {effectiveSentBackMap?.size > 5 && <li>...and {effectiveSentBackMap?.size - 5} more</li>}
                         </ul>
                         <p className="mt-1">Propagating will overwrite their current review data.</p>
                       </AlertDescription>
