@@ -1,19 +1,41 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ReviewStageCard, StageStatus } from './ReviewStageCard';
 import { KPI, ReviewSubmission, KpiQuery } from '@/hooks/useKpis';
-import { User, Briefcase, Shield, MessageSquare, History, UserCheck, ClipboardCheck, AlertTriangle, Download } from 'lucide-react';
+import { User, Briefcase, Shield, MessageSquare, History, UserCheck, ClipboardCheck, AlertTriangle, Download, ChevronDown, CalendarClock } from 'lucide-react';
 import { getVisibleJourneyStages, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { UomType } from '@/lib/qualitativeUom';
 import { exportReviewTimelinePdf, ReviewTimelinePdfData } from '@/lib/pdfExport';
 import { statusLabels } from '@/lib/reviewConstants';
 import { format } from 'date-fns';
+
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+function getPreviousPeriods(currentMonth: string, currentYear: number, count: number) {
+  const idx = MONTHS.indexOf(currentMonth);
+  if (idx === -1) return [];
+  const result: { month: string; year: number }[] = [];
+  for (let i = 1; i <= count; i++) {
+    let mi = idx - i;
+    let yr = currentYear;
+    if (mi < 0) {
+      mi += 12;
+      yr -= 1;
+    }
+    result.push({ month: MONTHS[mi], year: yr });
+  }
+  return result;
+}
 
 function useEmployeeProfileForPdf(employeeId: string | undefined) {
   return useQuery({
@@ -117,6 +139,78 @@ export function KpiJourneySection({
   const kpiStatus = kpi.status || 'kra_set';
   const visibleStages = getVisibleStagesForLevel(viewLevel, effectiveStages);
   const globalIsNA = submission?.is_na || false;
+  const [prevMonthsOpen, setPrevMonthsOpen] = useState(false);
+
+  // Compute previous 2 periods
+  const prevPeriods = useMemo(
+    () => getPreviousPeriods(kpi.review_period || '', kpi.review_year || new Date().getFullYear(), 2),
+    [kpi.review_period, kpi.review_year]
+  );
+
+  // Fetch previous months' matching KPIs + submissions
+  const { data: prevMonthsData = [] } = useQuery({
+    queryKey: ['prev-month-kpis', kpi.employee_id, kpi.kpi_name, kpi.kra_name, kpi.category_id, prevPeriods],
+    queryFn: async () => {
+      if (prevPeriods.length === 0) return [];
+      const uniqueMonths = prevPeriods.map(p => p.month);
+      const uniqueYears = [...new Set(prevPeriods.map(p => p.year))];
+
+      // Fetch matching KPIs
+      const { data: kpis, error: kErr } = await supabase
+        .from('kpis')
+        .select('*')
+        .eq('employee_id', kpi.employee_id)
+        .eq('kpi_name', kpi.kpi_name)
+        .eq('kra_name', kpi.kra_name)
+        .eq('category_id', kpi.category_id)
+        .in('review_period', uniqueMonths)
+        .in('review_year', uniqueYears);
+      if (kErr) throw kErr;
+      if (!kpis || kpis.length === 0) return [];
+
+      // Filter to exact month+year pairs
+      const filtered = kpis.filter(k =>
+        prevPeriods.some(p => p.month === k.review_period && p.year === k.review_year)
+      );
+      if (filtered.length === 0) return [];
+
+      // Fetch submissions for those KPIs
+      const kpiIds = filtered.map(k => k.id);
+      const { data: subs, error: sErr } = await supabase
+        .from('review_submissions')
+        .select('*')
+        .in('kpi_id', kpiIds);
+      if (sErr) throw sErr;
+      const subMap = new Map((subs || []).map(s => [s.kpi_id, s]));
+
+      // Fetch workflows
+      const { data: wfData } = await supabase.rpc('get_bulk_employee_workflows', {
+        employee_ids: [kpi.employee_id],
+        p_review_periods: filtered.map(k => k.review_period),
+        p_review_years: filtered.map(k => k.review_year),
+      });
+      const wfMap = new Map<string, string[]>();
+      if (wfData) {
+        for (const w of wfData as any[]) {
+          const key = `${w.review_period}_${w.review_year}`;
+          wfMap.set(key, w.stages || DEFAULT_WORKFLOW_STAGES);
+        }
+      }
+
+      return prevPeriods
+        .map(p => {
+          const matchKpi = filtered.find(k => k.review_period === p.month && k.review_year === p.year);
+          if (!matchKpi) return null;
+          const sub = subMap.get(matchKpi.id) || null;
+          const wfKey = `${p.month}_${p.year}`;
+          const stages = wfMap.get(wfKey) || effectiveStages;
+          return { period: p, kpi: matchKpi, submission: sub, workflowStages: stages };
+        })
+        .filter(Boolean) as { period: { month: string; year: number }; kpi: any; submission: any; workflowStages: string[] }[];
+    },
+    enabled: prevPeriods.length > 0 && !!kpi.employee_id && !!kpi.kpi_name,
+    staleTime: 2 * 60 * 1000,
+  });
 
   // Fetch audit logs for the KPI
   const { data: auditLogs = [] } = useQuery({
@@ -456,7 +550,74 @@ export function KpiJourneySection({
           })}
         </div>
 
-        {/* Query Summary */}
+        {/* Previous Months Comparison */}
+        {prevMonthsData.length > 0 && (
+          <Collapsible open={prevMonthsOpen} onOpenChange={setPrevMonthsOpen}>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="w-full justify-between h-8 text-xs text-muted-foreground hover:text-foreground">
+                <span className="flex items-center gap-1.5">
+                  <CalendarClock className="h-3.5 w-3.5" />
+                  Previous Months ({prevMonthsData.length})
+                </span>
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${prevMonthsOpen ? 'rotate-180' : ''}`} />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-3 pt-2">
+              {prevMonthsData.map(({ period, kpi: prevKpi, submission: prevSub, workflowStages: prevWf }) => {
+                const prevStages = getVisibleStagesForLevel(viewLevel, prevWf);
+                const prevStatus = prevKpi.status || 'kra_set';
+                const prevIsNA = prevSub?.is_na || false;
+                const prevGridCols = prevStages.length <= 4 ? 'grid-cols-2 lg:grid-cols-4' : prevStages.length <= 6 ? 'grid-cols-2 lg:grid-cols-3 xl:grid-cols-6' : 'grid-cols-2 lg:grid-cols-4';
+
+                const prevStageData: Record<string, any> = {
+                  self: buildStage(User, 'blue', 'Self', prevSub?.self_score ?? null, prevSub?.self_rating ?? null, prevSub?.self_remarks ?? null, buildEvidenceUrls(prevSub?.self_evidence_urls, prevSub?.self_evidence_url), prevSub?.achieved_value ?? null),
+                  manager: buildStage(Briefcase, 'amber', 'Manager', prevSub?.manager_score ?? null, prevSub?.manager_rating ?? null, prevSub?.manager_remarks ?? null, buildEvidenceUrls(prevSub?.manager_evidence_urls, prevSub?.manager_evidence_url), prevSub?.manager_achieved_value ?? null),
+                  skip_level: buildStage(UserCheck, 'teal', 'Skip-Level', prevSub?.skip_level_score ?? null, prevSub?.skip_level_rating ?? null, prevSub?.skip_level_remarks ?? null, buildEvidenceUrls(prevSub?.skip_level_evidence_urls, prevSub?.skip_level_evidence_url), prevSub?.skip_level_achieved_value ?? null),
+                  hr_pms: buildStage(ClipboardCheck, 'rose', 'HR PMS', prevSub?.hr_pms_score ?? null, prevSub?.hr_pms_rating ?? null, prevSub?.hr_pms_remarks ?? null, buildEvidenceUrls(prevSub?.hr_pms_evidence_urls, prevSub?.hr_pms_evidence_url), prevSub?.hr_pms_achieved_value ?? null),
+                  auditor: buildStage(Shield, 'purple', 'Auditor', prevSub?.auditor_score ?? null, prevSub?.auditor_rating ?? null, prevSub?.auditor_remarks ?? null, buildEvidenceUrls(prevSub?.auditor_evidence_urls, prevSub?.auditor_evidence_url), prevSub?.auditor_achieved_value ?? null),
+                  management: buildStage(Briefcase, 'emerald', 'Management', prevSub?.management_score ?? null, prevSub?.management_rating ?? null, prevSub?.management_remarks ?? null, buildEvidenceUrls(prevSub?.management_evidence_urls, prevSub?.management_evidence_url), prevSub?.management_achieved_value ?? null),
+                };
+
+                return (
+                  <div key={`${period.month}-${period.year}`} className="border rounded-lg p-3 bg-muted/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge variant="outline" className="text-xs font-medium">
+                        {period.month} {period.year}
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                        {statusLabels[prevStatus] || prevStatus.replace(/_/g, ' ')}
+                      </Badge>
+                    </div>
+                    <div className={`grid ${prevGridCols} gap-2`}>
+                      {prevStages.map(stage => {
+                        const data = prevStageData[stage];
+                        if (!data) return null;
+                        const status = getStageStatus(stage, prevStatus, viewLevel, prevWf);
+                        const stageIsNA = (prevIsNA && data.score === null && status !== 'pending') || (!prevIsNA && data.score === null && status !== 'pending' && status === 'completed');
+                        return (
+                          <ReviewStageCard
+                            key={stage}
+                            icon={data.icon}
+                            iconColor={data.iconColor}
+                            title={data.title}
+                            score={data.score}
+                            rating={data.rating}
+                            remarks={data.remarks}
+                            evidenceUrls={data.evidenceUrls}
+                            status={status}
+                            isNA={stageIsNA}
+                            achievedValue={data.achievedValue}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+
         {(openQueries > 0 || resolvedQueries > 0) && (
           <div className="pt-3 border-t flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm">
