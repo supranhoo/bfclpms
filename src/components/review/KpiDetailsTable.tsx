@@ -365,20 +365,36 @@ export function KpiDetailsTable({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Category</TableHead>
+          <TableHead>
+            <button onClick={() => handleSort('category')} className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer">
+              Category {getSortIcon('category')}
+            </button>
+          </TableHead>
           <TableHead>KRA / KPI</TableHead>
           <TableHead>Target</TableHead>
-          <TableHead>Weightage</TableHead>
+          <TableHead>
+            <button onClick={() => handleSort('weightage')} className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer">
+              Weightage {getSortIcon('weightage')}
+            </button>
+          </TableHead>
           <TableHead>Achieved</TableHead>
           {scoreColumns.map(col => (
-            <TableHead key={col.key} className="text-center">{col.label}</TableHead>
+            <TableHead key={col.key} className="text-center">
+              <button onClick={() => handleSort(col.key)} className="flex items-center gap-1 justify-center hover:text-foreground transition-colors cursor-pointer w-full">
+                {col.label} {getSortIcon(col.key)}
+              </button>
+            </TableHead>
           ))}
-          <TableHead>Status</TableHead>
+          <TableHead>
+            <button onClick={() => handleSort('status')} className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer">
+              Status {getSortIcon('status')}
+            </button>
+          </TableHead>
           <TableHead>Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {kpis.map((kpi, index) => {
+        {sortedKpis.map((kpi, index) => {
           const submission = submissionMap.get(kpi.id);
           const kpiQueries = queryMap?.get(kpi.id) || [];
           const openQueries = kpiQueries.filter((q: KpiQuery) => q.status === 'open');
