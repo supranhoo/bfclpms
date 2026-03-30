@@ -531,7 +531,8 @@ export default function OrgKpiDataEntry() {
   // Save & Propagate handler
   const handleCardSaveAndPropagate = useCallback(async (
     kpi: typeof filteredKpis[0],
-    values: Parameters<typeof handleCardSave>[1]
+    values: Parameters<typeof handleCardSave>[1],
+    filterEmployeeIds?: string[],
   ) => {
     await handleCardSave(kpi, values);
     const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'employee';
@@ -577,6 +578,8 @@ export default function OrgKpiDataEntry() {
       propagatedScopeIds.push('organization');
     } else if ((scope === 'department' || scope === 'employee') && values.scopedValues) {
       for (const sv of values.scopedValues) {
+        // Skip if filterEmployeeIds provided and this scope isn't in the list
+        if (filterEmployeeIds && !filterEmployeeIds.includes(sv.scopeId)) continue;
         if (sv.achievedValue === null && !sv.isNa) continue;
         const result = await propagate.mutateAsync({
           categoryId: kpi.category_id,
