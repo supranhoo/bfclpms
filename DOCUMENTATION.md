@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.15.12 — Unified employee mapping table with multi-select
+> **Version:** 2.15.13 — Edit & delete slab category dropdown options
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
