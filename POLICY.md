@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 1.35.0 — §34 clarification: recompute is independent of advance_status
+> **Version:** 1.36.0 — §35: N/A toggle must be role-scoped
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
