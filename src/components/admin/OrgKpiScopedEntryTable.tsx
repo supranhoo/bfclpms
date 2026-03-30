@@ -602,7 +602,7 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="text-xs">
-                  Propagate this {scopeLabel.toLowerCase()} only
+                  Propagate this employee only
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
