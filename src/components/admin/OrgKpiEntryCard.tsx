@@ -751,7 +751,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                       <AlertDescription className="text-xs text-amber-700 dark:text-amber-400">
                         <p className="font-medium mb-1">{effectiveSentBackMap?.size} employee(s) have KPIs that were sent back:</p>
                         <ul className="list-disc pl-4 space-y-0.5">
-                          {Array.from(sentBackMap.entries()).slice(0, 5).map(([id, info]) => {
+                          {Array.from(effectiveSentBackMap.entries()).slice(0, 5).map(([id, info]) => {
                             const row = scopedValues.find(r => r.scopeId === id);
                             return <li key={id}>{row?.scopeName || id} — {info.reason}</li>;
                           })}
