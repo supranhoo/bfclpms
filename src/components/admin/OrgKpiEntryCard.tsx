@@ -444,6 +444,11 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               uom={data.uom}
               criteria={data.criteria ?? undefined}
               employeeObservations={employeeObservations}
+              sentBackMap={sentBackMap}
+              selectedIds={selectedScopeIds}
+              onSelectionChange={setSelectedScopeIds}
+              onPropagateRow={(scopeId) => handleSaveAndPropagate([scopeId])}
+              isPropagating={isPropagating}
             />
           )}
 
