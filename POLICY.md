@@ -692,3 +692,13 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Rationale:** If only stages after the target are cleared but the target stage's own data is preserved, stale scores from the previous approval cycle remain visible, creating a false impression that the stage has already been re-reviewed.
 
 **Invariant:** The cascade-clear condition must use `>=` (not `>`) for stage index comparison, ensuring the target stage itself is included in the clear set.
+
+---
+
+## §34. Admin Edit Final Score Recomputation Invariant
+
+**Rule:** When an admin edits any score field on an already-approved KPI, the system must recompute `final_score` using the authoritative 8-stage fallback chain (management → auditor → HR PMS → skip-level → manager → self) and patch the result if it differs from the current `final_score`.
+
+**Rationale:** The normal approval flow sets `final_score` during status advancement. Since already-approved KPIs skip status advancement, the `final_score` would remain stale after admin edits without explicit recomputation.
+
+**Invariant:** Post-upsert recomputation must always execute when a KPI is already approved, regardless of which role-level score was edited.
