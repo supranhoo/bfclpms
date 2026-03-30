@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.15.5 — Fix final_score recomputation on already-approved KPIs
+> **Version:** 2.15.6 — Decouple final_score recompute from advance_status toggle
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
