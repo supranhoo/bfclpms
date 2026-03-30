@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 1.30.0 — Add sent-back visibility and individual propagation policies
+> **Version:** 1.31.0 — Add org KPI audit log completeness invariant
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -639,3 +639,32 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Rationale:** Scoped KPIs store values in per-department/per-employee rows, not in the top-level field. Checking only the top-level field permanently disables propagation for all scoped entries.
 
 **Invariant:** Any future refactor of the Propagate button AND the blank-data propagation guard must preserve scope-aware validation logic. Both checks must differentiate org-scope (top-level value) from department/employee-scope (`scopedValues` array).
+
+---
+
+## §30. Org KPI Audit Log Completeness Invariant
+
+**Rule:** Every mutation to `org_kpi_values` must write a corresponding entry to `org_kpi_data_entry_logs`. This includes:
+- `created` — initial value entry
+- `updated` — value change
+- `propagated` — value propagated to employee KPIs
+- `rollback` — propagation rollback
+- `unlocked` — admin unlock for re-editing
+- `imported` — bulk import
+- `copied_from_previous` — copy from previous period
+
+**Rationale:** The Value History popover is the primary audit trail for org KPI data changes. Missing entries undermine accountability and make it impossible to trace when/who changed values.
+
+**Invariant:** Any new org KPI mutation path must include an audit log write. Existing history gaps cannot be backfilled — only new operations are logged going forward.
+
+---
+
+## §31. Sent-Back Indicator Detection Invariant
+
+**Rule:** The sent-back indicator on the Org KPI scoped table must detect sent-back state by:
+1. Finding employee KPIs at `kra_set` status (haven't re-progressed)
+2. Cross-referencing with `kpi_queries` records of type `send_back` (any status — not just `'open'`)
+
+**Rationale:** Send-back query records are auto-resolved when KPI status changes, so filtering by `status = 'open'` always returns empty results. The correct signal is: KPI is still at `kra_set` AND has a historical send-back query.
+
+**Invariant:** The sent-back detection must never rely solely on `kpi_queries.status = 'open'`. It must check the KPI's current workflow status.
