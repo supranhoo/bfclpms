@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 1.24.0 — Rollback and re-submission downstream data clearing invariant
+> **Version:** 1.25.0 — Cycle-aware reconciliation invariant
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -485,6 +485,13 @@ Draft → Pending HR Approval → Active → [Extended] → Completed / Cancelle
 - The canonical stage ordering for clearing purposes is: `self_review → manager_check → skip_level_check → hr_pms_review → audit → management_review`.
 - This invariant prevents the dashboard and review journey from displaying stale scores from a prior review cycle that was rolled back.
 
+### 17.5 Reconciliation Must Be Cycle-Aware (Invariant)
+
+- The `reconcile_workflow_statuses` function MUST NOT advance a KPI based on a downstream score that predates the most recent rollback or send-back to the current status.
+- **Branch 3 (Review-Stage Mismatch):** Before advancing a KPI, the reconciler MUST verify that no rollback/send-back audit log targeting the current status exists with a timestamp newer than the submission's `updated_at`. If such a log exists, the downstream score is stale and the KPI MUST be skipped.
+- **Approval final_score sync:** When the reconciler approves a KPI, `final_score` and `final_rating` MUST be set from the terminal stage's score (determined by the employee's month-specific workflow), NOT a generic COALESCE fallback chain. An ELSE fallback to COALESCE is permitted only for unrecognized terminal stages.
+- This invariant prevents the reconciler from re-approving KPIs with stale post-rollback scores.
+
 ---
 
 ## 18. Admin Configurable Settings Reference
@@ -597,6 +604,9 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 | 1.8.0 | 2026-03-07 | Sent-Back KPI Governance Bypass (§3.5): Employees can edit and resubmit KPIs that were sent back by a reviewer, even when Edit KPI / Self Review governance permissions are disabled. Fresh KPIs remain locked. |
 | 1.7.0 | 2026-03-05 | Effective Month Selection Policy (§23): KRA assignment dialogs now require explicit month/year selection instead of deriving from non-existent system setting. Multi-month frequencies auto-resolve to terminal month via `getActiveMonthForCycle`. |
 | 1.6.0 | 2026-03-05 | Bug bounty fixes (BUG-001–BUG-009): full 7-role coverage in User Management, email validation hardening, XSS sanitization in PolicyRenderer, SendBack character limit, stable React keys, pagination reset on filter, server-side unread notification count, Dashboard lazy-loading of allSubmissions |
+| 1.25.0 | 2026-03-30 | Cycle-aware reconciliation invariant (§17.5): reconciler checks rollback audit logs before advancing KPIs with downstream scores; approval syncs final_score from terminal stage, not generic COALESCE |
+| 1.24.0 | 2026-03-30 | Rollback and re-submission downstream data clearing invariant (§17.4): rollbacks clear all downstream reviewer fields; re-submissions clear downstream fields based on activeReviewStage |
+| 1.23.0 | 2026-03-29 | KPI Detail Report workflow-aware score display: out-of-workflow stage columns blanked using employee's month-specific workflow (§17.3) |
 | 1.22.0 | 2026-03-28 | Out-of-workflow admin data entry guard: Admin entering data for a role not present in the employee's workflow (e.g., auditor on hr_pms workflow) saves role-specific fields but does NOT advance KPI status or sync final_score. `resolveForwardStatus` returns null for out-of-workflow roles. |
 | 1.21.0 | 2026-03-28 | Approved KPI Final Score Immutability: Once a KPI reaches 'approved' status, `final_score` is frozen. Admin data entry on approved KPIs updates only role-specific fields (e.g., auditor_score) without re-triggering status advancement or final_score sync. This prevents score drift from post-approval historical edits. |
 | 1.20.0 | 2026-03-27 | Production Incentive Phase 2: BU sub-units (furnaces/lines), production target data entry grid, allocation rules for common employees (weighted % splits), incentive status column (hold/finalised/forfeited/released), manual status override with audit trail, program settings (incentive_base, min_kra_score, no_kra_eligible), department-specific slabs. Auto-computed status respects manual overrides. |
