@@ -617,7 +617,7 @@ export function KpiDetailsTable({
           );
         })}
         
-        {kpis.length === 0 && (
+        {sortedKpis.length === 0 && (
           <TableRow>
             <TableCell colSpan={totalColumns} className="text-center py-8 text-muted-foreground">
               No KPIs found for this period
