@@ -67,9 +67,10 @@ export function IncentiveSlabEditor({ programId, programType }: Props) {
     setNewRow({ min_value: '', max_value: '', incentive_percent: '', rating_label: '', sub_category: '' });
   };
 
-  const SLAB_CATEGORIES = programType === 'support'
-    ? SLAB_CATEGORIES_BASE.filter(c => c.value === 'pms_score')
-    : SLAB_CATEGORIES_BASE;
+  const { data: allCategories = [] } = useIncentiveSlabCategories();
+  const allowedCategoryValues = programType === 'support'
+    ? ['pms_score']
+    : undefined;
 
   return (
     <Card>
@@ -78,14 +79,11 @@ export function IncentiveSlabEditor({ programId, programType }: Props) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex gap-3 flex-wrap">
-          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-            <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {SLAB_CATEGORIES.map(c => (
-                <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SlabCategorySelector
+            value={selectedCategory}
+            onValueChange={setSelectedCategory}
+            allowedValues={allowedCategoryValues}
+          />
           {programType === 'production' && (
             <Select value={selectedBU || 'all'} onValueChange={(v) => setSelectedBU(v === 'all' ? null : v)}>
               <SelectTrigger className="w-[180px]"><SelectValue placeholder="All BUs" /></SelectTrigger>
