@@ -117,6 +117,7 @@ export function AdminDataEntryDialog({
   const [remarks, setRemarks] = useState<string>('');
   const [reason, setReason] = useState<string>('');
   const [isNa, setIsNa] = useState<boolean>(false);
+  const [originalIsNa, setOriginalIsNa] = useState<boolean>(false);
   const [advanceStatus, setAdvanceStatus] = useState<boolean>(true);
   const [isAutoCalculated, setIsAutoCalculated] = useState<boolean>(false);
   const [adminOverrideConfirmed, setAdminOverrideConfirmed] = useState<boolean>(false);
@@ -291,14 +292,16 @@ export function AdminDataEntryDialog({
       setScore('');
       setRemarks('');
       setIsNa(false);
+      setOriginalIsNa(false);
       setCalculatedScore(null);
       setCalculatedRatingLevel(null);
       setEvidenceUrls([]);
       return;
     }
 
-    setIsNa(existingSubmission.is_na === true);
-
+    const naState = existingSubmission.is_na === true;
+    setIsNa(naState);
+    setOriginalIsNa(naState);
     // Get values based on role level — map DB rating back to dropdown value using score
     const loadLevel = (
       achievedVal: number | null,
@@ -536,7 +539,7 @@ export function AdminDataEntryDialog({
       remarks: remarks || null,
       evidence_url: evidenceUrls.length > 0 ? evidenceUrls[evidenceUrls.length - 1] : null,
       evidence_urls: evidenceUrls.length > 0 ? evidenceUrls : null,
-      is_na: isNa,
+      is_na: isNa !== originalIsNa ? isNa : undefined,
       reason: reason.trim(),
       kpi_name: kpi.kpi_name,
       advance_status: advanceStatus,
