@@ -1,43 +1,63 @@
 
 
-## RCA: KPI Detail Report Shows Out-of-Workflow Auditor Score
+## RCA: Rollback Does Not Clear Downstream Reviewer Scores
 
-### Root Cause
-The KPI Detail Report fetches `auditor_score` directly from `review_submissions` and displays it unconditionally in the "Auditor" column (line 220: `auditorScore: sub?.auditor_score ?? null`). It does not check whether the `audit` stage exists in the employee's month-specific workflow.
+### Problem
+When a KPI is rolled back from Management Review to Audit, the system reverts the KPI status but leaves the old management scores (Value: 5, Rating: 5) in `review_submissions`. After the auditor resubmits, the Review Journey and dashboard still display stale management data.
 
-For employee 100801 in January 2026, the workflow is `self_l1_hr_pms` (no auditor stage). However, an admin previously entered an auditor score via Admin Data Entry. The report blindly displays this value even though auditor is not part of the workflow.
+### Root Cause (Two Gaps)
 
-**Key observation**: The report already fetches per-employee workflow data via `useBulkEmployeeWorkflows` (lines 245-249) but only uses it for orphan detection — not for filtering out-of-workflow scores.
+**Gap 1 — Rollback approval (`useKpiRollbackRequests.ts` line 163-168):**
+Only updates `kpis.status` to the target stage. Does NOT clear downstream reviewer scores from `review_submissions`.
+
+**Gap 2 — Reviewer re-submission (`UnifiedScorecard.tsx` line 580-606):**
+The `submitReview` mutation only writes the current reviewer's fields + `final_score/final_rating`. It does NOT clear scores from reviewers AFTER the current stage. The send-back flow (line 737-745) already has this clearing logic, but the regular save path does not.
 
 ### Fix
 
-**File: `src/pages/reports/KpiDetailReport.tsx`**
+#### 1. Clear downstream scores on rollback approval (`src/hooks/useKpiRollbackRequests.ts`)
+After reverting KPI status, also update `review_submissions` to null out all reviewer fields for stages that come AFTER the `target_status` in the workflow.
 
-In the `enrichedRows` memo (lines 251-260), extend the logic to also blank out score columns for roles not present in the employee's workflow:
-
+Use the same stage-to-field mapping as the send-back flow:
 ```text
-Stage-to-score mapping:
-  'audit'              → auditorScore = null
-  'management_review'  → managementScore = null
-  'skip_level_check'   → skipLevelScore = null
-  'hr_pms_review'      → hrPmsScore = null
+target = audit → clear management_* fields, final_score, final_rating
+target = hr_pms_review → clear auditor_*, management_*, final_score, final_rating
+target = manager_check → clear skip_level_*, hr_pms_*, auditor_*, management_*, final_score, final_rating
 ```
 
-When a stage is missing from the employee's workflow stages array, set the corresponding score field to `null` in the enriched row. This also needs to be applied in the Excel export so exported data matches the UI.
+#### 2. Clear downstream scores on reviewer submission (`src/components/review/UnifiedScorecard.tsx`)
+In the `submitReview` mutation, after writing the reviewer's own fields, also null out all reviewer fields for stages AFTER the current `activeReviewStage`. This prevents stale data from persisting when a reviewer re-submits after a rollback.
 
-The `resolveFinalScore` fallback chain (lines 29-40) is not affected since `final_score` for approved KPIs is already correctly stored in the database (fixed by the earlier migration). For non-approved KPIs, the fallback chain should also respect the workflow — but this is a broader change; for now, blanking the display column is the correct targeted fix.
+Add to `updateData` before the Supabase call:
+```text
+If viewLevel = auditor (activeReviewStage = audit):
+  updateData.management_score = null
+  updateData.management_rating = null
+  updateData.management_remarks = null
+  updateData.management_evidence_url = null
+  updateData.management_achieved_value = null
+```
 
-Also recalculate `totalScore`, `percentage`, and `overallRating` after adjusting the `finalScore` with workflow awareness.
+Use the workflow stages array to determine which fields are downstream.
+
+#### 3. Data repair for Piyush Bansal's Feb KPI
+Execute a targeted SQL update to clear the stale management scores for this specific KPI, allowing it to properly appear as pending management review.
+
+#### 4. Documentation updates
+- `DOCUMENTATION.md` version history
+- `POLICY.md` — add invariant: rollback and re-submission must clear all downstream reviewer data
 
 ### Files Changed
 | File | Action |
 |------|--------|
-| `src/pages/reports/KpiDetailReport.tsx` | Blank out-of-workflow score columns using existing workflow map |
-| `DOCUMENTATION.md` | Version history entry |
-| `POLICY.md` | Add invariant: reports must not display scores for non-workflow stages |
+| `src/hooks/useKpiRollbackRequests.ts` | Clear downstream reviewer fields on rollback approval |
+| `src/components/review/UnifiedScorecard.tsx` | Clear downstream fields in `submitReview` mutation |
+| Data update (SQL) | Fix Piyush Bansal's Feb KPI stale management scores |
+| `DOCUMENTATION.md` | Version history |
+| `POLICY.md` | New invariant |
 
 ### Risk Assessment
-- **Data**: No database changes — display-only fix
-- **Regression**: Low — only hides scores that shouldn't be visible; in-workflow scores unchanged
-- **Scope**: Affects KPI Detail Report only; same pattern should be audited in other reports later
+- **Regression**: Low — only clears fields that should not exist post-rollback; normal forward flow unaffected since downstream fields are naturally empty
+- **Data**: 1 targeted row fix; no changes to Dec 2025 or earlier
+- **Scope**: Fixes both rollback and re-submission paths systemically
 
