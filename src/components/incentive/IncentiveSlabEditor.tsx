@@ -9,6 +9,8 @@ import { Trash2, Plus, Save } from 'lucide-react';
 import { useIncentiveSlabs, useUpsertSlab, useDeleteSlab } from '@/hooks/useIncentivePrograms';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { SlabCategorySelector } from './SlabCategorySelector';
+import { useIncentiveSlabCategories } from '@/hooks/useIncentiveSlabCategories';
 
 interface Props {
   programId: string;
