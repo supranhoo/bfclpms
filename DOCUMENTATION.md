@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.13.0 — Scoring Health Check: threshold-vs-target sanity detection
+> **Version:** 2.13.1 — Scoring Health Check: smarter threshold-vs-target detection with UOM/mode awareness
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

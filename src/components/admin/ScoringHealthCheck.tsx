@@ -125,21 +125,34 @@ function detectIssues(kpis: KPI[]): ScoringIssue[] {
       if (kpi.target_value != null && r5 !== null && !isNaN(r5)) {
         const target = parseFloat(String(kpi.target_value));
         if (!isNaN(target) && target !== 0) {
-          const criteria = kpi.criteria;
-          if (criteria === 'Higher is Better' && r5 <= target) {
-            issues.push({
-              kpi, type: 'THRESHOLD_TARGET_MISMATCH', severity: 'medium',
-              description: `R5 threshold (${r5}) is ≤ the target (${target}). Any value meeting the target gets the highest rating. Verify thresholds are absolute values, not percentages.`,
-              suggestedFix: 'If R5 should be 140% of target, set R5 to ' + (target * 1.4).toFixed(1) + '. Open the KPI editor to correct thresholds.',
-              employeeName, employeeCode,
-            });
-          } else if (criteria === 'Lower is Better' && r5 >= target) {
-            issues.push({
-              kpi, type: 'THRESHOLD_TARGET_MISMATCH', severity: 'medium',
-              description: `R5 threshold (${r5}) is ≥ the target (${target}). Any value meeting the target gets the highest rating. Verify thresholds are absolute values, not percentages.`,
-              suggestedFix: 'If R5 should be 60% of target, set R5 to ' + (target * 0.6).toFixed(1) + '. Open the KPI editor to correct thresholds.',
-              employeeName, employeeCode,
-            });
+          // Skip if threshold_mode is ratio — thresholds are already relative to target
+          const thresholdMode = (kpi as any).threshold_mode;
+          if (thresholdMode === 'ratio') {
+            // Ratio mode: R5 ≤ target in absolute terms is expected, skip
+          } else {
+            // Skip for percentage UOM where target = 100 (can't exceed 100%)
+            const uomStr = (kpi.uom || '').toLowerCase();
+            const isPercentage100 = (uomStr === '%' || uomStr.includes('percent')) && target === 100;
+
+            if (!isPercentage100) {
+              const criteria = kpi.criteria;
+              const uomLabel = kpi.uom || 'units';
+              if (criteria === 'Higher is Better' && r5 <= target) {
+                issues.push({
+                  kpi, type: 'THRESHOLD_TARGET_MISMATCH', severity: 'medium',
+                  description: `R5 threshold (${r5} ${uomLabel}) is ≤ the target (${target} ${uomLabel}). Any value meeting the target gets the highest rating.`,
+                  suggestedFix: 'R5 equals target — verify this is intentional. Open KPI editor to review threshold mode (absolute vs ratio) and values.',
+                  employeeName, employeeCode,
+                });
+              } else if (criteria === 'Lower is Better' && r5 >= target) {
+                issues.push({
+                  kpi, type: 'THRESHOLD_TARGET_MISMATCH', severity: 'medium',
+                  description: `R5 threshold (${r5} ${uomLabel}) is ≥ the target (${target} ${uomLabel}). Any value meeting the target gets the highest rating.`,
+                  suggestedFix: 'R5 equals target — verify this is intentional for Lower is Better criteria. Review threshold mode and values in KPI editor.',
+                  employeeName, employeeCode,
+                });
+              }
+            }
           }
         }
       }
