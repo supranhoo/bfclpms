@@ -18,7 +18,7 @@ import { BINARY_OPTIONS, type QualitativeOption } from '@/lib/qualitativeUom';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle, RotateCcw, Trash2, Ban, Undo2 } from 'lucide-react';
-import type { SentBackInfo } from '@/hooks/useSentBackOrgKpiEmployees';
+import { useSentBackOrgKpiEmployees, type SentBackInfo } from '@/hooks/useSentBackOrgKpiEmployees';
 
 export interface OrgKpiCardData {
   categoryId: string;
@@ -120,6 +120,17 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
   const isEmployeeScope = data.scope === 'employee';
   const obsKpiIds = isEmployeeScope && employeeKpiIds ? employeeKpiIds : [];
   const { data: observationMap } = useObservationsByKpis(obsKpiIds);
+
+  // Sent-back detection for scoped KPIs (self-contained — no parent wiring needed)
+  const isScoped = data.scope === 'department' || data.scope === 'employee';
+  const { data: internalSentBackMap } = useSentBackOrgKpiEmployees(
+    isScoped ? data.categoryId : undefined,
+    isScoped ? data.kraName : undefined,
+    isScoped ? data.kpiName : undefined,
+    isScoped ? reviewPeriod : undefined,
+    isScoped ? reviewYear : undefined,
+  );
+  const effectiveSentBackMap = sentBackMap ?? internalSentBackMap;
 
   const employeeObservations = useMemo(() => {
     if (!observationMap || observationMap.size === 0) return undefined;
