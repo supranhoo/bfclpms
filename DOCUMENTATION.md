@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.13.7 — Admin data entry: atomic final_score sync on approval (eliminates two-step write failure)
+> **Version:** 2.13.8 — Fix Propagate button disabled for scoped Org KPIs
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4311,6 +4311,15 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix:** Moved workflow resolution BEFORE the upsert. When `newStatus === 'approved'`, `final_score` and `final_rating` are included directly in the upsert payload — single atomic write.
 - **Fallback:** After upsert, if `final_score` is still null on an approved KPI, the 8-stage fallback chain (Management → Auditor → HR PMS → Skip-Level → Manager → Self) computes and patches the score.
 - **Invariant:** Admin data entry must write `final_score` atomically in the same upsert when advancing to `approved` (POLICY.md §28)
+
+---
+
+### v2.13.8 — Fix Propagate button disabled for scoped Org KPIs (2026-03-30)
+
+- **Bug fix:** Propagate button was permanently disabled for department-scoped and employee-scoped Org KPIs, even after Unlock → Edit
+- **Root cause:** The disabled check used top-level `achievedValue` which is always empty for scoped KPIs — actual values live in `scopedValues` array
+- **Fix:** Replaced with scope-aware validation: org-scope checks `achievedValue`, department/employee scope checks if any `scopedValues` row has a value or is N/A
+- **Invariant:** Propagate button must use scope-aware validation (POLICY.md §29)
 
 ---
 
