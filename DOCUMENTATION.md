@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.12.0 — Cycle-aware reconciliation: workflow-aware final_score sync + rollback-awareness
+> **Version:** 2.13.0 — Scoring Health Check: threshold-vs-target sanity detection
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4237,6 +4237,15 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Export consistency:** Excel export uses `filteredRows` derived from `enrichedRows`, so exported data matches the UI
 - **Dependency fix:** `filteredRows` memo now correctly depends on `enrichedRows` instead of raw `rows`
 - **Invariant:** Reports must not display scores for workflow stages that do not exist in the employee's resolved workflow
+
+---
+
+### v2.13.0 — Scoring Health Check: threshold-vs-target sanity detection (2026-03-30)
+
+- **Enhancement:** Added `THRESHOLD_TARGET_MISMATCH` detection to Scoring Health Check for numeric KPIs
+- **Logic:** For "Higher is Better" KPIs, flags R5 ≤ target as Medium severity; for "Lower is Better", flags R5 ≥ target
+- **Scope:** All numeric KPIs with both target and R5 thresholds defined
+- **Regression risk:** Zero — additive detection only, no scoring logic changes
 
 ---
 

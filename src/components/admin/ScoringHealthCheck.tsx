@@ -27,7 +27,8 @@ type IssueType =
   | 'MISSING_CRITERIA'
   | 'BINARY_MISSING_POLARITY'
   | 'BINARY_INVALID_RATINGS'
-  | 'BINARY_LIKELY_INVERTED';
+  | 'BINARY_LIKELY_INVERTED'
+  | 'THRESHOLD_TARGET_MISMATCH';
 
 // Keywords indicating a negative-outcome KPI where "No" should score highest
 const NEGATIVE_OUTCOME_KEYWORDS = [
@@ -118,6 +119,29 @@ function detectIssues(kpis: KPI[]): ScoringIssue[] {
           suggestedFix: 'Set a target value or define R5–R1 thresholds in the KPI editor.',
           employeeName, employeeCode,
         });
+      }
+
+      // Threshold-vs-Target sanity check
+      if (kpi.target_value != null && r5 !== null && !isNaN(r5)) {
+        const target = parseFloat(String(kpi.target_value));
+        if (!isNaN(target) && target !== 0) {
+          const criteria = kpi.criteria;
+          if (criteria === 'Higher is Better' && r5 <= target) {
+            issues.push({
+              kpi, type: 'THRESHOLD_TARGET_MISMATCH', severity: 'medium',
+              description: `R5 threshold (${r5}) is ≤ the target (${target}). Any value meeting the target gets the highest rating. Verify thresholds are absolute values, not percentages.`,
+              suggestedFix: 'If R5 should be 140% of target, set R5 to ' + (target * 1.4).toFixed(1) + '. Open the KPI editor to correct thresholds.',
+              employeeName, employeeCode,
+            });
+          } else if (criteria === 'Lower is Better' && r5 >= target) {
+            issues.push({
+              kpi, type: 'THRESHOLD_TARGET_MISMATCH', severity: 'medium',
+              description: `R5 threshold (${r5}) is ≥ the target (${target}). Any value meeting the target gets the highest rating. Verify thresholds are absolute values, not percentages.`,
+              suggestedFix: 'If R5 should be 60% of target, set R5 to ' + (target * 0.6).toFixed(1) + '. Open the KPI editor to correct thresholds.',
+              employeeName, employeeCode,
+            });
+          }
+        }
       }
     } else if (uomType === 'binary') {
       // Binary KPIs: check custom options if present, otherwise fallback is fine
