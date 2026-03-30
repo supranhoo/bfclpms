@@ -4413,3 +4413,13 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Excel export:** Full filtered dataset exported via `xlsx` library
 - **Access:** Controlled via `kpi-scorecard-detail` key in report access system; default: admin, manager, management, hr_pms, auditor
 - **Files:** `src/pages/reports/KpiScorecardDetail.tsx` (new), `ReportsHub.tsx`, `App.tsx`, `useReportAccess.ts`
+
+---
+
+### v2.15.8 — Fix N/A blast-radius bug in admin data entry (2026-03-30)
+
+- **Bug:** Admin toggling N/A for any role level (e.g., management) wiped scores across ALL levels (self, manager, auditor, etc.)
+- **Root cause:** `useAdminDataEntry.ts` unconditionally cleared every scoring field when `is_na=true`, and the dialog always passed `is_na` even when unchanged
+- **Fix (useAdminDataEntry.ts):** N/A clearing now scoped to current role's fields only; `is_na` flag only written when it actually changed from existing state
+- **Fix (AdminDataEntryDialog.tsx):** Track `originalIsNa` state; only pass `is_na` to mutation when toggled by admin
+- **Invariant:** N/A toggle must never clear scores for unrelated review levels (POLICY.md §35)

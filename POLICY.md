@@ -702,3 +702,13 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Rationale:** The normal approval flow sets `final_score` during status advancement. Since already-approved KPIs skip status advancement, the `final_score` would remain stale after admin edits without explicit recomputation. The `advance_status` flag must never gate this recomputation.
 
 **Invariant:** Post-upsert recomputation must always execute when `currentKpiStatus === 'approved'`, regardless of which role-level score was edited and regardless of the `advance_status` toggle state.
+
+---
+
+## §35. Admin N/A Toggle Role-Scoped Clearing Invariant
+
+**Rule:** When an admin marks a KPI as N/A via the Admin Data Entry dialog, the system must only clear scoring fields (achieved_value, rating, score, remarks) for the **currently selected role level** and the `final_score`/`final_rating`. Scores for other review levels (self, manager, skip-level, HR PMS, auditor, management) must remain untouched.
+
+**Rationale:** The `is_na` flag is a KPI-level applicability marker. However, clearing scores across all levels when any single level is marked N/A causes data loss for already-completed reviews. The admin dialog must only send the `is_na` flag when it has been explicitly toggled (changed from its original state), preventing accidental re-clears on subsequent edits.
+
+**Invariant:** The N/A clearing block in `useAdminDataEntry.ts` must never reference scoring fields for roles other than the active `role_level` parameter. The `AdminDataEntryDialog` must track the original `is_na` state and only include `is_na` in the mutation payload when the value differs from the original.
