@@ -11,9 +11,10 @@ import { useIncentivePrograms } from '@/hooks/useIncentivePrograms';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { SlabCategorySelector } from './SlabCategorySelector';
+import { useIncentiveSlabCategories } from '@/hooks/useIncentiveSlabCategories';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const CATEGORIES = ['production', 'availability', 'maintenance', 'metal_recovery'];
 
 interface LocalRow {
   _key: string;
