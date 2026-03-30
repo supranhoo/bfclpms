@@ -127,7 +127,7 @@ export function ProductionTargetGrid({ controlledProgramId }: { controlledProgra
             <Select value={selectedProgram} onValueChange={setSelectedProgram}>
               <SelectTrigger className="w-[200px]"><SelectValue placeholder="Select Program" /></SelectTrigger>
               <SelectContent>
-                {productionPrograms.map((p: any) => (
+                {(programs as any[]).filter((p: any) => p.is_active).map((p: any) => (
                   <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                 ))}
               </SelectContent>
