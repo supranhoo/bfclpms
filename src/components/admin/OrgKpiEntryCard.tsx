@@ -17,7 +17,8 @@ import { QualitativeSelect } from '@/components/review/QualitativeSelect';
 import { BINARY_OPTIONS, type QualitativeOption } from '@/lib/qualitativeUom';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle, RotateCcw, Trash2, Ban } from 'lucide-react';
+import { Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle, RotateCcw, Trash2, Ban, Undo2 } from 'lucide-react';
+import type { SentBackInfo } from '@/hooks/useSentBackOrgKpiEmployees';
 
 export interface OrgKpiCardData {
   categoryId: string;
@@ -62,6 +63,7 @@ interface OrgKpiEntryCardProps {
   isAdmin?: boolean;
   governanceLocked?: boolean;
   employeeKpiIds?: string[];
+  sentBackMap?: Map<string, SentBackInfo>;
   onSave: (values: {
     achievedValue: number | null;
     remarks: string;
@@ -77,7 +79,7 @@ interface OrgKpiEntryCardProps {
     isNa?: boolean;
     naRemarks?: string;
     scopedValues?: Array<{ scopeId: string; achievedValue: number | null; remarks: string; evidenceUrl: string | null; isNa?: boolean }>;
-  }) => Promise<void>;
+  }, employeeIds?: string[]) => Promise<void>;
   onUnlock?: () => Promise<void>;
   onRollback?: (reason: string) => Promise<void>;
   onBulkRollback?: (reason: string) => Promise<void>;
@@ -97,7 +99,7 @@ const scopeIcons = {
   employee: User,
 };
 
-export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, governanceLocked, employeeKpiIds, onSave, onSaveAndPropagate, onUnlock, onRollback, onBulkRollback, onOpenImpact, onRemoveFromOrg }: OrgKpiEntryCardProps) {
+export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, governanceLocked, employeeKpiIds, sentBackMap, onSave, onSaveAndPropagate, onUnlock, onRollback, onBulkRollback, onOpenImpact, onRemoveFromOrg }: OrgKpiEntryCardProps) {
   const isLocked = (data.status === 'propagated' && !isAdmin) || (governanceLocked === true);
   const isPropagated = data.status === 'propagated';
   const [isUnlocking, setIsUnlocking] = useState(false);
@@ -112,6 +114,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
   const [evidenceUrl, setEvidenceUrl] = useState(data.evidenceUrl);
   const [scopedValues, setScopedValues] = useState<ScopedRow[]>(data.scopedRows || []);
   const [isNa, setIsNa] = useState(data.isNa ?? false);
+  const [selectedScopeIds, setSelectedScopeIds] = useState<string[]>([]);
 
   // Fetch observations for employee-scoped KPIs (React Query deduplicates with OrgKpiObservationsSummary)
   const isEmployeeScope = data.scope === 'employee';
@@ -236,13 +239,14 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
     }, 2000);
   }, [onSave, getValues]);
 
-  const handleSaveAndPropagate = async () => {
+  const handleSaveAndPropagate = async (filterIds?: string[]) => {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     setIsPropagating(true);
     try {
-      await onSaveAndPropagate(getValues());
+      await onSaveAndPropagate(getValues(), filterIds);
       isDirtyRef.current = false;
       setSaveStatus('saved');
+      setSelectedScopeIds([]);
     } finally {
       setIsPropagating(false);
     }
@@ -440,6 +444,11 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               uom={data.uom}
               criteria={data.criteria ?? undefined}
               employeeObservations={employeeObservations}
+              sentBackMap={sentBackMap}
+              selectedIds={selectedScopeIds}
+              onSelectionChange={setSelectedScopeIds}
+              onPropagateRow={(scopeId) => handleSaveAndPropagate([scopeId])}
+              isPropagating={isPropagating}
             />
           )}
 
@@ -653,7 +662,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
             )}
           </div>
           {!isLocked && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {saveStatus === 'saving' && (
                 <span className="text-xs text-muted-foreground flex items-center gap-1">
                   <Loader2 className="h-3 w-3 animate-spin" />Saving...
@@ -664,6 +673,51 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                   <CheckCircle2 className="h-3 w-3" />Saved
                 </span>
               )}
+
+              {/* Propagate Selected button — only when selections exist */}
+              {selectedScopeIds.length > 0 && data.scope !== 'organization' && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1" disabled={isPropagating}>
+                      {isPropagating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUpRight className="h-3.5 w-3.5" />}
+                      Propagate Selected ({selectedScopeIds.length})
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Propagate Selected</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will propagate values for {selectedScopeIds.length} selected {data.scopeLabel?.toLowerCase() || 'scope'}(s) to employee scorecards.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    {/* Sent-back warning */}
+                    {sentBackMap && selectedScopeIds.some(id => sentBackMap.has(id)) && (
+                      <Alert variant="default" className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/30 py-2">
+                        <Undo2 className="h-4 w-4 text-amber-600" />
+                        <AlertDescription className="text-xs text-amber-700 dark:text-amber-400">
+                          <p className="font-medium mb-1">The following have KPIs that were sent back:</p>
+                          <ul className="list-disc pl-4 space-y-0.5">
+                            {selectedScopeIds.filter(id => sentBackMap.has(id)).map(id => {
+                              const row = scopedValues.find(r => r.scopeId === id);
+                              const info = sentBackMap.get(id);
+                              return <li key={id}>{row?.scopeName || id} — {info?.reason}</li>;
+                            })}
+                          </ul>
+                          <p className="mt-1">Propagating will overwrite their current review data.</p>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => handleSaveAndPropagate(selectedScopeIds)}>
+                        Propagate Selected
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+
+              {/* Main Propagate All button */}
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button size="sm" className="h-7 text-xs" disabled={isPropagating || !(data.scope === 'organization' ? (isNa || achievedValue.trim() !== '') : (isNa || scopedValues.some(sv => sv.achievedValue !== null || sv.isNa)))}>
@@ -679,9 +733,26 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                       The entry will be <strong>locked for editing</strong> afterward. Only an admin can unlock it.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
+                  {/* Sent-back warning for bulk propagation */}
+                  {sentBackMap && sentBackMap.size > 0 && data.scope !== 'organization' && (
+                    <Alert variant="default" className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/30 py-2">
+                      <Undo2 className="h-4 w-4 text-amber-600" />
+                      <AlertDescription className="text-xs text-amber-700 dark:text-amber-400">
+                        <p className="font-medium mb-1">{sentBackMap.size} employee(s) have KPIs that were sent back:</p>
+                        <ul className="list-disc pl-4 space-y-0.5">
+                          {Array.from(sentBackMap.entries()).slice(0, 5).map(([id, info]) => {
+                            const row = scopedValues.find(r => r.scopeId === id);
+                            return <li key={id}>{row?.scopeName || id} — {info.reason}</li>;
+                          })}
+                          {sentBackMap.size > 5 && <li>...and {sentBackMap.size - 5} more</li>}
+                        </ul>
+                        <p className="mt-1">Propagating will overwrite their current review data.</p>
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleSaveAndPropagate}>
+                    <AlertDialogAction onClick={() => handleSaveAndPropagate()}>
                       Propagate to Scorecards
                     </AlertDialogAction>
                   </AlertDialogFooter>

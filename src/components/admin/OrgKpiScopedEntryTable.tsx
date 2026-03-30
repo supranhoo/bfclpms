@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -12,9 +13,10 @@ import { isValueOutOfRange, RatingThresholds, calculateRating } from '@/lib/rati
 import { RatingBadge } from '@/components/ui/RatingBadge';
 import { QualitativeSelect } from '@/components/review/QualitativeSelect';
 import { BINARY_OPTIONS, type QualitativeOption } from '@/lib/qualitativeUom';
-import { ChevronDown, ChevronRight, Building2, AlertTriangle, Ban, TrendingUp, TrendingDown, MessageSquare } from 'lucide-react';
+import { ChevronDown, ChevronRight, Building2, AlertTriangle, Ban, TrendingUp, TrendingDown, MessageSquare, ArrowUpRight, Undo2 } from 'lucide-react';
 import { format } from 'date-fns';
 import type { KpiObservation } from '@/hooks/useKpiObservations';
+import type { SentBackInfo } from '@/hooks/useSentBackOrgKpiEmployees';
 
 export interface ScopedRow {
   scopeId: string;
@@ -50,9 +52,19 @@ interface OrgKpiScopedEntryTableProps {
   employeeObservations?: Map<string, KpiObservation[]>;
   /** @deprecated Use employeeObservations instead */
   observationCounts?: Map<string, ObservationCounts>;
+  /** Sent-back status per employee */
+  sentBackMap?: Map<string, SentBackInfo>;
+  /** Selected scope IDs for multi-select propagation */
+  selectedIds?: string[];
+  /** Selection change callback */
+  onSelectionChange?: (ids: string[]) => void;
+  /** Per-row propagate callback */
+  onPropagateRow?: (scopeId: string) => void;
+  /** Whether propagation is in progress */
+  isPropagating?: boolean;
 }
 
-export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts }: OrgKpiScopedEntryTableProps) {
+export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds = [], onSelectionChange, onPropagateRow, isPropagating }: OrgKpiScopedEntryTableProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [bulkFillValue, setBulkFillValue] = useState('');
 
@@ -60,6 +72,11 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
   const allQualitative = rows.length > 0 && rows.every(r => r.uomType === 'binary' || (r.uomType === 'tiered' && r.qualitativeOptions?.length));
   const enteredCount = rows.filter(r => r.achievedValue !== null || r.isNa).length;
   const allEntered = rows.length > 0 && enteredCount === rows.length;
+  const sentBackCount = sentBackMap?.size ?? 0;
+
+  const hasSelectionFeature = !!onSelectionChange;
+  const hasRowPropagation = !!onPropagateRow;
+  const showActionsColumn = hasSelectionFeature || hasRowPropagation;
 
   const isEmployeeScope = scopeLabel === 'Employee';
   const sortedRows = [...rows].sort((a, b) => {
@@ -98,6 +115,26 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
 
   const emptyCount = rows.filter(r => r.achievedValue === null && !r.isNa).length;
 
+  // Select all/none
+  const allSelected = rows.length > 0 && selectedIds.length === rows.length;
+  const someSelected = selectedIds.length > 0 && selectedIds.length < rows.length;
+
+  const handleSelectAll = (checked: boolean) => {
+    if (!onSelectionChange) return;
+    onSelectionChange(checked ? rows.map(r => r.scopeId) : []);
+  };
+
+  const handleToggleRow = (scopeId: string, checked: boolean) => {
+    if (!onSelectionChange) return;
+    if (checked) {
+      onSelectionChange([...selectedIds, scopeId]);
+    } else {
+      onSelectionChange(selectedIds.filter(id => id !== scopeId));
+    }
+  };
+
+  const totalColSpan = 7 + (hasSelectionFeature ? 1 : 0) + (hasRowPropagation ? 1 : 0);
+
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <div className="flex items-center gap-2 flex-wrap">
@@ -108,6 +145,12 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
             <span className={allEntered ? 'text-green-600 dark:text-green-400 font-medium' : 'text-muted-foreground'}>
               ({enteredCount} / {rows.length} entered{naCount > 0 ? `, ${naCount} N/A` : ''})
             </span>
+            {sentBackCount > 0 && (
+              <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-400 gap-0.5">
+                <Undo2 className="w-2.5 h-2.5" />
+                {sentBackCount} sent back
+              </Badge>
+            )}
           </Button>
         </CollapsibleTrigger>
 
@@ -139,6 +182,18 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
           <Table>
             <TableHeader className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm">
               <TableRow className="bg-muted/30">
+                {hasSelectionFeature && (
+                  <TableHead className="w-10 text-center">
+                    <Checkbox
+                      checked={allSelected}
+                      ref={(el) => {
+                        if (el) (el as any).indeterminate = someSelected;
+                      }}
+                      onCheckedChange={handleSelectAll}
+                      className="mx-auto"
+                    />
+                  </TableHead>
+                )}
                 <TableHead className="text-xs min-w-[200px]">{scopeLabel}</TableHead>
                 <TableHead className="text-xs w-24 text-center">Target</TableHead>
                 <TableHead className="text-xs w-16 text-center">N/A</TableHead>
@@ -146,6 +201,9 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
                 <TableHead className="text-xs w-24 text-center">Rating</TableHead>
                 <TableHead className="text-xs min-w-[220px]">Remark</TableHead>
                 <TableHead className="text-xs w-24">File</TableHead>
+                {hasRowPropagation && (
+                  <TableHead className="text-xs w-16 text-center">Actions</TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -161,11 +219,34 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
                     criteria={criteria}
                     employeeObservations={employeeObservations}
                     observationCounts={observationCounts}
+                    sentBackMap={sentBackMap}
+                    selectedIds={selectedIds}
+                    onToggleRow={hasSelectionFeature ? handleToggleRow : undefined}
+                    onPropagateRow={onPropagateRow}
+                    isPropagating={isPropagating}
+                    totalColSpan={totalColSpan}
+                    hasSelectionFeature={hasSelectionFeature}
+                    hasRowPropagation={hasRowPropagation}
                   />
                 ))
               ) : (
                 sortedRows.map(row => (
-                  <DepartmentRow key={row.scopeId} row={row} onValueChange={onValueChange} ratingThresholds={ratingThresholds} targetValue={targetValue} uom={uom} criteria={criteria} />
+                  <DepartmentRow
+                    key={row.scopeId}
+                    row={row}
+                    onValueChange={onValueChange}
+                    ratingThresholds={ratingThresholds}
+                    targetValue={targetValue}
+                    uom={uom}
+                    criteria={criteria}
+                    sentBackInfo={sentBackMap?.get(row.scopeId)}
+                    isSelected={selectedIds.includes(row.scopeId)}
+                    onToggleRow={hasSelectionFeature ? handleToggleRow : undefined}
+                    onPropagateRow={onPropagateRow}
+                    isPropagating={isPropagating}
+                    hasSelectionFeature={hasSelectionFeature}
+                    hasRowPropagation={hasRowPropagation}
+                  />
                 ))
               )}
             </TableBody>
@@ -186,13 +267,21 @@ interface EmployeeGroupProps {
   criteria?: string;
   employeeObservations?: Map<string, KpiObservation[]>;
   observationCounts?: Map<string, ObservationCounts>;
+  sentBackMap?: Map<string, SentBackInfo>;
+  selectedIds: string[];
+  onToggleRow?: (scopeId: string, checked: boolean) => void;
+  onPropagateRow?: (scopeId: string) => void;
+  isPropagating?: boolean;
+  totalColSpan: number;
+  hasSelectionFeature: boolean;
+  hasRowPropagation: boolean;
 }
 
-function EmployeeGroup({ group, onValueChange, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts }: EmployeeGroupProps) {
+function EmployeeGroup({ group, onValueChange, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds, onToggleRow, onPropagateRow, isPropagating, totalColSpan, hasSelectionFeature, hasRowPropagation }: EmployeeGroupProps) {
   return (
     <>
       <TableRow key={`group-${group.dept ?? 'none'}`} className="bg-muted/50 hover:bg-muted/50">
-        <TableCell colSpan={7} className="py-1.5 px-3">
+        <TableCell colSpan={totalColSpan} className="py-1.5 px-3">
           <div className="flex items-center gap-2">
             <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             <span className="text-xs font-semibold text-muted-foreground">
@@ -215,6 +304,14 @@ function EmployeeGroup({ group, onValueChange, ratingThresholds, targetValue, uo
           criteria={criteria}
           observations={employeeObservations?.get(row.scopeId)}
           observationCounts={observationCounts?.get(row.scopeId)}
+          sentBackInfo={sentBackMap?.get(row.scopeId)}
+          isSelected={selectedIds.includes(row.scopeId)}
+          onToggleRow={onToggleRow}
+          onPropagateRow={onPropagateRow}
+          isPropagating={isPropagating}
+          totalColSpan={totalColSpan}
+          hasSelectionFeature={hasSelectionFeature}
+          hasRowPropagation={hasRowPropagation}
         />
       ))}
     </>
@@ -244,9 +341,17 @@ interface EmployeeRowProps {
   criteria?: string;
   observations?: KpiObservation[];
   observationCounts?: ObservationCounts;
+  sentBackInfo?: SentBackInfo;
+  isSelected: boolean;
+  onToggleRow?: (scopeId: string, checked: boolean) => void;
+  onPropagateRow?: (scopeId: string) => void;
+  isPropagating?: boolean;
+  totalColSpan: number;
+  hasSelectionFeature: boolean;
+  hasRowPropagation: boolean;
 }
 
-function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, observations, observationCounts: legacyCounts }: EmployeeRowProps) {
+function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, observations, observationCounts: legacyCounts, sentBackInfo, isSelected, onToggleRow, onPropagateRow, isPropagating, totalColSpan, hasSelectionFeature, hasRowPropagation }: EmployeeRowProps) {
   const [expanded, setExpanded] = useState(false);
 
   const effectiveTarget = row.targetValue != null ? row.targetValue : targetValue;
@@ -258,6 +363,7 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
     : null;
 
   const rowIsNa = row.isNa ?? false;
+  const isSentBack = !!sentBackInfo;
 
   // Derive counts from full observations if available, else fall back to legacy counts
   const counts = observations
@@ -271,10 +377,22 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
   const hasObservations = observations && observations.length > 0;
   const totalObs = counts ? counts.positive + counts.concern + counts.neutral : 0;
 
+  const canPropagate = (numVal !== null || rowIsNa) && !isPropagating;
+
   return (
     <>
-      <TableRow className={rowIsNa ? 'opacity-60' : ''}>
-        {/* Name + dept/designation + observation badges */}
+      <TableRow className={`${rowIsNa ? 'opacity-60' : ''} ${isSentBack ? 'border-l-2 border-l-amber-500 bg-amber-50/30 dark:bg-amber-950/20' : ''}`}>
+        {/* Checkbox */}
+        {hasSelectionFeature && (
+          <TableCell className="py-1.5 w-10 text-center">
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={(checked) => onToggleRow?.(row.scopeId, !!checked)}
+            />
+          </TableCell>
+        )}
+
+        {/* Name + dept/designation + observation badges + sent-back indicator */}
         <TableCell className="text-sm py-1.5 min-w-[200px]">
           <div className="flex flex-col gap-0.5">
             <span className="font-medium text-sm leading-tight">{row.scopeName}</span>
@@ -288,6 +406,24 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
                 <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal">
                   {row.designation}
                 </Badge>
+              )}
+              {/* Sent-back indicator */}
+              {isSentBack && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-400 gap-0.5 cursor-help">
+                        <Undo2 className="w-2.5 h-2.5" />
+                        Sent Back
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[300px] text-xs">
+                      <p className="font-medium">Sent back by {sentBackInfo.senderName}</p>
+                      <p className="text-muted-foreground mt-0.5">{sentBackInfo.reason}</p>
+                      <p className="text-muted-foreground mt-0.5">{format(new Date(sentBackInfo.date), 'dd MMM yyyy HH:mm')}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
               {/* Observation badges — clickable when full observations available */}
               {counts && counts.positive > 0 && (
@@ -448,12 +584,36 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
             />
           )}
         </TableCell>
+
+        {/* Per-row propagate action */}
+        {hasRowPropagation && (
+          <TableCell className="py-1.5 w-16 text-center">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    disabled={!canPropagate}
+                    onClick={() => onPropagateRow?.(row.scopeId)}
+                  >
+                    <ArrowUpRight className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  Propagate this employee only
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </TableCell>
+        )}
       </TableRow>
 
       {/* Expandable observation detail sub-row */}
       {expanded && hasObservations && (
         <TableRow className="bg-muted/20 hover:bg-muted/20">
-          <TableCell colSpan={7} className="py-2 px-3">
+          <TableCell colSpan={totalColSpan} className="py-2 px-3">
             <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
               {observations!.map(obs => {
                 const type = obsTypeConfig[obs.observation_type] || obsTypeConfig.neutral;
@@ -498,7 +658,7 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
   );
 }
 
-// ---- Department row (unchanged) ----
+// ---- Department row ----
 interface DepartmentRowProps {
   row: ScopedRow;
   onValueChange: (scopeId: string, field: 'achievedValue' | 'remarks' | 'evidenceUrl' | 'isNa', value: string | null) => void;
@@ -506,20 +666,54 @@ interface DepartmentRowProps {
   targetValue?: number | null;
   uom?: string | null;
   criteria?: string;
+  sentBackInfo?: SentBackInfo;
+  isSelected: boolean;
+  onToggleRow?: (scopeId: string, checked: boolean) => void;
+  onPropagateRow?: (scopeId: string) => void;
+  isPropagating?: boolean;
+  hasSelectionFeature: boolean;
+  hasRowPropagation: boolean;
 }
 
-function DepartmentRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria }: DepartmentRowProps) {
+function DepartmentRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, sentBackInfo, isSelected, onToggleRow, onPropagateRow, isPropagating, hasSelectionFeature, hasRowPropagation }: DepartmentRowProps) {
   const rowIsNa = row.isNa ?? false;
   const effectiveTarget = row.targetValue != null ? row.targetValue : targetValue;
   const effectiveUom = row.uom != null ? row.uom : uom;
+  const isSentBack = !!sentBackInfo;
+  const canPropagate = (row.achievedValue !== null || rowIsNa) && !isPropagating;
 
   return (
-    <TableRow className={rowIsNa ? 'opacity-60' : ''}>
+    <TableRow className={`${rowIsNa ? 'opacity-60' : ''} ${isSentBack ? 'border-l-2 border-l-amber-500 bg-amber-50/30 dark:bg-amber-950/20' : ''}`}>
+      {hasSelectionFeature && (
+        <TableCell className="py-1.5 w-10 text-center">
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={(checked) => onToggleRow?.(row.scopeId, !!checked)}
+          />
+        </TableCell>
+      )}
       <TableCell className="text-sm py-1.5 min-w-[200px]">
         <div className="flex flex-col">
           <span className="font-medium">{row.scopeName}</span>
           {row.scopeSubText && (
             <span className="text-xs text-muted-foreground mt-0.5">{row.scopeSubText}</span>
+          )}
+          {isSentBack && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-400 gap-0.5 cursor-help mt-0.5 w-fit">
+                    <Undo2 className="w-2.5 h-2.5" />
+                    Sent Back
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[300px] text-xs">
+                  <p className="font-medium">Sent back by {sentBackInfo.senderName}</p>
+                  <p className="text-muted-foreground mt-0.5">{sentBackInfo.reason}</p>
+                  <p className="text-muted-foreground mt-0.5">{format(new Date(sentBackInfo.date), 'dd MMM yyyy HH:mm')}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
       </TableCell>
@@ -614,6 +808,28 @@ function DepartmentRow({ row, onValueChange, ratingThresholds, targetValue, uom,
           />
         )}
       </TableCell>
+      {hasRowPropagation && (
+        <TableCell className="py-1.5 w-16 text-center">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  disabled={!canPropagate}
+                  onClick={() => onPropagateRow?.(row.scopeId)}
+                >
+                  <ArrowUpRight className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">
+                Propagate this department only
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </TableCell>
+      )}
     </TableRow>
   );
 }

@@ -7,6 +7,7 @@ import { useOrgLevelKpisWithEmployees, useOrgLevelKpis } from '@/hooks/useOrgLev
 import { useOrgKpiOwnershipMap } from '@/hooks/useOrgKpiDataOwner';
 import { useUnmarkAsOrgLevel } from '@/hooks/useMarkAsOrgLevel';
 import { usePropagateOrgKpiValue } from '@/hooks/usePropagateOrgKpiValue';
+import { useSentBackOrgKpiEmployees } from '@/hooks/useSentBackOrgKpiEmployees';
 import { useBatchInsertAuditLogs } from '@/hooks/useOrgKpiAuditLog';
 import { useRollbackOrgKpiPropagation, useBulkRollbackOrgKpiPropagation } from '@/hooks/useRollbackOrgKpiPropagation';
 import { OrgLevelScope } from '@/hooks/useKpis';
@@ -530,7 +531,8 @@ export default function OrgKpiDataEntry() {
   // Save & Propagate handler
   const handleCardSaveAndPropagate = useCallback(async (
     kpi: typeof filteredKpis[0],
-    values: Parameters<typeof handleCardSave>[1]
+    values: Parameters<typeof handleCardSave>[1],
+    filterEmployeeIds?: string[],
   ) => {
     await handleCardSave(kpi, values);
     const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'employee';
@@ -576,6 +578,8 @@ export default function OrgKpiDataEntry() {
       propagatedScopeIds.push('organization');
     } else if ((scope === 'department' || scope === 'employee') && values.scopedValues) {
       for (const sv of values.scopedValues) {
+        // Skip if filterEmployeeIds provided and this scope isn't in the list
+        if (filterEmployeeIds && !filterEmployeeIds.includes(sv.scopeId)) continue;
         if (sv.achievedValue === null && !sv.isNa) continue;
         const result = await propagate.mutateAsync({
           categoryId: kpi.category_id,
@@ -1139,7 +1143,7 @@ export default function OrgKpiDataEntry() {
                       governanceLocked={governanceLocked}
                       employeeKpiIds={empKpiIds}
                       onSave={(values) => handleCardSave(kpi, values)}
-                      onSaveAndPropagate={(values) => handleCardSaveAndPropagate(kpi, values)}
+                      onSaveAndPropagate={(values, filterIds) => handleCardSaveAndPropagate(kpi, values, filterIds)}
                       onUnlock={async () => {
                         await supabase
                           .from('org_kpi_values')
