@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.15.0 — Previous month tiles in Review Journey
+> **Version:** 2.15.2 — Fix rollback cascade-clear off-by-one + Re-review badge
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
