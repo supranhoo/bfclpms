@@ -668,3 +668,17 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Rationale:** Send-back query records are auto-resolved when KPI status changes, so filtering by `status = 'open'` always returns empty results. The correct signal is: KPI is still at `kra_set` AND has a historical send-back query.
 
 **Invariant:** The sent-back detection must never rely solely on `kpi_queries.status = 'open'`. It must check the KPI's current workflow status.
+
+---
+
+## §32. Review Journey Previous Month Comparison Invariant
+
+**Rule:** The Review Journey must show up to 2 previous months of the same KPI for trend comparison. The displayed data must:
+1. Come from live database queries (same `kpis` + `review_submissions` tables as current month)
+2. Use a short staleTime (≤2 minutes) to ensure real-time linkage with the dashboard
+3. Resolve each previous month's workflow independently via `get_bulk_employee_workflows` RPC
+4. Match KPIs by `employee_id + kpi_name + kra_name + category_id` (not by KPI ID)
+
+**Rationale:** Reviewers need to compare current performance against recent history without switching between dashboards. The data must be live-linked to prevent stale comparisons.
+
+**Invariant:** Previous month tiles must never show cached or snapshot data — they must always reflect the current state of the corresponding KPI in the database.

@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.14.2 — Fix sent-back indicator detection + expand value history audit logging
+> **Version:** 2.15.0 — Previous month tiles in Review Journey
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
