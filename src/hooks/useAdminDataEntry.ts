@@ -319,7 +319,9 @@ export function useAdminSubmitReviewData() {
       }
 
       // 8. Recompute final_score for approved KPIs (handles both new approvals and edits on already-approved)
-      const shouldRecomputeFinal = newStatus === 'approved' || (advance_status !== false && newSubmission && !newStatus);
+      // Decoupled from advance_status — already-approved KPIs always need final_score sync
+      const kpiWasAlreadyApproved = !newStatus && currentKpiStatus === 'approved';
+      const shouldRecomputeFinal = newStatus === 'approved' || (kpiWasAlreadyApproved && !!newSubmission);
       if (shouldRecomputeFinal && newSubmission) {
         // Re-fetch the full submission to get all latest scores after upsert
         const { data: freshSub } = await supabase
