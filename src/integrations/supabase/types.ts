@@ -1134,6 +1134,30 @@ export type Database = {
         }
         Relationships: []
       }
+      incentive_slab_categories: {
+        Row: {
+          created_at: string | null
+          id: string
+          label: string
+          sort_order: number | null
+          value: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          label: string
+          sort_order?: number | null
+          value: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          label?: string
+          sort_order?: number | null
+          value?: string
+        }
+        Relationships: []
+      }
       incentive_slabs: {
         Row: {
           applicable_designations: string[] | null
