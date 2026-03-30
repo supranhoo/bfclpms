@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.15.10 — Port Incentive detection via vessel rates query
+> **Version:** 2.15.11 — DB-driven slab categories (zero-hardcoding)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
