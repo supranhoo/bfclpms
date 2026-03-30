@@ -31,6 +31,7 @@ import { BusinessUnitManager } from '@/components/incentive/BusinessUnitManager'
 import { AllocationRulesEditor } from '@/components/incentive/AllocationRulesEditor';
 import { VesselRateEditor } from '@/components/incentive/VesselRateEditor';
 import { VesselDataEntryGrid } from '@/components/incentive/VesselDataEntryGrid';
+import { UnifiedProductionDataTab } from '@/components/incentive/UnifiedProductionDataTab';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 /* ── Summary badges for each program card ── */
