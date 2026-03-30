@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 1.32.0 — Review Journey previous month comparison invariant
+> **Version:** 1.33.0 — Rollback cascade-clear invariant
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
