@@ -685,7 +685,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleSaveAndPropagate}>
+                    <AlertDialogAction onClick={() => handleSaveAndPropagate()}>
                       Propagate to Scorecards
                     </AlertDialogAction>
                   </AlertDialogFooter>
