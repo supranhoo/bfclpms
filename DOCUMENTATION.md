@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.14.0 — Sent-back indicator + individual/multi-select propagation for Org KPI scoped table
+> **Version:** 2.14.1 — Fix sent-back indicator wiring for Org KPI scoped table
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4329,6 +4329,21 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Root cause:** The blank-data guard at line 547 checked only `values.achievedValue` (top-level), which is always `null` for scoped KPIs — same class of bug as v2.13.8
 - **Fix:** Made the guard scope-aware: org-scope checks top-level value; department/employee scope checks if any `scopedValues` row has data or is N/A
 - **Invariant:** Blank-data propagation guard must be scope-aware (POLICY.md §29)
+
+---
+
+### v2.14.0 — Sent-back indicator + individual/multi-select propagation for Org KPI scoped table (2026-03-30)
+
+- **Feature:** Amber left-border + Undo2 icon with tooltip on employee rows whose KPIs were sent back
+- **Feature:** Checkbox column + per-row propagate button + "Propagate Selected" bulk action
+- **Feature:** Sent-back warning in propagation confirmation dialogs
+
+---
+
+### v2.14.1 — Fix sent-back indicator wiring (2026-03-30)
+
+- **Bug fix:** Sent-back indicator never appeared because `useSentBackOrgKpiEmployees` was imported but never called
+- **Fix:** Moved hook invocation inside `OrgKpiEntryCard` (self-contained — no parent wiring needed)
 
 ---
 
