@@ -1,47 +1,66 @@
 
 
-## Plan: Add Sortable Column Headers to KpiDetailsTable (All Dashboards)
+## RCA & Fix: Admin Management Score Not Updating final_score on Already-Approved KPIs
 
-### Scope
+### Root Cause
 
-`KpiDetailsTable` is the **single shared component** used across all review dashboards — My KPIs, Team Review, Audit, Management, Skip-Level, and HR PMS. Adding sort capability here automatically enables it on **all dashboards**.
+**File: `src/hooks/useAdminDataEntry.ts` lines 198-201**
 
-### What Changes
+When the admin enters a management score on a KPI that is **already approved**, the code explicitly skips final_score sync:
 
-**File: `src/components/review/KpiDetailsTable.tsx`**
-
-1. **Add local sort state** — `sortField` and `sortDirection` via `useState`
-2. **Replace static `<TableHead>` with clickable headers** for: Category, Weightage, each score column (Self, Manager, HR PMS, Auditor, Mgmt — dynamically from `scoreColumns`), Final (last score column), and Status
-3. **Sort `kpis` array via `useMemo`** before rendering:
-   - **Category**: alphabetical by `kra_categories.name`
-   - **Weightage**: numerical
-   - **Score columns**: numerical by corresponding submission score from `submissionMap`, nulls last
-   - **Status**: by canonical status order from `statusLabels`
-4. **Arrow icons**: `ArrowUpDown` (inactive), `ArrowUp`/`ArrowDown` (active) from lucide-react
-5. **Styling**: Active header gets `secondary` variant look; click toggles asc↔desc; clicking a different column defaults to desc
-
-### Technical Detail
-
-```text
-Header row (before):
-  Category | KRA/KPI | Target | Weightage | Achieved | [scores...] | Status | Actions
-
-Header row (after):
-  Category ↕ | KRA/KPI | Target | Weightage ↕ | Achieved | [scores ↕...] | Status ↕ | Actions
+```typescript
+if (currentKpiStatus === 'approved') {
+  console.info('KPI already approved — skipping status advancement and final_score sync');
+  newStatus = null;  // ← This prevents line 232 from running
+}
 ```
 
-The sort wraps the incoming `kpis` prop in a `useMemo` — original array is never mutated. Default state: no active sort (preserves original order).
+Line 232 only updates `final_score` when `newStatus === 'approved'`, but since it's already approved, `newStatus` is `null`. Result: `management_score` gets set to 5, but `final_score` stays at 0 (the old auditor score).
 
-Since all 6 dashboards (EmployeeScorecard, UnifiedScorecard, AuditScorecard, ManagementScorecard) use `KpiDetailsTable`, sorting is automatically available everywhere.
+**DB evidence**: KPI `a93a5c95` (Budgetary Preparation, Abhas, Jan 2026):
+- `management_score = 5`, `auditor_score = 0`, `final_score = 0` ← should be 5
+
+### Fix
+
+**File: `src/hooks/useAdminDataEntry.ts`**
+
+After the upsert (around line 280), add a new block: **when the KPI is already approved**, recompute `final_score` using the 8-stage fallback chain from the freshly-written submission data, then patch it. This ensures any admin edit on an approved KPI immediately reflects in the dashboard.
+
+```typescript
+// After upsert succeeds, if KPI was already approved, recompute final_score
+if (currentKpiStatus === 'approved' && newSubmission) {
+  const fallbackChain = [
+    'management_score', 'auditor_score', 'hr_pms_score',
+    'skip_level_score', 'manager_score', 'self_score'
+  ];
+  let computedScore = null;
+  for (const field of fallbackChain) {
+    if (newSubmission[field] !== null && newSubmission[field] !== undefined) {
+      computedScore = newSubmission[field];
+      break;
+    }
+  }
+  if (computedScore !== null) {
+    await supabase.from('review_submissions')
+      .update({ final_score: computedScore })
+      .eq('kpi_id', kpi_id);
+  }
+}
+```
+
+Also fix the **existing data** for this specific KPI with a one-time DB patch.
 
 ### Files Modified
 
 | File | Change |
 |------|--------|
-| `src/components/review/KpiDetailsTable.tsx` | Add sort state, sortable headers, sorted kpis memo |
-| `DOCUMENTATION.md` | v2.15.4 changelog |
+| `src/hooks/useAdminDataEntry.ts` | Add post-upsert final_score recomputation for already-approved KPIs |
+| DB migration | Fix existing stale final_score for affected KPI |
+| `DOCUMENTATION.md` | v2.15.5 changelog |
+| `POLICY.md` | Add invariant: admin edits on approved KPIs must recompute final_score |
 
 ### Risk Assessment
-- **Regression**: Zero — additive UI change, no data/DB modifications
-- **Performance**: Single `useMemo` with sort; negligible for typical KPI counts
+- **Regression**: Low — only triggers for already-approved KPIs edited by admin
+- **Data**: One-time patch corrects the specific KPI; trigger ensures rating stays in sync
+- **Performance**: Single additional query only when editing approved KPIs
 
