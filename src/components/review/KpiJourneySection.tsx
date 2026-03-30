@@ -1,19 +1,41 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ReviewStageCard, StageStatus } from './ReviewStageCard';
 import { KPI, ReviewSubmission, KpiQuery } from '@/hooks/useKpis';
-import { User, Briefcase, Shield, MessageSquare, History, UserCheck, ClipboardCheck, AlertTriangle, Download } from 'lucide-react';
+import { User, Briefcase, Shield, MessageSquare, History, UserCheck, ClipboardCheck, AlertTriangle, Download, ChevronDown, CalendarClock } from 'lucide-react';
 import { getVisibleJourneyStages, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { UomType } from '@/lib/qualitativeUom';
 import { exportReviewTimelinePdf, ReviewTimelinePdfData } from '@/lib/pdfExport';
 import { statusLabels } from '@/lib/reviewConstants';
 import { format } from 'date-fns';
+
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+function getPreviousPeriods(currentMonth: string, currentYear: number, count: number) {
+  const idx = MONTHS.indexOf(currentMonth);
+  if (idx === -1) return [];
+  const result: { month: string; year: number }[] = [];
+  for (let i = 1; i <= count; i++) {
+    let mi = idx - i;
+    let yr = currentYear;
+    if (mi < 0) {
+      mi += 12;
+      yr -= 1;
+    }
+    result.push({ month: MONTHS[mi], year: yr });
+  }
+  return result;
+}
 
 function useEmployeeProfileForPdf(employeeId: string | undefined) {
   return useQuery({
