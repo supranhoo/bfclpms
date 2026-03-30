@@ -1,44 +1,65 @@
 
 
-## Plan: Conditional Production Data Tab — Show Vessel Grid for Port Incentive Programs
+## Fix: Port Incentive Detection — Use Vessel Rates Query Instead of `incentive_base`
 
 ### Problem
-When "Port Incentive" (a fixed-rate/vessel program) is selected in the Production Data tab, the system shows the `ProductionTargetGrid` with irrelevant fields (Sub-Unit/Furnace, Category, Target, Achieved, Incentive %). Port incentive programs should only show the `VesselDataEntryGrid` with employee vessel counts, since employees and rates are already configured.
+The current condition `incentive_base === 'fixed'` never matches because Port Incentive uses `incentive_base = 'basic_salary'`. The distinguishing factor is that Port Incentive programs have **vessel rates configured** in `incentive_vessel_rates`.
 
-### Solution
-Merge the two grids into a **single unified Production Data tab** with one program selector. When the selected program has `incentive_base === 'fixed'` (port/vessel program), render the `VesselDataEntryGrid`. Otherwise, render the `ProductionTargetGrid` table.
+### UI After Fix
+
+When user selects **Port Incentive** from the program dropdown:
+
+```text
+┌──────────────────────────────────────────────────────────────────────┐
+│  Program: [Port Incentive ▼]     Month: [January ▼]   Year: [2026▼]│
+├──────────────────────────────────────────────────────────────────────┤
+│  🚢 Vessel Data Entry                                               │
+├──────────┬────────┬──────────────┬────────────────┬─────────┬───────┤
+│ Employee │ Code   │ Rate/Vessel ₹│ Vessels Handled│ Total ₹ │Remarks│
+├──────────┼────────┼──────────────┼────────────────┼─────────┼───────┤
+│ Abhas    │ 100020 │ 5,000        │ [  3  ]        │ ₹15,000 │ [   ] │
+│ Ravi K   │ 100045 │ 4,500        │ [  5  ]        │ ₹22,500 │ [   ] │
+├──────────┴────────┴──────────────┴────────────────┴─────────┴───────┤
+│ Grand Total: ₹37,500                              [ 💾 Save All ]  │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+When user selects a **slab-based program** (e.g., Production Incentive), the existing `ProductionTargetGrid` renders with Sub-Unit, Category, Target, Achieved columns as before.
 
 ### Changes
 
-**`src/pages/admin/IncentiveConfig.tsx`** — Replace the Production Data tab content:
-- Remove the separate `ProductionTargetGrid` + `VesselDataEntryGrid` side-by-side layout
-- Add a single unified component that has one program selector at the top
-- Conditionally render the appropriate grid based on selected program's `incentive_base`
+**`src/components/incentive/UnifiedProductionDataTab.tsx`**
+- Add a `useQuery` that counts rows in `incentive_vessel_rates` for the selected `program_id`
+- Replace `incentive_base === 'fixed'` with `vesselRateCount > 0`
+- Show a brief skeleton/loading while the count query resolves
 
-**`src/components/incentive/ProductionTargetGrid.tsx`** — Accept optional `programId` prop:
-- Allow parent to pass a pre-selected program ID and hide the internal program selector when controlled externally
+```typescript
+const { data: vesselRateCount, isLoading: countLoading } = useQuery({
+  queryKey: ['vessel-rate-count', selectedProgramId],
+  enabled: !!selectedProgramId,
+  queryFn: async () => {
+    const { count, error } = await supabase
+      .from('incentive_vessel_rates')
+      .select('id', { count: 'exact', head: true })
+      .eq('program_id', selectedProgramId);
+    if (error) throw error;
+    return count ?? 0;
+  },
+});
+const isVesselProgram = (vesselRateCount ?? 0) > 0;
+```
 
-**`src/components/incentive/VesselDataEntryGrid.tsx`** — Accept optional single-program mode:
-- When only one program is passed (the selected port incentive), hide the program selector
-
-**Alternative (simpler) approach** — Modify `ProductionTargetGrid` directly:
-- When the selected program has `incentive_base === 'fixed'`, instead of showing the target/achieved table, render an inline message: "This is a vessel-based program. Use the Vessel Data Entry below." and auto-scroll/highlight the vessel grid.
-
-**Recommended approach**: Restructure the Production Data tab in `IncentiveConfig.tsx` with a single top-level program + month/year selector, then conditionally render:
-- **Vessel program** → `VesselDataEntryGrid` (employee list with vessel count input + auto-calculated amount)
-- **Slab program** → `ProductionTargetGrid` (sub-unit/category/target/achieved table)
+**`DOCUMENTATION.md`** — v2.15.10 changelog
 
 ### Files Modified
 
 | File | Change |
 |------|--------|
-| `src/pages/admin/IncentiveConfig.tsx` | Unified program selector in Production Data tab; conditional grid rendering |
-| `src/components/incentive/ProductionTargetGrid.tsx` | Accept `selectedProgramId` prop to skip internal selector |
-| `src/components/incentive/VesselDataEntryGrid.tsx` | Accept single program directly (no multi-program selector needed) |
-| `DOCUMENTATION.md` | v2.15.9 changelog |
+| `src/components/incentive/UnifiedProductionDataTab.tsx` | Query vessel rates count; use count > 0 for grid toggle |
+| `DOCUMENTATION.md` | v2.15.10 changelog |
 
 ### Risk Assessment
-- **Regression**: Zero — same components, just conditional rendering logic
-- **Data**: No schema changes; both grids use existing tables
-- **UX**: Cleaner — one selector, one grid, no confusion about which fields apply
+- **Regression**: Zero — only changes the boolean condition; both grids untouched
+- **Data**: No schema changes
+- **Performance**: `head: true` count query is lightweight (no row data fetched)
 
