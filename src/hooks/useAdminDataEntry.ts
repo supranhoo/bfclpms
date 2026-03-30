@@ -307,11 +307,18 @@ export function useAdminSubmitReviewData() {
         }
       }
 
-      // 8. Verification fallback: if approved but final_score is null, compute from 8-stage fallback
-      if (newStatus === 'approved' && newSubmission) {
-        const finalScore = newSubmission.final_score;
-        if (finalScore === null || finalScore === undefined) {
-          console.warn('[AdminDataEntry] final_score is null after approval — running fallback computation');
+      // 8. Recompute final_score for approved KPIs (handles both new approvals and edits on already-approved)
+      const shouldRecomputeFinal = newStatus === 'approved' || (advance_status !== false && newSubmission && !newStatus);
+      if (shouldRecomputeFinal && newSubmission) {
+        // Re-fetch the full submission to get all latest scores after upsert
+        const { data: freshSub } = await supabase
+          .from('review_submissions')
+          .select('*')
+          .eq('kpi_id', kpi_id)
+          .single();
+
+        if (freshSub) {
+          const currentFinal = freshSub.final_score;
           const fallbackChain = [
             'management_score', 'auditor_score', 'hr_pms_score',
             'skip_level_score', 'manager_score', 'self_score',
@@ -324,15 +331,16 @@ export function useAdminSubmitReviewData() {
           let computedScore: number | null = null;
           let computedRating: string | null = null;
           for (let i = 0; i < fallbackChain.length; i++) {
-            const s = (newSubmission as any)[fallbackChain[i]];
+            const s = (freshSub as any)[fallbackChain[i]];
             if (s !== null && s !== undefined) {
               computedScore = s;
-              computedRating = (newSubmission as any)[fallbackRatingChain[i]] || null;
+              computedRating = (freshSub as any)[fallbackRatingChain[i]] || null;
               break;
             }
           }
 
-          if (computedScore !== null) {
+          // Patch if computed differs from current OR if current is null
+          if (computedScore !== null && (currentFinal === null || currentFinal === undefined || currentFinal !== computedScore)) {
             const { error: patchError } = await supabase
               .from('review_submissions')
               .update({
@@ -343,9 +351,9 @@ export function useAdminSubmitReviewData() {
               .eq('kpi_id', kpi_id);
 
             if (patchError) {
-              console.error('[AdminDataEntry] Fallback final_score patch failed:', patchError);
+              console.error('[AdminDataEntry] final_score recomputation patch failed:', patchError);
             } else {
-              console.info(`[AdminDataEntry] Fallback final_score patched: ${computedScore}`);
+              console.info(`[AdminDataEntry] final_score recomputed: ${currentFinal} → ${computedScore}`);
             }
           }
         }
