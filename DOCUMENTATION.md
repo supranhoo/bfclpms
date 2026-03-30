@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.15.6 — Decouple final_score recompute from advance_status toggle
+> **Version:** 2.15.7 — KPI Scorecard Detail report
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
