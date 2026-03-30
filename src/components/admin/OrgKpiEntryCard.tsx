@@ -63,6 +63,7 @@ interface OrgKpiEntryCardProps {
   isAdmin?: boolean;
   governanceLocked?: boolean;
   employeeKpiIds?: string[];
+  sentBackMap?: Map<string, SentBackInfo>;
   onSave: (values: {
     achievedValue: number | null;
     remarks: string;
@@ -78,7 +79,7 @@ interface OrgKpiEntryCardProps {
     isNa?: boolean;
     naRemarks?: string;
     scopedValues?: Array<{ scopeId: string; achievedValue: number | null; remarks: string; evidenceUrl: string | null; isNa?: boolean }>;
-  }) => Promise<void>;
+  }, employeeIds?: string[]) => Promise<void>;
   onUnlock?: () => Promise<void>;
   onRollback?: (reason: string) => Promise<void>;
   onBulkRollback?: (reason: string) => Promise<void>;
