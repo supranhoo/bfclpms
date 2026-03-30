@@ -666,7 +666,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               )}
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button size="sm" className="h-7 text-xs" disabled={isPropagating || !(data.scope === 'organization' ? (isNa || achievedValue.trim() !== '') : (isNa || scopedValues.some(sv => sv.achievedValue !== null && sv.achievedValue !== '' || sv.isNa)))}>
+                  <Button size="sm" className="h-7 text-xs" disabled={isPropagating || !(data.scope === 'organization' ? (isNa || achievedValue.trim() !== '') : (isNa || scopedValues.some(sv => sv.achievedValue !== null || sv.isNa)))}>
                     {isPropagating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUpRight className="h-3.5 w-3.5 mr-1" />}
                     Propagate
                   </Button>
