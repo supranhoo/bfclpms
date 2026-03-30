@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.13.3 — Removed THRESHOLD_TARGET_MISMATCH detection from Scoring Health Check; R5 = target is a valid business configuration per policy
+> **Version:** 2.13.4 — Added DESCRIPTION_THRESHOLD_MISMATCH detection: parses KPI name for "Rating N: X%" patterns and flags when configured thresholds don't match described percentages
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4237,6 +4237,16 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Export consistency:** Excel export uses `filteredRows` derived from `enrichedRows`, so exported data matches the UI
 - **Dependency fix:** `filteredRows` memo now correctly depends on `enrichedRows` instead of raw `rows`
 - **Invariant:** Reports must not display scores for workflow stages that do not exist in the employee's resolved workflow
+
+---
+
+### v2.13.4 — Scoring Health Check: description-vs-threshold mismatch detection (2026-03-30)
+
+- **Enhancement:** Added `DESCRIPTION_THRESHOLD_MISMATCH` detection to Scoring Health Check
+- **Logic:** Parses `kpi_name` for embedded scoring logic patterns (e.g., "Rating 5: 140%", "R4: 120%") using regex, computes expected threshold values as percentages of target, and flags mismatches exceeding 5% tolerance
+- **Suggested fix:** Shows computed correct values based on description percentages, advising admin to update thresholds or correct description text
+- **Severity:** Medium — data entry inconsistency, not a structural misconfiguration
+- **Regression risk:** Zero — additive detection only, no scoring logic changes
 
 ---
 

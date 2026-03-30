@@ -27,7 +27,8 @@ type IssueType =
   | 'MISSING_CRITERIA'
   | 'BINARY_MISSING_POLARITY'
   | 'BINARY_INVALID_RATINGS'
-  | 'BINARY_LIKELY_INVERTED';
+  | 'BINARY_LIKELY_INVERTED'
+  | 'DESCRIPTION_THRESHOLD_MISMATCH';
 
 // Keywords indicating a negative-outcome KPI where "No" should score highest
 const NEGATIVE_OUTCOME_KEYWORDS = [
@@ -118,6 +119,50 @@ function detectIssues(kpis: KPI[]): ScoringIssue[] {
           suggestedFix: 'Set a target value or define R5–R1 thresholds in the KPI editor.',
           employeeName, employeeCode,
         });
+      }
+
+      // ─── Description-vs-Threshold Mismatch ─────────────────────────────
+      // Parse kpi_name for "Rating N: X%" patterns and compare against actual thresholds
+      if (kpi.target_value != null) {
+        const target = parseFloat(String(kpi.target_value));
+        if (!isNaN(target) && target !== 0) {
+          const descPattern = /(?:Rating\s*|R)([1-5])\s*[:=]\s*(\d+(?:\.\d+)?)\s*%/gi;
+          const describedPairs: { level: number; pct: number }[] = [];
+          let match: RegExpExecArray | null;
+          while ((match = descPattern.exec(kpi.kpi_name || '')) !== null) {
+            describedPairs.push({ level: parseInt(match[1]), pct: parseFloat(match[2]) });
+          }
+
+          if (describedPairs.length > 0) {
+            const thresholdMap: Record<number, number | null> = {
+              5: r5, 4: r4, 3: r3, 2: r2, 1: r1,
+            };
+            const tolerance = target * 0.05;
+            const mismatches: string[] = [];
+            const expectedVals: string[] = [];
+
+            for (const { level, pct } of describedPairs) {
+              const expected = target * (pct / 100);
+              const actual = thresholdMap[level];
+              if (actual !== null && !isNaN(actual)) {
+                if (Math.abs(expected - actual) > tolerance) {
+                  const actualPct = Math.round((actual / target) * 100);
+                  mismatches.push(`R${level}: description says ${pct}% (${expected.toFixed(1)}) but configured as ${actual} (${actualPct}%)`);
+                }
+              }
+              expectedVals.push(`R${level}=${expected.toFixed(1)} (${pct}%)`);
+            }
+
+            if (mismatches.length > 0) {
+              issues.push({
+                kpi, type: 'DESCRIPTION_THRESHOLD_MISMATCH', severity: 'medium',
+                description: `Scoring logic in KPI name doesn't match configured thresholds. ${mismatches.join('; ')}.`,
+                suggestedFix: `Based on description: ${expectedVals.join(', ')}. Update thresholds to match or correct the description text.`,
+                employeeName, employeeCode,
+              });
+            }
+          }
+        }
       }
 
     } else if (uomType === 'binary') {
