@@ -697,8 +697,8 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 ## §34. Admin Edit Final Score Recomputation Invariant
 
-**Rule:** When an admin edits any score field on an already-approved KPI, the system must recompute `final_score` using the authoritative 8-stage fallback chain (management → auditor → HR PMS → skip-level → manager → self) and patch the result if it differs from the current `final_score`.
+**Rule:** When an admin edits any score field on an already-approved KPI, the system must recompute `final_score` using the authoritative 8-stage fallback chain (management → auditor → HR PMS → skip-level → manager → self) and patch the result if it differs from the current `final_score`. This recomputation is **independent of the `advance_status` toggle** — that toggle controls workflow progression only, not score integrity.
 
-**Rationale:** The normal approval flow sets `final_score` during status advancement. Since already-approved KPIs skip status advancement, the `final_score` would remain stale after admin edits without explicit recomputation.
+**Rationale:** The normal approval flow sets `final_score` during status advancement. Since already-approved KPIs skip status advancement, the `final_score` would remain stale after admin edits without explicit recomputation. The `advance_status` flag must never gate this recomputation.
 
-**Invariant:** Post-upsert recomputation must always execute when a KPI is already approved, regardless of which role-level score was edited.
+**Invariant:** Post-upsert recomputation must always execute when `currentKpiStatus === 'approved'`, regardless of which role-level score was edited and regardless of the `advance_status` toggle state.

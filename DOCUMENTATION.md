@@ -4385,6 +4385,15 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 
 ---
 
+### v2.15.6 — Decouple final_score recompute from advance_status toggle (2026-03-30)
+
+- **Bug fix:** v2.15.5 recompute was still gated by `advance_status !== false`, causing final_score to remain stale when the toggle was off for already-approved KPIs
+- **Fix (useAdminDataEntry.ts):** Hoisted `currentKpiStatus` out of the `advance_status` block; new condition `kpiWasAlreadyApproved = !newStatus && currentKpiStatus === 'approved'` fires independently of the advance toggle
+- **Data fix:** Repaired all approved KPIs from Jan 2026+ where `final_score` didn't match `management_score` (4 records)
+- **Zero regression risk:** Non-approved KPIs unaffected; normal forward flow unchanged; N/A KPIs unaffected
+
+---
+
 ### v2.15.5 — Fix final_score recomputation on already-approved KPIs (2026-03-30)
 
 - **Bug fix:** Admin editing management_score on already-approved KPI left final_score at old value (e.g., auditor_score=0) because status advancement was skipped for approved KPIs, which also skipped final_score sync
