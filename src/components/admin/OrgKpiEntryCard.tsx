@@ -239,13 +239,14 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
     }, 2000);
   }, [onSave, getValues]);
 
-  const handleSaveAndPropagate = async () => {
+  const handleSaveAndPropagate = async (filterIds?: string[]) => {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     setIsPropagating(true);
     try {
-      await onSaveAndPropagate(getValues());
+      await onSaveAndPropagate(getValues(), filterIds);
       isDirtyRef.current = false;
       setSaveStatus('saved');
+      setSelectedScopeIds([]);
     } finally {
       setIsPropagating(false);
     }
