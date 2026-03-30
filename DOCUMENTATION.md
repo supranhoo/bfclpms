@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.13.2 — Scoring Health Check: smart computed threshold recommendations (R5–R1) based on target/criteria/UOM; suppresses false positives when R4–R1 already form valid spread
+> **Version:** 2.13.3 — Removed THRESHOLD_TARGET_MISMATCH detection from Scoring Health Check; R5 = target is a valid business configuration per policy
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

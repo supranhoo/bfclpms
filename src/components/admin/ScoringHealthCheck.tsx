@@ -27,8 +27,7 @@ type IssueType =
   | 'MISSING_CRITERIA'
   | 'BINARY_MISSING_POLARITY'
   | 'BINARY_INVALID_RATINGS'
-  | 'BINARY_LIKELY_INVERTED'
-  | 'THRESHOLD_TARGET_MISMATCH';
+  | 'BINARY_LIKELY_INVERTED';
 
 // Keywords indicating a negative-outcome KPI where "No" should score highest
 const NEGATIVE_OUTCOME_KEYWORDS = [
@@ -121,82 +120,6 @@ function detectIssues(kpis: KPI[]): ScoringIssue[] {
         });
       }
 
-      // Threshold-vs-Target sanity check
-      if (kpi.target_value != null && r5 !== null && !isNaN(r5)) {
-        const target = parseFloat(String(kpi.target_value));
-        if (!isNaN(target) && target !== 0) {
-          // Skip if threshold_mode is ratio — thresholds are already relative to target
-          const thresholdMode = (kpi as any).threshold_mode;
-          if (thresholdMode === 'ratio') {
-            // Ratio mode: R5 ≤ target in absolute terms is expected, skip
-          } else {
-            // Skip for percentage UOM where target = 100 (can't exceed 100%)
-            const uomStr = (kpi.uom || '').toLowerCase();
-            const isPercentage100 = (uomStr === '%' || uomStr.includes('percent')) && target === 100;
-
-            if (!isPercentage100) {
-              const criteria = kpi.criteria;
-              const uomLabel = kpi.uom || 'units';
-              const isDateUom = uomStr === 'date' || uomStr.includes('date');
-
-              // Suppression: if R5 = target but R4–R1 form a valid spread, it's intentional
-              const hasValidSpread = (() => {
-                const vals = [r4, r3, r2, r1].filter((v): v is number => v !== null && !isNaN(v));
-                if (vals.length < 2) return false;
-                if (criteria === 'Higher is Better') {
-                  return vals.every(v => v < target);
-                } else if (criteria === 'Lower is Better') {
-                  return vals.every(v => v > target);
-                }
-                return false;
-              })();
-
-              if (!hasValidSpread) {
-                // Compute smart recommendations
-                const computeRecs = () => {
-                  const round = (n: number) => Math.round(n * 100) / 100;
-                  if (isDateUom) {
-                    // Date UOM: day offsets
-                    return {
-                      r5: round(target - 3), r4: round(target - 1),
-                      r3: round(target), r2: round(target + 2), r1: round(target + 5),
-                    };
-                  }
-                  if (criteria === 'Higher is Better') {
-                    return {
-                      r5: round(target * 1.20), r4: round(target * 1.10),
-                      r3: round(target), r2: round(target * 0.90), r1: round(target * 0.80),
-                    };
-                  }
-                  // Lower is Better
-                  return {
-                    r5: round(target * 0.80), r4: round(target * 0.90),
-                    r3: round(target), r2: round(target * 1.10), r1: round(target * 1.20),
-                  };
-                };
-                const recs = computeRecs();
-                const recStr = `Suggested thresholds: R5=${recs.r5}, R4=${recs.r4}, R3=${recs.r3}, R2=${recs.r2}, R1=${recs.r1}. Open KPI editor to apply.`;
-
-                if (criteria === 'Higher is Better' && r5 <= target) {
-                  issues.push({
-                    kpi, type: 'THRESHOLD_TARGET_MISMATCH', severity: 'medium',
-                    description: `R5 threshold (${r5} ${uomLabel}) is ≤ the target (${target} ${uomLabel}). Any value meeting the target gets the highest rating.`,
-                    suggestedFix: recStr,
-                    employeeName, employeeCode,
-                  });
-                } else if (criteria === 'Lower is Better' && r5 >= target) {
-                  issues.push({
-                    kpi, type: 'THRESHOLD_TARGET_MISMATCH', severity: 'medium',
-                    description: `R5 threshold (${r5} ${uomLabel}) is ≥ the target (${target} ${uomLabel}). Any value meeting the target gets the highest rating.`,
-                    suggestedFix: recStr,
-                    employeeName, employeeCode,
-                  });
-                }
-              }
-            }
-          }
-        }
-      }
     } else if (uomType === 'binary') {
       // Binary KPIs: check custom options if present, otherwise fallback is fine
       const opts = kpi.qualitative_options as Array<{ label?: string; rating?: number }> | null;
