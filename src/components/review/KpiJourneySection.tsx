@@ -550,7 +550,74 @@ export function KpiJourneySection({
           })}
         </div>
 
-        {/* Query Summary */}
+        {/* Previous Months Comparison */}
+        {prevMonthsData.length > 0 && (
+          <Collapsible open={prevMonthsOpen} onOpenChange={setPrevMonthsOpen}>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="w-full justify-between h-8 text-xs text-muted-foreground hover:text-foreground">
+                <span className="flex items-center gap-1.5">
+                  <CalendarClock className="h-3.5 w-3.5" />
+                  Previous Months ({prevMonthsData.length})
+                </span>
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${prevMonthsOpen ? 'rotate-180' : ''}`} />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-3 pt-2">
+              {prevMonthsData.map(({ period, kpi: prevKpi, submission: prevSub, workflowStages: prevWf }) => {
+                const prevStages = getVisibleStagesForLevel(viewLevel, prevWf);
+                const prevStatus = prevKpi.status || 'kra_set';
+                const prevIsNA = prevSub?.is_na || false;
+                const prevGridCols = prevStages.length <= 4 ? 'grid-cols-2 lg:grid-cols-4' : prevStages.length <= 6 ? 'grid-cols-2 lg:grid-cols-3 xl:grid-cols-6' : 'grid-cols-2 lg:grid-cols-4';
+
+                const prevStageData: Record<string, any> = {
+                  self: buildStage(User, 'blue', 'Self', prevSub?.self_score ?? null, prevSub?.self_rating ?? null, prevSub?.self_remarks ?? null, buildEvidenceUrls(prevSub?.self_evidence_urls, prevSub?.self_evidence_url), prevSub?.achieved_value ?? null),
+                  manager: buildStage(Briefcase, 'amber', 'Manager', prevSub?.manager_score ?? null, prevSub?.manager_rating ?? null, prevSub?.manager_remarks ?? null, buildEvidenceUrls(prevSub?.manager_evidence_urls, prevSub?.manager_evidence_url), prevSub?.manager_achieved_value ?? null),
+                  skip_level: buildStage(UserCheck, 'teal', 'Skip-Level', prevSub?.skip_level_score ?? null, prevSub?.skip_level_rating ?? null, prevSub?.skip_level_remarks ?? null, buildEvidenceUrls(prevSub?.skip_level_evidence_urls, prevSub?.skip_level_evidence_url), prevSub?.skip_level_achieved_value ?? null),
+                  hr_pms: buildStage(ClipboardCheck, 'rose', 'HR PMS', prevSub?.hr_pms_score ?? null, prevSub?.hr_pms_rating ?? null, prevSub?.hr_pms_remarks ?? null, buildEvidenceUrls(prevSub?.hr_pms_evidence_urls, prevSub?.hr_pms_evidence_url), prevSub?.hr_pms_achieved_value ?? null),
+                  auditor: buildStage(Shield, 'purple', 'Auditor', prevSub?.auditor_score ?? null, prevSub?.auditor_rating ?? null, prevSub?.auditor_remarks ?? null, buildEvidenceUrls(prevSub?.auditor_evidence_urls, prevSub?.auditor_evidence_url), prevSub?.auditor_achieved_value ?? null),
+                  management: buildStage(Briefcase, 'emerald', 'Management', prevSub?.management_score ?? null, prevSub?.management_rating ?? null, prevSub?.management_remarks ?? null, buildEvidenceUrls(prevSub?.management_evidence_urls, prevSub?.management_evidence_url), prevSub?.management_achieved_value ?? null),
+                };
+
+                return (
+                  <div key={`${period.month}-${period.year}`} className="border rounded-lg p-3 bg-muted/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge variant="outline" className="text-xs font-medium">
+                        {period.month} {period.year}
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                        {statusLabels[prevStatus] || prevStatus.replace(/_/g, ' ')}
+                      </Badge>
+                    </div>
+                    <div className={`grid ${prevGridCols} gap-2`}>
+                      {prevStages.map(stage => {
+                        const data = prevStageData[stage];
+                        if (!data) return null;
+                        const status = getStageStatus(stage, prevStatus, viewLevel, prevWf);
+                        const stageIsNA = (prevIsNA && data.score === null && status !== 'pending') || (!prevIsNA && data.score === null && status !== 'pending' && status === 'completed');
+                        return (
+                          <ReviewStageCard
+                            key={stage}
+                            icon={data.icon}
+                            iconColor={data.iconColor}
+                            title={data.title}
+                            score={data.score}
+                            rating={data.rating}
+                            remarks={data.remarks}
+                            evidenceUrls={data.evidenceUrls}
+                            status={status}
+                            isNA={stageIsNA}
+                            achievedValue={data.achievedValue}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+
         {(openQueries > 0 || resolvedQueries > 0) && (
           <div className="pt-3 border-t flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm">
