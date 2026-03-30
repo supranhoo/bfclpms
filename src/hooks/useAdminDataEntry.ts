@@ -166,7 +166,76 @@ export function useAdminSubmitReviewData() {
         updateFields.is_na = false;
       }
 
-      // 3. Upsert submission
+      // 3. Resolve workflow status BEFORE upsert so we can include final_score atomically
+      let newStatus: string | null = null;
+
+      if (advance_status !== false) {
+        if (role_level === 'self') {
+          const { data: currentKpi } = await supabase
+            .from('kpis')
+            .select('status')
+            .eq('id', kpi_id)
+            .single();
+
+          const STAGE_ORDER = [
+            'kra_set', 'self_review', 'manager_check', 'skip_level_check',
+            'hr_pms_review', 'audit', 'management_review', 'approved',
+          ];
+          const currentStatus = currentKpi?.status || 'kra_set';
+          const currentIdx = STAGE_ORDER.indexOf(currentStatus);
+          const selfReviewIdx = STAGE_ORDER.indexOf('self_review');
+
+          if (currentIdx < selfReviewIdx) {
+            newStatus = 'self_review';
+          }
+        } else {
+          const { data: kpiPeriod } = await supabase
+            .from('kpis')
+            .select('status, review_period, review_year')
+            .eq('id', kpi_id)
+            .single();
+
+          const currentKpiStatus = kpiPeriod?.status || 'kra_set';
+          if (currentKpiStatus === 'approved') {
+            console.info('[AdminDataEntry] KPI already approved — skipping status advancement and final_score sync');
+            newStatus = null;
+          } else {
+            const rpcParams: Record<string, unknown> = { employee_uuid: employee_id };
+            if (kpiPeriod?.review_period && kpiPeriod?.review_year) {
+              rpcParams.p_review_period = kpiPeriod.review_period;
+              rpcParams.p_review_year = kpiPeriod.review_year;
+            }
+
+            const { data: stagesData } = await supabase
+              .rpc('get_employee_workflow', rpcParams as any);
+            const stages = (stagesData as string[]) || undefined;
+
+            const ROLE_TO_STAGE: Record<string, string> = {
+              manager: 'manager_check',
+              skip_level: 'skip_level_check',
+              hr_pms: 'hr_pms_review',
+              auditor: 'audit',
+              management: 'management_review',
+            };
+            const requiredStage = ROLE_TO_STAGE[role_level];
+            if (requiredStage && stages && !stages.includes(requiredStage)) {
+              console.info(`[AdminDataEntry] Role "${role_level}" (stage "${requiredStage}") not in employee workflow [${stages.join(',')}] — skipping status advancement`);
+              newStatus = null;
+            } else {
+              newStatus = resolveForwardStatus(role_level, stages);
+            }
+          }
+        }
+      }
+
+      // 3b. If advancing to approved, include final_score/final_rating atomically in the upsert
+      if (newStatus === 'approved') {
+        updateFields.final_score = score !== null && score !== undefined ? score : null;
+        updateFields.final_rating = rating || null;
+        updateFields.kpi_status = 'submitted';
+      }
+
+      // 4. Upsert submission (single atomic write including final_score when approving)
       const { data: newSubmission, error } = await supabase
         .from('review_submissions')
         .upsert(
@@ -183,7 +252,7 @@ export function useAdminSubmitReviewData() {
 
       if (error) throw error;
 
-      // 4. Create audit log with on-behalf info
+      // 5. Create audit log with on-behalf info
       const { error: auditError } = await supabase.from('kpi_audit_logs').insert({
         kpi_id,
         action: `ADMIN_DATA_ENTRY_${role_level.toUpperCase()}`,
@@ -203,7 +272,7 @@ export function useAdminSubmitReviewData() {
         console.error('Failed to create audit log:', auditError);
       }
 
-      // 5. Notify the affected employee
+      // 6. Notify the affected employee
       const { error: notifyError } = await supabase.from('notifications').insert({
         user_id: employee_id,
         type: 'admin_data_entry',
@@ -218,111 +287,66 @@ export function useAdminSubmitReviewData() {
         console.error('Failed to create notification:', notifyError);
       }
 
-      // 6. Optionally advance KPI workflow status
-      if (advance_status !== false) {
-        let newStatus: string | null = null;
+      // 7. Advance KPI workflow status
+      if (newStatus) {
+        const { error: statusError } = await supabase
+          .from('kpis')
+          .update({ status: newStatus as any, updated_at: new Date().toISOString() })
+          .eq('id', kpi_id);
 
-        if (role_level === 'self') {
-          // Guard against demotion: only advance to self_review if KPI is currently at kra_set.
-          // If the KPI is already at self_review or beyond, skip the status change entirely.
-          const { data: currentKpi } = await supabase
-            .from('kpis')
-            .select('status')
-            .eq('id', kpi_id)
-            .single();
-
-          const STAGE_ORDER = [
-            'kra_set', 'self_review', 'manager_check', 'skip_level_check',
-            'hr_pms_review', 'audit', 'management_review', 'approved',
-          ];
-          const currentStatus = currentKpi?.status || 'kra_set';
-          const currentIdx = STAGE_ORDER.indexOf(currentStatus);
-          const selfReviewIdx = STAGE_ORDER.indexOf('self_review');
-
-          // Only advance if the KPI hasn't yet reached self_review
-          if (currentIdx < selfReviewIdx) {
-            newStatus = 'self_review';
-          }
-          // If already at self_review or beyond, leave newStatus = null → no status update
-        } else {
-          // Fetch KPI's current status and review period context
-          const { data: kpiPeriod } = await supabase
-            .from('kpis')
-            .select('status, review_period, review_year')
-            .eq('id', kpi_id)
-            .single();
-
-          // GUARD: If KPI is already approved, do NOT re-advance or re-sync final_score.
-          // Admin data entry on approved KPIs should only update role-specific fields.
-          const currentKpiStatus = kpiPeriod?.status || 'kra_set';
-          if (currentKpiStatus === 'approved') {
-            console.info('[AdminDataEntry] KPI already approved — skipping status advancement and final_score sync');
-            newStatus = null; // prevent any status/final_score changes
-          } else {
-            const rpcParams: Record<string, unknown> = { employee_uuid: employee_id };
-            if (kpiPeriod?.review_period && kpiPeriod?.review_year) {
-              rpcParams.p_review_period = kpiPeriod.review_period;
-              rpcParams.p_review_year = kpiPeriod.review_year;
-            }
-
-            // Fetch employee's workflow stages to determine correct forward status
-            const { data: stagesData } = await supabase
-              .rpc('get_employee_workflow', rpcParams as any);
-            const stages = (stagesData as string[]) || undefined;
-
-            // GUARD: Validate that the admin-entered role actually exists in this
-            // employee's workflow. If not, save role-specific fields but do NOT
-            // advance status or sync final_score (prevents out-of-workflow auto-approval).
-            const ROLE_TO_STAGE: Record<string, string> = {
-              manager: 'manager_check',
-              skip_level: 'skip_level_check',
-              hr_pms: 'hr_pms_review',
-              auditor: 'audit',
-              management: 'management_review',
-            };
-            const requiredStage = ROLE_TO_STAGE[role_level];
-            if (requiredStage && stages && !stages.includes(requiredStage)) {
-              console.info(`[AdminDataEntry] Role "${role_level}" (stage "${requiredStage}") not in employee workflow [${stages.join(',')}] — skipping status advancement`);
-              newStatus = null;
-            } else {
-              newStatus = resolveForwardStatus(role_level, stages);
-            }
-          }
+        if (statusError) {
+          console.error('Failed to advance KPI status:', statusError);
         }
 
-        if (newStatus) {
-          const { error: statusError } = await supabase
-            .from('kpis')
-            .update({ status: newStatus as any, updated_at: new Date().toISOString() })
-            .eq('id', kpi_id);
+        // For non-approved statuses, update kpi_status to submitted
+        if (newStatus !== 'approved') {
+          await supabase
+            .from('review_submissions')
+            .update({ kpi_status: 'submitted' as any, updated_at: new Date().toISOString() })
+            .eq('kpi_id', kpi_id);
+        }
+      }
 
-          if (statusError) {
-            console.error('Failed to advance KPI status:', statusError);
+      // 8. Verification fallback: if approved but final_score is null, compute from 8-stage fallback
+      if (newStatus === 'approved' && newSubmission) {
+        const finalScore = newSubmission.final_score;
+        if (finalScore === null || finalScore === undefined) {
+          console.warn('[AdminDataEntry] final_score is null after approval — running fallback computation');
+          const fallbackChain = [
+            'management_score', 'auditor_score', 'hr_pms_score',
+            'skip_level_score', 'manager_score', 'self_score',
+          ] as const;
+          const fallbackRatingChain = [
+            'management_rating', 'auditor_rating', 'hr_pms_rating',
+            'skip_level_rating', 'manager_rating', 'self_rating',
+          ] as const;
+
+          let computedScore: number | null = null;
+          let computedRating: string | null = null;
+          for (let i = 0; i < fallbackChain.length; i++) {
+            const s = (newSubmission as any)[fallbackChain[i]];
+            if (s !== null && s !== undefined) {
+              computedScore = s;
+              computedRating = (newSubmission as any)[fallbackRatingChain[i]] || null;
+              break;
+            }
           }
 
-          // When advancing to 'approved', sync final_rating and final_score from the
-          // just-entered role-level data so dashboards show the correct scores.
-          // This mirrors what ManagementScorecard does on normal submission.
-          if (newStatus === 'approved') {
-            const { error: finalSyncError } = await supabase
+          if (computedScore !== null) {
+            const { error: patchError } = await supabase
               .from('review_submissions')
               .update({
-                final_rating: rating || null,
-                final_score: score !== null && score !== undefined ? score : null,
-                kpi_status: 'submitted' as any,
+                final_score: computedScore,
+                final_rating: computedRating as any,
                 updated_at: new Date().toISOString(),
               })
               .eq('kpi_id', kpi_id);
 
-            if (finalSyncError) {
-              console.error('Failed to sync final_rating/final_score:', finalSyncError);
+            if (patchError) {
+              console.error('[AdminDataEntry] Fallback final_score patch failed:', patchError);
+            } else {
+              console.info(`[AdminDataEntry] Fallback final_score patched: ${computedScore}`);
             }
-          } else {
-            // Just update kpi_status to submitted for non-final stages
-            await supabase
-              .from('review_submissions')
-              .update({ kpi_status: 'submitted' as any, updated_at: new Date().toISOString() })
-              .eq('kpi_id', kpi_id);
           }
         }
       }

@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 1.27.0 — Scoring Health Check dual-interpretation rule for description-threshold matching
+> **Version:** 1.28.0 — Atomic final_score sync invariant for admin data entry
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -607,6 +607,7 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 | 1.25.0 | 2026-03-30 | Cycle-aware reconciliation invariant (§17.5): reconciler checks rollback audit logs before advancing KPIs with downstream scores; approval syncs final_score from terminal stage, not generic COALESCE |
 | 1.24.0 | 2026-03-30 | Rollback and re-submission downstream data clearing invariant (§17.4): rollbacks clear all downstream reviewer fields; re-submissions clear downstream fields based on activeReviewStage |
 | 1.23.0 | 2026-03-29 | KPI Detail Report workflow-aware score display: out-of-workflow stage columns blanked using employee's month-specific workflow (§17.3) |
+| 1.28.0 | 2026-03-30 | Atomic final_score sync invariant: Admin data entry must write `final_score` in the same upsert that writes role-level data when advancing to `approved`. A separate `.update()` for `final_score` is prohibited. Includes 8-stage fallback verification. |
 | 1.27.0 | 2026-03-30 | Scoring Health Check dual-interpretation rule: DESCRIPTION_THRESHOLD_MISMATCH accepts both target-multiplier and raw-percentage interpretations — flag only when neither matches |
 | 1.26.0 | 2026-03-30 | reconcile_workflow_statuses single-function invariant: only one overload may exist. All migrations modifying this function MUST drop ALL known historical signatures `(boolean, text, integer, uuid[], uuid)` and `(text, integer, boolean, uuid, uuid[])` before recreating. |
 | 1.22.0 | 2026-03-28 | Out-of-workflow admin data entry guard: Admin entering data for a role not present in the employee's workflow (e.g., auditor on hr_pms workflow) saves role-specific fields but does NOT advance KPI status or sync final_score. `resolveForwardStatus` returns null for out-of-workflow roles. |

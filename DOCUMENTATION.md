@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.13.6 — Fixed DESCRIPTION_THRESHOLD_MISMATCH false positives for raw-percentage KPIs (dual-interpretation: target-multiplier OR direct-value match)
+> **Version:** 2.13.7 — Admin data entry: atomic final_score sync on approval (eliminates two-step write failure)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4301,6 +4301,16 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix (Rollback):** `useApproveRollbackRequest` now nulls out all reviewer fields (score, rating, remarks, evidence, achieved_value) for stages after `target_status`, plus `final_score`/`final_rating`
 - **Fix (Re-submission):** `submitReview` mutation now clears all downstream stage fields based on the employee's `effectiveStages` array and current `activeReviewStage`
 - **Invariant:** Rollbacks and re-submissions must clear all downstream reviewer data (POLICY.md §17.4)
+
+---
+
+### v2.13.7 — Admin data entry: atomic final_score sync on approval (2026-03-30)
+
+- **Bug fix:** Admin data entry with "Advance workflow" advancing to `approved` did not reliably populate `final_score` — dashboards showed "—"
+- **Root cause:** Workflow resolution happened AFTER the upsert, then a separate `.update()` call wrote `final_score`. If `score` param was null or the second call failed silently, `final_score` remained null while KPI was marked `approved`.
+- **Fix:** Moved workflow resolution BEFORE the upsert. When `newStatus === 'approved'`, `final_score` and `final_rating` are included directly in the upsert payload — single atomic write.
+- **Fallback:** After upsert, if `final_score` is still null on an approved KPI, the 8-stage fallback chain (Management → Auditor → HR PMS → Skip-Level → Manager → Self) computes and patches the score.
+- **Invariant:** Admin data entry must write `final_score` atomically in the same upsert when advancing to `approved` (POLICY.md §28)
 
 ---
 
