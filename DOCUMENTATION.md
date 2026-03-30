@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.15.4 — Sortable column headers in KPI Details Table (all dashboards)
+> **Version:** 2.15.5 — Fix final_score recomputation on already-approved KPIs
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4368,3 +4368,26 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix (useAdminDataEntry.ts):** Changed `<` → `<=` in all 5 stage-clear conditions (manager, skip-level, HR PMS, audit, management) so admin step-back also clears the target stage
 - **UI:** Added amber "Re-review" badge in `KpiDetailsTable` score columns when score is null AND KPI status matches that stage (indicates rolled-back stage awaiting re-review)
 - **Invariant:** Rollback target stage fields must be cleared on rollback/step-back (POLICY.md §33)
+
+---
+
+### v2.15.3 — Fix observation edit mentionedUserIds error (2026-03-30)
+
+- **Bug fix:** Editing observations failed because `mentionedUserIds` was passed to the DB update call but is not a database column
+- **Fix (useKpiObservations.ts):** Strip `mentionedUserIds` from update payload before sending to database
+
+---
+
+### v2.15.4 — Sortable column headers in KPI Details Table (2026-03-30)
+
+- **Feature:** Added clickable sort headers for Category, Weightage, Score columns, and Status in `KpiDetailsTable`
+- **Scope:** Automatically available across all 6 dashboards (My KPIs, Team Review, Audit, Management, Skip-Level, HR PMS)
+
+---
+
+### v2.15.5 — Fix final_score recomputation on already-approved KPIs (2026-03-30)
+
+- **Bug fix:** Admin editing management_score on already-approved KPI left final_score at old value (e.g., auditor_score=0) because status advancement was skipped for approved KPIs, which also skipped final_score sync
+- **Fix (useAdminDataEntry.ts):** After upsert, if KPI is already approved, re-fetch submission and recompute final_score using 8-stage fallback chain; patch if it differs from current value
+- **Data fix:** Corrected stale final_score for Abhas Jan 2026 "Budgetary Preparation" KPI (management_score=5, final_score was 0→5)
+- **Invariant:** Admin edits on approved KPIs must always trigger final_score recomputation (POLICY.md §34)
