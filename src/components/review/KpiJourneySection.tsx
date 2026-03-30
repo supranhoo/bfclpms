@@ -139,6 +139,78 @@ export function KpiJourneySection({
   const kpiStatus = kpi.status || 'kra_set';
   const visibleStages = getVisibleStagesForLevel(viewLevel, effectiveStages);
   const globalIsNA = submission?.is_na || false;
+  const [prevMonthsOpen, setPrevMonthsOpen] = useState(false);
+
+  // Compute previous 2 periods
+  const prevPeriods = useMemo(
+    () => getPreviousPeriods(kpi.review_period || '', kpi.review_year || new Date().getFullYear(), 2),
+    [kpi.review_period, kpi.review_year]
+  );
+
+  // Fetch previous months' matching KPIs + submissions
+  const { data: prevMonthsData = [] } = useQuery({
+    queryKey: ['prev-month-kpis', kpi.employee_id, kpi.kpi_name, kpi.kra_name, kpi.category_id, prevPeriods],
+    queryFn: async () => {
+      if (prevPeriods.length === 0) return [];
+      const uniqueMonths = prevPeriods.map(p => p.month);
+      const uniqueYears = [...new Set(prevPeriods.map(p => p.year))];
+
+      // Fetch matching KPIs
+      const { data: kpis, error: kErr } = await supabase
+        .from('kpis')
+        .select('*')
+        .eq('employee_id', kpi.employee_id)
+        .eq('kpi_name', kpi.kpi_name)
+        .eq('kra_name', kpi.kra_name)
+        .eq('category_id', kpi.category_id)
+        .in('review_period', uniqueMonths)
+        .in('review_year', uniqueYears);
+      if (kErr) throw kErr;
+      if (!kpis || kpis.length === 0) return [];
+
+      // Filter to exact month+year pairs
+      const filtered = kpis.filter(k =>
+        prevPeriods.some(p => p.month === k.review_period && p.year === k.review_year)
+      );
+      if (filtered.length === 0) return [];
+
+      // Fetch submissions for those KPIs
+      const kpiIds = filtered.map(k => k.id);
+      const { data: subs, error: sErr } = await supabase
+        .from('review_submissions')
+        .select('*')
+        .in('kpi_id', kpiIds);
+      if (sErr) throw sErr;
+      const subMap = new Map((subs || []).map(s => [s.kpi_id, s]));
+
+      // Fetch workflows
+      const { data: wfData } = await supabase.rpc('get_bulk_employee_workflows', {
+        employee_ids: [kpi.employee_id],
+        p_review_periods: filtered.map(k => k.review_period),
+        p_review_years: filtered.map(k => k.review_year),
+      });
+      const wfMap = new Map<string, string[]>();
+      if (wfData) {
+        for (const w of wfData as any[]) {
+          const key = `${w.review_period}_${w.review_year}`;
+          wfMap.set(key, w.stages || DEFAULT_WORKFLOW_STAGES);
+        }
+      }
+
+      return prevPeriods
+        .map(p => {
+          const matchKpi = filtered.find(k => k.review_period === p.month && k.review_year === p.year);
+          if (!matchKpi) return null;
+          const sub = subMap.get(matchKpi.id) || null;
+          const wfKey = `${p.month}_${p.year}`;
+          const stages = wfMap.get(wfKey) || effectiveStages;
+          return { period: p, kpi: matchKpi, submission: sub, workflowStages: stages };
+        })
+        .filter(Boolean) as { period: { month: string; year: number }; kpi: any; submission: any; workflowStages: string[] }[];
+    },
+    enabled: prevPeriods.length > 0 && !!kpi.employee_id && !!kpi.kpi_name,
+    staleTime: 2 * 60 * 1000,
+  });
 
   // Fetch audit logs for the KPI
   const { data: auditLogs = [] } = useQuery({
