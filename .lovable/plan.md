@@ -1,99 +1,44 @@
 
 
-## RCA: Admin N/A Toggle Clears All Levels' Scores
+## Plan: Conditional Production Data Tab — Show Vessel Grid for Port Incentive Programs
 
-### Root Cause
+### Problem
+When "Port Incentive" (a fixed-rate/vessel program) is selected in the Production Data tab, the system shows the `ProductionTargetGrid` with irrelevant fields (Sub-Unit/Furnace, Category, Target, Achieved, Incentive %). Port incentive programs should only show the `VesselDataEntryGrid` with employee vessel counts, since employees and rates are already configured.
 
-**File: `src/hooks/useAdminDataEntry.ts` lines 144-164**
+### Solution
+Merge the two grids into a **single unified Production Data tab** with one program selector. When the selected program has `incentive_base === 'fixed'` (port/vessel program), render the `VesselDataEntryGrid`. Otherwise, render the `ProductionTargetGrid` table.
 
-When the admin toggles N/A for **any** role level (e.g., management), the code unconditionally clears **every** scoring field across **all** levels:
+### Changes
 
-```typescript
-if (is_na) {
-  updateFields.final_score = null;
-  updateFields.self_score = null;      // ← WRONG: wipes self
-  updateFields.self_rating = null;
-  updateFields.manager_score = null;   // ← WRONG: wipes manager
-  updateFields.auditor_score = null;   // ← WRONG: wipes auditor
-  // ... ALL levels cleared
-}
-```
+**`src/pages/admin/IncentiveConfig.tsx`** — Replace the Production Data tab content:
+- Remove the separate `ProductionTargetGrid` + `VesselDataEntryGrid` side-by-side layout
+- Add a single unified component that has one program selector at the top
+- Conditionally render the appropriate grid based on selected program's `incentive_base`
 
-This is a **KPI-level** applicability flag (`is_na` on `review_submissions`), not a role-level flag. The original design intent was: "marking N/A means the entire KPI is excluded from scoring." But the problem is the admin dialog **always passes `is_na`** (line 539: `is_na: isNa`), even when the toggle hasn't changed. So if admin enters a management score with the N/A toggle left ON from a previous state, it re-clears everything.
+**`src/components/incentive/ProductionTargetGrid.tsx`** — Accept optional `programId` prop:
+- Allow parent to pass a pre-selected program ID and hide the internal program selector when controlled externally
 
-**Additionally**: The N/A toggle in the dialog initializes from `existingSubmission.is_na` (line 300), which is a **KPI-wide** flag. If an admin previously marked N/A at any level, the toggle shows ON for all subsequent role entries, causing unintentional score wipes.
+**`src/components/incentive/VesselDataEntryGrid.tsx`** — Accept optional single-program mode:
+- When only one program is passed (the selected port incentive), hide the program selector
 
-### The Two Bugs
+**Alternative (simpler) approach** — Modify `ProductionTargetGrid` directly:
+- When the selected program has `incentive_base === 'fixed'`, instead of showing the target/achieved table, render an inline message: "This is a vessel-based program. Use the Vessel Data Entry below." and auto-scroll/highlight the vessel grid.
 
-1. **Blast-radius bug**: When `is_na = true`, all levels' scores are cleared — not just the level being edited. If admin intends to mark only management as N/A, self/auditor scores should be preserved.
-
-2. **Sticky toggle bug**: The N/A toggle reflects the KPI-wide `is_na` state, not the role being edited. Admin opening the dialog for management sees N/A toggled ON because a previous entry set it — and submitting passes `is_na: true` again, re-wiping everything.
-
-### Fix
-
-**File: `src/hooks/useAdminDataEntry.ts`**
-
-1. **Only clear the current role's fields when marking N/A** — not all levels. Use `buildUpdateFields` with null values for the active role only.
-2. **Only send `is_na` when it actually changed** — compare against `oldSubmission.is_na` and only include it in updateFields if toggled.
-3. When `is_na` is being set to `true`, clear the **current role's** score/rating/achieved fields and set `final_score`/`final_rating` to null. Do NOT touch other roles' fields.
-4. When `is_na` is being set to `false` (un-marking), only clear the `is_na` flag itself.
-
-**File: `src/components/admin/AdminDataEntryDialog.tsx`**
-
-5. Track the **original** `is_na` state on dialog open. Only pass `is_na` to the mutation when it differs from the original, preventing accidental re-clears.
-
-### Exact Code Changes
-
-**`useAdminDataEntry.ts` lines 144-167** — Replace the N/A handling block:
-
-```typescript
-if (is_na !== undefined) {
-  updateFields.is_na = is_na;
-  updateFields.na_marked_by_role = is_na ? 'admin' : null;
-  if (is_na) {
-    // Only clear the CURRENT role's fields + final score
-    const roleClearFields = buildUpdateFields(role_level, {
-      achieved_value: null,
-      rating: null,
-      score: null,
-      remarks: null,
-    });
-    Object.assign(updateFields, roleClearFields);
-    updateFields.final_score = null;
-    updateFields.final_rating = null;
-  }
-}
-```
-
-**`AdminDataEntryDialog.tsx`** — Track original N/A state:
-
-```typescript
-const [originalIsNa, setOriginalIsNa] = useState(false);
-// On load: setOriginalIsNa(existingSubmission.is_na === true);
-// On submit: only include is_na if isNa !== originalIsNa
-```
-
-### Data Repair
-
-SQL to restore the wiped self and auditor scores for this specific KPI from audit logs (the `old_value` JSON contains the pre-wipe data).
-
-### Impact Assessment
-
-| Surface | Impact |
-|---------|--------|
-| Normal score entry (no N/A) | Zero — `is_na` block not entered |
-| Marking entire KPI as N/A | Still clears current role + final — correct |
-| Editing a different role after N/A | No longer wipes other roles' scores |
-| Dashboard/Reports | Correct — final_score reflects actual state |
-| Weighted averages | Correct — `is_na` exclusion logic unchanged |
+**Recommended approach**: Restructure the Production Data tab in `IncentiveConfig.tsx` with a single top-level program + month/year selector, then conditionally render:
+- **Vessel program** → `VesselDataEntryGrid` (employee list with vessel count input + auto-calculated amount)
+- **Slab program** → `ProductionTargetGrid` (sub-unit/category/target/achieved table)
 
 ### Files Modified
 
 | File | Change |
 |------|--------|
-| `src/hooks/useAdminDataEntry.ts` | Scope N/A clearing to current role only |
-| `src/components/admin/AdminDataEntryDialog.tsx` | Track original N/A state; conditional `is_na` pass |
-| DB data repair | Restore wiped scores from audit log for affected KPI |
-| `DOCUMENTATION.md` | v2.15.8 changelog |
-| `POLICY.md` | Add invariant: N/A toggle must not clear unrelated role scores |
+| `src/pages/admin/IncentiveConfig.tsx` | Unified program selector in Production Data tab; conditional grid rendering |
+| `src/components/incentive/ProductionTargetGrid.tsx` | Accept `selectedProgramId` prop to skip internal selector |
+| `src/components/incentive/VesselDataEntryGrid.tsx` | Accept single program directly (no multi-program selector needed) |
+| `DOCUMENTATION.md` | v2.15.9 changelog |
+
+### Risk Assessment
+- **Regression**: Zero — same components, just conditional rendering logic
+- **Data**: No schema changes; both grids use existing tables
+- **UX**: Cleaner — one selector, one grid, no confusion about which fields apply
 
