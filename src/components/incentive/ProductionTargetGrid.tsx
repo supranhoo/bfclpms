@@ -26,10 +26,12 @@ interface LocalRow {
   remarks: string;
 }
 
-export function ProductionTargetGrid() {
+export function ProductionTargetGrid({ controlledProgramId }: { controlledProgramId?: string } = {}) {
   const { user } = useAuth();
   const now = new Date();
-  const [selectedProgram, setSelectedProgram] = useState('');
+  const [internalProgram, setInternalProgram] = useState('');
+  const selectedProgram = controlledProgramId || internalProgram;
+  const setSelectedProgram = controlledProgramId ? () => {} : setInternalProgram;
   const [selectedBU, setSelectedBU] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[now.getMonth()]);
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -120,14 +122,16 @@ export function ProductionTargetGrid() {
       <CardContent className="space-y-4">
         {/* Filters */}
         <div className="flex gap-3 flex-wrap items-center">
-          <Select value={selectedProgram} onValueChange={setSelectedProgram}>
-            <SelectTrigger className="w-[200px]"><SelectValue placeholder="Select Program" /></SelectTrigger>
-            <SelectContent>
-              {productionPrograms.map((p: any) => (
-                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {!controlledProgramId && (
+            <Select value={selectedProgram} onValueChange={setSelectedProgram}>
+              <SelectTrigger className="w-[200px]"><SelectValue placeholder="Select Program" /></SelectTrigger>
+              <SelectContent>
+                {productionPrograms.map((p: any) => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Select value={selectedBU || 'all'} onValueChange={v => setSelectedBU(v === 'all' ? '' : v)}>
             <SelectTrigger className="w-[180px]"><SelectValue placeholder="All BUs" /></SelectTrigger>
             <SelectContent>

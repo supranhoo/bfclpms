@@ -31,6 +31,7 @@ import { BusinessUnitManager } from '@/components/incentive/BusinessUnitManager'
 import { AllocationRulesEditor } from '@/components/incentive/AllocationRulesEditor';
 import { VesselRateEditor } from '@/components/incentive/VesselRateEditor';
 import { VesselDataEntryGrid } from '@/components/incentive/VesselDataEntryGrid';
+import { UnifiedProductionDataTab } from '@/components/incentive/UnifiedProductionDataTab';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 /* ── Summary badges for each program card ── */
@@ -197,12 +198,7 @@ export default function IncentiveConfig() {
         </TabsContent>
 
         <TabsContent value="production" className="space-y-6">
-          <ProductionTargetGrid />
-          <VesselDataEntryGrid
-            programs={programs
-              .filter((p: any) => p.is_active && p.incentive_base === 'fixed')
-              .map((p: any) => ({ id: p.id, name: p.name, min_kra_score: p.min_kra_score }))}
-          />
+          <UnifiedProductionDataTab programs={programs as any[]} />
         </TabsContent>
 
         <TabsContent value="eligibility">
