@@ -1,87 +1,56 @@
 
 
-## Fix: Final Score Not Updating on Already-Approved KPIs
+## Plan: KPI Scorecard Detail Report (Flat Table, No Row Limit)
 
-### Root Cause (Confirmed)
+### What We're Building
+A new report at `/reports/kpi-scorecard-detail` — a flat table with **one row per KPI** showing employee details and all stage scores. No pagination limit on data fetch; all KPIs for the selected period are loaded using the same batch-fetch loop as the existing KPI Detail Report.
 
-**File: `src/hooks/useAdminDataEntry.ts` line 311**
+### Columns
+Employee Code, Name, Designation, Department, Month, Category, KRA, KPI, Weightage, Self, Manager, Skip-Level, HR PMS, Auditor, Management, Final Score, Status
 
-```typescript
-const shouldRecomputeFinal = newStatus === 'approved' || (advance_status !== false && newSubmission && !newStatus);
-```
+### Data Fetching Strategy
+- Reuse the proven batch-fetch pattern from `KpiDetailReport.tsx` (loop with `range(offset, offset+999)` until fewer than 1000 rows returned) — this bypasses the Supabase 1000-row default limit
+- Fetch `profiles` (with `designation`, `departments`) in a single query
+- Join client-side into flat rows
 
-When the KPI is already approved:
-- Line 199-201: `newStatus` is set to `null` (correctly — no status change needed)
-- Line 311: The recompute condition requires `advance_status !== false`
-- But `advance_status` is **irrelevant** for already-approved KPIs — its purpose is to control workflow advancement, not final score sync
-- If the admin dialog has `advanceStatus` toggled off (or defaults to off for certain roles), the recompute is skipped entirely
+### Features
+- Month/Year selectors, department filter, search (name/code/KPI)
+- Sortable column headers (reuse pattern from `KpiDetailsTable`)
+- Client-side pagination for UI performance (default 100 rows per page)
+- Excel export of **all filtered rows** (not just current page) via `xlsx`
+- Report access controlled via `kpi-scorecard-detail` key
 
-### Fix (Surgical, 1 line)
-
-**File: `src/hooks/useAdminDataEntry.ts` — line 311**
-
-Replace the condition with one that explicitly handles the already-approved case independently of `advance_status`:
-
-```typescript
-// Before:
-const shouldRecomputeFinal = newStatus === 'approved' || (advance_status !== false && newSubmission && !newStatus);
-
-// After:
-const kpiWasAlreadyApproved = !newStatus && currentKpiStatus === 'approved';
-const shouldRecomputeFinal = newStatus === 'approved' || (kpiWasAlreadyApproved && newSubmission);
-```
-
-This requires hoisting `currentKpiStatus` so it's accessible at line 311. Currently it's scoped inside the `if (advance_status !== false)` block (line 198). We extract it to the outer scope before that block.
-
-### Exact Changes
-
-**`src/hooks/useAdminDataEntry.ts`:**
-
-1. **Before the `advance_status` gate (line ~170):** Fetch the KPI's current status unconditionally for non-self roles, store as `currentKpiStatus` in outer scope
-2. **Line 311:** Replace condition with `newStatus === 'approved' || (currentKpiStatus === 'approved' && newSubmission)`
-3. Remove the `advance_status !== false` gate from the recompute — it has no business being there
-
-### Why This Has Zero Regression Risk
-
-- **Normal forward flow** (`newStatus === 'approved'`): Unchanged — still triggers recompute
-- **Already-approved edits**: Now always recomputes, regardless of advance toggle — correct behavior
-- **Non-approved KPIs with advance off**: `currentKpiStatus !== 'approved'` and `newStatus !== 'approved'` → recompute skipped → correct (no final score to sync yet)
-- **N/A KPIs**: `is_na` path clears all scores including `final_score` before upsert; recompute finds all nulls → no patch → correct
-
-### Impact Coverage
-
-| Surface | Impact |
-|---------|--------|
-| Dashboard score tiles | Correct — reads `final_score` which is now patched |
-| Previous month tiles | Correct — same query path |
-| KPI Details panel | Correct — reads same `review_submissions` |
-| Reports (Performance, Scorecard, etc.) | Correct — all read `final_score` |
-| Weighted average calculations | Correct — uses `final_score` |
-| Audit logs | No change — already logged correctly |
-| Non-approved KPIs | No change — recompute only fires for `approved` status |
-
-### Data Repair
-
-Use the insert tool (not migration) to fix existing stale records:
-
-```sql
-UPDATE review_submissions rs
-SET final_score = rs.management_score,
-    final_rating = rs.management_rating
-FROM kpis k
-WHERE rs.kpi_id = k.id
-  AND k.status = 'approved'
-  AND rs.management_score IS NOT NULL
-  AND (rs.final_score IS NULL OR rs.final_score != rs.management_score)
-  AND k.review_year >= 2026;
-```
-
-### Files Modified
+### Files to Create/Modify
 
 | File | Change |
 |------|--------|
-| `src/hooks/useAdminDataEntry.ts` | Hoist `currentKpiStatus`; fix recompute condition |
-| `DOCUMENTATION.md` | v2.15.6 changelog |
-| `POLICY.md` | Clarify §34: recompute is independent of advance_status toggle |
-| DB data repair | Fix existing stale final_scores via insert tool |
+| `src/pages/reports/KpiScorecardDetail.tsx` | **New** — full report page |
+| `src/pages/reports/ReportsHub.tsx` | Add card entry |
+| `src/App.tsx` | Add lazy route `/reports/kpi-scorecard-detail` |
+| `src/hooks/useReportAccess.ts` | Add `kpi-scorecard-detail` to `DEFAULT_CONFIGS` |
+| `DOCUMENTATION.md` | v2.15.7 changelog |
+
+### Technical Details
+
+```text
+Data flow:
+  supabase.from('kpis')
+    .select('id, employee_id, kra_name, kpi_name, weightage, review_period,
+             review_year, status, frequency,
+             kra_categories(name),
+             review_submissions(self_score, manager_score, skip_level_score,
+                                hr_pms_score, auditor_score, management_score,
+                                final_score, is_na)')
+    .eq('review_year', year)
+    .range(offset, offset + 999)
+  → loop until batch < 1000
+
+  profiles: id, employee_code, full_name, designation, departments(name)
+  → Map by id, join client-side
+```
+
+### Risk Assessment
+- **Regression**: Zero — new page only, existing reports untouched
+- **Performance**: Batch fetch proven in KPI Detail Report for 1500+ KPIs
+- **Row limit**: Explicitly handled via the while-loop pattern — no 1000-row cap
 
