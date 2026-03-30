@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.13.7 — Admin data entry: atomic final_score sync on approval (eliminates two-step write failure)
+> **Version:** 2.13.8 — Fix Propagate button disabled for scoped Org KPIs
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
