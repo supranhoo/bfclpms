@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.15.12 — Unified employee mapping table with multi-select
+> **Version:** 2.15.13 — Edit & delete slab category dropdown options
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4453,3 +4453,12 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Features:** Multi-select checkboxes, "Select All Filtered", sortable columns, filter dropdowns for Division/BU/Dept/Designation/Grade, search bar, pagination (20/page)
 - **New hooks:** `useBulkAddProgramMappings`, `useBulkRemoveProgramMappings` for batch operations
 - **POLICY.md §37:** Employee mapping UI must show resolved employee list, not abstract entity pickers
+
+---
+
+### v2.15.13 — Edit & delete slab category dropdown options (2026-03-30)
+
+- **Problem:** Slab categories could only be added via the dropdown; no way to edit or delete existing categories
+- **Fix:** Added a "Manage" (⚙) button next to the dropdown that opens a popover with inline edit and delete actions for each category
+- **New hook:** `useUpdateSlabCategory` — updates label and re-derives value
+- **UI:** Popover lists all categories with pencil (edit) and trash (delete) icons; inline input for editing; "Add New" at bottom
