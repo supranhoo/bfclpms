@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 1.24.0 — Rollback and re-submission downstream data clearing invariant
+> **Version:** 1.25.0 — Cycle-aware reconciliation invariant
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -484,6 +484,13 @@ Draft → Pending HR Approval → Active → [Extended] → Completed / Cancelle
 - **When a reviewer re-submits after a rollback**, the `submitReview` mutation MUST clear all reviewer fields for stages AFTER the current `activeReviewStage`. This prevents stale downstream data from persisting.
 - The canonical stage ordering for clearing purposes is: `self_review → manager_check → skip_level_check → hr_pms_review → audit → management_review`.
 - This invariant prevents the dashboard and review journey from displaying stale scores from a prior review cycle that was rolled back.
+
+### 17.5 Reconciliation Must Be Cycle-Aware (Invariant)
+
+- The `reconcile_workflow_statuses` function MUST NOT advance a KPI based on a downstream score that predates the most recent rollback or send-back to the current status.
+- **Branch 3 (Review-Stage Mismatch):** Before advancing a KPI, the reconciler MUST verify that no rollback/send-back audit log targeting the current status exists with a timestamp newer than the submission's `updated_at`. If such a log exists, the downstream score is stale and the KPI MUST be skipped.
+- **Approval final_score sync:** When the reconciler approves a KPI, `final_score` and `final_rating` MUST be set from the terminal stage's score (determined by the employee's month-specific workflow), NOT a generic COALESCE fallback chain. An ELSE fallback to COALESCE is permitted only for unrecognized terminal stages.
+- This invariant prevents the reconciler from re-approving KPIs with stale post-rollback scores.
 
 ---
 

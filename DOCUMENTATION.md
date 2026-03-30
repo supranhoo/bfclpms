@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.11.0 — Rollback and re-submission clear downstream reviewer data
+> **Version:** 2.12.0 — Cycle-aware reconciliation: workflow-aware final_score sync + rollback-awareness
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4237,6 +4237,17 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Export consistency:** Excel export uses `filteredRows` derived from `enrichedRows`, so exported data matches the UI
 - **Dependency fix:** `filteredRows` memo now correctly depends on `enrichedRows` instead of raw `rows`
 - **Invariant:** Reports must not display scores for workflow stages that do not exist in the employee's resolved workflow
+
+---
+
+### v2.12.0 — Cycle-aware reconciliation: workflow-aware final_score sync + rollback-awareness (2026-03-30)
+
+- **Bug fix:** `reconcile_workflow_statuses` re-approved KPIs with stale post-rollback downstream scores (e.g., management_score=5 from pre-rollback cycle)
+- **Root cause (Branch 3):** Review-stage mismatch detection advanced KPIs based on stale downstream scores without checking if a rollback occurred after the score was entered
+- **Root cause (Branch 2a):** Terminal-stage approval used generic `COALESCE(management_score, auditor_score, ...)` instead of the employee's actual terminal stage score
+- **Fix (Rollback-awareness):** Branch 3 now checks `kpi_audit_logs` for rollback/send-back events targeting the current status that are newer than `review_submissions.updated_at`. If found, the downstream score is treated as stale and skipped.
+- **Fix (Workflow-aware sync):** Approval final_score/final_rating now uses a `CASE v_terminal_stage` expression mapping to the correct terminal reviewer's score, with an `ELSE` fallback to the original COALESCE chain for safety
+- **Invariant:** Reconciliation must be cycle-aware (POLICY.md §17.5)
 
 ---
 
