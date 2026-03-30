@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-03-28  
-> **Version:** 2.10.0 — KPI Detail Report: workflow-aware score column filtering
+> **Last Updated:** 2026-03-30  
+> **Version:** 2.11.0 — Rollback and re-submission clear downstream reviewer data
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4237,6 +4237,17 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Export consistency:** Excel export uses `filteredRows` derived from `enrichedRows`, so exported data matches the UI
 - **Dependency fix:** `filteredRows` memo now correctly depends on `enrichedRows` instead of raw `rows`
 - **Invariant:** Reports must not display scores for workflow stages that do not exist in the employee's resolved workflow
+
+---
+
+### v2.11.0 — Rollback and re-submission clear downstream reviewer data (2026-03-30)
+
+- **Bug fix:** After a rollback (e.g., Management → Audit), stale downstream scores (management_score, management_rating, etc.) remained in `review_submissions`, causing dashboard and review journey to display old data
+- **Root cause (Gap 1):** `useApproveRollbackRequest` only reverted `kpis.status` without clearing downstream reviewer fields in `review_submissions`
+- **Root cause (Gap 2):** `submitReview` in `UnifiedScorecard` only wrote the current reviewer's fields without clearing fields for stages after the current one — stale data persisted after rollback re-submissions
+- **Fix (Rollback):** `useApproveRollbackRequest` now nulls out all reviewer fields (score, rating, remarks, evidence, achieved_value) for stages after `target_status`, plus `final_score`/`final_rating`
+- **Fix (Re-submission):** `submitReview` mutation now clears all downstream stage fields based on the employee's `effectiveStages` array and current `activeReviewStage`
+- **Invariant:** Rollbacks and re-submissions must clear all downstream reviewer data (POLICY.md §17.4)
 
 ---
 
