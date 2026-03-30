@@ -1,40 +1,53 @@
 
 
-## Fix: Improve THRESHOLD_TARGET_MISMATCH Recommendations
+## Plan: Smart Threshold Recommendations in Scoring Health Check
 
 ### Problem
-The current suggested fixes are generic and misleading:
-- "Higher is Better" always suggests "140% of target" — wrong for percentage-based KPIs (e.g., target=100% where R5=100 is correct)
-- "Lower is Better" always suggests "60% of target" — equally arbitrary
-- No consideration of `threshold_mode` (absolute vs ratio) or UOM type (%, Nos, etc.)
+The current `THRESHOLD_TARGET_MISMATCH` detection shows 541 generic "verify this is intentional" messages. Admins cannot act on them without manually calculating what the thresholds should be. The system has enough data (target, criteria, UOM) to compute and recommend specific R5–R1 values.
 
 ### Fix
 
 **File: `src/components/admin/ScoringHealthCheck.tsx`**
 
-1. **Skip the check for percentage UOM KPIs where target = 100**: If UOM contains "%" or "percent" and target is 100, R5=100 is logically correct (can't exceed 100%). Suppress the flag entirely.
+Replace the generic `suggestedFix` text with computed threshold recommendations based on criteria and UOM:
 
-2. **Consider `threshold_mode`**: If `threshold_mode === 'ratio'`, thresholds are already percentages of target — R5 ≤ target in absolute terms is expected. Skip the check for ratio-mode KPIs.
+#### Recommendation Logic
 
-3. **Replace hardcoded percentage suggestions with neutral guidance**: Instead of prescribing "140%" or "60%", use:
-   - "R5 threshold equals the target. If R5 should represent exceeding the target, update it in the KPI editor. Review the threshold mode (absolute vs percentage)."
+**Higher is Better** (target = T):
+```text
+Recommended: R5 = T×1.20, R4 = T×1.10, R3 = T, R2 = T×0.90, R1 = T×0.80
+```
+Example: Target = 15 → R5=18, R4=16.5, R3=15, R2=13.5, R1=12
 
-4. **Add UOM context to the description**: Show the UOM in the message so admins can judge whether the flag is relevant.
+**Lower is Better** (target = T):
+```text
+Recommended: R5 = T×0.80, R4 = T×0.90, R3 = T, R2 = T×1.10, R1 = T×1.20
+```
+Example: Target = 95% → R5=76, R4=85.5, R3=95, R2=104.5, R1=114
 
-### What Changes
-| Current | New |
-|---------|-----|
-| Always flags R5 ≤ target for "Higher is Better" | Skips if `threshold_mode = 'ratio'` or UOM is percentage with target=100 |
-| "If R5 should be 140% of target, set R5 to X" | "R5 equals target — verify this is intentional. Open KPI editor to review threshold mode and values." |
-| "If R5 should be 60% of target, set R5 to X" | "R5 equals target — verify this is intentional for Lower is Better criteria." |
+**Date UOM** (target = T days):
+```text
+R5 = T-3, R4 = T-1, R3 = T, R2 = T+2, R1 = T+5
+```
+
+#### Display Format
+The `suggestedFix` field will show:
+```
+Suggested thresholds: R5=18, R4=16.5, R3=15, R2=13.5, R1=12.
+Open KPI editor to apply.
+```
+
+#### Suppression Refinement
+Additionally, suppress the flag entirely when R5 = target AND all other thresholds (R4–R1) form a valid spread away from target. This indicates intentional "meet target = R5" configuration with proper degradation — not a misconfiguration.
 
 ### Files Changed
-| File | Action |
+| File | Change |
 |------|--------|
-| `src/components/admin/ScoringHealthCheck.tsx` | Smarter THRESHOLD_TARGET_MISMATCH detection + neutral suggestions |
+| `src/components/admin/ScoringHealthCheck.tsx` | Compute specific R5–R1 recommendations based on target, criteria, UOM |
 | `DOCUMENTATION.md` | Version history |
 
 ### Risk Assessment
-- **Regression**: Zero — reduces false positives, no scoring logic changes
-- **Scope**: Detection-only, no data or workflow impact
+- **Regression**: Zero — display-only change in suggestion text
+- **False positives reduced**: Suppresses flags where R4–R1 already form a valid spread
+- **Scope**: Affects `suggestedFix` string only; no scoring logic changes
 
