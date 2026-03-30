@@ -1,57 +1,34 @@
 
 
-## Plan: Add Description-vs-Threshold Mismatch Detection to Scoring Health Check
+## RCA: PostgREST "Could not choose best candidate function" Error
 
-### Problem
-KPI names often embed scoring logic descriptions like "Rating 5: 140%, Rating 4: 120%, Rating 3: 100%..." but the actual configured thresholds may not match these stated percentages. The Health Check currently has no way to catch this data entry inconsistency.
+### Root Cause
+There are **two overloads** of `reconcile_workflow_statuses` in the database:
 
-Example from the screenshot: KPI name says "Rating 5: 140%" (implying R5 = 19.6 for target 14), but R5 is configured as 14 (100% of target).
+1. `(p_dry_run boolean, p_review_period text, p_review_year integer, p_kpi_ids uuid[], p_performed_by uuid)` — all params have defaults
+2. `(p_review_period text, p_review_year integer, p_dry_run boolean, p_performed_by uuid, p_kpi_ids uuid[])` — first two params required
 
-### Fix
+The rogue overload (#1) was created by migration `20260325182832` which reordered params with `p_dry_run` first. Subsequent migrations used `DROP FUNCTION IF EXISTS` with the canonical signature `(text, integer, boolean, uuid, uuid[])` before recreating — but that DROP never matched overload #1's signature `(boolean, text, integer, uuid[], uuid)` because the param order differs. So overload #1 was never actually dropped.
 
-**File: `src/components/admin/ScoringHealthCheck.tsx`**
+When PostgREST receives an RPC call, it sees two candidate functions with overlapping defaulted params and cannot disambiguate → error.
 
-1. Add new issue type `DESCRIPTION_THRESHOLD_MISMATCH` to the `IssueType` union.
+### CAPA (Corrective and Preventive Action)
 
-2. Add a detection block that:
-   - Parses `kpi_name` for patterns like `Rating 5: 140%`, `Rating 4: 120%`, `R5: 140%`, `R5=140%` using regex
-   - If percentages are found AND target is defined, computes expected threshold values (e.g., 140% of 14 = 19.6)
-   - Compares expected values against actual R5–R1 thresholds
-   - Flags mismatches with severity **Medium** when any described percentage differs from the configured value by more than 5% tolerance
-   - Shows the specific mismatch: "Description says R5=140% (19.6) but configured R5=14 (100%)"
+**Corrective**: New migration that:
+1. `DROP FUNCTION IF EXISTS public.reconcile_workflow_statuses(boolean, text, integer, uuid[], uuid);` — kills the rogue overload
+2. `DROP FUNCTION IF EXISTS public.reconcile_workflow_statuses(text, integer, boolean, uuid, uuid[]);` — drops canonical
+3. Recreate the single canonical function with signature `(p_review_period text, p_review_year integer, p_dry_run boolean DEFAULT true, p_performed_by uuid DEFAULT NULL, p_kpi_ids uuid[] DEFAULT NULL)`
 
-3. `suggestedFix` shows the computed correct values based on the described percentages:
-   ```
-   "Based on description: R5=19.6 (140%), R4=16.8 (120%), R3=14 (100%). Update thresholds or correct the description text."
-   ```
-
-### Regex Pattern
-```typescript
-// Matches: "Rating 5: 140%", "R5: 140%", "Rating 5 = 140%", "R5=140"
-/(?:Rating\s*|R)([0-5])\s*[:=]\s*(\d+(?:\.\d+)?)\s*%/gi
-```
-
-### Detection Logic
-```text
-1. Extract all "Rating N: X%" pairs from kpi_name
-2. If target_value exists and at least one pair found:
-   a. For each pair, compute expected = target × (X / 100)
-   b. Compare against actual threshold (r5, r4, etc.)
-   c. If |expected - actual| > 5% of target → flag mismatch
-3. Build suggestedFix showing both described and correct values
-```
-
-### Tolerance
-A 5% tolerance of target value prevents false positives from rounding differences (e.g., target=14, 140%=19.6 vs configured R5=20 is acceptable).
+**Preventive**: Add a comment block at the top of the function documenting the canonical signature. Future migrations must always drop ALL known historical signatures before recreating.
 
 ### Files Changed
 | File | Change |
 |------|--------|
-| `src/components/admin/ScoringHealthCheck.tsx` | Add `DESCRIPTION_THRESHOLD_MISMATCH` type + regex-based detection |
-| `DOCUMENTATION.md` | Version history v2.13.4 |
+| New SQL migration | Drop both overloads, recreate single canonical function |
+| `DOCUMENTATION.md` | Version history v2.13.5 |
+| `POLICY.md` | Add invariant: "reconcile_workflow_statuses must exist as exactly one function — migrations must drop all historical signatures" |
 
 ### Risk Assessment
-- **Regression**: Zero — additive detection only, no scoring logic changes
-- **False positives**: Low — only triggers when kpi_name explicitly contains percentage patterns AND they don't match thresholds
-- **Scope**: Numeric KPIs with embedded scoring descriptions only
+- **Regression**: Zero — drops the duplicate, preserves the canonical function body unchanged
+- **Scope**: Function signature cleanup only; no logic changes
 
