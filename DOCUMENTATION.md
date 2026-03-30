@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.15.9 — Unified Production Data tab: conditional vessel/slab grid
+> **Version:** 2.15.10 — Port Incentive detection via vessel rates query
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
