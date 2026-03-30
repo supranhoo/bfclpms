@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.15.9 — Unified Production Data tab: conditional vessel/slab grid
+> **Version:** 2.15.10 — Port Incentive detection via vessel rates query
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4423,3 +4423,12 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix (useAdminDataEntry.ts):** N/A clearing now scoped to current role's fields only; `is_na` flag only written when it actually changed from existing state
 - **Fix (AdminDataEntryDialog.tsx):** Track `originalIsNa` state; only pass `is_na` to mutation when toggled by admin
 - **Invariant:** N/A toggle must never clear scores for unrelated review levels (POLICY.md §35)
+
+---
+
+### v2.15.10 — Port Incentive detection via vessel rates query (2026-03-30)
+
+- **Bug:** Port Incentive program showed ProductionTargetGrid (Sub-Unit/Category/Target fields) instead of VesselDataEntryGrid because detection used `incentive_base === 'fixed'` but the program uses `basic_salary`
+- **Fix (UnifiedProductionDataTab.tsx):** Query `incentive_vessel_rates` count for selected program; if count > 0, render VesselDataEntryGrid; otherwise render ProductionTargetGrid
+- **UX:** Added loading skeleton while vessel rate count query resolves
+- **No schema changes**
