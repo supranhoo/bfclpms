@@ -4260,6 +4260,15 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 
 ---
 
+### v2.13.1 — Scoring Health Check: smarter threshold-vs-target detection (2026-03-30)
+
+- **Improvement:** `THRESHOLD_TARGET_MISMATCH` detection now skips KPIs with `threshold_mode = 'ratio'` (thresholds are relative to target by design)
+- **Improvement:** Suppresses false positives for percentage UOM KPIs where target = 100 (R5 cannot logically exceed 100%)
+- **Improvement:** Replaced prescriptive suggestions ("set R5 to 140% of target") with neutral guidance ("verify this is intentional, review threshold mode")
+- **Improvement:** UOM label now included in diagnostic messages for admin context
+
+---
+
 ### v2.11.0 — Rollback and re-submission clear downstream reviewer data (2026-03-30)
 
 - **Bug fix:** After a rollback (e.g., Management → Audit), stale downstream scores (management_score, management_rating, etc.) remained in `review_submissions`, causing dashboard and review journey to display old data
