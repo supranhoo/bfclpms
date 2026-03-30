@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.14.1 — Fix sent-back indicator wiring for Org KPI scoped table
+> **Version:** 2.14.2 — Fix sent-back indicator detection + expand value history audit logging
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4344,6 +4344,16 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 
 - **Bug fix:** Sent-back indicator never appeared because `useSentBackOrgKpiEmployees` was imported but never called
 - **Fix:** Moved hook invocation inside `OrgKpiEntryCard` (self-contained — no parent wiring needed)
+
+---
+
+### v2.14.2 — Fix sent-back indicator detection + expand value history audit logging (2026-03-30)
+
+- **Bug fix (Issue 1):** Sent-back indicator never appeared because the hook filtered `kpi_queries` by `status = 'open'`, but send-back records are auto-resolved to `'resolved'` when KPI status changes
+- **Fix:** Removed `status = 'open'` filter. Now detects sent-back state by checking if the KPI is still at `kra_set` AND has a `send_back` query record (any status). Indicator disappears once the employee re-progresses past `kra_set`.
+- **Bug fix (Issue 2):** Value History popover showed very limited data — missing `propagated`, `rollback`, and many `updated` entries
+- **Fix:** Added `propagated` audit log writes after successful propagation. Added `propagated`, `rollback`, `unlocked` to the `actionLabels` map in `OrgKpiAuditLog.tsx`.
+- **Invariant:** Every org KPI value mutation must write an audit log entry (POLICY.md §30)
 
 ---
 

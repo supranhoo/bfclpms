@@ -19,6 +19,9 @@ const actionLabels: Record<string, { label: string; variant: 'default' | 'second
   updated: { label: 'Updated', variant: 'secondary' },
   imported: { label: 'Imported', variant: 'outline' },
   copied_from_previous: { label: 'Copied', variant: 'outline' },
+  propagated: { label: 'Propagated', variant: 'default' },
+  rollback: { label: 'Rollback', variant: 'secondary' },
+  unlocked: { label: 'Unlocked', variant: 'outline' },
 };
 
 export function OrgKpiAuditLog({ categoryId, kraName, kpiName, reviewPeriod, reviewYear }: OrgKpiAuditLogProps) {
