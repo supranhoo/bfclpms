@@ -4,7 +4,7 @@
  * Used across My KPIs, Team Review, Audit, and Management views
  */
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,7 +18,8 @@ import { getKpiSummaryText } from '@/lib/textFormatting';
 import { canReviewKpi as workflowCanReview, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { 
   Info, Lock, CheckCircle2, Calendar, ChevronDown, ChevronUp, Undo2, Eye, 
-  Building2, Users, User, FileCheck, Clock, UserPlus, Zap, FastForward
+  Building2, Users, User, FileCheck, Clock, UserPlus, Zap, FastForward,
+  ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react';
 import { AuditKpiAssignPopover } from '@/components/review/AuditKpiAssignPopover';
 import type { AuditKpiAssignment } from '@/hooks/useAuditKpiAssignments';
@@ -140,6 +141,15 @@ function getScoreForColumn(
   }
 }
 
+// Canonical status order for sorting
+const STATUS_ORDER: string[] = [
+  'kra_set', 'self_review', 'manager_check', 'skip_level_check',
+  'hr_pms_review', 'audit', 'management_review', 'approved',
+];
+
+type SortField = 'category' | 'weightage' | 'status' | string; // string for dynamic score column keys
+type SortDirection = 'asc' | 'desc';
+
 export function KpiDetailsTable({
   kpis,
   submissionMap,
@@ -161,9 +171,58 @@ export function KpiDetailsTable({
   auditKpiAssignments,
   dataOwnerNames,
 }: KpiDetailsTableProps) {
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
   const scoreColumns = buildScoreColumns(effectiveStages);
-  const totalColumns = 5 + scoreColumns.length + 2; // Category, KRA/KPI, Target, Weightage, Achieved + scores + Status, Actions
+  const totalColumns = 5 + scoreColumns.length + 2;
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'desc' ? 'asc' : 'desc');
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 text-muted-foreground" />;
+    return sortDirection === 'asc'
+      ? <ArrowUp className="h-3 w-3" />
+      : <ArrowDown className="h-3 w-3" />;
+  };
+
+  const sortedKpis = useMemo(() => {
+    if (!sortField) return kpis;
+    return [...kpis].sort((a, b) => {
+      const dir = sortDirection === 'asc' ? 1 : -1;
+
+      if (sortField === 'category') {
+        const catA = a.kra_categories?.name?.toLowerCase() || '';
+        const catB = b.kra_categories?.name?.toLowerCase() || '';
+        return catA.localeCompare(catB) * dir;
+      }
+
+      if (sortField === 'weightage') {
+        return ((a.weightage || 0) - (b.weightage || 0)) * dir;
+      }
+
+      if (sortField === 'status') {
+        const idxA = STATUS_ORDER.indexOf(a.status || 'kra_set');
+        const idxB = STATUS_ORDER.indexOf(b.status || 'kra_set');
+        return (idxA - idxB) * dir;
+      }
+
+      // Score columns (self_score, manager_score, etc.)
+      const subA = submissionMap.get(a.id);
+      const subB = submissionMap.get(b.id);
+      const scoreA = getScoreForColumn(subA, sortField, a.status || 'kra_set') ?? -Infinity;
+      const scoreB = getScoreForColumn(subB, sortField, b.status || 'kra_set') ?? -Infinity;
+      return (scoreA - scoreB) * dir;
+    });
+  }, [kpis, sortField, sortDirection, submissionMap]);
   
   const canReviewKpiCheck = (kpi: KPI): boolean => {
     // N/A KPIs are still reviewable — the reviewer decides whether to confirm or override N/A
@@ -306,20 +365,36 @@ export function KpiDetailsTable({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Category</TableHead>
+          <TableHead>
+            <button onClick={() => handleSort('category')} className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer">
+              Category {getSortIcon('category')}
+            </button>
+          </TableHead>
           <TableHead>KRA / KPI</TableHead>
           <TableHead>Target</TableHead>
-          <TableHead>Weightage</TableHead>
+          <TableHead>
+            <button onClick={() => handleSort('weightage')} className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer">
+              Weightage {getSortIcon('weightage')}
+            </button>
+          </TableHead>
           <TableHead>Achieved</TableHead>
           {scoreColumns.map(col => (
-            <TableHead key={col.key} className="text-center">{col.label}</TableHead>
+            <TableHead key={col.key} className="text-center">
+              <button onClick={() => handleSort(col.key)} className="flex items-center gap-1 justify-center hover:text-foreground transition-colors cursor-pointer w-full">
+                {col.label} {getSortIcon(col.key)}
+              </button>
+            </TableHead>
           ))}
-          <TableHead>Status</TableHead>
+          <TableHead>
+            <button onClick={() => handleSort('status')} className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer">
+              Status {getSortIcon('status')}
+            </button>
+          </TableHead>
           <TableHead>Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {kpis.map((kpi, index) => {
+        {sortedKpis.map((kpi, index) => {
           const submission = submissionMap.get(kpi.id);
           const kpiQueries = queryMap?.get(kpi.id) || [];
           const openQueries = kpiQueries.filter((q: KpiQuery) => q.status === 'open');
@@ -542,7 +617,7 @@ export function KpiDetailsTable({
           );
         })}
         
-        {kpis.length === 0 && (
+        {sortedKpis.length === 0 && (
           <TableRow>
             <TableCell colSpan={totalColumns} className="text-center py-8 text-muted-foreground">
               No KPIs found for this period
