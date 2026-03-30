@@ -184,7 +184,7 @@ export function ProductionTargetGrid({ controlledProgramId }: { controlledProgra
                           <Select value={row.slab_category} onValueChange={v => updateRow(row._key, 'slab_category', v)}>
                             <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c.replace('_', ' ')}</SelectItem>)}
+                              {slabCategories.filter((c: any) => c.value !== 'pms_score').map((c: any) => <SelectItem key={c.id} value={c.value}>{c.label}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         </TableCell>
