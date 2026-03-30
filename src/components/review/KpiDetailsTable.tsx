@@ -4,7 +4,7 @@
  * Used across My KPIs, Team Review, Audit, and Management views
  */
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,7 +18,8 @@ import { getKpiSummaryText } from '@/lib/textFormatting';
 import { canReviewKpi as workflowCanReview, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { 
   Info, Lock, CheckCircle2, Calendar, ChevronDown, ChevronUp, Undo2, Eye, 
-  Building2, Users, User, FileCheck, Clock, UserPlus, Zap, FastForward
+  Building2, Users, User, FileCheck, Clock, UserPlus, Zap, FastForward,
+  ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react';
 import { AuditKpiAssignPopover } from '@/components/review/AuditKpiAssignPopover';
 import type { AuditKpiAssignment } from '@/hooks/useAuditKpiAssignments';
