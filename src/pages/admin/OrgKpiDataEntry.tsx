@@ -1143,7 +1143,7 @@ export default function OrgKpiDataEntry() {
                       governanceLocked={governanceLocked}
                       employeeKpiIds={empKpiIds}
                       onSave={(values) => handleCardSave(kpi, values)}
-                      onSaveAndPropagate={(values) => handleCardSaveAndPropagate(kpi, values)}
+                      onSaveAndPropagate={(values, filterIds) => handleCardSaveAndPropagate(kpi, values, filterIds)}
                       onUnlock={async () => {
                         await supabase
                           .from('org_kpi_values')
