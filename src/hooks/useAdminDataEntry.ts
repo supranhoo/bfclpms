@@ -637,7 +637,7 @@ export function useAdminStatusStepBack() {
       }
 
       // Clear management fields if target is before management_review
-      if (targetIdx < FULL_STATUS_ORDER.indexOf('management_review')) {
+      if (targetIdx <= FULL_STATUS_ORDER.indexOf('management_review')) {
         clearFields.management_rating = null;
         clearFields.management_score = null;
         clearFields.management_remarks = null;

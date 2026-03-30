@@ -181,7 +181,7 @@ export function useApproveRollbackRequest() {
       const targetIdx = CANONICAL_ORDER.indexOf(target_status);
       const clearFields: Record<string, null> = { final_score: null, final_rating: null };
       CANONICAL_ORDER.forEach((stage, idx) => {
-        if (idx > targetIdx && STAGE_FIELD_MAP[stage]) {
+        if (idx >= targetIdx && STAGE_FIELD_MAP[stage]) {
           STAGE_FIELD_MAP[stage].forEach(field => { clearFields[field] = null; });
         }
       });
