@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.13.5 — Fixed PostgREST "could not choose best candidate function" error for reconcile_workflow_statuses by dropping rogue overload
+> **Version:** 2.13.6 — Fixed DESCRIPTION_THRESHOLD_MISMATCH false positives for raw-percentage KPIs (dual-interpretation: target-multiplier OR direct-value match)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4270,7 +4270,12 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 
 ---
 
-### v2.13.5 — Fixed reconcile_workflow_statuses PostgREST overload error (2026-03-30)
+### v2.13.6 — Fixed DESCRIPTION_THRESHOLD_MISMATCH false positives for raw-percentage KPIs (2026-03-30)
+
+- **RCA:** Detection always computed `expected = target × (pct/100)`, but budget/percentage KPIs use raw percentage values as thresholds (e.g., R3=100 means "100% of budget", not target×100%)
+- **Fix:** Dual-interpretation check — a threshold is valid if it matches EITHER `target × (pct/100)` OR the raw percentage value directly, within 5% tolerance of target
+- **Result:** Eliminates false positives for KPIs like "Budget saving" where R3=100 and target=95
+
 
 - **RCA:** Two overloads of `reconcile_workflow_statuses` existed with different parameter orders — `(boolean, text, integer, uuid[], uuid)` vs `(text, integer, boolean, uuid, uuid[])` — causing PostgREST to fail with "could not choose the best candidate function"
 - **Root cause:** Migration `20260325182832` created overload #1 with `p_dry_run` first. Subsequent `DROP FUNCTION IF EXISTS` used the canonical signature which didn't match overload #1's param order, leaving it orphaned
