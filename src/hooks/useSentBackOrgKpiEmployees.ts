@@ -8,8 +8,11 @@ export interface SentBackInfo {
 }
 
 /**
- * Detects which employees have open send-back queries on their KPIs
- * matching a specific org-level KPI (by category/kra/kpi/period/year).
+ * Detects which employees have sent-back org KPIs.
+ * 
+ * Logic: An employee's org KPI is considered "sent back" when:
+ * 1. There exists a kpi_queries record with query_type='send_back' for their KPI, AND
+ * 2. The KPI's current status is 'kra_set' (hasn't re-progressed past the sent-back stage)
  *
  * Returns Map<employeeId, SentBackInfo>
  */
@@ -26,10 +29,10 @@ export function useSentBackOrgKpiEmployees(
       const map = new Map<string, SentBackInfo>();
       if (!categoryId || !kraName || !kpiName || !reviewPeriod || !reviewYear) return map;
 
-      // 1. Find employee KPIs matching this org KPI definition
+      // 1. Find employee KPIs matching this org KPI definition that are at 'kra_set' status
       const { data: kpis, error: kpiErr } = await supabase
         .from('kpis')
-        .select('id, employee_id')
+        .select('id, employee_id, status')
         .eq('category_id', categoryId)
         .eq('kra_name', kraName)
         .eq('kpi_name', kpiName)
@@ -40,16 +43,19 @@ export function useSentBackOrgKpiEmployees(
       if (kpiErr) throw kpiErr;
       if (!kpis || kpis.length === 0) return map;
 
-      const kpiIds = kpis.map(k => k.id);
-      const kpiToEmployee = new Map(kpis.map(k => [k.id, k.employee_id]));
+      // Only consider KPIs that are still at 'kra_set' (not yet re-progressed)
+      const kraSetKpis = kpis.filter(k => k.status === 'kra_set');
+      if (kraSetKpis.length === 0) return map;
 
-      // 2. Find open send-back queries for these KPIs
+      const kpiIds = kraSetKpis.map(k => k.id);
+      const kpiToEmployee = new Map(kraSetKpis.map(k => [k.id, k.employee_id]));
+
+      // 2. Find the most recent send-back query for these KPIs (any status — open or resolved)
       const { data: queries, error: qErr } = await supabase
         .from('kpi_queries')
         .select('kpi_id, reason, created_at, raised_by')
         .in('kpi_id', kpiIds)
         .eq('query_type', 'send_back')
-        .eq('status', 'open')
         .order('created_at', { ascending: false });
 
       if (qErr) throw qErr;
