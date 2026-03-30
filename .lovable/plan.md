@@ -1,34 +1,46 @@
 
 
-## RCA: PostgREST "Could not choose best candidate function" Error
+## Plan: Fix DESCRIPTION_THRESHOLD_MISMATCH False Positive for Raw-Percentage KPIs
 
 ### Root Cause
-There are **two overloads** of `reconcile_workflow_statuses` in the database:
+The detection at line 145 always computes: `expected = target × (pct / 100)`.
 
-1. `(p_dry_run boolean, p_review_period text, p_review_year integer, p_kpi_ids uuid[], p_performed_by uuid)` — all params have defaults
-2. `(p_review_period text, p_review_year integer, p_dry_run boolean, p_performed_by uuid, p_kpi_ids uuid[])` — first two params required
+For budget/percentage KPIs where thresholds ARE the raw percentage values (e.g., R3=100 meaning "100% of budget"), the described percentage directly equals the threshold. But the code calculates `95 × (100/100) = 95` and compares against actual `100` → false mismatch.
 
-The rogue overload (#1) was created by migration `20260325182832` which reordered params with `p_dry_run` first. Subsequent migrations used `DROP FUNCTION IF EXISTS` with the canonical signature `(text, integer, boolean, uuid, uuid[])` before recreating — but that DROP never matched overload #1's signature `(boolean, text, integer, uuid[], uuid)` because the param order differs. So overload #1 was never actually dropped.
+### Fix
 
-When PostgREST receives an RPC call, it sees two candidate functions with overlapping defaulted params and cannot disambiguate → error.
+**File: `src/components/admin/ScoringHealthCheck.tsx`** (lines 144-153)
 
-### CAPA (Corrective and Preventive Action)
+Add a secondary check: if the described percentage value directly matches the actual threshold (within tolerance), treat it as valid and skip the flag.
 
-**Corrective**: New migration that:
-1. `DROP FUNCTION IF EXISTS public.reconcile_workflow_statuses(boolean, text, integer, uuid[], uuid);` — kills the rogue overload
-2. `DROP FUNCTION IF EXISTS public.reconcile_workflow_statuses(text, integer, boolean, uuid, uuid[]);` — drops canonical
-3. Recreate the single canonical function with signature `(p_review_period text, p_review_year integer, p_dry_run boolean DEFAULT true, p_performed_by uuid DEFAULT NULL, p_kpi_ids uuid[] DEFAULT NULL)`
+```typescript
+for (const { level, pct } of describedPairs) {
+  const expectedFromTarget = target * (pct / 100);
+  const actual = thresholdMap[level];
+  if (actual !== null && !isNaN(actual)) {
+    const directMatch = Math.abs(pct - actual) <= Math.abs(target * 0.05);
+    const targetMultiplierMatch = Math.abs(expectedFromTarget - actual) <= Math.abs(target * 0.05);
+    if (!directMatch && !targetMultiplierMatch) {
+      // Flag mismatch only if NEITHER interpretation matches
+      const actualPct = Math.round((actual / target) * 100);
+      mismatches.push(`R${level}: description says ${pct}% (${expectedFromTarget.toFixed(1)}) but configured as ${actual} (${actualPct}%)`);
+    }
+  }
+  expectedVals.push(`R${level}=${expectedFromTarget.toFixed(1)} (${pct}%)`);
+}
+```
 
-**Preventive**: Add a comment block at the top of the function documenting the canonical signature. Future migrations must always drop ALL known historical signatures before recreating.
+**Logic**: Two valid interpretations exist for "Rating 3: 100%":
+1. **Target-multiplier**: threshold = target × 100% = 95 (for target=95)
+2. **Raw-percentage**: threshold = 100 (the literal value)
 
-### Files Changed
-| File | Change |
-|------|--------|
-| New SQL migration | Drop both overloads, recreate single canonical function |
-| `DOCUMENTATION.md` | Version history v2.13.5 |
-| `POLICY.md` | Add invariant: "reconcile_workflow_statuses must exist as exactly one function — migrations must drop all historical signatures" |
+If either interpretation matches the actual threshold, suppress the flag.
+
+### Other Files
+- `DOCUMENTATION.md`: Version history v2.13.6
+- `POLICY.md`: Document dual-interpretation rule
 
 ### Risk Assessment
-- **Regression**: Zero — drops the duplicate, preserves the canonical function body unchanged
-- **Scope**: Function signature cleanup only; no logic changes
+- **Regression**: Zero — relaxes detection (fewer false positives), no scoring logic changes
+- **False negatives**: Minimal — only suppresses when described % literally equals the threshold value, which is almost always intentional
 
