@@ -197,12 +197,7 @@ export default function IncentiveConfig() {
         </TabsContent>
 
         <TabsContent value="production" className="space-y-6">
-          <ProductionTargetGrid />
-          <VesselDataEntryGrid
-            programs={programs
-              .filter((p: any) => p.is_active && p.incentive_base === 'fixed')
-              .map((p: any) => ({ id: p.id, name: p.name, min_kra_score: p.min_kra_score }))}
-          />
+          <UnifiedProductionDataTab programs={programs as any[]} />
         </TabsContent>
 
         <TabsContent value="eligibility">
