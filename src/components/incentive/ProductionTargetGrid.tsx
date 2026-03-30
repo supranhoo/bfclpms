@@ -11,9 +11,10 @@ import { useIncentivePrograms } from '@/hooks/useIncentivePrograms';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { SlabCategorySelector } from './SlabCategorySelector';
+import { useIncentiveSlabCategories } from '@/hooks/useIncentiveSlabCategories';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const CATEGORIES = ['production', 'availability', 'maintenance', 'metal_recovery'];
 
 interface LocalRow {
   _key: string;
@@ -38,7 +39,7 @@ export function ProductionTargetGrid({ controlledProgramId }: { controlledProgra
   const [localRows, setLocalRows] = useState<LocalRow[]>([]);
 
   const { data: programs = [] } = useIncentivePrograms();
-  const productionPrograms = (programs as any[]).filter((p: any) => p.is_active);
+  const { data: slabCategories = [] } = useIncentiveSlabCategories();
 
   const { data: businessUnits = [] } = useQuery({
     queryKey: ['business-units'],
@@ -126,7 +127,7 @@ export function ProductionTargetGrid({ controlledProgramId }: { controlledProgra
             <Select value={selectedProgram} onValueChange={setSelectedProgram}>
               <SelectTrigger className="w-[200px]"><SelectValue placeholder="Select Program" /></SelectTrigger>
               <SelectContent>
-                {productionPrograms.map((p: any) => (
+                {(programs as any[]).filter((p: any) => p.is_active).map((p: any) => (
                   <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                 ))}
               </SelectContent>
@@ -183,7 +184,7 @@ export function ProductionTargetGrid({ controlledProgramId }: { controlledProgra
                           <Select value={row.slab_category} onValueChange={v => updateRow(row._key, 'slab_category', v)}>
                             <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c.replace('_', ' ')}</SelectItem>)}
+                              {slabCategories.filter((c: any) => c.value !== 'pms_score').map((c: any) => <SelectItem key={c.id} value={c.value}>{c.label}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         </TableCell>

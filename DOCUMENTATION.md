@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.15.10 — Port Incentive detection via vessel rates query
+> **Version:** 2.15.11 — DB-driven slab categories (zero-hardcoding)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4432,3 +4432,14 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix (UnifiedProductionDataTab.tsx):** Query `incentive_vessel_rates` count for selected program; if count > 0, render VesselDataEntryGrid; otherwise render ProductionTargetGrid
 - **UX:** Added loading skeleton while vessel rate count query resolves
 - **No schema changes**
+
+---
+
+### v2.15.11 — DB-driven slab categories (zero-hardcoding) (2026-03-30)
+
+- **Problem:** Slab categories (PMS Score, Production, Availability, etc.) were hardcoded in `IncentiveSlabEditor.tsx` and `ProductionTargetGrid.tsx`
+- **Fix:** Created `incentive_slab_categories` table with RLS, seeded with existing values
+- **New hook:** `useIncentiveSlabCategories.ts` — CRUD for slab categories
+- **New component:** `SlabCategorySelector.tsx` — reusable dropdown with inline "Add New" (mirrors `ProgramTypeSelector` pattern)
+- **Updated:** `IncentiveSlabEditor.tsx` and `ProductionTargetGrid.tsx` now use DB-driven categories
+- **POLICY.md §36:** Slab categories must be master-data driven, never hardcoded
