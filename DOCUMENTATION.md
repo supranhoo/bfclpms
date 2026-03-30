@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-03-28  
-> **Version:** 2.10.0 — KPI Detail Report: workflow-aware score column filtering
+> **Last Updated:** 2026-03-30  
+> **Version:** 2.11.0 — Rollback and re-submission clear downstream reviewer data
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
