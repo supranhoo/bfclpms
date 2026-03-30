@@ -30,7 +30,7 @@ export function ProductionTargetGrid({ controlledProgramId }: { controlledProgra
   const { user } = useAuth();
   const now = new Date();
   const [internalProgram, setInternalProgram] = useState('');
-  const selectedProgram = controlledProgramId || internalProgram;
+  const [selectedBU, setSelectedBU] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[now.getMonth()]);
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [localRows, setLocalRows] = useState<LocalRow[]>([]);
