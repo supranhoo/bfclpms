@@ -1,51 +1,60 @@
 
 
-## RCA: "Cannot propagate blank data" Error for Employee-Scoped Org KPIs
+## Plan: Sent-Back Indicator + Individual Propagation for Org KPI Scoped Table
 
-### Root Cause
+### Feature 1: Sent-Back Row Highlight
 
-In `src/pages/admin/OrgKpiDataEntry.tsx` line 547, the blank-data guard is:
+**Approach**: Amber left-border + Undo2 icon with tooltip showing reason, per employee row.
 
-```typescript
-if (!values.isNa && values.achievedValue === null) {
-  toast({ title: 'Cannot propagate blank data', ... });
-  return;
-}
-```
+**Data source**: Query `kpi_queries` (type `send_back`) joined with `kpis` (matching org KPI by category_id + kra_name + kpi_name + review_period + review_year + employee_id) to get per-employee send-back status and reason.
 
-This checks the **top-level** `values.achievedValue`, which is always `null` for employee-scoped and department-scoped KPIs. The actual data lives in `values.scopedValues`. The guard fires before the code ever reaches the scoped propagation loop at line 572, blocking all propagation for scoped KPIs — even when every row has data entered.
+**Implementation**:
 
-This is the same class of bug as the Propagate button disabled issue (v2.13.8) — the code assumes org-scope data shape for all scopes.
-
-### Fix
-
-**File: `src/pages/admin/OrgKpiDataEntry.tsx` (line 546-554)**
-
-Replace the flat blank-data guard with scope-aware logic:
-
-```text
-IF scope === 'organization':
-  Block if !values.isNa && values.achievedValue === null
-ELSE (department/employee):
-  Block if !values.isNa && (!values.scopedValues || 
-    !values.scopedValues.some(sv => sv.achievedValue !== null || sv.isNa))
-```
-
-This allows propagation when at least one scoped row has data, matching the approved "only edited rows" propagation rule (the existing `continue` guard at line 574 already skips blank rows).
-
-**File: `DOCUMENTATION.md`** — Version history v2.13.9
-
-**File: `POLICY.md`** — Add to §29: "The blank-data propagation guard must also be scope-aware."
-
-### Files Changed
 | File | Change |
 |------|--------|
-| `src/pages/admin/OrgKpiDataEntry.tsx` | Make blank-data guard scope-aware (lines 546-554) |
-| `DOCUMENTATION.md` | Version history v2.13.9 |
-| `POLICY.md` | Extend §29 scope-aware invariant |
+| `src/hooks/useSentBackOrgKpiEmployees.ts` | New hook — accepts category_id, kra_name, kpi_name, review_period, review_year. Returns `Map<employeeId, { reason, senderName, date }>` by joining kpis → kpi_queries (type=send_back, latest per KPI) |
+| `src/pages/admin/OrgKpiDataEntry.tsx` | Call the hook, pass sent-back map down to `OrgKpiEntryCard` → `OrgKpiScopedEntryTable` |
+| `src/components/admin/OrgKpiScopedEntryTable.tsx` | Accept `sentBackMap` prop. In `EmployeeRow`: if employee is sent-back, add `border-l-2 border-amber-500 bg-amber-50/30 dark:bg-amber-950/20` to the row + Undo2 icon with Tooltip showing reason and sender |
+
+**Visual**: Row gets amber left border + subtle background tint. Undo2 icon appears after the name badges with a tooltip: *"Sent back by {name}: {reason}"*
+
+### Feature 2: Individual + Multi-Select Propagation
+
+**Approach**: Checkboxes on each row + per-row propagate icon button + "Propagate Selected" bulk action.
+
+**Implementation**:
+
+| File | Change |
+|------|--------|
+| `src/components/admin/OrgKpiScopedEntryTable.tsx` | Add checkbox column (first column). Add per-row ArrowUpRight icon button in a new Actions column. Emit `onPropagateRow(scopeId)` and `onSelectionChange(selectedIds[])` callbacks. Add "select all" checkbox in header. |
+| `src/components/admin/OrgKpiEntryCard.tsx` | Add "Propagate Selected (N)" button next to existing "Propagate" when selections exist. Wire `onPropagateRow` to call propagation for single employee (scope=employee, employeeId=scopeId). Wire selection state. |
+| `src/pages/admin/OrgKpiDataEntry.tsx` | Extend `handleCardSaveAndPropagate` to accept optional `employeeIds` filter — when provided, propagate only those employees instead of all |
+| `src/hooks/usePropagateOrgKpiValue.ts` | No changes needed — already supports `scope: 'employee'` with `employeeId` param |
+
+### Feature 3: Sent-Back Warning on Bulk Propagation
+
+**Approach**: When clicking "Propagate" or "Propagate Selected", if any selected employees have sent-back KPIs, show an amber warning in the confirmation dialog listing those employees. Admin can still proceed.
+
+| File | Change |
+|------|--------|
+| `src/components/admin/OrgKpiEntryCard.tsx` | In the AlertDialog for propagation confirmation, check sentBackMap against selected/all employees. If matches found, render an amber warning section: "The following employees have KPIs that were sent back: [list]. Propagating will overwrite their current review data." |
+
+### Other Files
+| File | Change |
+|------|--------|
+| `DOCUMENTATION.md` | Version history v2.14.0 |
+| `POLICY.md` | Add §30: Sent-back visibility invariant for Org KPI scoped tables; §31: Individual propagation must be available alongside bulk |
+
+### Table Layout Change
+
+```text
+Current:  | Employee | Target | N/A | Achieved | Rating | Remark | File |
+Proposed: | ☐ | Employee | Target | N/A | Achieved | Rating | Remark | File | Actions |
+                                                                              ↑ per-row propagate btn
+```
 
 ### Risk Assessment
-- **Regression**: Zero — only relaxes guard for scoped KPIs that have data in scopedValues
-- **Scope**: Propagation guard only; propagation logic unchanged
-- **Safety net**: Line 574 already skips individual blank rows during scoped propagation
+- **Regression**: Low — additive UI changes; propagation logic already supports employee scope
+- **Performance**: Sent-back hook adds one query per card; acceptable since it's admin-only page
+- **False positives**: Sent-back detection uses latest `kpi_queries` record — if KPI was re-approved after send-back, we should filter by checking current KPI status is not `approved`
 
