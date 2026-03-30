@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
-> **Last Updated:** 2026-03-28  
-> **Version:** 1.23.0 — Report workflow-aware score display invariant
+> **Last Updated:** 2026-03-30  
+> **Version:** 1.24.0 — Rollback and re-submission downstream data clearing invariant
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -477,6 +477,13 @@ Draft → Pending HR Approval → Active → [Extended] → Completed / Cancelle
 - For non-approved KPIs, `finalScore` must be recalculated using only in-workflow scores after blanking out-of-workflow scores.
 - For approved KPIs, `final_score` from the database is authoritative (already validated at approval time).
 - This invariant applies to all reports displaying per-role scores: KPI Detail Report, and should be extended to other reports as needed.
+
+### 17.4 Rollback & Re-Submission Data Clearing (Invariant)
+
+- **When a rollback is approved**, all reviewer fields (score, rating, remarks, evidence, achieved_value) for stages AFTER the `target_status` in the canonical stage ordering MUST be set to `null`. `final_score` and `final_rating` MUST also be cleared.
+- **When a reviewer re-submits after a rollback**, the `submitReview` mutation MUST clear all reviewer fields for stages AFTER the current `activeReviewStage`. This prevents stale downstream data from persisting.
+- The canonical stage ordering for clearing purposes is: `self_review → manager_check → skip_level_check → hr_pms_review → audit → management_review`.
+- This invariant prevents the dashboard and review journey from displaying stale scores from a prior review cycle that was rolled back.
 
 ---
 
