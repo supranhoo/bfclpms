@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.15.2 — Fix rollback cascade-clear off-by-one + Re-review badge
+> **Version:** 2.15.4 — Sortable column headers in KPI Details Table (all dashboards)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
