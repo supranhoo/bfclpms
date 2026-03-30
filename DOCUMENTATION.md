@@ -4270,6 +4270,15 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 
 ---
 
+### v2.13.5 — Fixed reconcile_workflow_statuses PostgREST overload error (2026-03-30)
+
+- **RCA:** Two overloads of `reconcile_workflow_statuses` existed with different parameter orders — `(boolean, text, integer, uuid[], uuid)` vs `(text, integer, boolean, uuid, uuid[])` — causing PostgREST to fail with "could not choose the best candidate function"
+- **Root cause:** Migration `20260325182832` created overload #1 with `p_dry_run` first. Subsequent `DROP FUNCTION IF EXISTS` used the canonical signature which didn't match overload #1's param order, leaving it orphaned
+- **Fix:** Migration drops ALL known historical signatures before recreating the single canonical function
+- **Preventive:** POLICY.md §1.26.0 — invariant requiring all future migrations to drop all known signatures
+
+---
+
 ### v2.13.1 — Scoring Health Check: smarter threshold-vs-target detection (2026-03-30)
 
 - **Improvement:** `THRESHOLD_TARGET_MISMATCH` detection now skips KPIs with `threshold_mode = 'ratio'` (thresholds are relative to target by design)
