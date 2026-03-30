@@ -355,6 +355,11 @@ const App = () => (
                     <Suspense fallback={<PageFallback />}><TeamVsManagerScoreReport /></Suspense>
                   </ReportRoute>
                 } />
+                <Route path="/reports/kpi-scorecard-detail" element={
+                  <ReportRoute reportKey="kpi-scorecard-detail">
+                    <Suspense fallback={<PageFallback />}><KpiScorecardDetail /></Suspense>
+                  </ReportRoute>
+                } />
               </Route>
               <Route path="*" element={<Suspense fallback={<PageFallback />}><NotFound /></Suspense>} />
             </Routes>

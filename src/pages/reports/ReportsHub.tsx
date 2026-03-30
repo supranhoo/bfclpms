@@ -171,6 +171,14 @@ const reports: ReportCard[] = [
     color: 'text-fuchsia-500',
     reportKey: 'team-vs-manager-score',
   },
+  {
+    title: 'KPI Scorecard Detail',
+    description: 'Flat table of every KPI with employee code, name, designation, department, and scores from all review stages',
+    icon: Table2,
+    path: '/reports/kpi-scorecard-detail',
+    color: 'text-lime-600',
+    reportKey: 'kpi-scorecard-detail',
+  },
 ];
 
 export default function ReportsHub() {
