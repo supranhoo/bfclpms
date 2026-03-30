@@ -1,63 +1,88 @@
 
 
-## RCA: Rollback Does Not Clear Downstream Reviewer Scores
+## Fix: Reconciliation Function Re-Approves KPIs With Stale Post-Rollback Scores
 
-### Problem
-When a KPI is rolled back from Management Review to Audit, the system reverts the KPI status but leaves the old management scores (Value: 5, Rating: 5) in `review_submissions`. After the auditor resubmits, the Review Journey and dashboard still display stale management data.
+### Root Cause (Confirmed)
+The `reconcile_workflow_statuses` SQL function has two fatal flaws after a rollback:
 
-### Root Cause (Two Gaps)
+1. **Branch 3 (Review-Stage Mismatch)**: Scans for any non-null score in downstream stages. After a rollback to `audit`, if stale `management_score` wasn't cleared (pre-fix data), Branch 3 advances status to `management_review`.
+2. **Branch 2a (Terminal Stage Completed)**: On the next reconciliation pass, since `management_review` is the terminal stage and `management_score` exists, it auto-approves with `COALESCE(management_score, ...)` — picking up the stale score of 5 instead of the updated auditor score of 0.
 
-**Gap 1 — Rollback approval (`useKpiRollbackRequests.ts` line 163-168):**
-Only updates `kpis.status` to the target stage. Does NOT clear downstream reviewer scores from `review_submissions`.
+The downstream-clearing code we added to `useKpiRollbackRequests.ts` and `UnifiedScorecard.tsx` prevents **new** rollbacks from leaving stale data. But **Piyush Bansal's Feb KPIs** were rolled back **before** the fix was deployed, so stale `management_score` values persist and the reconciler keeps re-approving them.
 
-**Gap 2 — Reviewer re-submission (`UnifiedScorecard.tsx` line 580-606):**
-The `submitReview` mutation only writes the current reviewer's fields + `final_score/final_rating`. It does NOT clear scores from reviewers AFTER the current stage. The send-back flow (line 737-745) already has this clearing logic, but the regular save path does not.
+### Fix (3 Parts)
 
-### Fix
+#### 1. Make reconciliation approval workflow-aware (SQL migration)
+Replace the generic `COALESCE` chain (line 225) with terminal-stage-aware logic:
 
-#### 1. Clear downstream scores on rollback approval (`src/hooks/useKpiRollbackRequests.ts`)
-After reverting KPI status, also update `review_submissions` to null out all reviewer fields for stages that come AFTER the `target_status` in the workflow.
+```sql
+-- Instead of:
+SET final_score = COALESCE(management_score, auditor_score, hr_pms_score, ...)
 
-Use the same stage-to-field mapping as the send-back flow:
-```text
-target = audit → clear management_* fields, final_score, final_rating
-target = hr_pms_review → clear auditor_*, management_*, final_score, final_rating
-target = manager_check → clear skip_level_*, hr_pms_*, auditor_*, management_*, final_score, final_rating
+-- Use:
+SET final_score = CASE v_terminal_stage
+  WHEN 'management_review' THEN management_score
+  WHEN 'audit' THEN auditor_score
+  WHEN 'hr_pms_review' THEN hr_pms_score
+  WHEN 'skip_level_check' THEN skip_level_score
+  WHEN 'manager_check' THEN manager_score
+  WHEN 'self_review' THEN self_score
+  ELSE COALESCE(management_score, auditor_score, hr_pms_score, skip_level_score, manager_score, self_score)
+END
 ```
 
-#### 2. Clear downstream scores on reviewer submission (`src/components/review/UnifiedScorecard.tsx`)
-In the `submitReview` mutation, after writing the reviewer's own fields, also null out all reviewer fields for stages AFTER the current `activeReviewStage`. This prevents stale data from persisting when a reviewer re-submits after a rollback.
+Same pattern for `final_rating`.
 
-Add to `updateData` before the Supabase call:
-```text
-If viewLevel = auditor (activeReviewStage = audit):
-  updateData.management_score = null
-  updateData.management_rating = null
-  updateData.management_remarks = null
-  updateData.management_evidence_url = null
-  updateData.management_achieved_value = null
+#### 2. Add rollback-awareness to Branch 3 (Review-Stage Mismatch)
+Before advancing a KPI based on a downstream score, verify the score was updated **after** the most recent rollback/send-back event for that KPI. If a rollback exists that is more recent than the score, skip the KPI:
+
+```sql
+-- In Branch 3, after finding a downstream score, check:
+SELECT EXISTS (
+  SELECT 1 FROM kpi_audit_logs
+  WHERE kpi_id = v_kpi.kpi_id
+    AND action IN ('ROLLBACK_APPROVED', 'STATUS_TRANSITION')
+    AND (new_value->>'status')::text = v_kpi.current_status
+    AND created_at > (
+      SELECT COALESCE(MAX(rs.updated_at), '1970-01-01')
+      FROM review_submissions rs WHERE rs.kpi_id = v_kpi.kpi_id
+    )
+) INTO v_has_recent_rollback;
+
+IF v_has_recent_rollback THEN
+  CONTINUE;  -- Skip, the downstream score is stale
+END IF;
 ```
 
-Use the workflow stages array to determine which fields are downstream.
+#### 3. Data repair — clear stale management scores for Piyush Bansal Feb KPIs
+Targeted SQL UPDATE to null out `management_*` and `final_*` fields, and revert `kpis.status` to `audit` for Feb 2026 KPIs that were incorrectly re-approved by the reconciler.
 
-#### 3. Data repair for Piyush Bansal's Feb KPI
-Execute a targeted SQL update to clear the stale management scores for this specific KPI, allowing it to properly appear as pending management review.
+```sql
+-- Identify affected KPIs: Piyush Bansal Feb 2026, status=approved, 
+-- with management_score but where audit logs show a rollback occurred
+-- after the management score was entered.
+```
 
 #### 4. Documentation updates
 - `DOCUMENTATION.md` version history
-- `POLICY.md` — add invariant: rollback and re-submission must clear all downstream reviewer data
+- `POLICY.md` — add invariant: reconciliation must use workflow-aware terminal score, not generic COALESCE
+
+### Zero-Regression Safeguards
+
+| Risk | Mitigation |
+|------|-----------|
+| Normal forward-flow KPIs incorrectly blocked | Branch 3 rollback check only fires if a rollback audit log exists targeting the current status AND is newer than the submission. Normal KPIs have no rollback logs → no change in behavior. |
+| Terminal-stage CASE expression misses a stage | Added ELSE fallback to original COALESCE chain — if terminal stage is unrecognized, behavior is identical to current code. |
+| Data repair touches wrong rows | SQL UPDATE scoped to: employee = Piyush Bansal, period = February 2026, year = 2026 only. WHERE clause includes `management_score IS NOT NULL AND status = 'approved'` plus audit log cross-check for rollback existence. |
+| Reconciler becomes too conservative | The rollback-awareness check only applies to Branch 3 (mismatch). Branches 1 (orphan) and 2a (terminal scored) are unaffected for non-rollback scenarios. |
+| Dec 2025 and earlier data | No data repair for Dec 2025 or earlier. Migration only changes function logic (no backfill). |
+| Auto-reconcile triggered by workflow config changes | Same function — now safer. Will not re-approve KPIs with stale post-rollback scores. |
 
 ### Files Changed
 | File | Action |
 |------|--------|
-| `src/hooks/useKpiRollbackRequests.ts` | Clear downstream reviewer fields on rollback approval |
-| `src/components/review/UnifiedScorecard.tsx` | Clear downstream fields in `submitReview` mutation |
-| Data update (SQL) | Fix Piyush Bansal's Feb KPI stale management scores |
+| New SQL migration | Update `reconcile_workflow_statuses`: workflow-aware final_score sync + rollback-awareness in Branch 3 |
+| Data update (insert tool) | Fix Piyush Bansal Feb 2026 KPIs: clear stale management scores, revert status |
 | `DOCUMENTATION.md` | Version history |
 | `POLICY.md` | New invariant |
-
-### Risk Assessment
-- **Regression**: Low — only clears fields that should not exist post-rollback; normal forward flow unaffected since downstream fields are naturally empty
-- **Data**: 1 targeted row fix; no changes to Dec 2025 or earlier
-- **Scope**: Fixes both rollback and re-submission paths systemically
 
