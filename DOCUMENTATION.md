@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.13.4 — Added DESCRIPTION_THRESHOLD_MISMATCH detection: parses KPI name for "Rating N: X%" patterns and flags when configured thresholds don't match described percentages
+> **Version:** 2.13.5 — Fixed PostgREST "could not choose best candidate function" error for reconcile_workflow_statuses by dropping rogue overload
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4267,6 +4267,15 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix (Rollback-awareness):** Branch 3 now checks `kpi_audit_logs` for rollback/send-back events targeting the current status that are newer than `review_submissions.updated_at`. If found, the downstream score is treated as stale and skipped.
 - **Fix (Workflow-aware sync):** Approval final_score/final_rating now uses a `CASE v_terminal_stage` expression mapping to the correct terminal reviewer's score, with an `ELSE` fallback to the original COALESCE chain for safety
 - **Invariant:** Reconciliation must be cycle-aware (POLICY.md §17.5)
+
+---
+
+### v2.13.5 — Fixed reconcile_workflow_statuses PostgREST overload error (2026-03-30)
+
+- **RCA:** Two overloads of `reconcile_workflow_statuses` existed with different parameter orders — `(boolean, text, integer, uuid[], uuid)` vs `(text, integer, boolean, uuid, uuid[])` — causing PostgREST to fail with "could not choose the best candidate function"
+- **Root cause:** Migration `20260325182832` created overload #1 with `p_dry_run` first. Subsequent `DROP FUNCTION IF EXISTS` used the canonical signature which didn't match overload #1's param order, leaving it orphaned
+- **Fix:** Migration drops ALL known historical signatures before recreating the single canonical function
+- **Preventive:** POLICY.md §1.26.0 — invariant requiring all future migrations to drop all known signatures
 
 ---
 
