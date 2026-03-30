@@ -4400,3 +4400,16 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix (useAdminDataEntry.ts):** After upsert, if KPI is already approved, re-fetch submission and recompute final_score using 8-stage fallback chain; patch if it differs from current value
 - **Data fix:** Corrected stale final_score for Abhas Jan 2026 "Budgetary Preparation" KPI (management_score=5, final_score was 0→5)
 - **Invariant:** Admin edits on approved KPIs must always trigger final_score recomputation (POLICY.md §34)
+
+---
+
+### v2.15.7 — KPI Scorecard Detail report (2026-03-30)
+
+- **Feature:** New report at `/reports/kpi-scorecard-detail` — flat table with one row per KPI
+- **Columns:** Employee Code, Name, Designation, Department, Month, Category, KRA, KPI, Weightage, Self, Manager, Skip-Level, HR PMS, Auditor, Management, Final Score, Status
+- **No row limit:** Uses batch-fetch loop (`range(offset, offset+999)`) to load all KPIs for the period
+- **Sortable headers:** All columns support click-to-sort with ascending/descending toggle
+- **Filters:** Month/year selector, department filter, text search (name/code/KPI/KRA)
+- **Excel export:** Full filtered dataset exported via `xlsx` library
+- **Access:** Controlled via `kpi-scorecard-detail` key in report access system; default: admin, manager, management, hr_pms, auditor
+- **Files:** `src/pages/reports/KpiScorecardDetail.tsx` (new), `ReportsHub.tsx`, `App.tsx`, `useReportAccess.ts`
