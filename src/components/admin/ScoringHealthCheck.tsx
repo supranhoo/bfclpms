@@ -142,15 +142,17 @@ function detectIssues(kpis: KPI[]): ScoringIssue[] {
             const expectedVals: string[] = [];
 
             for (const { level, pct } of describedPairs) {
-              const expected = target * (pct / 100);
+              const expectedFromTarget = target * (pct / 100);
               const actual = thresholdMap[level];
               if (actual !== null && !isNaN(actual)) {
-                if (Math.abs(expected - actual) > tolerance) {
+                const directMatch = Math.abs(pct - actual) <= Math.abs(target * 0.05);
+                const targetMultiplierMatch = Math.abs(expectedFromTarget - actual) <= tolerance;
+                if (!directMatch && !targetMultiplierMatch) {
                   const actualPct = Math.round((actual / target) * 100);
-                  mismatches.push(`R${level}: description says ${pct}% (${expected.toFixed(1)}) but configured as ${actual} (${actualPct}%)`);
+                  mismatches.push(`R${level}: description says ${pct}% (${expectedFromTarget.toFixed(1)}) but configured as ${actual} (${actualPct}%)`);
                 }
               }
-              expectedVals.push(`R${level}=${expected.toFixed(1)} (${pct}%)`);
+              expectedVals.push(`R${level}=${expectedFromTarget.toFixed(1)} (${pct}%)`);
             }
 
             if (mismatches.length > 0) {

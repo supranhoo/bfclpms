@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.13.5 — Fixed PostgREST "could not choose best candidate function" error for reconcile_workflow_statuses by dropping rogue overload
+> **Version:** 2.13.6 — Fixed DESCRIPTION_THRESHOLD_MISMATCH false positives for raw-percentage KPIs (dual-interpretation: target-multiplier OR direct-value match)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

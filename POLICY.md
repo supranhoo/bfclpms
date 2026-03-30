@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 1.26.0 — reconcile_workflow_statuses single-function invariant
+> **Version:** 1.27.0 — Scoring Health Check dual-interpretation rule for description-threshold matching
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
