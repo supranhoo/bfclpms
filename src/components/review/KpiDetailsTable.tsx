@@ -483,10 +483,18 @@ export function KpiDetailsTable({
                   const stageReached = isStageAtOrBeforeCurrent(col.key, kpi.status || 'kra_set', effectiveStages);
                   // Show N/A if: (1) stage completed with no score, OR (2) KPI is marked N/A, no score, and stage has been reached
                   const showNA = score === null && (stageCompleted || (submission?.is_na && stageReached));
+                  // Show "Re-review" indicator when score is null and KPI is AT that stage (rolled back)
+                  const stageName = COLUMN_TO_STAGE[col.key];
+                  const isAtCurrentStage = stageName === (kpi.status || 'kra_set');
+                  const showReReview = score === null && isAtCurrentStage && !showNA && col.key !== 'self_score';
                   return (
                     <TableCell key={col.key} className="text-center">
                       {showNA ? (
                         <Badge variant="outline" className="bg-muted/50 text-muted-foreground text-xs">N/A</Badge>
+                      ) : showReReview ? (
+                        <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-700 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-300 text-xs">
+                          Re-review
+                        </Badge>
                       ) : (
                         renderScoreCell(score)
                       )}

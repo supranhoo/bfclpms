@@ -601,7 +601,7 @@ export function useAdminStatusStepBack() {
       }
 
       // Clear manager fields if target is before manager_check
-      if (targetIdx < FULL_STATUS_ORDER.indexOf('manager_check')) {
+      if (targetIdx <= FULL_STATUS_ORDER.indexOf('manager_check')) {
         clearFields.manager_rating = null;
         clearFields.manager_score = null;
         clearFields.manager_remarks = null;
@@ -610,7 +610,7 @@ export function useAdminStatusStepBack() {
       }
 
       // Clear skip-level fields if target is before skip_level_check
-      if (targetIdx < FULL_STATUS_ORDER.indexOf('skip_level_check')) {
+      if (targetIdx <= FULL_STATUS_ORDER.indexOf('skip_level_check')) {
         clearFields.skip_level_rating = null;
         clearFields.skip_level_score = null;
         clearFields.skip_level_remarks = null;
@@ -619,7 +619,7 @@ export function useAdminStatusStepBack() {
       }
 
       // Clear HR PMS fields if target is before hr_pms_review
-      if (targetIdx < FULL_STATUS_ORDER.indexOf('hr_pms_review')) {
+      if (targetIdx <= FULL_STATUS_ORDER.indexOf('hr_pms_review')) {
         clearFields.hr_pms_rating = null;
         clearFields.hr_pms_score = null;
         clearFields.hr_pms_remarks = null;
@@ -628,7 +628,7 @@ export function useAdminStatusStepBack() {
       }
 
       // Clear auditor fields if target is before audit
-      if (targetIdx < FULL_STATUS_ORDER.indexOf('audit')) {
+      if (targetIdx <= FULL_STATUS_ORDER.indexOf('audit')) {
         clearFields.auditor_rating = null;
         clearFields.auditor_score = null;
         clearFields.auditor_remarks = null;
@@ -637,7 +637,7 @@ export function useAdminStatusStepBack() {
       }
 
       // Clear management fields if target is before management_review
-      if (targetIdx < FULL_STATUS_ORDER.indexOf('management_review')) {
+      if (targetIdx <= FULL_STATUS_ORDER.indexOf('management_review')) {
         clearFields.management_rating = null;
         clearFields.management_score = null;
         clearFields.management_remarks = null;

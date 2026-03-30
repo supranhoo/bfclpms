@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 1.32.0 — Review Journey previous month comparison invariant
+> **Version:** 1.33.0 — Rollback cascade-clear invariant
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -682,3 +682,13 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Rationale:** Reviewers need to compare current performance against recent history without switching between dashboards. The data must be live-linked to prevent stale comparisons.
 
 **Invariant:** Previous month tiles must never show cached or snapshot data — they must always reflect the current state of the corresponding KPI in the database.
+
+---
+
+## §33. Rollback Cascade-Clear Invariant
+
+**Rule:** When a KPI is rolled back (via rollback request approval or admin step-back), ALL review fields for the **target stage AND all subsequent stages** must be cleared. This includes: score, rating, remarks, evidence_url, and achieved_value for each stage, plus final_score and final_rating.
+
+**Rationale:** If only stages after the target are cleared but the target stage's own data is preserved, stale scores from the previous approval cycle remain visible, creating a false impression that the stage has already been re-reviewed.
+
+**Invariant:** The cascade-clear condition must use `>=` (not `>`) for stage index comparison, ensuring the target stage itself is included in the clear set.
