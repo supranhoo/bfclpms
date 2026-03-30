@@ -1,16 +1,13 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { X, Search, Building2, Users, GraduationCap, UserPlus, Layers } from 'lucide-react';
-import { useDepartments, useBusinessUnits, useDivisions } from '@/hooks/useOrganization';
-import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
-import { useProgramMappings, useAddProgramMapping, useRemoveProgramMapping } from '@/hooks/useIncentivePrograms';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Users, Search, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useProgramMappings, useAddProgramMapping, useRemoveProgramMapping, useBulkAddProgramMappings, useBulkRemoveProgramMappings } from '@/hooks/useIncentivePrograms';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -18,77 +15,184 @@ interface Props {
   programId: string;
 }
 
+type SortKey = 'full_name' | 'designation' | 'department_name' | 'bu_name' | 'division_name' | 'level' | 'pms_grade';
+type SortDir = 'asc' | 'desc';
+
+const PAGE_SIZE = 20;
+
 export function ProgramEmployeeMapping({ programId }: Props) {
   const { data: mappings = [], isLoading } = useProgramMappings(programId);
   const addMapping = useAddProgramMapping();
   const removeMapping = useRemoveProgramMapping();
+  const bulkAdd = useBulkAddProgramMappings();
+  const bulkRemove = useBulkRemoveProgramMappings();
 
-  const { data: departments = [] } = useDepartments();
-  const { data: businessUnits = [] } = useBusinessUnits();
-  const { data: divisions = [] } = useDivisions();
-  const { designations, grades } = useEmployeeFilterOptions();
+  const [search, setSearch] = useState('');
+  const [filterDivision, setFilterDivision] = useState<string>('all');
+  const [filterBU, setFilterBU] = useState<string>('all');
+  const [filterDept, setFilterDept] = useState<string>('all');
+  const [filterDesig, setFilterDesig] = useState<string>('all');
+  const [filterGrade, setFilterGrade] = useState<string>('all');
+  const [sortKey, setSortKey] = useState<SortKey>('full_name');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [page, setPage] = useState(0);
 
-  const [empSearch, setEmpSearch] = useState('');
-
+  // Fetch all active employees with org joins
   const { data: allEmployees = [] } = useQuery({
-    queryKey: ['all-employees-for-mapping'],
+    queryKey: ['employees-for-mapping'],
     queryFn: async () => {
       const { data } = await supabase
         .from('profiles')
-        .select('id, full_name, employee_code, department_id')
+        .select('id, full_name, employee_code, designation, pms_grade, level, department_id, departments(name, business_unit_id, business_units(name, division_id, divisions(name)))')
         .eq('is_active', true)
         .order('full_name');
-      return data || [];
+      return (data || []).map((e: any) => ({
+        id: e.id,
+        full_name: e.full_name || 'Unknown',
+        employee_code: e.employee_code || '',
+        designation: e.designation || '',
+        pms_grade: e.pms_grade || '',
+        level: e.level || '',
+        department_name: e.departments?.name || '',
+        department_id: e.department_id || '',
+        bu_name: e.departments?.business_units?.name || '',
+        bu_id: e.departments?.business_units?.id || '',
+        division_name: e.departments?.business_units?.divisions?.name || '',
+        division_id: e.departments?.business_units?.divisions?.id || '',
+      }));
     },
   });
 
-  const mappingsByType = useMemo(() => {
-    const map: Record<string, Set<string>> = {
-      division: new Set(),
-      department: new Set(),
-      business_unit: new Set(),
-      designation: new Set(),
-      pms_grade: new Set(),
-      employee: new Set(),
+  // Build mapped employee IDs set + id lookup
+  const mappedSet = useMemo(() => {
+    const s = new Set<string>();
+    mappings.forEach((m: any) => {
+      if (m.mapping_type === 'employee') s.add(m.mapping_value);
+    });
+    return s;
+  }, [mappings]);
+
+  const mappingIdByEmp = useMemo(() => {
+    const m = new Map<string, string>();
+    mappings.forEach((mp: any) => {
+      if (mp.mapping_type === 'employee') m.set(mp.mapping_value, mp.id);
+    });
+    return m;
+  }, [mappings]);
+
+  // Distinct filter options
+  const filterOptions = useMemo(() => {
+    const divs = new Set<string>();
+    const bus = new Set<string>();
+    const depts = new Set<string>();
+    const desigs = new Set<string>();
+    const grades = new Set<string>();
+    allEmployees.forEach((e: any) => {
+      if (e.division_name) divs.add(e.division_name);
+      if (e.bu_name) bus.add(e.bu_name);
+      if (e.department_name) depts.add(e.department_name);
+      if (e.designation) desigs.add(e.designation);
+      if (e.pms_grade) grades.add(e.pms_grade);
+    });
+    return {
+      divisions: [...divs].sort(),
+      bus: [...bus].sort(),
+      depts: [...depts].sort(),
+      desigs: [...desigs].sort(),
+      grades: [...grades].sort(),
     };
-    mappings.forEach((m: any) => map[m.mapping_type]?.add(m.mapping_value));
-    return map;
-  }, [mappings]);
+  }, [allEmployees]);
 
-  const mappingIdMap = useMemo(() => {
-    const map = new Map<string, string>();
-    mappings.forEach((m: any) => map.set(`${m.mapping_type}:${m.mapping_value}`, m.id));
-    return map;
-  }, [mappings]);
+  // Filter + search
+  const filtered = useMemo(() => {
+    let list = allEmployees;
+    if (search) {
+      const q = search.toLowerCase();
+      list = list.filter((e: any) =>
+        e.full_name.toLowerCase().includes(q) || e.employee_code.toLowerCase().includes(q)
+      );
+    }
+    if (filterDivision !== 'all') list = list.filter((e: any) => e.division_name === filterDivision);
+    if (filterBU !== 'all') list = list.filter((e: any) => e.bu_name === filterBU);
+    if (filterDept !== 'all') list = list.filter((e: any) => e.department_name === filterDept);
+    if (filterDesig !== 'all') list = list.filter((e: any) => e.designation === filterDesig);
+    if (filterGrade !== 'all') list = list.filter((e: any) => e.pms_grade === filterGrade);
+    return list;
+  }, [allEmployees, search, filterDivision, filterBU, filterDept, filterDesig, filterGrade]);
 
-  const toggle = (type: string, value: string) => {
-    const key = `${type}:${value}`;
-    if (mappingIdMap.has(key)) {
-      removeMapping.mutate(mappingIdMap.get(key)!);
+  // Sort
+  const sorted = useMemo(() => {
+    const copy = [...filtered];
+    copy.sort((a: any, b: any) => {
+      const av = (a[sortKey] || '').toLowerCase();
+      const bv = (b[sortKey] || '').toLowerCase();
+      return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    });
+    return copy;
+  }, [filtered, sortKey, sortDir]);
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const paged = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  // Reset page on filter change
+  const resetPage = () => setPage(0);
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     } else {
-      addMapping.mutate({ program_id: programId, mapping_type: type, mapping_value: value });
+      setSortKey(key);
+      setSortDir('asc');
     }
   };
 
-  const filteredEmployees = useMemo(() => {
-    if (!empSearch) return allEmployees.slice(0, 50);
-    const q = empSearch.toLowerCase();
-    return allEmployees
-      .filter((e: any) =>
-        (e.full_name?.toLowerCase().includes(q)) ||
-        (e.employee_code?.toLowerCase().includes(q))
-      )
-      .slice(0, 50);
-  }, [allEmployees, empSearch]);
+  const toggleEmployee = useCallback((empId: string) => {
+    if (mappingIdByEmp.has(empId)) {
+      removeMapping.mutate(mappingIdByEmp.get(empId)!);
+    } else {
+      addMapping.mutate({ program_id: programId, mapping_type: 'employee', mapping_value: empId });
+    }
+  }, [mappingIdByEmp, programId, addMapping, removeMapping]);
 
-  const summary = [
-    mappingsByType.division.size > 0 && `${mappingsByType.division.size} division(s)`,
-    mappingsByType.department.size > 0 && `${mappingsByType.department.size} dept(s)`,
-    mappingsByType.business_unit.size > 0 && `${mappingsByType.business_unit.size} BU(s)`,
-    mappingsByType.designation.size > 0 && `${mappingsByType.designation.size} designation(s)`,
-    mappingsByType.pms_grade.size > 0 && `${mappingsByType.pms_grade.size} grade(s)`,
-    mappingsByType.employee.size > 0 && `${mappingsByType.employee.size} individual(s)`,
-  ].filter(Boolean);
+  // Select all filtered (that are not already mapped)
+  const unmappedFiltered = filtered.filter((e: any) => !mappedSet.has(e.id));
+  const allFilteredMapped = unmappedFiltered.length === 0 && filtered.length > 0;
+
+  const selectAllFiltered = () => {
+    const rows = unmappedFiltered.map((e: any) => ({
+      program_id: programId,
+      mapping_type: 'employee' as const,
+      mapping_value: e.id,
+    }));
+    if (rows.length > 0) bulkAdd.mutate(rows);
+  };
+
+  const clearAllFiltered = () => {
+    const ids = filtered
+      .map((e: any) => mappingIdByEmp.get(e.id))
+      .filter(Boolean) as string[];
+    if (ids.length > 0) bulkRemove.mutate(ids);
+  };
+
+  const clearFilters = () => {
+    setSearch('');
+    setFilterDivision('all');
+    setFilterBU('all');
+    setFilterDept('all');
+    setFilterDesig('all');
+    setFilterGrade('all');
+    resetPage();
+  };
+
+  const hasFilters = search || filterDivision !== 'all' || filterBU !== 'all' || filterDept !== 'all' || filterDesig !== 'all' || filterGrade !== 'all';
+
+  const SortHeader = ({ label, field }: { label: string; field: SortKey }) => (
+    <Button variant="ghost" size="sm" className="h-auto p-0 font-medium text-muted-foreground hover:text-foreground" onClick={() => toggleSort(field)}>
+      {label}
+      <ArrowUpDown className="ml-1 h-3 w-3" />
+    </Button>
+  );
 
   if (isLoading) return <div className="text-sm text-muted-foreground py-4">Loading mappings...</div>;
 
@@ -99,152 +203,139 @@ export function ProgramEmployeeMapping({ programId }: Props) {
           <Users className="h-5 w-5" /> Employee Mapping
         </CardTitle>
         <CardDescription>
-          Define which employees are enrolled in this program. Employees matching ANY criteria below are included.
+          Define which employees are enrolled in this program. Select employees from the table below.
         </CardDescription>
-        {summary.length > 0 && (
-          <div className="flex flex-wrap gap-1 pt-1">
-            {summary.map((s, i) => (
-              <Badge key={i} variant="secondary">{s}</Badge>
-            ))}
-          </div>
-        )}
+        <div className="flex flex-wrap gap-1 pt-1">
+          <Badge variant="secondary">{mappedSet.size} employee(s) mapped</Badge>
+        </div>
       </CardHeader>
-      <CardContent>
-        <Tabs defaultValue="department">
-          <TabsList className="grid grid-cols-5 w-full">
-            <TabsTrigger value="division" className="text-xs">
-              <Layers className="h-3 w-3 mr-1" /> Division
-            </TabsTrigger>
-            <TabsTrigger value="department" className="text-xs">
-              <Building2 className="h-3 w-3 mr-1" /> Dept / BU
-            </TabsTrigger>
-            <TabsTrigger value="designation" className="text-xs">
-              <GraduationCap className="h-3 w-3 mr-1" /> Designation
-            </TabsTrigger>
-            <TabsTrigger value="grade" className="text-xs">
-              Grade
-            </TabsTrigger>
-            <TabsTrigger value="employee" className="text-xs">
-              <UserPlus className="h-3 w-3 mr-1" /> Individual
-            </TabsTrigger>
-          </TabsList>
+      <CardContent className="space-y-4">
+        {/* Filters */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+          <Select value={filterDivision} onValueChange={(v) => { setFilterDivision(v); resetPage(); }}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Division" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Divisions</SelectItem>
+              {filterOptions.divisions.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filterBU} onValueChange={(v) => { setFilterBU(v); resetPage(); }}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="BU" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All BUs</SelectItem>
+              {filterOptions.bus.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filterDept} onValueChange={(v) => { setFilterDept(v); resetPage(); }}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Department" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
+              {filterOptions.depts.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filterDesig} onValueChange={(v) => { setFilterDesig(v); resetPage(); }}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Designation" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Designations</SelectItem>
+              {filterOptions.desigs.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filterGrade} onValueChange={(v) => { setFilterGrade(v); resetPage(); }}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Grade" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Grades</SelectItem>
+              {filterOptions.grades.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
 
-          <TabsContent value="division" className="mt-3">
-            <ScrollArea className="h-60 border rounded-md p-2">
-              {divisions.map((d: any) => (
-                <label key={d.id} className="flex items-center gap-2 py-1 px-1 hover:bg-muted/50 rounded cursor-pointer">
+        {/* Search + actions */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-2 top-2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search name or code..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); resetPage(); }}
+              className="pl-8 h-8 text-sm"
+            />
+          </div>
+          <Button variant="outline" size="sm" onClick={selectAllFiltered} disabled={allFilteredMapped || bulkAdd.isPending}>
+            {allFilteredMapped ? '✓ All Selected' : `Select All (${unmappedFiltered.length})`}
+          </Button>
+          {hasFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters}>Clear Filters</Button>
+          )}
+        </div>
+
+        {/* Table */}
+        <div className="border rounded-md">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10">
                   <Checkbox
-                    checked={mappingsByType.division.has(d.id)}
-                    onCheckedChange={() => toggle('division', d.id)}
+                    checked={allFilteredMapped && filtered.length > 0}
+                    onCheckedChange={() => allFilteredMapped ? clearAllFiltered() : selectAllFiltered()}
+                    disabled={filtered.length === 0}
                   />
-                  <span className="text-sm">{d.name}</span>
-                </label>
-              ))}
-              {divisions.length === 0 && <p className="text-sm text-muted-foreground p-2">No divisions found</p>}
-            </ScrollArea>
-          </TabsContent>
-
-          <TabsContent value="department" className="space-y-3 mt-3">
-            <Label className="text-xs font-medium text-muted-foreground">Departments</Label>
-            <ScrollArea className="h-48 border rounded-md p-2">
-              {departments.map((d: any) => (
-                <label key={d.id} className="flex items-center gap-2 py-1 px-1 hover:bg-muted/50 rounded cursor-pointer">
-                  <Checkbox
-                    checked={mappingsByType.department.has(d.id)}
-                    onCheckedChange={() => toggle('department', d.id)}
-                  />
-                  <span className="text-sm">{d.name}</span>
-                </label>
-              ))}
-            </ScrollArea>
-
-            <Label className="text-xs font-medium text-muted-foreground">Business Units</Label>
-            <ScrollArea className="h-36 border rounded-md p-2">
-              {businessUnits.map((bu: any) => (
-                <label key={bu.id} className="flex items-center gap-2 py-1 px-1 hover:bg-muted/50 rounded cursor-pointer">
-                  <Checkbox
-                    checked={mappingsByType.business_unit.has(bu.id)}
-                    onCheckedChange={() => toggle('business_unit', bu.id)}
-                  />
-                  <span className="text-sm">{bu.name}</span>
-                </label>
-              ))}
-            </ScrollArea>
-          </TabsContent>
-
-          <TabsContent value="designation" className="mt-3">
-            <ScrollArea className="h-60 border rounded-md p-2">
-              {designations.map((d: string) => (
-                <label key={d} className="flex items-center gap-2 py-1 px-1 hover:bg-muted/50 rounded cursor-pointer">
-                  <Checkbox
-                    checked={mappingsByType.designation.has(d)}
-                    onCheckedChange={() => toggle('designation', d)}
-                  />
-                  <span className="text-sm">{d}</span>
-                </label>
-              ))}
-              {designations.length === 0 && <p className="text-sm text-muted-foreground p-2">No designations found</p>}
-            </ScrollArea>
-          </TabsContent>
-
-          <TabsContent value="grade" className="mt-3">
-            <ScrollArea className="h-60 border rounded-md p-2">
-              {grades.map((g: string) => (
-                <label key={g} className="flex items-center gap-2 py-1 px-1 hover:bg-muted/50 rounded cursor-pointer">
-                  <Checkbox
-                    checked={mappingsByType.pms_grade.has(g)}
-                    onCheckedChange={() => toggle('pms_grade', g)}
-                  />
-                  <span className="text-sm">{g}</span>
-                </label>
-              ))}
-              {grades.length === 0 && <p className="text-sm text-muted-foreground p-2">No PMS grades found</p>}
-            </ScrollArea>
-          </TabsContent>
-
-          <TabsContent value="employee" className="space-y-3 mt-3">
-            {/* Selected chips */}
-            {mappingsByType.employee.size > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {Array.from(mappingsByType.employee).map((empId) => {
-                  const emp = allEmployees.find((e: any) => e.id === empId);
-                  return (
-                    <Badge key={empId} variant="secondary" className="gap-1">
-                      {emp ? `${emp.full_name || 'Unknown'} (${emp.employee_code || ''})` : empId}
-                      <X className="h-3 w-3 cursor-pointer" onClick={() => toggle('employee', empId)} />
-                    </Badge>
-                  );
-                })}
-              </div>
-            )}
-
-            <div className="relative">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by name or employee code..."
-                value={empSearch}
-                onChange={(e) => setEmpSearch(e.target.value)}
-                className="pl-8"
-              />
-            </div>
-
-            <ScrollArea className="h-52 border rounded-md p-2">
-              {filteredEmployees.map((emp: any) => (
-                <label key={emp.id} className="flex items-center gap-2 py-1 px-1 hover:bg-muted/50 rounded cursor-pointer">
-                  <Checkbox
-                    checked={mappingsByType.employee.has(emp.id)}
-                    onCheckedChange={() => toggle('employee', emp.id)}
-                  />
-                  <span className="text-sm">
-                    {emp.full_name || 'Unknown'}
+                </TableHead>
+                <TableHead><SortHeader label="Employee (Code)" field="full_name" /></TableHead>
+                <TableHead><SortHeader label="Designation" field="designation" /></TableHead>
+                <TableHead><SortHeader label="Department" field="department_name" /></TableHead>
+                <TableHead><SortHeader label="BU" field="bu_name" /></TableHead>
+                <TableHead><SortHeader label="Division" field="division_name" /></TableHead>
+                <TableHead><SortHeader label="Level" field="level" /></TableHead>
+                <TableHead><SortHeader label="Grade" field="pms_grade" /></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {paged.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-8">
+                    No employees found
+                  </TableCell>
+                </TableRow>
+              ) : paged.map((emp: any) => (
+                <TableRow key={emp.id} className="cursor-pointer" onClick={() => toggleEmployee(emp.id)}>
+                  <TableCell>
+                    <Checkbox
+                      checked={mappedSet.has(emp.id)}
+                      onCheckedChange={() => toggleEmployee(emp.id)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </TableCell>
+                  <TableCell className="text-sm font-medium">
+                    {emp.full_name}
                     {emp.employee_code && <span className="text-muted-foreground ml-1">({emp.employee_code})</span>}
-                  </span>
-                </label>
+                  </TableCell>
+                  <TableCell className="text-sm">{emp.designation}</TableCell>
+                  <TableCell className="text-sm">{emp.department_name}</TableCell>
+                  <TableCell className="text-sm">{emp.bu_name}</TableCell>
+                  <TableCell className="text-sm">{emp.division_name}</TableCell>
+                  <TableCell className="text-sm">{emp.level}</TableCell>
+                  <TableCell className="text-sm">{emp.pms_grade}</TableCell>
+                </TableRow>
               ))}
-              {filteredEmployees.length === 0 && <p className="text-sm text-muted-foreground p-2">No employees found</p>}
-            </ScrollArea>
-          </TabsContent>
-        </Tabs>
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Pagination */}
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>
+            Showing {sorted.length === 0 ? 0 : page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sorted.length)} of {sorted.length} employees
+          </span>
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="icon" className="h-7 w-7" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="px-2">Page {page + 1} / {totalPages}</span>
+            <Button variant="outline" size="icon" className="h-7 w-7" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
