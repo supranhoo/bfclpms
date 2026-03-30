@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 1.29.1 — Extend scope-aware invariant to blank-data guard
+> **Version:** 1.30.0 — Add sent-back visibility and individual propagation policies
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

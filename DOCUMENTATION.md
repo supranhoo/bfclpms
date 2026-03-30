@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.13.9 — Fix blank-data guard blocking scoped Org KPI propagation
+> **Version:** 2.14.0 — Sent-back indicator + individual/multi-select propagation for Org KPI scoped table
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
