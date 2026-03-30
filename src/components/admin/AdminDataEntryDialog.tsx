@@ -117,6 +117,7 @@ export function AdminDataEntryDialog({
   const [remarks, setRemarks] = useState<string>('');
   const [reason, setReason] = useState<string>('');
   const [isNa, setIsNa] = useState<boolean>(false);
+  const [originalIsNa, setOriginalIsNa] = useState<boolean>(false);
   const [advanceStatus, setAdvanceStatus] = useState<boolean>(true);
   const [isAutoCalculated, setIsAutoCalculated] = useState<boolean>(false);
   const [adminOverrideConfirmed, setAdminOverrideConfirmed] = useState<boolean>(false);

@@ -140,27 +140,26 @@ export function useAdminSubmitReviewData() {
       });
 
       // 2b. Handle is_na flag: explicit toggle takes priority,
-      // otherwise auto-clear when achieved_value is provided
+      // otherwise auto-clear when achieved_value is provided.
+      // CRITICAL: Only clear the CURRENT role's fields — never wipe other levels' scores.
       if (is_na !== undefined) {
-        updateFields.is_na = is_na;
-        updateFields.na_marked_by_role = is_na ? 'admin' : null;
-        // When marking NA, clear ALL scoring fields so dashboard reflects N/A immediately
-        if (is_na) {
-          updateFields.final_score = null;
-          updateFields.final_rating = null;
-          updateFields.achieved_value = null;
-          updateFields.self_score = null;
-          updateFields.self_rating = null;
-          updateFields.manager_score = null;
-          updateFields.manager_rating = null;
-          updateFields.skip_level_score = null;
-          updateFields.skip_level_rating = null;
-          updateFields.hr_pms_score = null;
-          updateFields.hr_pms_rating = null;
-          updateFields.auditor_score = null;
-          updateFields.auditor_rating = null;
-          updateFields.management_score = null;
-          updateFields.management_rating = null;
+        const oldIsNa = oldSubmission?.is_na === true;
+        // Only write is_na when it actually changed to prevent accidental re-clears
+        if (is_na !== oldIsNa) {
+          updateFields.is_na = is_na;
+          updateFields.na_marked_by_role = is_na ? 'admin' : null;
+          if (is_na) {
+            // Clear only the CURRENT role's fields + final score
+            const roleClearFields = buildUpdateFields(role_level, {
+              achieved_value: null,
+              rating: null,
+              score: null,
+              remarks: null,
+            });
+            Object.assign(updateFields, roleClearFields);
+            updateFields.final_score = null;
+            updateFields.final_rating = null;
+          }
         }
       } else if (achieved_value !== undefined && achieved_value !== null) {
         updateFields.is_na = false;
