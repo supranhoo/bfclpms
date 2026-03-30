@@ -168,6 +168,33 @@ export function useApproveRollbackRequest() {
 
       if (kpiError) throw kpiError;
 
+      // Clear downstream reviewer fields in review_submissions
+      // All stages after target_status must have their data nulled out
+      const STAGE_FIELD_MAP: Record<string, string[]> = {
+        manager_check: ['manager_score', 'manager_rating', 'manager_remarks', 'manager_evidence_url', 'manager_achieved_value'],
+        skip_level_check: ['skip_level_score', 'skip_level_rating', 'skip_level_remarks', 'skip_level_evidence_url', 'skip_level_achieved_value'],
+        hr_pms_review: ['hr_pms_score', 'hr_pms_rating', 'hr_pms_remarks', 'hr_pms_evidence_url', 'hr_pms_achieved_value'],
+        audit: ['auditor_score', 'auditor_rating', 'auditor_remarks', 'auditor_evidence_url', 'auditor_achieved_value'],
+        management_review: ['management_score', 'management_rating', 'management_remarks', 'management_evidence_url', 'management_achieved_value'],
+      };
+      const CANONICAL_ORDER = ['self_review', 'manager_check', 'skip_level_check', 'hr_pms_review', 'audit', 'management_review'];
+      const targetIdx = CANONICAL_ORDER.indexOf(target_status);
+      const clearFields: Record<string, null> = { final_score: null, final_rating: null };
+      CANONICAL_ORDER.forEach((stage, idx) => {
+        if (idx > targetIdx && STAGE_FIELD_MAP[stage]) {
+          STAGE_FIELD_MAP[stage].forEach(field => { clearFields[field] = null; });
+        }
+      });
+
+      const { error: clearError } = await supabase
+        .from('review_submissions')
+        .update({ ...clearFields, updated_at: new Date().toISOString() } as any)
+        .eq('kpi_id', kpi_id);
+
+      if (clearError) {
+        console.error('[Rollback] Failed to clear downstream fields:', clearError);
+      }
+
       // Notify requester
       await supabase.from('notifications').insert({
         user_id: requested_by,
