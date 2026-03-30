@@ -26,11 +26,11 @@ interface LocalRow {
   remarks: string;
 }
 
-export function ProductionTargetGrid() {
+export function ProductionTargetGrid({ controlledProgramId }: { controlledProgramId?: string } = {}) {
   const { user } = useAuth();
   const now = new Date();
-  const [selectedProgram, setSelectedProgram] = useState('');
-  const [selectedBU, setSelectedBU] = useState('');
+  const [internalProgram, setInternalProgram] = useState('');
+  const selectedProgram = controlledProgramId || internalProgram;
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[now.getMonth()]);
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [localRows, setLocalRows] = useState<LocalRow[]>([]);
