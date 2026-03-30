@@ -160,6 +160,39 @@ export function useRemoveProgramMapping() {
   });
 }
 
+export function useBulkAddProgramMappings() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: async (rows: { program_id: string; mapping_type: string; mapping_value: string }[]) => {
+      if (rows.length === 0) return;
+      const { error } = await supabase.from('incentive_program_mappings').insert(rows);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['incentive-program-mappings'] });
+      toast({ title: 'Employees mapped successfully' });
+    },
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+}
+
+export function useBulkRemoveProgramMappings() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      if (ids.length === 0) return;
+      const { error } = await supabase.from('incentive_program_mappings').delete().in('id', ids);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['incentive-program-mappings'] });
+    },
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+}
+
 // ── Disqualification Rules ──
 
 export function useDisqualificationRules(programId?: string) {
