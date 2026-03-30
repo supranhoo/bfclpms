@@ -1,55 +1,59 @@
 
 
-## RCA & Fix Plan: Sent-Back Indicator Not Visible + Value History Incomplete
+## Plan: Previous Month Tiles in Review Journey (Real-Time Linked)
 
-### Issue 1: Sent-Back Indicator Not Showing
+### What We're Building
+Add a collapsible "Previous Months" section below the current Review Journey tiles. It fetches the **same KPI** (matched by `employee_id + kpi_name + kra_name + category_id`) for the previous 2 months directly from the database, showing all review stage cards with scores, ratings, remarks, and evidence — linked to live data with no gap.
 
-**Root Cause**: The `useSentBackOrgKpiEmployees` hook queries `kpi_queries` filtering by `status = 'open'`. However, **all send-back query records have `status = 'resolved'`** — they get auto-resolved when the KPI status changes (employee re-submits or admin intervenes). This means the map is always empty, so the amber highlight and Undo2 icon never appear.
+### Layout
 
-**Fix approach**: Instead of relying on open queries, detect sent-back state from the **KPI's current status**. An employee's org KPI that was sent back will have `status = 'kra_set'` (or another earlier stage). Cross-reference with the `kpi_queries` table to find the most recent `send_back` query (regardless of status) for each employee KPI, and check if the KPI hasn't progressed past the sent-back stage since then.
+```text
+┌─ Review Journey ──────────────────────── [PDF] ─┐
+│  [Self] [Manager] [Auditor] [Mgmt]  ← Current   │
+│                                                   │
+│  ▼ Previous Months                                │
+│  ┌─ February 2025 ─────────────────────────────┐  │
+│  │ [Self] [Manager] [Auditor] [Mgmt]           │  │
+│  └──────────────────────────────────────────────┘  │
+│  ┌─ January 2025 ──────────────────────────────┐   │
+│  │ [Self] [Manager] [Auditor] [Mgmt]           │   │
+│  └──────────────────────────────────────────────┘   │
+└───────────────────────────────────────────────────┘
+```
 
-**Concrete logic change in `useSentBackOrgKpiEmployees.ts`**:
-1. Find matching org-level KPIs (same as now)
-2. For each KPI, check if `status` is at or before the stage it was sent back to — i.e., KPI status is `kra_set` AND there exists a `send_back` query record (any status, most recent)
-3. Also include KPIs where `kpi_queries.status = 'open'` (original logic, for safety)
-4. This means: show the indicator when the employee **hasn't yet re-progressed past the sent-back stage**
-
-| File | Change |
-|------|--------|
-| `src/hooks/useSentBackOrgKpiEmployees.ts` | Remove the `status = 'open'` filter. Instead, fetch the latest send-back query per KPI, then check if the KPI's current status matches the sent-back target (typically `kra_set`). Only show the indicator if the KPI hasn't progressed past it. |
-
----
-
-### Issue 2: Value History Shows Very Limited Data
-
-**Root Cause**: The "Value History" popover reads from `org_kpi_data_entry_logs`. This table only has entries for:
-- `created` (initial data entry)
-- `unlocked` (admin unlock)
-
-Missing entries:
-- **`updated`**: The audit log write at line 507 compares `sv.achievedValue !== oldVal`, but the auto-save mechanism and React Query refetch pattern means the `existingValuesMap` often already has the latest value, so the comparison evaluates as equal and skips the log entry.
-- **`propagated`**: Propagation never writes to `org_kpi_data_entry_logs` at all.
-- **`rollback`**: Rollbacks don't write to this table either.
-
-**Fix approach** (multi-part):
-
-1. **Write audit log on propagation**: After successful propagation in `handleCardSaveAndPropagate`, insert an audit entry with `action: 'propagated'` including the propagated count.
-
-2. **Fix the update comparison**: The `oldVal` lookup uses `existingValuesMap` which may be stale or already refreshed. Instead, capture the old value **before** the upsert call, not from the reactive map. The simplest fix: always write an audit log when saving (if value is non-null), and de-duplicate by comparing against the **last audit log entry** rather than the reactive map. Alternatively, use a `ref` to track the "value at load time" per scoped row.
-
-3. **Write audit log on rollback and unlock**: These already log `unlocked` but not value changes. Add `rollback` entries when rollback is performed.
-
-4. **Add `propagated` and `rollback` to the action labels** in `OrgKpiAuditLog.tsx` so they render correctly.
+### Implementation
 
 | File | Change |
 |------|--------|
-| `src/pages/admin/OrgKpiDataEntry.tsx` | (a) Write `propagated` audit entry after each successful propagation call with old/new values. (b) Write `rollback` audit entry on rollback. (c) Fix `updated` comparison — track initial values at data load time via a ref, compare against that instead of reactive `existingValuesMap`. |
-| `src/components/admin/OrgKpiAuditLog.tsx` | Add `propagated`, `rollback`, `unlocked` to `actionLabels` map with appropriate labels and badge variants. |
-| `DOCUMENTATION.md` | Version history v2.14.2 |
-| `POLICY.md` | Add invariant: every org KPI value mutation must write an audit log entry |
+| `src/components/review/KpiJourneySection.tsx` | Add previous months section after the current stage grid |
+| `DOCUMENTATION.md` | Version history v2.15.0 |
+| `POLICY.md` | §32: Review Journey previous month comparison invariant |
+
+### Key Logic in `KpiJourneySection.tsx`
+
+1. **Compute previous 2 periods** from `kpi.review_period` / `kpi.review_year`:
+   - Use MONTHS array index, decrement, handle year rollover (Jan → Dec of prev year)
+
+2. **Fetch matching KPIs + submissions** via a single `useQuery`:
+   - Query `kpis` table: `employee_id = X AND kpi_name = Y AND kra_name = Z AND category_id = C AND review_period IN (prev1, prev2) AND review_year IN (year1, year2)`
+   - Join with `review_submissions` via separate query on returned KPI IDs
+   - Also fetch each previous KPI's workflow via `get_bulk_employee_workflows` RPC for correct stage visibility
+   - `staleTime: 2 * 60 * 1000` — real-time enough, avoids excessive refetches
+
+3. **Render** inside a `Collapsible` (from shadcn), collapsed by default:
+   - For each previous month: month/year header badge + same `ReviewStageCard` grid
+   - Reuse existing `buildStage`, `getStageStatus`, `getVisibleStagesForLevel` functions
+   - Each card shows scores, ratings, remarks, evidence — identical to current month tiles
+
+4. **PDF export**: Include previous month data in the PDF when expanded (extend `ReviewTimelinePdfData`)
+
+### Data Flow
+- All data comes from live DB queries (same `kpis` + `review_submissions` tables as current month)
+- No caching gap — uses React Query with short staleTime
+- If no previous month data exists, section is hidden entirely
 
 ### Risk Assessment
-- **Regression**: Zero for Issue 1 (relaxes filter). Low for Issue 2 (additive audit writes).
-- **Performance**: Issue 1 adds KPI status check (already fetched). Issue 2 adds more audit log inserts (fire-and-forget, non-blocking).
-- **Data**: Existing history gaps cannot be backfilled — only new operations will be logged going forward.
+- **Regression**: Zero — additive section below existing tiles
+- **Performance**: 1 additional query (max 2 KPIs + 2 submissions); negligible
+- **Workflow awareness**: Each previous month may have different workflow config; handled by per-period RPC call
 
