@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.15.7 — KPI Scorecard Detail report
+> **Version:** 2.15.8 — Fix N/A blast-radius bug in admin data entry
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
