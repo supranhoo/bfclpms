@@ -141,6 +141,15 @@ function getScoreForColumn(
   }
 }
 
+// Canonical status order for sorting
+const STATUS_ORDER: string[] = [
+  'kra_set', 'self_review', 'manager_check', 'skip_level_check',
+  'hr_pms_review', 'audit', 'management_review', 'approved',
+];
+
+type SortField = 'category' | 'weightage' | 'status' | string; // string for dynamic score column keys
+type SortDirection = 'asc' | 'desc';
+
 export function KpiDetailsTable({
   kpis,
   submissionMap,
@@ -162,9 +171,58 @@ export function KpiDetailsTable({
   auditKpiAssignments,
   dataOwnerNames,
 }: KpiDetailsTableProps) {
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
   const scoreColumns = buildScoreColumns(effectiveStages);
-  const totalColumns = 5 + scoreColumns.length + 2; // Category, KRA/KPI, Target, Weightage, Achieved + scores + Status, Actions
+  const totalColumns = 5 + scoreColumns.length + 2;
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'desc' ? 'asc' : 'desc');
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 text-muted-foreground" />;
+    return sortDirection === 'asc'
+      ? <ArrowUp className="h-3 w-3" />
+      : <ArrowDown className="h-3 w-3" />;
+  };
+
+  const sortedKpis = useMemo(() => {
+    if (!sortField) return kpis;
+    return [...kpis].sort((a, b) => {
+      const dir = sortDirection === 'asc' ? 1 : -1;
+
+      if (sortField === 'category') {
+        const catA = a.kra_categories?.name?.toLowerCase() || '';
+        const catB = b.kra_categories?.name?.toLowerCase() || '';
+        return catA.localeCompare(catB) * dir;
+      }
+
+      if (sortField === 'weightage') {
+        return ((a.weightage || 0) - (b.weightage || 0)) * dir;
+      }
+
+      if (sortField === 'status') {
+        const idxA = STATUS_ORDER.indexOf(a.status || 'kra_set');
+        const idxB = STATUS_ORDER.indexOf(b.status || 'kra_set');
+        return (idxA - idxB) * dir;
+      }
+
+      // Score columns (self_score, manager_score, etc.)
+      const subA = submissionMap.get(a.id);
+      const subB = submissionMap.get(b.id);
+      const scoreA = getScoreForColumn(subA, sortField, a.status || 'kra_set') ?? -Infinity;
+      const scoreB = getScoreForColumn(subB, sortField, b.status || 'kra_set') ?? -Infinity;
+      return (scoreA - scoreB) * dir;
+    });
+  }, [kpis, sortField, sortDirection, submissionMap]);
   
   const canReviewKpiCheck = (kpi: KPI): boolean => {
     // N/A KPIs are still reviewable — the reviewer decides whether to confirm or override N/A
