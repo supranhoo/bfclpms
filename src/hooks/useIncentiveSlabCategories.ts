@@ -39,6 +39,25 @@ export function useCreateSlabCategory() {
   });
 }
 
+export function useUpdateSlabCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, label }: { id: string; label: string }) => {
+      const value = label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const { error } = await supabase
+        .from('incentive_slab_categories')
+        .update({ label, value })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['incentive-slab-categories'] });
+      toast.success('Slab category updated');
+    },
+    onError: (e: any) => toast.error(e.message || 'Failed to update category'),
+  });
+}
+
 export function useDeleteSlabCategory() {
   const qc = useQueryClient();
   return useMutation({
