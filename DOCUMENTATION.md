@@ -4358,3 +4358,13 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 ---
 
 *This documentation is automatically maintained alongside the codebase.*
+
+---
+
+### v2.15.2 — Fix rollback cascade-clear off-by-one + Re-review badge (2026-03-30)
+
+- **Bug fix:** Rollback from `approved` → `management_review` left stale `management_score` in DB because cascade-clear used `>` instead of `>=` (only cleared stages AFTER target, not the target itself)
+- **Fix (useKpiRollbackRequests.ts):** Changed `idx > targetIdx` → `idx >= targetIdx` in cascade-clear loop so the target stage's own fields (score, rating, remarks, evidence, achieved_value) are also nulled
+- **Fix (useAdminDataEntry.ts):** Changed `<` → `<=` in all 5 stage-clear conditions (manager, skip-level, HR PMS, audit, management) so admin step-back also clears the target stage
+- **UI:** Added amber "Re-review" badge in `KpiDetailsTable` score columns when score is null AND KPI status matches that stage (indicates rolled-back stage awaiting re-review)
+- **Invariant:** Rollback target stage fields must be cleared on rollback/step-back (POLICY.md §33)
