@@ -646,9 +646,45 @@ export default function OrgKpiDataEntry() {
         }
       }
     }
+
+    // Write propagation audit log entries
+    if (propagatedScopeIds.length > 0) {
+      const propagationAuditEntries: Array<any> = [];
+      if (scope === 'organization') {
+        propagationAuditEntries.push({
+          category_id: kpi.category_id,
+          kra_name: kpi.kra_name,
+          kpi_name: kpi.kpi_name,
+          review_period: selectedPeriod,
+          review_year: selectedYear,
+          action: 'propagated',
+          performed_by: profile?.id || '',
+          new_value: values.isNa ? null : values.achievedValue,
+          remarks: `Propagated to ${totalPropagated} employee(s)`,
+        });
+      } else if (values.scopedValues) {
+        for (const sv of values.scopedValues) {
+          if (!propagatedScopeIds.includes(sv.scopeId)) continue;
+          propagationAuditEntries.push({
+            category_id: kpi.category_id,
+            kra_name: kpi.kra_name,
+            kpi_name: kpi.kpi_name,
+            review_period: selectedPeriod,
+            review_year: selectedYear,
+            action: 'propagated',
+            performed_by: profile?.id || '',
+            new_value: sv.isNa ? null : sv.achievedValue,
+            remarks: `Scope: ${sv.scopeId}`,
+          });
+        }
+      }
+      if (propagationAuditEntries.length > 0) {
+        try { await insertAuditLogs.mutateAsync(propagationAuditEntries); } catch { /* non-blocking */ }
+      }
+    }
     
     queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
-  }, [handleCardSave, propagate, selectedPeriod, selectedYear, queryClient]);
+  }, [handleCardSave, propagate, selectedPeriod, selectedYear, queryClient, profile?.id, insertAuditLogs, employeeCountMap]);
 
   // Copy from previous period
   const handleCopyFromPrevious = async () => {
