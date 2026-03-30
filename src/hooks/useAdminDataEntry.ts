@@ -601,7 +601,7 @@ export function useAdminStatusStepBack() {
       }
 
       // Clear manager fields if target is before manager_check
-      if (targetIdx < FULL_STATUS_ORDER.indexOf('manager_check')) {
+      if (targetIdx <= FULL_STATUS_ORDER.indexOf('manager_check')) {
         clearFields.manager_rating = null;
         clearFields.manager_score = null;
         clearFields.manager_remarks = null;
