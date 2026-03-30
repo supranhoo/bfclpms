@@ -70,6 +70,7 @@ const IncentiveReport = lazy(() => import("./pages/reports/IncentiveReport"));
 const VarianceReport = lazy(() => import("./pages/reports/VarianceReport"));
 const ManagerTeamKpiReport = lazy(() => import("./pages/reports/ManagerTeamKpiReport"));
 const TeamVsManagerScoreReport = lazy(() => import("./pages/reports/TeamVsManagerScoreReport"));
+const KpiScorecardDetail = lazy(() => import("./pages/reports/KpiScorecardDetail"));
 
 // Layout components
 import { ReportRoute } from "./components/layout/ReportRoute";
@@ -352,6 +353,11 @@ const App = () => (
                 <Route path="/reports/team-vs-manager-score" element={
                   <ReportRoute reportKey="team-vs-manager-score">
                     <Suspense fallback={<PageFallback />}><TeamVsManagerScoreReport /></Suspense>
+                  </ReportRoute>
+                } />
+                <Route path="/reports/kpi-scorecard-detail" element={
+                  <ReportRoute reportKey="kpi-scorecard-detail">
+                    <Suspense fallback={<PageFallback />}><KpiScorecardDetail /></Suspense>
                   </ReportRoute>
                 } />
               </Route>
