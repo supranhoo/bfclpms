@@ -610,7 +610,7 @@ export function useAdminStatusStepBack() {
       }
 
       // Clear skip-level fields if target is before skip_level_check
-      if (targetIdx < FULL_STATUS_ORDER.indexOf('skip_level_check')) {
+      if (targetIdx <= FULL_STATUS_ORDER.indexOf('skip_level_check')) {
         clearFields.skip_level_rating = null;
         clearFields.skip_level_score = null;
         clearFields.skip_level_remarks = null;
