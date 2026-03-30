@@ -538,7 +538,7 @@ export function AdminDataEntryDialog({
       remarks: remarks || null,
       evidence_url: evidenceUrls.length > 0 ? evidenceUrls[evidenceUrls.length - 1] : null,
       evidence_urls: evidenceUrls.length > 0 ? evidenceUrls : null,
-      is_na: isNa,
+      is_na: isNa !== originalIsNa ? isNa : undefined,
       reason: reason.trim(),
       kpi_name: kpi.kpi_name,
       advance_status: advanceStatus,
