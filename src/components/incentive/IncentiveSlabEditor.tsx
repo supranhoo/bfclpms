@@ -17,13 +17,7 @@ interface Props {
   programType: string;
 }
 
-const SLAB_CATEGORIES_BASE = [
-  { value: 'pms_score', label: 'PMS Score' },
-  { value: 'production', label: 'Production' },
-  { value: 'availability', label: 'Availability' },
-  { value: 'maintenance', label: 'Maintenance' },
-  { value: 'metal_recovery', label: 'Metal Recovery' },
-];
+// Slab categories are now DB-driven via incentive_slab_categories table
 
 export function IncentiveSlabEditor({ programId, programType }: Props) {
   const { data: slabs = [], isLoading } = useIncentiveSlabs(programId);
