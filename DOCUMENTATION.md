@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.13.8 — Fix Propagate button disabled for scoped Org KPIs
+> **Version:** 2.13.9 — Fix blank-data guard blocking scoped Org KPI propagation
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4320,6 +4320,15 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Root cause:** The disabled check used top-level `achievedValue` which is always empty for scoped KPIs — actual values live in `scopedValues` array
 - **Fix:** Replaced with scope-aware validation: org-scope checks `achievedValue`, department/employee scope checks if any `scopedValues` row has a value or is N/A
 - **Invariant:** Propagate button must use scope-aware validation (POLICY.md §29)
+
+---
+
+### v2.13.9 — Fix blank-data guard blocking scoped Org KPI propagation (2026-03-30)
+
+- **Bug fix:** "Cannot propagate blank data" toast fired for department/employee-scoped Org KPIs even when all scoped rows had values entered
+- **Root cause:** The blank-data guard at line 547 checked only `values.achievedValue` (top-level), which is always `null` for scoped KPIs — same class of bug as v2.13.8
+- **Fix:** Made the guard scope-aware: org-scope checks top-level value; department/employee scope checks if any `scopedValues` row has data or is N/A
+- **Invariant:** Blank-data propagation guard must be scope-aware (POLICY.md §29)
 
 ---
 

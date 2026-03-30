@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 1.29.0 — Scope-aware propagation validation invariant
+> **Version:** 1.29.1 — Extend scope-aware invariant to blank-data guard
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -638,4 +638,4 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Rationale:** Scoped KPIs store values in per-department/per-employee rows, not in the top-level field. Checking only the top-level field permanently disables propagation for all scoped entries.
 
-**Invariant:** Any future refactor of the Propagate button must preserve scope-aware validation logic.
+**Invariant:** Any future refactor of the Propagate button AND the blank-data propagation guard must preserve scope-aware validation logic. Both checks must differentiate org-scope (top-level value) from department/employee-scope (`scopedValues` array).
