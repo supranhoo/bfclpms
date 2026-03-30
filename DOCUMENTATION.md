@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-30  
-> **Version:** 2.15.5 — Fix final_score recomputation on already-approved KPIs
+> **Version:** 2.15.6 — Decouple final_score recompute from advance_status toggle
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4382,6 +4382,15 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 
 - **Feature:** Added clickable sort headers for Category, Weightage, Score columns, and Status in `KpiDetailsTable`
 - **Scope:** Automatically available across all 6 dashboards (My KPIs, Team Review, Audit, Management, Skip-Level, HR PMS)
+
+---
+
+### v2.15.6 — Decouple final_score recompute from advance_status toggle (2026-03-30)
+
+- **Bug fix:** v2.15.5 recompute was still gated by `advance_status !== false`, causing final_score to remain stale when the toggle was off for already-approved KPIs
+- **Fix (useAdminDataEntry.ts):** Hoisted `currentKpiStatus` out of the `advance_status` block; new condition `kpiWasAlreadyApproved = !newStatus && currentKpiStatus === 'approved'` fires independently of the advance toggle
+- **Data fix:** Repaired all approved KPIs from Jan 2026+ where `final_score` didn't match `management_score` (4 records)
+- **Zero regression risk:** Non-approved KPIs unaffected; normal forward flow unchanged; N/A KPIs unaffected
 
 ---
 

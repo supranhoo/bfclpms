@@ -168,6 +168,8 @@ export function useAdminSubmitReviewData() {
 
       // 3. Resolve workflow status BEFORE upsert so we can include final_score atomically
       let newStatus: string | null = null;
+      // Hoist currentKpiStatus to outer scope — needed for post-upsert final_score recompute
+      let currentKpiStatus: string | null = null;
 
       if (advance_status !== false) {
         if (role_level === 'self') {
@@ -182,6 +184,7 @@ export function useAdminSubmitReviewData() {
             'hr_pms_review', 'audit', 'management_review', 'approved',
           ];
           const currentStatus = currentKpi?.status || 'kra_set';
+          currentKpiStatus = currentStatus;
           const currentIdx = STAGE_ORDER.indexOf(currentStatus);
           const selfReviewIdx = STAGE_ORDER.indexOf('self_review');
 
@@ -195,9 +198,9 @@ export function useAdminSubmitReviewData() {
             .eq('id', kpi_id)
             .single();
 
-          const currentKpiStatus = kpiPeriod?.status || 'kra_set';
+          currentKpiStatus = kpiPeriod?.status || 'kra_set';
           if (currentKpiStatus === 'approved') {
-            console.info('[AdminDataEntry] KPI already approved — skipping status advancement and final_score sync');
+            console.info('[AdminDataEntry] KPI already approved — skipping status advancement');
             newStatus = null;
           } else {
             const rpcParams: Record<string, unknown> = { employee_uuid: employee_id };
@@ -226,6 +229,14 @@ export function useAdminSubmitReviewData() {
             }
           }
         }
+      } else if (role_level !== 'self') {
+        // Even when advance_status is off, fetch current KPI status for final_score recompute
+        const { data: kpiPeriod } = await supabase
+          .from('kpis')
+          .select('status')
+          .eq('id', kpi_id)
+          .single();
+        currentKpiStatus = kpiPeriod?.status || 'kra_set';
       }
 
       // 3b. If advancing to approved, include final_score/final_rating atomically in the upsert
@@ -308,7 +319,9 @@ export function useAdminSubmitReviewData() {
       }
 
       // 8. Recompute final_score for approved KPIs (handles both new approvals and edits on already-approved)
-      const shouldRecomputeFinal = newStatus === 'approved' || (advance_status !== false && newSubmission && !newStatus);
+      // Decoupled from advance_status — already-approved KPIs always need final_score sync
+      const kpiWasAlreadyApproved = !newStatus && currentKpiStatus === 'approved';
+      const shouldRecomputeFinal = newStatus === 'approved' || (kpiWasAlreadyApproved && !!newSubmission);
       if (shouldRecomputeFinal && newSubmission) {
         // Re-fetch the full submission to get all latest scores after upsert
         const { data: freshSub } = await supabase
