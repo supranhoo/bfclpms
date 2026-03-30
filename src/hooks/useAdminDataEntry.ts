@@ -619,7 +619,7 @@ export function useAdminStatusStepBack() {
       }
 
       // Clear HR PMS fields if target is before hr_pms_review
-      if (targetIdx < FULL_STATUS_ORDER.indexOf('hr_pms_review')) {
+      if (targetIdx <= FULL_STATUS_ORDER.indexOf('hr_pms_review')) {
         clearFields.hr_pms_rating = null;
         clearFields.hr_pms_score = null;
         clearFields.hr_pms_remarks = null;
