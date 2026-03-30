@@ -56,10 +56,12 @@ export interface UpdateObservationInput {
   title?: string;
   description?: string;
   evidence_url?: string;
+  evidence_urls?: string[];
   is_applied?: boolean;
   reviewed_by?: string;
   reviewed_at?: string;
   visibility?: ObservationVisibility;
+  mentionedUserIds?: string[];
 }
 
 // Fetch observations for a single KPI
@@ -220,16 +222,75 @@ export function useUpdateObservation() {
   
   return useMutation({
     mutationFn: async (input: UpdateObservationInput) => {
-      const { id, ...updates } = input;
+      const { id, mentionedUserIds, evidence_urls, ...updates } = input;
+      
+      // Build clean update payload — only include evidence_urls if provided
+      const dbUpdates: Record<string, any> = { ...updates };
+      if (evidence_urls !== undefined) {
+        dbUpdates.evidence_urls = evidence_urls.length > 0 ? evidence_urls : null;
+      }
       
       const { data, error } = await supabase
         .from('kpi_observations')
-        .update(updates)
+        .update(dbUpdates)
         .eq('id', id)
         .select()
         .single();
 
       if (error) throw error;
+
+      // Process mention notifications for edits
+      if (mentionedUserIds && mentionedUserIds.length > 0) {
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData.user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name, email')
+            .eq('id', userData.user.id)
+            .single();
+
+          const mentionerName = profile?.full_name || profile?.email || 'Someone';
+
+          const { data: kpiData } = await supabase
+            .from('kpis')
+            .select('employee_id, kpi_name')
+            .eq('id', data.kpi_id)
+            .single();
+
+          const shortKpiName = (kpiData?.kpi_name || 'a KPI').split(/[\n\r:]/)[0].trim().slice(0, 80);
+          const uniqueIds = [...new Set(mentionedUserIds)].filter(uid => uid !== userData.user!.id);
+
+          if (uniqueIds.length > 0) {
+            const notifications = uniqueIds.map(userId => ({
+              user_id: userId,
+              type: 'observation_mention',
+              title: '@Mentioned in Observation',
+              message: `${mentionerName} mentioned you in observation "${getDisplayText(updates.title || '')}" on ${shortKpiName}`,
+              kpi_id: data.kpi_id,
+              related_user_id: userData.user!.id,
+              metadata: {
+                employee_id: kpiData?.employee_id || null,
+                observation_id: data.id,
+                observation_title: updates.title,
+                observation_type: updates.observation_type,
+                observation_description: updates.description || null,
+              },
+            }));
+
+            await supabase.from('notifications').insert(notifications);
+
+            await supabase.from('kpi_mention_access').upsert(
+              uniqueIds.map(userId => ({
+                kpi_id: data.kpi_id,
+                user_id: userId,
+                granted_by: userData.user!.id,
+              })),
+              { onConflict: 'kpi_id,user_id', ignoreDuplicates: true }
+            );
+          }
+        }
+      }
+
       return data;
     },
     onSuccess: (data) => {
