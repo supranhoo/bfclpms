@@ -722,3 +722,13 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Rationale:** Hardcoded category lists require code deployments to change and risk drift between environments. The DB-driven approach allows admins to extend categories (e.g., "Safety Score", "Quality") without developer intervention.
 
 **Invariant:** No component or hook may define a static array of slab category values. All slab category lists must be sourced from the `incentive_slab_categories` table via the `useIncentiveSlabCategories` hook.
+
+---
+
+## §37. Employee Mapping — Resolved List Invariant
+
+**Rule:** The incentive program employee mapping UI must display a unified, sortable table of all active employees with their organizational attributes (name, code, designation, department, BU, division, level, PMS grade). The UI must NOT use abstract entity pickers (e.g., separate tabs for divisions, departments, grades) as the primary mapping interface.
+
+**Rationale:** Abstract entity pickers obscure which individual employees are actually enrolled. A resolved employee list gives admins immediate visibility into who is mapped, supports multi-select with filters, and prevents accidental over-enrollment.
+
+**Invariant:** `ProgramEmployeeMapping` must always render a flat employee table with checkboxes. Bulk operations (select-all-filtered, clear-all-filtered) must use the `useBulkAddProgramMappings` / `useBulkRemoveProgramMappings` hooks for performance.

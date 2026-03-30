@@ -4443,3 +4443,13 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **New component:** `SlabCategorySelector.tsx` — reusable dropdown with inline "Add New" (mirrors `ProgramTypeSelector` pattern)
 - **Updated:** `IncentiveSlabEditor.tsx` and `ProductionTargetGrid.tsx` now use DB-driven categories
 - **POLICY.md §36:** Slab categories must be master-data driven, never hardcoded
+
+---
+
+### v2.15.12 — Unified employee mapping table with multi-select (2026-03-30)
+
+- **Problem:** Employee mapping used 5 separate tabs (Division, Dept/BU, Designation, Grade, Individual) making it hard to see resolved employee list
+- **Fix:** Replaced tabs with a single sortable table showing all active employees with columns: Employee (Code), Designation, Department, BU, Division, Level, PMS Grade
+- **Features:** Multi-select checkboxes, "Select All Filtered", sortable columns, filter dropdowns for Division/BU/Dept/Designation/Grade, search bar, pagination (20/page)
+- **New hooks:** `useBulkAddProgramMappings`, `useBulkRemoveProgramMappings` for batch operations
+- **POLICY.md §37:** Employee mapping UI must show resolved employee list, not abstract entity pickers
