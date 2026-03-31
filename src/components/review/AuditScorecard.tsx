@@ -792,6 +792,7 @@ export function AuditScorecard({
                     isExpanded={expandedDailyKpis.has(kpi.id)}
                     getOrgKpiValue={getOrgKpiValue}
                     sentBackKpiIds={sentBackKpiIds}
+                    observationCount={observationCounts.get(kpi.id) || 0}
                   />
                 );
               })}
