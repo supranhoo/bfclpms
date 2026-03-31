@@ -4646,6 +4646,10 @@ export type Database = {
         Args: { p_frequency: string; p_month: string; p_year: number }
         Returns: boolean
       }
+      is_org_kpi_audit_employee: {
+        Args: { _profile_id: string }
+        Returns: boolean
+      }
       is_period_locked: {
         Args: { _period_name: string; _review_year: number }
         Returns: boolean
