@@ -26,6 +26,7 @@ interface DryRunResult {
     pro_rata_factor: number;
     final_incentive_percent: number;
     production_value: number | null;
+    incentive_amount?: number;
   }>;
 }
 
