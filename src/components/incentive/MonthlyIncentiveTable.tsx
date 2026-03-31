@@ -33,7 +33,7 @@ export function MonthlyIncentiveTable() {
   const { data: programs = [] } = useIncentivePrograms();
   const activePrograms = (programs as any[]).filter((p: any) => p.is_active);
 
-  const { data: records = [], isLoading } = useIncentiveRecords(selectedMonth, selectedYear);
+  const { data: records = [], isLoading, isError, error } = useIncentiveRecords(selectedMonth, selectedYear, selectedProgram || undefined);
   const confirmRecords = useConfirmIncentiveRecords();
   const markPaid = useMarkIncentivePaid();
   const computeIncentives = useComputeIncentives();
