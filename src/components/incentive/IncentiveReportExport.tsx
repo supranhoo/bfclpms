@@ -29,18 +29,24 @@ export function IncentiveReportExport() {
 
   const filtered = useMemo(() => {
     if (!records) return [];
-    if (!search.trim()) return records;
-    const q = search.toLowerCase();
-    return records.filter((r: any) => {
-      const p = r.profiles;
-      return (
-        p?.full_name?.toLowerCase().includes(q) ||
-        p?.employee_code?.toLowerCase().includes(q) ||
-        p?.designation?.toLowerCase().includes(q) ||
-        p?.departments?.name?.toLowerCase().includes(q)
-      );
-    });
-  }, [records, search]);
+    let result = records;
+    if (periodFilter !== 'all') {
+      result = result.filter((r: any) => r.payment_period === periodFilter);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter((r: any) => {
+        const p = r.profiles;
+        return (
+          p?.full_name?.toLowerCase().includes(q) ||
+          p?.employee_code?.toLowerCase().includes(q) ||
+          p?.designation?.toLowerCase().includes(q) ||
+          p?.departments?.name?.toLowerCase().includes(q)
+        );
+      });
+    }
+    return result;
+  }, [records, search, periodFilter]);
 
   const stats = useMemo(() => {
     const list = filtered || [];
