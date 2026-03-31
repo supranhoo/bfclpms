@@ -67,31 +67,25 @@ export function useOrgKpiAuditReview(reviewPeriod: string, reviewYear: number) {
       const employeeIds = [...new Set(orgKpis.map(k => k.employee_id))];
 
       // 3. Batch fetch profiles with department and designation joins
-      const profiles: Array<any> = [];
+      const profiles: Array<{ id: string; full_name: string | null; employee_code: string | null; department_id: string | null; designation: string | null }> = [];
       for (let i = 0; i < employeeIds.length; i += 500) {
         const batch = employeeIds.slice(i, i + 500);
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('profiles')
-          .select('id, full_name, employee_code, department_id, designation_id')
-          .in('id', batch) as any;
+          .select('id, full_name, employee_code, department_id, designation')
+          .in('id', batch);
+        if (error) console.error('Profile fetch error:', error.message);
         if (data) profiles.push(...data);
       }
-      const profileMap = new Map(profiles.map((p: any) => [p.id, p]));
+      const profileMap = new Map(profiles.map(p => [p.id, p]));
 
-      // Fetch departments and designations for mapping
-      const deptIds = [...new Set(profiles.map(p => (p as any).department_id).filter(Boolean))];
-      const desigIds = [...new Set(profiles.map(p => (p as any).designation_id).filter(Boolean))];
-      
+      // Fetch departments for mapping
+      const deptIds = [...new Set(profiles.map(p => p.department_id).filter(Boolean))] as string[];
       const deptMap = new Map<string, string>();
-      const desigMap = new Map<string, string>();
       
       if (deptIds.length > 0) {
         const { data: depts } = await supabase.from('departments').select('id, name').in('id', deptIds);
         depts?.forEach(d => deptMap.set(d.id, d.name));
-      }
-      if (desigIds.length > 0) {
-        const { data: desigs } = await supabase.from('designations').select('id, name').in('id', desigIds);
-        desigs?.forEach(d => desigMap.set(d.id, d.name));
       }
 
       // 4. Fetch review submissions for all these KPIs
@@ -158,8 +152,8 @@ export function useOrgKpiAuditReview(reviewPeriod: string, reviewYear: number) {
           employeeId: kpi.employee_id,
           employeeName: profile?.full_name || 'Unknown',
           employeeCode: profile?.employee_code || '',
-          departmentName: deptMap.get((profile as any)?.department_id) || 'Unassigned',
-          designationName: desigMap.get((profile as any)?.designation_id) || '',
+          departmentName: deptMap.get(profile?.department_id || '') || 'Unassigned',
+          designationName: profile?.designation || '',
           kpiId: kpi.id,
           kpiStatus: kpi.status as string,
           selfScore: submission?.self_score ?? null,
