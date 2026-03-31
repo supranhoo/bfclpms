@@ -428,6 +428,11 @@ serve(async (req) => {
 
       const finalPercent = isDQ ? 0 : basePercent * (1 - ltiPenalty / 100) * proRata;
 
+      // Zero out production incentive amount when disqualified
+      if (isDQ && program.program_type === 'production') {
+        incentiveAmount = 0;
+      }
+
       // Vessel-based incentive calculation
       let vesselAmount: number | null = null;
       const vesselRate = vesselRateMap.get(emp.id);
@@ -506,7 +511,7 @@ serve(async (req) => {
         if (isFullMonth) {
           // Single "Full Month" record
           const totalTons = populatedRanges.reduce((s, r) => s + r.total, 0);
-          const amount = resolvedRate !== null ? totalTons * resolvedRate : 0;
+          const amount = isDQ ? 0 : (resolvedRate !== null ? totalTons * resolvedRate : 0);
           records.push({
             employee_id: emp.id,
             program_id: program_id,
@@ -531,7 +536,7 @@ serve(async (req) => {
         } else {
           // Per-range records
           for (const rt of populatedRanges) {
-            const amount = resolvedRate !== null ? rt.total * resolvedRate : 0;
+            const amount = isDQ ? 0 : (resolvedRate !== null ? rt.total * resolvedRate : 0);
             records.push({
               employee_id: emp.id,
               program_id: program_id,

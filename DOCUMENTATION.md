@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.35 — Fix N/A recompute overwriting final_score
+> **Version:** 2.15.36 — Zero DQ incentive amount; show DQ status in report
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
