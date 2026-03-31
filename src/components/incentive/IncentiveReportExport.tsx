@@ -21,6 +21,7 @@ export function IncentiveReportExport() {
   const [month, setMonth] = useState('all');
   const [year, setYear] = useState('all');
   const [programId, setProgramId] = useState('all');
+  const [periodFilter, setPeriodFilter] = useState('all');
   const [search, setSearch] = useState('');
 
   const { data: programs } = useIncentivePrograms();
