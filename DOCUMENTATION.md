@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.37 — Merge Incentive Report & Monthly Report into single unified tab
+> **Version:** 2.15.38 — Fix stale DQ records via delete-before-upsert cleanup
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

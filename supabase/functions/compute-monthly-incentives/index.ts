@@ -567,7 +567,7 @@ serve(async (req) => {
           program_id: program_id,
           review_period,
           review_year,
-          payment_period: 'full',
+          payment_period: 'Full Month',
           pms_score: pmsScore,
           production_value: vesselAmount !== null ? vesselAmount : (productionTotalTons ?? elig?.production_value ?? null),
           incentive_amount: vesselAmount !== null ? vesselAmount : (incentiveAmount || 0),
