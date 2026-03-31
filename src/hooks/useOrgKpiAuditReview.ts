@@ -32,6 +32,12 @@ export interface OrgKpiAuditGroup {
   targetValue: number | null;
   uom: string | null;
   achievedValue: number | null;
+  dataEntryRemarks: string | null;
+  evidenceUrl: string | null;
+  evidenceUrls: any[] | null;
+  enteredByName: string | null;
+  dataSource: string | null;
+  orgValueStatus: string | null;
   employees: OrgKpiAuditEmployee[];
   pendingCount: number;
   auditedCount: number;
