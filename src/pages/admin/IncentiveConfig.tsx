@@ -27,6 +27,7 @@ import { ProgramEmployeeMapping } from '@/components/incentive/ProgramEmployeeMa
 import { EligibilityFieldsConfig } from '@/components/incentive/EligibilityFieldsConfig';
 import { ProgramTypeSelector } from '@/components/incentive/ProgramTypeSelector';
 import { ProductionTargetGrid } from '@/components/incentive/ProductionTargetGrid';
+import { ProductionRatesTab } from '@/components/incentive/ProductionRatesTab';
 import { BusinessUnitManager } from '@/components/incentive/BusinessUnitManager';
 import { AllocationRulesEditor } from '@/components/incentive/AllocationRulesEditor';
 import { VesselRateEditor } from '@/components/incentive/VesselRateEditor';
