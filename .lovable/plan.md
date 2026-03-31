@@ -1,51 +1,30 @@
 
 
-## Plan: Fix Infinite Recursion in Profiles RLS Policy
+## Plan: Fix "Unknown" Employee Names in Audit Review
 
 ### Root Cause
-The migration `20260331135141` added an RLS policy on `profiles` that queries the `kpis` table. The `kpis` table has its own RLS policies that reference `profiles`, creating a **circular dependency** → Postgres error `42P17: infinite recursion detected in policy for relation "profiles"`.
 
-This blocks ALL profile queries (including auth login flow), which is why the entire dashboard shows only skeletons.
+The profiles query in `useOrgKpiAuditReview.ts` selects `designation_id` — a column that **does not exist** on the `profiles` table. The actual column is `designation` (text). Because the query result is cast with `as any`, the PostgREST error is silently swallowed, returning no profile data → all employees show "Unknown".
+
+This is purely a code bug. **No RLS or database changes needed** — admin, auditor, and hr_pms roles already have SELECT policies on all profiles.
 
 ### Fix
 
-**Drop the problematic policy** and replace it with a **SECURITY DEFINER function** that bypasses RLS when checking the kpis table, breaking the recursion cycle.
-
-```sql
--- 1. Drop the recursive policy
-DROP POLICY IF EXISTS "Audit reviewers can view org kpi employee profiles" ON public.profiles;
-
--- 2. Create a security definer function (bypasses RLS)
-CREATE OR REPLACE FUNCTION public.is_org_kpi_audit_employee(_profile_id uuid)
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM kpis k
-    WHERE k.employee_id = _profile_id
-      AND k.is_org_level = true
-      AND k.status IN ('audit', 'management_review', 'approved')
-  )
-$$;
-
--- 3. Re-create policy using the function (no recursion)
-CREATE POLICY "Audit reviewers can view org kpi employee profiles"
-ON public.profiles FOR SELECT TO authenticated
-USING (public.is_org_kpi_audit_employee(id));
-```
+**`src/hooks/useOrgKpiAuditReview.ts`**:
+1. Change `.select('id, full_name, employee_code, department_id, designation_id')` → `.select('id, full_name, employee_code, department_id, designation')`
+2. Remove the separate `designations` table lookup — use the `designation` text field directly
+3. Remove the `as any` cast on the profiles query to surface errors properly
+4. Map `emp.designation` directly to `designationName` instead of looking up via `desigMap`
 
 ### Files Modified
 
 | File | Change |
 |------|--------|
-| DB migration | Drop recursive policy, create SECURITY DEFINER function, re-create policy using function |
-| `DOCUMENTATION.md` | v2.15.29 — fix infinite recursion |
+| `src/hooks/useOrgKpiAuditReview.ts` | Fix column name `designation_id` → `designation`; remove designations table lookup; remove `as any` |
+| `DOCUMENTATION.md` | v2.15.30 — fix Unknown names |
 
 ### Risk Assessment
-- **Regression**: This is a **critical fix** — the current state blocks all dashboard access
-- **Security**: SECURITY DEFINER function is scoped to a single boolean check on org-level KPIs at audit+ stages
-- **Data**: No schema changes
+- **Regression**: Zero — no RLS changes, no new policies. The previous dashboard crash was caused by an RLS policy on profiles referencing kpis; this fix only changes a column name in a SELECT
+- **Security**: No changes to access control; existing role-based policies already grant visibility
+- **Data**: Read-only fix, no schema changes
 
