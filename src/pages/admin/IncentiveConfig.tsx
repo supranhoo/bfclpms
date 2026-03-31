@@ -150,49 +150,8 @@ export default function IncentiveConfig() {
                     <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200" />
                   </AccordionTrigger>
 
-                  <AccordionContent className="px-4 pb-4">
-                    <Tabs value={getInnerTab(p.id)} onValueChange={v => setInnerTabFor(p.id, v)}>
-                      <TabsList className="mb-3">
-                        <TabsTrigger value="mapping">Mapping</TabsTrigger>
-                        <TabsTrigger value="slabs">Slabs</TabsTrigger>
-                        <TabsTrigger value="rules">DQ Rules</TabsTrigger>
-                        <TabsTrigger value="fields">Fields</TabsTrigger>
-                        <TabsTrigger value="sub-units">BU Sub-Units</TabsTrigger>
-                        <TabsTrigger value="allocation">Allocation</TabsTrigger>
-                        <TabsTrigger value="vessel-rates">Vessel Rates</TabsTrigger>
-                      </TabsList>
-
-                      <TabsContent value="mapping">
-                        <ProgramEmployeeMapping programId={p.id} />
-                      </TabsContent>
-
-                      <TabsContent value="slabs">
-                        <IncentiveSlabEditor
-                          programId={p.id}
-                          programType={p.program_type as 'production' | 'support'}
-                        />
-                      </TabsContent>
-
-                      <TabsContent value="rules">
-                        <DisqualificationRulesEditor programId={p.id} />
-                      </TabsContent>
-
-                      <TabsContent value="fields">
-                        <EligibilityFieldsConfig programId={p.id} />
-                      </TabsContent>
-
-                      <TabsContent value="sub-units">
-                        <BusinessUnitManager />
-                      </TabsContent>
-
-                      <TabsContent value="allocation">
-                        <AllocationRulesEditor programId={p.id} />
-                      </TabsContent>
-
-                      <TabsContent value="vessel-rates">
-                        <VesselRateEditor programId={p.id} minKraScore={p.min_kra_score} />
-                      </TabsContent>
-                    </Tabs>
+                   <AccordionContent className="px-4 pb-4">
+                    <ProgramInnerTabs program={p} />
                   </AccordionContent>
                 </AccordionItem>
               ))}
