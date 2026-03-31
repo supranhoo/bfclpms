@@ -95,6 +95,7 @@ function ProgramInnerTabs({ program }: { program: any }) {
             <TabsTrigger value="sub-units">BU Sub-Units</TabsTrigger>
             <TabsTrigger value="allocation">Allocation</TabsTrigger>
             <TabsTrigger value="vessel-rates">Vessel Rates</TabsTrigger>
+            <TabsTrigger value="production-rates">Production Rates</TabsTrigger>
             {customTabs.map((ct) => (
               <TabsTrigger key={ct.id} value={`custom-${ct.id}`}>
                 {ct.tab_label}
