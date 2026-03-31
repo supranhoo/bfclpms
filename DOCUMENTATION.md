@@ -4497,3 +4497,7 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Excel columns:** Employee Info (6), Period & Programme (3), Scores & Slabs (4), DQ Fields (3), Adjustments (4), Final (3), Analytical (5)
 - **Updated:** `IncentiveReport.tsx` — new default "Incentive Report" tab alongside existing Monthly Report and Retroactive Adjustments tabs
 - **POLICY.md §41:** Incentive report exports must include all DQ rule fields
+
+### v2.15.21 — Fix Send Reminder Error (Org KPI Data Entry)
+- **Fixed:** `OrgKpiDataEntry.tsx` — reordered error handling to check `data?.error` before SDK-level `error`, so the actual edge function error message (e.g., "Pending KPI reminder event is not enabled") is shown instead of a generic "non-2xx status code" message
+- **Root cause:** The `org_kpi_pending_reminder` event toggle already exists in Email Notification Settings but may not be enabled; the fix ensures admins see the actionable error message
