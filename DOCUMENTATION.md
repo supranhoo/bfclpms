@@ -4548,3 +4548,13 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Migration:** Added FK constraints (`employee_id → profiles(id) ON DELETE CASCADE`) to all three tables; orphan rows cleaned before constraint creation
 - **No RLS changes** — no risk of dashboard recursion issues
 - **Frontend:** Hooks unchanged; existing error display from v2.15.32 now surfaces real data instead of schema errors
+
+### v2.15.34 — Period-Based Incentive Records for Production Programs
+- Added `payment_period` column to `employee_incentive_records` with updated unique constraint
+- Edge function splits production data into period-based records (1-10, 11-20, 21-31) or Full Month
+- Frontend: Period column added to report preview, monthly table, and Excel export; "All" renamed to "Full Month"
+
+### v2.15.35 — Fix N/A Recompute Overwriting Final Score
+- **Root cause:** Admin marks management as N/A → upsert correctly sets `final_score = null` → Step 8 recompute block re-fetches submission, finds `auditor_score = 0` via fallback chain, patches `final_score` back to 0
+- **Fix:** Added `is_na` guard in recompute block — if `is_na === true`, force `final_score/final_rating` to null and skip fallback chain
+- **DB repair:** Corrective update nullified `final_score` on all records where `is_na = true` but score was non-null
