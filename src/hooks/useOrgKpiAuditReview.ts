@@ -8,6 +8,8 @@ export interface OrgKpiAuditEmployee {
   employeeId: string;
   employeeName: string;
   employeeCode: string;
+  departmentName: string;
+  designationName: string;
   kpiId: string;
   kpiStatus: string;
   selfScore: number | null;
@@ -26,6 +28,7 @@ export interface OrgKpiAuditGroup {
   categoryColor: string;
   kraName: string;
   kpiName: string;
+  criteria: string | null;
   targetValue: number | null;
   uom: string | null;
   achievedValue: number | null;
@@ -44,7 +47,7 @@ export function useOrgKpiAuditReview(reviewPeriod: string, reviewYear: number) {
         .from('kpis')
         .select(`
           id, employee_id, category_id, kra_name, kpi_name, status,
-          target_value, uom, is_org_level,
+          target_value, uom, is_org_level, criteria,
           kra_categories (id, name, color)
         `)
         .eq('is_org_level', true)
@@ -57,12 +60,21 @@ export function useOrgKpiAuditReview(reviewPeriod: string, reviewYear: number) {
       // 2. Get all employee IDs
       const employeeIds = [...new Set(orgKpis.map(k => k.employee_id))];
 
-      // 3. Batch fetch profiles
-      const profiles: Array<{ id: string; full_name: string | null; employee_code: string | null }> = [];
+      // 3. Batch fetch profiles with department and designation joins
+      const profiles: Array<{
+        id: string;
+        full_name: string | null;
+        employee_code: string | null;
+        departments: { name: string } | null;
+        designations: { name: string } | null;
+      }> = [];
       for (let i = 0; i < employeeIds.length; i += 500) {
         const batch = employeeIds.slice(i, i + 500);
-        const { data } = await supabase.from('profiles').select('id, full_name, employee_code').in('id', batch);
-        if (data) profiles.push(...data);
+        const { data } = await supabase
+          .from('profiles')
+          .select('id, full_name, employee_code, departments(name), designations(name)')
+          .in('id', batch);
+        if (data) profiles.push(...(data as any));
       }
       const profileMap = new Map(profiles.map(p => [p.id, p]));
 
@@ -110,19 +122,15 @@ export function useOrgKpiAuditReview(reviewPeriod: string, reviewYear: number) {
       for (const kpi of orgKpis) {
         const empStages = workflowMap.get(kpi.employee_id) || DEFAULT_WORKFLOW_STAGES;
 
-        // Check if this workflow has an audit stage
         if (!empStages.includes('audit')) continue;
 
-        // Get auditor-reviewable statuses
         const reviewableStatuses = resolveReviewableStatuses('auditor', empStages);
         const isAuditPending = reviewableStatuses.includes(kpi.status as string);
 
-        // Check if audited (status is past audit stage)
         const auditIdx = empStages.indexOf('audit');
         const statusIdx = empStages.indexOf(kpi.status as string);
         const isAudited = statusIdx > auditIdx;
 
-        // Only include if at or past audit stage
         if (!isAuditPending && !isAudited) continue;
 
         const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
@@ -134,6 +142,8 @@ export function useOrgKpiAuditReview(reviewPeriod: string, reviewYear: number) {
           employeeId: kpi.employee_id,
           employeeName: profile?.full_name || 'Unknown',
           employeeCode: profile?.employee_code || '',
+          departmentName: (profile?.departments as any)?.name || 'Unassigned',
+          designationName: (profile?.designations as any)?.name || '',
           kpiId: kpi.id,
           kpiStatus: kpi.status as string,
           selfScore: submission?.self_score ?? null,
@@ -153,6 +163,7 @@ export function useOrgKpiAuditReview(reviewPeriod: string, reviewYear: number) {
             categoryColor: cat?.color || '#6B7280',
             kraName: kpi.kra_name,
             kpiName: kpi.kpi_name,
+            criteria: (kpi as any).criteria || null,
             targetValue: kpi.target_value,
             uom: kpi.uom,
             achievedValue: achievedMap.get(key) ?? null,
@@ -202,10 +213,8 @@ export function useSubmitOrgKpiAuditScore() {
       approve: boolean;
       workflowStages: string[];
     }) => {
-      // Compute rating
       const auditorRating = auditorScore >= 5 ? 'blue' : auditorScore >= 4 ? 'green' : auditorScore >= 3 ? 'yellow' : 'red';
 
-      // Update review_submissions
       const { data: updateData, error: subErr } = await supabase
         .from('review_submissions')
         .update({
@@ -219,12 +228,9 @@ export function useSubmitOrgKpiAuditScore() {
       if (subErr) throw subErr;
       if (!updateData?.length) throw new Error('Unable to update submission. Permission denied.');
 
-      // Advance status
       const newStatus = approve ? resolveForwardStatus('auditor', workflowStages) : 'audit';
       if (!newStatus) throw new Error('Cannot resolve next workflow status.');
 
-      // If approving to final 'approved', sync final_score
-      const updatePayload: any = { status: newStatus };
       if (newStatus === 'approved') {
         await supabase.from('review_submissions')
           .update({ final_score: auditorScore, final_rating: auditorRating as any })
@@ -240,7 +246,6 @@ export function useSubmitOrgKpiAuditScore() {
       if (kpiErr) throw kpiErr;
       if (!kpiData?.length) throw new Error('Unable to update KPI status.');
 
-      // Audit log
       if (user?.id) {
         await supabase.from('kpi_audit_logs').insert({
           kpi_id: kpiId,

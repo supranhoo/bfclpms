@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.25 — Multi-mode production rates (employee/dept/BU/common)
+> **Version:** 2.15.27 — Org KPI Audit Review redesign (data entry style + collapsible)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
