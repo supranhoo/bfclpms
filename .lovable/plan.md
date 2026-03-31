@@ -1,61 +1,54 @@
 
 
-## Plan: Redesign Org KPI Audit Review (Data Entry Style + Collapsible)
+## Plan: Fix Org KPI Audit Review — Names, Codes, Values, Attachments, Remarks
 
-### Problem
-Current audit cards are compact and don't show enough KPI detail. User wants them to match the Org KPI Data Entry layout but **with collapsible capability** — cards can be expanded/collapsed individually.
+### Problems Identified
 
-### Changes
+1. **"Unknown" employee names / missing codes** — The profiles query returns data but RLS may block visibility for the logged-in user. The auditor role has a SELECT policy on profiles, so the issue is likely that the logged-in user doesn't have the `auditor` role, OR the `as any` cast is hiding errors. Fix: add a fallback RLS policy so audit-page users can see profiles of employees whose KPIs they're reviewing.
+2. **No achieved value visible** — The org_kpi_values query fetches `achieved_value` but only shows it as a badge. Auditor needs to see the **data entry value** (achieved), **remarks**, and **evidence/attachments** uploaded by the data entry owner.
+3. **Remarks column too narrow** — `max-w-[150px]` with truncation cuts off text. Need to widen or use a tooltip/expandable approach.
 
-**`src/components/admin/OrgKpiAuditCard.tsx`** — Redesign:
-1. Keep `Collapsible` wrapper but **default to expanded** (`defaultOpen={true}`)
-2. Redesign the trigger/header to show KPI metadata prominently (name, description, formula, scoring logic, KRA, target, UOM, status badges) — matching `OrgKpiEntryCard` style
-3. Collapsible content = employee table grouped by department, with columns: Employee, Target, Self, Manager, Auditor Score input, Remarks, Status, Action
-4. Add "Fill value" / "Fill empty" bulk input for auditor score
-5. Remove `w-full` from table, tighten padding per previous approved plan
-6. Keep bulk approve section at bottom of collapsible content
+### Database Changes
 
-**`src/hooks/useOrgKpiAuditReview.ts`** — Add fields:
-- Fetch `criteria` (description/formula) from KPI record
-- Add `departmentName`, `designationName` to `OrgKpiAuditEmployee` via profile joins
+**New RLS policy on profiles** — Allow authenticated users to view profiles of employees who have org-level KPIs at audit stage:
 
-**`src/pages/admin/OrgKpiAuditReview.tsx`** — Minor:
-- Remove category sub-headers (cards are self-descriptive with category color border)
-- Keep filters and progress bar
-
-### Visual Layout
-
-```text
-┌─ Collapsible Card (default: expanded) ──────────────────────────┐
-│ ▾ Adherence to Electrical Maintenance Budget    [◎ 2 Pending]   │
-│   Description: Measures the variance between...                  │
-│   Formula: (Actual / Budgeted) * 100                             │
-│   KRA: Adherence to Monthly Budget  Target: 90  UOM: %          │
-│ ┌───────────────────────────────────────────────────────────────┐│
-│ │ 🏢 45 MW-Elect (1 employee)                                  ││
-│ │ Employee        │Tgt│Self│Mgr│Auditor│Remark│Status│Action   ││
-│ │ Sanjeeb K. Jena │90 │4.0 │4.0│[___] │[____]│ ●    │[Approve]││
-│ └───────────────────────────────────────────────────────────────┘│
-│ ─── Bulk Approve (2 pending) ───                                 │
-└──────────────────────────────────────────────────────────────────┘
-
-┌─ Collapsed Card ────────────────────────────────────────────────┐
-│ ▸ Safety Compliance Index               [✓ All Audited]         │
-│   KRA: Safety & Environment  Target: 95  UOM: %                │
-└─────────────────────────────────────────────────────────────────┘
+```sql
+CREATE POLICY "Audit reviewers can view org kpi employee profiles"
+ON public.profiles FOR SELECT TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM kpis k
+    WHERE k.employee_id = profiles.id
+      AND k.is_org_level = true
+      AND k.status IN ('audit', 'management_review', 'approved')
+  )
+);
 ```
+
+### Hook Changes — `useOrgKpiAuditReview.ts`
+
+1. Expand `org_kpi_values` query to also fetch: `remarks`, `evidence_url`, `evidence_urls`, `entered_by`, `data_source`, `status`
+2. Add these fields to `OrgKpiAuditGroup` interface: `dataEntryRemarks`, `evidenceUrl`, `evidenceUrls`, `enteredBy`, `dataSource`, `orgValueStatus`
+3. Map these into each group from the achieved values query
+
+### UI Changes — `OrgKpiAuditCard.tsx`
+
+1. **Show data entry info in card header**: Display achieved value with data entry remarks, data source, and who entered it
+2. **Show attachments**: Render clickable links/thumbnails for `evidence_url` and `evidence_urls` (matching the pattern used in `OrgKpiEntryCard`)
+3. **Widen remarks column**: Remove `max-w-[150px]`, use `min-w-[200px]` instead, and show full text with tooltip on hover for audited rows
+4. **Employee name/code fix**: Will be resolved by the new RLS policy; also add employee_code display in a visible format
 
 ### Files Modified
 
 | File | Change |
 |------|--------|
-| `src/components/admin/OrgKpiAuditCard.tsx` | Redesign with collapsible (default open), KPI metadata, dept-grouped employees, bulk fill, compact table |
-| `src/hooks/useOrgKpiAuditReview.ts` | Add criteria, department, designation to query |
-| `src/pages/admin/OrgKpiAuditReview.tsx` | Remove category sub-headers |
-| `DOCUMENTATION.md` | v2.15.27 |
+| DB migration | Add RLS policy for audit-stage profile visibility |
+| `src/hooks/useOrgKpiAuditReview.ts` | Expand org_kpi_values query; add evidence/remarks/enteredBy to group interface |
+| `src/components/admin/OrgKpiAuditCard.tsx` | Show data entry details (achieved, remarks, attachments) in header; widen remarks column; ensure name/code visible |
+| `DOCUMENTATION.md` | v2.15.28 |
 
 ### Risk Assessment
-- **Regression**: Low — UI redesign of existing card; hook changes are additive
-- **Data**: No schema changes
-- **Performance**: One extra join for department/designation (minimal)
+- **Regression**: Zero — additive RLS policy, UI enhancements only
+- **Security**: New RLS policy is scoped to org-level KPIs at audit+ stages only
+- **Data**: No schema changes, read-only additions
 
