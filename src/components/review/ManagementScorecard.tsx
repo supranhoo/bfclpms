@@ -153,6 +153,12 @@ export function ManagementScorecard({
   const kpiIds = kpis?.map(k => k.id) || [];
   const { data: submissions } = useReviewSubmissions(kpiIds);
   const { data: queries } = useKpiQueries(kpiIds);
+  const { data: observationsMap } = useObservationsByKpis(kpiIds);
+  const observationCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    observationsMap?.forEach((obs, kpiId) => map.set(kpiId, obs.length));
+    return map;
+  }, [observationsMap]);
 
   // Fetch ALL-period submissions for tracker modal & review panel history
   const allKpiIds = useMemo(() => allKpis?.map(k => k.id) || [], [allKpis]);

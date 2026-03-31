@@ -149,6 +149,12 @@ export function AuditScorecard({
   const { data: sentBackKpiIds } = useSentBackKpis(kpiIds);
   const { data: queries } = useKpiQueries(kpiIds);
   const { data: auditKpiAssignments } = useAuditKpiAssignments(kpiIds);
+  const { data: observationsMap } = useObservationsByKpis(kpiIds);
+  const observationCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    observationsMap?.forEach((obs, kpiId) => map.set(kpiId, obs.length));
+    return map;
+  }, [observationsMap]);
 
   // Fetch ALL-period submissions for tracker modal & review panel history
   const allKpiIds = useMemo(() => allKpis?.map(k => k.id) || [], [allKpis]);
