@@ -4536,3 +4536,9 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **UI:** Added "Amount (₹)" column to `MonthlyIncentiveTable` and `IncentiveDryRunDialog`; added "Total Amount" summary card
 - **Export:** Incentive amount included in Excel export
 - **POLICY.md §44:** Updated to document computation pipeline integration
+
+### v2.15.32 — Fix Incentive Records Visibility
+- **Root cause:** `useIncentiveRecords` had no `program_id` filter — fetched all records for month/year; errors were silently swallowed showing "No records found"
+- **Hook:** Added optional `programId` parameter with query filter and error logging
+- **UI:** Pass `selectedProgram` to hook; added error state display with actual error message; improved empty state messaging
+- **RLS:** Departments already has `SELECT` for all authenticated users — no migration needed
