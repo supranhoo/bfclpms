@@ -1,31 +1,34 @@
 import { useState, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Download, CheckCircle2, DollarSign, Calculator, Loader2 } from 'lucide-react';
-import { useIncentiveRecords, useConfirmIncentiveRecords, useMarkIncentivePaid, useComputeIncentives } from '@/hooks/useIncentiveRecords';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Download, CheckCircle2, DollarSign, Calculator, Loader2, Users, ShieldAlert, Clock, IndianRupee, Search } from 'lucide-react';
+import { useIncentiveRecords, useConfirmIncentiveRecords, useMarkIncentivePaid, useComputeIncentives, useIncentiveReportData } from '@/hooks/useIncentiveRecords';
 import { useIncentivePrograms } from '@/hooks/useIncentivePrograms';
 import { useAuth } from '@/contexts/AuthContext';
 import { IncentiveDryRunDialog } from './IncentiveDryRunDialog';
-import { IncentiveStatusOverride, IncentiveStatusBadge } from './IncentiveStatusOverride';
+import { IncentiveStatusOverride } from './IncentiveStatusOverride';
 import * as XLSX from 'xlsx';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const YEARS = Array.from({ length: 5 }, (_, i) => String(2024 + i));
 
 export function MonthlyIncentiveTable() {
   const { user } = useAuth();
   const currentDate = new Date();
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[currentDate.getMonth()]);
-  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
+  const [selectedYear, setSelectedYear] = useState(String(currentDate.getFullYear()));
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [incentiveStatusFilter, setIncentiveStatusFilter] = useState<string>('all');
   const [eligibilityFilter, setEligibilityFilter] = useState<string>('all');
+  const [periodFilter, setPeriodFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedProgram, setSelectedProgram] = useState<string>('');
+  const [selectedProgram, setSelectedProgram] = useState<string>('all');
   const [dryRunResult, setDryRunResult] = useState<any>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [employeeNameMap, setEmployeeNameMap] = useState<Map<string, { name: string; code: string }>>(new Map());
@@ -33,7 +36,27 @@ export function MonthlyIncentiveTable() {
   const { data: programs = [] } = useIncentivePrograms();
   const activePrograms = (programs as any[]).filter((p: any) => p.is_active);
 
-  const { data: records = [], isLoading, isError, error } = useIncentiveRecords(selectedMonth, selectedYear, selectedProgram || undefined);
+  const isAllMode = selectedMonth === 'all' || selectedYear === 'all';
+
+  // Standard fetch for specific month+year
+  const { data: standardRecords = [], isLoading: stdLoading, isError: stdError, error: stdErrorObj } = useIncentiveRecords(
+    isAllMode ? undefined : selectedMonth,
+    isAllMode ? undefined : Number(selectedYear),
+    selectedProgram !== 'all' ? selectedProgram : undefined
+  );
+
+  // Batched fetch for "All" mode
+  const { data: batchedRecords, isLoading: batchLoading } = useIncentiveReportData({
+    month: selectedMonth,
+    year: selectedYear,
+    programId: selectedProgram,
+  });
+
+  const records = isAllMode ? (batchedRecords || []) : standardRecords;
+  const isLoading = isAllMode ? batchLoading : stdLoading;
+  const isError = !isAllMode && stdError;
+  const error = stdErrorObj;
+
   const confirmRecords = useConfirmIncentiveRecords();
   const markPaid = useMarkIncentivePaid();
   const computeIncentives = useComputeIncentives();
@@ -45,46 +68,77 @@ export function MonthlyIncentiveTable() {
       if (eligibilityFilter === 'eligible' && r.is_disqualified) return false;
       if (eligibilityFilter === 'disqualified' && !r.is_disqualified) return false;
       if (eligibilityFilter === 'prorata' && r.pro_rata_factor >= 1) return false;
+      if (periodFilter !== 'all' && r.payment_period !== periodFilter) return false;
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
         const name = r.profiles?.full_name?.toLowerCase() || '';
         const code = r.profiles?.employee_code?.toLowerCase() || '';
-        if (!name.includes(term) && !code.includes(term)) return false;
+        const dept = r.profiles?.departments?.name?.toLowerCase() || '';
+        const desig = r.profiles?.designation?.toLowerCase() || '';
+        if (!name.includes(term) && !code.includes(term) && !dept.includes(term) && !desig.includes(term)) return false;
       }
       return true;
     });
-  }, [records, statusFilter, incentiveStatusFilter, eligibilityFilter, searchTerm]);
+  }, [records, statusFilter, incentiveStatusFilter, eligibilityFilter, periodFilter, searchTerm]);
 
   const summaryStats = useMemo(() => {
-    const total = records.length;
-    const eligible = (records as any[]).filter((r: any) => !r.is_disqualified).length;
-    const disqualified = (records as any[]).filter((r: any) => r.is_disqualified).length;
-    const prorata = (records as any[]).filter((r: any) => !r.is_disqualified && r.pro_rata_factor < 1).length;
-    const avgIncentive = eligible > 0 ? (records as any[]).filter((r: any) => !r.is_disqualified).reduce((s: number, r: any) => s + (r.final_incentive_percent || 0), 0) / eligible : 0;
-    const totalAmount = (records as any[]).reduce((s: number, r: any) => s + (r.incentive_amount || 0), 0);
-    return { total, eligible, disqualified, prorata, avgIncentive, totalAmount };
-  }, [records]);
+    const total = filteredRecords.length;
+    const eligible = filteredRecords.filter((r: any) => !r.is_disqualified).length;
+    const disqualified = filteredRecords.filter((r: any) => r.is_disqualified).length;
+    const prorata = filteredRecords.filter((r: any) => !r.is_disqualified && r.pro_rata_factor < 1).length;
+    const totalAmount = filteredRecords.reduce((s: number, r: any) => s + (r.incentive_amount || 0), 0);
+    return { total, eligible, disqualified, prorata, totalAmount };
+  }, [filteredRecords]);
 
-   const handleExport = () => {
-     const exportData = filteredRecords.map((r: any) => ({
-       'Employee Code': r.profiles?.employee_code,
-       'Employee Name': r.profiles?.full_name,
-       'Department': r.profiles?.departments?.name,
-       'Period': r.payment_period === 'full' ? '' : r.payment_period,
-       'PMS Score': r.pms_score?.toFixed(2),
-       'Matched Slab': r.incentive_slabs ? `${r.incentive_slabs.min_value}-${r.incentive_slabs.max_value}` : '—',
-       'Base Incentive %': r.base_incentive_percent,
-       'DQ Reasons': r.disqualification_reasons?.join(', ') || '',
-       'LTI Penalty %': r.lti_penalty_percent,
-       'Pro-rata Factor': r.pro_rata_factor,
-       'Final Incentive %': r.final_incentive_percent,
-       'Incentive Amount': r.incentive_amount || 0,
-       'Status': r.status,
-    }));
+  const handleExport = () => {
+    if (!filteredRecords.length) return;
+    const exportData = filteredRecords.map((r: any) => {
+      const p = r.profiles;
+      const dept = p?.departments;
+      const bu = dept?.business_units;
+      const div = bu?.divisions;
+      const slab = r.incentive_slabs;
+      const prog = r.incentive_programs;
+      return {
+        'Employee Code': p?.employee_code ?? '',
+        'Employee Name': p?.full_name ?? '',
+        'Designation': p?.designation ?? '',
+        'Department': dept?.name ?? '',
+        'Business Unit': bu?.name ?? '',
+        'Division': div?.name ?? '',
+        'Month': r.review_period,
+        'Year': r.review_year,
+        'Period': r.payment_period === 'full' ? 'Full Month' : (r.payment_period || ''),
+        'Programme Name': prog?.name ?? '',
+        'PMS Score': r.pms_score ?? '',
+        'Slab Range': slab ? `${slab.min_value}–${slab.max_value}` : '',
+        'Slab Rating': slab?.rating_label ?? '',
+        'Base Incentive %': r.base_incentive_percent,
+        'Is Disqualified': r.is_disqualified ? 'Yes' : 'No',
+        'DQ Reasons': (r.disqualification_reasons || []).join(', '),
+        'LTI Penalty %': r.lti_penalty_percent,
+        'Pro-rata Factor': r.pro_rata_factor,
+        'Production Value': r.production_value ?? '',
+        'Original Score': r.original_score ?? '',
+        'Adjusted Score': r.adjusted_score ?? '',
+        'Final Incentive %': r.final_incentive_percent,
+        'Incentive Amount': r.incentive_amount || 0,
+        'Incentive Status': r.incentive_status,
+        'Record Status': r.status,
+        'Incentive Base': prog?.incentive_base ?? '',
+        'Retroactive Adjustment': r.is_retroactive_adjustment ? 'Yes' : 'No',
+        'Adjustment Source Period': r.adjustment_source_period ?? '',
+        'Computed At': r.computed_at ?? '',
+        'Confirmed By': r.confirmed_by ?? '',
+      };
+    });
     const ws = XLSX.utils.json_to_sheet(exportData);
+    ws['!cols'] = Object.keys(exportData[0]).map(() => ({ wch: 18 }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Incentive Report');
-    XLSX.writeFile(wb, `incentive_report_${selectedMonth}_${selectedYear}.xlsx`);
+    const suffix = selectedMonth !== 'all' ? `_${selectedMonth}` : '';
+    const ySuffix = selectedYear !== 'all' ? `_${selectedYear}` : '';
+    XLSX.writeFile(wb, `Incentive_Report${suffix}${ySuffix}.xlsx`);
   };
 
   const handleConfirmAll = () => {
@@ -98,18 +152,16 @@ export function MonthlyIncentiveTable() {
   };
 
   const handleCompute = async () => {
-    if (!selectedProgram) return;
+    if (selectedProgram === 'all' || isAllMode) return;
     try {
       const result = await computeIncentives.mutateAsync({
         review_period: selectedMonth,
-        review_year: selectedYear,
+        review_year: Number(selectedYear),
         program_id: selectedProgram,
         dry_run: true,
       });
       setDryRunResult(result);
       setShowPreview(true);
-
-      // Fetch employee names for dry run records
       const ids = (result as any)?.records?.map((r: any) => r.employee_id) || [];
       if (ids.length > 0) {
         const { data: profiles } = await supabase
@@ -125,11 +177,11 @@ export function MonthlyIncentiveTable() {
   };
 
   const handleConfirmCompute = async () => {
-    if (!selectedProgram) return;
+    if (selectedProgram === 'all' || isAllMode) return;
     try {
       await computeIncentives.mutateAsync({
         review_period: selectedMonth,
-        review_year: selectedYear,
+        review_year: Number(selectedYear),
         program_id: selectedProgram,
         dry_run: false,
       });
@@ -138,123 +190,177 @@ export function MonthlyIncentiveTable() {
     } catch { /* error handled by hook */ }
   };
 
+  const canCompute = selectedProgram !== 'all' && !isAllMode;
+
   return (
     <div className="space-y-4">
-      {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-6">
-        {[
-          { label: 'Total Employees', value: summaryStats.total },
-          { label: 'Eligible', value: summaryStats.eligible },
-          { label: 'Disqualified', value: summaryStats.disqualified },
-          { label: 'Pro-rata', value: summaryStats.prorata },
-          { label: 'Avg Incentive %', value: summaryStats.avgIncentive.toFixed(1) + '%' },
-          { label: 'Total Amount', value: '₹' + summaryStats.totalAmount.toLocaleString('en-IN') },
-        ].map(s => (
-          <Card key={s.label}>
-            <CardContent className="pt-4">
-              <p className="text-sm text-muted-foreground">{s.label}</p>
-              <p className="text-2xl font-bold">{s.value}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
       {/* Filters */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Monthly Incentive Report</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-3 flex-wrap items-center">
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
-              <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
-            </Select>
-            <Select value={String(selectedYear)} onValueChange={v => setSelectedYear(Number(v))}>
-              <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
-              <SelectContent>{[2024, 2025, 2026, 2027].map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
-            </Select>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[130px]"><SelectValue placeholder="Status" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="confirmed">Confirmed</SelectItem>
-                <SelectItem value="paid">Paid</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={eligibilityFilter} onValueChange={setEligibilityFilter}>
-              <SelectTrigger className="w-[140px]"><SelectValue placeholder="Eligibility" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="eligible">Eligible</SelectItem>
-                <SelectItem value="disqualified">Disqualified</SelectItem>
-                <SelectItem value="prorata">Pro-rata</SelectItem>
-              </SelectContent>
-            </Select>
-            <Input placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-[180px]" />
-            <Select value={incentiveStatusFilter} onValueChange={setIncentiveStatusFilter}>
-              <SelectTrigger className="w-[140px]"><SelectValue placeholder="Incentive Status" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Incentive</SelectItem>
-                <SelectItem value="hold">Hold</SelectItem>
-                <SelectItem value="finalised">Finalised</SelectItem>
-                <SelectItem value="forfeited">Forfeited</SelectItem>
-                <SelectItem value="released">Released</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={selectedProgram} onValueChange={setSelectedProgram}>
-              <SelectTrigger className="w-[180px]"><SelectValue placeholder="Select Program" /></SelectTrigger>
-              <SelectContent>
-                {activePrograms.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <div className="ml-auto flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleCompute} disabled={!selectedProgram || computeIncentives.isPending}>
-                {computeIncentives.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Calculator className="h-4 w-4 mr-1" />}
-                Compute
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleExport}><Download className="h-4 w-4 mr-1" /> Export</Button>
-              <Button size="sm" onClick={handleConfirmAll} disabled={confirmRecords.isPending}><CheckCircle2 className="h-4 w-4 mr-1" /> Confirm All</Button>
-              <Button size="sm" variant="secondary" onClick={handleMarkAllPaid} disabled={markPaid.isPending}><DollarSign className="h-4 w-4 mr-1" /> Mark Paid</Button>
+        <CardContent className="pt-4 pb-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-36">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Month</label>
+              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Months</SelectItem>
+                  {MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="w-28">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Year</label>
+              <Select value={selectedYear} onValueChange={setSelectedYear}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Years</SelectItem>
+                  {YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="w-44">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Programme</label>
+              <Select value={selectedProgram} onValueChange={setSelectedProgram}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Programmes</SelectItem>
+                  {activePrograms.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="w-32">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Period</label>
+              <Select value={periodFilter} onValueChange={setPeriodFilter}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Periods</SelectItem>
+                  <SelectItem value="Full Month">Full Month</SelectItem>
+                  <SelectItem value="1-10">1-10</SelectItem>
+                  <SelectItem value="11-20">11-20</SelectItem>
+                  <SelectItem value="21-31">21-31</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="w-28">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Status</label>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="confirmed">Confirmed</SelectItem>
+                  <SelectItem value="paid">Paid</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="w-32">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Eligibility</label>
+              <Select value={eligibilityFilter} onValueChange={setEligibilityFilter}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="eligible">Eligible</SelectItem>
+                  <SelectItem value="disqualified">Disqualified</SelectItem>
+                  <SelectItem value="prorata">Pro-rata</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="w-32">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Incentive Status</label>
+              <Select value={incentiveStatusFilter} onValueChange={setIncentiveStatusFilter}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="hold">Hold</SelectItem>
+                  <SelectItem value="finalised">Finalised</SelectItem>
+                  <SelectItem value="forfeited">Forfeited</SelectItem>
+                  <SelectItem value="released">Released</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1 min-w-[160px]">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Search</label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input className="pl-8" placeholder="Name, code, dept..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+              </div>
             </div>
           </div>
+          <div className="flex gap-2 mt-3 justify-end">
+            <Button variant="outline" size="sm" onClick={handleCompute} disabled={!canCompute || computeIncentives.isPending}>
+              {computeIncentives.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Calculator className="h-4 w-4 mr-1" />}
+              Compute
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExport} disabled={!filteredRecords.length}>
+              <Download className="h-4 w-4 mr-1" /> Export
+            </Button>
+            <Button size="sm" onClick={handleConfirmAll} disabled={confirmRecords.isPending || isAllMode}>
+              <CheckCircle2 className="h-4 w-4 mr-1" /> Confirm All
+            </Button>
+            <Button size="sm" variant="secondary" onClick={handleMarkAllPaid} disabled={markPaid.isPending || isAllMode}>
+              <DollarSign className="h-4 w-4 mr-1" /> Mark Paid
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
-          <div className="rounded-md border overflow-auto">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <SummaryCard icon={Users} label="Total Records" value={summaryStats.total} />
+        <SummaryCard icon={Users} label="Eligible" value={summaryStats.eligible} className="text-primary" />
+        <SummaryCard icon={ShieldAlert} label="Disqualified" value={summaryStats.disqualified} className="text-destructive" />
+        <SummaryCard icon={Clock} label="Pro-rata" value={summaryStats.prorata} className="text-accent-foreground" />
+        <SummaryCard icon={IndianRupee} label="Total Amount (₹)" value={summaryStats.totalAmount.toLocaleString('en-IN')} />
+      </div>
+
+      {/* Data Table */}
+      <Card>
+        <CardHeader className="py-3 px-4">
+          <CardTitle className="text-sm font-medium">
+            {filteredRecords.length > 50
+              ? `Showing 50 of ${filteredRecords.length} records`
+              : `${filteredRecords.length} records`}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="rounded-md border-0 overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                   <TableHead>Employee</TableHead>
-                   <TableHead>Department</TableHead>
-                   <TableHead>Period</TableHead>
-                   <TableHead>PMS Score</TableHead>
-                   <TableHead>Slab</TableHead>
-                   <TableHead>Base %</TableHead>
-                   <TableHead>DQ Reason</TableHead>
-                   <TableHead>LTI Penalty</TableHead>
-                   <TableHead>Pro-rata</TableHead>
-                   <TableHead>Final %</TableHead>
-                   <TableHead>Amount (₹)</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Incentive Status</TableHead>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Dept</TableHead>
+                  <TableHead>Month</TableHead>
+                  <TableHead>Period</TableHead>
+                  <TableHead>PMS Score</TableHead>
+                  <TableHead>Slab</TableHead>
+                  <TableHead>Base %</TableHead>
+                  <TableHead>DQ Reason</TableHead>
+                  <TableHead>LTI Penalty</TableHead>
+                  <TableHead>Pro-rata</TableHead>
+                  <TableHead>Final %</TableHead>
+                  <TableHead className="text-right">Amount (₹)</TableHead>
+                  <TableHead>DQ / Incentive Status</TableHead>
+                  <TableHead>Workflow</TableHead>
+                  <TableHead>Override</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                   <TableRow><TableCell colSpan={13} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
-                 ) : isError ? (
-                   <TableRow><TableCell colSpan={13} className="text-center py-8 text-destructive">Error loading records: {(error as Error)?.message || 'Unknown error'}</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={15} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                ) : isError ? (
+                  <TableRow><TableCell colSpan={15} className="text-center py-8 text-destructive">Error: {(error as Error)?.message || 'Unknown error'}</TableCell></TableRow>
                 ) : filteredRecords.length === 0 ? (
-                  <TableRow><TableCell colSpan={13} className="text-center py-8 text-muted-foreground">{selectedProgram ? 'No records found for this program/period. Run incentive computation first.' : 'Select a program to view records.'}</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={15} className="text-center py-8 text-muted-foreground">No records found. Adjust filters or compute incentives first.</TableCell></TableRow>
                 ) : (
-                  filteredRecords.map((r: any) => (
-                    <TableRow key={r.id}>
+                  filteredRecords.slice(0, 50).map((r: any) => (
+                    <TableRow key={r.id} className={r.is_disqualified ? 'bg-destructive/5' : ''}>
                       <TableCell>
                         <div className="text-sm font-medium">{r.profiles?.full_name}</div>
                         <div className="text-xs text-muted-foreground">{r.profiles?.employee_code}</div>
                       </TableCell>
-                       <TableCell className="text-sm">{r.profiles?.departments?.name || '—'}</TableCell>
-                       <TableCell className="text-xs">{r.payment_period === 'full' ? '—' : r.payment_period}</TableCell>
+                      <TableCell className="text-sm">{r.profiles?.departments?.name || '—'}</TableCell>
+                      <TableCell className="text-xs">{r.review_period}</TableCell>
+                      <TableCell className="text-xs">{r.payment_period === 'full' ? 'Full Month' : (r.payment_period || '—')}</TableCell>
                       <TableCell>{r.pms_score?.toFixed(2) || '—'}</TableCell>
                       <TableCell>
                         {r.incentive_slabs ? (
@@ -264,7 +370,16 @@ export function MonthlyIncentiveTable() {
                       <TableCell>{r.base_incentive_percent}%</TableCell>
                       <TableCell>
                         {r.is_disqualified ? (
-                          <Badge variant="destructive" className="text-xs">{r.disqualification_reasons?.[0] || 'DQ'}</Badge>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <Badge variant="destructive" className="text-xs">{r.disqualification_reasons?.[0] || 'DQ'}</Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs max-w-[200px]">{(r.disqualification_reasons || []).join(', ') || 'Disqualified'}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         ) : '—'}
                       </TableCell>
                       <TableCell>{r.lti_penalty_percent > 0 ? `${r.lti_penalty_percent}%` : '—'}</TableCell>
@@ -274,11 +389,29 @@ export function MonthlyIncentiveTable() {
                           {r.final_incentive_percent}%
                         </Badge>
                       </TableCell>
-                      <TableCell className="font-medium">
+                      <TableCell className="text-right font-medium">
                         {(r.incentive_amount || 0) > 0 ? `₹${Number(r.incentive_amount).toLocaleString('en-IN')}` : '—'}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={r.status === 'paid' ? 'default' : r.status === 'confirmed' ? 'secondary' : 'outline'}>
+                        {r.is_disqualified ? (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <Badge variant="destructive" className="text-xs">Disqualified</Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs max-w-[200px]">{(r.disqualification_reasons || []).join(', ') || 'Disqualified'}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        ) : (
+                          <Badge variant={r.incentive_status === 'finalised' ? 'default' : 'outline'} className="text-xs capitalize">
+                            {r.incentive_status || 'hold'}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={r.status === 'paid' ? 'default' : r.status === 'confirmed' ? 'secondary' : 'outline'} className="text-xs">
                           {r.status}
                         </Badge>
                       </TableCell>
@@ -303,5 +436,19 @@ export function MonthlyIncentiveTable() {
         employeeNames={employeeNameMap}
       />
     </div>
+  );
+}
+
+function SummaryCard({ icon: Icon, label, value, className }: { icon: any; label: string; value: string | number; className?: string }) {
+  return (
+    <Card>
+      <CardContent className="flex items-center gap-3 py-3 px-4">
+        <Icon className={`h-5 w-5 text-muted-foreground ${className || ''}`} />
+        <div>
+          <p className="text-xs text-muted-foreground">{label}</p>
+          <p className={`text-lg font-semibold ${className || ''}`}>{value}</p>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
