@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 1.41.0 — §40: query_raised notifications must originate solely from the DB trigger (single source)
+> **Version:** 1.42.0 — §41: Incentive report exports must include all DQ rule fields
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
