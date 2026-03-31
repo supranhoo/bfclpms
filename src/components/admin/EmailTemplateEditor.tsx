@@ -430,6 +430,24 @@ Kindly check your KPIs for more details.`,
     color: '#f97316',
     emoji: '⚡',
   },
+  {
+    key: 'monthly_review_reminder',
+    label: 'Monthly Review Reminder',
+    description: 'Sent on alternate dates (1st, 3rd, 5th, 7th, 9th) of each month to remind employees to complete self-review & team KRA review',
+    subject: '[{{company_name}}] Reminder: Complete Your {{review_period}} {{review_year}} Performance Review',
+    bodyTemplate: `Dear {{recipient_name}},
+
+This is a reminder to complete your performance review for {{review_period}} {{review_year}}.
+
+Please log in to the PMS portal and submit your self-review at the earliest.
+
+If you have already submitted, kindly disregard this reminder.
+
+Best regards,
+{{company_name}} HR Team`,
+    color: '#3b82f6',
+    emoji: '📋',
+  },
 ];
 
 const PLACEHOLDERS = [
