@@ -1,92 +1,83 @@
 
 
-## Plan: Daily Achievement Grid with Per-Ton Rate & Date Range Filter
+## Plan: Multi-Mode Production Rates (Employee / Department / BU / Common)
 
-### Overview
-Build the production daily entry system for programs like "Metal Sizing" — auto-populates mapped employees (no BU dropdown), with day-wise achievement entry for a selected month/year, per-ton rates, and a **date range toggle** (1-10, 11-20, 21-31, All).
+### Problem
+Currently, production rates can only be set per individual employee. The user wants flexibility to assign rates at 4 levels:
+1. **Employee-wise** — current behavior, per-employee rate
+2. **Department-wise** — one rate applies to all employees in a department
+3. **BU-wise** — one rate applies to all employees in a business unit
+4. **Common** — single rate for all mapped employees in the program
 
-### Database Changes
+### Database Change
 
-**Table 1: `incentive_production_rates`**
+Add `rate_type` and `entity_id` columns to `incentive_production_rates`. Make `employee_id` nullable (only used for employee-wise). Add a new column for rate assignment scope.
+
 ```sql
-CREATE TABLE public.incentive_production_rates (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  program_id UUID NOT NULL REFERENCES incentive_programs(id) ON DELETE CASCADE,
-  employee_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  rate_per_ton NUMERIC NOT NULL DEFAULT 0,
-  remarks TEXT,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(program_id, employee_id)
-);
--- RLS: authenticated full access
-```
+ALTER TABLE public.incentive_production_rates
+  ADD COLUMN rate_type TEXT NOT NULL DEFAULT 'employee'
+    CHECK (rate_type IN ('employee', 'department', 'bu', 'common')),
+  ADD COLUMN entity_id UUID; -- department_id or bu_id depending on rate_type
 
-**Table 2: `production_daily_entries`**
-```sql
-CREATE TABLE public.production_daily_entries (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  program_id UUID NOT NULL REFERENCES incentive_programs(id) ON DELETE CASCADE,
-  employee_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  month TEXT NOT NULL,
-  year INT NOT NULL,
-  daily_values JSONB NOT NULL DEFAULT '{}',
-  -- e.g. {"1": 10, "2": 15, "31": 12}
-  updated_by UUID REFERENCES profiles(id),
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(program_id, employee_id, month, year)
-);
--- RLS: authenticated full access
+ALTER TABLE public.incentive_production_rates
+  ALTER COLUMN employee_id DROP NOT NULL;
+
+-- Drop old unique constraint, add new one
+ALTER TABLE public.incentive_production_rates
+  DROP CONSTRAINT IF EXISTS incentive_production_rates_program_id_employee_id_key;
+
+ALTER TABLE public.incentive_production_rates
+  ADD CONSTRAINT incentive_production_rates_unique_rate
+    UNIQUE (program_id, rate_type, employee_id, entity_id);
 ```
 
 ### UI Layout
 
 ```text
-Production Data — Metal Sizing
-┌────────────────────────────────────────────────────────────────────────┐
-│ Month: [March ▼]  Year: [2026 ▼]  Dates: [All] [1-10] [11-20] [21-31]│
-├────────────────────────────────────────────────────────────────────────┤
-│ Code │ Name       │ Desig  │ Dept   │ Rate/Ton │ 1 │ 2 │...│ 31│Total│ Amt │
-│ ─────┼────────────┼────────┼────────┼──────────┼───┼───┼───┼───┼─────┼─────│
-│ E001 │ Jaspal     │ Opr    │ Sizing │ ₹500     │[_]│[_]│   │[_]│ 120 │₹60K │
-│ E002 │ Ravi       │ Opr    │ Sizing │ ₹450     │[_]│[_]│   │[_]│  98 │₹44K │
-│                                                     Grand Total: ₹1.04L    │
-│                                                              [Save All]    │
-└────────────────────────────────────────────────────────────────────────┘
+Production Rates (Per Ton)
+┌─────────────────────────────────────────────────────────────────┐
+│ Rate Type: (●) Employee  ( ) Department  ( ) BU  ( ) Common    │
+│                                                                 │
+│ [+ Add Rate]                                                    │
+├─────────────────────────────────────────────────────────────────┤
+│ When "Employee":                                                │
+│   Select Employee ▼  |  Rate  |  Remarks  |  [Add]              │
+│                                                                 │
+│ When "Department":                                              │
+│   Select Department ▼  |  Rate  |  Remarks  |  [Add]            │
+│                                                                 │
+│ When "BU":                                                      │
+│   Select BU ▼  |  Rate  |  Remarks  |  [Add]                   │
+│                                                                 │
+│ When "Common":                                                  │
+│   Rate  |  Remarks  |  [Add]  (applies to ALL mapped employees) │
+├─────────────────────────────────────────────────────────────────┤
+│ Table shows:                                                    │
+│ Type │ Applies To      │ Rate/Ton │ Remarks │ Actions           │
+│ Emp  │ Jaspal Singh    │ ₹500     │ ...     │ Edit | Delete     │
+│ Dept │ Sizing Dept     │ ₹450     │ ...     │ Edit | Delete     │
+│ BU   │ Manufacturing   │ ₹400     │ ...     │ Edit | Delete     │
+│ Com  │ All Employees   │ ₹350     │ ...     │ Edit | Delete     │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-- **Date range toggle**: ToggleGroup with 4 options — `All`, `1-10`, `11-20`, `21-31`. Only visible date columns are shown; Total/Amount always reflect ALL days regardless of filter.
-- Sticky left columns (Code, Name, Desig, Dept, Rate/Ton) with horizontal scroll for date columns.
-- Days beyond month length are hidden (e.g., Feb shows 1-28/29).
+### Rate Resolution in Daily Grid
 
-### Detection Logic Update (`UnifiedProductionDataTab`)
-
-```text
-1. Has vessel rates → VesselDataEntryGrid (existing)
-2. Has production rates → ProductionDailyGrid (NEW)
-3. Neither → ProductionTargetGrid (existing slab-based)
-```
-
-### Programme Config: Production Rates Tab
-
-Add a **"Production Rates"** core tab inside each program (alongside Vessel Rates) — a simple per-employee grid to set `rate_per_ton`. Employees come from programme mappings.
+When `ProductionDailyGrid` renders, it resolves each employee's effective rate using **priority order**: Employee > Department > BU > Common. The first match wins.
 
 ### Code Changes
 
 | File | Change |
 |------|--------|
-| DB migration | Create `incentive_production_rates` + `production_daily_entries` |
-| `src/hooks/useProductionDailyEntries.ts` | New — hooks for rates CRUD + daily entries fetch/upsert |
-| `src/components/incentive/ProductionDailyGrid.tsx` | New — daily grid with date range toggle, rate display, totals |
-| `src/components/incentive/ProductionRatesTab.tsx` | New — per-employee rate config in programme settings |
-| `src/components/incentive/UnifiedProductionDataTab.tsx` | Add production rate detection; render `ProductionDailyGrid` |
-| `src/pages/admin/IncentiveConfig.tsx` | Add "Production Rates" tab in `ProgramInnerTabs` |
-| `DOCUMENTATION.md` | v2.15.24 |
-| `POLICY.md` | §44 — Production daily entry governance |
+| DB migration | Add `rate_type`, `entity_id` columns; make `employee_id` nullable; update unique constraint |
+| `src/components/incentive/ProductionRatesTab.tsx` | Add rate type radio/toggle, dynamic entity selector (employee/dept/BU/none), update table columns |
+| `src/hooks/useProductionDailyEntries.ts` | Update upsert to include `rate_type`/`entity_id`; update query joins for dept/BU names; add rate resolution helper |
+| `src/components/incentive/ProductionDailyGrid.tsx` | Resolve effective rate per employee using priority cascade (employee > dept > BU > common) |
+| `DOCUMENTATION.md` | v2.15.25 |
+| `POLICY.md` | Update §44 with multi-mode rate assignment |
 
 ### Risk Assessment
-- **Regression**: Zero — additive tables and components
-- **Performance**: JSONB daily values = 1 row per employee/month; date range filter is purely UI-side
-- **Data**: No existing schema modifications
+- **Regression**: Low — existing employee-wise rates will have `rate_type='employee'` by default
+- **Data**: Backward-compatible — default value ensures existing rows work unchanged
+- **Performance**: Rate resolution is client-side over a small dataset (rates per program)
 
