@@ -428,6 +428,11 @@ serve(async (req) => {
 
       const finalPercent = isDQ ? 0 : basePercent * (1 - ltiPenalty / 100) * proRata;
 
+      // Zero out production incentive amount when disqualified
+      if (isDQ && program.program_type === 'production') {
+        incentiveAmount = 0;
+      }
+
       // Vessel-based incentive calculation
       let vesselAmount: number | null = null;
       const vesselRate = vesselRateMap.get(emp.id);

@@ -218,12 +218,13 @@ export function IncentiveReportExport() {
                    <TableHead>Programme</TableHead>
                    <TableHead className="text-right">Final %</TableHead>
                    <TableHead className="text-right">Amount (₹)</TableHead>
-                   <TableHead>Status</TableHead>
+                   <TableHead>DQ / Incentive Status</TableHead>
+                   <TableHead>Workflow</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.slice(0, 50).map((r: any) => (
-                  <TableRow key={r.id}>
+                  <TableRow key={r.id} className={r.is_disqualified ? 'bg-destructive/5' : ''}>
                     <TableCell className="font-mono text-xs">{r.profiles?.employee_code}</TableCell>
                     <TableCell>{r.profiles?.full_name}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{r.profiles?.designation}</TableCell>
@@ -234,6 +235,24 @@ export function IncentiveReportExport() {
                      <TableCell className="text-xs">{r.incentive_programs?.name}</TableCell>
                     <TableCell className="text-right font-medium">{r.final_incentive_percent}%</TableCell>
                     <TableCell className="text-right font-medium">₹{(r.incentive_amount || 0).toLocaleString('en-IN')}</TableCell>
+                    <TableCell>
+                      {r.is_disqualified ? (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <Badge variant="destructive" className="text-xs">Disqualified</Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs max-w-[200px]">{(r.disqualification_reasons || []).join(', ') || 'Disqualified'}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        <Badge variant={r.incentive_status === 'finalised' ? 'default' : 'outline'} className="text-xs capitalize">
+                          {r.incentive_status || 'hold'}
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={statusColor(r.status)} className="text-xs">{r.status}</Badge>
                     </TableCell>
