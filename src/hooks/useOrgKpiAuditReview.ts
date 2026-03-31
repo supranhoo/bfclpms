@@ -173,6 +173,7 @@ export function useOrgKpiAuditReview(reviewPeriod: string, reviewYear: number) {
         };
 
         if (!groupMap.has(key)) {
+          const orgVal = orgValueMap.get(key);
           groupMap.set(key, {
             categoryId: kpi.category_id,
             categoryName: cat?.name || 'Unknown',
@@ -182,7 +183,13 @@ export function useOrgKpiAuditReview(reviewPeriod: string, reviewYear: number) {
             criteria: (kpi as any).criteria || null,
             targetValue: kpi.target_value,
             uom: kpi.uom,
-            achievedValue: achievedMap.get(key) ?? null,
+            achievedValue: orgVal?.achieved_value ?? null,
+            dataEntryRemarks: orgVal?.remarks ?? null,
+            evidenceUrl: orgVal?.evidence_url ?? null,
+            evidenceUrls: Array.isArray(orgVal?.evidence_urls) ? orgVal.evidence_urls : null,
+            enteredByName: (orgVal?.entered_by_profile as any)?.full_name ?? null,
+            dataSource: orgVal?.data_source ?? null,
+            orgValueStatus: orgVal?.status ?? null,
             employees: [],
             pendingCount: 0,
             auditedCount: 0,
