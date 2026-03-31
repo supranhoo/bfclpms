@@ -189,13 +189,13 @@ export function IncentiveReportExport() {
                   <TableHead>Code</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Designation</TableHead>
-                  <TableHead>Dept</TableHead>
-                  <TableHead>BU</TableHead>
-                  <TableHead>Month</TableHead>
-                  <TableHead>Year</TableHead>
-                  <TableHead>Programme</TableHead>
-                  <TableHead className="text-right">Final %</TableHead>
-                  <TableHead>Status</TableHead>
+                   <TableHead>Dept</TableHead>
+                   <TableHead>Month</TableHead>
+                   <TableHead>Year</TableHead>
+                   <TableHead>Programme</TableHead>
+                   <TableHead className="text-right">Final %</TableHead>
+                   <TableHead className="text-right">Amount (₹)</TableHead>
+                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
