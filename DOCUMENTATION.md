@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.22 — Org KPI Audit Review page for auditor-level org KPI approval
+> **Version:** 2.15.24 — Daily achievement grid with per-ton rate & date range filter
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
