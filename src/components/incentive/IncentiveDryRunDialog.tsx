@@ -79,6 +79,7 @@ export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, i
                 <TableHead>LTI Penalty</TableHead>
                 <TableHead>Pro-rata</TableHead>
                 <TableHead>Final %</TableHead>
+                <TableHead>Amount (₹)</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
