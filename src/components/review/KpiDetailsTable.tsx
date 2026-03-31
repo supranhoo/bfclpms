@@ -597,6 +597,14 @@ export function KpiDetailsTable({
                         currentAssignment={auditKpiAssignments?.get(kpi.id) || null}
                       />
                     )}
+                    {(() => {
+                      const obsCount = observationCounts?.get(kpi.id) || 0;
+                      return obsCount > 0 ? (
+                        <span className="ml-1 inline-flex items-center gap-0.5 text-xs text-amber-600 dark:text-amber-400">
+                          <Eye className="h-3 w-3" />{obsCount}
+                        </span>
+                      ) : null;
+                    })()}
                   </div>
                 </TableCell>
                 
