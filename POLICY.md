@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 1.39.0 — §38: Observation counts visible on all dashboard KPI rows
+> **Version:** 1.40.0 — §39: Notification messages must use first-line-only KPI names
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

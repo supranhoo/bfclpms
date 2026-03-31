@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.15 — Observation counts visible on all dashboard KPI rows
+> **Version:** 2.15.16 — Query notifications use first-line KPI names and show query reason
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
