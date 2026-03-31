@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.33 — Add missing FK constraints for incentive tables
+> **Version:** 2.15.34 — Period-based incentive records for production programs
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
