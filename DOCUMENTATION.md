@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.32 — Fix incentive records visibility (programId filter + error display)
+> **Version:** 2.15.33 — Add missing FK constraints for incentive tables
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
