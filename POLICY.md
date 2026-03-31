@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 1.49.0 — §44: Recomputation cleanup (delete-before-upsert)
+> **Version:** 1.50.0 — §44: DQ rules must be configured per program
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
