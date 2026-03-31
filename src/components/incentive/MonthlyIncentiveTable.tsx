@@ -28,6 +28,7 @@ export function MonthlyIncentiveTable() {
   const [selectedProgram, setSelectedProgram] = useState<string>('');
   const [dryRunResult, setDryRunResult] = useState<any>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [employeeNameMap, setEmployeeNameMap] = useState<Map<string, { name: string; code: string }>>(new Map());
 
   const { data: programs = [] } = useIncentivePrograms();
   const activePrograms = (programs as any[]).filter((p: any) => p.is_active);
