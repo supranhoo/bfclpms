@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.34 — Period-based incentive records for production programs
+> **Version:** 2.15.35 — Fix N/A recompute overwriting final_score
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
