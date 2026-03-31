@@ -58,6 +58,103 @@ function ProgramSummaryBadges({ programId }: { programId: string }) {
   );
 }
 
+/* ── Inner tabs for each program (core + dynamic custom tabs) ── */
+function ProgramInnerTabs({ program }: { program: any }) {
+  const p = program;
+  const { data: customTabs = [] } = useCustomTabs(p.id);
+  const upsertTab = useUpsertCustomTab();
+  const deleteTab = useDeleteCustomTab();
+
+  const [activeTab, setActiveTab] = useState('mapping');
+  const [showTabManager, setShowTabManager] = useState(false);
+  const [editingTab, setEditingTab] = useState<any>(null);
+
+  const handleSaveTab = (tabData: any) => {
+    upsertTab.mutate(
+      { ...tabData, program_id: p.id },
+      { onSuccess: () => { setShowTabManager(false); setEditingTab(null); } }
+    );
+  };
+
+  const handleDeleteTab = (tab: any) => {
+    if (!confirm(`Delete tab "${tab.tab_label}"? All data in this tab will be lost.`)) return;
+    deleteTab.mutate({ id: tab.id, programId: p.id });
+    if (activeTab === `custom-${tab.id}`) setActiveTab('mapping');
+  };
+
+  return (
+    <>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <div className="flex items-center gap-2 mb-3">
+          <TabsList className="flex-wrap">
+            <TabsTrigger value="mapping">Mapping</TabsTrigger>
+            <TabsTrigger value="slabs">Slabs</TabsTrigger>
+            <TabsTrigger value="rules">DQ Rules</TabsTrigger>
+            <TabsTrigger value="fields">Fields</TabsTrigger>
+            <TabsTrigger value="sub-units">BU Sub-Units</TabsTrigger>
+            <TabsTrigger value="allocation">Allocation</TabsTrigger>
+            <TabsTrigger value="vessel-rates">Vessel Rates</TabsTrigger>
+            {customTabs.map((ct) => (
+              <TabsTrigger key={ct.id} value={`custom-${ct.id}`}>
+                {ct.tab_label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => { setEditingTab(null); setShowTabManager(true); }}
+            className="shrink-0"
+          >
+            <Plus className="h-3.5 w-3.5 mr-1" /> Add Tab
+          </Button>
+        </div>
+
+        <TabsContent value="mapping">
+          <ProgramEmployeeMapping programId={p.id} />
+        </TabsContent>
+        <TabsContent value="slabs">
+          <IncentiveSlabEditor programId={p.id} programType={p.program_type as 'production' | 'support'} />
+        </TabsContent>
+        <TabsContent value="rules">
+          <DisqualificationRulesEditor programId={p.id} />
+        </TabsContent>
+        <TabsContent value="fields">
+          <EligibilityFieldsConfig programId={p.id} />
+        </TabsContent>
+        <TabsContent value="sub-units">
+          <BusinessUnitManager />
+        </TabsContent>
+        <TabsContent value="allocation">
+          <AllocationRulesEditor programId={p.id} />
+        </TabsContent>
+        <TabsContent value="vessel-rates">
+          <VesselRateEditor programId={p.id} minKraScore={p.min_kra_score} />
+        </TabsContent>
+
+        {customTabs.map((ct) => (
+          <TabsContent key={ct.id} value={`custom-${ct.id}`}>
+            <CustomTabDataGrid
+              tab={ct}
+              programId={p.id}
+              onEditTab={() => { setEditingTab(ct); setShowTabManager(true); }}
+              onDeleteTab={() => handleDeleteTab(ct)}
+            />
+          </TabsContent>
+        ))}
+      </Tabs>
+
+      <CustomTabManager
+        open={showTabManager}
+        onOpenChange={setShowTabManager}
+        onSave={handleSaveTab}
+        editingTab={editingTab}
+        isPending={upsertTab.isPending}
+      />
+    </>
+  );
+}
+
 export default function IncentiveConfig() {
   const { data: programs = [], isLoading } = useIncentivePrograms();
   const { data: programTypes = [] } = useIncentiveProgramTypes();
@@ -68,7 +165,6 @@ export default function IncentiveConfig() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newProgram, setNewProgram] = useState({ name: '', program_type: 'support', description: '' });
   const [editProgram, setEditProgram] = useState<any>(null);
-  const [innerTab, setInnerTab] = useState<Record<string, string>>({});
 
   const handleCreate = () => {
     createProgram.mutate(newProgram, {
@@ -78,9 +174,6 @@ export default function IncentiveConfig() {
       },
     });
   };
-
-  const getInnerTab = (id: string) => innerTab[id] || 'mapping';
-  const setInnerTabFor = (id: string, tab: string) => setInnerTab(prev => ({ ...prev, [id]: tab }));
 
   return (
     <div className="space-y-6">
