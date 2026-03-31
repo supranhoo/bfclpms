@@ -772,3 +772,15 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Rationale:** Incomplete incentive reports risk payroll errors and compliance gaps. DQ data is critical for audit trails and financial reconciliation.
 
 **Invariant:** The `IncentiveReportExport` component's Excel export must produce at least 28 columns covering Employee Info, Period, Programme, Scores, DQ Fields, Adjustments, Final, and Analytical data.
+
+---
+
+### §42: Dynamic Program Configuration Tabs
+
+**Rule:** Incentive program configuration tabs must be database-driven via `incentive_program_custom_tabs`. No new hardcoded tabs shall be added to `IncentiveConfig.tsx`. All new per-employee data entry needs (vessel rates, production targets, custom metrics) must use the dynamic custom tab system.
+
+**Core Tabs (immutable):** Mapping, Slabs, DQ Rules, Fields, BU Sub-Units, Allocation, Vessel Rates — these remain hardcoded because they have dedicated business logic components.
+
+**Custom Tabs:** Admin-configurable via the `[+ Add Tab]` button. Each custom tab stores its field schema in JSONB (`fields` column) and per-employee data in `incentive_custom_tab_data.field_values` JSONB.
+
+**Invariant:** The `ProgramInnerTabs` component must always render all active custom tabs from the database after the core tabs.
