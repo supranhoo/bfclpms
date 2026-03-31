@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronRight, Check, CheckCheck, Users, AlertCircle, Target, Building2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Check, CheckCheck, Users, AlertCircle, Target, Building2, FileText, Paperclip, User } from 'lucide-react';
 import { OrgKpiAuditGroup, OrgKpiAuditEmployee } from '@/hooks/useOrgKpiAuditReview';
+import { openStorageFile } from '@/lib/storageDownload';
 
 interface OrgKpiAuditCardProps {
   group: OrgKpiAuditGroup;
@@ -161,6 +162,57 @@ export function OrgKpiAuditCard({ group, onSubmitScore, onBulkApprove, isSubmitt
                       {group.categoryName}
                     </Badge>
                   </div>
+                  {/* Data entry details */}
+                  {(group.dataEntryRemarks || group.enteredByName || group.dataSource || group.evidenceUrl || group.evidenceUrls?.length) && (
+                    <div className="mt-2 p-2 rounded bg-muted/40 border border-border/50 space-y-1">
+                      <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+                        {group.enteredByName && (
+                          <span className="flex items-center gap-1">
+                            <User className="h-3 w-3" />
+                            <span className="font-medium">Entered by:</span> {group.enteredByName}
+                          </span>
+                        )}
+                        {group.dataSource && (
+                          <span>
+                            <span className="font-medium">Source:</span> {group.dataSource}
+                          </span>
+                        )}
+                      </div>
+                      {group.dataEntryRemarks && (
+                        <p className="text-xs text-muted-foreground">
+                          <span className="font-medium">Remarks:</span> {group.dataEntryRemarks}
+                        </p>
+                      )}
+                      {/* Attachments */}
+                      {(() => {
+                        const urls: string[] = [];
+                        if (group.evidenceUrls?.length) {
+                          urls.push(...(group.evidenceUrls as string[]));
+                        } else if (group.evidenceUrl) {
+                          urls.push(group.evidenceUrl);
+                        }
+                        if (urls.length === 0) return null;
+                        return (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Paperclip className="h-3 w-3 text-muted-foreground shrink-0" />
+                            {urls.map((url, i) => {
+                              const filename = url.split('/').pop() || `File ${i + 1}`;
+                              return (
+                                <button
+                                  key={i}
+                                  className="text-xs text-primary hover:underline flex items-center gap-0.5"
+                                  onClick={(e) => { e.stopPropagation(); openStorageFile(url); }}
+                                >
+                                  <FileText className="h-3 w-3" />
+                                  {filename.length > 25 ? filename.slice(0, 22) + '...' : filename}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -230,7 +282,7 @@ export function OrgKpiAuditCard({ group, onSubmitScore, onBulkApprove, isSubmitt
                     <th className="text-center py-1.5 px-0.5 font-medium">Self</th>
                     <th className="text-center py-1.5 px-0.5 font-medium">Mgr</th>
                     <th className="text-center py-1.5 px-0.5 font-medium">Auditor</th>
-                    <th className="text-left py-1.5 px-1.5 font-medium max-w-[150px]">Remarks</th>
+                    <th className="text-left py-1.5 px-1.5 font-medium min-w-[200px]">Remarks</th>
                     <th className="text-center py-1.5 px-0.5 font-medium">Status</th>
                     <th className="text-center py-1.5 px-0.5 font-medium">Action</th>
                   </tr>
@@ -340,13 +392,13 @@ function DepartmentGroup({
       </tr>
       {employees.map(emp => (
         <tr key={emp.kpiId} className="border-b last:border-0 hover:bg-muted/20">
-          <td className="py-1.5 px-1.5 max-w-[140px]">
-            <div className="truncate text-sm">{emp.employeeName}</div>
+          <td className="py-1.5 px-1.5 max-w-[160px]">
+            <div className="truncate text-sm font-medium">{emp.employeeName}</div>
             {emp.designationName && (
               <div className="text-[10px] text-muted-foreground truncate">{emp.designationName}</div>
             )}
           </td>
-          <td className="py-1.5 px-1.5 text-muted-foreground text-xs">{emp.employeeCode}</td>
+          <td className="py-1.5 px-1.5 text-muted-foreground text-xs font-mono">{emp.employeeCode || '-'}</td>
           <td className="py-1.5 px-0.5 text-center text-xs">{emp.selfScore?.toFixed(1) ?? '-'}</td>
           <td className="py-1.5 px-0.5 text-center text-xs">{emp.managerScore?.toFixed(1) ?? '-'}</td>
           <td className="py-1.5 px-0.5 text-center">
@@ -366,7 +418,7 @@ function DepartmentGroup({
               <span className="font-medium text-xs">{emp.auditorScore?.toFixed(1) ?? '-'}</span>
             )}
           </td>
-          <td className="py-1.5 px-1.5 max-w-[150px]">
+          <td className="py-1.5 px-1.5 min-w-[200px]">
             {emp.isAuditPending ? (
               <Input
                 className="h-7 text-xs"
@@ -376,7 +428,14 @@ function DepartmentGroup({
                 disabled={isSubmitting}
               />
             ) : (
-              <span className="text-xs text-muted-foreground truncate block">{emp.auditorRemarks || '-'}</span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-xs text-muted-foreground line-clamp-2 block">{emp.auditorRemarks || '-'}</span>
+                </TooltipTrigger>
+                {emp.auditorRemarks && (
+                  <TooltipContent className="max-w-xs">{emp.auditorRemarks}</TooltipContent>
+                )}
+              </Tooltip>
             )}
           </td>
           <td className="py-1.5 px-0.5 text-center">

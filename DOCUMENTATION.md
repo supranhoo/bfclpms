@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.27 — Org KPI Audit Review redesign (data entry style + collapsible)
+> **Version:** 2.15.28 — Org KPI Audit Review: fix names/codes, show data entry values/attachments, widen remarks
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

@@ -32,6 +32,12 @@ export interface OrgKpiAuditGroup {
   targetValue: number | null;
   uom: string | null;
   achievedValue: number | null;
+  dataEntryRemarks: string | null;
+  evidenceUrl: string | null;
+  evidenceUrls: any[] | null;
+  enteredByName: string | null;
+  dataSource: string | null;
+  orgValueStatus: string | null;
   employees: OrgKpiAuditEmployee[];
   pendingCount: number;
   auditedCount: number;
@@ -114,16 +120,16 @@ export function useOrgKpiAuditReview(reviewPeriod: string, reviewYear: number) {
         }
       }
 
-      // 6. Fetch org KPI achieved values
+      // 6. Fetch org KPI achieved values with data entry details
       const { data: orgValues } = await supabase
         .from('org_kpi_values')
-        .select('category_id, kra_name, kpi_name, achieved_value')
+        .select('category_id, kra_name, kpi_name, achieved_value, remarks, evidence_url, evidence_urls, entered_by, data_source, status, entered_by_profile:profiles!org_kpi_values_entered_by_fkey(full_name)')
         .eq('review_period', reviewPeriod)
         .eq('review_year', reviewYear);
 
-      const achievedMap = new Map<string, number | null>();
+      const orgValueMap = new Map<string, any>();
       orgValues?.forEach(v => {
-        achievedMap.set(`${v.category_id}||${v.kra_name}||${v.kpi_name}`, v.achieved_value);
+        orgValueMap.set(`${v.category_id}||${v.kra_name}||${v.kpi_name}`, v);
       });
 
       // 7. Group KPIs by org KPI definition and filter for audit-stage
@@ -167,6 +173,7 @@ export function useOrgKpiAuditReview(reviewPeriod: string, reviewYear: number) {
         };
 
         if (!groupMap.has(key)) {
+          const orgVal = orgValueMap.get(key);
           groupMap.set(key, {
             categoryId: kpi.category_id,
             categoryName: cat?.name || 'Unknown',
@@ -176,7 +183,13 @@ export function useOrgKpiAuditReview(reviewPeriod: string, reviewYear: number) {
             criteria: (kpi as any).criteria || null,
             targetValue: kpi.target_value,
             uom: kpi.uom,
-            achievedValue: achievedMap.get(key) ?? null,
+            achievedValue: orgVal?.achieved_value ?? null,
+            dataEntryRemarks: orgVal?.remarks ?? null,
+            evidenceUrl: orgVal?.evidence_url ?? null,
+            evidenceUrls: Array.isArray(orgVal?.evidence_urls) ? orgVal.evidence_urls : null,
+            enteredByName: (orgVal?.entered_by_profile as any)?.full_name ?? null,
+            dataSource: orgVal?.data_source ?? null,
+            orgValueStatus: orgVal?.status ?? null,
             employees: [],
             pendingCount: 0,
             auditedCount: 0,
