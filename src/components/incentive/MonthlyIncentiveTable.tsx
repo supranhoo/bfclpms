@@ -33,7 +33,7 @@ export function MonthlyIncentiveTable() {
   const { data: programs = [] } = useIncentivePrograms();
   const activePrograms = (programs as any[]).filter((p: any) => p.is_active);
 
-  const { data: records = [], isLoading } = useIncentiveRecords(selectedMonth, selectedYear);
+  const { data: records = [], isLoading, isError, error } = useIncentiveRecords(selectedMonth, selectedYear, selectedProgram || undefined);
   const confirmRecords = useConfirmIncentiveRecords();
   const markPaid = useMarkIncentivePaid();
   const computeIncentives = useComputeIncentives();
@@ -240,8 +240,10 @@ export function MonthlyIncentiveTable() {
               <TableBody>
                 {isLoading ? (
                   <TableRow><TableCell colSpan={12} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                ) : isError ? (
+                  <TableRow><TableCell colSpan={12} className="text-center py-8 text-destructive">Error loading records: {(error as Error)?.message || 'Unknown error'}</TableCell></TableRow>
                 ) : filteredRecords.length === 0 ? (
-                  <TableRow><TableCell colSpan={12} className="text-center py-8 text-muted-foreground">No records found. Run incentive computation first.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={12} className="text-center py-8 text-muted-foreground">{selectedProgram ? 'No records found for this program/period. Run incentive computation first.' : 'Select a program to view records.'}</TableCell></TableRow>
                 ) : (
                   filteredRecords.map((r: any) => (
                     <TableRow key={r.id}>

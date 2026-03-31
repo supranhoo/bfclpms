@@ -2,9 +2,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-export function useIncentiveRecords(reviewPeriod?: string, reviewYear?: number) {
+export function useIncentiveRecords(reviewPeriod?: string, reviewYear?: number, programId?: string) {
   return useQuery({
-    queryKey: ['incentive-records', reviewPeriod, reviewYear],
+    queryKey: ['incentive-records', reviewPeriod, reviewYear, programId],
     enabled: !!reviewPeriod && !!reviewYear,
     queryFn: async () => {
       let query = supabase
@@ -13,8 +13,14 @@ export function useIncentiveRecords(reviewPeriod?: string, reviewYear?: number) 
         .eq('review_period', reviewPeriod!)
         .eq('review_year', reviewYear!)
         .order('final_incentive_percent', { ascending: false });
+      if (programId) {
+        query = query.eq('program_id', programId);
+      }
       const { data, error } = await query;
-      if (error) throw error;
+      if (error) {
+        console.error('Incentive records fetch error:', error);
+        throw error;
+      }
       return data;
     },
   });
