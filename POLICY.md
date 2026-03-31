@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 1.50.0 — §44: DQ rules must be configured per program
+> **Version:** 1.51.0 — §44: DQ records preserve calculated amount for audit visibility
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
