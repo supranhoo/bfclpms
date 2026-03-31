@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.32 — Fix incentive records visibility (programId filter + error display)
+> **Version:** 2.15.33 — Add missing FK constraints for incentive tables
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4542,3 +4542,9 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Hook:** Added optional `programId` parameter with query filter and error logging
 - **UI:** Pass `selectedProgram` to hook; added error state display with actual error message; improved empty state messaging
 - **RLS:** Departments already has `SELECT` for all authenticated users — no migration needed
+
+### v2.15.33 — Add Missing FK Constraints for Incentive Tables
+- **Root cause:** `employee_incentive_records`, `employee_incentive_eligibility`, and `incentive_score_revisions` had `employee_id` columns without foreign key references to `profiles`. PostgREST could not resolve embedded joins (`profiles:employee_id(...)`) → runtime error "Could not find a relationship"
+- **Migration:** Added FK constraints (`employee_id → profiles(id) ON DELETE CASCADE`) to all three tables; orphan rows cleaned before constraint creation
+- **No RLS changes** — no risk of dashboard recursion issues
+- **Frontend:** Hooks unchanged; existing error display from v2.15.32 now surfaces real data instead of schema errors
