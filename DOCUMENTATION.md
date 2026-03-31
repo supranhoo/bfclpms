@@ -4480,3 +4480,12 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Components updated:** `KpiDetailsTable.tsx` (new `observationCounts` prop), `MobileKpiCard.tsx` (new `observationCount` prop)
 - **Scorecards updated:** `UnifiedScorecard`, `EmployeeScorecard`, `AuditScorecard`, `ManagementScorecard` — all fetch batch observations via `useObservationsByKpis`
 - **POLICY.md §38:** Observation counts must be visible on all dashboard KPI rows
+
+---
+
+### v2.15.16 — Query notifications use first-line KPI names and show query reason (2026-03-31)
+
+- **Problem:** Query raised notifications included full KPI description with formula/scoring logic, making them unreadable; email notifications showed `Query: N/A` because `query_reason` was not passed in metadata
+- **Fix (in-app):** `useKpis.ts` and `useQueryWorkflow.ts` now truncate KPI name to first line via `.split('\n')[0].substring(0, 100)` and pass `query_reason` in notification metadata
+- **Fix (email):** DB trigger `send_email_on_notification` extended first-line truncation to query types (`query_raised`, `query_response_submitted`, `query_response_fyi`, `query_resolved`, `query_resolved_fyi`)
+- **POLICY.md §39:** All notification messages must use first-line-only KPI names
