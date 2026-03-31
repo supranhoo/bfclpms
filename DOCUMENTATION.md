@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.28 — Org KPI Audit Review: fix names/codes, show data entry values/attachments, widen remarks
+> **Version:** 2.15.29 — Fix infinite recursion in profiles RLS policy (SECURITY DEFINER function for audit employee check)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
