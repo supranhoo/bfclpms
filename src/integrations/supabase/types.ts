@@ -1044,28 +1044,34 @@ export type Database = {
       incentive_production_rates: {
         Row: {
           created_at: string | null
-          employee_id: string
+          employee_id: string | null
+          entity_id: string | null
           id: string
           program_id: string
           rate_per_ton: number
+          rate_type: string
           remarks: string | null
           updated_at: string | null
         }
         Insert: {
           created_at?: string | null
-          employee_id: string
+          employee_id?: string | null
+          entity_id?: string | null
           id?: string
           program_id: string
           rate_per_ton?: number
+          rate_type?: string
           remarks?: string | null
           updated_at?: string | null
         }
         Update: {
           created_at?: string | null
-          employee_id?: string
+          employee_id?: string | null
+          entity_id?: string | null
           id?: string
           program_id?: string
           rate_per_ton?: number
+          rate_type?: string
           remarks?: string | null
           updated_at?: string | null
         }

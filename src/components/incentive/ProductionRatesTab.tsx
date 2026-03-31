@@ -7,12 +7,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
 import { Plus, Trash2, Edit, Check, X } from 'lucide-react';
 import { formatEmployeeName } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 
 interface Props {
   programId: string;
 }
+
+type RateType = 'employee' | 'department' | 'bu' | 'common';
 
 export function ProductionRatesTab({ programId }: Props) {
   const { data: rates = [], isLoading } = useProductionRates(programId);
@@ -20,7 +25,8 @@ export function ProductionRatesTab({ programId }: Props) {
   const remove = useDeleteProductionRate();
 
   const [showAdd, setShowAdd] = useState(false);
-  const [selectedEmployee, setSelectedEmployee] = useState('');
+  const [rateType, setRateType] = useState<RateType>('employee');
+  const [selectedEntity, setSelectedEntity] = useState('');
   const [newRate, setNewRate] = useState('0');
   const [newRemarks, setNewRemarks] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -38,36 +44,116 @@ export function ProductionRatesTab({ programId }: Props) {
     },
   });
 
-  const assignedIds = new Set((rates as any[]).map((r: any) => r.employee_id));
-  const availableProfiles = allProfiles.filter(p => !assignedIds.has(p.id));
+  const { data: departments = [] } = useQuery({
+    queryKey: ['departments-for-rates'],
+    queryFn: async () => {
+      const { data } = await supabase.from('departments').select('id, name').order('name');
+      return data || [];
+    },
+  });
+
+  const { data: businessUnits = [] } = useQuery({
+    queryKey: ['business-units-for-rates'],
+    queryFn: async () => {
+      const { data } = await supabase.from('business_units').select('id, name').order('name');
+      return data || [];
+    },
+  });
+
+  const assignedEmployeeIds = new Set(
+    (rates as any[]).filter((r: any) => r.rate_type === 'employee').map((r: any) => r.employee_id)
+  );
+  const availableProfiles = allProfiles.filter(p => !assignedEmployeeIds.has(p.id));
+
+  const assignedDeptIds = new Set(
+    (rates as any[]).filter((r: any) => r.rate_type === 'department').map((r: any) => r.entity_id)
+  );
+  const availableDepts = departments.filter(d => !assignedDeptIds.has(d.id));
+
+  const assignedBUIds = new Set(
+    (rates as any[]).filter((r: any) => r.rate_type === 'bu').map((r: any) => r.entity_id)
+  );
+  const availableBUs = businessUnits.filter(b => !assignedBUIds.has(b.id));
+
+  const hasCommon = (rates as any[]).some((r: any) => r.rate_type === 'common');
 
   const handleAdd = () => {
-    if (!selectedEmployee || !newRate) return;
-    upsert.mutate({
-      program_id: programId,
-      employee_id: selectedEmployee,
-      rate_per_ton: parseFloat(newRate) || 0,
-      remarks: newRemarks || undefined,
-    }, {
-      onSuccess: () => {
-        setShowAdd(false);
-        setSelectedEmployee('');
-        setNewRate('0');
-        setNewRemarks('');
-      },
-    });
+    if (rateType === 'common') {
+      if (!newRate) return;
+      upsert.mutate({
+        program_id: programId,
+        rate_type: 'common',
+        rate_per_ton: parseFloat(newRate) || 0,
+        remarks: newRemarks || undefined,
+      }, { onSuccess: resetAddForm });
+    } else if (rateType === 'employee') {
+      if (!selectedEntity || !newRate) return;
+      upsert.mutate({
+        program_id: programId,
+        employee_id: selectedEntity,
+        rate_type: 'employee',
+        rate_per_ton: parseFloat(newRate) || 0,
+        remarks: newRemarks || undefined,
+      }, { onSuccess: resetAddForm });
+    } else {
+      if (!selectedEntity || !newRate) return;
+      upsert.mutate({
+        program_id: programId,
+        rate_type: rateType,
+        entity_id: selectedEntity,
+        rate_per_ton: parseFloat(newRate) || 0,
+        remarks: newRemarks || undefined,
+      }, { onSuccess: resetAddForm });
+    }
+  };
+
+  const resetAddForm = () => {
+    setShowAdd(false);
+    setSelectedEntity('');
+    setNewRate('0');
+    setNewRemarks('');
   };
 
   const handleSaveEdit = (r: any) => {
     upsert.mutate({
       id: r.id,
       program_id: programId,
-      employee_id: r.employee_id,
+      employee_id: r.employee_id || undefined,
+      rate_type: r.rate_type,
+      entity_id: r.entity_id || undefined,
       rate_per_ton: parseFloat(editRate) || 0,
       remarks: editRemarks || undefined,
     }, {
       onSuccess: () => setEditingId(null),
     });
+  };
+
+  const getAppliesTo = (r: any): string => {
+    if (r.rate_type === 'common') return 'All Employees';
+    if (r.rate_type === 'employee') {
+      const profile = r.profiles;
+      return formatEmployeeName(profile?.full_name, profile?.email || '', profile?.employee_code);
+    }
+    if (r.rate_type === 'department') {
+      const dept = departments.find(d => d.id === r.entity_id);
+      return dept?.name || r.entity_id?.slice(0, 8) || '—';
+    }
+    if (r.rate_type === 'bu') {
+      const bu = businessUnits.find(b => b.id === r.entity_id);
+      return bu?.name || r.entity_id?.slice(0, 8) || '—';
+    }
+    return '—';
+  };
+
+  const rateTypeBadge = (type: string) => {
+    const map: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
+      employee: { label: 'Employee', variant: 'default' },
+      department: { label: 'Dept', variant: 'secondary' },
+      bu: { label: 'BU', variant: 'outline' },
+      common: { label: 'Common', variant: 'destructive' },
+    };
+    const m = map[type] || { label: type, variant: 'default' as const };
+    return <Badge variant={m.variant}>{m.label}</Badge>;
   };
 
   return (
@@ -80,30 +166,85 @@ export function ProductionRatesTab({ programId }: Props) {
       </CardHeader>
       <CardContent>
         {showAdd && (
-          <div className="flex items-end gap-2 mb-4 flex-wrap">
-            <div className="w-[200px]">
-              <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
-                <SelectContent>
-                  {availableProfiles.map(p => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {formatEmployeeName(p.full_name, p.email, p.employee_code)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div className="space-y-3 mb-4 p-3 border rounded-md bg-muted/30">
+            <RadioGroup
+              value={rateType}
+              onValueChange={v => { setRateType(v as RateType); setSelectedEntity(''); }}
+              className="flex flex-wrap gap-4"
+            >
+              {(['employee', 'department', 'bu', 'common'] as RateType[]).map(t => (
+                <div key={t} className="flex items-center space-x-2">
+                  <RadioGroupItem value={t} id={`rt-${t}`} />
+                  <Label htmlFor={`rt-${t}`} className="text-sm capitalize">{t === 'bu' ? 'Business Unit' : t}</Label>
+                </div>
+              ))}
+            </RadioGroup>
+
+            <div className="flex items-end gap-2 flex-wrap">
+              {rateType === 'employee' && (
+                <div className="w-[220px]">
+                  <Select value={selectedEntity} onValueChange={setSelectedEntity}>
+                    <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
+                    <SelectContent>
+                      {availableProfiles.map(p => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {formatEmployeeName(p.full_name, p.email, p.employee_code)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {rateType === 'department' && (
+                <div className="w-[220px]">
+                  <Select value={selectedEntity} onValueChange={setSelectedEntity}>
+                    <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                    <SelectContent>
+                      {availableDepts.map(d => (
+                        <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {rateType === 'bu' && (
+                <div className="w-[220px]">
+                  <Select value={selectedEntity} onValueChange={setSelectedEntity}>
+                    <SelectTrigger><SelectValue placeholder="Select business unit" /></SelectTrigger>
+                    <SelectContent>
+                      {availableBUs.map(b => (
+                        <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <Input className="w-[120px]" type="number" placeholder="Rate/Ton" value={newRate} onChange={e => setNewRate(e.target.value)} />
+              <Input className="w-[160px]" placeholder="Remarks" value={newRemarks} onChange={e => setNewRemarks(e.target.value)} />
+              <Button
+                size="sm"
+                onClick={handleAdd}
+                disabled={
+                  upsert.isPending ||
+                  (rateType !== 'common' && !selectedEntity) ||
+                  (rateType === 'common' && hasCommon)
+                }
+              >
+                Add
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button>
             </div>
-            <Input className="w-[120px]" type="number" placeholder="Rate/Ton" value={newRate} onChange={e => setNewRate(e.target.value)} />
-            <Input className="w-[160px]" placeholder="Remarks" value={newRemarks} onChange={e => setNewRemarks(e.target.value)} />
-            <Button size="sm" onClick={handleAdd} disabled={!selectedEmployee || upsert.isPending}>Add</Button>
-            <Button size="sm" variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button>
+            {rateType === 'common' && hasCommon && (
+              <p className="text-xs text-muted-foreground">A common rate already exists. Edit or delete it first.</p>
+            )}
           </div>
         )}
 
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Employee</TableHead>
+              <TableHead className="w-[80px]">Type</TableHead>
+              <TableHead>Applies To</TableHead>
               <TableHead>Rate / Ton (₹)</TableHead>
               <TableHead>Remarks</TableHead>
               <TableHead className="w-[100px]">Actions</TableHead>
@@ -111,15 +252,15 @@ export function ProductionRatesTab({ programId }: Props) {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">Loading...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Loading...</TableCell></TableRow>
             ) : (rates as any[]).length === 0 ? (
-              <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">No production rates configured. Add employees and set their per-ton rate.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No production rates configured. Add rates by employee, department, BU, or a common rate.</TableCell></TableRow>
             ) : (rates as any[]).map((r: any) => {
-              const profile = r.profiles;
               const isEditing = editingId === r.id;
               return (
                 <TableRow key={r.id}>
-                  <TableCell>{formatEmployeeName(profile?.full_name, profile?.email || '', profile?.employee_code)}</TableCell>
+                  <TableCell>{rateTypeBadge(r.rate_type || 'employee')}</TableCell>
+                  <TableCell>{getAppliesTo(r)}</TableCell>
                   <TableCell>
                     {isEditing ? (
                       <Input className="w-[100px]" type="number" value={editRate} onChange={e => setEditRate(e.target.value)} />
