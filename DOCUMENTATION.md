@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.14 — Monthly review reminder template visible in Email Templates UI
+> **Version:** 2.15.15 — Observation counts visible on all dashboard KPI rows
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
