@@ -1,75 +1,60 @@
 
 
-## Plan: Period-Based Incentive Records for Production Programs
+## RCA & Fix: Management N/A Not Clearing Final Score
 
-### What Changes
+### Root Cause
 
-The edge function currently sums all 31 days into one record. Instead, it will detect which day-ranges have data in `daily_values` JSONB and create separate records per period. The report and monthly table will show a "Period" column.
+**File**: `src/hooks/useAdminDataEntry.ts`, lines 320-372
 
-### 1. Database Migration
+When admin marks a KPI as N/A for management on an already-approved KPI:
 
-- Add `payment_period` column (text, default `'full'`) to `employee_incentive_records`
-- Drop existing unique constraint `(employee_id, review_period, review_year, program_id)`
-- Recreate as `(employee_id, review_period, review_year, program_id, payment_period)`
-- Existing records get `'full'` by default
+1. Step 2b correctly sets `is_na = true`, `final_score = null`, `management_score = null` in the upsert payload
+2. Step 4 upsert writes these to the database correctly
+3. **Step 8 (recompute)** immediately re-fetches the submission and runs the 8-stage fallback chain — finds `auditor_score = 0`, and **patches final_score back to 0**
 
-### 2. Edge Function (`compute-monthly-incentives`)
+The recompute block has no `is_na` guard. It unconditionally overwrites final_score with the first non-null score from the fallback chain.
 
-For production programs, instead of summing all days:
-- Parse `daily_values` keys into 3 buckets: days 1-10, 11-20, 21-31
-- Check which buckets have non-zero data
-- If data exists in multiple distinct buckets → create one record per populated bucket with `payment_period` = `'1-10'`, `'11-20'`, or `'21-31'`
-- If ALL buckets have data (user entered with "All" toggle) → create single record with `payment_period = 'Full Month'`
-- For support programs → always `'full'`
-- Update upsert `onConflict` to include `payment_period`
+**DB confirmation**: KPI `f457fd99` has `is_na = true` but `final_score = 0.00`, `final_rating = red` — the recompute overwrote the null.
 
-**Detection logic**: Check the distribution of populated day keys. If entries span across all three ranges, treat as "Full Month". If entries only exist in specific ranges (e.g., only days 1-10 filled), create per-range records.
+### Fix
 
-### 3. Frontend — Production Daily Grid
+**`src/hooks/useAdminDataEntry.ts`** — Add `is_na` guard to the recompute block (step 8):
 
-**`src/components/incentive/ProductionDailyGrid.tsx`**:
-- Rename toggle label `"All"` → `"Full Month"`
+```typescript
+// Before the recompute logic at line 324:
+if (shouldRecomputeFinal && newSubmission) {
+  const freshSub = ...;
+  
+  // NEW: If N/A was just set, force final_score to null — don't run fallback chain
+  if (freshSub?.is_na === true) {
+    if (freshSub.final_score !== null) {
+      await supabase.from('review_submissions')
+        .update({ final_score: null, final_rating: null })
+        .eq('kpi_id', kpi_id);
+    }
+  } else {
+    // existing fallback chain logic
+  }
+}
+```
 
-### 4. Frontend — Report Export
-
-**`src/components/incentive/IncentiveReportExport.tsx`**:
-- Add "Period" column in preview table (after Year, before Programme)
-- Display `r.payment_period` (`1-10`, `11-20`, `21-31`, or `Full Month`)
-- Add "Period" to Excel export
-- Add Period filter dropdown (All, Full Month, 1-10, 11-20, 21-31)
-
-### 5. Frontend — Monthly Incentive Table
-
-**`src/components/incentive/MonthlyIncentiveTable.tsx`**:
-- Add "Period" column displaying `payment_period`
-- Include in export
-- Each period row has independent status (draft/confirmed/paid)
-
-### 6. Hook Update
-
-**`src/hooks/useIncentiveRecords.ts`**:
-- Include `payment_period` in select queries
-
-### 7. Documentation
-
-- `DOCUMENTATION.md` → v2.15.34
-- `POLICY.md` → update §44
+**DB repair migration**: Fix the existing corrupted record:
+```sql
+UPDATE review_submissions 
+SET final_score = NULL, final_rating = NULL 
+WHERE is_na = true AND final_score IS NOT NULL;
+```
 
 ### Files Modified
 
 | File | Change |
 |------|--------|
-| DB migration | Add `payment_period` column; update unique constraint |
-| `supabase/functions/compute-monthly-incentives/index.ts` | Split production into period-based records; detect full vs partial |
-| `src/components/incentive/ProductionDailyGrid.tsx` | Rename "All" → "Full Month" |
-| `src/components/incentive/IncentiveReportExport.tsx` | Add Period column + filter |
-| `src/components/incentive/MonthlyIncentiveTable.tsx` | Add Period column |
-| `src/hooks/useIncentiveRecords.ts` | Include `payment_period` in queries |
-| `DOCUMENTATION.md` | v2.15.34 |
-| `POLICY.md` | §44 update |
+| `src/hooks/useAdminDataEntry.ts` | Add `is_na` guard before fallback chain recompute |
+| DB migration | Repair existing records where `is_na = true` but `final_score` is not null |
+| `DOCUMENTATION.md` | v2.15.35 |
 
 ### Risk Assessment
-- **Regression**: Unique constraint change needs careful migration; existing records default to `'full'`
-- **Data**: Next computation for production programs will create period rows; support programs unaffected
+- **Regression**: None — only adds a guard before existing logic; non-N/A path unchanged
 - **Dashboard Safety**: No RLS changes
+- **Data**: Migration is corrective — only nullifies scores already marked N/A
 
