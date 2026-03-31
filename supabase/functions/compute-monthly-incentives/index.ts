@@ -611,8 +611,24 @@ serve(async (req) => {
       );
     }
 
-    // Upsert records
+    // Delete existing records for all affected employees before upserting
+    // This prevents orphaned records when period structure changes (full → split or vice versa)
     if (records.length > 0) {
+      const uniqueEmployeeIds = [...new Set(records.map((r: any) => r.employee_id))];
+      const empBatchSize = 50;
+      for (let i = 0; i < uniqueEmployeeIds.length; i += empBatchSize) {
+        const empBatch = uniqueEmployeeIds.slice(i, i + empBatchSize);
+        const { error: delError } = await supabase
+          .from('employee_incentive_records')
+          .delete()
+          .eq('program_id', program_id)
+          .eq('review_period', review_period)
+          .eq('review_year', review_year)
+          .in('employee_id', empBatch);
+        if (delError) console.error('Delete error:', delError);
+      }
+
+      // Upsert fresh records
       const batchSize = 100;
       for (let i = 0; i < records.length; i += batchSize) {
         const batch = records.slice(i, i + batchSize);
