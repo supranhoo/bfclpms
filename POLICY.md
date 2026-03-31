@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 1.46.0 — §44: Multi-mode production rate assignment
+> **Version:** 1.47.0 — §44: Production computation pipeline connected
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
