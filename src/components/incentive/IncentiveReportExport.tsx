@@ -227,9 +227,10 @@ export function IncentiveReportExport() {
                     <TableCell>{r.profiles?.full_name}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{r.profiles?.designation}</TableCell>
                     <TableCell className="text-xs">{r.profiles?.departments?.name}</TableCell>
-                    <TableCell>{r.review_period}</TableCell>
-                    <TableCell>{r.review_year}</TableCell>
-                    <TableCell className="text-xs">{r.incentive_programs?.name}</TableCell>
+                     <TableCell>{r.review_period}</TableCell>
+                     <TableCell>{r.review_year}</TableCell>
+                     <TableCell className="text-xs">{r.payment_period === 'full' ? '—' : r.payment_period}</TableCell>
+                     <TableCell className="text-xs">{r.incentive_programs?.name}</TableCell>
                     <TableCell className="text-right font-medium">{r.final_incentive_percent}%</TableCell>
                     <TableCell className="text-right font-medium">₹{(r.incentive_amount || 0).toLocaleString('en-IN')}</TableCell>
                     <TableCell>

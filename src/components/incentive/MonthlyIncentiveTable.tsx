@@ -65,20 +65,21 @@ export function MonthlyIncentiveTable() {
     return { total, eligible, disqualified, prorata, avgIncentive, totalAmount };
   }, [records]);
 
-  const handleExport = () => {
-    const exportData = filteredRecords.map((r: any) => ({
-      'Employee Code': r.profiles?.employee_code,
-      'Employee Name': r.profiles?.full_name,
-      'Department': r.profiles?.departments?.name,
-      'PMS Score': r.pms_score?.toFixed(2),
-      'Matched Slab': r.incentive_slabs ? `${r.incentive_slabs.min_value}-${r.incentive_slabs.max_value}` : '—',
-      'Base Incentive %': r.base_incentive_percent,
-      'DQ Reasons': r.disqualification_reasons?.join(', ') || '',
-      'LTI Penalty %': r.lti_penalty_percent,
-      'Pro-rata Factor': r.pro_rata_factor,
-      'Final Incentive %': r.final_incentive_percent,
-      'Incentive Amount': r.incentive_amount || 0,
-      'Status': r.status,
+   const handleExport = () => {
+     const exportData = filteredRecords.map((r: any) => ({
+       'Employee Code': r.profiles?.employee_code,
+       'Employee Name': r.profiles?.full_name,
+       'Department': r.profiles?.departments?.name,
+       'Period': r.payment_period === 'full' ? '' : r.payment_period,
+       'PMS Score': r.pms_score?.toFixed(2),
+       'Matched Slab': r.incentive_slabs ? `${r.incentive_slabs.min_value}-${r.incentive_slabs.max_value}` : '—',
+       'Base Incentive %': r.base_incentive_percent,
+       'DQ Reasons': r.disqualification_reasons?.join(', ') || '',
+       'LTI Penalty %': r.lti_penalty_percent,
+       'Pro-rata Factor': r.pro_rata_factor,
+       'Final Incentive %': r.final_incentive_percent,
+       'Incentive Amount': r.incentive_amount || 0,
+       'Status': r.status,
     }));
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();

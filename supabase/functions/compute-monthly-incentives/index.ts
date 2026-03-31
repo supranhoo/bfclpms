@@ -613,7 +613,7 @@ serve(async (req) => {
         const batch = records.slice(i, i + batchSize);
         const { error } = await supabase
           .from('employee_incentive_records')
-          .upsert(batch, { onConflict: 'employee_id,review_period,review_year,program_id' });
+          .upsert(batch, { onConflict: 'employee_id,review_period,review_year,program_id,payment_period' });
         if (error) console.error('Upsert error:', error);
       }
     }

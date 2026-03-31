@@ -197,7 +197,7 @@ export function ProductionDailyGrid({ programId, programName }: Props) {
             </SelectContent>
           </Select>
           <ToggleGroup type="single" value={dateRange} onValueChange={v => v && setDateRange(v as DateRange)} variant="outline" size="sm">
-            <ToggleGroupItem value="all">All</ToggleGroupItem>
+            <ToggleGroupItem value="all">Full Month</ToggleGroupItem>
             <ToggleGroupItem value="1-10">1-10</ToggleGroupItem>
             <ToggleGroupItem value="11-20">11-20</ToggleGroupItem>
             <ToggleGroupItem value="21-31">21-31</ToggleGroupItem>
