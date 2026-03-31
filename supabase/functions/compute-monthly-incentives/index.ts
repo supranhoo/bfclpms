@@ -534,7 +534,7 @@ serve(async (req) => {
         } else {
           // Per-range records
           for (const rt of populatedRanges) {
-            const amount = isDQ ? 0 : (resolvedRate !== null ? rt.total * resolvedRate : 0);
+            const amount = resolvedRate !== null ? rt.total * resolvedRate : 0;
             records.push({
               employee_id: emp.id,
               program_id: program_id,
