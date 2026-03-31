@@ -47,7 +47,7 @@ export function IncentiveReportExport() {
     const eligible = list.filter((r: any) => !r.is_disqualified).length;
     const dq = list.filter((r: any) => r.is_disqualified).length;
     const proRata = list.filter((r: any) => r.pro_rata_factor < 1).length;
-    const totalAmount = list.reduce((sum: number, r: any) => sum + (r.final_incentive_percent || 0), 0);
+    const totalAmount = list.reduce((sum: number, r: any) => sum + (r.incentive_amount || 0), 0);
     return { total, eligible, dq, proRata, totalAmount };
   }, [filtered]);
 
@@ -167,7 +167,7 @@ export function IncentiveReportExport() {
         <SummaryCard icon={Users} label="Eligible" value={stats.eligible} className="text-primary" />
         <SummaryCard icon={ShieldAlert} label="Disqualified" value={stats.dq} className="text-destructive" />
         <SummaryCard icon={Clock} label="Pro-rata" value={stats.proRata} className="text-accent-foreground" />
-        <SummaryCard icon={IndianRupee} label="Total Incentive %" value={stats.totalAmount.toFixed(1)} />
+        <SummaryCard icon={IndianRupee} label="Total Amount (₹)" value={stats.totalAmount.toLocaleString('en-IN')} />
       </div>
 
       {/* Preview Table */}
@@ -189,13 +189,13 @@ export function IncentiveReportExport() {
                   <TableHead>Code</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Designation</TableHead>
-                  <TableHead>Dept</TableHead>
-                  <TableHead>BU</TableHead>
-                  <TableHead>Month</TableHead>
-                  <TableHead>Year</TableHead>
-                  <TableHead>Programme</TableHead>
-                  <TableHead className="text-right">Final %</TableHead>
-                  <TableHead>Status</TableHead>
+                   <TableHead>Dept</TableHead>
+                   <TableHead>Month</TableHead>
+                   <TableHead>Year</TableHead>
+                   <TableHead>Programme</TableHead>
+                   <TableHead className="text-right">Final %</TableHead>
+                   <TableHead className="text-right">Amount (₹)</TableHead>
+                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -205,11 +205,11 @@ export function IncentiveReportExport() {
                     <TableCell>{r.profiles?.full_name}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{r.profiles?.designation}</TableCell>
                     <TableCell className="text-xs">{r.profiles?.departments?.name}</TableCell>
-                    <TableCell className="text-xs">{r.profiles?.departments?.business_units?.name}</TableCell>
                     <TableCell>{r.review_period}</TableCell>
                     <TableCell>{r.review_year}</TableCell>
                     <TableCell className="text-xs">{r.incentive_programs?.name}</TableCell>
                     <TableCell className="text-right font-medium">{r.final_incentive_percent}%</TableCell>
+                    <TableCell className="text-right font-medium">₹{(r.incentive_amount || 0).toLocaleString('en-IN')}</TableCell>
                     <TableCell>
                       <Badge variant={statusColor(r.status)} className="text-xs">{r.status}</Badge>
                     </TableCell>
