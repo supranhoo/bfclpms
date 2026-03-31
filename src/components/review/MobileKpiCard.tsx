@@ -53,6 +53,7 @@ export function MobileKpiCard({
   getOrgKpiValue,
   sentBackKpiIds,
   dataOwnerNames,
+  observationCount,
 }: MobileKpiCardProps) {
   const isNaKpi = submission?.is_na || false;
   const isDailyKpi = kpi.frequency === 'Daily';
