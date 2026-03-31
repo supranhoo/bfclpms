@@ -231,6 +231,7 @@ export function MonthlyIncentiveTable() {
                   <TableHead>LTI Penalty</TableHead>
                   <TableHead>Pro-rata</TableHead>
                   <TableHead>Final %</TableHead>
+                  <TableHead>Amount (₹)</TableHead>
                    <TableHead>Status</TableHead>
                    <TableHead>Incentive Status</TableHead>
                 </TableRow>
