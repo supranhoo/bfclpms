@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Download, Users, ShieldAlert, Clock, IndianRupee, Search } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useIncentiveReportData } from '@/hooks/useIncentiveRecords';
 import { useIncentivePrograms } from '@/hooks/useIncentivePrograms';
 import * as XLSX from 'xlsx';
