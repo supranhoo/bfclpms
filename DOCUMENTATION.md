@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.38 — Fix stale DQ records via delete-before-upsert cleanup
+> **Version:** 2.15.39 — Ensure all programs have standard DQ rules configured
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4575,3 +4575,9 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix 1:** Normalized all `payment_period = 'full'` → `'Full Month'` in database
 - **Fix 2:** Edge function now deletes all existing records for employee+program+month before upserting fresh computed results
 - **Fix 3:** Standardized support/vessel program `payment_period` from `'full'` to `'Full Month'`
+
+### v2.15.39 — Ensure All Programs Have Standard DQ Rules Configured
+- **Root cause:** Metal Sizing program had zero DQ rules in `incentive_disqualification_rules` table, causing the DQ evaluation loop to be a no-op — all employees passed as eligible regardless of warning letters, suspensions, etc.
+- **Fix:** Inserted 6 standard DQ rules (warning, suspension, absence, LWP, LTI, contract) for Metal Sizing, CLU Meta Recovery, CLU Metal Recovery, Production Incentive, and completed Port Incentive (had only 1 rule)
+- **Re-computation:** Metal Sizing March 2026 re-computed — 2 employees now correctly show as disqualified with ₹0 amount
+- **Operational note:** Every new incentive program MUST have DQ rules configured via the Incentive Configuration UI before computation; otherwise DQ evaluation is skipped entirely
