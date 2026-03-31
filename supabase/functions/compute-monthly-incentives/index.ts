@@ -428,10 +428,8 @@ serve(async (req) => {
 
       const finalPercent = isDQ ? 0 : basePercent * (1 - ltiPenalty / 100) * proRata;
 
-      // Zero out production incentive amount when disqualified
-      if (isDQ && program.program_type === 'production') {
-        incentiveAmount = 0;
-      }
+      // DQ records retain calculated incentive amount for audit visibility
+      // Payroll must use is_disqualified flag to determine actual payout
 
       // Vessel-based incentive calculation
       let vesselAmount: number | null = null;
@@ -442,7 +440,7 @@ serve(async (req) => {
         if (pmsScore !== null && pmsScore < (program.min_kra_score || 3)) {
           isDQ = true;
           dqReasons.push(`KRA score ${pmsScore.toFixed(2)} below minimum ${program.min_kra_score}`);
-          vesselAmount = 0;
+          // Retain vessel amount for audit visibility; DQ flag determines payout
         } else if (pmsScore === null && !program.no_kra_eligible) {
           // No KRA and not eligible without KRA
           vesselAmount = 0;
@@ -511,7 +509,7 @@ serve(async (req) => {
         if (isFullMonth) {
           // Single "Full Month" record
           const totalTons = populatedRanges.reduce((s, r) => s + r.total, 0);
-          const amount = isDQ ? 0 : (resolvedRate !== null ? totalTons * resolvedRate : 0);
+          const amount = resolvedRate !== null ? totalTons * resolvedRate : 0;
           records.push({
             employee_id: emp.id,
             program_id: program_id,
@@ -536,7 +534,7 @@ serve(async (req) => {
         } else {
           // Per-range records
           for (const rt of populatedRanges) {
-            const amount = isDQ ? 0 : (resolvedRate !== null ? rt.total * resolvedRate : 0);
+            const amount = resolvedRate !== null ? rt.total * resolvedRate : 0;
             records.push({
               employee_id: emp.id,
               program_id: program_id,

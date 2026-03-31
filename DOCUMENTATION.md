@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.39 — Ensure all programs have standard DQ rules configured
+> **Version:** 2.15.40 — DQ records retain calculated incentive amount for audit visibility
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

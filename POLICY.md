@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 1.50.0 — §44: DQ rules must be configured per program
+> **Version:** 1.51.0 — §44: DQ records preserve calculated amount for audit visibility
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -820,5 +820,7 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Detection priority:** Vessel rates → Vessel grid; Production rates → Daily grid; Neither → Slab-based grid.
 
 **Invariant:** The edge function must always aggregate `production_daily_entries` for production programs. The `incentive_amount` field must reflect `totalTons × resolvedRate`. Client-side-only calculations must never be the sole source of truth for incentive amounts.
+
+**DQ amount visibility:** When an employee is disqualified, the `incentive_amount` retains the calculated value (what would have been earned). The `is_disqualified` flag and `disqualification_reasons` array indicate forfeiture. `final_incentive_percent` is set to 0 for slab-based programs. Payroll/finance teams MUST use `is_disqualified = true` (not `incentive_amount = 0`) to determine actual payout eligibility.
 
 **DQ rule configuration requirement:** Every incentive program MUST have disqualification rules configured in `incentive_disqualification_rules` before computation. If no rules exist for a program, the DQ evaluation loop is a no-op and all employees pass as eligible. Standard rule set: warning, suspension, absence, LWP, LTI, contract. Admins can manage rules via the programme's "Disqualification Rules" tab in Incentive Configuration.
