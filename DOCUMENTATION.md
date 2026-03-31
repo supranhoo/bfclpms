@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.30 — Fix Unknown employee names in Org KPI Audit Review (wrong column name in profiles query)
+> **Version:** 2.15.31 — Connect production data pipeline to incentive computation
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
