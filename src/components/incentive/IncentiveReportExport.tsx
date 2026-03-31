@@ -213,6 +213,7 @@ export function IncentiveReportExport() {
                    <TableHead>Dept</TableHead>
                    <TableHead>Month</TableHead>
                    <TableHead>Year</TableHead>
+                   <TableHead>Period</TableHead>
                    <TableHead>Programme</TableHead>
                    <TableHead className="text-right">Final %</TableHead>
                    <TableHead className="text-right">Amount (₹)</TableHead>
