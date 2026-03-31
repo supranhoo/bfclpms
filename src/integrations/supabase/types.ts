@@ -577,7 +577,22 @@ export type Database = {
           updated_at?: string
           weekly_off_days?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "employee_incentive_eligibility_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_incentive_eligibility_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       employee_incentive_records: {
         Row: {
@@ -671,6 +686,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "employee_incentive_records_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_incentive_records_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "employee_incentive_records_matched_slab_id_fkey"
             columns: ["matched_slab_id"]
@@ -1293,7 +1322,22 @@ export type Database = {
           source_kpi_id?: string | null
           source_period?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "incentive_score_revisions_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incentive_score_revisions_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       incentive_slab_categories: {
         Row: {
