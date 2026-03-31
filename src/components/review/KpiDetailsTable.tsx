@@ -98,6 +98,7 @@ interface KpiDetailsTableProps {
   sentBackKpiIds?: Set<string>;
   auditKpiAssignments?: Map<string, AuditKpiAssignment>;
   dataOwnerNames?: Map<string, string[]>;
+  observationCounts?: Map<string, number>;
 }
 
 /**
