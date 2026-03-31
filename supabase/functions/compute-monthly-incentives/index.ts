@@ -239,6 +239,36 @@ serve(async (req) => {
       }
     }
 
+    // 5b. Fetch production daily entries and rates for production programs
+    let prodEntryMap = new Map<string, number>(); // employee_id -> totalTons
+    let prodRates: any[] = [];
+    if (program.program_type === 'production') {
+      const { data: dailyEntries } = await supabase
+        .from('production_daily_entries')
+        .select('employee_id, daily_values')
+        .eq('program_id', program_id)
+        .eq('month', review_period)
+        .eq('year', review_year);
+
+      if (dailyEntries) {
+        for (const entry of dailyEntries) {
+          const vals = entry.daily_values as Record<string, any> || {};
+          let total = 0;
+          for (const key of Object.keys(vals)) {
+            const v = parseFloat(vals[key]);
+            if (!isNaN(v)) total += v;
+          }
+          prodEntryMap.set(entry.employee_id, total);
+        }
+      }
+
+      const { data: rates } = await supabase
+        .from('incentive_production_rates')
+        .select('employee_id, entity_id, rate_per_ton, rate_type')
+        .eq('program_id', program_id);
+      prodRates = rates || [];
+    }
+
     // 5. Fetch existing records to check for manual overrides
     const { data: existingRecords } = await supabase
       .from('employee_incentive_records')
