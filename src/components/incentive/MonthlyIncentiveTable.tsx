@@ -252,7 +252,8 @@ export function MonthlyIncentiveTable() {
                         <div className="text-sm font-medium">{r.profiles?.full_name}</div>
                         <div className="text-xs text-muted-foreground">{r.profiles?.employee_code}</div>
                       </TableCell>
-                      <TableCell className="text-sm">{r.profiles?.departments?.name || '—'}</TableCell>
+                       <TableCell className="text-sm">{r.profiles?.departments?.name || '—'}</TableCell>
+                       <TableCell className="text-xs">{r.payment_period === 'full' ? '—' : r.payment_period}</TableCell>
                       <TableCell>{r.pms_score?.toFixed(2) || '—'}</TableCell>
                       <TableCell>
                         {r.incentive_slabs ? (
