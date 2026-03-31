@@ -72,11 +72,30 @@ export function useOrgKpiAuditReview(reviewPeriod: string, reviewYear: number) {
         const batch = employeeIds.slice(i, i + 500);
         const { data } = await supabase
           .from('profiles')
-          .select('id, full_name, employee_code, departments(name), designations(name)')
-          .in('id', batch);
-        if (data) profiles.push(...(data as any));
+          .select('id, full_name, employee_code, department_id, designation_id') as any;
+        // Fetch separately to avoid TS2589
+        if (data) {
+          const filtered = data.filter((p: any) => batch.includes(p.id));
+          profiles.push(...filtered);
+        }
       }
       const profileMap = new Map(profiles.map(p => [p.id, p]));
+
+      // Fetch departments and designations for mapping
+      const deptIds = [...new Set(profiles.map(p => (p as any).department_id).filter(Boolean))];
+      const desigIds = [...new Set(profiles.map(p => (p as any).designation_id).filter(Boolean))];
+      
+      const deptMap = new Map<string, string>();
+      const desigMap = new Map<string, string>();
+      
+      if (deptIds.length > 0) {
+        const { data: depts } = await supabase.from('departments').select('id, name').in('id', deptIds);
+        depts?.forEach(d => deptMap.set(d.id, d.name));
+      }
+      if (desigIds.length > 0) {
+        const { data: desigs } = await supabase.from('designations').select('id, name').in('id', desigIds);
+        desigs?.forEach(d => desigMap.set(d.id, d.name));
+      }
 
       // 4. Fetch review submissions for all these KPIs
       const kpiIds = orgKpis.map(k => k.id);

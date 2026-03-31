@@ -59,16 +59,6 @@ export default function OrgKpiAuditReview() {
     });
   }, [groups, selectedCategoryId, searchQuery, statusFilter]);
 
-  // Group by category
-  const groupedByCategory = useMemo(() => {
-    const map = new Map<string, typeof filteredGroups>();
-    filteredGroups.forEach(g => {
-      const arr = map.get(g.categoryName) || [];
-      arr.push(g);
-      map.set(g.categoryName, arr);
-    });
-    return Array.from(map.entries());
-  }, [filteredGroups]);
 
   const handleSubmitScore = useCallback(async (kpiId: string, score: number, remarks: string, approve: boolean, workflowStages: string[]) => {
     await submitScore.mutateAsync({ kpiId, auditorScore: score, auditorRemarks: remarks, approve, workflowStages });
