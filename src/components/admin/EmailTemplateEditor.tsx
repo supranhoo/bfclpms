@@ -480,6 +480,8 @@ const PLACEHOLDERS = [
   { key: '{{total_weightage}}', description: 'Total weightage of assigned KRAs (batch assignment only)' },
   { key: '{{auto_score_reason}}', description: 'Reason for system auto-score (e.g. delayed self review)' },
   { key: '{{kpi_list}}', description: 'Bullet list of auto-scored KPI names (system auto-score only)' },
+  { key: '{{pending_kpis_count}}', description: 'Number of pending KPIs (monthly review reminder only)' },
+  { key: '{{pending_kpis_list}}', description: 'List of pending KPI names (monthly review reminder only)' },
 ];
 
 export function EmailTemplateEditor() {
