@@ -61,25 +61,16 @@ export function useOrgKpiAuditReview(reviewPeriod: string, reviewYear: number) {
       const employeeIds = [...new Set(orgKpis.map(k => k.employee_id))];
 
       // 3. Batch fetch profiles with department and designation joins
-      const profiles: Array<{
-        id: string;
-        full_name: string | null;
-        employee_code: string | null;
-        departments: { name: string } | null;
-        designations: { name: string } | null;
-      }> = [];
+      const profiles: Array<any> = [];
       for (let i = 0; i < employeeIds.length; i += 500) {
         const batch = employeeIds.slice(i, i + 500);
         const { data } = await supabase
           .from('profiles')
-          .select('id, full_name, employee_code, department_id, designation_id') as any;
-        // Fetch separately to avoid TS2589
-        if (data) {
-          const filtered = data.filter((p: any) => batch.includes(p.id));
-          profiles.push(...filtered);
-        }
+          .select('id, full_name, employee_code, department_id, designation_id')
+          .in('id', batch) as any;
+        if (data) profiles.push(...data);
       }
-      const profileMap = new Map(profiles.map(p => [p.id, p]));
+      const profileMap = new Map(profiles.map((p: any) => [p.id, p]));
 
       // Fetch departments and designations for mapping
       const deptIds = [...new Set(profiles.map(p => (p as any).department_id).filter(Boolean))];
