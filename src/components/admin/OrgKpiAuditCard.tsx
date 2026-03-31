@@ -162,6 +162,57 @@ export function OrgKpiAuditCard({ group, onSubmitScore, onBulkApprove, isSubmitt
                       {group.categoryName}
                     </Badge>
                   </div>
+                  {/* Data entry details */}
+                  {(group.dataEntryRemarks || group.enteredByName || group.dataSource || group.evidenceUrl || group.evidenceUrls?.length) && (
+                    <div className="mt-2 p-2 rounded bg-muted/40 border border-border/50 space-y-1">
+                      <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+                        {group.enteredByName && (
+                          <span className="flex items-center gap-1">
+                            <User className="h-3 w-3" />
+                            <span className="font-medium">Entered by:</span> {group.enteredByName}
+                          </span>
+                        )}
+                        {group.dataSource && (
+                          <span>
+                            <span className="font-medium">Source:</span> {group.dataSource}
+                          </span>
+                        )}
+                      </div>
+                      {group.dataEntryRemarks && (
+                        <p className="text-xs text-muted-foreground">
+                          <span className="font-medium">Remarks:</span> {group.dataEntryRemarks}
+                        </p>
+                      )}
+                      {/* Attachments */}
+                      {(() => {
+                        const urls: string[] = [];
+                        if (group.evidenceUrls?.length) {
+                          urls.push(...(group.evidenceUrls as string[]));
+                        } else if (group.evidenceUrl) {
+                          urls.push(group.evidenceUrl);
+                        }
+                        if (urls.length === 0) return null;
+                        return (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Paperclip className="h-3 w-3 text-muted-foreground shrink-0" />
+                            {urls.map((url, i) => {
+                              const filename = url.split('/').pop() || `File ${i + 1}`;
+                              return (
+                                <button
+                                  key={i}
+                                  className="text-xs text-primary hover:underline flex items-center gap-0.5"
+                                  onClick={(e) => { e.stopPropagation(); openStorageFile(url); }}
+                                >
+                                  <FileText className="h-3 w-3" />
+                                  {filename.length > 25 ? filename.slice(0, 22) + '...' : filename}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
