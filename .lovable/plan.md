@@ -1,48 +1,34 @@
 
 
-## RCA: Metal Sizing DQ Rules Not Applied
+## Plan: Keep Incentive Amount Visible for Disqualified Records
 
-### Root Cause — Missing Configuration Data
+### Problem
+When an employee is disqualified, the edge function zeroes out `incentiveAmount` and `finalPercent`. The user wants the **earned amount to remain visible** so stakeholders can see what was forfeited, while the status shows "Disqualified".
 
-The `incentive_disqualification_rules` table has **zero rows** for the Metal Sizing program (`9bef3123...`). The edge function queries DQ rules per `program_id` (line 60-63), so when no rules exist, the DQ evaluation loop is a no-op and all employees pass as eligible.
+### Changes
 
-Programs that DO have rules configured:
-- KRA Incentive (`21b98a7d...`) — 6 rules (absence, lwp, warning, suspension, lti, contract)
-- Port Incentive (`c1724805...`) — 1 rule (warning)
+**File: `supabase/functions/compute-monthly-incentives/index.ts`**
 
-Metal Sizing has **none**.
+1. **Remove the zeroing of `incentiveAmount`** at line 432-434 — keep the calculated production amount intact
+2. **Remove zeroing of `vesselAmount`** at line 445 — keep vessel amount intact when DQ'd
+3. **Keep `finalPercent = 0` for DQ** (line 429) — this is correct since the percentage-based incentive should show 0% final
+4. Actually, re-reading: `finalPercent` is also used for slab-based (support) programs. For production programs the amount comes from `incentiveAmount`. So:
+   - Remove `incentiveAmount = 0` on DQ (line 432-434)
+   - Remove `vesselAmount = 0` on DQ (line 445)
+   - The `finalPercent` zeroing at line 429 stays — it correctly shows 0% for slab-based programs, but the base % and amount remain visible
 
-### Fix
-
-**1. Insert DQ rules for Metal Sizing program**
-
-Insert the same standard DQ rules that exist for KRA Incentive into Metal Sizing. At minimum: `warning`, `suspension`, `lti`, `contract`, `lwp`, `absence`.
-
-```sql
-INSERT INTO incentive_disqualification_rules (program_id, rule_type, rule_config)
-VALUES
-  ('9bef3123-6754-4166-8a31-8c746e69048f', 'warning',    '{"disqualify": true}'),
-  ('9bef3123-6754-4166-8a31-8c746e69048f', 'suspension', '{"disqualify": true}'),
-  ('9bef3123-6754-4166-8a31-8c746e69048f', 'absence',    '{"threshold_days": 1}'),
-  ('9bef3123-6754-4166-8a31-8c746e69048f', 'lwp',        '{"max_lwp_days": 3, "exempt_roles": []}'),
-  ('9bef3123-6754-4166-8a31-8c746e69048f', 'lti',        '{"lti_1_penalty_percent": 50, "lti_2_plus_penalty_percent": 100, "scope": "department"}'),
-  ('9bef3123-6754-4166-8a31-8c746e69048f', 'contract',   '{"ineligible": true, "exempt_bus": []}');
-```
-
-**2. Re-compute Metal Sizing for March 2026** to apply the new rules.
-
-**3. Audit all other programs** — check if any other production programs are also missing DQ rules and insert them.
+**Net effect**: DQ records will show `is_disqualified: true`, `disqualification_reasons: [...]`, `final_incentive_percent: 0`, but `incentive_amount` will retain the calculated value so users can see the forfeited amount.
 
 ### Files Modified
 
 | File | Change |
 |------|--------|
-| DB insert | Add 6 DQ rules for Metal Sizing |
-| Re-computation | Trigger compute for March 2026 Metal Sizing |
-| `DOCUMENTATION.md` | v2.15.39 — note DQ rule configuration requirement |
+| `supabase/functions/compute-monthly-incentives/index.ts` | Remove amount-zeroing for DQ records (lines 432-434, 445) |
+| `DOCUMENTATION.md` | v2.15.40 — DQ records retain calculated amount |
+| `POLICY.md` | Update §44 — DQ status preserves amount for audit visibility |
 
 ### Risk Assessment
-- **Regression**: None — inserting new configuration rows; no code or schema change
-- **Data**: Re-computation will delete-and-reinsert records with correct DQ status
-- **Operational**: Admin should verify DQ rule configuration exists for every program via the Incentive Configuration UI
+- **Regression**: None — only removes zeroing; DQ status and reasons unchanged
+- **Downstream**: Payroll/finance teams must use `is_disqualified` flag (not amount=0) to determine actual payout
+- **Report**: Amount column will show values for DQ rows; the DQ badge already distinguishes them
 
