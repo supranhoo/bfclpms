@@ -288,6 +288,7 @@ export function MonthlyIncentiveTable() {
         result={dryRunResult}
         onConfirm={handleConfirmCompute}
         isConfirming={computeIncentives.isPending}
+        employeeNames={employeeNameMap}
       />
     </div>
   );
