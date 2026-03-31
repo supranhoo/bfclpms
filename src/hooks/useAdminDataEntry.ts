@@ -330,42 +330,57 @@ export function useAdminSubmitReviewData() {
           .single();
 
         if (freshSub) {
-          const currentFinal = freshSub.final_score;
-          const fallbackChain = [
-            'management_score', 'auditor_score', 'hr_pms_score',
-            'skip_level_score', 'manager_score', 'self_score',
-          ] as const;
-          const fallbackRatingChain = [
-            'management_rating', 'auditor_rating', 'hr_pms_rating',
-            'skip_level_rating', 'manager_rating', 'self_rating',
-          ] as const;
-
-          let computedScore: number | null = null;
-          let computedRating: string | null = null;
-          for (let i = 0; i < fallbackChain.length; i++) {
-            const s = (freshSub as any)[fallbackChain[i]];
-            if (s !== null && s !== undefined) {
-              computedScore = s;
-              computedRating = (freshSub as any)[fallbackRatingChain[i]] || null;
-              break;
+          // Guard: If N/A was set, force final_score to null — skip fallback chain
+          if (freshSub.is_na === true) {
+            if (freshSub.final_score !== null) {
+              const { error: naPatchError } = await supabase
+                .from('review_submissions')
+                .update({ final_score: null, final_rating: null, updated_at: new Date().toISOString() })
+                .eq('kpi_id', kpi_id);
+              if (naPatchError) {
+                console.error('[AdminDataEntry] N/A final_score clear failed:', naPatchError);
+              } else {
+                console.info('[AdminDataEntry] N/A guard: cleared final_score to null');
+              }
             }
-          }
+          } else {
+            const currentFinal = freshSub.final_score;
+            const fallbackChain = [
+              'management_score', 'auditor_score', 'hr_pms_score',
+              'skip_level_score', 'manager_score', 'self_score',
+            ] as const;
+            const fallbackRatingChain = [
+              'management_rating', 'auditor_rating', 'hr_pms_rating',
+              'skip_level_rating', 'manager_rating', 'self_rating',
+            ] as const;
 
-          // Patch if computed differs from current OR if current is null
-          if (computedScore !== null && (currentFinal === null || currentFinal === undefined || currentFinal !== computedScore)) {
-            const { error: patchError } = await supabase
-              .from('review_submissions')
-              .update({
-                final_score: computedScore,
-                final_rating: computedRating as any,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('kpi_id', kpi_id);
+            let computedScore: number | null = null;
+            let computedRating: string | null = null;
+            for (let i = 0; i < fallbackChain.length; i++) {
+              const s = (freshSub as any)[fallbackChain[i]];
+              if (s !== null && s !== undefined) {
+                computedScore = s;
+                computedRating = (freshSub as any)[fallbackRatingChain[i]] || null;
+                break;
+              }
+            }
 
-            if (patchError) {
-              console.error('[AdminDataEntry] final_score recomputation patch failed:', patchError);
-            } else {
-              console.info(`[AdminDataEntry] final_score recomputed: ${currentFinal} → ${computedScore}`);
+            // Patch if computed differs from current OR if current is null
+            if (computedScore !== null && (currentFinal === null || currentFinal === undefined || currentFinal !== computedScore)) {
+              const { error: patchError } = await supabase
+                .from('review_submissions')
+                .update({
+                  final_score: computedScore,
+                  final_rating: computedRating as any,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('kpi_id', kpi_id);
+
+              if (patchError) {
+                console.error('[AdminDataEntry] final_score recomputation patch failed:', patchError);
+              } else {
+                console.info(`[AdminDataEntry] final_score recomputed: ${currentFinal} → ${computedScore}`);
+              }
             }
           }
         }
