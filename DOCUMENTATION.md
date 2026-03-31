@@ -4470,3 +4470,13 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Problem:** `monthly_review_reminder` event existed in edge function and notification settings toggle but was missing from `DEFAULT_TEMPLATES` in `EmailTemplateEditor.tsx`, making it invisible in the templates list
 - **Fix:** Added `monthly_review_reminder` entry to `DEFAULT_TEMPLATES` with default subject/body matching the edge function template
 - **New placeholders:** `{{pending_kpis_count}}`, `{{pending_kpis_list}}` for monthly reminder context
+
+---
+
+### v2.15.15 — Observation counts visible on all dashboard KPI rows (2026-03-31)
+
+- **Problem:** Observations were only visible inside the KPI review panel; dashboard KPI rows showed query badges but not observation counts
+- **Fix:** Added a compact amber Eye icon + count indicator next to KPI status on all dashboard views (My KPIs, Team Review, Audit, Management, Skip-Level, HR PMS)
+- **Components updated:** `KpiDetailsTable.tsx` (new `observationCounts` prop), `MobileKpiCard.tsx` (new `observationCount` prop)
+- **Scorecards updated:** `UnifiedScorecard`, `EmployeeScorecard`, `AuditScorecard`, `ManagementScorecard` — all fetch batch observations via `useObservationsByKpis`
+- **POLICY.md §38:** Observation counts must be visible on all dashboard KPI rows

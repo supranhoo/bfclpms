@@ -732,3 +732,13 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Rationale:** Abstract entity pickers obscure which individual employees are actually enrolled. A resolved employee list gives admins immediate visibility into who is mapped, supports multi-select with filters, and prevents accidental over-enrollment.
 
 **Invariant:** `ProgramEmployeeMapping` must always render a flat employee table with checkboxes. Bulk operations (select-all-filtered, clear-all-filtered) must use the `useBulkAddProgramMappings` / `useBulkRemoveProgramMappings` hooks for performance.
+
+---
+
+## §38. Dashboard Observation Visibility Invariant
+
+**Rule:** Every dashboard KPI row (desktop table and mobile card) must display the observation count when observations exist for that KPI. The indicator must be a compact, non-cluttered Eye icon with count in amber, rendered after the query badge.
+
+**Rationale:** Observations represent critical feedback (positive, concern, neutral) from managers, auditors, and management. Hiding them inside the review panel reduces visibility and delays action. Surface-level indicators ensure all stakeholders see observation activity at a glance.
+
+**Invariant:** `KpiDetailsTable` must accept an `observationCounts` prop and render an Eye+count indicator for KPIs with observations > 0. All scorecard containers must fetch observations via `useObservationsByKpis` and pass the derived counts.
