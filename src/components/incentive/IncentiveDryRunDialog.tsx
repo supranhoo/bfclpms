@@ -14,6 +14,7 @@ interface DryRunResult {
     eligible: number;
     disqualified: number;
     avg_incentive_percent: number;
+    total_amount?: number;
   };
   records: Array<{
     employee_id: string;
