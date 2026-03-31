@@ -1,47 +1,61 @@
 
 
-## Plan: Reduce Table Width in Org KPI Audit Review
+## Plan: Redesign Org KPI Audit Review (Data Entry Style + Collapsible)
 
 ### Problem
-The employee table inside each audit card uses `w-full` and spreads across the entire card width, making it feel overly wide — especially on larger screens (see uploaded screenshot).
+Current audit cards are compact and don't show enough KPI detail. User wants them to match the Org KPI Data Entry layout but **with collapsible capability** — cards can be expanded/collapsed individually.
 
-### Changes (single file)
+### Changes
 
-**`src/components/admin/OrgKpiAuditCard.tsx`**
+**`src/components/admin/OrgKpiAuditCard.tsx`** — Redesign:
+1. Keep `Collapsible` wrapper but **default to expanded** (`defaultOpen={true}`)
+2. Redesign the trigger/header to show KPI metadata prominently (name, description, formula, scoring logic, KRA, target, UOM, status badges) — matching `OrgKpiEntryCard` style
+3. Collapsible content = employee table grouped by department, with columns: Employee, Target, Self, Manager, Auditor Score input, Remarks, Status, Action
+4. Add "Fill value" / "Fill empty" bulk input for auditor score
+5. Remove `w-full` from table, tighten padding per previous approved plan
+6. Keep bulk approve section at bottom of collapsible content
 
-1. Replace `<table className="w-full text-sm">` with `<table className="text-sm">` (remove `w-full` so the table shrinks to content width).
-2. Constrain the Employee name column: reduce `max-w-[160px]` to `max-w-[140px]`.
-3. Reduce padding on all cells from `px-2` to `px-1.5` and score columns from `px-1` to `px-0.5`.
-4. Shrink the Remarks input/text column by adding `max-w-[150px]` and the Auditor Score input width from `w-16` to `w-14`.
+**`src/hooks/useOrgKpiAuditReview.ts`** — Add fields:
+- Fetch `criteria` (description/formula) from KPI record
+- Add `departmentName`, `designationName` to `OrgKpiAuditEmployee` via profile joins
 
-### Before vs After
+**`src/pages/admin/OrgKpiAuditReview.tsx`** — Minor:
+- Remove category sub-headers (cards are self-descriptive with category color border)
+- Keep filters and progress bar
+
+### Visual Layout
 
 ```text
-BEFORE (current — table stretches full card width):
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│ Employee              │ Code    │ Self │ Manager │ Auditor Score │ Remarks          │ Status  │ Action         │
-│ ──────────────────────┼─────────┼──────┼─────────┼───────────────┼──────────────────┼─────────┼────────────────│
-│ V.A.V.S.S. Ganapathi  │ 200271  │ 4.0  │  4.0    │    [____]     │ [______________] │ Pending │ [Save][Approve]│
-│                        spread across entire card width ~1040px                                                │
-└──────────────────────────────────────────────────────────────────────────────────┘
-
-AFTER (compact — table auto-sizes to content):
-┌──────────────────────────────────────────────────────────────────┐
-│ Employee           │ Code   │Self│Mgr│Auditor│ Remarks    │St │Action      │
-│ ───────────────────┼────────┼────┼───┼───────┼────────────┼───┼────────────│
-│ V.A.V.S.S. Ganap…  │ 200271 │4.0 │4.0│[___]  │ [________] │ ● │[Save][Apr] │
-│                  fits content, no wasted horizontal space                  │
+┌─ Collapsible Card (default: expanded) ──────────────────────────┐
+│ ▾ Adherence to Electrical Maintenance Budget    [◎ 2 Pending]   │
+│   Description: Measures the variance between...                  │
+│   Formula: (Actual / Budgeted) * 100                             │
+│   KRA: Adherence to Monthly Budget  Target: 90  UOM: %          │
+│ ┌───────────────────────────────────────────────────────────────┐│
+│ │ 🏢 45 MW-Elect (1 employee)                                  ││
+│ │ Employee        │Tgt│Self│Mgr│Auditor│Remark│Status│Action   ││
+│ │ Sanjeeb K. Jena │90 │4.0 │4.0│[___] │[____]│ ●    │[Approve]││
+│ └───────────────────────────────────────────────────────────────┘│
+│ ─── Bulk Approve (2 pending) ───                                 │
 └──────────────────────────────────────────────────────────────────┘
+
+┌─ Collapsed Card ────────────────────────────────────────────────┐
+│ ▸ Safety Compliance Index               [✓ All Audited]         │
+│   KRA: Safety & Environment  Target: 95  UOM: %                │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ### Files Modified
 
 | File | Change |
 |------|--------|
-| `src/components/admin/OrgKpiAuditCard.tsx` | Remove `w-full` from table, tighten padding and max-widths |
-| `DOCUMENTATION.md` | v2.15.26 |
+| `src/components/admin/OrgKpiAuditCard.tsx` | Redesign with collapsible (default open), KPI metadata, dept-grouped employees, bulk fill, compact table |
+| `src/hooks/useOrgKpiAuditReview.ts` | Add criteria, department, designation to query |
+| `src/pages/admin/OrgKpiAuditReview.tsx` | Remove category sub-headers |
+| `DOCUMENTATION.md` | v2.15.27 |
 
 ### Risk Assessment
-- **Regression**: Zero — CSS-only change, no logic affected
-- **UI**: Table auto-sizes to content; horizontal scroll still available if needed on small screens
+- **Regression**: Low — UI redesign of existing card; hook changes are additive
+- **Data**: No schema changes
+- **Performance**: One extra join for department/designation (minimal)
 
