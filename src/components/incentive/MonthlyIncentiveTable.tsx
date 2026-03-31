@@ -268,6 +268,9 @@ export function MonthlyIncentiveTable() {
                           {r.final_incentive_percent}%
                         </Badge>
                       </TableCell>
+                      <TableCell className="font-medium">
+                        {(r.incentive_amount || 0) > 0 ? `₹${Number(r.incentive_amount).toLocaleString('en-IN')}` : '—'}
+                      </TableCell>
                       <TableCell>
                         <Badge variant={r.status === 'paid' ? 'default' : r.status === 'confirmed' ? 'secondary' : 'outline'}>
                           {r.status}
