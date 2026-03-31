@@ -1,53 +1,48 @@
 
 
-## RCA: Disqualified Employee Still Shows as Eligible in Report
+## RCA: Metal Sizing DQ Rules Not Applied
 
-### Root Cause (Two Issues)
+### Root Cause — Missing Configuration Data
 
-**Issue 1 — Stale records not cleaned on re-computation**
+The `incentive_disqualification_rules` table has **zero rows** for the Metal Sizing program (`9bef3123...`). The edge function queries DQ rules per `program_id` (line 60-63), so when no rules exist, the DQ evaluation loop is a no-op and all employees pass as eligible.
 
-The edge function upserts records using `onConflict: 'employee_id,review_period,review_year,program_id,payment_period'`. It never **deletes** existing records for the employee+program+month before upserting. This means:
-- Old records computed before the DQ fix still exist with `is_disqualified: false` and non-zero amounts
-- Re-computing will only update records whose `payment_period` matches exactly; it won't remove orphaned ones
+Programs that DO have rules configured:
+- KRA Incentive (`21b98a7d...`) — 6 rules (absence, lwp, warning, suspension, lti, contract)
+- Port Incentive (`c1724805...`) — 1 rule (warning)
 
-**Issue 2 — `payment_period: 'full'` vs `'Full Month'` mismatch**
-
-The database currently has a record with `payment_period = 'full'` (old default) alongside period-split records (`1-10`, `21-31`). The new computation creates `'Full Month'` records, which don't match the old `'full'` unique key — so the stale record persists indefinitely.
-
-**Evidence from database:**
-```
-employee ef74c606... has 3 Metal Sizing records for March 2026:
-  - payment_period='full',     is_disqualified=false, amount=₹7,000  ← STALE
-  - payment_period='1-10',     is_disqualified=false, amount=₹2,000  ← STALE  
-  - payment_period='21-31',    is_disqualified=false, amount=₹5,000  ← STALE
-```
-Eligibility data confirms `has_warning_letter = true` — all should be disqualified.
+Metal Sizing has **none**.
 
 ### Fix
 
-**1. Database Migration — Clean stale data**
-- Update all `payment_period = 'full'` to `'Full Month'` for consistency
-- Delete duplicate records where both `'full'`/`'Full Month'` and period-split records exist for the same employee+program+month
+**1. Insert DQ rules for Metal Sizing program**
 
-**2. Edge Function — Delete before upsert**
-Before upserting computed records, delete all existing records for the same `employee_id + program_id + review_period + review_year` combination. This ensures:
-- Period changes (full → split or vice versa) don't leave orphans
-- Re-computation always reflects current DQ status cleanly
+Insert the same standard DQ rules that exist for KRA Incentive into Metal Sizing. At minimum: `warning`, `suspension`, `lti`, `contract`, `lwp`, `absence`.
 
-**3. Edge Function — Standardise `'Full Month'` everywhere**
-Change the fallback/support program `payment_period` from `'full'` to `'Full Month'` (line 570) to match the production logic.
+```sql
+INSERT INTO incentive_disqualification_rules (program_id, rule_type, rule_config)
+VALUES
+  ('9bef3123-6754-4166-8a31-8c746e69048f', 'warning',    '{"disqualify": true}'),
+  ('9bef3123-6754-4166-8a31-8c746e69048f', 'suspension', '{"disqualify": true}'),
+  ('9bef3123-6754-4166-8a31-8c746e69048f', 'absence',    '{"threshold_days": 1}'),
+  ('9bef3123-6754-4166-8a31-8c746e69048f', 'lwp',        '{"max_lwp_days": 3, "exempt_roles": []}'),
+  ('9bef3123-6754-4166-8a31-8c746e69048f', 'lti',        '{"lti_1_penalty_percent": 50, "lti_2_plus_penalty_percent": 100, "scope": "department"}'),
+  ('9bef3123-6754-4166-8a31-8c746e69048f', 'contract',   '{"ineligible": true, "exempt_bus": []}');
+```
+
+**2. Re-compute Metal Sizing for March 2026** to apply the new rules.
+
+**3. Audit all other programs** — check if any other production programs are also missing DQ rules and insert them.
 
 ### Files Modified
 
 | File | Change |
 |------|--------|
-| DB migration | Normalize `'full'` → `'Full Month'`; delete orphan duplicates |
-| `supabase/functions/compute-monthly-incentives/index.ts` | Add delete-before-upsert; change `'full'` → `'Full Month'` at line 570 |
-| `DOCUMENTATION.md` | v2.15.38 |
-| `POLICY.md` | Update §44 note on recomputation cleanup |
+| DB insert | Add 6 DQ rules for Metal Sizing |
+| Re-computation | Trigger compute for March 2026 Metal Sizing |
+| `DOCUMENTATION.md` | v2.15.39 — note DQ rule configuration requirement |
 
 ### Risk Assessment
-- **Regression**: Low — delete-before-upsert is scoped to exact employee+program+month; only affects records about to be recomputed
-- **Data**: Migration is corrective only; normalizes existing inconsistency
-- **Manual override preservation**: The delete-before-upsert will remove manually overridden statuses. To mitigate, the function should read existing overrides first (already done at line 276-281) and re-apply them after upsert (already done at line 532/582). No additional code needed.
+- **Regression**: None — inserting new configuration rows; no code or schema change
+- **Data**: Re-computation will delete-and-reinsert records with correct DQ status
+- **Operational**: Admin should verify DQ rule configuration exists for every program via the Incentive Configuration UI
 
