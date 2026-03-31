@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.19 — Show employee names in incentive dry run dialog instead of UUIDs
+> **Version:** 2.15.20 — Dynamic custom tabs for incentive program configuration (database-driven, no hardcoding)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
