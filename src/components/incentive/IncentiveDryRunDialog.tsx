@@ -14,6 +14,7 @@ interface DryRunResult {
     eligible: number;
     disqualified: number;
     avg_incentive_percent: number;
+    total_amount?: number;
   };
   records: Array<{
     employee_id: string;
@@ -25,6 +26,7 @@ interface DryRunResult {
     pro_rata_factor: number;
     final_incentive_percent: number;
     production_value: number | null;
+    incentive_amount?: number;
   }>;
 }
 
@@ -49,12 +51,13 @@ export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, i
           <DialogDescription>Review the results before committing. Program: {result.program}</DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-5">
           {[
             { label: 'Total', value: summary.total },
             { label: 'Eligible', value: summary.eligible },
             { label: 'Disqualified', value: summary.disqualified },
             { label: 'Avg Incentive %', value: summary.avg_incentive_percent.toFixed(1) + '%' },
+            { label: 'Total Amount', value: '₹' + (summary.total_amount?.toLocaleString('en-IN') || '0') },
           ].map(s => (
             <Card key={s.label}>
               <CardContent className="pt-3 pb-3">
@@ -76,6 +79,7 @@ export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, i
                 <TableHead>LTI Penalty</TableHead>
                 <TableHead>Pro-rata</TableHead>
                 <TableHead>Final %</TableHead>
+                <TableHead>Amount (₹)</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -100,6 +104,9 @@ export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, i
                       <Badge variant={r.final_incentive_percent > 0 ? 'default' : 'secondary'}>
                         {r.final_incentive_percent}%
                       </Badge>
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {(r.incentive_amount || 0) > 0 ? `₹${r.incentive_amount?.toLocaleString('en-IN')}` : '—'}
                     </TableCell>
                   </TableRow>
                 );

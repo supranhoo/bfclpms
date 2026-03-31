@@ -61,7 +61,8 @@ export function MonthlyIncentiveTable() {
     const disqualified = (records as any[]).filter((r: any) => r.is_disqualified).length;
     const prorata = (records as any[]).filter((r: any) => !r.is_disqualified && r.pro_rata_factor < 1).length;
     const avgIncentive = eligible > 0 ? (records as any[]).filter((r: any) => !r.is_disqualified).reduce((s: number, r: any) => s + (r.final_incentive_percent || 0), 0) / eligible : 0;
-    return { total, eligible, disqualified, prorata, avgIncentive };
+    const totalAmount = (records as any[]).reduce((s: number, r: any) => s + (r.incentive_amount || 0), 0);
+    return { total, eligible, disqualified, prorata, avgIncentive, totalAmount };
   }, [records]);
 
   const handleExport = () => {
@@ -76,6 +77,7 @@ export function MonthlyIncentiveTable() {
       'LTI Penalty %': r.lti_penalty_percent,
       'Pro-rata Factor': r.pro_rata_factor,
       'Final Incentive %': r.final_incentive_percent,
+      'Incentive Amount': r.incentive_amount || 0,
       'Status': r.status,
     }));
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -138,13 +140,14 @@ export function MonthlyIncentiveTable() {
   return (
     <div className="space-y-4">
       {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-6">
         {[
           { label: 'Total Employees', value: summaryStats.total },
           { label: 'Eligible', value: summaryStats.eligible },
           { label: 'Disqualified', value: summaryStats.disqualified },
           { label: 'Pro-rata', value: summaryStats.prorata },
           { label: 'Avg Incentive %', value: summaryStats.avgIncentive.toFixed(1) + '%' },
+          { label: 'Total Amount', value: '₹' + summaryStats.totalAmount.toLocaleString('en-IN') },
         ].map(s => (
           <Card key={s.label}>
             <CardContent className="pt-4">
@@ -229,15 +232,16 @@ export function MonthlyIncentiveTable() {
                   <TableHead>LTI Penalty</TableHead>
                   <TableHead>Pro-rata</TableHead>
                   <TableHead>Final %</TableHead>
+                  <TableHead>Amount (₹)</TableHead>
                    <TableHead>Status</TableHead>
                    <TableHead>Incentive Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={12} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
                 ) : filteredRecords.length === 0 ? (
-                  <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">No records found. Run incentive computation first.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={12} className="text-center py-8 text-muted-foreground">No records found. Run incentive computation first.</TableCell></TableRow>
                 ) : (
                   filteredRecords.map((r: any) => (
                     <TableRow key={r.id}>
@@ -264,6 +268,9 @@ export function MonthlyIncentiveTable() {
                         <Badge variant={r.final_incentive_percent > 0 ? 'default' : 'secondary'}>
                           {r.final_incentive_percent}%
                         </Badge>
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {(r.incentive_amount || 0) > 0 ? `₹${Number(r.incentive_amount).toLocaleString('en-IN')}` : '—'}
                       </TableCell>
                       <TableCell>
                         <Badge variant={r.status === 'paid' ? 'default' : r.status === 'confirmed' ? 'secondary' : 'outline'}>

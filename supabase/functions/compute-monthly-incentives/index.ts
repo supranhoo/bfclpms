@@ -239,6 +239,36 @@ serve(async (req) => {
       }
     }
 
+    // 5b. Fetch production daily entries and rates for production programs
+    let prodEntryMap = new Map<string, number>(); // employee_id -> totalTons
+    let prodRates: any[] = [];
+    if (program.program_type === 'production') {
+      const { data: dailyEntries } = await supabase
+        .from('production_daily_entries')
+        .select('employee_id, daily_values')
+        .eq('program_id', program_id)
+        .eq('month', review_period)
+        .eq('year', review_year);
+
+      if (dailyEntries) {
+        for (const entry of dailyEntries) {
+          const vals = entry.daily_values as Record<string, any> || {};
+          let total = 0;
+          for (const key of Object.keys(vals)) {
+            const v = parseFloat(vals[key]);
+            if (!isNaN(v)) total += v;
+          }
+          prodEntryMap.set(entry.employee_id, total);
+        }
+      }
+
+      const { data: rates } = await supabase
+        .from('incentive_production_rates')
+        .select('employee_id, entity_id, rate_per_ton, rate_type')
+        .eq('program_id', program_id);
+      prodRates = rates || [];
+    }
+
     // 5. Fetch existing records to check for manual overrides
     const { data: existingRecords } = await supabase
       .from('employee_incentive_records')
@@ -284,12 +314,35 @@ serve(async (req) => {
 
         pmsScore = totalWeight > 0 ? totalWeightedScore / totalWeight : null;
       } else {
-        // Production — use eligibility production_value
+        // Production — use aggregated production daily entries
         pmsScore = null;
       }
 
+      // Resolve production rate and amount for production programs
+      let productionTotalTons: number | null = null;
+      let resolvedRate: number | null = null;
+      let incentiveAmount = 0;
+
+      if (program.program_type === 'production') {
+        productionTotalTons = prodEntryMap.get(emp.id) ?? null;
+
+        // Priority cascade: employee > department > business_unit > common
+        const empRate = prodRates.find((r: any) => r.rate_type === 'employee' && r.employee_id === emp.id);
+        const deptRate = emp.department_id ? prodRates.find((r: any) => r.rate_type === 'department' && r.entity_id === emp.department_id) : null;
+        // For BU rate, we need to resolve dept -> BU
+        const buRate = prodRates.find((r: any) => r.rate_type === 'business_unit');
+        const commonRate = prodRates.find((r: any) => r.rate_type === 'common');
+
+        const rateRecord = empRate || deptRate || buRate || commonRate;
+        resolvedRate = rateRecord?.rate_per_ton ?? null;
+
+        if (productionTotalTons !== null && resolvedRate !== null) {
+          incentiveAmount = productionTotalTons * resolvedRate;
+        }
+      }
+
       // Match slab
-      const scoreForSlab = program.program_type === 'support' ? pmsScore : elig?.production_value;
+      const scoreForSlab = program.program_type === 'support' ? pmsScore : (productionTotalTons ?? elig?.production_value);
       if (scoreForSlab !== null && scoreForSlab !== undefined && slabs?.length) {
         const pmsSlabs = slabs.filter((s: any) =>
           s.slab_category === (program.program_type === 'support' ? 'pms_score' : 'production')
@@ -411,8 +464,8 @@ serve(async (req) => {
             incentiveStatus = 'hold';
           }
         } else {
-          // Production: finalised if production data exists
-          incentiveStatus = elig?.production_value !== null && elig?.production_value !== undefined ? 'finalised' : 'hold';
+          // Production: finalised if production daily entries exist
+          incentiveStatus = productionTotalTons !== null && productionTotalTons > 0 ? 'finalised' : 'hold';
         }
       }
 
@@ -425,7 +478,8 @@ serve(async (req) => {
         review_period,
         review_year,
         pms_score: pmsScore,
-        production_value: vesselAmount !== null ? vesselAmount : (elig?.production_value || null),
+        production_value: vesselAmount !== null ? vesselAmount : (productionTotalTons ?? elig?.production_value ?? null),
+        incentive_amount: vesselAmount !== null ? vesselAmount : (incentiveAmount || 0),
         matched_slab_id: matchedSlab?.id || null,
         base_incentive_percent: vesselAmount !== null ? 0 : basePercent,
         is_disqualified: isDQ,
@@ -447,11 +501,14 @@ serve(async (req) => {
       ? eligible.reduce((s: number, r: any) => s + r.final_incentive_percent, 0) / eligible.length
       : 0;
 
+    const totalAmount = records.reduce((s: number, r: any) => s + (r.incentive_amount || 0), 0);
+
     const summary = {
       total: records.length,
       eligible: eligible.length,
       disqualified: disqualified.length,
       avg_incentive_percent: Math.round(avgIncentive * 100) / 100,
+      total_amount: Math.round(totalAmount * 100) / 100,
     };
 
     // In dry_run mode, return preview without writing

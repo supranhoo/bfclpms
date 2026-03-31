@@ -591,6 +591,7 @@ export type Database = {
           employee_id: string
           final_incentive_percent: number
           id: string
+          incentive_amount: number | null
           incentive_status: string
           is_disqualified: boolean
           is_retroactive_adjustment: boolean
@@ -620,6 +621,7 @@ export type Database = {
           employee_id: string
           final_incentive_percent?: number
           id?: string
+          incentive_amount?: number | null
           incentive_status?: string
           is_disqualified?: boolean
           is_retroactive_adjustment?: boolean
@@ -649,6 +651,7 @@ export type Database = {
           employee_id?: string
           final_incentive_percent?: number
           id?: string
+          incentive_amount?: number | null
           incentive_status?: string
           is_disqualified?: boolean
           is_retroactive_adjustment?: boolean
