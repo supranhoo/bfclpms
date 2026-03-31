@@ -105,6 +105,19 @@ export function MonthlyIncentiveTable() {
       });
       setDryRunResult(result);
       setShowPreview(true);
+
+      // Fetch employee names for dry run records
+      const ids = (result as any)?.records?.map((r: any) => r.employee_id) || [];
+      if (ids.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, employee_code')
+          .in('id', ids);
+        const nameMap = new Map<string, { name: string; code: string }>(
+          (profiles || []).map((p: any) => [p.id, { name: p.full_name || 'Unknown', code: p.employee_code || '' }])
+        );
+        setEmployeeNameMap(nameMap);
+      }
     } catch { /* error handled by hook */ }
   };
 
