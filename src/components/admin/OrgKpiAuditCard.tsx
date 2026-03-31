@@ -418,7 +418,7 @@ function DepartmentGroup({
               <span className="font-medium text-xs">{emp.auditorScore?.toFixed(1) ?? '-'}</span>
             )}
           </td>
-          <td className="py-1.5 px-1.5 max-w-[150px]">
+          <td className="py-1.5 px-1.5 min-w-[200px]">
             {emp.isAuditPending ? (
               <Input
                 className="h-7 text-xs"
@@ -428,7 +428,14 @@ function DepartmentGroup({
                 disabled={isSubmitting}
               />
             ) : (
-              <span className="text-xs text-muted-foreground truncate block">{emp.auditorRemarks || '-'}</span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-xs text-muted-foreground line-clamp-2 block">{emp.auditorRemarks || '-'}</span>
+                </TooltipTrigger>
+                {emp.auditorRemarks && (
+                  <TooltipContent className="max-w-xs">{emp.auditorRemarks}</TooltipContent>
+                )}
+              </Tooltip>
             )}
           </td>
           <td className="py-1.5 px-0.5 text-center">
