@@ -1,0 +1,1 @@
+ALTER TABLE public.employee_incentive_records ADD COLUMN IF NOT EXISTS incentive_amount numeric DEFAULT 0;
