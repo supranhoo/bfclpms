@@ -76,6 +76,7 @@ export function IncentiveReportExport() {
         'Division': div?.name ?? '',
         'Month': r.review_period,
         'Year': r.review_year,
+        'Period': r.payment_period === 'full' ? '' : r.payment_period,
         'Programme Name': prog?.name ?? '',
         'PMS Score': r.pms_score ?? '',
         'Slab Range': slab ? `${slab.min_value}–${slab.max_value}` : '',
