@@ -35,6 +35,7 @@ interface MobileKpiCardProps {
   getOrgKpiValue?: (kpi: KPI) => { achieved_value: number | null; data_source: string | null; entered_by_name: string | null } | null;
   sentBackKpiIds?: Set<string>;
   dataOwnerNames?: Map<string, string[]>;
+  observationCount?: number;
 }
 
 export function MobileKpiCard({
