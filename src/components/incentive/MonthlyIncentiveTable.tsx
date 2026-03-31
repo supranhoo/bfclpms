@@ -65,20 +65,21 @@ export function MonthlyIncentiveTable() {
     return { total, eligible, disqualified, prorata, avgIncentive, totalAmount };
   }, [records]);
 
-  const handleExport = () => {
-    const exportData = filteredRecords.map((r: any) => ({
-      'Employee Code': r.profiles?.employee_code,
-      'Employee Name': r.profiles?.full_name,
-      'Department': r.profiles?.departments?.name,
-      'PMS Score': r.pms_score?.toFixed(2),
-      'Matched Slab': r.incentive_slabs ? `${r.incentive_slabs.min_value}-${r.incentive_slabs.max_value}` : '—',
-      'Base Incentive %': r.base_incentive_percent,
-      'DQ Reasons': r.disqualification_reasons?.join(', ') || '',
-      'LTI Penalty %': r.lti_penalty_percent,
-      'Pro-rata Factor': r.pro_rata_factor,
-      'Final Incentive %': r.final_incentive_percent,
-      'Incentive Amount': r.incentive_amount || 0,
-      'Status': r.status,
+   const handleExport = () => {
+     const exportData = filteredRecords.map((r: any) => ({
+       'Employee Code': r.profiles?.employee_code,
+       'Employee Name': r.profiles?.full_name,
+       'Department': r.profiles?.departments?.name,
+       'Period': r.payment_period === 'full' ? '' : r.payment_period,
+       'PMS Score': r.pms_score?.toFixed(2),
+       'Matched Slab': r.incentive_slabs ? `${r.incentive_slabs.min_value}-${r.incentive_slabs.max_value}` : '—',
+       'Base Incentive %': r.base_incentive_percent,
+       'DQ Reasons': r.disqualification_reasons?.join(', ') || '',
+       'LTI Penalty %': r.lti_penalty_percent,
+       'Pro-rata Factor': r.pro_rata_factor,
+       'Final Incentive %': r.final_incentive_percent,
+       'Incentive Amount': r.incentive_amount || 0,
+       'Status': r.status,
     }));
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
@@ -223,27 +224,28 @@ export function MonthlyIncentiveTable() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>PMS Score</TableHead>
-                  <TableHead>Slab</TableHead>
-                  <TableHead>Base %</TableHead>
-                  <TableHead>DQ Reason</TableHead>
-                  <TableHead>LTI Penalty</TableHead>
-                  <TableHead>Pro-rata</TableHead>
-                  <TableHead>Final %</TableHead>
-                  <TableHead>Amount (₹)</TableHead>
-                   <TableHead>Status</TableHead>
-                   <TableHead>Incentive Status</TableHead>
+                   <TableHead>Employee</TableHead>
+                   <TableHead>Department</TableHead>
+                   <TableHead>Period</TableHead>
+                   <TableHead>PMS Score</TableHead>
+                   <TableHead>Slab</TableHead>
+                   <TableHead>Base %</TableHead>
+                   <TableHead>DQ Reason</TableHead>
+                   <TableHead>LTI Penalty</TableHead>
+                   <TableHead>Pro-rata</TableHead>
+                   <TableHead>Final %</TableHead>
+                   <TableHead>Amount (₹)</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Incentive Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={12} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
-                ) : isError ? (
-                  <TableRow><TableCell colSpan={12} className="text-center py-8 text-destructive">Error loading records: {(error as Error)?.message || 'Unknown error'}</TableCell></TableRow>
+                   <TableRow><TableCell colSpan={13} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                 ) : isError ? (
+                   <TableRow><TableCell colSpan={13} className="text-center py-8 text-destructive">Error loading records: {(error as Error)?.message || 'Unknown error'}</TableCell></TableRow>
                 ) : filteredRecords.length === 0 ? (
-                  <TableRow><TableCell colSpan={12} className="text-center py-8 text-muted-foreground">{selectedProgram ? 'No records found for this program/period. Run incentive computation first.' : 'Select a program to view records.'}</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={13} className="text-center py-8 text-muted-foreground">{selectedProgram ? 'No records found for this program/period. Run incentive computation first.' : 'Select a program to view records.'}</TableCell></TableRow>
                 ) : (
                   filteredRecords.map((r: any) => (
                     <TableRow key={r.id}>
@@ -251,7 +253,8 @@ export function MonthlyIncentiveTable() {
                         <div className="text-sm font-medium">{r.profiles?.full_name}</div>
                         <div className="text-xs text-muted-foreground">{r.profiles?.employee_code}</div>
                       </TableCell>
-                      <TableCell className="text-sm">{r.profiles?.departments?.name || '—'}</TableCell>
+                       <TableCell className="text-sm">{r.profiles?.departments?.name || '—'}</TableCell>
+                       <TableCell className="text-xs">{r.payment_period === 'full' ? '—' : r.payment_period}</TableCell>
                       <TableCell>{r.pms_score?.toFixed(2) || '—'}</TableCell>
                       <TableCell>
                         {r.incentive_slabs ? (

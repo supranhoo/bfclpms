@@ -240,7 +240,9 @@ serve(async (req) => {
     }
 
     // 5b. Fetch production daily entries and rates for production programs
-    let prodEntryMap = new Map<string, number>(); // employee_id -> totalTons
+    // Store raw daily_values so we can split by period later
+    let prodDailyMap = new Map<string, Record<string, any>>(); // employee_id -> daily_values
+    let prodEntryMap = new Map<string, number>(); // employee_id -> totalTons (for slab matching)
     let prodRates: any[] = [];
     if (program.program_type === 'production') {
       const { data: dailyEntries } = await supabase
@@ -253,6 +255,7 @@ serve(async (req) => {
       if (dailyEntries) {
         for (const entry of dailyEntries) {
           const vals = entry.daily_values as Record<string, any> || {};
+          prodDailyMap.set(entry.employee_id, vals);
           let total = 0;
           for (const key of Object.keys(vals)) {
             const v = parseFloat(vals[key]);
@@ -472,26 +475,110 @@ serve(async (req) => {
       // Check if record already has a manual override — if so, don't revert it
       const existingOverride = existingRecords?.find((er: any) => er.employee_id === emp.id && er.status_overridden_by);
 
-      records.push({
-        employee_id: emp.id,
-        program_id: program_id,
-        review_period,
-        review_year,
-        pms_score: pmsScore,
-        production_value: vesselAmount !== null ? vesselAmount : (productionTotalTons ?? elig?.production_value ?? null),
-        incentive_amount: vesselAmount !== null ? vesselAmount : (incentiveAmount || 0),
-        matched_slab_id: matchedSlab?.id || null,
-        base_incentive_percent: vesselAmount !== null ? 0 : basePercent,
-        is_disqualified: isDQ,
-        disqualification_reasons: dqReasons.length > 0 ? dqReasons : null,
-        lti_penalty_percent: ltiPenalty,
-        pro_rata_factor: proRata,
-        final_incentive_percent: vesselAmount !== null ? 0 : Math.round(finalPercent * 100) / 100,
-        status: 'draft',
-        incentive_status: existingOverride ? existingOverride.incentive_status : incentiveStatus,
-        computed_at: new Date().toISOString(),
-      });
-      computed++;
+      // For production programs, split into period-based records
+      if (program.program_type === 'production' && prodDailyMap.has(emp.id)) {
+        const dailyVals = prodDailyMap.get(emp.id) || {};
+        const days = Object.keys(dailyVals).map(Number).filter(d => !isNaN(d));
+
+        // Compute per-range totals
+        const ranges: { label: string; min: number; max: number }[] = [
+          { label: '1-10', min: 1, max: 10 },
+          { label: '11-20', min: 11, max: 20 },
+          { label: '21-31', min: 21, max: 31 },
+        ];
+
+        const rangeTotals: { label: string; total: number }[] = [];
+        for (const range of ranges) {
+          let total = 0;
+          for (const d of days) {
+            if (d >= range.min && d <= range.max) {
+              const v = parseFloat(dailyVals[String(d)]);
+              if (!isNaN(v)) total += v;
+            }
+          }
+          if (total > 0) rangeTotals.push({ label: range.label, total });
+        }
+
+        // If all 3 ranges have data → "Full Month"; otherwise per-range records
+        const populatedRanges = rangeTotals.filter(r => r.total > 0);
+        const isFullMonth = populatedRanges.length === 3;
+
+        if (isFullMonth) {
+          // Single "Full Month" record
+          const totalTons = populatedRanges.reduce((s, r) => s + r.total, 0);
+          const amount = resolvedRate !== null ? totalTons * resolvedRate : 0;
+          records.push({
+            employee_id: emp.id,
+            program_id: program_id,
+            review_period,
+            review_year,
+            payment_period: 'Full Month',
+            pms_score: null,
+            production_value: totalTons,
+            incentive_amount: amount,
+            matched_slab_id: matchedSlab?.id || null,
+            base_incentive_percent: basePercent,
+            is_disqualified: isDQ,
+            disqualification_reasons: dqReasons.length > 0 ? dqReasons : null,
+            lti_penalty_percent: ltiPenalty,
+            pro_rata_factor: proRata,
+            final_incentive_percent: Math.round(finalPercent * 100) / 100,
+            status: 'draft',
+            incentive_status: existingOverride ? existingOverride.incentive_status : incentiveStatus,
+            computed_at: new Date().toISOString(),
+          });
+          computed++;
+        } else {
+          // Per-range records
+          for (const rt of populatedRanges) {
+            const amount = resolvedRate !== null ? rt.total * resolvedRate : 0;
+            records.push({
+              employee_id: emp.id,
+              program_id: program_id,
+              review_period,
+              review_year,
+              payment_period: rt.label,
+              pms_score: null,
+              production_value: rt.total,
+              incentive_amount: amount,
+              matched_slab_id: matchedSlab?.id || null,
+              base_incentive_percent: basePercent,
+              is_disqualified: isDQ,
+              disqualification_reasons: dqReasons.length > 0 ? dqReasons : null,
+              lti_penalty_percent: ltiPenalty,
+              pro_rata_factor: proRata,
+              final_incentive_percent: Math.round(finalPercent * 100) / 100,
+              status: 'draft',
+              incentive_status: existingOverride ? existingOverride.incentive_status : incentiveStatus,
+              computed_at: new Date().toISOString(),
+            });
+            computed++;
+          }
+        }
+      } else {
+        // Support / vessel / production with no daily data — single record
+        records.push({
+          employee_id: emp.id,
+          program_id: program_id,
+          review_period,
+          review_year,
+          payment_period: 'full',
+          pms_score: pmsScore,
+          production_value: vesselAmount !== null ? vesselAmount : (productionTotalTons ?? elig?.production_value ?? null),
+          incentive_amount: vesselAmount !== null ? vesselAmount : (incentiveAmount || 0),
+          matched_slab_id: matchedSlab?.id || null,
+          base_incentive_percent: vesselAmount !== null ? 0 : basePercent,
+          is_disqualified: isDQ,
+          disqualification_reasons: dqReasons.length > 0 ? dqReasons : null,
+          lti_penalty_percent: ltiPenalty,
+          pro_rata_factor: proRata,
+          final_incentive_percent: vesselAmount !== null ? 0 : Math.round(finalPercent * 100) / 100,
+          status: 'draft',
+          incentive_status: existingOverride ? existingOverride.incentive_status : incentiveStatus,
+          computed_at: new Date().toISOString(),
+        });
+        computed++;
+      }
     }
 
     // 6. Compute summary stats
@@ -526,7 +613,7 @@ serve(async (req) => {
         const batch = records.slice(i, i + batchSize);
         const { error } = await supabase
           .from('employee_incentive_records')
-          .upsert(batch, { onConflict: 'employee_id,review_period,review_year,program_id' });
+          .upsert(batch, { onConflict: 'employee_id,review_period,review_year,program_id,payment_period' });
         if (error) console.error('Upsert error:', error);
       }
     }

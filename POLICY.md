@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 1.47.0 — §44: Production computation pipeline connected
+> **Version:** 1.48.0 — §44: Period-based payment tracking for production programs
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -809,9 +809,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Calculation:** Incentive amount = Total daily achievement × Effective rate per ton. The grid displays a badge (emp/dept/bu/com) next to each rate to indicate its source.
 
-**Computation pipeline:** The `compute-monthly-incentives` edge function aggregates production daily entries and resolves rates using the priority cascade. The computed `incentive_amount` is stored in `employee_incentive_records.incentive_amount` and displayed in both the dry-run preview and the monthly report table.
+**Computation pipeline:** The `compute-monthly-incentives` edge function aggregates production daily entries and resolves rates using the priority cascade. For production programs, it splits records by payment period: if daily data spans all three ranges (1-10, 11-20, 21-31), a single "Full Month" record is created; if data only covers specific ranges, separate records are created per populated range. Each period record has its own `incentive_amount` and independent `status` (draft/confirmed/paid), enabling payroll to track and confirm payments per period without duplication.
 
-**Date range filter:** UI-only filter (All, 1-10, 11-20, 21-31) for usability on narrow screens. Totals always reflect all days regardless of visible range.
+**Payment period column:** `employee_incentive_records.payment_period` stores: `'1-10'`, `'11-20'`, `'21-31'`, `'Full Month'`, or `'full'` (for support/vessel programs). Unique constraint: `(employee_id, review_period, review_year, program_id, payment_period)`.
+
+**Date range filter:** UI toggle renamed from "All" to "Full Month". Totals always reflect all days regardless of visible range.
 
 **Detection priority:** Vessel rates → Vessel grid; Production rates → Daily grid; Neither → Slab-based grid.
 

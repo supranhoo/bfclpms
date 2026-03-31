@@ -21,6 +21,7 @@ export function IncentiveReportExport() {
   const [month, setMonth] = useState('all');
   const [year, setYear] = useState('all');
   const [programId, setProgramId] = useState('all');
+  const [periodFilter, setPeriodFilter] = useState('all');
   const [search, setSearch] = useState('');
 
   const { data: programs } = useIncentivePrograms();
@@ -28,18 +29,24 @@ export function IncentiveReportExport() {
 
   const filtered = useMemo(() => {
     if (!records) return [];
-    if (!search.trim()) return records;
-    const q = search.toLowerCase();
-    return records.filter((r: any) => {
-      const p = r.profiles;
-      return (
-        p?.full_name?.toLowerCase().includes(q) ||
-        p?.employee_code?.toLowerCase().includes(q) ||
-        p?.designation?.toLowerCase().includes(q) ||
-        p?.departments?.name?.toLowerCase().includes(q)
-      );
-    });
-  }, [records, search]);
+    let result = records;
+    if (periodFilter !== 'all') {
+      result = result.filter((r: any) => r.payment_period === periodFilter);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter((r: any) => {
+        const p = r.profiles;
+        return (
+          p?.full_name?.toLowerCase().includes(q) ||
+          p?.employee_code?.toLowerCase().includes(q) ||
+          p?.designation?.toLowerCase().includes(q) ||
+          p?.departments?.name?.toLowerCase().includes(q)
+        );
+      });
+    }
+    return result;
+  }, [records, search, periodFilter]);
 
   const stats = useMemo(() => {
     const list = filtered || [];
@@ -69,6 +76,7 @@ export function IncentiveReportExport() {
         'Division': div?.name ?? '',
         'Month': r.review_period,
         'Year': r.review_year,
+        'Period': r.payment_period === 'full' ? '' : r.payment_period,
         'Programme Name': prog?.name ?? '',
         'PMS Score': r.pms_score ?? '',
         'Slab Range': slab ? `${slab.min_value}–${slab.max_value}` : '',
@@ -146,7 +154,20 @@ export function IncentiveReportExport() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex-1 min-w-[180px]">
+             <div className="w-36">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Period</label>
+              <Select value={periodFilter} onValueChange={setPeriodFilter}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Periods</SelectItem>
+                  <SelectItem value="Full Month">Full Month</SelectItem>
+                  <SelectItem value="1-10">1-10</SelectItem>
+                  <SelectItem value="11-20">11-20</SelectItem>
+                  <SelectItem value="21-31">21-31</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+             <div className="flex-1 min-w-[180px]">
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Search</label>
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -192,6 +213,7 @@ export function IncentiveReportExport() {
                    <TableHead>Dept</TableHead>
                    <TableHead>Month</TableHead>
                    <TableHead>Year</TableHead>
+                   <TableHead>Period</TableHead>
                    <TableHead>Programme</TableHead>
                    <TableHead className="text-right">Final %</TableHead>
                    <TableHead className="text-right">Amount (₹)</TableHead>
@@ -205,9 +227,10 @@ export function IncentiveReportExport() {
                     <TableCell>{r.profiles?.full_name}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{r.profiles?.designation}</TableCell>
                     <TableCell className="text-xs">{r.profiles?.departments?.name}</TableCell>
-                    <TableCell>{r.review_period}</TableCell>
-                    <TableCell>{r.review_year}</TableCell>
-                    <TableCell className="text-xs">{r.incentive_programs?.name}</TableCell>
+                     <TableCell>{r.review_period}</TableCell>
+                     <TableCell>{r.review_year}</TableCell>
+                     <TableCell className="text-xs">{r.payment_period === 'full' ? '—' : r.payment_period}</TableCell>
+                     <TableCell className="text-xs">{r.incentive_programs?.name}</TableCell>
                     <TableCell className="text-right font-medium">{r.final_incentive_percent}%</TableCell>
                     <TableCell className="text-right font-medium">₹{(r.incentive_amount || 0).toLocaleString('en-IN')}</TableCell>
                     <TableCell>

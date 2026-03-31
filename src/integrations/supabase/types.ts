@@ -613,6 +613,7 @@ export type Database = {
           lti_penalty_percent: number
           matched_slab_id: string | null
           original_score: number | null
+          payment_period: string
           pms_score: number | null
           pro_rata_factor: number
           production_value: number | null
@@ -643,6 +644,7 @@ export type Database = {
           lti_penalty_percent?: number
           matched_slab_id?: string | null
           original_score?: number | null
+          payment_period?: string
           pms_score?: number | null
           pro_rata_factor?: number
           production_value?: number | null
@@ -673,6 +675,7 @@ export type Database = {
           lti_penalty_percent?: number
           matched_slab_id?: string | null
           original_score?: number | null
+          payment_period?: string
           pms_score?: number | null
           pro_rata_factor?: number
           production_value?: number | null
