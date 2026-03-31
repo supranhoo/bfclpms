@@ -993,8 +993,10 @@ export default function OrgKpiDataEntry() {
                       const { data, error } = await supabase.functions.invoke('send-pending-report-reminder', {
                         body: { review_period: selectedPeriod, review_year: selectedYear },
                       });
-                      if (error) throw error;
+                      // Check data.error first — the SDK sets `error` for any non-2xx,
+                      // but the function returns a JSON body with the real message
                       if (data?.error) throw new Error(data.error);
+                      if (error) throw error;
                       toast({
                         title: 'Reminder Sent',
                         description: `Notified ${data?.owners_notified ?? 0} data owner(s) about ${data?.total_pending ?? 0} pending KPI(s).`,
