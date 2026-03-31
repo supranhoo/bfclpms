@@ -440,7 +440,7 @@ serve(async (req) => {
         if (pmsScore !== null && pmsScore < (program.min_kra_score || 3)) {
           isDQ = true;
           dqReasons.push(`KRA score ${pmsScore.toFixed(2)} below minimum ${program.min_kra_score}`);
-          vesselAmount = 0;
+          // Retain vessel amount for audit visibility; DQ flag determines payout
         } else if (pmsScore === null && !program.no_kra_eligible) {
           // No KRA and not eligible without KRA
           vesselAmount = 0;
