@@ -167,7 +167,7 @@ export function IncentiveReportExport() {
         <SummaryCard icon={Users} label="Eligible" value={stats.eligible} className="text-primary" />
         <SummaryCard icon={ShieldAlert} label="Disqualified" value={stats.dq} className="text-destructive" />
         <SummaryCard icon={Clock} label="Pro-rata" value={stats.proRata} className="text-accent-foreground" />
-        <SummaryCard icon={IndianRupee} label="Total Incentive %" value={stats.totalAmount.toFixed(1)} />
+        <SummaryCard icon={IndianRupee} label="Total Amount (₹)" value={stats.totalAmount.toLocaleString('en-IN')} />
       </div>
 
       {/* Preview Table */}
