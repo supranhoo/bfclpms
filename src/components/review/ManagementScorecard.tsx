@@ -891,6 +891,7 @@ export function ManagementScorecard({
                     onToggleExpand={toggleDailyExpand}
                     isExpanded={expandedDailyKpis.has(kpi.id)}
                     getOrgKpiValue={getOrgKpiValue}
+                    observationCount={observationCounts.get(kpi.id) || 0}
                   />
                 );
               })}
