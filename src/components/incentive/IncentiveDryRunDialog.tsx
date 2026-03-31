@@ -51,12 +51,13 @@ export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, i
           <DialogDescription>Review the results before committing. Program: {result.program}</DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-5">
           {[
             { label: 'Total', value: summary.total },
             { label: 'Eligible', value: summary.eligible },
             { label: 'Disqualified', value: summary.disqualified },
             { label: 'Avg Incentive %', value: summary.avg_incentive_percent.toFixed(1) + '%' },
+            { label: 'Total Amount', value: '₹' + (summary.total_amount?.toLocaleString('en-IN') || '0') },
           ].map(s => (
             <Card key={s.label}>
               <CardContent className="pt-3 pb-3">
