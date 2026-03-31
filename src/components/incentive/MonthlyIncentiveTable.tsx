@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -27,6 +28,7 @@ export function MonthlyIncentiveTable() {
   const [selectedProgram, setSelectedProgram] = useState<string>('');
   const [dryRunResult, setDryRunResult] = useState<any>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [employeeNameMap, setEmployeeNameMap] = useState<Map<string, { name: string; code: string }>>(new Map());
 
   const { data: programs = [] } = useIncentivePrograms();
   const activePrograms = (programs as any[]).filter((p: any) => p.is_active);
@@ -103,6 +105,19 @@ export function MonthlyIncentiveTable() {
       });
       setDryRunResult(result);
       setShowPreview(true);
+
+      // Fetch employee names for dry run records
+      const ids = (result as any)?.records?.map((r: any) => r.employee_id) || [];
+      if (ids.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, employee_code')
+          .in('id', ids);
+        const nameMap = new Map<string, { name: string; code: string }>(
+          (profiles || []).map((p: any) => [p.id, { name: p.full_name || 'Unknown', code: p.employee_code || '' }])
+        );
+        setEmployeeNameMap(nameMap);
+      }
     } catch { /* error handled by hook */ }
   };
 
@@ -273,6 +288,7 @@ export function MonthlyIncentiveTable() {
         result={dryRunResult}
         onConfirm={handleConfirmCompute}
         isConfirming={computeIncentives.isPending}
+        employeeNames={employeeNameMap}
       />
     </div>
   );
