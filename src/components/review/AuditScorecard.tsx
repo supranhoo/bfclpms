@@ -820,6 +820,7 @@ export function AuditScorecard({
               sentBackKpiIds={sentBackKpiIds}
               auditKpiAssignments={auditKpiAssignments}
               dataOwnerNames={dataOwnerNamesMap}
+              observationCounts={observationCounts}
             />
           )}
         </CardContent>

@@ -917,6 +917,7 @@ export function ManagementScorecard({
               onToggleExpand={toggleDailyExpand}
               workflowStages={effectiveStages}
               dataOwnerNames={dataOwnerNamesMap}
+              observationCounts={observationCounts}
             />
           )}
         </CardContent>
