@@ -1,47 +1,47 @@
 
 
-## RCA & Fix: Disqualified Employee Still Shows Incentive Amount in Report
+## Plan: Merge Incentive Report & Monthly Report into Single Tab
 
-### Root Cause (Two Issues)
+### Problem
+Two tabs ("Incentive Report" and "Monthly Report") show nearly identical data. The only differences are:
+- Monthly Report has action buttons (Compute, Confirm All, Mark Paid, Status Override)
+- Incentive Report supports "All" months/years and batched fetching
+- Incentive Report has DQ badge with tooltip; Monthly has inline DQ reason
 
-**1. Edge Function — Production incentive amount not zeroed on DQ**
+### Approach
+Keep the **MonthlyIncentiveTable** as the single unified component, enhancing it with the best features from both.
 
-In `compute-monthly-incentives/index.ts`, the production incentive amount is calculated at lines 342-344 **before** DQ evaluation at lines 363-427. When an employee is disqualified (e.g., warning letter), `isDQ` is set to `true` and `finalPercent` becomes 0 (line 429), but `incentiveAmount` (tons × rate) is never zeroed. The period-based records at lines 509 and 534 use this non-zero `incentiveAmount` directly.
+### Changes
 
-**2. Report UI — No DQ/incentive_status visibility**
+**`src/components/incentive/MonthlyIncentiveTable.tsx`**:
+1. Add "All" option to Month and Year dropdowns (currently requires a specific selection)
+2. Switch data fetching: when "All" is selected for month/year, use `useIncentiveReportData` (batched, no row limit); when specific month+year selected, use `useIncentiveRecords` (standard query)
+3. Add Period filter dropdown from IncentiveReportExport
+4. Add DQ tooltip from IncentiveReportExport (hover on DQ badge shows reasons)
+5. Enhance Excel export to include all 28 columns from IncentiveReportExport (BU, Division, Designation, etc.)
+6. Add "All Programmes" option to programme dropdown (currently only shows active programs with no "all" option)
 
-The Incentive Report preview table (`IncentiveReportExport.tsx`, line 237) only shows `r.status` (draft/confirmed/paid). It does not display `is_disqualified` or `incentive_status`. A disqualified employee appears identical to an eligible one in the report.
+**`src/pages/reports/IncentiveReport.tsx`**:
+- Remove the "Incentive Report" tab and "Monthly Report" tab — keep only one tab called "Incentive Report"
+- Keep "Retroactive Adjustments" as a second tab
+- Render `MonthlyIncentiveTable` directly under the first tab
 
-### Fix
+**`src/components/incentive/IncentiveReportExport.tsx`**:
+- Delete this file (all features merged into MonthlyIncentiveTable)
 
-#### Edge Function (`compute-monthly-incentives/index.ts`)
-After DQ evaluation completes (after line 427), add:
-```typescript
-if (isDQ && program.program_type === 'production') {
-  incentiveAmount = 0;
-}
-```
-This ensures production period records get `incentive_amount: 0` when disqualified.
-
-#### Report UI (`IncentiveReportExport.tsx`)
-- Replace the "Status" column with a combined status display:
-  - If `is_disqualified` → show **"Disqualified"** badge in red with DQ reason tooltip
-  - Else → show `incentive_status` (hold/finalised/forfeited/released)
-- Keep `status` (draft/confirmed/paid) as a secondary indicator or merge both
-
-#### Monthly Table (`MonthlyIncentiveTable.tsx`)
-Already shows DQ info — no changes needed.
+**`DOCUMENTATION.md`** — v2.15.37, note merge
 
 ### Files Modified
 
 | File | Change |
 |------|--------|
-| `supabase/functions/compute-monthly-incentives/index.ts` | Zero `incentiveAmount` when `isDQ` for production programs |
-| `src/components/incentive/IncentiveReportExport.tsx` | Show DQ status and incentive_status in preview table; add DQ badge |
-| `DOCUMENTATION.md` | v2.15.36 |
+| `src/components/incentive/MonthlyIncentiveTable.tsx` | Add "All" filters, batched fetch, period filter, DQ tooltip, enhanced export |
+| `src/pages/reports/IncentiveReport.tsx` | Remove duplicate tabs; two tabs: "Incentive Report" + "Retroactive Adjustments" |
+| `src/components/incentive/IncentiveReportExport.tsx` | Delete |
+| `DOCUMENTATION.md` | v2.15.37 |
 
 ### Risk Assessment
-- **Regression**: None — only zeroes amount for already-disqualified records; eligible records unaffected
-- **Data**: Existing records need re-computation to correct amounts. No schema change.
-- **Dashboard Safety**: No RLS changes
+- **Regression**: Low — combining existing working features; no new logic
+- **Data**: No schema or RLS changes
+- **UX**: Simpler navigation; all capabilities in one place
 
