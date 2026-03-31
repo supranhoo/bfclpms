@@ -4558,3 +4558,14 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Root cause:** Admin marks management as N/A → upsert correctly sets `final_score = null` → Step 8 recompute block re-fetches submission, finds `auditor_score = 0` via fallback chain, patches `final_score` back to 0
 - **Fix:** Added `is_na` guard in recompute block — if `is_na === true`, force `final_score/final_rating` to null and skip fallback chain
 - **DB repair:** Corrective update nullified `final_score` on all records where `is_na = true` but score was non-null
+
+### v2.15.36 — Zero DQ Incentive Amount; Show DQ Status in Report
+- Edge function: Zero `incentiveAmount` for production programs when employee is disqualified
+- Report UI: Added DQ/Incentive Status and Workflow columns to preview table
+
+### v2.15.37 — Merge Incentive Report & Monthly Report into Single Tab
+- Merged `IncentiveReportExport` into `MonthlyIncentiveTable` as a single unified component
+- Added "All Months", "All Years", "All Programmes" filter options with batched data fetching
+- Added Period filter, DQ tooltip, enhanced 30-column Excel export
+- Reduced Incentive Report page from 3 tabs to 2 (Incentive Report + Retroactive Adjustments)
+- Deleted `IncentiveReportExport.tsx`
