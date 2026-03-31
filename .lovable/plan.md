@@ -1,26 +1,83 @@
 
 
-## Plan: Add Monthly Review Reminder to Email Templates UI
+## Plan: Show Observation Count on All Dashboard KPI Rows (Clean, Non-Cluttered)
 
-### Problem
-The `monthly_review_reminder` event type exists in the edge function (`send-email-notification/index.ts`) and in the notification settings toggle (`EmailNotificationSettings.tsx`), but it is missing from the `DEFAULT_TEMPLATES` array in `EmailTemplateEditor.tsx`. This is why it does not appear in the Email Templates list alongside the other 25 templates.
+### Design Approach — Avoid Clutter
+
+Instead of adding another separate badge next to status + query badge + audit icon, observations will use a **compact icon-only indicator** — a small dot-count next to an Eye icon, styled subtly in amber. It only renders when count > 0, uses minimal horizontal space, and visually groups with existing badges without adding visual noise.
+
+### UI
+
+```text
+Desktop row — Status cell (current vs proposed):
+
+BEFORE:
+│ [Manager Check] [2 query]                    │
+
+AFTER (only when observations exist):
+│ [Manager Check] [2 query] 👁 3               │
+                              ↑ small amber Eye icon + count
+                              No extra badge chrome — just icon + number
+```
+
+Mobile card — below the status badge row:
+```text
+│ [Manager Check]  [1 query]  👁 2             │
+```
+
+The indicator uses `text-amber-600` with no border/background — lighter visual weight than the destructive query badge, preventing clutter.
 
 ### Changes
 
-**`src/components/admin/EmailTemplateEditor.tsx`**
-- Add a new entry to the `DEFAULT_TEMPLATES` array (after `system_auto_scored`, before the closing `]`) with:
-  - `key: 'monthly_review_reminder'`
-  - `label: 'Monthly Review Reminder'`
-  - `description: 'Sent on alternate dates (1st, 3rd, 5th, 7th, 9th) of each month to remind employees to complete self-review & team KRA review'`
-  - Default subject and body matching the template already defined in the edge function
-  - `color: '#3b82f6'`, `emoji: '📋'`
-- Add monthly-reminder-specific placeholders to the `PLACEHOLDERS` array:
-  - `{{pending_kpis_count}}` — Number of pending KPIs
-  - `{{pending_kpis_list}}` — List of pending KPI names
+**`src/components/review/KpiDetailsTable.tsx`**
+- Add optional prop: `observationCounts?: Map<string, number>`
+- After query badge (line ~591), render compact indicator:
+  ```tsx
+  {obsCount > 0 && (
+    <span className="ml-1 inline-flex items-center gap-0.5 text-xs text-amber-600 dark:text-amber-400">
+      <Eye className="h-3 w-3" />{obsCount}
+    </span>
+  )}
+  ```
 
-**`DOCUMENTATION.md`** — v2.15.14 changelog
+**`src/components/dashboard/MobileKpiCard.tsx`**
+- Add optional prop: `observationCount?: number`
+- Render same compact indicator in the status badge row
+
+**`src/components/review/UnifiedScorecard.tsx`**
+- Import `useObservationsByKpis`
+- Extract KPI IDs, fetch batch observations
+- Derive `observationCounts: Map<string, number>` (kpiId → count)
+- Pass to `KpiDetailsTable` and `MobileKpiCard`
+
+**`src/components/review/EmployeeScorecard.tsx`**
+- Same pattern
+
+**`src/components/review/AuditScorecard.tsx`**
+- Same pattern
+
+**`src/components/review/ManagementScorecard.tsx`**
+- Same pattern
+
+**`DOCUMENTATION.md`** — v2.15.15 changelog
+
+**`POLICY.md`** — Add invariant: observation counts visible on all dashboard KPI rows
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `src/components/review/KpiDetailsTable.tsx` | Add `observationCounts` prop, render icon+count |
+| `src/components/dashboard/MobileKpiCard.tsx` | Add `observationCount` prop, render icon+count |
+| `src/components/review/UnifiedScorecard.tsx` | Fetch batch observations, pass counts |
+| `src/components/review/EmployeeScorecard.tsx` | Fetch batch observations, pass counts |
+| `src/components/review/AuditScorecard.tsx` | Fetch batch observations, pass counts |
+| `src/components/review/ManagementScorecard.tsx` | Fetch batch observations, pass counts |
+| `DOCUMENTATION.md` | v2.15.15 |
+| `POLICY.md` | Dashboard observation visibility invariant |
 
 ### Risk Assessment
-- **Regression**: Zero — additive only, appending one entry to an existing array
-- **Data**: No schema changes; uses existing `system_settings` persistence pattern (`email_template_monthly_review_reminder`)
+- **Regression**: Zero — optional prop, no change when not passed
+- **Clutter**: Minimal — icon+number only, no badge chrome, amber color distinguishes from red query badge
+- **Performance**: Single batch query per dashboard, cached by React Query
 
