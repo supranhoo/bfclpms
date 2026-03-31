@@ -85,6 +85,53 @@ export function useComputeIncentives() {
   });
 }
 
+// ── Report Data (batched, no row limit) ──
+
+interface IncentiveReportFilters {
+  month: string;
+  year: string;
+  programId: string;
+}
+
+async function fetchAllIncentiveRecords(filters: IncentiveReportFilters) {
+  const PAGE_SIZE = 1000;
+  let allData: any[] = [];
+  let offset = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    let query = supabase
+      .from('employee_incentive_records')
+      .select(`
+        *,
+        profiles:employee_id(full_name, employee_code, designation, department_id, departments(name, business_units(name, divisions(name)))),
+        incentive_slabs:matched_slab_id(min_value, max_value, incentive_percent, rating_label),
+        incentive_programs:program_id(name, incentive_base)
+      `)
+      .range(offset, offset + PAGE_SIZE - 1)
+      .order('created_at', { ascending: true });
+
+    if (filters.month !== 'all') query = query.eq('review_period', filters.month);
+    if (filters.year !== 'all') query = query.eq('review_year', Number(filters.year));
+    if (filters.programId !== 'all') query = query.eq('program_id', filters.programId);
+
+    const { data, error } = await query;
+    if (error) throw error;
+    allData = [...allData, ...(data || [])];
+    hasMore = (data?.length || 0) === PAGE_SIZE;
+    offset += PAGE_SIZE;
+  }
+  return allData;
+}
+
+export function useIncentiveReportData(filters: IncentiveReportFilters) {
+  return useQuery({
+    queryKey: ['incentive-report-data', filters.month, filters.year, filters.programId],
+    queryFn: () => fetchAllIncentiveRecords(filters),
+    placeholderData: (prev) => prev,
+  });
+}
+
 export function useDetectRetroactiveChanges() {
   const qc = useQueryClient();
   const { toast } = useToast();

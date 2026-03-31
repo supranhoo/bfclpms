@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.17 — Fix duplicate query_raised notification; single-source via DB trigger
+> **Version:** 2.15.18 — Enhanced Incentive Report with filters, summary cards, and 28-column Excel export
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4489,3 +4489,11 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix (in-app):** `useKpis.ts` and `useQueryWorkflow.ts` now truncate KPI name to first line via `.split('\n')[0].substring(0, 100)` and pass `query_reason` in notification metadata
 - **Fix (email):** DB trigger `send_email_on_notification` extended first-line truncation to query types (`query_raised`, `query_response_submitted`, `query_response_fyi`, `query_resolved`, `query_resolved_fyi`)
 - **POLICY.md §39:** All notification messages must use first-line-only KPI names
+
+### v2.15.18 — Enhanced Incentive Report with filters and Excel export (2026-03-31)
+
+- **New hook:** `useIncentiveReportData` in `useIncentiveRecords.ts` — batched pagination (1000-row pages in a loop) to fetch ALL incentive records without hitting Supabase's default limit
+- **New component:** `IncentiveReportExport.tsx` — Month/Year/Programme filters (all with "All" option), search, summary cards (Total, Eligible, DQ, Pro-rata, Total %), preview table, and comprehensive 28-column Excel export
+- **Excel columns:** Employee Info (6), Period & Programme (3), Scores & Slabs (4), DQ Fields (3), Adjustments (4), Final (3), Analytical (5)
+- **Updated:** `IncentiveReport.tsx` — new default "Incentive Report" tab alongside existing Monthly Report and Retroactive Adjustments tabs
+- **POLICY.md §41:** Incentive report exports must include all DQ rule fields
