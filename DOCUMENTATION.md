@@ -4569,3 +4569,9 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - Added Period filter, DQ tooltip, enhanced 30-column Excel export
 - Reduced Incentive Report page from 3 tabs to 2 (Incentive Report + Retroactive Adjustments)
 - Deleted `IncentiveReportExport.tsx`
+
+### v2.15.38 — Fix Stale DQ Records via Delete-Before-Upsert Cleanup
+- **Root cause:** Edge function upserted without deleting existing records; stale `payment_period='full'` records persisted alongside new `'Full Month'` records, causing DQ employees to still show incentive amounts
+- **Fix 1:** Normalized all `payment_period = 'full'` → `'Full Month'` in database
+- **Fix 2:** Edge function now deletes all existing records for employee+program+month before upserting fresh computed results
+- **Fix 3:** Standardized support/vessel program `payment_period` from `'full'` to `'Full Month'`
