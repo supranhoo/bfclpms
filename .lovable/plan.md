@@ -1,66 +1,40 @@
 
 
-## Plan: Enhanced Incentive Report with Filters & Excel Export (No Row Limit)
+## Plan: Show Employee Names in Incentive Dry Run Dialog
 
-### Updated from Previous Plan
+### Problem
+The `IncentiveDryRunDialog` accepts an `employeeNames` prop (`Map<string, { name, code }>`) but `MonthlyIncentiveTable` never passes it. The dialog falls back to `r.employee_id.slice(0, 8)` — showing UUIDs like "935c69c8".
 
-The only change from the previously approved plan: **remove the 1000-row Supabase default limit** by implementing paginated fetching that retrieves ALL records.
+### Fix
 
-### Pagination Strategy
-
-Supabase caps `.select()` at 1000 rows by default. To fetch all records, the new `useIncentiveReportData` hook will use a **batched fetch loop**:
+**`src/components/incentive/MonthlyIncentiveTable.tsx`**:
+1. After a successful dry run, extract all `employee_id` values from the result records
+2. Fetch profiles for those IDs from the `profiles` table (`id, full_name, employee_code`)
+3. Build a `Map<string, { name, code }>` and store in state
+4. Pass it as the `employeeNames` prop to `IncentiveDryRunDialog`
 
 ```typescript
-async function fetchAllIncentiveRecords(filters) {
-  const PAGE_SIZE = 1000;
-  let allData = [];
-  let offset = 0;
-  let hasMore = true;
-  
-  while (hasMore) {
-    let query = supabase
-      .from('employee_incentive_records')
-      .select('*, profiles:employee_id(...), incentive_slabs:matched_slab_id(...), incentive_programs:program_id(...)')
-      .range(offset, offset + PAGE_SIZE - 1)
-      .order('created_at', { ascending: true });
-    
-    // Apply filters only when not "all"
-    if (filters.month !== 'all') query = query.eq('review_period', filters.month);
-    if (filters.year !== 'all') query = query.eq('review_year', filters.year);
-    if (filters.programId !== 'all') query = query.eq('program_id', filters.programId);
-    
-    const { data, error } = await query;
-    if (error) throw error;
-    allData = [...allData, ...(data || [])];
-    hasMore = (data?.length || 0) === PAGE_SIZE;
-    offset += PAGE_SIZE;
-  }
-  return allData;
-}
+// After dry run returns results:
+const ids = data.records.map(r => r.employee_id);
+const { data: profiles } = await supabase
+  .from('profiles')
+  .select('id, full_name, employee_code')
+  .in('id', ids);
+
+const nameMap = new Map(
+  profiles?.map(p => [p.id, { name: p.full_name || 'Unknown', code: p.employee_code || '' }])
+);
+setEmployeeNameMap(nameMap);
 ```
-
-### All Other Details — Same as Previously Approved Plan
-
-**Filters**: Month (All + 12), Year (All + range), Programme (All + active programmes), Search input
-
-**Summary Cards**: Total Records, Eligible, Disqualified, Pro-rata, Total Incentive Amount
-
-**Preview Table**: Code, Name, Desig, Dept, BU, Month, Year, Programme, Final%, Status
-
-**Excel Export — 28 columns**: Employee Info (6), Period & Programme (3), Scores & Slabs (4), DQ Fields (3), Adjustments (4), Final (3), Analytical (5)
 
 ### Files Modified
 
 | File | Change |
 |------|--------|
-| `src/hooks/useIncentiveRecords.ts` | Add `useIncentiveReportData` with batched pagination (no 1000-row limit) |
-| `src/components/incentive/IncentiveReportExport.tsx` | New report UI with filters, summary cards, table, Excel export |
-| `src/pages/reports/IncentiveReport.tsx` | Add new "Incentive Report" tab |
-| `DOCUMENTATION.md` | v2.15.18 |
-| `POLICY.md` | Incentive report completeness invariant |
+| `src/components/incentive/MonthlyIncentiveTable.tsx` | Fetch employee names after dry run, pass to dialog |
+| `DOCUMENTATION.md` | v2.15.19 |
 
 ### Risk Assessment
-- **Regression**: Zero — additive tab
-- **Performance**: Batched fetching prevents timeout; UI renders preview table (first 50 rows) while full dataset loads for export
-- **Data**: Read-only queries, no schema changes
+- **Regression**: Zero — additive prop that was already supported but unused
+- **Performance**: Single query for batch of employee IDs after dry run
 
