@@ -133,6 +133,9 @@ function ProgramInnerTabs({ program }: { program: any }) {
         <TabsContent value="vessel-rates">
           <VesselRateEditor programId={p.id} minKraScore={p.min_kra_score} />
         </TabsContent>
+        <TabsContent value="production-rates">
+          <ProductionRatesTab programId={p.id} />
+        </TabsContent>
 
         {customTabs.map((ct) => (
           <TabsContent key={ct.id} value={`custom-${ct.id}`}>
