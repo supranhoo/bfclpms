@@ -4501,3 +4501,12 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 ### v2.15.21 — Fix Send Reminder Error (Org KPI Data Entry)
 - **Fixed:** `OrgKpiDataEntry.tsx` — reordered error handling to check `data?.error` before SDK-level `error`, so the actual edge function error message (e.g., "Pending KPI reminder event is not enabled") is shown instead of a generic "non-2xx status code" message
 - **Root cause:** The `org_kpi_pending_reminder` event toggle already exists in Email Notification Settings but may not be enabled; the fix ensures admins see the actionable error message
+
+### v2.15.22 — Org KPI Audit Review Page
+- **New page:** `/admin/org-kpi-audit-review` — dedicated audit review interface for organization-level KPIs
+- **New hook:** `useOrgKpiAuditReview` — fetches org-level KPIs at audit stage with employee details, scores, and per-employee workflows
+- **New component:** `OrgKpiAuditCard` — card per org KPI definition with employee grid, inline scoring, bulk approve
+- **Features:** Month/Year filters, search, category pills, status tabs (All/Pending/Audited), progress bar, consistency indicator, bulk approve
+- **Workflow:** Uses `resolveForwardStatus('auditor', stages)` for proper status advancement per employee's workflow
+- **Sidebar:** Added under Audit section (auditor + admin roles), menu key: `admin-org-kpi-audit`
+- **POLICY.md §43:** Org KPI audit review governance
