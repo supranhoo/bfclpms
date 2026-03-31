@@ -428,10 +428,8 @@ serve(async (req) => {
 
       const finalPercent = isDQ ? 0 : basePercent * (1 - ltiPenalty / 100) * proRata;
 
-      // Zero out production incentive amount when disqualified
-      if (isDQ && program.program_type === 'production') {
-        incentiveAmount = 0;
-      }
+      // DQ records retain calculated incentive amount for audit visibility
+      // Payroll must use is_disqualified flag to determine actual payout
 
       // Vessel-based incentive calculation
       let vesselAmount: number | null = null;
