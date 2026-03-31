@@ -171,6 +171,7 @@ export function KpiDetailsTable({
   sentBackKpiIds,
   auditKpiAssignments,
   dataOwnerNames,
+  observationCounts,
 }: KpiDetailsTableProps) {
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
