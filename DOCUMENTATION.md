@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.38 — Fix stale DQ records via delete-before-upsert cleanup
+> **Version:** 2.15.39 — Ensure all programs have standard DQ rules configured
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
