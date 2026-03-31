@@ -240,9 +240,9 @@ export function MonthlyIncentiveTable() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={12} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
-                ) : isError ? (
-                  <TableRow><TableCell colSpan={12} className="text-center py-8 text-destructive">Error loading records: {(error as Error)?.message || 'Unknown error'}</TableCell></TableRow>
+                   <TableRow><TableCell colSpan={13} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                 ) : isError ? (
+                   <TableRow><TableCell colSpan={13} className="text-center py-8 text-destructive">Error loading records: {(error as Error)?.message || 'Unknown error'}</TableCell></TableRow>
                 ) : filteredRecords.length === 0 ? (
                   <TableRow><TableCell colSpan={12} className="text-center py-8 text-muted-foreground">{selectedProgram ? 'No records found for this program/period. Run incentive computation first.' : 'Select a program to view records.'}</TableCell></TableRow>
                 ) : (
