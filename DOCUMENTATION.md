@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.18 — Enhanced Incentive Report with filters, summary cards, and 28-column Excel export
+> **Version:** 2.15.19 — Show employee names in incentive dry run dialog instead of UUIDs
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
