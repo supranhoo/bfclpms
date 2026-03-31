@@ -240,8 +240,10 @@ export function MonthlyIncentiveTable() {
               <TableBody>
                 {isLoading ? (
                   <TableRow><TableCell colSpan={12} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                ) : isError ? (
+                  <TableRow><TableCell colSpan={12} className="text-center py-8 text-destructive">Error loading records: {(error as Error)?.message || 'Unknown error'}</TableCell></TableRow>
                 ) : filteredRecords.length === 0 ? (
-                  <TableRow><TableCell colSpan={12} className="text-center py-8 text-muted-foreground">No records found. Run incentive computation first.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={12} className="text-center py-8 text-muted-foreground">{selectedProgram ? 'No records found for this program/period. Run incentive computation first.' : 'Select a program to view records.'}</TableCell></TableRow>
                 ) : (
                   filteredRecords.map((r: any) => (
                     <TableRow key={r.id}>

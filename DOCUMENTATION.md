@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.31 — Connect production data pipeline to incentive computation
+> **Version:** 2.15.32 — Fix incentive records visibility (programId filter + error display)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
