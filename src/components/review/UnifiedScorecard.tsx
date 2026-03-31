@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useKpisByEmployee, useReviewSubmissions, useApproveKpi, useRaiseQuery, useKpiQueries, useSendBackKpi, useEmployeeKpiPeriods, RatingLevel, KPI, KpiQuery } from '@/hooks/useKpis';
 import { useSubPeriodSubmissions, useSubPeriodSubmissionsByKpis, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
+import { useObservationsByKpis } from '@/hooks/useKpiObservations';
 import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
 import { useOrgKpiDataOwnerNames, getOwnerNamesForKpi } from '@/hooks/useOrgKpiDataOwner';
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';

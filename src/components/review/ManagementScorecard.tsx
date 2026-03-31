@@ -13,6 +13,7 @@ import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
 import { resolveForwardStatus, resolveSendBackTargets, resolveSendBackStatus, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { useKpisByEmployee, useReviewSubmissions, useKpiQueries, RatingLevel, KPI, KpiQuery } from '@/hooks/useKpis';
 import { useSubPeriodSubmissions, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
+import { useObservationsByKpis } from '@/hooks/useKpiObservations';
 import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
 import { useOrgKpiDataOwnerNames, getOwnerNamesForKpi } from '@/hooks/useOrgKpiDataOwner';
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
