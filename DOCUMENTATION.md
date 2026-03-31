@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-03-30  
-> **Version:** 2.15.13 — Edit & delete slab category dropdown options
+> **Last Updated:** 2026-03-31  
+> **Version:** 2.15.14 — Monthly review reminder template visible in Email Templates UI
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4462,3 +4462,11 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix:** Added a "Manage" (⚙) button next to the dropdown that opens a popover with inline edit and delete actions for each category
 - **New hook:** `useUpdateSlabCategory` — updates label and re-derives value
 - **UI:** Popover lists all categories with pencil (edit) and trash (delete) icons; inline input for editing; "Add New" at bottom
+
+---
+
+### v2.15.14 — Monthly review reminder template visible in Email Templates UI (2026-03-31)
+
+- **Problem:** `monthly_review_reminder` event existed in edge function and notification settings toggle but was missing from `DEFAULT_TEMPLATES` in `EmailTemplateEditor.tsx`, making it invisible in the templates list
+- **Fix:** Added `monthly_review_reminder` entry to `DEFAULT_TEMPLATES` with default subject/body matching the edge function template
+- **New placeholders:** `{{pending_kpis_count}}`, `{{pending_kpis_list}}` for monthly reminder context

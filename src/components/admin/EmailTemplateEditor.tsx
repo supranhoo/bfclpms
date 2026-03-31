@@ -430,6 +430,24 @@ Kindly check your KPIs for more details.`,
     color: '#f97316',
     emoji: '⚡',
   },
+  {
+    key: 'monthly_review_reminder',
+    label: 'Monthly Review Reminder',
+    description: 'Sent on alternate dates (1st, 3rd, 5th, 7th, 9th) of each month to remind employees to complete self-review & team KRA review',
+    subject: '[{{company_name}}] Reminder: Complete Your {{review_period}} {{review_year}} Performance Review',
+    bodyTemplate: `Dear {{recipient_name}},
+
+This is a reminder to complete your performance review for {{review_period}} {{review_year}}.
+
+Please log in to the PMS portal and submit your self-review at the earliest.
+
+If you have already submitted, kindly disregard this reminder.
+
+Best regards,
+{{company_name}} HR Team`,
+    color: '#3b82f6',
+    emoji: '📋',
+  },
 ];
 
 const PLACEHOLDERS = [
@@ -462,6 +480,8 @@ const PLACEHOLDERS = [
   { key: '{{total_weightage}}', description: 'Total weightage of assigned KRAs (batch assignment only)' },
   { key: '{{auto_score_reason}}', description: 'Reason for system auto-score (e.g. delayed self review)' },
   { key: '{{kpi_list}}', description: 'Bullet list of auto-scored KPI names (system auto-score only)' },
+  { key: '{{pending_kpis_count}}', description: 'Number of pending KPIs (monthly review reminder only)' },
+  { key: '{{pending_kpis_list}}', description: 'List of pending KPI names (monthly review reminder only)' },
 ];
 
 export function EmailTemplateEditor() {
