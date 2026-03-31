@@ -282,7 +282,7 @@ export function OrgKpiAuditCard({ group, onSubmitScore, onBulkApprove, isSubmitt
                     <th className="text-center py-1.5 px-0.5 font-medium">Self</th>
                     <th className="text-center py-1.5 px-0.5 font-medium">Mgr</th>
                     <th className="text-center py-1.5 px-0.5 font-medium">Auditor</th>
-                    <th className="text-left py-1.5 px-1.5 font-medium max-w-[150px]">Remarks</th>
+                    <th className="text-left py-1.5 px-1.5 font-medium min-w-[200px]">Remarks</th>
                     <th className="text-center py-1.5 px-0.5 font-medium">Status</th>
                     <th className="text-center py-1.5 px-0.5 font-medium">Action</th>
                   </tr>
