@@ -61,7 +61,8 @@ export function MonthlyIncentiveTable() {
     const disqualified = (records as any[]).filter((r: any) => r.is_disqualified).length;
     const prorata = (records as any[]).filter((r: any) => !r.is_disqualified && r.pro_rata_factor < 1).length;
     const avgIncentive = eligible > 0 ? (records as any[]).filter((r: any) => !r.is_disqualified).reduce((s: number, r: any) => s + (r.final_incentive_percent || 0), 0) / eligible : 0;
-    return { total, eligible, disqualified, prorata, avgIncentive };
+    const totalAmount = (records as any[]).reduce((s: number, r: any) => s + (r.incentive_amount || 0), 0);
+    return { total, eligible, disqualified, prorata, avgIncentive, totalAmount };
   }, [records]);
 
   const handleExport = () => {
