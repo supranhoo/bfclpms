@@ -5,10 +5,12 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Badge } from '@/components/ui/badge';
 import { Save } from 'lucide-react';
-import { useProductionRates, useProductionDailyEntries, useBulkUpsertDailyEntries } from '@/hooks/useProductionDailyEntries';
+import { useProductionRates, useProductionDailyEntries, useBulkUpsertDailyEntries, resolveEmployeeRate } from '@/hooks/useProductionDailyEntries';
 import { useAuth } from '@/contexts/AuthContext';
-import { formatEmployeeName } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -33,6 +35,54 @@ export function ProductionDailyGrid({ programId, programName }: Props) {
   const { data: entries = [], isLoading: entriesLoading } = useProductionDailyEntries(programId, month, year);
   const bulkUpsert = useBulkUpsertDailyEntries();
 
+  // Fetch mapped employees for this program (from mappings)
+  const { data: mappedEmployees = [], isLoading: mappedLoading } = useQuery({
+    queryKey: ['mapped-employees-for-grid', programId],
+    enabled: !!programId,
+    queryFn: async () => {
+      // Get mappings for this program
+      const { data: mappings } = await supabase
+        .from('incentive_program_mappings')
+        .select('mapping_type, mapping_value')
+        .eq('program_id', programId);
+
+      if (!mappings || mappings.length === 0) return [];
+
+      // Resolve employees from mappings
+      const employeeIds = new Set<string>();
+      const deptIds: string[] = [];
+      const buIds: string[] = [];
+      const divIds: string[] = [];
+      const desigs: string[] = [];
+
+      for (const m of mappings) {
+        if (m.mapping_type === 'employee') employeeIds.add(m.mapping_value);
+        else if (m.mapping_type === 'department') deptIds.push(m.mapping_value);
+        else if (m.mapping_type === 'business_unit') buIds.push(m.mapping_value);
+        else if (m.mapping_type === 'division') divIds.push(m.mapping_value);
+        else if (m.mapping_type === 'designation') desigs.push(m.mapping_value);
+      }
+
+      // Fetch all profiles that match any mapping
+      let query = supabase
+        .from('profiles')
+        .select('id, full_name, employee_code, email, designation, department_id, departments(id, name, business_unit_id)')
+        .order('full_name');
+
+      const { data: allProfiles } = await query;
+      if (!allProfiles) return [];
+
+      return allProfiles.filter(p => {
+        if (employeeIds.has(p.id)) return true;
+        if (deptIds.length && p.department_id && deptIds.includes(p.department_id)) return true;
+        const buId = (p as any).departments?.business_unit_id;
+        if (buIds.length && buId && buIds.includes(buId)) return true;
+        if (desigs.length && p.designation && desigs.includes(p.designation)) return true;
+        return false;
+      });
+    },
+  });
+
   // daily_values keyed by employee_id
   const [localData, setLocalData] = useState<Record<string, Record<string, number>>>({});
 
@@ -51,16 +101,35 @@ export function ProductionDailyGrid({ programId, programName }: Props) {
     }
   }, [daysInMonth, dateRange]);
 
+  // Resolve effective rates for all mapped employees
+  const employeeRates = useMemo(() => {
+    const map = new Map<string, { rate: number; source: string }>();
+    for (const emp of mappedEmployees) {
+      const deptId = emp.department_id;
+      const buId = (emp as any).departments?.business_unit_id || null;
+      const resolved = resolveEmployeeRate(emp.id, deptId, buId, rates as any[]);
+      if (resolved.source !== 'none') {
+        map.set(emp.id, { rate: resolved.rate, source: resolved.source });
+      }
+    }
+    return map;
+  }, [mappedEmployees, rates]);
+
+  // Only show employees that have a resolved rate
+  const gridEmployees = useMemo(() => {
+    return mappedEmployees.filter(e => employeeRates.has(e.id));
+  }, [mappedEmployees, employeeRates]);
+
   // Initialize from DB
   useEffect(() => {
     const entryMap = new Map((entries as any[]).map((e: any) => [e.employee_id, e.daily_values || {}]));
     const init: Record<string, Record<string, number>> = {};
-    (rates as any[]).forEach((r: any) => {
-      const existing = entryMap.get(r.employee_id) || {};
-      init[r.employee_id] = existing;
+    gridEmployees.forEach((emp: any) => {
+      const existing = entryMap.get(emp.id) || {};
+      init[emp.id] = existing;
     });
     setLocalData(init);
-  }, [rates, entries]);
+  }, [gridEmployees, entries]);
 
   const handleCellChange = (empId: string, day: number, value: string) => {
     const numVal = value === '' ? 0 : parseFloat(value) || 0;
@@ -78,27 +147,35 @@ export function ProductionDailyGrid({ programId, programName }: Props) {
     return Object.values(vals).reduce((sum, v) => sum + (Number(v) || 0), 0);
   };
 
-  const getAmount = (empId: string, ratePerTon: number): number => {
-    return getTotal(empId) * ratePerTon;
-  };
-
   const grandTotal = useMemo(() => {
-    return (rates as any[]).reduce((sum, r: any) => sum + getAmount(r.employee_id, Number(r.rate_per_ton)), 0);
-  }, [localData, rates]);
+    return gridEmployees.reduce((sum, emp) => {
+      const rateInfo = employeeRates.get(emp.id);
+      const rate = rateInfo?.rate || 0;
+      return sum + getTotal(emp.id) * rate;
+    }, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localData, gridEmployees, employeeRates]);
 
   const handleSave = () => {
-    const payload = (rates as any[]).map((r: any) => ({
+    const payload = gridEmployees.map((emp: any) => ({
       program_id: programId,
-      employee_id: r.employee_id,
+      employee_id: emp.id,
       month,
       year,
-      daily_values: localData[r.employee_id] || {},
+      daily_values: localData[emp.id] || {},
       updated_by: user?.id,
     }));
     bulkUpsert.mutate(payload);
   };
 
-  const isLoading = ratesLoading || entriesLoading;
+  const isLoading = ratesLoading || entriesLoading || mappedLoading;
+
+  const sourceBadge = (source: string) => {
+    const variants: Record<string, 'default' | 'secondary' | 'outline'> = {
+      employee: 'default', department: 'secondary', bu: 'outline', common: 'outline',
+    };
+    return <Badge variant={variants[source] || 'outline'} className="text-[10px] ml-1">{source.slice(0, 3)}</Badge>;
+  };
 
   return (
     <Card>
@@ -130,8 +207,8 @@ export function ProductionDailyGrid({ programId, programName }: Props) {
       <CardContent>
         {isLoading ? (
           <p className="text-center text-muted-foreground py-8">Loading...</p>
-        ) : (rates as any[]).length === 0 ? (
-          <p className="text-center text-muted-foreground py-8">No production rates configured for this program. Add rates in the program's "Production Rates" tab first.</p>
+        ) : gridEmployees.length === 0 ? (
+          <p className="text-center text-muted-foreground py-8">No employees with resolved production rates. Configure rates in the program's "Production Rates" tab first.</p>
         ) : (
           <>
             <div className="overflow-x-auto border rounded-md">
@@ -142,7 +219,7 @@ export function ProductionDailyGrid({ programId, programName }: Props) {
                     <TableHead className="sticky left-[80px] bg-background z-10 min-w-[120px]">Name</TableHead>
                     <TableHead className="sticky left-[200px] bg-background z-10 min-w-[90px]">Desig</TableHead>
                     <TableHead className="sticky left-[290px] bg-background z-10 min-w-[90px]">Dept</TableHead>
-                    <TableHead className="sticky left-[380px] bg-background z-10 min-w-[90px]">Rate/Ton</TableHead>
+                    <TableHead className="sticky left-[380px] bg-background z-10 min-w-[100px]">Rate/Ton</TableHead>
                     {visibleDays.map(d => (
                       <TableHead key={d} className="text-center min-w-[56px] px-1">{d}</TableHead>
                     ))}
@@ -151,25 +228,31 @@ export function ProductionDailyGrid({ programId, programName }: Props) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(rates as any[]).map((r: any) => {
-                    const profile = r.profiles;
-                    const empVals = localData[r.employee_id] || {};
-                    const total = getTotal(r.employee_id);
-                    const amount = total * Number(r.rate_per_ton);
+                  {gridEmployees.map((emp: any) => {
+                    const rateInfo = employeeRates.get(emp.id);
+                    const effectiveRate = rateInfo?.rate || 0;
+                    const rateSource = rateInfo?.source || 'none';
+                    const empVals = localData[emp.id] || {};
+                    const total = getTotal(emp.id);
+                    const amount = total * effectiveRate;
+                    const deptName = (emp as any).departments?.name || '—';
                     return (
-                      <TableRow key={r.id}>
-                        <TableCell className="sticky left-0 bg-background z-10 text-xs font-mono">{profile?.employee_code || '—'}</TableCell>
-                        <TableCell className="sticky left-[80px] bg-background z-10 text-xs">{profile?.full_name || '—'}</TableCell>
-                        <TableCell className="sticky left-[200px] bg-background z-10 text-xs">{profile?.designation || '—'}</TableCell>
-                        <TableCell className="sticky left-[290px] bg-background z-10 text-xs">{profile?.departments?.name || '—'}</TableCell>
-                        <TableCell className="sticky left-[380px] bg-background z-10 text-xs font-medium">₹{Number(r.rate_per_ton).toLocaleString('en-IN')}</TableCell>
+                      <TableRow key={emp.id}>
+                        <TableCell className="sticky left-0 bg-background z-10 text-xs font-mono">{emp.employee_code || '—'}</TableCell>
+                        <TableCell className="sticky left-[80px] bg-background z-10 text-xs">{emp.full_name || '—'}</TableCell>
+                        <TableCell className="sticky left-[200px] bg-background z-10 text-xs">{emp.designation || '—'}</TableCell>
+                        <TableCell className="sticky left-[290px] bg-background z-10 text-xs">{deptName}</TableCell>
+                        <TableCell className="sticky left-[380px] bg-background z-10 text-xs font-medium">
+                          ₹{effectiveRate.toLocaleString('en-IN')}
+                          {sourceBadge(rateSource)}
+                        </TableCell>
                         {visibleDays.map(d => (
                           <TableCell key={d} className="px-1">
                             <Input
                               type="number"
                               className="h-7 w-14 text-xs text-center px-1"
                               value={empVals[String(d)] || ''}
-                              onChange={e => handleCellChange(r.employee_id, d, e.target.value)}
+                              onChange={e => handleCellChange(emp.id, d, e.target.value)}
                               min={0}
                             />
                           </TableCell>

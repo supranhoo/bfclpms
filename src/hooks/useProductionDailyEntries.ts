@@ -27,13 +27,26 @@ export function useUpsertProductionRate() {
     mutationFn: async (values: {
       id?: string;
       program_id: string;
-      employee_id: string;
+      employee_id?: string;
+      rate_type?: string;
+      entity_id?: string;
       rate_per_ton: number;
       remarks?: string;
     }) => {
+      // Build the payload, setting nulls explicitly for nullable fields
+      const payload: any = {
+        program_id: values.program_id,
+        rate_per_ton: values.rate_per_ton,
+        rate_type: values.rate_type || 'employee',
+        remarks: values.remarks || null,
+        employee_id: values.employee_id || null,
+        entity_id: values.entity_id || null,
+      };
+      if (values.id) payload.id = values.id;
+
       const { data, error } = await supabase
         .from('incentive_production_rates')
-        .upsert(values, { onConflict: 'program_id,employee_id' })
+        .upsert(payload, { onConflict: 'program_id,rate_type,employee_id,entity_id' })
         .select()
         .single();
       if (error) throw error;
@@ -125,4 +138,48 @@ export function useBulkUpsertDailyEntries() {
     },
     onError: (e: any) => toast({ title: 'Error saving entries', description: e.message, variant: 'destructive' }),
   });
+}
+
+// ── Rate Resolution Helper ──
+// Priority: employee > department > bu > common
+
+export interface ResolvedRate {
+  employeeId: string;
+  rate: number;
+  source: 'employee' | 'department' | 'bu' | 'common' | 'none';
+}
+
+export function resolveEmployeeRate(
+  employeeId: string,
+  departmentId: string | null,
+  buId: string | null,
+  rates: any[]
+): ResolvedRate {
+  // 1. Employee-specific
+  const empRate = rates.find(
+    (r: any) => r.rate_type === 'employee' && r.employee_id === employeeId
+  );
+  if (empRate) return { employeeId, rate: Number(empRate.rate_per_ton), source: 'employee' };
+
+  // 2. Department-wise
+  if (departmentId) {
+    const deptRate = rates.find(
+      (r: any) => r.rate_type === 'department' && r.entity_id === departmentId
+    );
+    if (deptRate) return { employeeId, rate: Number(deptRate.rate_per_ton), source: 'department' };
+  }
+
+  // 3. BU-wise
+  if (buId) {
+    const buRate = rates.find(
+      (r: any) => r.rate_type === 'bu' && r.entity_id === buId
+    );
+    if (buRate) return { employeeId, rate: Number(buRate.rate_per_ton), source: 'bu' };
+  }
+
+  // 4. Common
+  const commonRate = rates.find((r: any) => r.rate_type === 'common');
+  if (commonRate) return { employeeId, rate: Number(commonRate.rate_per_ton), source: 'common' };
+
+  return { employeeId, rate: 0, source: 'none' };
 }
