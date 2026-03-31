@@ -49,6 +49,7 @@ const KpiWeightageDashboard = lazy(() => import("./pages/admin/KpiWeightageDashb
 const PendingSelfReviews = lazy(() => import("./pages/admin/PendingSelfReviews"));
 const IncentiveConfig = lazy(() => import("./pages/admin/IncentiveConfig"));
 const EmployeeDevelopment = lazy(() => import("./pages/admin/EmployeeDevelopment"));
+const OrgKpiAuditReview = lazy(() => import("./pages/admin/OrgKpiAuditReview"));
 
 // Report pages
 const PerformanceReport = lazy(() => import("./pages/reports/PerformanceReport"));
