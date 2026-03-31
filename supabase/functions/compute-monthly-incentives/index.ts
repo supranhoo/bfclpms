@@ -464,8 +464,8 @@ serve(async (req) => {
             incentiveStatus = 'hold';
           }
         } else {
-          // Production: finalised if production data exists
-          incentiveStatus = elig?.production_value !== null && elig?.production_value !== undefined ? 'finalised' : 'hold';
+          // Production: finalised if production daily entries exist
+          incentiveStatus = productionTotalTons !== null && productionTotalTons > 0 ? 'finalised' : 'hold';
         }
       }
 
