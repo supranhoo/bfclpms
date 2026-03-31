@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-03-30  
-> **Version:** 2.15.13 — Edit & delete slab category dropdown options
+> **Last Updated:** 2026-03-31  
+> **Version:** 2.15.14 — Monthly review reminder template visible in Email Templates UI
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
