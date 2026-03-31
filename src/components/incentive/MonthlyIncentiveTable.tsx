@@ -223,18 +223,19 @@ export function MonthlyIncentiveTable() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>PMS Score</TableHead>
-                  <TableHead>Slab</TableHead>
-                  <TableHead>Base %</TableHead>
-                  <TableHead>DQ Reason</TableHead>
-                  <TableHead>LTI Penalty</TableHead>
-                  <TableHead>Pro-rata</TableHead>
-                  <TableHead>Final %</TableHead>
-                  <TableHead>Amount (₹)</TableHead>
-                   <TableHead>Status</TableHead>
-                   <TableHead>Incentive Status</TableHead>
+                   <TableHead>Employee</TableHead>
+                   <TableHead>Department</TableHead>
+                   <TableHead>Period</TableHead>
+                   <TableHead>PMS Score</TableHead>
+                   <TableHead>Slab</TableHead>
+                   <TableHead>Base %</TableHead>
+                   <TableHead>DQ Reason</TableHead>
+                   <TableHead>LTI Penalty</TableHead>
+                   <TableHead>Pro-rata</TableHead>
+                   <TableHead>Final %</TableHead>
+                   <TableHead>Amount (₹)</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Incentive Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
