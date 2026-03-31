@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { ProductionTargetGrid } from './ProductionTargetGrid';
 import { VesselDataEntryGrid } from './VesselDataEntryGrid';
+import { ProductionDailyGrid } from './ProductionDailyGrid';
 
 interface Program {
   id: string;
@@ -21,7 +22,7 @@ export function UnifiedProductionDataTab({ programs }: { programs: Program[] }) 
 
   const selectedProgram = activePrograms.find(p => p.id === selectedProgramId);
 
-  const { data: vesselRateCount, isLoading: countLoading } = useQuery({
+  const { data: vesselRateCount, isLoading: vesselCountLoading } = useQuery({
     queryKey: ['vessel-rate-count', selectedProgramId],
     enabled: !!selectedProgramId,
     queryFn: async () => {
@@ -34,7 +35,22 @@ export function UnifiedProductionDataTab({ programs }: { programs: Program[] }) 
     },
   });
 
+  const { data: productionRateCount, isLoading: prodCountLoading } = useQuery({
+    queryKey: ['production-rate-count', selectedProgramId],
+    enabled: !!selectedProgramId,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('incentive_production_rates')
+        .select('id', { count: 'exact', head: true })
+        .eq('program_id', selectedProgramId);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+
   const isVesselProgram = (vesselRateCount ?? 0) > 0;
+  const isProductionRateProgram = (productionRateCount ?? 0) > 0;
+  const countLoading = vesselCountLoading || prodCountLoading;
 
   return (
     <div className="space-y-4">
@@ -75,6 +91,11 @@ export function UnifiedProductionDataTab({ programs }: { programs: Program[] }) 
             name: selectedProgram!.name,
             min_kra_score: selectedProgram!.min_kra_score,
           }]}
+        />
+      ) : isProductionRateProgram ? (
+        <ProductionDailyGrid
+          programId={selectedProgramId}
+          programName={selectedProgram?.name}
         />
       ) : (
         <ProductionTargetGrid controlledProgramId={selectedProgramId} />

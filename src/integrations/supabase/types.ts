@@ -1041,6 +1041,58 @@ export type Database = {
           },
         ]
       }
+      incentive_production_rates: {
+        Row: {
+          created_at: string | null
+          employee_id: string
+          id: string
+          program_id: string
+          rate_per_ton: number
+          remarks: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          employee_id: string
+          id?: string
+          program_id: string
+          rate_per_ton?: number
+          remarks?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          employee_id?: string
+          id?: string
+          program_id?: string
+          rate_per_ton?: number
+          remarks?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "incentive_production_rates_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incentive_production_rates_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incentive_production_rates_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "incentive_programs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       incentive_program_custom_tabs: {
         Row: {
           created_at: string | null
@@ -3049,6 +3101,78 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      production_daily_entries: {
+        Row: {
+          created_at: string | null
+          daily_values: Json
+          employee_id: string
+          id: string
+          month: string
+          program_id: string
+          updated_at: string | null
+          updated_by: string | null
+          year: number
+        }
+        Insert: {
+          created_at?: string | null
+          daily_values?: Json
+          employee_id: string
+          id?: string
+          month: string
+          program_id: string
+          updated_at?: string | null
+          updated_by?: string | null
+          year: number
+        }
+        Update: {
+          created_at?: string | null
+          daily_values?: Json
+          employee_id?: string
+          id?: string
+          month?: string
+          program_id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "production_daily_entries_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_daily_entries_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_daily_entries_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "incentive_programs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_daily_entries_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_daily_entries_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       production_targets: {
         Row: {

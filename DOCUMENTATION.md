@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.22 — Org KPI Audit Review page for auditor-level org KPI approval
+> **Version:** 2.15.24 — Daily achievement grid with per-ton rate & date range filter
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4510,3 +4510,13 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Workflow:** Uses `resolveForwardStatus('auditor', stages)` for proper status advancement per employee's workflow
 - **Sidebar:** Added under Audit section (auditor + admin roles), menu key: `admin-org-kpi-audit`
 - **POLICY.md §43:** Org KPI audit review governance
+
+### v2.15.24 — Daily Achievement Grid with Per-Ton Rate
+- **New tables:** `incentive_production_rates` (per-employee rate/ton per program), `production_daily_entries` (JSONB daily values per employee/month/year)
+- **New component:** `ProductionDailyGrid` — horizontal-scroll grid with dates 1-31 as columns, employees as rows, date range toggle (All, 1-10, 11-20, 21-31)
+- **New component:** `ProductionRatesTab` — per-employee rate configuration in programme settings
+- **New hook:** `useProductionDailyEntries` — CRUD for production rates + daily entries
+- **Detection logic:** `UnifiedProductionDataTab` now detects production rates → renders daily grid; vessel rates → vessel grid; neither → slab grid
+- **Programme config:** Added "Production Rates" tab alongside "Vessel Rates"
+- **Calculation:** Total achievement × Rate/Ton = Amount; Grand Total shown at bottom
+- **POLICY.md §44:** Production daily entry governance

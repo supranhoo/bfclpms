@@ -27,6 +27,7 @@ import { ProgramEmployeeMapping } from '@/components/incentive/ProgramEmployeeMa
 import { EligibilityFieldsConfig } from '@/components/incentive/EligibilityFieldsConfig';
 import { ProgramTypeSelector } from '@/components/incentive/ProgramTypeSelector';
 import { ProductionTargetGrid } from '@/components/incentive/ProductionTargetGrid';
+import { ProductionRatesTab } from '@/components/incentive/ProductionRatesTab';
 import { BusinessUnitManager } from '@/components/incentive/BusinessUnitManager';
 import { AllocationRulesEditor } from '@/components/incentive/AllocationRulesEditor';
 import { VesselRateEditor } from '@/components/incentive/VesselRateEditor';
@@ -94,6 +95,7 @@ function ProgramInnerTabs({ program }: { program: any }) {
             <TabsTrigger value="sub-units">BU Sub-Units</TabsTrigger>
             <TabsTrigger value="allocation">Allocation</TabsTrigger>
             <TabsTrigger value="vessel-rates">Vessel Rates</TabsTrigger>
+            <TabsTrigger value="production-rates">Production Rates</TabsTrigger>
             {customTabs.map((ct) => (
               <TabsTrigger key={ct.id} value={`custom-${ct.id}`}>
                 {ct.tab_label}
@@ -130,6 +132,9 @@ function ProgramInnerTabs({ program }: { program: any }) {
         </TabsContent>
         <TabsContent value="vessel-rates">
           <VesselRateEditor programId={p.id} minKraScore={p.min_kra_score} />
+        </TabsContent>
+        <TabsContent value="production-rates">
+          <ProductionRatesTab programId={p.id} />
         </TabsContent>
 
         {customTabs.map((ct) => (
