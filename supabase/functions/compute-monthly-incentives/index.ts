@@ -240,7 +240,9 @@ serve(async (req) => {
     }
 
     // 5b. Fetch production daily entries and rates for production programs
-    let prodEntryMap = new Map<string, number>(); // employee_id -> totalTons
+    // Store raw daily_values so we can split by period later
+    let prodDailyMap = new Map<string, Record<string, any>>(); // employee_id -> daily_values
+    let prodEntryMap = new Map<string, number>(); // employee_id -> totalTons (for slab matching)
     let prodRates: any[] = [];
     if (program.program_type === 'production') {
       const { data: dailyEntries } = await supabase
@@ -253,6 +255,7 @@ serve(async (req) => {
       if (dailyEntries) {
         for (const entry of dailyEntries) {
           const vals = entry.daily_values as Record<string, any> || {};
+          prodDailyMap.set(entry.employee_id, vals);
           let total = 0;
           for (const key of Object.keys(vals)) {
             const v = parseFloat(vals[key]);
