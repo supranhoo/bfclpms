@@ -77,6 +77,7 @@ export function MonthlyIncentiveTable() {
       'LTI Penalty %': r.lti_penalty_percent,
       'Pro-rata Factor': r.pro_rata_factor,
       'Final Incentive %': r.final_incentive_percent,
+      'Incentive Amount': r.incentive_amount || 0,
       'Status': r.status,
     }));
     const ws = XLSX.utils.json_to_sheet(exportData);
