@@ -35,6 +35,7 @@ interface MobileKpiCardProps {
   getOrgKpiValue?: (kpi: KPI) => { achieved_value: number | null; data_source: string | null; entered_by_name: string | null } | null;
   sentBackKpiIds?: Set<string>;
   dataOwnerNames?: Map<string, string[]>;
+  observationCount?: number;
 }
 
 export function MobileKpiCard({
@@ -52,6 +53,7 @@ export function MobileKpiCard({
   getOrgKpiValue,
   sentBackKpiIds,
   dataOwnerNames,
+  observationCount,
 }: MobileKpiCardProps) {
   const isNaKpi = submission?.is_na || false;
   const isDailyKpi = kpi.frequency === 'Daily';
@@ -252,6 +254,11 @@ export function MobileKpiCard({
         <Badge className={cn(statusColors[kpi.status || 'kra_set'], "text-[10px] shrink-0 ml-1.5")}>
           {statusLabels[kpi.status || 'kra_set']}
         </Badge>
+        {(observationCount ?? 0) > 0 && (
+          <span className="ml-1 inline-flex items-center gap-0.5 text-[10px] text-amber-600 dark:text-amber-400 shrink-0">
+            <Eye className="h-3 w-3" />{observationCount}
+          </span>
+        )}
       </div>
 
       {/* Org KPI Badge Row */}

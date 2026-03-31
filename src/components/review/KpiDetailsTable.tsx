@@ -98,6 +98,7 @@ interface KpiDetailsTableProps {
   sentBackKpiIds?: Set<string>;
   auditKpiAssignments?: Map<string, AuditKpiAssignment>;
   dataOwnerNames?: Map<string, string[]>;
+  observationCounts?: Map<string, number>;
 }
 
 /**
@@ -170,6 +171,7 @@ export function KpiDetailsTable({
   sentBackKpiIds,
   auditKpiAssignments,
   dataOwnerNames,
+  observationCounts,
 }: KpiDetailsTableProps) {
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -595,6 +597,14 @@ export function KpiDetailsTable({
                         currentAssignment={auditKpiAssignments?.get(kpi.id) || null}
                       />
                     )}
+                    {(() => {
+                      const obsCount = observationCounts?.get(kpi.id) || 0;
+                      return obsCount > 0 ? (
+                        <span className="ml-1 inline-flex items-center gap-0.5 text-xs text-amber-600 dark:text-amber-400">
+                          <Eye className="h-3 w-3" />{obsCount}
+                        </span>
+                      ) : null;
+                    })()}
                   </div>
                 </TableCell>
                 

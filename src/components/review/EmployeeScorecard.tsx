@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useKpisByEmployee, useReviewSubmissions, useApproveKpi, useRaiseQuery, useKpiQueries, useSendBackKpi, RatingLevel, KPI, KpiQuery } from '@/hooks/useKpis';
 import { useSubPeriodSubmissions, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
+import { useObservationsByKpis } from '@/hooks/useKpiObservations';
 import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
 import { useOrgKpiDataOwnerNames, getOwnerNamesForKpi } from '@/hooks/useOrgKpiDataOwner';
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
@@ -147,6 +148,12 @@ export function EmployeeScorecard({
   const kpiIds = kpis?.map(k => k.id) || [];
   const { data: submissions } = useReviewSubmissions(kpiIds);
   const { data: queries } = useKpiQueries(kpiIds);
+  const { data: observationsMap } = useObservationsByKpis(kpiIds);
+  const observationCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    observationsMap?.forEach((obs, kpiId) => map.set(kpiId, obs.length));
+    return map;
+  }, [observationsMap]);
 
   // Fetch ALL-period submissions for tracker modal & review panel history
   const allKpiIds = useMemo(() => allKpis?.map(k => k.id) || [], [allKpis]);
@@ -759,6 +766,7 @@ export function EmployeeScorecard({
                     onToggleExpand={toggleDailyExpand}
                     isExpanded={expandedDailyKpis.has(kpi.id)}
                     getOrgKpiValue={getOrgKpiValue}
+                    observationCount={observationCounts.get(kpi.id) || 0}
                   />
                 );
               })}
@@ -784,6 +792,7 @@ export function EmployeeScorecard({
               onToggleExpand={toggleDailyExpand}
               workflowStages={effectiveStages}
               dataOwnerNames={dataOwnerNamesMap}
+              observationCounts={observationCounts}
             />
           )}
         </CardContent>
