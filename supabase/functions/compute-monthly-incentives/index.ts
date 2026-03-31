@@ -501,11 +501,14 @@ serve(async (req) => {
       ? eligible.reduce((s: number, r: any) => s + r.final_incentive_percent, 0) / eligible.length
       : 0;
 
+    const totalAmount = records.reduce((s: number, r: any) => s + (r.incentive_amount || 0), 0);
+
     const summary = {
       total: records.length,
       eligible: eligible.length,
       disqualified: disqualified.length,
       avg_incentive_percent: Math.round(avgIncentive * 100) / 100,
+      total_amount: Math.round(totalAmount * 100) / 100,
     };
 
     // In dry_run mode, return preview without writing
