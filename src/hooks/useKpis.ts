@@ -932,17 +932,17 @@ export function useRaiseQuery() {
         supabase.from('kpis').select('kpi_name').eq('id', kpi_id).single(),
         supabase.from('profiles').select('full_name').eq('id', user.id).single(),
       ]);
-      const kpiName = kpiRes.data?.kpi_name || 'a KPI';
+      const cleanKpiName = (kpiRes.data?.kpi_name || 'a KPI').split('\n')[0].substring(0, 100);
       const raiserName = profileRes.data?.full_name || 'A reviewer';
 
       await supabase.from('notifications').insert({
         user_id: raised_to,
         type: 'query_raised',
         title: 'New Query Raised',
-        message: `${raiserName} raised a query on "${kpiName}": ${reason.slice(0, 120)}`,
+        message: `${raiserName} raised a query on "${cleanKpiName}": ${reason.slice(0, 120)}`,
         kpi_id,
         related_user_id: user.id,
-        metadata: { query_id: data.id },
+        metadata: { query_id: data.id, query_reason: reason },
       });
 
       return data;

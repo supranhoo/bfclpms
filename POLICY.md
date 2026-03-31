@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 1.39.0 — §38: Observation counts visible on all dashboard KPI rows
+> **Version:** 1.40.0 — §39: Notification messages must use first-line-only KPI names
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -742,3 +742,13 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Rationale:** Observations represent critical feedback (positive, concern, neutral) from managers, auditors, and management. Hiding them inside the review panel reduces visibility and delays action. Surface-level indicators ensure all stakeholders see observation activity at a glance.
 
 **Invariant:** `KpiDetailsTable` must accept an `observationCounts` prop and render an Eye+count indicator for KPIs with observations > 0. All scorecard containers must fetch observations via `useObservationsByKpis` and pass the derived counts.
+
+---
+
+## §39. Notification KPI Name Truncation Invariant
+
+**Rule:** All notification messages (in-app and email) must use the first line of the KPI name only, truncated to a maximum of 100 characters. The full KPI description, formula, and scoring logic must never appear in notification text.
+
+**Rationale:** KPI names in the database often contain multi-line text with description, formula, and scoring logic appended. Including this in notifications makes them unreadable and clutters both the notification panel and email inbox.
+
+**Invariant:** When creating notification records in client code (`useKpis.ts`, `useQueryWorkflow.ts`, etc.), always apply `.split('\n')[0].substring(0, 100)` to `kpi_name` before inserting. The `send_email_on_notification` DB trigger must apply `LEFT(SPLIT_PART(..., E'\n', 1), 80)` for all query and observation notification types.

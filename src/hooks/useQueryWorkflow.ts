@@ -100,12 +100,13 @@ export function useRespondToQuery() {
             .single();
 
           const responderName = responderProfile?.full_name || responderProfile?.email || 'Employee';
+          const cleanKpiName = (kpiRecord?.kpi_name || 'Unknown').split('\n')[0].substring(0, 100);
 
           await supabase.from('notifications').insert({
             user_id: queryRecord.raised_by,
             type: 'query_response_submitted',
             title: 'Query Response Received',
-            message: `${responderName} responded to your query on KPI: ${kpiRecord?.kpi_name || 'Unknown'}`,
+            message: `${responderName} responded to your query on KPI: ${cleanKpiName}`,
             kpi_id: queryRecord.kpi_id,
             related_user_id: user.id,
             metadata: {
@@ -189,12 +190,13 @@ export function useAcceptQueryResponse() {
             .single();
 
           const accepterName = accepterProfile?.full_name || accepterProfile?.email || 'Manager';
+          const cleanKpiName = (kpiRecord?.kpi_name || 'Unknown').split('\n')[0].substring(0, 100);
 
           await supabase.from('notifications').insert({
             user_id: queryRecord.raised_to,
             type: 'query_resolved',
             title: 'Query Resolved',
-            message: `${accepterName} accepted your response on KPI: ${kpiRecord?.kpi_name || 'Unknown'}`,
+            message: `${accepterName} accepted your response on KPI: ${cleanKpiName}`,
             kpi_id: queryRecord.kpi_id,
             related_user_id: user.id,
             metadata: { query_id: variables.query_id },
