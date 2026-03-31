@@ -238,7 +238,7 @@ export function MonthlyIncentiveTable() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={12} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
                 ) : filteredRecords.length === 0 ? (
                   <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">No records found. Run incentive computation first.</TableCell></TableRow>
                 ) : (
