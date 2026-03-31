@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 1.43.0 — §42: Dynamic program configuration tabs invariant
+> **Version:** 1.44.0 — §43: Org KPI Audit Review governance
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -784,3 +784,15 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Custom Tabs:** Admin-configurable via the `[+ Add Tab]` button. Each custom tab stores its field schema in JSONB (`fields` column) and per-employee data in `incentive_custom_tab_data.field_values` JSONB.
 
 **Invariant:** The `ProgramInnerTabs` component must always render all active custom tabs from the database after the core tabs.
+
+---
+
+### §43 — Org KPI Audit Review Governance
+
+**Rule:** Organization-level KPIs that include an audit stage in their workflow must be reviewable via the dedicated Org KPI Audit Review page (`/admin/org-kpi-audit-review`). This page shows only org-level KPIs whose employee instances have reached the audit-reviewable status per each employee's workflow.
+
+**Scoring:** Auditor scores are written to `review_submissions` (same pattern as `AuditScorecard.tsx`). Approving advances the KPI status to the next workflow stage via `resolveForwardStatus('auditor', stages)`.
+
+**Bulk approve:** A single auditor score can be applied to all pending employees under one org KPI definition. Each employee's KPI is advanced individually, respecting their specific workflow.
+
+**Access:** Auditor and Admin roles only. Menu key: `admin-org-kpi-audit`.

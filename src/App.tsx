@@ -49,6 +49,7 @@ const KpiWeightageDashboard = lazy(() => import("./pages/admin/KpiWeightageDashb
 const PendingSelfReviews = lazy(() => import("./pages/admin/PendingSelfReviews"));
 const IncentiveConfig = lazy(() => import("./pages/admin/IncentiveConfig"));
 const EmployeeDevelopment = lazy(() => import("./pages/admin/EmployeeDevelopment"));
+const OrgKpiAuditReview = lazy(() => import("./pages/admin/OrgKpiAuditReview"));
 
 // Report pages
 const PerformanceReport = lazy(() => import("./pages/reports/PerformanceReport"));
@@ -333,6 +334,11 @@ const App = () => (
                 <Route path="/admin/employee-development" element={
                   <ProtectedRoute allowedRoles={['admin', 'hr_pms']} menuKey="admin-employee-development">
                     <Suspense fallback={<PageFallback />}><EmployeeDevelopment /></Suspense>
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/org-kpi-audit-review" element={
+                  <ProtectedRoute allowedRoles={['auditor', 'admin']} menuKey="admin-org-kpi-audit">
+                    <Suspense fallback={<PageFallback />}><OrgKpiAuditReview /></Suspense>
                   </ProtectedRoute>
                 } />
                 <Route path="/reports/incentive" element={
