@@ -105,6 +105,9 @@ export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, i
                         {r.final_incentive_percent}%
                       </Badge>
                     </TableCell>
+                    <TableCell className="font-medium">
+                      {(r.incentive_amount || 0) > 0 ? `₹${r.incentive_amount?.toLocaleString('en-IN')}` : '—'}
+                    </TableCell>
                   </TableRow>
                 );
               })}
