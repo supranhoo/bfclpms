@@ -139,13 +139,14 @@ export function MonthlyIncentiveTable() {
   return (
     <div className="space-y-4">
       {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-6">
         {[
           { label: 'Total Employees', value: summaryStats.total },
           { label: 'Eligible', value: summaryStats.eligible },
           { label: 'Disqualified', value: summaryStats.disqualified },
           { label: 'Pro-rata', value: summaryStats.prorata },
           { label: 'Avg Incentive %', value: summaryStats.avgIncentive.toFixed(1) + '%' },
+          { label: 'Total Amount', value: '₹' + summaryStats.totalAmount.toLocaleString('en-IN') },
         ].map(s => (
           <Card key={s.label}>
             <CardContent className="pt-4">
