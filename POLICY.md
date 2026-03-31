@@ -796,3 +796,17 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Bulk approve:** A single auditor score can be applied to all pending employees under one org KPI definition. Each employee's KPI is advanced individually, respecting their specific workflow.
 
 **Access:** Auditor and Admin roles only. Menu key: `admin-org-kpi-audit`.
+
+### §44 — Production Daily Entry Governance
+
+**Rule:** Programs with per-ton production rates use daily achievement grids instead of BU-based production target entry. Employees are auto-populated from programme mappings — no BU dropdown is required.
+
+**Rate configuration:** Per-employee `rate_per_ton` is configured in the programme's "Production Rates" tab. Only employees with configured rates appear in the daily entry grid.
+
+**Daily values:** Stored as JSONB (`{"1": 10, "2": 15, ...}`) in `production_daily_entries`, keyed by program + employee + month + year. Days beyond the month's length are ignored.
+
+**Calculation:** Incentive amount = Total daily achievement × Rate per ton. The grand total is displayed but amounts are informational — actual payroll integration uses the stored data.
+
+**Date range filter:** UI-only filter (All, 1-10, 11-20, 21-31) for usability on narrow screens. Totals always reflect all days regardless of visible range.
+
+**Detection priority:** Vessel rates → Vessel grid; Production rates → Daily grid; Neither → Slab-based grid.
