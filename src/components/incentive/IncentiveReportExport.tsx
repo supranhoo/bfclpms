@@ -47,7 +47,7 @@ export function IncentiveReportExport() {
     const eligible = list.filter((r: any) => !r.is_disqualified).length;
     const dq = list.filter((r: any) => r.is_disqualified).length;
     const proRata = list.filter((r: any) => r.pro_rata_factor < 1).length;
-    const totalAmount = list.reduce((sum: number, r: any) => sum + (r.final_incentive_percent || 0), 0);
+    const totalAmount = list.reduce((sum: number, r: any) => sum + (r.incentive_amount || 0), 0);
     return { total, eligible, dq, proRata, totalAmount };
   }, [filtered]);
 
