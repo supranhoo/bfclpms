@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
-> **Last Updated:** 2026-03-30  
-> **Version:** 1.38.0 — §37: Employee mapping must show resolved employee list
+> **Last Updated:** 2026-03-31  
+> **Version:** 1.39.0 — §38: Observation counts visible on all dashboard KPI rows
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
