@@ -1,98 +1,92 @@
 
 
-## Plan: Org KPI Audit Review Page
+## Plan: Daily Achievement Grid with Per-Ton Rate & Date Range Filter
 
-### Concept
+### Overview
+Build the production daily entry system for programs like "Metal Sizing" — auto-populates mapped employees (no BU dropdown), with day-wise achievement entry for a selected month/year, per-ton rates, and a **date range toggle** (1-10, 11-20, 21-31, All).
 
-A new admin/auditor page at `/admin/org-kpi-audit-review` that mirrors the "Organization KPI Data Entry" layout but is focused on **audit-stage org-level KPIs**. Instead of entering achieved values, auditors review and approve org KPIs that have reached the audit stage per their workflow. Approving advances the KPI to the next workflow stage.
+### Database Changes
 
-### What It Shows
+**Table 1: `incentive_production_rates`**
+```sql
+CREATE TABLE public.incentive_production_rates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  program_id UUID NOT NULL REFERENCES incentive_programs(id) ON DELETE CASCADE,
+  employee_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  rate_per_ton NUMERIC NOT NULL DEFAULT 0,
+  remarks TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(program_id, employee_id)
+);
+-- RLS: authenticated full access
+```
 
-Only org-level KPIs (`is_org_level = true`) where **at least one employee's instance** has reached the audit stage (status matching the auditor's reviewable statuses — typically `manager_check`). Grouped by org KPI definition (category + KRA + KPI name), with employee-level detail expandable per card.
+**Table 2: `production_daily_entries`**
+```sql
+CREATE TABLE public.production_daily_entries (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  program_id UUID NOT NULL REFERENCES incentive_programs(id) ON DELETE CASCADE,
+  employee_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  month TEXT NOT NULL,
+  year INT NOT NULL,
+  daily_values JSONB NOT NULL DEFAULT '{}',
+  -- e.g. {"1": 10, "2": 15, "31": 12}
+  updated_by UUID REFERENCES profiles(id),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(program_id, employee_id, month, year)
+);
+-- RLS: authenticated full access
+```
 
 ### UI Layout
 
 ```text
-┌──────────────────────────────────────────────────────────────────────┐
-│ Org KPI Audit Review                                                │
-│ Review and approve organization KPIs at the audit stage             │
-├──────────────────────────────────────────────────────────────────────┤
-│ Month: [January ▼]  Year: [2026 ▼]  Search: [___________]          │
-│                                                                      │
-│ Category: [All] [Operations] [Quality] [Safety]                     │
-│                                                                      │
-│ Status: [All (24)] [Pending Audit (18)] [Audited (6)]               │
-├──────────────────────────────────────────────────────────────────────┤
-│ Progress: ████████████░░░░░░░  18/24 pending · 6/24 audited        │
-├──────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│ ┌── Category: Operations ─────────────────────────────────────────┐ │
-│ │                                                                  │ │
-│ │ ┌─ KRA: Production │ KPI: Monthly Output ────────────────────┐ │ │
-│ │ │ Target: 5000  │ UOM: Units  │ Achieved: 4800 (propagated)  │ │ │
-│ │ │ Employees at audit: 12/15                                   │ │ │
-│ │ │                                                              │ │ │
-│ │ │ Employee        │ Self │ Mgr  │ Auditor │ Status  │ Action  │ │ │
-│ │ │ ────────────────┼──────┼──────┼─────────┼─────────┼──────── │ │ │
-│ │ │ Jaspal Singh    │ 4.2  │ 4.0  │ [___]   │ Pending │ [Save]  │ │ │
-│ │ │ Ravi Kumar      │ 3.8  │ 3.5  │ [___]   │ Pending │ [Save]  │ │ │
-│ │ │ Amit Verma      │ 4.5  │ 4.3  │ 4.0     │ Audited │  ✓      │ │ │
-│ │ │                                                              │ │ │
-│ │ │ [Bulk Approve All] [Enter Score & Forward: ___]              │ │ │
-│ │ └──────────────────────────────────────────────────────────────┘ │ │
-│ └──────────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────────┘
+Production Data — Metal Sizing
+┌────────────────────────────────────────────────────────────────────────┐
+│ Month: [March ▼]  Year: [2026 ▼]  Dates: [All] [1-10] [11-20] [21-31]│
+├────────────────────────────────────────────────────────────────────────┤
+│ Code │ Name       │ Desig  │ Dept   │ Rate/Ton │ 1 │ 2 │...│ 31│Total│ Amt │
+│ ─────┼────────────┼────────┼────────┼──────────┼───┼───┼───┼───┼─────┼─────│
+│ E001 │ Jaspal     │ Opr    │ Sizing │ ₹500     │[_]│[_]│   │[_]│ 120 │₹60K │
+│ E002 │ Ravi       │ Opr    │ Sizing │ ₹450     │[_]│[_]│   │[_]│  98 │₹44K │
+│                                                     Grand Total: ₹1.04L    │
+│                                                              [Save All]    │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Key Features
+- **Date range toggle**: ToggleGroup with 4 options — `All`, `1-10`, `11-20`, `21-31`. Only visible date columns are shown; Total/Amount always reflect ALL days regardless of filter.
+- Sticky left columns (Code, Name, Desig, Dept, Rate/Ton) with horizontal scroll for date columns.
+- Days beyond month length are hidden (e.g., Feb shows 1-28/29).
 
-1. **Month/Year filter** — same `ReviewPeriodSelector` as Data Entry
-2. **Search** — filter by KPI name, KRA name, or category
-3. **Category pills** — filter by category with counts
-4. **Status filter** — All / Pending Audit / Audited (approved past audit)
-5. **Progress bar** — shows audit completion percentage
-6. **Card-based layout** — grouped by category, one card per org KPI definition
-7. **Employee grid per card** — shows each employee mapped to this org KPI whose workflow includes audit and KPI has reached audit-reviewable status
-8. **Bulk approve** — enter a single auditor score and apply to all pending employees in one org KPI card
-9. **Inline scoring** — enter auditor score + remarks per employee row
-10. **Achieved value display** — show the propagated org KPI achieved value on each card
-11. **Audit trail** — show who approved and when via tooltips
+### Detection Logic Update (`UnifiedProductionDataTab`)
 
-### Additional Suggestions (included in plan)
+```text
+1. Has vessel rates → VesselDataEntryGrid (existing)
+2. Has production rates → ProductionDailyGrid (NEW)
+3. Neither → ProductionTargetGrid (existing slab-based)
+```
 
-- **Org KPI consistency indicator**: Badge showing if all employees under one org KPI have the same score (consistency check)
-- **Score distribution mini-chart**: Small bar showing score spread across employees for each org KPI
-- **Export to Excel**: Download audit status report
-- **Observation count badge**: Show pending observations per org KPI (reuse existing hook)
+### Programme Config: Production Rates Tab
 
-### Database Changes
-
-**None** — this page reads from existing `kpis`, `review_submissions`, and `profiles` tables. Audit scores are written to `review_submissions` using the same mutation pattern as `AuditScorecard.tsx`.
+Add a **"Production Rates"** core tab inside each program (alongside Vessel Rates) — a simple per-employee grid to set `rate_per_ton`. Employees come from programme mappings.
 
 ### Code Changes
 
 | File | Change |
 |------|--------|
-| `src/pages/admin/OrgKpiAuditReview.tsx` | New page — filters, cards, employee grids, bulk approve |
-| `src/hooks/useOrgKpiAuditReview.ts` | New hook — fetch org-level KPIs at audit stage with employee details, scores, workflows |
-| `src/components/admin/OrgKpiAuditCard.tsx` | New component — card per org KPI with employee grid, inline scoring, bulk approve |
-| `src/App.tsx` | Add route `/admin/org-kpi-audit-review` |
-| `src/components/layout/AppSidebar.tsx` | Add menu item under audit section + admin section |
-| `DOCUMENTATION.md` | v2.15.22 |
-| `POLICY.md` | §43 — Org KPI audit review governance |
-
-### Technical Approach
-
-1. **Hook (`useOrgKpiAuditReview`)**: Fetches all org-level KPIs for the period, then for each unique org KPI definition, fetches employee instances. Resolves each employee's workflow to determine if audit stage exists and if KPI has reached it. Returns structured data grouped by category.
-
-2. **Scoring**: Reuses the same `review_submissions` upsert pattern from `AuditScorecard.tsx` — writes `auditor_score`, `auditor_rating`, advances status to next workflow stage via `resolveForwardStatus`.
-
-3. **Bulk approve**: Applies a single score to all pending employees under one org KPI card in a single transaction loop.
-
-4. **Access**: Available to `auditor` and `admin` roles.
+| DB migration | Create `incentive_production_rates` + `production_daily_entries` |
+| `src/hooks/useProductionDailyEntries.ts` | New — hooks for rates CRUD + daily entries fetch/upsert |
+| `src/components/incentive/ProductionDailyGrid.tsx` | New — daily grid with date range toggle, rate display, totals |
+| `src/components/incentive/ProductionRatesTab.tsx` | New — per-employee rate config in programme settings |
+| `src/components/incentive/UnifiedProductionDataTab.tsx` | Add production rate detection; render `ProductionDailyGrid` |
+| `src/pages/admin/IncentiveConfig.tsx` | Add "Production Rates" tab in `ProgramInnerTabs` |
+| `DOCUMENTATION.md` | v2.15.24 |
+| `POLICY.md` | §44 — Production daily entry governance |
 
 ### Risk Assessment
-- **Regression**: Zero — new page, no modifications to existing components
-- **Data**: Read/write to existing tables using established patterns
-- **Performance**: One query for org KPIs + batch query for employee instances per period (cached by React Query)
+- **Regression**: Zero — additive tables and components
+- **Performance**: JSONB daily values = 1 row per employee/month; date range filter is purely UI-side
+- **Data**: No existing schema modifications
 
