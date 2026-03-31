@@ -1528,6 +1528,7 @@ export function UnifiedScorecard({
               auditKpiAssignments={auditKpiAssignments}
               getOrgKpiValue={getOrgKpiValue}
               dataOwnerNames={dataOwnerNamesMap}
+              observationCounts={observationCounts}
             />
           )}
         </CardContent>
