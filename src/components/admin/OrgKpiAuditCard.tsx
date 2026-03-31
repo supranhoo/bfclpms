@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, ChevronRight, Check, CheckCheck, Users, AlertCircle, Target, Building2, FileText, Paperclip, User } from 'lucide-react';
 import { OrgKpiAuditGroup, OrgKpiAuditEmployee } from '@/hooks/useOrgKpiAuditReview';
-import { downloadStorageFile } from '@/lib/storageDownload';
+import { openStorageFile } from '@/lib/storageDownload';
 
 interface OrgKpiAuditCardProps {
   group: OrgKpiAuditGroup;
