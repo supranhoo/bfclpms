@@ -1,12 +1,11 @@
 import { useState, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronRight, Check, CheckCheck, Users, AlertCircle } from 'lucide-react';
+import { ChevronDown, ChevronRight, Check, CheckCheck, Users, AlertCircle, Target, Building2 } from 'lucide-react';
 import { OrgKpiAuditGroup, OrgKpiAuditEmployee } from '@/hooks/useOrgKpiAuditReview';
 
 interface OrgKpiAuditCardProps {
@@ -17,11 +16,12 @@ interface OrgKpiAuditCardProps {
 }
 
 export function OrgKpiAuditCard({ group, onSubmitScore, onBulkApprove, isSubmitting }: OrgKpiAuditCardProps) {
-  const [isOpen, setIsOpen] = useState(group.pendingCount > 0);
+  const [isOpen, setIsOpen] = useState(true);
   const [scores, setScores] = useState<Record<string, string>>({});
   const [remarks, setRemarks] = useState<Record<string, string>>({});
   const [bulkScore, setBulkScore] = useState('');
   const [bulkRemarks, setBulkRemarks] = useState('');
+  const [fillValue, setFillValue] = useState('');
   const [submittingKpiId, setSubmittingKpiId] = useState<string | null>(null);
   const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
 
@@ -30,7 +30,19 @@ export function OrgKpiAuditCard({ group, onSubmitScore, onBulkApprove, isSubmitt
     [group.employees]
   );
 
-  // Consistency check: all scores the same?
+  // Group employees by department
+  const employeesByDept = useMemo(() => {
+    const map = new Map<string, OrgKpiAuditEmployee[]>();
+    group.employees.forEach(emp => {
+      const dept = emp.departmentName || 'Unassigned';
+      const arr = map.get(dept) || [];
+      arr.push(emp);
+      map.set(dept, arr);
+    });
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [group.employees]);
+
+  // Consistency check
   const auditorScores = group.employees
     .filter(e => e.auditorScore !== null)
     .map(e => e.auditorScore!);
@@ -62,30 +74,96 @@ export function OrgKpiAuditCard({ group, onSubmitScore, onBulkApprove, isSubmitt
     }
   };
 
+  const handleFillAll = () => {
+    const val = fillValue.trim();
+    if (!val) return;
+    const newScores: Record<string, string> = { ...scores };
+    pendingEmployees.forEach(emp => {
+      newScores[emp.kpiId] = val;
+    });
+    setScores(newScores);
+  };
+
+  const handleFillEmpty = () => {
+    const val = fillValue.trim();
+    if (!val) return;
+    const newScores: Record<string, string> = { ...scores };
+    pendingEmployees.forEach(emp => {
+      if (!newScores[emp.kpiId]) {
+        newScores[emp.kpiId] = val;
+      }
+    });
+    setScores(newScores);
+  };
+
+  // Parse criteria for description/formula/scoring
+  const criteriaLines = useMemo(() => {
+    if (!group.criteria) return { description: null, formula: null, scoring: null };
+    const text = group.criteria;
+    const lines = text.split('\n').filter(Boolean);
+    let description: string | null = null;
+    let formula: string | null = null;
+    let scoring: string | null = null;
+    for (const line of lines) {
+      const lower = line.toLowerCase();
+      if (lower.startsWith('description:') || lower.startsWith('desc:')) {
+        description = line.substring(line.indexOf(':') + 1).trim();
+      } else if (lower.startsWith('formula:')) {
+        formula = line.substring(line.indexOf(':') + 1).trim();
+      } else if (lower.startsWith('scoring') || lower.startsWith('rating')) {
+        scoring = line.substring(line.indexOf(':') + 1).trim();
+      }
+    }
+    if (!description && !formula && !scoring) {
+      description = text;
+    }
+    return { description, formula, scoring };
+  }, [group.criteria]);
+
   return (
     <Card className="border-l-4" style={{ borderLeftColor: group.categoryColor }}>
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger asChild>
-          <CardHeader className="cursor-pointer hover:bg-muted/30 transition-colors py-3 px-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 min-w-0">
-                {isOpen ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
-                <div className="min-w-0">
-                  <CardTitle className="text-sm font-medium truncate">{group.kraName}</CardTitle>
-                  <p className="text-xs text-muted-foreground truncate">{group.kpiName}</p>
+          <div className="cursor-pointer hover:bg-muted/30 transition-colors p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2 min-w-0 flex-1">
+                {isOpen ? <ChevronDown className="h-4 w-4 shrink-0 mt-1 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 shrink-0 mt-1 text-muted-foreground" />}
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-semibold text-foreground leading-snug">{group.kpiName}</h3>
+                  {criteriaLines.description && (
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{criteriaLines.description}</p>
+                  )}
+                  {criteriaLines.formula && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      <span className="font-medium text-foreground/70">Formula:</span> {criteriaLines.formula}
+                    </p>
+                  )}
+                  {criteriaLines.scoring && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      <span className="font-medium text-foreground/70">Scoring:</span> {criteriaLines.scoring}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                    <span className="text-xs text-muted-foreground">
+                      <span className="font-medium">KRA:</span> {group.kraName}
+                    </span>
+                    {group.targetValue !== null && (
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Target className="h-3 w-3" /> Target: {group.targetValue} {group.uom || ''}
+                      </span>
+                    )}
+                    {group.achievedValue !== null && (
+                      <Badge variant="outline" className="text-xs h-5">
+                        Achieved: {group.achievedValue} {group.uom || ''}
+                      </Badge>
+                    )}
+                    <Badge variant="secondary" className="text-xs h-5">
+                      {group.categoryName}
+                    </Badge>
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                {group.achievedValue !== null && (
-                  <Badge variant="outline" className="text-xs">
-                    Achieved: {group.achievedValue} {group.uom || ''}
-                  </Badge>
-                )}
-                {group.targetValue !== null && (
-                  <Badge variant="secondary" className="text-xs">
-                    Target: {group.targetValue}
-                  </Badge>
-                )}
                 {isConsistent && auditorScores.length > 0 && (
                   <Tooltip>
                     <TooltipTrigger>
@@ -98,108 +176,79 @@ export function OrgKpiAuditCard({ group, onSubmitScore, onBulkApprove, isSubmitt
                 )}
                 <div className="flex items-center gap-1 text-xs">
                   <Users className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-muted-foreground">
-                    {group.auditedCount}/{group.totalCount}
-                  </span>
+                  <span className="text-muted-foreground">{group.auditedCount}/{group.totalCount}</span>
                 </div>
-                {group.pendingCount > 0 && (
+                {group.pendingCount > 0 ? (
                   <Badge variant="destructive" className="text-xs">{group.pendingCount} pending</Badge>
-                )}
-                {group.pendingCount === 0 && group.totalCount > 0 && (
+                ) : group.totalCount > 0 ? (
                   <Badge className="bg-emerald-500 text-white text-xs">
                     <CheckCheck className="h-3 w-3 mr-1" />Complete
                   </Badge>
-                )}
+                ) : null}
               </div>
             </div>
-          </CardHeader>
+          </div>
         </CollapsibleTrigger>
 
         <CollapsibleContent>
           <CardContent className="pt-0 px-4 pb-4">
-            {/* Employee grid */}
+            {/* Fill controls */}
+            {pendingEmployees.length > 0 && (
+              <div className="flex items-center gap-2 mb-3 text-xs">
+                <span className="text-muted-foreground font-medium">
+                  {group.employees.length} Employees ({group.auditedCount}/{group.totalCount} audited)
+                </span>
+                <div className="ml-auto flex items-center gap-1.5">
+                  <span className="text-muted-foreground">Fill score:</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={5}
+                    step={0.1}
+                    className="w-14 h-6 text-xs text-center"
+                    value={fillValue}
+                    onChange={(e) => setFillValue(e.target.value)}
+                    placeholder="0-5"
+                  />
+                  <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={handleFillAll} disabled={!fillValue}>
+                    Fill all
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={handleFillEmpty} disabled={!fillValue}>
+                    Fill empty
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Employee table grouped by department */}
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="text-sm">
                 <thead>
                   <tr className="border-b text-muted-foreground">
-                    <th className="text-left py-2 px-2 font-medium">Employee</th>
-                    <th className="text-left py-2 px-2 font-medium">Code</th>
-                    <th className="text-center py-2 px-1 font-medium">Self</th>
-                    <th className="text-center py-2 px-1 font-medium">Manager</th>
-                    <th className="text-center py-2 px-1 font-medium">Auditor Score</th>
-                    <th className="text-left py-2 px-2 font-medium">Remarks</th>
-                    <th className="text-center py-2 px-1 font-medium">Status</th>
-                    <th className="text-center py-2 px-1 font-medium">Action</th>
+                    <th className="text-left py-1.5 px-1.5 font-medium">Employee</th>
+                    <th className="text-left py-1.5 px-1.5 font-medium">Code</th>
+                    <th className="text-center py-1.5 px-0.5 font-medium">Self</th>
+                    <th className="text-center py-1.5 px-0.5 font-medium">Mgr</th>
+                    <th className="text-center py-1.5 px-0.5 font-medium">Auditor</th>
+                    <th className="text-left py-1.5 px-1.5 font-medium max-w-[150px]">Remarks</th>
+                    <th className="text-center py-1.5 px-0.5 font-medium">Status</th>
+                    <th className="text-center py-1.5 px-0.5 font-medium">Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {group.employees.map(emp => (
-                    <tr key={emp.kpiId} className="border-b last:border-0 hover:bg-muted/20">
-                      <td className="py-2 px-2 truncate max-w-[160px]">{emp.employeeName}</td>
-                      <td className="py-2 px-2 text-muted-foreground text-xs">{emp.employeeCode}</td>
-                      <td className="py-2 px-1 text-center">{emp.selfScore?.toFixed(1) ?? '-'}</td>
-                      <td className="py-2 px-1 text-center">{emp.managerScore?.toFixed(1) ?? '-'}</td>
-                      <td className="py-2 px-1 text-center">
-                        {emp.isAuditPending ? (
-                          <Input
-                            type="number"
-                            min={0}
-                            max={5}
-                            step={0.1}
-                            className="w-16 h-7 text-center mx-auto"
-                            placeholder="0-5"
-                            value={scores[emp.kpiId] || ''}
-                            onChange={(e) => setScores(prev => ({ ...prev, [emp.kpiId]: e.target.value }))}
-                            disabled={isSubmitting}
-                          />
-                        ) : (
-                          <span className="font-medium">{emp.auditorScore?.toFixed(1) ?? '-'}</span>
-                        )}
-                      </td>
-                      <td className="py-2 px-2">
-                        {emp.isAuditPending ? (
-                          <Input
-                            className="h-7 text-xs"
-                            placeholder="Remarks..."
-                            value={remarks[emp.kpiId] || ''}
-                            onChange={(e) => setRemarks(prev => ({ ...prev, [emp.kpiId]: e.target.value }))}
-                            disabled={isSubmitting}
-                          />
-                        ) : (
-                          <span className="text-xs text-muted-foreground">{emp.auditorRemarks || '-'}</span>
-                        )}
-                      </td>
-                      <td className="py-2 px-1 text-center">
-                        {emp.isAudited ? (
-                          <Badge className="bg-emerald-500/10 text-emerald-600 text-xs"><Check className="h-3 w-3" /></Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-xs text-amber-600">Pending</Badge>
-                        )}
-                      </td>
-                      <td className="py-2 px-1 text-center">
-                        {emp.isAuditPending && (
-                          <div className="flex gap-1 justify-center">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs"
-                              onClick={() => handleSubmit(emp, false)}
-                              disabled={!scores[emp.kpiId] || isSubmitting || submittingKpiId === emp.kpiId}
-                            >
-                              Save
-                            </Button>
-                            <Button
-                              size="sm"
-                              className="h-7 text-xs"
-                              onClick={() => handleSubmit(emp, true)}
-                              disabled={!scores[emp.kpiId] || isSubmitting || submittingKpiId === emp.kpiId}
-                            >
-                              Approve
-                            </Button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
+                  {employeesByDept.map(([deptName, deptEmployees]) => (
+                    <DepartmentGroup
+                      key={deptName}
+                      deptName={deptName}
+                      employees={deptEmployees}
+                      scores={scores}
+                      remarks={remarks}
+                      isSubmitting={isSubmitting}
+                      submittingKpiId={submittingKpiId}
+                      onScoreChange={(kpiId, val) => setScores(prev => ({ ...prev, [kpiId]: val }))}
+                      onRemarkChange={(kpiId, val) => setRemarks(prev => ({ ...prev, [kpiId]: val }))}
+                      onSubmit={handleSubmit}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -252,5 +301,116 @@ export function OrgKpiAuditCard({ group, onSubmitScore, onBulkApprove, isSubmitt
         </CollapsibleContent>
       </Collapsible>
     </Card>
+  );
+}
+
+// Sub-component for department grouping
+function DepartmentGroup({
+  deptName,
+  employees,
+  scores,
+  remarks,
+  isSubmitting,
+  submittingKpiId,
+  onScoreChange,
+  onRemarkChange,
+  onSubmit,
+}: {
+  deptName: string;
+  employees: OrgKpiAuditEmployee[];
+  scores: Record<string, string>;
+  remarks: Record<string, string>;
+  isSubmitting: boolean;
+  submittingKpiId: string | null;
+  onScoreChange: (kpiId: string, val: string) => void;
+  onRemarkChange: (kpiId: string, val: string) => void;
+  onSubmit: (emp: OrgKpiAuditEmployee, approve: boolean) => Promise<void>;
+}) {
+  return (
+    <>
+      {/* Department header row */}
+      <tr className="bg-muted/40">
+        <td colSpan={8} className="py-1 px-1.5 text-xs font-medium text-muted-foreground">
+          <div className="flex items-center gap-1.5">
+            <Building2 className="h-3 w-3" />
+            {deptName}
+            <span className="text-muted-foreground/60">({employees.length})</span>
+          </div>
+        </td>
+      </tr>
+      {employees.map(emp => (
+        <tr key={emp.kpiId} className="border-b last:border-0 hover:bg-muted/20">
+          <td className="py-1.5 px-1.5 max-w-[140px]">
+            <div className="truncate text-sm">{emp.employeeName}</div>
+            {emp.designationName && (
+              <div className="text-[10px] text-muted-foreground truncate">{emp.designationName}</div>
+            )}
+          </td>
+          <td className="py-1.5 px-1.5 text-muted-foreground text-xs">{emp.employeeCode}</td>
+          <td className="py-1.5 px-0.5 text-center text-xs">{emp.selfScore?.toFixed(1) ?? '-'}</td>
+          <td className="py-1.5 px-0.5 text-center text-xs">{emp.managerScore?.toFixed(1) ?? '-'}</td>
+          <td className="py-1.5 px-0.5 text-center">
+            {emp.isAuditPending ? (
+              <Input
+                type="number"
+                min={0}
+                max={5}
+                step={0.1}
+                className="w-14 h-7 text-center mx-auto text-xs"
+                placeholder="0-5"
+                value={scores[emp.kpiId] || ''}
+                onChange={(e) => onScoreChange(emp.kpiId, e.target.value)}
+                disabled={isSubmitting}
+              />
+            ) : (
+              <span className="font-medium text-xs">{emp.auditorScore?.toFixed(1) ?? '-'}</span>
+            )}
+          </td>
+          <td className="py-1.5 px-1.5 max-w-[150px]">
+            {emp.isAuditPending ? (
+              <Input
+                className="h-7 text-xs"
+                placeholder="Remarks..."
+                value={remarks[emp.kpiId] || ''}
+                onChange={(e) => onRemarkChange(emp.kpiId, e.target.value)}
+                disabled={isSubmitting}
+              />
+            ) : (
+              <span className="text-xs text-muted-foreground truncate block">{emp.auditorRemarks || '-'}</span>
+            )}
+          </td>
+          <td className="py-1.5 px-0.5 text-center">
+            {emp.isAudited ? (
+              <Badge className="bg-emerald-500/10 text-emerald-600 text-xs"><Check className="h-3 w-3" /></Badge>
+            ) : (
+              <Badge variant="outline" className="text-xs text-amber-600">Pending</Badge>
+            )}
+          </td>
+          <td className="py-1.5 px-0.5 text-center">
+            {emp.isAuditPending && (
+              <div className="flex gap-1 justify-center">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-6 text-[10px] px-1.5"
+                  onClick={() => onSubmit(emp, false)}
+                  disabled={!scores[emp.kpiId] || isSubmitting || submittingKpiId === emp.kpiId}
+                >
+                  Save
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-6 text-[10px] px-1.5"
+                  onClick={() => onSubmit(emp, true)}
+                  disabled={!scores[emp.kpiId] || isSubmitting || submittingKpiId === emp.kpiId}
+                >
+                  Approve
+                </Button>
+              </div>
+            )}
+          </td>
+        </tr>
+      ))}
+    </>
   );
 }

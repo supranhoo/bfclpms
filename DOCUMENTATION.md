@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.25 — Multi-mode production rates (employee/dept/BU/common)
+> **Version:** 2.15.27 — Org KPI Audit Review redesign (data entry style + collapsible)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4520,3 +4520,11 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Programme config:** Added "Production Rates" tab alongside "Vessel Rates"
 - **Calculation:** Total achievement × Rate/Ton = Amount; Grand Total shown at bottom
 - **POLICY.md §44:** Production daily entry governance
+
+### v2.15.27 — Org KPI Audit Review Redesign (Data Entry Style + Collapsible)
+- **Redesigned:** `OrgKpiAuditCard.tsx` — always-expanded by default (collapsible), shows KPI metadata (name, description, formula, scoring logic, KRA, target, UOM, category badge)
+- **Department grouping:** Employee table grouped by department with designation badges
+- **Bulk fill controls:** "Fill all" and "Fill empty" buttons for auditor score input
+- **Compact table:** Tightened padding, constrained column widths, removed `w-full`
+- **Updated hook:** `useOrgKpiAuditReview.ts` — fetches `criteria`, `departmentName`, `designationName` via separate dept/desig lookups
+- **Page cleanup:** Removed category sub-headers from `OrgKpiAuditReview.tsx` — cards are self-descriptive with category-colored borders

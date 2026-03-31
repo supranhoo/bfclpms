@@ -59,16 +59,6 @@ export default function OrgKpiAuditReview() {
     });
   }, [groups, selectedCategoryId, searchQuery, statusFilter]);
 
-  // Group by category
-  const groupedByCategory = useMemo(() => {
-    const map = new Map<string, typeof filteredGroups>();
-    filteredGroups.forEach(g => {
-      const arr = map.get(g.categoryName) || [];
-      arr.push(g);
-      map.set(g.categoryName, arr);
-    });
-    return Array.from(map.entries());
-  }, [filteredGroups]);
 
   const handleSubmitScore = useCallback(async (kpiId: string, score: number, remarks: string, approve: boolean, workflowStages: string[]) => {
     await submitScore.mutateAsync({ kpiId, auditorScore: score, auditorRemarks: remarks, approve, workflowStages });
@@ -195,7 +185,7 @@ export default function OrgKpiAuditReview() {
       {/* Content */}
       {isLoading ? (
         <TableSkeleton />
-      ) : groupedByCategory.length === 0 ? (
+      ) : filteredGroups.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center text-muted-foreground">
             <Shield className="h-12 w-12 mx-auto mb-3 opacity-30" />
@@ -208,29 +198,15 @@ export default function OrgKpiAuditReview() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-6">
-          {groupedByCategory.map(([categoryName, categoryGroups]) => (
-            <div key={categoryName}>
-              <div className="flex items-center gap-2 mb-3">
-                <div
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: categoryGroups[0]?.categoryColor }}
-                />
-                <h3 className="font-semibold text-foreground">{categoryName}</h3>
-                <Badge variant="secondary" className="text-xs">{categoryGroups.length} KPIs</Badge>
-              </div>
-              <div className="space-y-3">
-                {categoryGroups.map(group => (
-                  <OrgKpiAuditCard
-                    key={`${group.categoryId}||${group.kraName}||${group.kpiName}`}
-                    group={group}
-                    onSubmitScore={handleSubmitScore}
-                    onBulkApprove={handleBulkApprove}
-                    isSubmitting={submitScore.isPending}
-                  />
-                ))}
-              </div>
-            </div>
+        <div className="space-y-4">
+          {filteredGroups.map(group => (
+            <OrgKpiAuditCard
+              key={`${group.categoryId}||${group.kraName}||${group.kpiName}`}
+              group={group}
+              onSubmitScore={handleSubmitScore}
+              onBulkApprove={handleBulkApprove}
+              isSubmitting={submitScore.isPending}
+            />
           ))}
         </div>
       )}
