@@ -809,6 +809,10 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Calculation:** Incentive amount = Total daily achievement × Effective rate per ton. The grid displays a badge (emp/dept/bu/com) next to each rate to indicate its source.
 
+**Computation pipeline:** The `compute-monthly-incentives` edge function aggregates production daily entries and resolves rates using the priority cascade. The computed `incentive_amount` is stored in `employee_incentive_records.incentive_amount` and displayed in both the dry-run preview and the monthly report table.
+
 **Date range filter:** UI-only filter (All, 1-10, 11-20, 21-31) for usability on narrow screens. Totals always reflect all days regardless of visible range.
 
 **Detection priority:** Vessel rates → Vessel grid; Production rates → Daily grid; Neither → Slab-based grid.
+
+**Invariant:** The edge function must always aggregate `production_daily_entries` for production programs. The `incentive_amount` field must reflect `totalTons × resolvedRate`. Client-side-only calculations must never be the sole source of truth for incentive amounts.

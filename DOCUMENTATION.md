@@ -4528,3 +4528,11 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Compact table:** Tightened padding, constrained column widths, removed `w-full`
 - **Updated hook:** `useOrgKpiAuditReview.ts` — fetches `criteria`, `departmentName`, `designationName` via separate dept/desig lookups
 - **Page cleanup:** Removed category sub-headers from `OrgKpiAuditReview.tsx` — cards are self-descriptive with category-colored borders
+
+### v2.15.31 — Connect Production Data Pipeline to Incentive Computation
+- **Root cause:** Edge function `compute-monthly-incentives` never read `production_daily_entries` or `incentive_production_rates` — only checked `employee_incentive_eligibility.production_value` (always null for production programs)
+- **DB migration:** Added `incentive_amount` numeric column to `employee_incentive_records` (default 0)
+- **Edge function:** Now fetches `production_daily_entries` (JSONB daily_values) and `incentive_production_rates`, aggregates totalTons × resolvedRate per employee using priority cascade (Employee > Dept > BU > Common)
+- **UI:** Added "Amount (₹)" column to `MonthlyIncentiveTable` and `IncentiveDryRunDialog`; added "Total Amount" summary card
+- **Export:** Incentive amount included in Excel export
+- **POLICY.md §44:** Updated to document computation pipeline integration
