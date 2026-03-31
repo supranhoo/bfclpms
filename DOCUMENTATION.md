@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.17 — Fix duplicate query_raised notification; single-source via DB trigger
+> **Version:** 2.15.18 — Enhanced Incentive Report with filters, summary cards, and 28-column Excel export
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
