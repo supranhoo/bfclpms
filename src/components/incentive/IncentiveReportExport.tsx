@@ -154,7 +154,20 @@ export function IncentiveReportExport() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex-1 min-w-[180px]">
+             <div className="w-36">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Period</label>
+              <Select value={periodFilter} onValueChange={setPeriodFilter}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Periods</SelectItem>
+                  <SelectItem value="Full Month">Full Month</SelectItem>
+                  <SelectItem value="1-10">1-10</SelectItem>
+                  <SelectItem value="11-20">11-20</SelectItem>
+                  <SelectItem value="21-31">21-31</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+             <div className="flex-1 min-w-[180px]">
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Search</label>
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
