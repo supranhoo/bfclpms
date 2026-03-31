@@ -392,13 +392,13 @@ function DepartmentGroup({
       </tr>
       {employees.map(emp => (
         <tr key={emp.kpiId} className="border-b last:border-0 hover:bg-muted/20">
-          <td className="py-1.5 px-1.5 max-w-[140px]">
-            <div className="truncate text-sm">{emp.employeeName}</div>
+          <td className="py-1.5 px-1.5 max-w-[160px]">
+            <div className="truncate text-sm font-medium">{emp.employeeName}</div>
             {emp.designationName && (
               <div className="text-[10px] text-muted-foreground truncate">{emp.designationName}</div>
             )}
           </td>
-          <td className="py-1.5 px-1.5 text-muted-foreground text-xs">{emp.employeeCode}</td>
+          <td className="py-1.5 px-1.5 text-muted-foreground text-xs font-mono">{emp.employeeCode || '-'}</td>
           <td className="py-1.5 px-0.5 text-center text-xs">{emp.selfScore?.toFixed(1) ?? '-'}</td>
           <td className="py-1.5 px-0.5 text-center text-xs">{emp.managerScore?.toFixed(1) ?? '-'}</td>
           <td className="py-1.5 px-0.5 text-center">
