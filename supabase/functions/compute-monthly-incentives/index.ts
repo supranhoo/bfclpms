@@ -314,12 +314,35 @@ serve(async (req) => {
 
         pmsScore = totalWeight > 0 ? totalWeightedScore / totalWeight : null;
       } else {
-        // Production — use eligibility production_value
+        // Production — use aggregated production daily entries
         pmsScore = null;
       }
 
+      // Resolve production rate and amount for production programs
+      let productionTotalTons: number | null = null;
+      let resolvedRate: number | null = null;
+      let incentiveAmount = 0;
+
+      if (program.program_type === 'production') {
+        productionTotalTons = prodEntryMap.get(emp.id) ?? null;
+
+        // Priority cascade: employee > department > business_unit > common
+        const empRate = prodRates.find((r: any) => r.rate_type === 'employee' && r.employee_id === emp.id);
+        const deptRate = emp.department_id ? prodRates.find((r: any) => r.rate_type === 'department' && r.entity_id === emp.department_id) : null;
+        // For BU rate, we need to resolve dept -> BU
+        const buRate = prodRates.find((r: any) => r.rate_type === 'business_unit');
+        const commonRate = prodRates.find((r: any) => r.rate_type === 'common');
+
+        const rateRecord = empRate || deptRate || buRate || commonRate;
+        resolvedRate = rateRecord?.rate_per_ton ?? null;
+
+        if (productionTotalTons !== null && resolvedRate !== null) {
+          incentiveAmount = productionTotalTons * resolvedRate;
+        }
+      }
+
       // Match slab
-      const scoreForSlab = program.program_type === 'support' ? pmsScore : elig?.production_value;
+      const scoreForSlab = program.program_type === 'support' ? pmsScore : (productionTotalTons ?? elig?.production_value);
       if (scoreForSlab !== null && scoreForSlab !== undefined && slabs?.length) {
         const pmsSlabs = slabs.filter((s: any) =>
           s.slab_category === (program.program_type === 'support' ? 'pms_score' : 'production')
