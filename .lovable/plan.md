@@ -1,72 +1,50 @@
 
 
-## Plan: Connect Production Data Pipeline to Incentive Computation
+## RCA & Fix: Incentive Amount Not Showing After Computation
 
-### Problem
-The `compute-monthly-incentives` edge function never reads from `production_daily_entries` or `incentive_production_rates`. It only checks `employee_incentive_eligibility.production_value` (which is unpopulated for production programs). Result: incentive shows 0% even though production data tab correctly calculates amounts like ₹2,000.
+### Investigation Summary
 
-### Root Cause Flow
-```text
-UI (Production Data tab)
-  → reads production_daily_entries (JSONB daily_values)
-  → reads incentive_production_rates (rate_per_ton)
-  → calculates: totalTons × rate = ₹2,000 (client-side only)
+**Data confirmed in database:**
+- 1 record exists for March 2026, Metal Sizing program
+- `incentive_amount = 2000`, `final_incentive_percent = 0`, employee = "Dummy"
+- The edge function correctly aggregated production daily entries × rate and stored the amount
 
-Edge Function (compute-monthly-incentives)
-  → reads employee_incentive_eligibility.production_value (NULL)
-  → scoreForSlab = null → no slab match → basePercent = 0
-  → final_incentive_percent = 0
-  → incentive_amount column doesn't exist
-```
+**Root Cause: Frontend query returns 0 records**
 
-### Database Changes
+The `useIncentiveRecords` hook fetches records but the table shows empty. Two issues identified:
 
-**Add `incentive_amount` column** to `employee_incentive_records`:
-```sql
-ALTER TABLE public.employee_incentive_records
-ADD COLUMN IF NOT EXISTS incentive_amount numeric DEFAULT 0;
-```
+1. **Silent query error** — The hook uses `profiles:employee_id(full_name, employee_code, department_id, designation, departments(name))` as a PostgREST embedded join. If the logged-in user's RLS on `departments` blocks access (departments RLS may not include the user's role), PostgREST can return a 400 error. The component does not display errors — it only shows "No records found", masking the actual failure.
 
-### Edge Function Changes — `compute-monthly-incentives/index.ts`
+2. **No program_id filter on query** — `useIncentiveRecords` fetches ALL records for the month/year regardless of which program is selected. While not the cause of 0 records, this means records from different programs get mixed together.
 
-After existing employee/eligibility fetching (around line 240), add:
+3. **Missing error display in UI** — The component never shows React Query errors, so any PostgREST failure silently appears as "no records."
 
-1. **Fetch `production_daily_entries`** for the program/month/year
-2. **Fetch `incentive_production_rates`** for the program
-3. **Build aggregation maps**:
-   - For each employee, sum all daily JSONB values → `totalTons`
-   - Resolve rate using priority cascade: employee (`rate_type='employee'` + `employee_id`) > department (`rate_type='department'` + `entity_id` matching dept) > BU (`rate_type='business_unit'`) > common (`rate_type='common'`)
-4. **In the per-employee loop** (line 254+):
-   - If production entries exist for this employee: `incentiveAmount = totalTons × resolvedRate`
-   - Use `totalTons` as `production_value` for slab matching (replacing the null `elig?.production_value`)
-   - Store `incentive_amount` in the record
-5. **Update incentive_status logic** (line 413-416): use production daily entries existence instead of `elig?.production_value`
+### Fix Plan
 
-### UI Changes
+**`src/hooks/useIncentiveRecords.ts`**:
+- Add optional `programId` parameter to `useIncentiveRecords`
+- When provided, filter by `program_id`
+- Add error logging in queryFn for debugging
 
-**`MonthlyIncentiveTable.tsx`**:
-- Add "Amount (₹)" column after "Final %" showing `r.incentive_amount` formatted with locale
-- Add amount to export data
-- Add total incentive amount to summary stats
+**`src/components/incentive/MonthlyIncentiveTable.tsx`**:
+- Pass `selectedProgram` to `useIncentiveRecords` so records are filtered by program
+- Add error state display — show the actual error message when query fails instead of "No records found"
+- Show a React Query error banner when `isError` is true
 
-**`IncentiveDryRunDialog.tsx`**:
-- Add "Amount" column in preview table
-- Show total amount in summary cards
+**RLS — Add `departments` SELECT policy for incentive users**:
+- Create a migration that adds a SELECT policy on `departments` for users with `admin-incentive` menu override (if not already present), ensuring the PostgREST join doesn't fail
 
 ### Files Modified
 
 | File | Change |
 |------|--------|
-| DB migration | Add `incentive_amount` column |
-| `supabase/functions/compute-monthly-incentives/index.ts` | Fetch production_daily_entries + production_rates; aggregate tons × rate; populate incentive_amount and production_value |
-| `src/components/incentive/MonthlyIncentiveTable.tsx` | Add Amount column, update export & summary |
-| `src/components/incentive/IncentiveDryRunDialog.tsx` | Add Amount column in preview |
-| `DOCUMENTATION.md` | v2.15.31 |
-| `POLICY.md` | Update §44 — production computation pipeline |
+| `src/hooks/useIncentiveRecords.ts` | Add optional `programId` param; add error logging |
+| `src/components/incentive/MonthlyIncentiveTable.tsx` | Pass programId; display query errors; improve empty state messaging |
+| DB migration | Add departments SELECT policy for menu override users (if missing) |
+| `DOCUMENTATION.md` | v2.15.32 |
 
 ### Risk Assessment
-- **Regression**: Low — additive column; existing support-program flow untouched (incentive_amount defaults to 0)
-- **Dashboard Safety**: No RLS changes, no cross-table policy references
-- **Data**: New column with default 0; existing records unaffected
-- **Performance**: Two additional queries per compute (production_daily_entries + production_rates) — small dataset
+- **Regression**: Low — additive RLS policy, filter is optional
+- **Dashboard Safety**: No changes to profiles RLS; departments policy is SELECT-only
+- **Data**: No schema changes
 
