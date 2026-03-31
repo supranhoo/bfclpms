@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 1.48.0 — §44: Period-based payment tracking for production programs
+> **Version:** 1.49.0 — §44: Recomputation cleanup (delete-before-upsert)
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -811,7 +811,9 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Computation pipeline:** The `compute-monthly-incentives` edge function aggregates production daily entries and resolves rates using the priority cascade. For production programs, it splits records by payment period: if daily data spans all three ranges (1-10, 11-20, 21-31), a single "Full Month" record is created; if data only covers specific ranges, separate records are created per populated range. Each period record has its own `incentive_amount` and independent `status` (draft/confirmed/paid), enabling payroll to track and confirm payments per period without duplication.
 
-**Payment period column:** `employee_incentive_records.payment_period` stores: `'1-10'`, `'11-20'`, `'21-31'`, `'Full Month'`, or `'full'` (for support/vessel programs). Unique constraint: `(employee_id, review_period, review_year, program_id, payment_period)`.
+**Payment period column:** `employee_incentive_records.payment_period` stores: `'1-10'`, `'11-20'`, `'21-31'`, or `'Full Month'`. All program types now use `'Full Month'` as the standardized full-period value. Unique constraint: `(employee_id, review_period, review_year, program_id, payment_period)`.
+
+**Recomputation cleanup:** The edge function deletes all existing records for each employee+program+month before upserting fresh results. This ensures: (a) period structure changes (full → split or vice versa) don't leave orphan records, (b) DQ status is always current after re-computation, and (c) manually overridden statuses are preserved via the pre-read at step 5 and re-applied during upsert.
 
 **Date range filter:** UI toggle renamed from "All" to "Full Month". Totals always reflect all days regardless of visible range.
 

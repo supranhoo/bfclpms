@@ -108,7 +108,7 @@ export function MonthlyIncentiveTable() {
         'Division': div?.name ?? '',
         'Month': r.review_period,
         'Year': r.review_year,
-        'Period': r.payment_period === 'full' ? 'Full Month' : (r.payment_period || ''),
+        'Period': r.payment_period || 'Full Month',
         'Programme Name': prog?.name ?? '',
         'PMS Score': r.pms_score ?? '',
         'Slab Range': slab ? `${slab.min_value}–${slab.max_value}` : '',
@@ -360,7 +360,7 @@ export function MonthlyIncentiveTable() {
                       </TableCell>
                       <TableCell className="text-sm">{r.profiles?.departments?.name || '—'}</TableCell>
                       <TableCell className="text-xs">{r.review_period}</TableCell>
-                      <TableCell className="text-xs">{r.payment_period === 'full' ? 'Full Month' : (r.payment_period || '—')}</TableCell>
+                      <TableCell className="text-xs">{r.payment_period || 'Full Month'}</TableCell>
                       <TableCell>{r.pms_score?.toFixed(2) || '—'}</TableCell>
                       <TableCell>
                         {r.incentive_slabs ? (
