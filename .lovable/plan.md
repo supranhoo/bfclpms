@@ -1,83 +1,110 @@
 
 
-## Plan: Show Observation Count on All Dashboard KPI Rows (Clean, Non-Cluttered)
+## Plan: Clean Up Query Raised Notifications — Remove Formula/Scoring, Show Query Text
 
-### Design Approach — Avoid Clutter
+### Problem (Two Issues)
 
-Instead of adding another separate badge next to status + query badge + audit icon, observations will use a **compact icon-only indicator** — a small dot-count next to an Eye icon, styled subtly in amber. It only renders when count > 0, uses minimal horizontal space, and visually groups with existing badges without adding visual noise.
+1. **In-app notification message** includes full KPI name with description, formula, and scoring logic — makes it unreadable (see screenshot)
+2. **Email notification** shows `Query: N/A` because the `query_reason` is never passed in the notification metadata; it also includes the bloated `kpi_name`
 
-### UI
+### Root Cause
 
+- **In-app**: `useKpis.ts` line 942 uses `kpiName` raw from DB (which contains multi-line text with description/formula/scoring)
+- **Email**: The DB trigger reads `kpi_name` from the `kpis` table without truncation for `query_raised` type (observations already do `LEFT(SPLIT_PART(...), 80)`). Also, `metadata->>'query_reason'` is null because the notification insert only stores `{ query_id }`, not the reason text.
+
+### UI After Fix
+
+**In-app notification (dark modal):**
 ```text
-Desktop row — Status cell (current vs proposed):
+┌──────────────────────────────────────────────────────────┐
+│ 🔔  Query Raised                                    ✕   │
+│                                                          │
+│ New Query Raised                                         │
+│                                                          │
+│ ┌──────────────────────────────────────────────────────┐ │
+│ │ Jaspal raised a query on "On-time Completion of      │ │
+│ │ Monthly Performance Reviews(Director's Reportees)":  │ │
+│ │ tets                                                 │ │
+│ └──────────────────────────────────────────────────────┘ │
+│                                                          │
+│ From           Date                                      │
+│ Jaspal         31 Mar 2026, 11:36 AM                     │
+│                                                          │
+│        [ Open in App ]                                   │
+│        [ Close       ]                                   │
+└──────────────────────────────────────────────────────────┘
 
-BEFORE:
-│ [Manager Check] [2 query]                    │
-
-AFTER (only when observations exist):
-│ [Manager Check] [2 query] 👁 3               │
-                              ↑ small amber Eye icon + count
-                              No extra badge chrome — just icon + number
+  ↑ KPI name is just the first line (no description/formula/scoring)
+  ↑ Query reason ("tets") is clearly visible
 ```
 
-Mobile card — below the status badge row:
+**Email notification:**
 ```text
-│ [Manager Check]  [1 query]  👁 2             │
-```
+┌──────────────────────────────────────────────────────────┐
+│  BFCL Logo              ❓ Query Raised                  │
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│  Hi Ankit Choudhary,                                     │
+│                                                          │
+│  Jaspal has raised a query on your KPI.                  │
+│                                                          │
+│  KPI: On-time Completion of Monthly Performance          │
+│       Reviews(Director's Reportees)                      │
+│  Period: January 2026                                    │
+│  Query: tets                                             │
+│                                                          │
+│  Please respond to this query at your earliest           │
+│  convenience.                                            │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
 
-The indicator uses `text-amber-600` with no border/background — lighter visual weight than the destructive query badge, preventing clutter.
+  ↑ KPI name: first line only (no formula/scoring)
+  ↑ Query text: actual reason typed by raiser (not "N/A")
+```
 
 ### Changes
 
-**`src/components/review/KpiDetailsTable.tsx`**
-- Add optional prop: `observationCounts?: Map<string, number>`
-- After query badge (line ~591), render compact indicator:
-  ```tsx
-  {obsCount > 0 && (
-    <span className="ml-1 inline-flex items-center gap-0.5 text-xs text-amber-600 dark:text-amber-400">
-      <Eye className="h-3 w-3" />{obsCount}
-    </span>
-  )}
-  ```
+**1. `src/hooks/useKpis.ts`** — In `useRaiseQuery` mutation:
+- Extract first line of `kpiName`: `kpiName.split('\n')[0].substring(0, 100)`
+- Pass `query_reason` in the notification metadata so the DB trigger can read it
+- Use the clean KPI name in the notification message
 
-**`src/components/dashboard/MobileKpiCard.tsx`**
-- Add optional prop: `observationCount?: number`
-- Render same compact indicator in the status badge row
+```typescript
+// Before:
+message: `${raiserName} raised a query on "${kpiName}": ${reason.slice(0, 120)}`,
+metadata: { query_id: data.id },
 
-**`src/components/review/UnifiedScorecard.tsx`**
-- Import `useObservationsByKpis`
-- Extract KPI IDs, fetch batch observations
-- Derive `observationCounts: Map<string, number>` (kpiId → count)
-- Pass to `KpiDetailsTable` and `MobileKpiCard`
+// After:
+const cleanKpiName = (kpiRes.data?.kpi_name || 'a KPI').split('\n')[0].substring(0, 100);
+message: `${raiserName} raised a query on "${cleanKpiName}": ${reason.slice(0, 120)}`,
+metadata: { query_id: data.id, query_reason: reason },
+```
 
-**`src/components/review/EmployeeScorecard.tsx`**
-- Same pattern
+**2. Database migration** — Update the notification trigger to strip `kpi_name` to first line for `query_raised` type (same pattern already used for observations):
 
-**`src/components/review/AuditScorecard.tsx`**
-- Same pattern
+```sql
+-- Add 'query_raised', 'query_response_submitted', 'query_resolved' to the
+-- truncation condition alongside observation types
+IF NEW.type IN ('observation_raised', ..., 'query_raised', 'query_response_submitted', 'query_resolved') THEN
+  v_kpi_name := LEFT(SPLIT_PART(COALESCE(v_kpi_name, ''), E'\n', 1), 80);
+END IF;
+```
 
-**`src/components/review/ManagementScorecard.tsx`**
-- Same pattern
+**3. `DOCUMENTATION.md`** — v2.15.16 changelog
 
-**`DOCUMENTATION.md`** — v2.15.15 changelog
-
-**`POLICY.md`** — Add invariant: observation counts visible on all dashboard KPI rows
+**4. `POLICY.md`** — Add invariant: notification messages must use first-line-only KPI names
 
 ### Files Modified
 
 | File | Change |
 |------|--------|
-| `src/components/review/KpiDetailsTable.tsx` | Add `observationCounts` prop, render icon+count |
-| `src/components/dashboard/MobileKpiCard.tsx` | Add `observationCount` prop, render icon+count |
-| `src/components/review/UnifiedScorecard.tsx` | Fetch batch observations, pass counts |
-| `src/components/review/EmployeeScorecard.tsx` | Fetch batch observations, pass counts |
-| `src/components/review/AuditScorecard.tsx` | Fetch batch observations, pass counts |
-| `src/components/review/ManagementScorecard.tsx` | Fetch batch observations, pass counts |
-| `DOCUMENTATION.md` | v2.15.15 |
-| `POLICY.md` | Dashboard observation visibility invariant |
+| `src/hooks/useKpis.ts` | Clean KPI name to first line; pass `query_reason` in metadata |
+| DB migration | Extend first-line truncation to query notification types |
+| `DOCUMENTATION.md` | v2.15.16 |
+| `POLICY.md` | KPI name truncation invariant for notifications |
 
 ### Risk Assessment
-- **Regression**: Zero — optional prop, no change when not passed
-- **Clutter**: Minimal — icon+number only, no badge chrome, amber color distinguishes from red query badge
-- **Performance**: Single batch query per dashboard, cached by React Query
+- **Regression**: Zero — email template already has `{{query_reason}}` placeholder; it just received null before
+- **Data**: Existing notifications unchanged; only new notifications will have clean text
+- **Performance**: No additional queries; just string manipulation on existing data
 
