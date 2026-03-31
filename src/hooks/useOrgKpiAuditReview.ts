@@ -120,16 +120,16 @@ export function useOrgKpiAuditReview(reviewPeriod: string, reviewYear: number) {
         }
       }
 
-      // 6. Fetch org KPI achieved values
+      // 6. Fetch org KPI achieved values with data entry details
       const { data: orgValues } = await supabase
         .from('org_kpi_values')
-        .select('category_id, kra_name, kpi_name, achieved_value')
+        .select('category_id, kra_name, kpi_name, achieved_value, remarks, evidence_url, evidence_urls, entered_by, data_source, status, entered_by_profile:profiles!org_kpi_values_entered_by_fkey(full_name)')
         .eq('review_period', reviewPeriod)
         .eq('review_year', reviewYear);
 
-      const achievedMap = new Map<string, number | null>();
+      const orgValueMap = new Map<string, any>();
       orgValues?.forEach(v => {
-        achievedMap.set(`${v.category_id}||${v.kra_name}||${v.kpi_name}`, v.achieved_value);
+        orgValueMap.set(`${v.category_id}||${v.kra_name}||${v.kpi_name}`, v);
       });
 
       // 7. Group KPIs by org KPI definition and filter for audit-stage
