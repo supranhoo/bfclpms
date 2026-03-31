@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 1.40.0 — §39: Notification messages must use first-line-only KPI names
+> **Version:** 1.41.0 — §40: query_raised notifications must originate solely from the DB trigger (single source)
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -752,3 +752,13 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Rationale:** KPI names in the database often contain multi-line text with description, formula, and scoring logic appended. Including this in notifications makes them unreadable and clutters both the notification panel and email inbox.
 
 **Invariant:** When creating notification records in client code (`useKpis.ts`, `useQueryWorkflow.ts`, etc.), always apply `.split('\n')[0].substring(0, 100)` to `kpi_name` before inserting. The `send_email_on_notification` DB trigger must apply `LEFT(SPLIT_PART(..., E'\n', 1), 80)` for all query and observation notification types.
+
+---
+
+## §40. Single-Source Query Raised Notifications
+
+**Rule:** `query_raised` notifications must only be created by the database trigger `notify_on_query_raised()` on the `kpi_queries` table. Frontend code must NOT insert duplicate notification records for query raises.
+
+**Rationale:** Duplicate notification paths cause inconsistent metadata keys (e.g., `reason` vs `query_reason`), leading to email templates receiving null values. A single server-side trigger ensures consistent metadata structure and prevents duplicate notifications.
+
+**Invariant:** The `useRaiseQuery` mutation in `useKpis.ts` must NOT insert into the `notifications` table. The DB trigger uses `jsonb_build_object('query_id', NEW.id, 'query_reason', NEW.reason)` to ensure the email trigger can read `metadata->>'query_reason'` correctly.
