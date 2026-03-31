@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 1.42.0 — §41: Incentive report exports must include all DQ rule fields
+> **Version:** 1.43.0 — §42: Dynamic program configuration tabs invariant
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
