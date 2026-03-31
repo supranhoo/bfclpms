@@ -41,12 +41,10 @@ export function CustomTabDataGrid({ tab, programId, onEditTab, onDeleteTab }: Pr
         .map((m: any) => m.mapping_value);
 
       if (employeeIds.length === 0) {
-        // Fallback: load all active employees
         const { data } = await supabase
           .from('profiles')
           .select('id, full_name, employee_code')
-          .eq('status', 'active')
-          .order('full_name');
+          .order('full_name') as { data: any[] | null };
         return data || [];
       }
 
@@ -54,7 +52,7 @@ export function CustomTabDataGrid({ tab, programId, onEditTab, onDeleteTab }: Pr
         .from('profiles')
         .select('id, full_name, employee_code')
         .in('id', employeeIds)
-        .order('full_name');
+        .order('full_name') as { data: any[] | null };
       return data || [];
     },
   });

@@ -33,6 +33,9 @@ import { VesselRateEditor } from '@/components/incentive/VesselRateEditor';
 import { VesselDataEntryGrid } from '@/components/incentive/VesselDataEntryGrid';
 import { UnifiedProductionDataTab } from '@/components/incentive/UnifiedProductionDataTab';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useCustomTabs, useUpsertCustomTab, useDeleteCustomTab } from '@/hooks/useIncentiveCustomTabs';
+import { CustomTabManager } from '@/components/incentive/CustomTabManager';
+import { CustomTabDataGrid } from '@/components/incentive/CustomTabDataGrid';
 
 /* ── Summary badges for each program card ── */
 function ProgramSummaryBadges({ programId }: { programId: string }) {
