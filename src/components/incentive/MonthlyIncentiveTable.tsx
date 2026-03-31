@@ -360,7 +360,7 @@ export function MonthlyIncentiveTable() {
                       </TableCell>
                       <TableCell className="text-sm">{r.profiles?.departments?.name || '—'}</TableCell>
                       <TableCell className="text-xs">{r.review_period}</TableCell>
-                      <TableCell className="text-xs">{r.payment_period === 'full' ? 'Full Month' : (r.payment_period || '—')}</TableCell>
+                      <TableCell className="text-xs">{r.payment_period || 'Full Month'}</TableCell>
                       <TableCell>{r.pms_score?.toFixed(2) || '—'}</TableCell>
                       <TableCell>
                         {r.incentive_slabs ? (
