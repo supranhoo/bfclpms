@@ -336,6 +336,11 @@ const App = () => (
                     <Suspense fallback={<PageFallback />}><EmployeeDevelopment /></Suspense>
                   </ProtectedRoute>
                 } />
+                <Route path="/admin/org-kpi-audit-review" element={
+                  <ProtectedRoute allowedRoles={['auditor', 'admin']} menuKey="admin-org-kpi-audit">
+                    <Suspense fallback={<PageFallback />}><OrgKpiAuditReview /></Suspense>
+                  </ProtectedRoute>
+                } />
                 <Route path="/reports/incentive" element={
                   <ReportRoute reportKey="incentive">
                     <Suspense fallback={<PageFallback />}><IncentiveReport /></Suspense>
