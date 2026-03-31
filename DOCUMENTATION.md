@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.24 — Daily achievement grid with per-ton rate & date range filter
+> **Version:** 2.15.25 — Multi-mode production rates (employee/dept/BU/common)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

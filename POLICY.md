@@ -801,11 +801,13 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Rule:** Programs with per-ton production rates use daily achievement grids instead of BU-based production target entry. Employees are auto-populated from programme mappings — no BU dropdown is required.
 
-**Rate configuration:** Per-employee `rate_per_ton` is configured in the programme's "Production Rates" tab. Only employees with configured rates appear in the daily entry grid.
+**Rate configuration:** Production rates support four assignment modes: **Employee-wise** (per individual), **Department-wise** (applies to all employees in a department), **BU-wise** (applies to all employees in a business unit), and **Common** (single rate for all mapped employees). Rates are configured in the programme's "Production Rates" tab using a radio selector and entity picker.
+
+**Rate resolution priority:** When the daily grid renders, each employee's effective rate is resolved using a strict priority cascade: Employee > Department > BU > Common. The first matching rate wins. Only employees with a resolved rate appear in the grid.
 
 **Daily values:** Stored as JSONB (`{"1": 10, "2": 15, ...}`) in `production_daily_entries`, keyed by program + employee + month + year. Days beyond the month's length are ignored.
 
-**Calculation:** Incentive amount = Total daily achievement × Rate per ton. The grand total is displayed but amounts are informational — actual payroll integration uses the stored data.
+**Calculation:** Incentive amount = Total daily achievement × Effective rate per ton. The grid displays a badge (emp/dept/bu/com) next to each rate to indicate its source.
 
 **Date range filter:** UI-only filter (All, 1-10, 11-20, 21-31) for usability on narrow screens. Totals always reflect all days regardless of visible range.
 
