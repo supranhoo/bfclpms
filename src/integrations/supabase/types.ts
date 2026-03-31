@@ -894,6 +894,65 @@ export type Database = {
           },
         ]
       }
+      incentive_custom_tab_data: {
+        Row: {
+          created_at: string | null
+          employee_id: string
+          field_values: Json
+          id: string
+          program_id: string
+          tab_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          employee_id: string
+          field_values?: Json
+          id?: string
+          program_id: string
+          tab_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          employee_id?: string
+          field_values?: Json
+          id?: string
+          program_id?: string
+          tab_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "incentive_custom_tab_data_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incentive_custom_tab_data_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incentive_custom_tab_data_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "incentive_programs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incentive_custom_tab_data_tab_id_fkey"
+            columns: ["tab_id"]
+            isOneToOne: false
+            referencedRelation: "incentive_program_custom_tabs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       incentive_disqualification_rules: {
         Row: {
           created_at: string
@@ -975,6 +1034,47 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "incentive_eligibility_fields_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "incentive_programs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      incentive_program_custom_tabs: {
+        Row: {
+          created_at: string | null
+          fields: Json
+          id: string
+          is_active: boolean | null
+          program_id: string
+          sort_order: number | null
+          tab_key: string
+          tab_label: string
+        }
+        Insert: {
+          created_at?: string | null
+          fields?: Json
+          id?: string
+          is_active?: boolean | null
+          program_id: string
+          sort_order?: number | null
+          tab_key: string
+          tab_label: string
+        }
+        Update: {
+          created_at?: string | null
+          fields?: Json
+          id?: string
+          is_active?: boolean | null
+          program_id?: string
+          sort_order?: number | null
+          tab_key?: string
+          tab_label?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "incentive_program_custom_tabs_program_id_fkey"
             columns: ["program_id"]
             isOneToOne: false
             referencedRelation: "incentive_programs"
