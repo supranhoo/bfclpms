@@ -762,3 +762,13 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Rationale:** Duplicate notification paths cause inconsistent metadata keys (e.g., `reason` vs `query_reason`), leading to email templates receiving null values. A single server-side trigger ensures consistent metadata structure and prevents duplicate notifications.
 
 **Invariant:** The `useRaiseQuery` mutation in `useKpis.ts` must NOT insert into the `notifications` table. The DB trigger uses `jsonb_build_object('query_id', NEW.id, 'query_reason', NEW.reason)` to ensure the email trigger can read `metadata->>'query_reason'` correctly.
+
+---
+
+### §41 — Incentive Report Export Completeness
+
+**Rule:** All incentive report exports (Excel/XLSX) must include the full set of disqualification rule fields: `Is Disqualified`, `Disqualification Reasons`, and `LTI Penalty %`. These fields must never be omitted from the export template.
+
+**Rationale:** Incomplete incentive reports risk payroll errors and compliance gaps. DQ data is critical for audit trails and financial reconciliation.
+
+**Invariant:** The `IncentiveReportExport` component's Excel export must produce at least 28 columns covering Employee Info, Period, Programme, Scores, DQ Fields, Adjustments, Final, and Analytical data.

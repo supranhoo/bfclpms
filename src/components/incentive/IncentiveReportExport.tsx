@@ -164,9 +164,9 @@ export function IncentiveReportExport() {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <SummaryCard icon={Users} label="Total Records" value={stats.total} />
-        <SummaryCard icon={Users} label="Eligible" value={stats.eligible} className="text-emerald-600" />
+        <SummaryCard icon={Users} label="Eligible" value={stats.eligible} className="text-primary" />
         <SummaryCard icon={ShieldAlert} label="Disqualified" value={stats.dq} className="text-destructive" />
-        <SummaryCard icon={Clock} label="Pro-rata" value={stats.proRata} className="text-amber-600" />
+        <SummaryCard icon={Clock} label="Pro-rata" value={stats.proRata} className="text-accent-foreground" />
         <SummaryCard icon={IndianRupee} label="Total Incentive %" value={stats.totalAmount.toFixed(1)} />
       </div>
 
