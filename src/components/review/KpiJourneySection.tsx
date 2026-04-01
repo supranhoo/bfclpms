@@ -594,7 +594,8 @@ export function KpiJourneySection({
                         const data = prevStageData[stage];
                         if (!data) return null;
                         const status = getStageStatus(stage, prevStatus, viewLevel, prevWf);
-                        const stageIsNA = (prevIsNA && data.score === null && status !== 'pending') || (!prevIsNA && data.score === null && status !== 'pending' && status === 'completed');
+                        const isPrevAutoAdvanced = !!(prevSub as any)?.auto_advance_reason;
+                        const stageIsNA = !isPrevAutoAdvanced && ((prevIsNA && data.score === null && status !== 'pending') || (!prevIsNA && data.score === null && status !== 'pending' && status === 'completed'));
                         return (
                           <ReviewStageCard
                             key={stage}
