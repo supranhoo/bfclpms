@@ -38,6 +38,7 @@ export default function CompetencyManagerTab() {
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingComp, setEditingComp] = useState<any>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [reviewPeriods, setReviewPeriods] = useState<{ period_name: string; review_year: number }[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState('');
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
