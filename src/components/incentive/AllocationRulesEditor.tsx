@@ -133,6 +133,15 @@ export function AllocationRulesEditor({ programId }: Props) {
             </TableBody>
           </Table>
         </div>
+        <ConfirmDestructiveDialog
+          open={!!deletingId}
+          onConfirm={() => { if (deletingId) deleteRule.mutate(deletingId, { onSuccess: () => setDeletingId(null) }); }}
+          onCancel={() => setDeletingId(null)}
+          title="Delete Allocation Rule"
+          description="Are you sure you want to delete this allocation rule? This action cannot be undone."
+          confirmLabel="Delete Rule"
+          isLoading={deleteRule.isPending}
+        />
       </CardContent>
     </Card>
   );

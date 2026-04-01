@@ -161,6 +161,15 @@ export function IncentiveSlabEditor({ programId, programType }: Props) {
             </TableBody>
           </Table>
         </div>
+        <ConfirmDestructiveDialog
+          open={!!deletingId}
+          onConfirm={() => { if (deletingId) deleteSlab.mutate(deletingId, { onSuccess: () => setDeletingId(null) }); }}
+          onCancel={() => setDeletingId(null)}
+          title="Delete Incentive Slab"
+          description="Are you sure you want to delete this incentive slab? This action cannot be undone."
+          confirmLabel="Delete Slab"
+          isLoading={deleteSlab.isPending}
+        />
       </CardContent>
     </Card>
   );

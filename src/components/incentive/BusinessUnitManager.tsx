@@ -113,6 +113,15 @@ export function BusinessUnitManager() {
           </>
         )}
       </CardContent>
+      <ConfirmDestructiveDialog
+        open={!!deletingId}
+        onConfirm={() => { if (deletingId) deleteSubUnit.mutate(deletingId, { onSuccess: () => setDeletingId(null) }); }}
+        onCancel={() => setDeletingId(null)}
+        title="Delete Sub-Unit"
+        description="Are you sure you want to delete this sub-unit? This action cannot be undone."
+        confirmLabel="Delete Sub-Unit"
+        isLoading={deleteSubUnit.isPending}
+      />
     </Card>
   );
 }

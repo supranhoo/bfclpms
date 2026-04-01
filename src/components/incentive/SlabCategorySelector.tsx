@@ -193,6 +193,16 @@ export function SlabCategorySelector({ value, onValueChange, allowedValues }: Pr
           </div>
         </PopoverContent>
       </Popover>
+
+      <ConfirmDestructiveDialog
+        open={!!deletingCat}
+        onConfirm={() => { if (deletingCat) handleDelete(deletingCat); setDeletingCat(null); }}
+        onCancel={() => setDeletingCat(null)}
+        title="Delete Slab Category"
+        description={`Are you sure you want to delete the category "${deletingCat?.label}"? This action cannot be undone.`}
+        confirmLabel="Delete Category"
+        isLoading={deleteCategory.isPending}
+      />
     </div>
   );
 }

@@ -279,6 +279,15 @@ export default function CompetencyManagerTab() {
           onSaved={() => fetchCompetencies(selectedEmployee)}
         />
       )}
+
+      <ConfirmDestructiveDialog
+        open={!!deletingId}
+        onConfirm={() => { if (deletingId) handleDelete(deletingId).then(() => setDeletingId(null)); }}
+        onCancel={() => setDeletingId(null)}
+        title="Delete Competency"
+        description="Are you sure you want to delete this competency assessment? This action cannot be undone."
+        confirmLabel="Delete Competency"
+      />
     </div>
   );
 }

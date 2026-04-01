@@ -280,6 +280,15 @@ export function CustomTabDataGrid({ tab, programId, onEditTab, onDeleteTab }: Pr
           )}
         </TableBody>
       </Table>
+      <ConfirmDestructiveDialog
+        open={!!deletingId}
+        onConfirm={() => { if (deletingId) deleteRow.mutate({ id: deletingId, tabId: tab.id }, { onSuccess: () => setDeletingId(null) }); }}
+        onCancel={() => setDeletingId(null)}
+        title="Delete Row"
+        description="Are you sure you want to delete this data row? This action cannot be undone."
+        confirmLabel="Delete Row"
+        isLoading={deleteRow.isPending}
+      />
     </div>
   );
 }

@@ -230,6 +230,15 @@ export function DisqualificationRulesEditor({ programId }: Props) {
           </div>
         )}
       </CardContent>
+      <ConfirmDestructiveDialog
+        open={!!deletingId}
+        onConfirm={() => { if (deletingId) deleteRule.mutate(deletingId, { onSuccess: () => setDeletingId(null) }); }}
+        onCancel={() => setDeletingId(null)}
+        title="Delete Disqualification Rule"
+        description="Are you sure you want to delete this disqualification rule? This action cannot be undone."
+        confirmLabel="Delete Rule"
+        isLoading={deleteRule.isPending}
+      />
     </Card>
   );
 }

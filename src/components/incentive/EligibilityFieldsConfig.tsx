@@ -175,6 +175,15 @@ export function EligibilityFieldsConfig({ programId }: Props) {
           </Table>
         </div>
       )}
+      <ConfirmDestructiveDialog
+        open={!!deletingId}
+        onConfirm={() => { if (deletingId) deleteField.mutate(deletingId, { onSuccess: () => setDeletingId(null) }); }}
+        onCancel={() => setDeletingId(null)}
+        title="Delete Eligibility Field"
+        description="Are you sure you want to delete this custom field? This action cannot be undone."
+        confirmLabel="Delete Field"
+        isLoading={deleteField.isPending}
+      />
     </div>
   );
 }
