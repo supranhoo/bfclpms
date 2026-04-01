@@ -1,39 +1,58 @@
 
 
-## Plan: Add Employee Selection Checkboxes + Mark Paid Impact Preview
+## Plan: Extract "Incentive Data Entry" as a Separate Menu Item
 
-### Changes to `src/components/incentive/MonthlyIncentiveTable.tsx`
+### Problem
+Currently, Production Data and Eligibility Data are tabs inside Incentive Config. This means anyone who needs to do data entry must have access to the full configuration page (programs, slabs, DQ rules). Separation is needed for access control.
 
-**1. Add row-level checkbox selection**
-- Add `selectedIds` state (`Set<string>`)
-- Add a header checkbox for select-all (filtered) toggle
-- Add a `Checkbox` in each table row (first column)
-- Selection only available for `confirmed` status rows (since only confirmed can be marked paid)
+### Approach
 
-**2. Update "Confirm All" and "Mark Paid" to work with selection**
-- If rows are selected, "Confirm All" confirms only selected draft rows; otherwise confirms all drafts (current behavior)
-- "Mark Paid" operates on selected confirmed rows; if none selected, operates on all confirmed (current behavior)
+**1. Create new page: `src/pages/admin/IncentiveDataEntry.tsx`**
+- New standalone page with two tabs: "Production Data" and "Eligibility Data"
+- Reuses existing components: `UnifiedProductionDataTab` and `EligibilityDataEntry`
+- Fetches `programs` via `useIncentivePrograms()` (read-only usage for production data dropdown)
+- PageHeader: "Incentive Data Entry" with appropriate description
 
-**3. Add impact confirmation dialog before Mark Paid**
-- New `AlertDialog` that shows before executing Mark Paid:
-  - Number of employees being marked paid
-  - Total incentive amount (₹) for those records
-  - List of employee names (scrollable, max 10 shown)
-  - "Cancel" and "Confirm Mark Paid" buttons
-- Only after user confirms does the mutation fire
+**2. Update `src/pages/admin/IncentiveConfig.tsx`**
+- Remove the "Production Data" and "Eligibility Data" tabs
+- Keep only the "Programs" tab (can remove the Tabs wrapper entirely since it's now single-content)
+- Update description to reflect config-only scope
 
-**4. Summary bar update**
-- Show selected count badge near the action buttons when selection is active (e.g., "3 selected")
+**3. Add route in `src/App.tsx`**
+- New route: `/admin/incentive-data-entry`
+- ProtectedRoute with `menuKey: 'admin-incentive-data'`, `allowedRoles: ['admin']`
+
+**4. Add sidebar menu item in `src/components/layout/AppSidebar.tsx`**
+- New entry in `admin` group right after Incentive Config:
+  ```
+  { title: 'Incentive Data Entry', icon: FileInput, path: '/admin/incentive-data-entry',
+    menuKey: 'admin-incentive-data', roles: ['admin'] }
+  ```
+- Also add to `dataEntry` group so non-admin users with menu overrides can access it
+
+**5. Seed menu_access_config**
+- SQL migration to insert `admin-incentive-data` into `menu_access_config` so it appears in Menu Access Rights for role-based + user-level override assignment
+
+**6. Update `DOCUMENTATION.md` and `POLICY.md`**
+
+### Additional Ideas
+
+- **Read-only program list for data entry**: The data entry page only needs to read program names for dropdowns — no mutation access to programs/slabs/DQ rules. This naturally enforces separation.
+- **Future: Dedicated data-entry roles**: With the menu access override system already in place, admins can immediately grant "Incentive Data Entry" to specific employees (e.g., accounts team) without giving them Incentive Config access.
 
 ### Files Modified
 
 | File | Change |
 |------|--------|
-| `src/components/incentive/MonthlyIncentiveTable.tsx` | Add `Checkbox` column, selection state, impact dialog, update Confirm/MarkPaid logic |
-| `DOCUMENTATION.md` | v2.15.47 |
+| `src/pages/admin/IncentiveDataEntry.tsx` | New page with Production Data + Eligibility Data tabs |
+| `src/pages/admin/IncentiveConfig.tsx` | Remove Production/Eligibility tabs, keep Programs only |
+| `src/App.tsx` | Add route for `/admin/incentive-data-entry` |
+| `src/components/layout/AppSidebar.tsx` | Add menu item in admin + dataEntry groups |
+| SQL migration | Seed `menu_access_config` for new menuKey |
+| `DOCUMENTATION.md` | v2.15.48 |
 
-### Technical Notes
-- Import `Checkbox` from UI components and `AlertDialog` for the confirmation
-- Selection resets on filter/compute changes
-- The impact dialog is purely client-side — no extra DB query needed since all data is already loaded
+### Risk Assessment
+- **Regression**: Low — existing components (`UnifiedProductionDataTab`, `EligibilityDataEntry`) are simply moved to a new host page, no logic changes
+- **Access**: Existing Incentive Config users see no disruption; data entry is now independently grantable
+- **Data**: No schema changes to business tables
 
