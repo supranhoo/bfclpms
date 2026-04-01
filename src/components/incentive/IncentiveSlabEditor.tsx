@@ -43,6 +43,7 @@ export function IncentiveSlabEditor({ programId, programType }: Props) {
   const [selectedBU, setSelectedBU] = useState<string | null>(null);
   const [selectedDept, setSelectedDept] = useState<string | null>(null);
   const [newRow, setNewRow] = useState({ min_value: '', max_value: '', incentive_percent: '', rating_label: '', sub_category: '' });
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const filteredSlabs = slabs.filter((s: any) => {
     if (s.slab_category !== selectedCategory) return false;
