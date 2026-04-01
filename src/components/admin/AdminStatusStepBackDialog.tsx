@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Undo2 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ArrowLeft, Undo2, AlertTriangle } from 'lucide-react';
 import { getStageLabel } from '@/hooks/useWorkflowConfig';
-import { useAdminStatusStepBack, getPreviousStatus } from '@/hooks/useAdminDataEntry';
+import { useAdminStatusStepBack, getPreviousStatus, FULL_STATUS_ORDER } from '@/hooks/useAdminDataEntry';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -36,6 +38,8 @@ export function AdminStatusStepBackDialog({
   workflowStages: externalStages,
 }: AdminStatusStepBackDialogProps) {
   const [reason, setReason] = useState('');
+  const [fullReset, setFullReset] = useState(false);
+  const [selectedTarget, setSelectedTarget] = useState<ReviewStatus | ''>('');
   const stepBackMutation = useAdminStatusStepBack();
 
   // Fetch employee's actual workflow stages when dialog is open and no external stages provided
@@ -52,21 +56,55 @@ export function AdminStatusStepBackDialog({
   const workflowStages = externalStages || fetchedStages || undefined;
   const previousStatus = getPreviousStatus(currentStatus, workflowStages);
 
+  // Compute all valid target stages (everything before current status in the workflow)
+  const availableTargets = useMemo(() => {
+    const stages = (workflowStages || FULL_STATUS_ORDER) as ReviewStatus[];
+    const currentIdx = stages.indexOf(currentStatus);
+    // Also check FULL_STATUS_ORDER for orphaned status
+    const fullIdx = FULL_STATUS_ORDER.indexOf(currentStatus);
+    const effectiveIdx = currentIdx >= 0 ? currentIdx : fullIdx;
+
+    if (effectiveIdx <= 0) return [];
+
+    const targets: ReviewStatus[] = [];
+    // Always include kra_set
+    if (!targets.includes('kra_set')) targets.push('kra_set');
+
+    // Add all workflow stages before current
+    for (let i = 0; i < effectiveIdx; i++) {
+      const stage = stages[i];
+      if (stage && !targets.includes(stage) && stage !== 'kra_set') {
+        targets.push(stage);
+      }
+    }
+
+    return targets;
+  }, [currentStatus, workflowStages]);
+
+  // Default to previous status when dialog opens
+  const effectiveTarget = fullReset
+    ? 'kra_set'
+    : (selectedTarget || previousStatus || 'kra_set') as ReviewStatus;
+
   const handleSubmit = () => {
-    if (!previousStatus || !reason.trim()) return;
+    if (!effectiveTarget || !reason.trim()) return;
 
     stepBackMutation.mutate(
       {
         kpi_id: kpiId,
         employee_id: employeeId,
         current_status: currentStatus,
-        target_status: previousStatus,
+        target_status: effectiveTarget,
         reason: reason.trim(),
         kpi_name: kpiName,
+        full_reset: fullReset,
+        revert_siblings: currentStatus === 'approved',
       },
       {
         onSuccess: () => {
           setReason('');
+          setFullReset(false);
+          setSelectedTarget('');
           onClose();
         },
       }
@@ -76,6 +114,8 @@ export function AdminStatusStepBackDialog({
   const handleOpenChange = (open: boolean) => {
     if (!open) {
       setReason('');
+      setFullReset(false);
+      setSelectedTarget('');
       onClose();
     }
   };
@@ -89,7 +129,7 @@ export function AdminStatusStepBackDialog({
             Step Back KPI Status
           </DialogTitle>
           <DialogDescription>
-            Move this KPI one step backward in the workflow. A mandatory reason is required for the audit trail.
+            Move this KPI backward in the workflow. Select a target stage and provide a mandatory reason for the audit trail.
           </DialogDescription>
         </DialogHeader>
 
@@ -101,16 +141,67 @@ export function AdminStatusStepBackDialog({
             <div className="text-xs text-muted-foreground">Employee: {employeeName}</div>
           </div>
 
-          {/* Status Transition */}
-          <div className="flex items-center justify-center gap-3 py-2">
-            <Badge variant="outline" className="text-sm">
-              {getStageLabel(currentStatus)}
-            </Badge>
-            <ArrowLeft className="h-4 w-4 text-muted-foreground" />
-            <Badge variant="secondary" className="text-sm">
-              {previousStatus ? getStageLabel(previousStatus) : '—'}
-            </Badge>
+          {/* Status Transition with target selector */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Target Stage</label>
+            <div className="flex items-center gap-3">
+              <Badge variant="outline" className="text-sm shrink-0">
+                {getStageLabel(currentStatus)}
+              </Badge>
+              <ArrowLeft className="h-4 w-4 text-muted-foreground shrink-0" />
+              {fullReset ? (
+                <Badge variant="secondary" className="text-sm">
+                  {getStageLabel('kra_set')} (Full Reset)
+                </Badge>
+              ) : availableTargets.length > 1 ? (
+                <Select
+                  value={selectedTarget || (previousStatus ?? '')}
+                  onValueChange={(v) => setSelectedTarget(v as ReviewStatus)}
+                  disabled={fullReset}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableTargets.map((stage) => (
+                      <SelectItem key={stage} value={stage}>
+                        {getStageLabel(stage)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Badge variant="secondary" className="text-sm">
+                  {previousStatus ? getStageLabel(previousStatus) : '—'}
+                </Badge>
+              )}
+            </div>
           </div>
+
+          {/* Full Reset checkbox */}
+          <div className="flex items-start gap-2 p-3 border border-destructive/30 rounded-md bg-destructive/5">
+            <Checkbox
+              id="full-reset"
+              checked={fullReset}
+              onCheckedChange={(checked) => setFullReset(checked === true)}
+            />
+            <div className="grid gap-1 leading-none">
+              <label htmlFor="full-reset" className="text-sm font-medium cursor-pointer flex items-center gap-1">
+                <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
+                Clear all review data (full reset)
+              </label>
+              <p className="text-xs text-muted-foreground">
+                Deletes all scores, remarks, evidence, and achieved values. Resets KPI to KRA Set with a clean slate. Use for removing test data.
+              </p>
+            </div>
+          </div>
+
+          {/* Sibling info for multi-month KPIs */}
+          {currentStatus === 'approved' && (
+            <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+              ℹ️ If this is a multi-month KPI (Quarterly, Bi-Monthly, etc.), all sibling months in the same cycle will also be reverted.
+            </div>
+          )}
 
           {/* Reason */}
           <div className="space-y-2">
@@ -133,8 +224,9 @@ export function AdminStatusStepBackDialog({
           <Button
             onClick={handleSubmit}
             disabled={!reason.trim() || stepBackMutation.isPending}
+            variant={fullReset ? 'destructive' : 'default'}
           >
-            {stepBackMutation.isPending ? 'Processing...' : 'Confirm Step Back'}
+            {stepBackMutation.isPending ? 'Processing...' : fullReset ? 'Confirm Full Reset' : 'Confirm Step Back'}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -546,7 +546,7 @@ export function useAdminSubmitSubPeriod() {
 // ========== Status Step-Back ==========
 
 // Full 8-stage order for cascade-clearing. Any employee's workflow is a subset of this.
-const FULL_STATUS_ORDER: Array<Database['public']['Enums']['review_status']> = [
+export const FULL_STATUS_ORDER: Array<Database['public']['Enums']['review_status']> = [
   'kra_set',
   'self_review',
   'manager_check',
