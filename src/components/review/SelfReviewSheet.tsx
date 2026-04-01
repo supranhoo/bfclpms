@@ -424,7 +424,7 @@ export function SelfReviewSheet({
         kpi_id: selectedKpi.id,
         achieved_value: effectiveScore,
         self_rating: selfRating,
-        self_score: result.rating,
+        self_score: finalRating,
         self_remarks: selfRemarks || defaultRemarks,
         self_evidence_url: selfEvidenceUrls.length > 0 ? selfEvidenceUrls[0] : null,
         self_evidence_urls: selfEvidenceUrls,
