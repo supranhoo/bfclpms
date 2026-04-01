@@ -4616,3 +4616,9 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix 2 — UI:** `KpiJourneySection.tsx` now detects `auto_advance_reason` on submissions and excludes auto-advanced KPIs from N/A badge logic. Both current and previous-month journey tiles are fixed.
 - **Backfill:** Existing auto-advanced submissions with NULL intermediate scores updated to 0/red via data correction.
 - **Affected files:** `src/hooks/usePendingSelfReviews.ts`, `src/components/review/KpiJourneySection.tsx`
+
+### v2.15.46 — Fix KRA-Level Dedup Blocking Sibling Month Backfill
+- **Root cause:** The rollover KRA-level dedup (terminal month check) prevented creating sibling month records when the terminal month already existed. Re-running rollover with `force: true` still created 0 records because the dedup short-circuited the entire KPI.
+- **Fix:** Removed KRA-level terminal dedup from `auto-rollover-kpis/index.ts`. The per-month `kra_name+kpi_name` dedup is sufficient and more precise — it allows creating missing sibling months while still preventing true duplicates.
+- **Data repair:** Re-ran rollover for March→April 2026 with `force: true`. Created 75 missing sibling KPI records across 22 employees (Quarterly April/May records alongside existing June).
+- **Affected file:** `supabase/functions/auto-rollover-kpis/index.ts`
