@@ -829,6 +829,10 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Terminal month resolution:** When KPIs are rolled over to a new period, the system resolves the target `review_period` to the correct terminal month based on the KPI's frequency. Monthly KPIs use the raw target month; multi-month frequencies (Bi-Monthly, Quarterly, Half-Yearly, Yearly) are mapped to their cycle's terminal month (e.g., Quarterly April → June). This prevents insertion failures caused by frequency lock triggers blocking non-terminal months.
 
+**Full-cycle record creation:** For multi-month KPIs, the rollover creates records for ALL months in the cycle that are >= the target month. For example, rolling to April for a Quarterly KPI creates records for April, May, and June. Earlier months in the cycle (Jan-Mar) already have records from the previous rollover. Each month is independently deduped against existing records.
+
+**Sibling month behavior:** Non-terminal month records are created with `status: 'kra_set'` and are naturally locked by the `enforce_frequency_lock_on_submission` trigger. They appear in scorecards as locked/blurred but visible. When the terminal month is approved, the `percolate_multimonth_score` trigger propagates scores and status to all sibling records.
+
 **Service role bypass:** The `enforce_frequency_lock_on_submission` database trigger allows service-role callers (edge functions) to bypass frequency lock checks. This ensures automated processes like rollover and bulk assignment are not blocked by the trigger.
 
 ## §46 — Daily KPI Rating Calculation
