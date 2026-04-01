@@ -146,7 +146,7 @@ export function PreviousMonthsScoreMini({
       <p className="text-[10px] font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">
         Previous Months
       </p>
-      <div className={cn('grid gap-1', `grid-cols-${results.length}`)}>
+      <div className="grid gap-1 grid-cols-3">
         {results.map((r, idx) => {
           if (r.score === null) {
             return (
