@@ -238,6 +238,16 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
           employeeName={employeeProfile?.full_name || 'Employee'}
           employeeCode={employeeProfile?.employee_code || undefined}
         />
+        <AdminStatusStepBackDialog
+          isOpen={stepBackDialogOpen}
+          onClose={() => setStepBackDialogOpen(false)}
+          kpiId={kpi.id}
+          kpiName={kpi.kpi_name}
+          kraName={kpi.kra_name}
+          employeeId={employeeId || kpi.employee_id}
+          employeeName={employeeProfile?.full_name || 'Employee'}
+          currentStatus={status}
+        />
       </>
     )}
     </>
