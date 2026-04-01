@@ -1,58 +1,47 @@
 
 
-## Plan: Extract "Incentive Data Entry" as a Separate Menu Item
+## RCA: Comments and Auto-Advance Reason Not Percolating to Sibling Months
 
-### Problem
-Currently, Production Data and Eligibility Data are tabs inside Incentive Config. This means anyone who needs to do data entry must have access to the full configuration page (programs, slabs, DQ rules). Separation is needed for access control.
+### Root Cause
 
-### Approach
+The `percolate_multimonth_score()` trigger copies only these fields to sibling month submissions:
+- Scores: `self_score`, `manager_score`, `skip_level_score`, `hr_pms_score`, `auditor_score`, `management_score`, `final_score`
+- Ratings: all corresponding `*_rating` columns
+- `achieved_value`, `is_na`
 
-**1. Create new page: `src/pages/admin/IncentiveDataEntry.tsx`**
-- New standalone page with two tabs: "Production Data" and "Eligibility Data"
-- Reuses existing components: `UnifiedProductionDataTab` and `EligibilityDataEntry`
-- Fetches `programs` via `useIncentivePrograms()` (read-only usage for production data dropdown)
-- PageHeader: "Incentive Data Entry" with appropriate description
+**Missing from percolation:**
+- `self_remarks`, `manager_remarks`, `skip_level_remarks`, `hr_pms_remarks`, `auditor_remarks`, `management_remarks`
+- `auto_advance_reason`
+- Evidence URLs: `self_evidence_urls`, `manager_evidence_urls`, `skip_level_evidence_urls`, `hr_pms_evidence_urls`, `auditor_evidence_urls`, `management_evidence_urls`
+- Achieved values per level: `manager_achieved_value`, `auditor_achieved_value`, `management_achieved_value`, `skip_level_achieved_value`, `hr_pms_achieved_value`
 
-**2. Update `src/pages/admin/IncentiveConfig.tsx`**
-- Remove the "Production Data" and "Eligibility Data" tabs
-- Keep only the "Programs" tab (can remove the Tabs wrapper entirely since it's now single-content)
-- Update description to reflect config-only scope
+### Fix
 
-**3. Add route in `src/App.tsx`**
-- New route: `/admin/incentive-data-entry`
-- ProtectedRoute with `menuKey: 'admin-incentive-data'`, `allowedRoles: ['admin']`
+**Single migration** — update `percolate_multimonth_score()` to include all remarks, `auto_advance_reason`, evidence URLs, and per-level achieved values in both the INSERT and ON CONFLICT UPDATE clauses.
 
-**4. Add sidebar menu item in `src/components/layout/AppSidebar.tsx`**
-- New entry in `admin` group right after Incentive Config:
-  ```
-  { title: 'Incentive Data Entry', icon: FileInput, path: '/admin/incentive-data-entry',
-    menuKey: 'admin-incentive-data', roles: ['admin'] }
-  ```
-- Also add to `dataEntry` group so non-admin users with menu overrides can access it
+**Data repair** — backfill existing sibling records that have null remarks but whose terminal month has remarks, using a single UPDATE...FROM query.
 
-**5. Seed menu_access_config**
-- SQL migration to insert `admin-incentive-data` into `menu_access_config` so it appears in Menu Access Rights for role-based + user-level override assignment
+### Changes
 
-**6. Update `DOCUMENTATION.md` and `POLICY.md`**
-
-### Additional Ideas
-
-- **Read-only program list for data entry**: The data entry page only needs to read program names for dropdowns — no mutation access to programs/slabs/DQ rules. This naturally enforces separation.
-- **Future: Dedicated data-entry roles**: With the menu access override system already in place, admins can immediately grant "Incentive Data Entry" to specific employees (e.g., accounts team) without giving them Incentive Config access.
-
-### Files Modified
-
-| File | Change |
+| Item | Detail |
 |------|--------|
-| `src/pages/admin/IncentiveDataEntry.tsx` | New page with Production Data + Eligibility Data tabs |
-| `src/pages/admin/IncentiveConfig.tsx` | Remove Production/Eligibility tabs, keep Programs only |
-| `src/App.tsx` | Add route for `/admin/incentive-data-entry` |
-| `src/components/layout/AppSidebar.tsx` | Add menu item in admin + dataEntry groups |
-| SQL migration | Seed `menu_access_config` for new menuKey |
-| `DOCUMENTATION.md` | v2.15.48 |
+| SQL migration | Recreate `percolate_multimonth_score()` with all missing columns |
+| SQL data repair (insert tool) | Backfill remarks, auto_advance_reason, evidence URLs for existing percolated records |
+| `DOCUMENTATION.md` | v2.15.49 entry |
 
-### Risk Assessment
-- **Regression**: Low — existing components (`UnifiedProductionDataTab`, `EligibilityDataEntry`) are simply moved to a new host page, no logic changes
-- **Access**: Existing Incentive Config users see no disruption; data entry is now independently grantable
-- **Data**: No schema changes to business tables
+### Columns to add to percolation INSERT/UPDATE
+
+```text
+self_remarks, manager_remarks, skip_level_remarks,
+hr_pms_remarks, auditor_remarks, management_remarks,
+auto_advance_reason,
+self_evidence_urls, manager_evidence_urls, skip_level_evidence_urls,
+hr_pms_evidence_urls, auditor_evidence_urls, management_evidence_urls,
+manager_achieved_value, auditor_achieved_value, management_achieved_value,
+skip_level_achieved_value, hr_pms_achieved_value
+```
+
+### Risk
+- Low — additive change only; existing score percolation logic unchanged
+- Backfill only touches records already identified as percolated via audit logs
 
