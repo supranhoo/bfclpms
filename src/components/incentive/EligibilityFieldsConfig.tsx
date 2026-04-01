@@ -29,6 +29,7 @@ export function EligibilityFieldsConfig({ programId }: Props) {
 
   const [showAdd, setShowAdd] = useState(false);
   const [newField, setNewField] = useState({ field_key: '', field_label: '', field_type: 'number', default_value: '' });
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const handleAdd = () => {
     if (!newField.field_key || !newField.field_label) return;
