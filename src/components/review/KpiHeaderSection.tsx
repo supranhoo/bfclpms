@@ -15,6 +15,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminKpiEditDialog } from '@/components/admin/AdminKpiEditDialog';
 import { AdminDataEntryDialog } from '@/components/admin/AdminDataEntryDialog';
+import { AdminStatusStepBackDialog } from '@/components/admin/AdminStatusStepBackDialog';
+import { getPreviousStatus } from '@/hooks/useAdminDataEntry';
 
 interface KpiHeaderSectionProps {
   kpi: KPI;
