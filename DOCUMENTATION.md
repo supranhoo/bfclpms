@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-01  
-> **Version:** 2.15.43 — Multi-month KPI score percolation: terminal month approval propagates scores to sibling months
+> **Version:** 2.15.45 — Auto-advance KPIs: populate all stage scores to 0; fix N/A display on journey tiles
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4609,3 +4609,10 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix:** Added `getCycleMonthsForTarget()` helper to edge function. Rollover now creates records for ALL months in the cycle that are >= the target month (e.g., Quarterly rolling to April creates April, May, and June). Each month is independently deduped against existing records.
 - **Compatibility:** Non-terminal month records are naturally locked by `enforce_frequency_lock_on_submission` trigger. Percolation trigger propagates scores from terminal to siblings on approval.
 - **Affected file:** `supabase/functions/auto-rollover-kpis/index.ts`
+
+### v2.15.45 — Auto-Advanced KPIs: Full Stage Score Propagation
+- **Root cause:** System auto-advance (overdue self-review) only set `self_score` and `final_score` to 0, leaving `manager_score`, `auditor_score`, `management_score` etc. as NULL. Journey tiles treated NULL scores on completed stages as "N/A" instead of showing the actual 0 score.
+- **Fix 1 — Data:** Auto-advance now sets ALL intermediate stage scores (`manager_score`, `skip_level_score`, `hr_pms_score`, `auditor_score`, `management_score`) to 0 with `red` rating alongside `self_score` and `final_score`.
+- **Fix 2 — UI:** `KpiJourneySection.tsx` now detects `auto_advance_reason` on submissions and excludes auto-advanced KPIs from N/A badge logic. Both current and previous-month journey tiles are fixed.
+- **Backfill:** Existing auto-advanced submissions with NULL intermediate scores updated to 0/red via data correction.
+- **Affected files:** `src/hooks/usePendingSelfReviews.ts`, `src/components/review/KpiJourneySection.tsx`
