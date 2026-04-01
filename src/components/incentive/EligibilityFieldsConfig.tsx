@@ -145,7 +145,7 @@ export function EligibilityFieldsConfig({ programId }: Props) {
                   </TableCell>
                   <TableCell>
                     {!CORE_FIELD_KEYS.includes(f.field_key) && (
-                      <Button size="icon" variant="ghost" onClick={() => deleteField.mutate(f.id)}>
+                      <Button size="icon" variant="ghost" onClick={() => setDeletingId(f.id)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     )}
