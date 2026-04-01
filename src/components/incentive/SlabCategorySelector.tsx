@@ -159,7 +159,7 @@ export function SlabCategorySelector({ value, onValueChange, allowedValues }: Pr
                     <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={() => { setEditingId(cat.id); setEditLabel(cat.label); }}>
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
-                    <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive" onClick={() => handleDelete(cat)}>
+                    <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive" onClick={() => setDeletingCat(cat)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </>
