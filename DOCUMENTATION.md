@@ -4597,3 +4597,15 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Bug 2 — Rating double-conversion:** For `missed_days_penalty` method, the aggregated score (0-5) was re-mapped through KPI thresholds via `calculateScoreFromAchieved`, producing incorrect ratings (e.g., 0 → "Outstanding" for Lower-is-Better KPIs). Fixed: when method is `missed_days_penalty`, the score IS the rating — no re-mapping.
 - **Bug 3 — Static label:** "Average Score" label shown regardless of aggregation method. Fixed to use dynamic `getAggregationMethodLabel()`.
 - **Affected file:** `src/components/review/SelfReviewSheet.tsx`
+
+### v2.15.43 — Multi-Month KPI Score Percolation Trigger
+- **Root cause:** Terminal-month approval for multi-month KPIs (Quarterly, Bi-Monthly, Half-Yearly, Yearly) did not propagate scores/status to sibling months in the same cycle.
+- **Fix:** Added `percolate_multimonth_score()` DB trigger on `kpis` table. When a multi-month KPI is set to `approved`, it automatically syncs scores and status to all sibling records in the same cycle via `get_cycle_months()`.
+- **Audit:** Each percolated sibling gets a `SCORE_PERCOLATED` entry in `kpi_audit_logs`.
+- **Backfill:** One-time migration propagated scores for all approved multi-month KPIs from Jan 2026 onwards.
+
+### v2.15.44 — Full-Cycle Rollover for Multi-Month KPIs
+- **Root cause:** Rollover function created only one record at the terminal month for multi-month KPIs (e.g., Quarterly April → only June). Sibling months (April, May) got no records, breaking scorecard visibility, weightage calculations, and percolation.
+- **Fix:** Added `getCycleMonthsForTarget()` helper to edge function. Rollover now creates records for ALL months in the cycle that are >= the target month (e.g., Quarterly rolling to April creates April, May, and June). Each month is independently deduped against existing records.
+- **Compatibility:** Non-terminal month records are naturally locked by `enforce_frequency_lock_on_submission` trigger. Percolation trigger propagates scores from terminal to siblings on approval.
+- **Affected file:** `supabase/functions/auto-rollover-kpis/index.ts`

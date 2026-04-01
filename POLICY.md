@@ -615,6 +615,8 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 | 1.20.0 | 2026-03-27 | Production Incentive Phase 2: BU sub-units (furnaces/lines), production target data entry grid, allocation rules for common employees (weighted % splits), incentive status column (hold/finalised/forfeited/released), manual status override with audit trail, program settings (incentive_base, min_kra_score, no_kra_eligible), department-specific slabs. Auto-computed status respects manual overrides. |
 | 1.19.3 | 2026-03-27 | Incentive program name, type, description, effective dates, and active status now editable via Edit Program dialog (pencil icon opens form instead of toggling active) |
 | 1.19.2 | 2026-03-27 | Binary Polarity toggle added to Assign New KRA dialog — admins can select Standard (Yes=5) or Inverted (No=5) scoring for binary KPIs; auto-detected from library selection |
+| 1.55.0 | 2026-04-01 | Full-Cycle Rollover (§45): Multi-month KPIs now create records for ALL months in the cycle (>= target), not just terminal month. Enables scorecard visibility, weightage inclusion, and percolation for sibling months. |
+| 1.54.0 | 2026-04-01 | Multi-Month Score Percolation (§47): DB trigger propagates terminal-month approval scores to sibling months in same cycle. Audit action SCORE_PERCOLATED. |
 | 1.19.1 | 2026-03-27 | Monthly Review Reminder: updated disregard notice to "If you have already completed your review and team's review (if applicable), please disregard this reminder." |
 | 1.19.0 | 2026-03-27 | Monthly Review Reminder: automated email on 1st of every month at 8 AM to all employees with active KRAs for previous month. Reminds self-review and team KRA review. Configurable via `monthly_review_reminder` event toggle. |
 | 1.18.2 | 2026-03-27 | KRA Library Quick Search: removed category/KRA selection checkboxes; only KPI-level selection remains, auto-filling all fields |
@@ -828,6 +830,10 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 ## §45 — Frequency-Aware KRA Rollover
 
 **Terminal month resolution:** When KPIs are rolled over to a new period, the system resolves the target `review_period` to the correct terminal month based on the KPI's frequency. Monthly KPIs use the raw target month; multi-month frequencies (Bi-Monthly, Quarterly, Half-Yearly, Yearly) are mapped to their cycle's terminal month (e.g., Quarterly April → June). This prevents insertion failures caused by frequency lock triggers blocking non-terminal months.
+
+**Full-cycle record creation:** For multi-month KPIs, the rollover creates records for ALL months in the cycle that are >= the target month. For example, rolling to April for a Quarterly KPI creates records for April, May, and June. Earlier months in the cycle (Jan-Mar) already have records from the previous rollover. Each month is independently deduped against existing records.
+
+**Sibling month behavior:** Non-terminal month records are created with `status: 'kra_set'` and are naturally locked by the `enforce_frequency_lock_on_submission` trigger. They appear in scorecards as locked/blurred but visible. When the terminal month is approved, the `percolate_multimonth_score` trigger propagates scores and status to all sibling records.
 
 **Service role bypass:** The `enforce_frequency_lock_on_submission` database trigger allows service-role callers (edge functions) to bypass frequency lock checks. This ensures automated processes like rollover and bulk assignment are not blocked by the trigger.
 
