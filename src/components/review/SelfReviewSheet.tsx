@@ -394,8 +394,20 @@ export function SelfReviewSheet({
 
     setIsSubmittingMonthly(true);
     try {
-      const result = calculateScoreFromAchieved(effectiveScore, selectedKpi);
-      const selfRating = scoreToRatingLevel(result.rating);
+      // For missed_days_penalty, the aggregated score IS the rating (0-5) — do NOT re-map through thresholds
+      const isDailyWeekly = selectedKpi.frequency === 'Daily' || selectedKpi.frequency === 'Weekly';
+      const isMissedDaysPenalty = dailyAggregationMethod === 'missed_days_penalty';
+      
+      let finalRating: number;
+      let selfRating: RatingLevel;
+      if (isDailyWeekly && isMissedDaysPenalty) {
+        finalRating = Math.min(5, Math.max(0, Math.round(effectiveScore)));
+        selfRating = scoreToRatingLevel(finalRating);
+      } else {
+        const result = calculateScoreFromAchieved(effectiveScore, selectedKpi);
+        finalRating = result.rating;
+        selfRating = scoreToRatingLevel(result.rating);
+      }
       
       let defaultRemarks: string;
       if (hasNoEntries) {
