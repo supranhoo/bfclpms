@@ -830,3 +830,9 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Terminal month resolution:** When KPIs are rolled over to a new period, the system resolves the target `review_period` to the correct terminal month based on the KPI's frequency. Monthly KPIs use the raw target month; multi-month frequencies (Bi-Monthly, Quarterly, Half-Yearly, Yearly) are mapped to their cycle's terminal month (e.g., Quarterly April → June). This prevents insertion failures caused by frequency lock triggers blocking non-terminal months.
 
 **Service role bypass:** The `enforce_frequency_lock_on_submission` database trigger allows service-role callers (edge functions) to bypass frequency lock checks. This ensures automated processes like rollover and bulk assignment are not blocked by the trigger.
+
+## §46 — Daily KPI Rating Calculation
+
+**Missed Days Penalty score IS the rating:** When a Daily/Weekly KPI uses the `missed_days_penalty` aggregation method, the aggregated score (0–5 scale) is the final rating. It must NOT be re-mapped through the KPI's threshold-based `calculateScoreFromAchieved` function, which is designed for raw achieved values. Re-mapping would cause double-conversion errors (e.g., a penalty score of 0 incorrectly mapped to "Outstanding" for Lower-is-Better KPIs).
+
+**Expected days source:** The Submit Monthly Review dialog must use `useExpectedDays` (which respects `day_count_type` and employee-specific working days) instead of raw calendar days. This ensures the submitted days count, missed days, and penalty score align with the Daily Submission Summary.
