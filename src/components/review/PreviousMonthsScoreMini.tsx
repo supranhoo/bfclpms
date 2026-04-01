@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const MONTHS = [
@@ -41,7 +40,8 @@ function getBestScore(sub: {
     ?? null;
 }
 
-function scoreColor(pct: number): string {
+function scoreColor(score: number): string {
+  const pct = (score / 5) * 100;
   if (pct >= 80) return 'text-green-600 dark:text-green-400';
   if (pct >= 60) return 'text-yellow-600 dark:text-yellow-400';
   return 'text-red-600 dark:text-red-400';
@@ -59,14 +59,12 @@ interface PrevMonthResult {
   month: string;
   year: number;
   score: number | null;
-  percentage: number | null;
 }
 
 export function PreviousMonthsScoreMini({
   employeeId,
   currentMonth,
   currentYear,
-  currentScore,
   count = 3,
 }: PreviousMonthsScoreMiniProps) {
   const prevMonths = useMemo(
@@ -89,7 +87,7 @@ export function PreviousMonthsScoreMini({
           .eq('review_year', pm.year);
 
         if (kErr || !kpis || kpis.length === 0) {
-          out.push({ month: pm.month, year: pm.year, score: null, percentage: null });
+          out.push({ month: pm.month, year: pm.year, score: null });
           continue;
         }
 
@@ -100,7 +98,7 @@ export function PreviousMonthsScoreMini({
           .in('kpi_id', kpiIds);
 
         if (!subs || subs.length === 0) {
-          out.push({ month: pm.month, year: pm.year, score: null, percentage: null });
+          out.push({ month: pm.month, year: pm.year, score: null });
           continue;
         }
 
@@ -123,14 +121,9 @@ export function PreviousMonthsScoreMini({
 
         if (hasAny && totalWeight > 0) {
           const avg = Math.round((weightedSum / totalWeight) * 100) / 100;
-          out.push({
-            month: pm.month,
-            year: pm.year,
-            score: avg,
-            percentage: Math.round((avg / 5) * 1000) / 10,
-          });
+          out.push({ month: pm.month, year: pm.year, score: avg });
         } else {
-          out.push({ month: pm.month, year: pm.year, score: null, percentage: null });
+          out.push({ month: pm.month, year: pm.year, score: null });
         }
       }
       return out;
@@ -147,40 +140,20 @@ export function PreviousMonthsScoreMini({
         Previous Months
       </p>
       <div className="grid gap-1 grid-cols-3">
-        {results.map((r, idx) => {
-          if (r.score === null) {
-            return (
-              <div key={`${r.month}-${r.year}`} className="text-center">
-                <p className="text-[10px] text-muted-foreground font-medium">{r.month.slice(0, 3)} {r.year}</p>
-                <p className="text-[10px] text-muted-foreground italic">N/A</p>
-              </div>
-            );
-          }
-
-          const pct = r.percentage!;
-          // Compare with next newer month or current score
-          const newerScore = idx === 0 ? currentScore : (results[idx - 1]?.score ?? null);
-          const trend = newerScore != null
-            ? r.score! < newerScore ? 'up' : r.score! > newerScore ? 'down' : 'same'
-            : 'same';
-
-          return (
-            <div key={`${r.month}-${r.year}`} className="text-center">
-              <p className="text-[10px] text-muted-foreground font-medium">
-                {r.month.slice(0, 3)} {r.year}
+        {results.map((r) => (
+          <div key={`${r.month}-${r.year}`} className="text-center">
+            <p className="text-[10px] text-muted-foreground font-medium">
+              {r.month.slice(0, 3)} {r.year}
+            </p>
+            {r.score !== null ? (
+              <p className={cn('text-sm font-bold', scoreColor(r.score))}>
+                {r.score.toFixed(2)}
               </p>
-              <p className={cn('text-xs font-semibold', scoreColor(pct))}>
-                {pct.toFixed(1)}%
-              </p>
-              <div className="flex items-center justify-center gap-0.5">
-                <span className="text-[10px] text-muted-foreground">{r.score!.toFixed(2)}/5</span>
-                {trend === 'up' && <TrendingUp className="h-2.5 w-2.5 text-green-500" />}
-                {trend === 'down' && <TrendingDown className="h-2.5 w-2.5 text-red-500" />}
-                {trend === 'same' && <Minus className="h-2.5 w-2.5 text-muted-foreground" />}
-              </div>
-            </div>
-          );
-        })}
+            ) : (
+              <p className="text-[10px] text-muted-foreground italic">N/A</p>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
