@@ -26,6 +26,7 @@ import { useKpiSorting } from '@/hooks/useKpiSorting';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import { OverallScoreChart } from '@/components/dashboard/OverallScoreChart';
 import { CategoryScoreChart, type CategorySortBy } from '@/components/dashboard/CategoryScoreChart';
+import { PreviousMonthsScoreMini } from '@/components/review/PreviousMonthsScoreMini';
 import { KpiReviewPanel } from '@/components/review/KpiReviewPanel';
 import { WorkflowProgressTracker } from '@/components/review/WorkflowProgressTracker';
 import { AchievedValueScoreInput } from '@/components/review/AchievedValueScoreInput';
@@ -1386,6 +1387,15 @@ export function UnifiedScorecard({
                 <span className="text-muted-foreground font-normal"> / {(scoreData.totalWeight * 5).toFixed(0)}</span>
               </p>
             </div>
+            {/* Previous 2 months mini trend */}
+            {selectedPeriod && selectedYear && (
+              <PreviousMonthsScoreMini
+                employeeId={employee.id}
+                currentMonth={selectedPeriod}
+                currentYear={selectedYear}
+                currentScore={scoreData.rating}
+              />
+            )}
           </CardContent>
         </Card>
 
