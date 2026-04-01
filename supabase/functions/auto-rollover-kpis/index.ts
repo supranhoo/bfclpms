@@ -35,6 +35,43 @@ interface RolloverRequest {
   skip_employee_ids?: string[];
 }
 
+// --- Frequency resolution helpers ---
+
+/**
+ * Given a target month index (0-based) and a KPI frequency, resolve
+ * the correct terminal month index for the cycle that contains the target month.
+ * Monthly / Weekly / Daily → return target as-is.
+ */
+function resolveTerminalMonth(targetMonthIdx: number, frequency: string | null): number {
+  if (!frequency) return targetMonthIdx;
+
+  const freq = frequency.trim();
+
+  switch (freq) {
+    case 'Bi-Monthly': {
+      // Pairs: Jan-Feb(1), Mar-Apr(3), May-Jun(5), Jul-Aug(7), Sep-Oct(9), Nov-Dec(11)
+      // Terminal is the even-indexed month (Feb=1, Apr=3, Jun=5, …)
+      return targetMonthIdx % 2 === 0 ? targetMonthIdx + 1 : targetMonthIdx;
+    }
+    case 'Quarterly': {
+      // Q1: Jan-Mar(2), Q2: Apr-Jun(5), Q3: Jul-Sep(8), Q4: Oct-Dec(11)
+      if (targetMonthIdx <= 2) return 2;   // March
+      if (targetMonthIdx <= 5) return 5;   // June
+      if (targetMonthIdx <= 8) return 8;   // September
+      return 11;                            // December
+    }
+    case 'Half-Yearly': {
+      // H1: Jan-Jun(5), H2: Jul-Dec(11)
+      return targetMonthIdx <= 5 ? 5 : 11;
+    }
+    case 'Yearly': {
+      return 11; // December
+    }
+    default:
+      return targetMonthIdx;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -52,10 +89,8 @@ Deno.serve(async (req) => {
     let isAuthorized = false;
 
     if (cronSecret && cronHeader && cronHeader === cronSecret) {
-      // Cron / system caller authenticated via shared secret
       isAuthorized = true;
     } else if (authHeader?.startsWith('Bearer ')) {
-      // Frontend / admin caller authenticated via JWT
       const token = authHeader.replace('Bearer ', '');
       const { data: { user }, error: authError } = await supabase.auth.getUser(token);
       if (!authError && user) {
@@ -190,19 +225,30 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Resolve the target month index (0-based)
+    const targetMonthIdx = MONTHS.indexOf(targetMonth);
+
     // Fetch existing target KPIs for all relevant employees (paginated)
+    // We need to check ALL possible terminal months, not just the raw target
+    const possibleTargetMonths = new Set<string>();
+    possibleTargetMonths.add(targetMonth);
+    // Add all possible terminal months that multi-month frequencies could resolve to
+    for (const freq of ['Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly']) {
+      const resolvedIdx = resolveTerminalMonth(targetMonthIdx, freq);
+      possibleTargetMonths.add(MONTHS[resolvedIdx]);
+    }
+
     const empIds = Object.keys(employeeKpis);
     const targetKpis: any[] = [];
-    // Process in chunks of 50 employee IDs to avoid URL length limits
     for (let i = 0; i < empIds.length; i += 50) {
       const chunk = empIds.slice(i, i + 50);
       let tPage = 0;
       while (true) {
         const { data } = await supabase
           .from('kpis')
-          .select('employee_id, kra_name, kpi_name')
-          .eq('review_period', targetMonth)
+          .select('employee_id, kra_name, kpi_name, review_period')
           .eq('review_year', targetYear)
+          .in('review_period', Array.from(possibleTargetMonths))
           .in('employee_id', chunk)
           .range(tPage * PAGE_SIZE, (tPage + 1) * PAGE_SIZE - 1);
         if (!data || data.length === 0) break;
@@ -212,14 +258,15 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Build dedup sets keyed by employee — include review_period in key for multi-month awareness
     const targetByEmployee: Record<string, Set<string>> = {};
     const targetKrasByEmployee: Record<string, Set<string>> = {};
     if (targetKpis) {
       for (const tk of targetKpis) {
         if (!targetByEmployee[tk.employee_id]) targetByEmployee[tk.employee_id] = new Set();
         if (!targetKrasByEmployee[tk.employee_id]) targetKrasByEmployee[tk.employee_id] = new Set();
-        targetByEmployee[tk.employee_id].add(`${tk.kra_name}|||${tk.kpi_name}`);
-        targetKrasByEmployee[tk.employee_id].add(tk.kra_name);
+        targetByEmployee[tk.employee_id].add(`${tk.review_period}|||${tk.kra_name}|||${tk.kpi_name}`);
+        targetKrasByEmployee[tk.employee_id].add(`${tk.review_period}|||${tk.kra_name}`);
       }
     }
 
@@ -252,84 +299,78 @@ Deno.serve(async (req) => {
       const empCode = profile?.employee_code || '';
       const deptName = profile?.departments?.name || '';
 
-      const existingKeys = targetByEmployee[empId] || new Set();
-      const existingCount = existingKeys.size;
-      const existingNames = Array.from(existingKeys).map(k => k.split('|||')[1]);
+      // For dedup, we check against the resolved target month per KPI
+      let kpisCopied = 0;
+      const existingNames: string[] = [];
+      let existingCount = 0;
 
-      if (existingCount > 0) {
-        // Has existing KPIs in target
-        if (rollover_balance_only || dry_run) {
-          // Find missing KPIs (check both exact kra+kpi match AND kra-only match)
-          const existingKras = targetKrasByEmployee[empId] || new Set();
-          const missingKpis = kpis.filter(k => 
-            !existingKeys.has(`${k.kra_name}|||${k.kpi_name}`)
-          );
-          
-          if (dry_run) {
-            // In dry_run, report as conflict so admin can decide
-            conflicts.push({
-              employee_id: empId,
-              employee_name: empName,
-              employee_code: empCode,
-              department: deptName,
-              kpis_copied: missingKpis.length,
-              status: 'balance_only',
-              existing_kpi_count: existingCount,
-              existing_kpi_names: existingNames,
-              source_kpi_count: kpis.length,
-            });
-          } else {
-            // Actually insert the missing KPIs
-            for (const kpi of missingKpis) {
-              kpisToInsert.push(buildNewKpi(kpi, targetMonth, targetYear));
-            }
-            rolledOver.push({
-              employee_id: empId,
-              employee_name: empName,
-              employee_code: empCode,
-              department: deptName,
-              kpis_copied: missingKpis.length,
-              status: 'balance_only',
-              existing_kpi_count: existingCount,
-              existing_kpi_names: existingNames,
-              source_kpi_count: kpis.length,
-            });
-          }
-        } else {
-          // Skip entirely
-          skippedEmployees.push({
-            employee_id: empId,
-            employee_name: empName,
-            employee_code: empCode,
-            department: deptName,
-            kpis_copied: 0,
-            status: 'skipped',
-            existing_kpi_count: existingCount,
-            existing_kpi_names: existingNames,
-            source_kpi_count: kpis.length,
-          });
+      const kpisForThisEmployee: any[] = [];
+
+      for (const kpi of kpis) {
+        const resolvedIdx = resolveTerminalMonth(targetMonthIdx, kpi.frequency);
+        const resolvedMonth = MONTHS[resolvedIdx];
+
+        const dedupKey = `${resolvedMonth}|||${kpi.kra_name}|||${kpi.kpi_name}`;
+        const kraDedupKey = `${resolvedMonth}|||${kpi.kra_name}`;
+        const empExistingKeys = targetByEmployee[empId] || new Set();
+        const empExistingKras = targetKrasByEmployee[empId] || new Set();
+
+        if (empExistingKeys.has(dedupKey)) {
+          // Exact match exists — skip
+          existingCount++;
+          existingNames.push(kpi.kpi_name);
+          continue;
         }
-      } else {
-        // No existing KPIs - copy all, but skip if same KRA already exists
-        // (prevents duplicates when org-KPI replication used different kpi_name)
-        const existingKras = targetKrasByEmployee[empId] || new Set();
-        const kpisToAdd = kpis.filter(k => !existingKras.has(k.kra_name));
-        const skippedByKra = kpis.length - kpisToAdd.length;
 
+        if (empExistingKras.has(kraDedupKey) && !rollover_balance_only) {
+          // KRA exists with different KPI name — skip unless balance_only mode
+          existingCount++;
+          existingNames.push(kpi.kpi_name);
+          continue;
+        }
+
+        // This KPI should be rolled over
+        kpisForThisEmployee.push(buildNewKpi(kpi, resolvedMonth, targetYear));
+        kpisCopied++;
+      }
+
+      if (dry_run && existingCount > 0 && kpisCopied > 0) {
+        conflicts.push({
+          employee_id: empId,
+          employee_name: empName,
+          employee_code: empCode,
+          department: deptName,
+          kpis_copied: kpisCopied,
+          status: 'balance_only',
+          existing_kpi_count: existingCount,
+          existing_kpi_names: existingNames,
+          source_kpi_count: kpis.length,
+        });
+      } else if (kpisCopied > 0) {
         if (!dry_run) {
-          for (const kpi of kpisToAdd) {
-            kpisToInsert.push(buildNewKpi(kpi, targetMonth, targetYear));
-          }
+          kpisToInsert.push(...kpisForThisEmployee);
         }
         rolledOver.push({
           employee_id: empId,
           employee_name: empName,
           employee_code: empCode,
           department: deptName,
-          kpis_copied: kpisToAdd.length,
-          status: 'rolled_over',
-          existing_kpi_count: 0,
-          existing_kpi_names: [],
+          kpis_copied: kpisCopied,
+          status: existingCount > 0 ? 'balance_only' : 'rolled_over',
+          existing_kpi_count: existingCount,
+          existing_kpi_names: existingNames,
+          source_kpi_count: kpis.length,
+        });
+      } else if (existingCount > 0) {
+        skippedEmployees.push({
+          employee_id: empId,
+          employee_name: empName,
+          employee_code: empCode,
+          department: deptName,
+          kpis_copied: 0,
+          status: 'skipped',
+          existing_kpi_count: existingCount,
+          existing_kpi_names: existingNames,
           source_kpi_count: kpis.length,
         });
       }
@@ -354,11 +395,17 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Create review period if needed
-    await supabase.from('review_periods').upsert(
-      { period_name: targetMonth, review_year: targetYear, is_locked: false },
-      { onConflict: 'period_name,review_year', ignoreDuplicates: true }
-    );
+    // Create review period if needed — for all possible resolved months
+    const resolvedMonthsSet = new Set<string>();
+    for (const kpi of kpisToInsert) {
+      resolvedMonthsSet.add(kpi.review_period);
+    }
+    for (const rm of resolvedMonthsSet) {
+      await supabase.from('review_periods').upsert(
+        { period_name: rm, review_year: targetYear, is_locked: false },
+        { onConflict: 'period_name,review_year', ignoreDuplicates: true }
+      );
+    }
 
     // Insert KPIs in batches of 500
     let totalInserted = 0;
@@ -381,8 +428,6 @@ Deno.serve(async (req) => {
       }
       totalInserted += inserted?.length || 0;
     }
-
-    const allResults = [...rolledOver, ...skippedEmployees];
 
     // Log successful rollover
     await supabase.from('kra_rollover_logs').insert({
