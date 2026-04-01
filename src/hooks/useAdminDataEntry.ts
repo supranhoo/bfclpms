@@ -546,7 +546,7 @@ export function useAdminSubmitSubPeriod() {
 // ========== Status Step-Back ==========
 
 // Full 8-stage order for cascade-clearing. Any employee's workflow is a subset of this.
-const FULL_STATUS_ORDER: Array<Database['public']['Enums']['review_status']> = [
+export const FULL_STATUS_ORDER: Array<Database['public']['Enums']['review_status']> = [
   'kra_set',
   'self_review',
   'manager_check',
@@ -585,10 +585,74 @@ interface AdminStepBackParams {
   target_status: Database['public']['Enums']['review_status'];
   reason: string;
   kpi_name: string;
+  full_reset?: boolean;
+  revert_siblings?: boolean;
 }
 
 /**
- * Hook for admin to move a KPI's workflow status one step backward.
+ * Build the full-reset clear fields: nullifies every score/rating/remark/evidence/achieved value
+ */
+function buildFullResetFields(): Record<string, unknown> {
+  return {
+    updated_at: new Date().toISOString(),
+    kpi_status: 'open',
+    self_score: null, self_rating: null, self_remarks: null, self_evidence_url: null, self_evidence_urls: null,
+    achieved_value: null,
+    manager_score: null, manager_rating: null, manager_remarks: null, manager_evidence_url: null, manager_evidence_urls: null, manager_achieved_value: null,
+    skip_level_score: null, skip_level_rating: null, skip_level_remarks: null, skip_level_evidence_url: null, skip_level_evidence_urls: null, skip_level_achieved_value: null,
+    hr_pms_score: null, hr_pms_rating: null, hr_pms_remarks: null, hr_pms_evidence_url: null, hr_pms_evidence_urls: null, hr_pms_achieved_value: null,
+    auditor_score: null, auditor_rating: null, auditor_remarks: null, auditor_evidence_url: null, auditor_evidence_urls: null, auditor_achieved_value: null,
+    management_score: null, management_rating: null, management_remarks: null, management_evidence_url: null, management_evidence_urls: null, management_achieved_value: null,
+    final_score: null, final_rating: null,
+    auto_advance_reason: null,
+  };
+}
+
+/**
+ * Build cascade-clear fields based on target status index.
+ */
+function buildCascadeClearFields(target_status: Database['public']['Enums']['review_status']): Record<string, unknown> {
+  const clearFields: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  const targetIdx = FULL_STATUS_ORDER.indexOf(target_status);
+
+  if (target_status === 'kra_set') {
+    clearFields.kpi_status = 'open';
+  }
+
+  if (targetIdx < FULL_STATUS_ORDER.indexOf('self_review')) {
+    clearFields.self_rating = null; clearFields.self_score = null; clearFields.self_remarks = null;
+    clearFields.self_evidence_url = null; clearFields.achieved_value = null;
+  }
+  if (targetIdx <= FULL_STATUS_ORDER.indexOf('manager_check')) {
+    clearFields.manager_rating = null; clearFields.manager_score = null; clearFields.manager_remarks = null;
+    clearFields.manager_evidence_url = null; clearFields.manager_achieved_value = null;
+  }
+  if (targetIdx <= FULL_STATUS_ORDER.indexOf('skip_level_check')) {
+    clearFields.skip_level_rating = null; clearFields.skip_level_score = null; clearFields.skip_level_remarks = null;
+    clearFields.skip_level_evidence_url = null; clearFields.skip_level_achieved_value = null;
+  }
+  if (targetIdx <= FULL_STATUS_ORDER.indexOf('hr_pms_review')) {
+    clearFields.hr_pms_rating = null; clearFields.hr_pms_score = null; clearFields.hr_pms_remarks = null;
+    clearFields.hr_pms_evidence_url = null; clearFields.hr_pms_achieved_value = null;
+  }
+  if (targetIdx <= FULL_STATUS_ORDER.indexOf('audit')) {
+    clearFields.auditor_rating = null; clearFields.auditor_score = null; clearFields.auditor_remarks = null;
+    clearFields.auditor_evidence_url = null; clearFields.auditor_achieved_value = null;
+  }
+  if (targetIdx <= FULL_STATUS_ORDER.indexOf('management_review')) {
+    clearFields.management_rating = null; clearFields.management_score = null; clearFields.management_remarks = null;
+    clearFields.management_evidence_url = null; clearFields.management_achieved_value = null;
+  }
+  if (target_status !== 'approved') {
+    clearFields.final_rating = null; clearFields.final_score = null;
+  }
+
+  return clearFields;
+}
+
+/**
+ * Hook for admin to move a KPI's workflow status backward to any preceding stage.
+ * Supports full reset and multi-month sibling reversion.
  * Creates audit trail and notifies the employee.
  */
 export function useAdminStatusStepBack() {
@@ -604,87 +668,25 @@ export function useAdminStatusStepBack() {
       target_status,
       reason,
       kpi_name,
+      full_reset = false,
+      revert_siblings = false,
     }: AdminStepBackParams) => {
       if (!user?.id) throw new Error('User not authenticated');
+
+      const effectiveTarget = full_reset ? 'kra_set' as const : target_status;
 
       // 1. Update KPI status
       const { data, error } = await supabase
         .from('kpis')
-        .update({ status: target_status, updated_at: new Date().toISOString() })
+        .update({ status: effectiveTarget, updated_at: new Date().toISOString() })
         .eq('id', kpi_id)
         .select()
         .single();
 
       if (error) throw error;
 
-      // 2. Clear downstream review data based on target_status using index-based clearing
-      const clearFields: Record<string, unknown> = { updated_at: new Date().toISOString() };
-      const targetIdx = FULL_STATUS_ORDER.indexOf(target_status);
-
-      // When stepping back to kra_set, also reset kpi_status so employee can resubmit
-      if (target_status === 'kra_set') {
-        clearFields.kpi_status = 'open';
-      }
-
-      // Clear self fields if target is before self_review
-      if (targetIdx < FULL_STATUS_ORDER.indexOf('self_review')) {
-        clearFields.self_rating = null;
-        clearFields.self_score = null;
-        clearFields.self_remarks = null;
-        clearFields.self_evidence_url = null;
-        clearFields.achieved_value = null;
-      }
-
-      // Clear manager fields if target is before manager_check
-      if (targetIdx <= FULL_STATUS_ORDER.indexOf('manager_check')) {
-        clearFields.manager_rating = null;
-        clearFields.manager_score = null;
-        clearFields.manager_remarks = null;
-        clearFields.manager_evidence_url = null;
-        clearFields.manager_achieved_value = null;
-      }
-
-      // Clear skip-level fields if target is before skip_level_check
-      if (targetIdx <= FULL_STATUS_ORDER.indexOf('skip_level_check')) {
-        clearFields.skip_level_rating = null;
-        clearFields.skip_level_score = null;
-        clearFields.skip_level_remarks = null;
-        clearFields.skip_level_evidence_url = null;
-        clearFields.skip_level_achieved_value = null;
-      }
-
-      // Clear HR PMS fields if target is before hr_pms_review
-      if (targetIdx <= FULL_STATUS_ORDER.indexOf('hr_pms_review')) {
-        clearFields.hr_pms_rating = null;
-        clearFields.hr_pms_score = null;
-        clearFields.hr_pms_remarks = null;
-        clearFields.hr_pms_evidence_url = null;
-        clearFields.hr_pms_achieved_value = null;
-      }
-
-      // Clear auditor fields if target is before audit
-      if (targetIdx <= FULL_STATUS_ORDER.indexOf('audit')) {
-        clearFields.auditor_rating = null;
-        clearFields.auditor_score = null;
-        clearFields.auditor_remarks = null;
-        clearFields.auditor_evidence_url = null;
-        clearFields.auditor_achieved_value = null;
-      }
-
-      // Clear management fields if target is before management_review
-      if (targetIdx <= FULL_STATUS_ORDER.indexOf('management_review')) {
-        clearFields.management_rating = null;
-        clearFields.management_score = null;
-        clearFields.management_remarks = null;
-        clearFields.management_evidence_url = null;
-        clearFields.management_achieved_value = null;
-      }
-
-      // Always clear final fields when stepping back
-      if (target_status !== 'approved') {
-        clearFields.final_rating = null;
-        clearFields.final_score = null;
-      }
+      // 2. Clear review submission data
+      const clearFields = full_reset ? buildFullResetFields() : buildCascadeClearFields(effectiveTarget);
 
       const { error: subError } = await supabase
         .from('review_submissions')
@@ -695,12 +697,12 @@ export function useAdminStatusStepBack() {
         console.error('Failed to clear downstream review data:', subError);
       }
 
-      // 2b. Create a kpi_queries entry so the reason is visible in the Review Journey
+      // 2b. Create a kpi_queries entry for visibility in Review Journey
       const { error: queryError } = await supabase.from('kpi_queries').insert({
         kpi_id,
         raised_by: user.id,
         raised_to: employee_id,
-        reason: `[ADMIN SENT BACK] ${reason}`,
+        reason: `[ADMIN ${full_reset ? 'FULL RESET' : 'SENT BACK'}] ${reason}`,
         entity_type: 'kpi' as const,
         status: 'resolved' as const,
         resolved_at: new Date().toISOString(),
@@ -712,36 +714,98 @@ export function useAdminStatusStepBack() {
       }
 
       // 3. Insert audit log
+      const auditAction = full_reset ? 'ADMIN_FULL_RESET' : 'ADMIN_STATUS_STEP_BACK';
       const { error: auditError } = await supabase.from('kpi_audit_logs').insert({
         kpi_id,
-        action: 'ADMIN_STATUS_STEP_BACK',
+        action: auditAction,
         performed_by: user.id,
         on_behalf_of: employee_id,
         on_behalf_role: 'admin',
         old_value: { status: current_status } as any,
-        new_value: { status: target_status } as any,
+        new_value: { status: effectiveTarget } as any,
         metadata: {
           reason,
           source: 'admin_status_step_back',
           from_status: current_status,
-          to_status: target_status,
+          to_status: effectiveTarget,
+          full_reset,
         },
       });
 
       if (auditError) console.error('Failed to create audit log:', auditError);
 
-      // 3. Notify employee
+      // 4. Notify employee
       const { error: notifyError } = await supabase.from('notifications').insert({
         user_id: employee_id,
         type: 'admin_status_step_back',
-        title: 'KPI Status Moved Back by Admin',
-        message: `Admin moved your KPI "${kpi_name}" from ${current_status} back to ${target_status}. Reason: ${reason}`,
+        title: full_reset ? 'KPI Fully Reset by Admin' : 'KPI Status Moved Back by Admin',
+        message: `Admin ${full_reset ? 'fully reset' : 'moved'} your KPI "${kpi_name}" from ${current_status} back to ${effectiveTarget}. Reason: ${reason}`,
         kpi_id,
         related_user_id: user.id,
-        metadata: { reason, from_status: current_status, to_status: target_status },
+        metadata: { reason, from_status: current_status, to_status: effectiveTarget, full_reset },
       });
 
       if (notifyError) console.error('Failed to create notification:', notifyError);
+
+      // 5. Revert multi-month siblings if requested (current was approved)
+      if (revert_siblings && current_status === 'approved') {
+        try {
+          // Fetch KPI details for sibling lookup
+          const { data: kpiData } = await supabase
+            .from('kpis')
+            .select('kra_name, kpi_name, review_year, frequency, review_period')
+            .eq('id', kpi_id)
+            .single();
+
+          if (kpiData && kpiData.frequency && kpiData.frequency !== 'Monthly') {
+            // Find sibling KPIs in the same cycle
+            const { data: siblings } = await supabase
+              .from('kpis')
+              .select('id, review_period, status')
+              .eq('employee_id', employee_id)
+              .eq('kra_name', kpiData.kra_name)
+              .eq('kpi_name', kpiData.kpi_name)
+              .eq('review_year', kpiData.review_year)
+              .eq('frequency', kpiData.frequency)
+              .neq('id', kpi_id);
+
+            if (siblings && siblings.length > 0) {
+              for (const sibling of siblings) {
+                // Update sibling KPI status
+                await supabase
+                  .from('kpis')
+                  .update({ status: effectiveTarget, updated_at: new Date().toISOString() })
+                  .eq('id', sibling.id);
+
+                // Clear sibling submission data
+                await supabase
+                  .from('review_submissions')
+                  .update(full_reset ? buildFullResetFields() : buildCascadeClearFields(effectiveTarget))
+                  .eq('kpi_id', sibling.id);
+
+                // Audit log for sibling
+                await supabase.from('kpi_audit_logs').insert({
+                  kpi_id: sibling.id,
+                  action: 'SIBLING_STEP_BACK',
+                  performed_by: user.id,
+                  on_behalf_of: employee_id,
+                  on_behalf_role: 'admin',
+                  old_value: { status: sibling.status } as any,
+                  new_value: { status: effectiveTarget } as any,
+                  metadata: {
+                    reason,
+                    source_kpi_id: kpi_id,
+                    source_period: kpiData.review_period,
+                    full_reset,
+                  },
+                });
+              }
+            }
+          }
+        } catch (siblingErr) {
+          console.error('Failed to revert siblings:', siblingErr);
+        }
+      }
 
       return data;
     },
