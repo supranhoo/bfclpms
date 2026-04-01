@@ -207,6 +207,17 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
             <ClipboardEdit className="h-3 w-3 sm:h-4 sm:w-4" />
             <span className="hidden sm:inline">Admin Data Entry</span>
           </Button>
+          {getPreviousStatus(status) && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setStepBackDialogOpen(true)}
+              className="gap-1 h-6 sm:h-7 px-2 text-xs border-destructive/30 text-destructive"
+            >
+              <Undo2 className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Step Back</span>
+            </Button>
+          )}
         </div>
       )}
     </div>
