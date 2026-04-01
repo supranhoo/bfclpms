@@ -5,7 +5,7 @@ import { KPI } from '@/hooks/useKpis';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { getCycleLabel } from '@/lib/frequencyUtils';
-import { Clock, Building2, Users, User, Lock, Settings, ClipboardEdit } from 'lucide-react';
+import { Clock, Building2, Users, User, Lock, Settings, ClipboardEdit, Undo2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { useWorkflowSetting } from '@/hooks/useWorkflowSettings';
@@ -15,6 +15,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminKpiEditDialog } from '@/components/admin/AdminKpiEditDialog';
 import { AdminDataEntryDialog } from '@/components/admin/AdminDataEntryDialog';
+import { AdminStatusStepBackDialog } from '@/components/admin/AdminStatusStepBackDialog';
+import { getPreviousStatus } from '@/hooks/useAdminDataEntry';
 
 interface KpiHeaderSectionProps {
   kpi: KPI;
@@ -31,6 +33,7 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
   const isAdmin = role === 'admin';
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [dataEntryDialogOpen, setDataEntryDialogOpen] = useState(false);
+  const [stepBackDialogOpen, setStepBackDialogOpen] = useState(false);
 
   const categoryName = kpi.kra_categories?.name || 'Uncategorized';
   const categoryColor = kpi.kra_categories?.color || '#6B7280';
@@ -204,6 +207,17 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
             <ClipboardEdit className="h-3 w-3 sm:h-4 sm:w-4" />
             <span className="hidden sm:inline">Admin Data Entry</span>
           </Button>
+          {getPreviousStatus(status) && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setStepBackDialogOpen(true)}
+              className="gap-1 h-6 sm:h-7 px-2 text-xs border-destructive/30 text-destructive"
+            >
+              <Undo2 className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Step Back</span>
+            </Button>
+          )}
         </div>
       )}
     </div>
@@ -223,6 +237,16 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
           employeeId={employeeId || kpi.employee_id}
           employeeName={employeeProfile?.full_name || 'Employee'}
           employeeCode={employeeProfile?.employee_code || undefined}
+        />
+        <AdminStatusStepBackDialog
+          isOpen={stepBackDialogOpen}
+          onClose={() => setStepBackDialogOpen(false)}
+          kpiId={kpi.id}
+          kpiName={kpi.kpi_name}
+          kraName={kpi.kra_name}
+          employeeId={employeeId || kpi.employee_id}
+          employeeName={employeeProfile?.full_name || 'Employee'}
+          currentStatus={status}
         />
       </>
     )}
