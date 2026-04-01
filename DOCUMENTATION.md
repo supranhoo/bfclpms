@@ -4591,3 +4591,9 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix:** Inserted 6 standard DQ rules (warning, suspension, absence, LWP, LTI, contract) for Metal Sizing, CLU Meta Recovery, CLU Metal Recovery, Production Incentive, and completed Port Incentive (had only 1 rule)
 - **Re-computation:** Metal Sizing March 2026 re-computed — 2 employees now correctly show as disqualified with ₹0 amount
 - **Operational note:** Every new incentive program MUST have DQ rules configured via the Incentive Configuration UI before computation; otherwise DQ evaluation is skipped entirely
+
+### v2.15.42 — Fix Daily KPI Aggregation in Submit Monthly Review Dialog
+- **Bug 1 — Submitted Days mismatch:** Dialog used `calculateDailyAggregatedScore` (calendar days) instead of `useExpectedDays` which respects `day_count_type` and employee working days. Fixed to use `calculateDailyAggregatedScoreWithExpectedDays` with correct expected days.
+- **Bug 2 — Rating double-conversion:** For `missed_days_penalty` method, the aggregated score (0-5) was re-mapped through KPI thresholds via `calculateScoreFromAchieved`, producing incorrect ratings (e.g., 0 → "Outstanding" for Lower-is-Better KPIs). Fixed: when method is `missed_days_penalty`, the score IS the rating — no re-mapping.
+- **Bug 3 — Static label:** "Average Score" label shown regardless of aggregation method. Fixed to use dynamic `getAggregationMethodLabel()`.
+- **Affected file:** `src/components/review/SelfReviewSheet.tsx`
