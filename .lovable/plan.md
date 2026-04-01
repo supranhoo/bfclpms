@@ -1,106 +1,97 @@
 
-## RCA — Multi-Month KPI score not percolating for employee 100017
 
-### Root cause
-This is not a data-entry mistake; the percolation logic is simply not implemented.
+## RCA: Rollover Creates Only Terminal-Month Record for Multi-Month KPIs
 
-What I verified in the codebase:
-- `DOCUMENTATION.md` says terminal-month scores for Bi-Monthly / Quarterly / Half-Yearly / Yearly KPIs should propagate to locked months in the same cycle.
-- `src/lib/frequencyUtils.ts` already has the cycle helpers needed for this (`getCycleMonths`, `getActiveMonthForCycle`, lock logic), but they are only used for visibility/locking/assignment behavior.
-- Approval flows in:
-  - `src/components/review/UnifiedScorecard.tsx`
-  - `src/components/review/ManagementScorecard.tsx`
-  - `src/hooks/useAdminDataEntry.ts`
-  - `src/hooks/usePendingSelfReviews.ts`
-  only update the single approved KPI row + its own `review_submissions` row.
-- I found no DB trigger/function/action for sibling-month propagation:
-  - no `percolate...` function
-  - no `SCORE_PERCOLATED` audit action
-  - no trigger on `kpis` approval that copies scores to same-cycle months
+### Root Cause
 
-So for employee `100017`, March can become approved with `final_score`, but January and February remain untouched because no code ever updates sibling KPI records.
+In `auto-rollover-kpis/index.ts` (line 309-334), for each source KPI the function resolves a single terminal month via `resolveTerminalMonth()` and creates **one** record at that terminal month only.
 
-### Why this happens
-Current architecture supports:
-1. terminal-month resolution for assignment/import/rollover
-2. lock/blur behavior for non-terminal months
+For a Quarterly KPI rolling March → April:
+- `resolveTerminalMonth(3, 'Quarterly')` → index 5 → **June**
+- Only one KPI record is created for June
+- **April and May get nothing** — they should also have KPI records (locked/non-scorable, eventually percolated via the trigger)
 
-But it does **not** support:
-3. score/status synchronization from terminal month back to prior months in the same cycle
+Same for Bi-Monthly: rolling to April → resolves to May (terminal), April gets no record.
 
-That missing step is the gap.
+This violates the architecture where every month in a cycle must have a KPI record so that:
+1. The KPI appears in that month's scorecard (locked/blurred but visible)
+2. The percolation trigger can propagate scores from terminal → siblings
+3. Weighted average calculations include the KPI for all months
 
-## Fix approach
-Implement percolation at the database layer so it works for every approval path, not just one UI.
+### Fix
 
-### Changes to build
-1. **New database function + trigger**
-   - Add `percolate_multimonth_score()` as an `AFTER UPDATE OF status ON public.kpis` trigger
-   - Fire only when:
-     - `NEW.status = 'approved'`
-     - `OLD.status IS DISTINCT FROM 'approved'`
-     - frequency is one of `Bi-Monthly`, `Quarterly`, `Half-Yearly`, `Yearly`
+**Modify `auto-rollover-kpis/index.ts`** to create records for ALL months in the cycle, not just the terminal month.
 
-2. **Sibling detection**
-   - Find same-cycle sibling KPIs using:
-     - same employee
-     - same KRA + KPI
-     - same review year / cycle logic
-     - same frequency / cycle override
-     - different `review_period`
-   - Use frequency config / cycle grouping logic rather than hardcoding quarter pairs
+**1. Compute full cycle months for each multi-month KPI**
 
-3. **Percolation behavior**
-   - Copy terminal KPI review data into sibling `review_submissions`
-   - Sync `final_score`, `final_rating`, relevant stage scores, `is_na`, and achieved value fields
-   - Set sibling KPI status to `approved` if not already approved
-   - Skip overwriting siblings that were already independently finalized unless policy says terminal month is authoritative
+After resolving the terminal month, derive all cycle months using the same logic as `get_cycle_months` SQL function:
 
-4. **Audit trail**
-   - Insert `kpi_audit_logs` rows with a dedicated action such as `SCORE_PERCOLATED`
-   - Store source terminal KPI id and source month in metadata
+```text
+Frequency    | Target: April        | Records created
+-------------|----------------------|------------------
+Monthly      | April                | April
+Bi-Monthly   | Apr-May cycle        | April, May
+Quarterly    | Apr-May-Jun (Q2)     | April, May, June
+Half-Yearly  | Jan-Jun (H1)         | April, May, June (Jan-Mar already exist)
+Yearly       | Jan-Dec              | April-Dec (Jan-Mar already exist)
+```
 
-5. **Backfill**
-   - Add a one-time corrective script/migration-safe data operation for already-approved terminal KPIs from Jan 2026 onward so cases like this March test case get repaired
+For Half-Yearly and Yearly, only create records for months >= target month (earlier months already have records from prior rollover cycles).
 
-## Risk & Impact Report
-### Data impact
-- No new business table required
-- Existing `kpis`, `review_submissions`, and `kpi_audit_logs` will be updated for sibling months
-- Historical integrity risk is moderate, so backfill should be limited to approved periods covered by current policy
+**2. Dedup each sibling month independently**
 
-### Workflow impact
-- Multi-month KPIs will now auto-close sibling months when the terminal month is approved
-- Single-month KPIs remain unchanged
+The existing dedup logic checks `targetByEmployee[empId]` keyed by `review_period|||kra_name|||kpi_name`. Each sibling month is checked independently — if April already has the KPI, skip April but still create May and June.
 
-### UI/UX impact
-- Jan/Feb scorecards, reports, and weighted summaries will now show the same approved score as March for the same quarterly cycle
-- No navigation changes required
+**3. Mark non-terminal month records distinctly**
 
-### Regression risk
-- Medium if implemented only in UI, because multiple approval paths exist
-- Low if implemented as a DB trigger with clear guards
+All records get `status: 'kra_set'`. The frequency lock trigger and UI lock logic already handle preventing scoring on non-terminal months. No special status needed.
 
-### Mitigation
-- Make terminal-month approval the only trigger condition
-- Only affect same-cycle sibling KPIs
-- Add audit logs for every propagated update
-- Add tests for Quarterly, Bi-Monthly, Half-Yearly, and Yearly cases
+**4. Add `getCycleMonthsForTarget` helper to edge function**
 
-## Files to change
-- `supabase/migrations/...sql` — new percolation trigger/function
-- `DOCUMENTATION.md` — document actual implemented percolation behavior
-- `POLICY.md` — formalize sibling-month approval/score propagation rule
-- Tests:
-  - DB/function test coverage if available
-  - `src/lib/frequencyUtils.test.ts` expand cycle coverage
-  - add mock scenarios for quarterly Jan-Feb-Mar propagation
+Port the cycle resolution logic (matching the SQL `get_cycle_months` function) into the edge function:
 
-## Expected outcome after fix
-For employee `100017`:
-- March remains the terminal reviewed KPI
-- March approval automatically propagates the approved score/status to January and February
-- Reports for Jan and Feb stop showing blank/unreviewed state for that KPI
+```typescript
+function getCycleMonthsForTarget(targetMonthIdx: number, frequency: string): number[] {
+  switch (frequency) {
+    case 'Bi-Monthly':
+      // Pairs starting from odd index: 0-1, 2-3, 4-5, ...
+      const pairStart = targetMonthIdx % 2 === 0 ? targetMonthIdx : targetMonthIdx - 1;
+      return [pairStart, pairStart + 1];
+    case 'Quarterly':
+      if (targetMonthIdx <= 2) return [0, 1, 2];
+      if (targetMonthIdx <= 5) return [3, 4, 5];
+      if (targetMonthIdx <= 8) return [6, 7, 8];
+      return [9, 10, 11];
+    case 'Half-Yearly':
+      return targetMonthIdx <= 5 ? [0,1,2,3,4,5] : [6,7,8,9,10,11];
+    case 'Yearly':
+      return [0,1,2,3,4,5,6,7,8,9,10,11];
+    default:
+      return [targetMonthIdx];
+  }
+}
+```
 
-## Recommendation
-Implement this server-side, not in React components. The bug exists because approval can happen through several paths, and all of them currently act on only one KPI row.
+**5. Filter to only months >= target month**
+
+For the rollover from March → April, we only create records for months that don't already have a prior cycle's record. Since the source is March and target is April, we create April onward within the cycle. Months before April (Jan, Feb, Mar) already have records from the previous cycle.
+
+**6. Update review_periods upsert**
+
+The existing code already upserts review periods for all resolved months (line 408-413). This will naturally cover all sibling months.
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `supabase/functions/auto-rollover-kpis/index.ts` | Add `getCycleMonthsForTarget`; loop over all cycle months >= target; dedup each independently; create records for all |
+| `DOCUMENTATION.md` | v2.15.44 — rollover creates full cycle records |
+| `POLICY.md` | Update rollover section — all cycle months get records |
+
+### Risk Assessment
+- **Regression**: Low — Monthly/Daily/Weekly KPIs unaffected (cycle = single month). Multi-month KPIs get more records, which is correct behavior.
+- **Dedup safety**: Each month is independently checked against existing records, preventing duplicates.
+- **Percolation compatibility**: The percolation trigger already handles sibling months. Having all records present means percolation works correctly on approval.
+- **Frequency lock**: The `enforce_frequency_lock_on_submission` trigger already blocks scoring on non-terminal months, so the new sibling records are naturally locked.
+- **Data repair**: After deploying, a re-rollover for April 2026 (with `force: true`) will fill in the missing sibling records. Existing terminal records will be skipped by dedup.
+
