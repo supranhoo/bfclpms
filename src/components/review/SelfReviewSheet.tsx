@@ -10,7 +10,8 @@ import { useIsOrgKpiDataOwner, useOrgKpiOwners } from '@/hooks/useOrgKpiDataOwne
 import { useToast } from '@/hooks/use-toast';
 import { useSubPeriodSubmissionsByKpis, useSubmitSubPeriod, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { useDailyAggregationMethod } from '@/hooks/useSystemSettings';
-import { calculateDailyAggregatedScore } from '@/lib/dailyAggregation';
+import { calculateDailyAggregatedScoreWithExpectedDays, getAggregationMethodLabel } from '@/lib/dailyAggregation';
+import { useExpectedDays } from '@/hooks/useDailyAggregation';
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { QualitativeOption, calculateQualitativeRating, scoreToRatingLevel } from '@/lib/qualitativeUom';
@@ -117,6 +118,8 @@ export function SelfReviewSheet({
 }: SelfReviewSheetProps) {
   const { profile } = useAuth();
   const { method: dailyAggregationMethod } = useDailyAggregationMethod();
+  const dayCountType = (selectedKpi?.day_count_type as 'working_days' | 'all_days') || 'working_days';
+  const { expectedDays } = useExpectedDays(dayCountType, selectedPeriod, selectedYear, selectedKpi?.employee_id);
   const submitReview = useSubmitSelfReview();
   const submitSubPeriod = useSubmitSubPeriod();
   const { toast } = useToast();
@@ -215,8 +218,8 @@ export function SelfReviewSheet({
       .filter(s => s.achieved_value !== null)
       .map(s => s.achieved_value as number);
     const isBinaryKpi = selectedKpi?.uom_type === 'binary';
-    return calculateDailyAggregatedScore(values, dailyAggregationMethod, selectedPeriod, selectedYear, isBinaryKpi);
-  }, [selectedKpiSubPeriods, dailyAggregationMethod, selectedPeriod, selectedYear, selectedKpi]);
+    return calculateDailyAggregatedScoreWithExpectedDays(values, dailyAggregationMethod, expectedDays, isBinaryKpi);
+  }, [selectedKpiSubPeriods, dailyAggregationMethod, expectedDays, selectedKpi]);
 
   const aggregatedSubPeriodScore = aggregatedSubPeriodResult?.score ?? null;
 
@@ -382,7 +385,7 @@ export function SelfReviewSheet({
       .filter(s => s.achieved_value !== null)
       .map(s => s.achieved_value as number);
     const isBinaryKpi = selectedKpi?.uom_type === 'binary';
-    const aggregationResult = calculateDailyAggregatedScore(values, dailyAggregationMethod, selectedPeriod, selectedYear, isBinaryKpi);
+    const aggregationResult = calculateDailyAggregatedScoreWithExpectedDays(values, dailyAggregationMethod, expectedDays, isBinaryKpi);
     const aggregatedScore = aggregationResult.score;
 
     // Allow submission with 0 score when no daily data was captured
@@ -391,8 +394,20 @@ export function SelfReviewSheet({
 
     setIsSubmittingMonthly(true);
     try {
-      const result = calculateScoreFromAchieved(effectiveScore, selectedKpi);
-      const selfRating = scoreToRatingLevel(result.rating);
+      // For missed_days_penalty, the aggregated score IS the rating (0-5) — do NOT re-map through thresholds
+      const isDailyWeekly = selectedKpi.frequency === 'Daily' || selectedKpi.frequency === 'Weekly';
+      const isMissedDaysPenalty = dailyAggregationMethod === 'missed_days_penalty';
+      
+      let finalRating: number;
+      let selfRating: RatingLevel;
+      if (isDailyWeekly && isMissedDaysPenalty) {
+        finalRating = Math.min(5, Math.max(0, Math.round(effectiveScore)));
+        selfRating = scoreToRatingLevel(finalRating);
+      } else {
+        const result = calculateScoreFromAchieved(effectiveScore, selectedKpi);
+        finalRating = result.rating;
+        selfRating = scoreToRatingLevel(result.rating);
+      }
       
       let defaultRemarks: string;
       if (hasNoEntries) {
@@ -409,7 +424,7 @@ export function SelfReviewSheet({
         kpi_id: selectedKpi.id,
         achieved_value: effectiveScore,
         self_rating: selfRating,
-        self_score: result.rating,
+        self_score: finalRating,
         self_remarks: selfRemarks || defaultRemarks,
         self_evidence_url: selfEvidenceUrls.length > 0 ? selfEvidenceUrls[0] : null,
         self_evidence_urls: selfEvidenceUrls,
@@ -1249,20 +1264,27 @@ export function SelfReviewSheet({
                     </div>
                   )}
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Average Score:</span>
+                    <span className="text-muted-foreground">{getAggregationMethodLabel(dailyAggregationMethod)} Score:</span>
                     <strong className="text-foreground">{(aggregatedSubPeriodScore ?? 0).toFixed(2)}</strong>
                   </div>
-                  {selectedKpi && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Rating:</span>
-                      <Badge
-                        style={{ backgroundColor: scoreDisplay[Math.round(calculateScoreFromAchieved(aggregatedSubPeriodScore ?? 0, selectedKpi).rating)]?.color || '#991B1B' }}
-                        className="text-white"
-                      >
-                        {scoreDisplay[Math.round(calculateScoreFromAchieved(aggregatedSubPeriodScore ?? 0, selectedKpi).rating)]?.label || 'Not Achieved'}
-                      </Badge>
-                    </div>
-                  )}
+                  {selectedKpi && (() => {
+                    const isDW = selectedKpi.frequency === 'Daily' || selectedKpi.frequency === 'Weekly';
+                    const isMDP = dailyAggregationMethod === 'missed_days_penalty';
+                    const ratingValue = (isDW && isMDP)
+                      ? Math.min(5, Math.max(0, Math.round(aggregatedSubPeriodScore ?? 0)))
+                      : Math.round(calculateScoreFromAchieved(aggregatedSubPeriodScore ?? 0, selectedKpi).rating);
+                    return (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Rating:</span>
+                        <Badge
+                          style={{ backgroundColor: scoreDisplay[ratingValue]?.color || '#991B1B' }}
+                          className="text-white"
+                        >
+                          {scoreDisplay[ratingValue]?.label || 'Not Achieved'}
+                        </Badge>
+                      </div>
+                    );
+                  })()}
                 </div>
                 <p className="text-sm text-muted-foreground">
                   Once submitted, the KPI will move to your manager's review queue.
