@@ -41,6 +41,7 @@ function DashboardContent() {
 
 export function DashboardLayout() {
   const { user, loading } = useAuth();
+  useRealtimeKpiSync();
 
   if (loading) {
     return (
