@@ -27,6 +27,7 @@ export function CustomTabDataGrid({ tab, programId, onEditTab, onDeleteTab }: Pr
   const [editId, setEditId] = useState<string | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState('');
   const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Fetch mapped employees for this program
   const { data: mappedEmployees = [] } = useQuery({
