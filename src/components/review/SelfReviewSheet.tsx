@@ -385,7 +385,7 @@ export function SelfReviewSheet({
       .filter(s => s.achieved_value !== null)
       .map(s => s.achieved_value as number);
     const isBinaryKpi = selectedKpi?.uom_type === 'binary';
-    const aggregationResult = calculateDailyAggregatedScore(values, dailyAggregationMethod, selectedPeriod, selectedYear, isBinaryKpi);
+    const aggregationResult = calculateDailyAggregatedScoreWithExpectedDays(values, dailyAggregationMethod, expectedDays, isBinaryKpi);
     const aggregatedScore = aggregationResult.score;
 
     // Allow submission with 0 score when no daily data was captured
