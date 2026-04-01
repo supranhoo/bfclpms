@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-01  
-> **Version:** 2.15.45 — Auto-advance KPIs: populate all stage scores to 0; fix N/A display on journey tiles
+> **Version:** 2.15.47 — Incentive Report: add row selection checkboxes and Mark Paid impact confirmation dialog
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
