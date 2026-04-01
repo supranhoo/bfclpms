@@ -91,6 +91,16 @@ export function AdminStatusStepBackDialog({
   const handleSubmit = () => {
     if (!effectiveTarget || !reason.trim()) return;
 
+    if (fullReset) {
+      setShowFullResetConfirm(true);
+      return;
+    }
+
+    executeStepBack();
+  };
+
+  const executeStepBack = () => {
+    setShowFullResetConfirm(false);
     stepBackMutation.mutate(
       {
         kpi_id: kpiId,
