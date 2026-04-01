@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-01  
-> **Version:** 2.15.52 — System-wide reconfirmation dialogs for destructive actions
+> **Version:** 2.15.53 — Real-time dashboard sync for KPI/score/target changes
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
