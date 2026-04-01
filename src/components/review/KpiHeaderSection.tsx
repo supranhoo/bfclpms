@@ -5,7 +5,7 @@ import { KPI } from '@/hooks/useKpis';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { getCycleLabel } from '@/lib/frequencyUtils';
-import { Clock, Building2, Users, User, Lock, Settings, ClipboardEdit } from 'lucide-react';
+import { Clock, Building2, Users, User, Lock, Settings, ClipboardEdit, Undo2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { useWorkflowSetting } from '@/hooks/useWorkflowSettings';
