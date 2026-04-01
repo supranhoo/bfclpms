@@ -41,6 +41,7 @@ export function AdminStatusStepBackDialog({
   const [reason, setReason] = useState('');
   const [fullReset, setFullReset] = useState(false);
   const [selectedTarget, setSelectedTarget] = useState<ReviewStatus | ''>('');
+  const [showFullResetConfirm, setShowFullResetConfirm] = useState(false);
   const stepBackMutation = useAdminStatusStepBack();
 
   // Fetch employee's actual workflow stages when dialog is open and no external stages provided
