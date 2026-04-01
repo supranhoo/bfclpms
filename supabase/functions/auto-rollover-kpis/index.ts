@@ -344,15 +344,8 @@ Deno.serve(async (req) => {
         // Only create records for months >= target month (earlier months already exist from prior cycles)
         const monthsToCreate = cycleMonths.filter(m => m >= targetMonthIdx);
 
-        // Check terminal month for KRA-level dedup (if terminal already has different KPI under same KRA)
-        const terminalIdx = resolveTerminalMonth(targetMonthIdx, kpi.frequency);
-        const terminalMonth = MONTHS[terminalIdx];
-        const terminalKraDedupKey = `${terminalMonth}|||${kpi.kra_name}`;
-        if (empExistingKras.has(terminalKraDedupKey) && !rollover_balance_only) {
-          existingCount++;
-          existingNames.push(kpi.kpi_name);
-          continue;
-        }
+        // Per-month kra_name+kpi_name dedup below is sufficient;
+        // KRA-level terminal dedup removed — it blocked sibling month creation.
 
         let anyCreated = false;
         for (const monthIdx of monthsToCreate) {
