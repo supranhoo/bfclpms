@@ -72,6 +72,33 @@ function resolveTerminalMonth(targetMonthIdx: number, frequency: string | null):
   }
 }
 
+/**
+ * Given a target month index (0-based) and a KPI frequency, return ALL month
+ * indices that belong to the same cycle.
+ */
+function getCycleMonthsForTarget(targetMonthIdx: number, frequency: string | null): number[] {
+  if (!frequency) return [targetMonthIdx];
+  const freq = frequency.trim();
+  switch (freq) {
+    case 'Bi-Monthly': {
+      const pairStart = targetMonthIdx % 2 === 0 ? targetMonthIdx : targetMonthIdx - 1;
+      return [pairStart, pairStart + 1];
+    }
+    case 'Quarterly': {
+      if (targetMonthIdx <= 2) return [0, 1, 2];
+      if (targetMonthIdx <= 5) return [3, 4, 5];
+      if (targetMonthIdx <= 8) return [6, 7, 8];
+      return [9, 10, 11];
+    }
+    case 'Half-Yearly':
+      return targetMonthIdx <= 5 ? [0, 1, 2, 3, 4, 5] : [6, 7, 8, 9, 10, 11];
+    case 'Yearly':
+      return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+    default:
+      return [targetMonthIdx];
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
