@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-01  
-> **Version:** 2.15.53 — Real-time dashboard sync for KPI/score/target changes
+> **Version:** 2.15.57 — Simplified previous months score display (score only, no %, arrows, /5)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
