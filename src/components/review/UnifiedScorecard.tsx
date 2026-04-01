@@ -1383,13 +1383,14 @@ export function UnifiedScorecard({
                 <span className="text-muted-foreground font-normal"> / {(scoreData.totalWeight * 5).toFixed(0)}</span>
               </p>
             </div>
-            {/* Previous 2 months mini trend */}
+            {/* Previous 3 months mini trend */}
             {selectedPeriod && selectedYear && (
               <PreviousMonthsScoreMini
                 employeeId={employee.id}
                 currentMonth={selectedPeriod}
                 currentYear={selectedYear}
                 currentScore={scoreData.rating}
+                count={3}
               />
             )}
           </CardContent>
