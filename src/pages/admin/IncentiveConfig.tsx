@@ -248,16 +248,7 @@ export default function IncentiveConfig() {
               ))}
             </Accordion>
           )}
-        </TabsContent>
-
-        <TabsContent value="production" className="space-y-6">
-          <UnifiedProductionDataTab programs={programs as any[]} />
-        </TabsContent>
-
-        <TabsContent value="eligibility">
-          <EligibilityDataEntry />
-        </TabsContent>
-      </Tabs>
+      </div>
 
       {/* Create Program Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
