@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-01  
-> **Version:** 1.53.0 — §46: Daily KPI missed_days_penalty score IS the rating (no threshold re-mapping)
+> **Version:** 1.54.0 — §47: Multi-month KPI score percolation policy
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -836,3 +836,17 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Missed Days Penalty score IS the rating:** When a Daily/Weekly KPI uses the `missed_days_penalty` aggregation method, the aggregated score (0–5 scale) is the final rating. It must NOT be re-mapped through the KPI's threshold-based `calculateScoreFromAchieved` function, which is designed for raw achieved values. Re-mapping would cause double-conversion errors (e.g., a penalty score of 0 incorrectly mapped to "Outstanding" for Lower-is-Better KPIs).
 
 **Expected days source:** The Submit Monthly Review dialog must use `useExpectedDays` (which respects `day_count_type` and employee-specific working days) instead of raw calendar days. This ensures the submitted days count, missed days, and penalty score align with the Daily Submission Summary.
+
+## §47 — Multi-Month KPI Score Percolation
+
+**Trigger:** When a multi-month KPI (Bi-Monthly, Quarterly, Half-Yearly, Yearly) transitions to `approved` on its terminal month, the database trigger `percolate_multimonth_score` automatically propagates the scores and `approved` status to all sibling KPI records in the same cycle.
+
+**Scope:** Sibling KPIs are identified by matching `employee_id`, `kra_name`, `kpi_name`, `review_year`, and `frequency`, with `review_period` within the same cycle (determined by `get_cycle_months`).
+
+**Skip rule:** Siblings already in `approved` status are not overwritten. Only non-approved siblings receive the propagated data.
+
+**Data propagated:** All score fields (self, manager, skip-level, HR PMS, auditor, management, final), ratings, `achieved_value`, and `is_na` are copied from the terminal month's `review_submissions` row.
+
+**Ordering:** The sibling KPI status is set to `approved` BEFORE the review submission is upserted, to prevent the `sync_kpi_status_from_submission` trigger from attempting a `kra_set → self_review` transition (which would be blocked by the frequency lock trigger).
+
+**Audit trail:** Each percolated sibling receives a `kpi_audit_logs` entry with action `SCORE_PERCOLATED`, recording the source terminal KPI ID, source period, and frequency.
