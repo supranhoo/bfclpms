@@ -10,7 +10,8 @@ import { useIsOrgKpiDataOwner, useOrgKpiOwners } from '@/hooks/useOrgKpiDataOwne
 import { useToast } from '@/hooks/use-toast';
 import { useSubPeriodSubmissionsByKpis, useSubmitSubPeriod, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { useDailyAggregationMethod } from '@/hooks/useSystemSettings';
-import { calculateDailyAggregatedScore } from '@/lib/dailyAggregation';
+import { calculateDailyAggregatedScoreWithExpectedDays, getAggregationMethodLabel } from '@/lib/dailyAggregation';
+import { useExpectedDays } from '@/hooks/useDailyAggregation';
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { QualitativeOption, calculateQualitativeRating, scoreToRatingLevel } from '@/lib/qualitativeUom';
