@@ -1264,20 +1264,27 @@ export function SelfReviewSheet({
                     </div>
                   )}
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Average Score:</span>
+                    <span className="text-muted-foreground">{getAggregationMethodLabel(dailyAggregationMethod)} Score:</span>
                     <strong className="text-foreground">{(aggregatedSubPeriodScore ?? 0).toFixed(2)}</strong>
                   </div>
-                  {selectedKpi && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Rating:</span>
-                      <Badge
-                        style={{ backgroundColor: scoreDisplay[Math.round(calculateScoreFromAchieved(aggregatedSubPeriodScore ?? 0, selectedKpi).rating)]?.color || '#991B1B' }}
-                        className="text-white"
-                      >
-                        {scoreDisplay[Math.round(calculateScoreFromAchieved(aggregatedSubPeriodScore ?? 0, selectedKpi).rating)]?.label || 'Not Achieved'}
-                      </Badge>
-                    </div>
-                  )}
+                  {selectedKpi && (() => {
+                    const isDW = selectedKpi.frequency === 'Daily' || selectedKpi.frequency === 'Weekly';
+                    const isMDP = dailyAggregationMethod === 'missed_days_penalty';
+                    const ratingValue = (isDW && isMDP)
+                      ? Math.min(5, Math.max(0, Math.round(aggregatedSubPeriodScore ?? 0)))
+                      : Math.round(calculateScoreFromAchieved(aggregatedSubPeriodScore ?? 0, selectedKpi).rating);
+                    return (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Rating:</span>
+                        <Badge
+                          style={{ backgroundColor: scoreDisplay[ratingValue]?.color || '#991B1B' }}
+                          className="text-white"
+                        >
+                          {scoreDisplay[ratingValue]?.label || 'Not Achieved'}
+                        </Badge>
+                      </div>
+                    );
+                  })()}
                 </div>
                 <p className="text-sm text-muted-foreground">
                   Once submitted, the KPI will move to your manager's review queue.
