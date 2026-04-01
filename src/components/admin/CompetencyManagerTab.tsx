@@ -251,7 +251,7 @@ export default function CompetencyManagerTab() {
                               <Button size="sm" variant="ghost" onClick={() => { setEditingComp(c); setDialogOpen(true); }}>
                                 <Pencil className="h-4 w-4" />
                               </Button>
-                              <Button size="sm" variant="ghost" onClick={() => handleDelete(c.id)}>
+                              <Button size="sm" variant="ghost" onClick={() => setDeletingId(c.id)}>
                                 <Trash2 className="h-4 w-4 text-destructive" />
                               </Button>
                             </div>
