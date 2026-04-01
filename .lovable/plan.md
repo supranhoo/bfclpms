@@ -1,40 +1,38 @@
 
 
-## Implementation: Fix Auto-Advanced KPIs Showing "N/A" + Backfill Existing Data
+## Data Repair: Re-run Rollover to Backfill Missing Sibling Month Records
 
-### Changes
+### Problem
+The rollover edge function code is now fixed (creates all cycle months), but the April 2026 rollover already ran with the old code. So Quarterly KPIs only have June records, Bi-Monthly only have May records, etc. April (and other sibling months) are missing.
 
-**1. `src/hooks/usePendingSelfReviews.ts` (lines 460-484)**
-Add all intermediate stage scores to both the update and insert payloads:
-- `manager_score: 0, manager_rating: 'red'`
-- `auditor_score: 0, auditor_rating: 'red'`  
-- `management_score: 0, management_rating: 'red'`
+### Fix — Re-run rollover with force flag
 
-**2. `src/components/review/KpiJourneySection.tsx` (lines 534, 596)**
-Add auto-advance detection and exclude from N/A logic:
-```typescript
-const isAutoAdvanced = !!(submission as any)?.auto_advance_reason;
-const stageIsNA = !isAutoAdvanced && (
-  (globalIsNA && data.score === null && status !== 'pending') 
-  || (!globalIsNA && data.score === null && status !== 'pending' && status === 'completed')
-);
-```
-For the previous-period section (line 596), same pattern using `prevSubmission`.
+Call the edge function with these parameters:
 
-**3. Database migration — Backfill existing auto-advanced submissions**
-```sql
-UPDATE review_submissions
-SET manager_score = 0, manager_rating = 'red',
-    auditor_score = 0, auditor_rating = 'red',
-    management_score = 0, management_rating = 'red'
-WHERE auto_advance_reason IS NOT NULL
-  AND manager_score IS NULL;
+```json
+{
+  "source_month": "March",
+  "source_year": 2026,
+  "target_month": "April",
+  "target_year": 2026,
+  "force": true,
+  "triggered_by": "admin_backfill"
+}
 ```
 
-**4. `DOCUMENTATION.md`** — v2.15.45 entry
-**5. `POLICY.md`** — Update auto-advance scoring policy
+### What will happen
+1. The function fetches all March 2026 source KPIs
+2. For each multi-month KPI, it computes the full cycle (e.g., Quarterly → April, May, June)
+3. Dedup checks each month independently — June already exists, so it skips June
+4. Creates missing April and May records with `status: 'kra_set'`
+5. Monthly KPIs are also deduped — April already exists, so they are skipped
 
-### Risk
-- Low regression — only auto-advanced KPIs affected
-- Backfill is safe: only touches rows with `auto_advance_reason IS NOT NULL` and null stage scores
+### Execution
+I will invoke the edge function directly using the Supabase curl tool with the service role key and the parameters above. This is safe because:
+- Dedup prevents any duplicate records
+- `force: true` bypasses the auto-rollover enabled check
+- Existing terminal month records are untouched
+
+### No code changes needed
+The edge function code is already correct. This is purely a data repair operation.
 
