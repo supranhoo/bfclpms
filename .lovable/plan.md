@@ -1,75 +1,106 @@
 
+## RCA — Multi-Month KPI score not percolating for employee 100017
 
-## RCA: Submit Monthly Review Dialog — Wrong Submitted Days Count & Incorrect Rating
+### Root cause
+This is not a data-entry mistake; the percolation logic is simply not implemented.
 
-### Issues Found (from screenshots)
+What I verified in the codebase:
+- `DOCUMENTATION.md` says terminal-month scores for Bi-Monthly / Quarterly / Half-Yearly / Yearly KPIs should propagate to locked months in the same cycle.
+- `src/lib/frequencyUtils.ts` already has the cycle helpers needed for this (`getCycleMonths`, `getActiveMonthForCycle`, lock logic), but they are only used for visibility/locking/assignment behavior.
+- Approval flows in:
+  - `src/components/review/UnifiedScorecard.tsx`
+  - `src/components/review/ManagementScorecard.tsx`
+  - `src/hooks/useAdminDataEntry.ts`
+  - `src/hooks/usePendingSelfReviews.ts`
+  only update the single approved KPI row + its own `review_submissions` row.
+- I found no DB trigger/function/action for sibling-month propagation:
+  - no `percolate...` function
+  - no `SCORE_PERCOLATED` audit action
+  - no trigger on `kpis` approval that copies scores to same-cycle months
 
-**Pic 1**: Submit Monthly Review shows "Submitted Days: 22/31, Missed Days: 9, Average Score: 0.00, Rating: Outstanding"
-**Pic 2**: Daily Submission Summary shows "31/31 Submitted, 0 Not Submitted, 100% Completion"
+So for employee `100017`, March can become approved with `final_score`, but January and February remain untouched because no code ever updates sibling KPI records.
 
-### Root Cause — Two Bugs
+### Why this happens
+Current architecture supports:
+1. terminal-month resolution for assignment/import/rollover
+2. lock/blur behavior for non-terminal months
 
-**Bug 1: Submitted Days mismatch (22 vs 31)**
+But it does **not** support:
+3. score/status synchronization from terminal month back to prior months in the same cycle
 
-In `SelfReviewSheet.tsx` line 214-216, the aggregation filters entries with `achieved_value !== null`:
-```typescript
-const values = selectedKpiSubPeriods
-  .filter(s => s.achieved_value !== null)
-  .map(s => s.achieved_value as number);
-```
-Entries where the user submitted a row but the `achieved_value` is `null` (the "—" entries in pic 2) are excluded. So `submittedDays = values.length = 22`, not 31. But the Daily Submission Summary counts ALL rows as submitted regardless of value.
+That missing step is the gap.
 
-The confirmation dialog also uses `calculateDailyAggregatedScore` (the backwards-compatible version) which always uses **calendar days** (31 for March) as `totalDays`, ignoring the KPI's `day_count_type` and employee working days configuration.
+## Fix approach
+Implement percolation at the database layer so it works for every approval path, not just one UI.
 
-**Bug 2: Rating shows "Outstanding" for score 0.00**
+### Changes to build
+1. **New database function + trigger**
+   - Add `percolate_multimonth_score()` as an `AFTER UPDATE OF status ON public.kpis` trigger
+   - Fire only when:
+     - `NEW.status = 'approved'`
+     - `OLD.status IS DISTINCT FROM 'approved'`
+     - frequency is one of `Bi-Monthly`, `Quarterly`, `Half-Yearly`, `Yearly`
 
-Line 1259 passes the aggregated score through `calculateScoreFromAchieved`:
-```typescript
-calculateScoreFromAchieved(aggregatedSubPeriodScore ?? 0, selectedKpi).rating
-```
+2. **Sibling detection**
+   - Find same-cycle sibling KPIs using:
+     - same employee
+     - same KRA + KPI
+     - same review year / cycle logic
+     - same frequency / cycle override
+     - different `review_period`
+   - Use frequency config / cycle grouping logic rather than hardcoding quarter pairs
 
-If `dailyAggregationMethod` is `missed_days_penalty`, the returned `score` is already on a 0-5 rating scale (5 = perfect, 0 = 5+ missed). This score is then **re-mapped through KPI thresholds** as if it were a raw achieved value. If the KPI has "Lower is Better" criteria or thresholds where 0 maps to outstanding, the rating becomes 5 (Outstanding) — a double-conversion error.
+3. **Percolation behavior**
+   - Copy terminal KPI review data into sibling `review_submissions`
+   - Sync `final_score`, `final_rating`, relevant stage scores, `is_na`, and achieved value fields
+   - Set sibling KPI status to `approved` if not already approved
+   - Skip overwriting siblings that were already independently finalized unless policy says terminal month is authoritative
 
-Even with `average` method: average of twenty-two 0-values = 0.00, passed to `calculateScoreFromAchieved(0, kpi)` — same problem if thresholds treat 0 as best.
+4. **Audit trail**
+   - Insert `kpi_audit_logs` rows with a dedicated action such as `SCORE_PERCOLATED`
+   - Store source terminal KPI id and source month in metadata
 
-### Fix
+5. **Backfill**
+   - Add a one-time corrective script/migration-safe data operation for already-approved terminal KPIs from Jan 2026 onward so cases like this March test case get repaired
 
-**1. Fix Submitted Days count** (`SelfReviewSheet.tsx` line 212-219)
+## Risk & Impact Report
+### Data impact
+- No new business table required
+- Existing `kpis`, `review_submissions`, and `kpi_audit_logs` will be updated for sibling months
+- Historical integrity risk is moderate, so backfill should be limited to approved periods covered by current policy
 
-Use `useDailyAggregatedScore` hook (which respects `day_count_type` and employee working days) instead of calling `calculateDailyAggregatedScore` directly. This aligns the confirmation dialog with the Daily Submission Summary.
+### Workflow impact
+- Multi-month KPIs will now auto-close sibling months when the terminal month is approved
+- Single-month KPIs remain unchanged
 
-Alternatively, keep the direct call but use `calculateDailyAggregatedScoreWithExpectedDays` with proper expected days from `useExpectedDays` hook.
+### UI/UX impact
+- Jan/Feb scorecards, reports, and weighted summaries will now show the same approved score as March for the same quarterly cycle
+- No navigation changes required
 
-**2. Fix Rating display** (`SelfReviewSheet.tsx` line 1255-1264)
+### Regression risk
+- Medium if implemented only in UI, because multiple approval paths exist
+- Low if implemented as a DB trigger with clear guards
 
-For Daily/Weekly KPIs using `missed_days_penalty` method, the aggregated score IS the rating (0-5). Do NOT pass it through `calculateScoreFromAchieved` again. Display it directly:
+### Mitigation
+- Make terminal-month approval the only trigger condition
+- Only affect same-cycle sibling KPIs
+- Add audit logs for every propagated update
+- Add tests for Quarterly, Bi-Monthly, Half-Yearly, and Yearly cases
 
-```typescript
-// For daily KPIs with missed_days_penalty, score IS the rating
-const dailyRating = (selectedKpi?.frequency === 'Daily' || selectedKpi?.frequency === 'Weekly')
-  && dailyAggregationMethod === 'missed_days_penalty'
-  ? Math.round(aggregatedSubPeriodScore ?? 0)
-  : Math.round(calculateScoreFromAchieved(aggregatedSubPeriodScore ?? 0, selectedKpi).rating);
-```
+## Files to change
+- `supabase/migrations/...sql` — new percolation trigger/function
+- `DOCUMENTATION.md` — document actual implemented percolation behavior
+- `POLICY.md` — formalize sibling-month approval/score propagation rule
+- Tests:
+  - DB/function test coverage if available
+  - `src/lib/frequencyUtils.test.ts` expand cycle coverage
+  - add mock scenarios for quarterly Jan-Feb-Mar propagation
 
-**3. Fix "Average Score" label**
+## Expected outcome after fix
+For employee `100017`:
+- March remains the terminal reviewed KPI
+- March approval automatically propagates the approved score/status to January and February
+- Reports for Jan and Feb stop showing blank/unreviewed state for that KPI
 
-The label always says "Average Score" even when the method is `missed_days_penalty`. Should show the correct method label (e.g., "Missed Days Score" or use `getAggregationMethodLabel`).
-
-**4. Align actual submission logic** (`SelfReviewSheet.tsx` line 383-386)
-
-The same bugs exist in `handleSubmitMonthlyReview` where the achieved_value sent to the review is calculated. Ensure it also uses the correct expected days and avoids double-rating.
-
-### Files Modified
-
-| File | Change |
-|------|--------|
-| `src/components/review/SelfReviewSheet.tsx` | Use `useDailyAggregatedScore` hook for correct expected days; fix rating double-conversion; fix score label |
-| `DOCUMENTATION.md` | v2.15.42 |
-| `POLICY.md` | Update daily KPI scoring policy |
-
-### Risk Assessment
-- **Regression**: Low — changes only affect the confirmation dialog display and the achieved value sent on submission for daily/weekly KPIs
-- **Data**: No schema change. Existing submissions with incorrect scores may need re-submission or manual correction
-- **Downstream**: Manager review will receive correctly calculated scores going forward
-
+## Recommendation
+Implement this server-side, not in React components. The bug exists because approval can happen through several paths, and all of them currently act on only one KPI row.
