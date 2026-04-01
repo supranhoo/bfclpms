@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 2.15.40 — DQ records retain calculated incentive amount for audit visibility
+> **Version:** 2.15.41 — Frequency-aware KRA rollover; service role trigger bypass
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

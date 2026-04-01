@@ -824,3 +824,9 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **DQ amount visibility:** When an employee is disqualified, the `incentive_amount` retains the calculated value (what would have been earned). The `is_disqualified` flag and `disqualification_reasons` array indicate forfeiture. `final_incentive_percent` is set to 0 for slab-based programs. Payroll/finance teams MUST use `is_disqualified = true` (not `incentive_amount = 0`) to determine actual payout eligibility.
 
 **DQ rule configuration requirement:** Every incentive program MUST have disqualification rules configured in `incentive_disqualification_rules` before computation. If no rules exist for a program, the DQ evaluation loop is a no-op and all employees pass as eligible. Standard rule set: warning, suspension, absence, LWP, LTI, contract. Admins can manage rules via the programme's "Disqualification Rules" tab in Incentive Configuration.
+
+## §45 — Frequency-Aware KRA Rollover
+
+**Terminal month resolution:** When KPIs are rolled over to a new period, the system resolves the target `review_period` to the correct terminal month based on the KPI's frequency. Monthly KPIs use the raw target month; multi-month frequencies (Bi-Monthly, Quarterly, Half-Yearly, Yearly) are mapped to their cycle's terminal month (e.g., Quarterly April → June). This prevents insertion failures caused by frequency lock triggers blocking non-terminal months.
+
+**Service role bypass:** The `enforce_frequency_lock_on_submission` database trigger allows service-role callers (edge functions) to bypass frequency lock checks. This ensures automated processes like rollover and bulk assignment are not blocked by the trigger.
