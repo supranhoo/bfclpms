@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-01  
-> **Version:** 2.15.47 — Incentive Report: add row selection checkboxes and Mark Paid impact confirmation dialog
+> **Version:** 2.15.49 — Percolate remarks, evidence, and auto-advance reason to sibling months
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
