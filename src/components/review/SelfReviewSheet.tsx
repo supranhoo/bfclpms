@@ -118,6 +118,8 @@ export function SelfReviewSheet({
 }: SelfReviewSheetProps) {
   const { profile } = useAuth();
   const { method: dailyAggregationMethod } = useDailyAggregationMethod();
+  const dayCountType = (selectedKpi?.day_count_type as 'working_days' | 'all_days') || 'working_days';
+  const { expectedDays } = useExpectedDays(dayCountType, selectedPeriod, selectedYear, selectedKpi?.employee_id);
   const submitReview = useSubmitSelfReview();
   const submitSubPeriod = useSubmitSubPeriod();
   const { toast } = useToast();
