@@ -1,34 +1,37 @@
 
 
-## Plan: Fix Category Chart Bars Not Rendering
+## Plan: Simplify Previous Months Score Display
 
-### Root Cause
-The previous change switched `CardContent` from `style={{ height: ... }}` to `style={{ minHeight: ... }}`. Recharts' `ResponsiveContainer` requires a parent with a **computed height** — `minHeight` alone doesn't give `h-full` a resolved pixel value, so the chart collapses to 0px and no bars render.
-
-### Fix
-
-**`src/components/review/UnifiedScorecard.tsx`** (line 1405)
-- Change `minHeight` back to `height` on the `CardContent` style prop
-- This restores the explicit height that `ResponsiveContainer` needs to render bars
-- To prevent excessive blank space with few categories, keep the dynamic calculation but use `height` not `minHeight`
-
-```typescript
-// Before (broken):
-<CardContent style={{ minHeight: Math.max(180, scoreData.categoryScores.length * 36) }}>
-
-// After (fixed):
-<CardContent style={{ height: Math.max(180, scoreData.categoryScores.length * 36) }}>
+### Current UI
+```text
+Feb 2026    Jan 2026    Dec 2025
+100.0%      99.4%       N/A
+5.00/5 ↘    4.97/5 ↘    
 ```
 
-**`DOCUMENTATION.md`** — v2.15.56 patch note
+### Proposed UI
+```text
+Previous Months
+┌──────────┬──────────┬──────────┐
+│ Feb 2026 │ Jan 2026 │ Dec 2025 │
+│   5.00   │   4.97   │   N/A    │
+└──────────┴──────────┴──────────┘
+```
 
-### Files Modified
+Each month shows only: **month label** + **score** (color-coded green/yellow/red). No percentage, no "/5", no trend arrows.
+
+### Changes
+
+**`src/components/review/PreviousMonthsScoreMini.tsx`**
+- Remove percentage display line
+- Remove trend arrow icons (TrendingUp, TrendingDown, Minus imports)
+- Show only `r.score.toFixed(2)` with color coding
+- Remove `/5` suffix
+
+**`DOCUMENTATION.md`** — v2.15.57
 
 | File | Change |
 |------|--------|
-| `src/components/review/UnifiedScorecard.tsx` | Restore `height` on category chart container |
-| `DOCUMENTATION.md` | v2.15.56 |
-
-### Risk
-- None — single-line revert to working behavior
+| `src/components/review/PreviousMonthsScoreMini.tsx` | Strip %, /5, arrows |
+| `DOCUMENTATION.md` | v2.15.57 |
 
