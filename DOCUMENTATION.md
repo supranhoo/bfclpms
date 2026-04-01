@@ -4639,3 +4639,9 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix:** Updated the trigger to include all remarks columns, `auto_advance_reason`, all `*_evidence_urls` columns, and all per-level `*_achieved_value` columns in both INSERT and ON CONFLICT UPDATE clauses.
 - **Data repair:** Backfilled existing percolated sibling records (identified via `SCORE_PERCOLATED` audit logs) with missing remarks and auto-advance reason from their terminal month source.
 - **Affected:** Database function `percolate_multimonth_score()`
+
+### v2.15.50 — Admin Step-Back: Target Stage Selector, Full Reset & Sibling Reversion
+- **Gap 1 — Target stage selector:** Admin step-back dialog now shows a dropdown of all preceding workflow stages (not just the immediate previous). Admin can choose exactly where to send a KPI back (e.g., from `approved` directly to `kra_set`).
+- **Gap 2 — Full reset:** Added "Clear all review data" checkbox. When checked, ALL scores, ratings, remarks, evidence, achieved values, and `auto_advance_reason` are nullified. KPI is reset to `kra_set` with `kpi_status = 'open'`. Audit action: `ADMIN_FULL_RESET`.
+- **Gap 3 — Multi-month sibling reversion:** When stepping back an `approved` multi-month KPI (Quarterly, Bi-Monthly, etc.), all sibling months in the same cycle are automatically reverted to the same target stage with the same data clearing. Audit action: `SIBLING_STEP_BACK`.
+- **Affected files:** `src/components/admin/AdminStatusStepBackDialog.tsx`, `src/hooks/useAdminDataEntry.ts`

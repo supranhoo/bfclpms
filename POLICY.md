@@ -869,3 +869,17 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **N/A distinction:** Auto-advanced KPIs with 0 scores are NOT the same as N/A KPIs. The `auto_advance_reason` field distinguishes system-auto-scored KPIs from genuinely not-applicable ones. Journey tile UI checks this field to prevent false N/A badges.
 
 **Audit:** Each auto-advance creates a `SYSTEM_AUTO_SCORED` audit log entry with the remark and source.
+
+## §49 — Admin Step-Back Target Selection, Full Reset & Sibling Reversion
+
+**Target selection:** When stepping back a KPI, the admin can select any preceding workflow stage — not just the immediate previous stage. The `kra_set` stage is always available as a target.
+
+**Full reset:** The "Clear all review data" option nullifies ALL submission fields (scores, ratings, remarks, evidence URLs, achieved values, `auto_advance_reason`). The KPI is reset to `kra_set` with `kpi_status = 'open'`, allowing the employee to start fresh. Audit action: `ADMIN_FULL_RESET`.
+
+**Multi-month sibling reversion:** When an `approved` multi-month KPI (Bi-Monthly, Quarterly, Half-Yearly, Yearly) is stepped back, all sibling months in the same cycle are automatically reverted to the same target stage with the same data clearing applied. This prevents orphaned approved siblings from remaining in an inconsistent state. Audit action: `SIBLING_STEP_BACK` for each sibling.
+
+**Safeguards:**
+1. Full reset requires explicit checkbox confirmation + destructive-styled button
+2. Mandatory reason field for audit trail
+3. Employee receives notification with reason and transition details
+4. kpi_queries entry created for Review Journey visibility
