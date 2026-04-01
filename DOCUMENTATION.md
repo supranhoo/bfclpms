@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-01  
-> **Version:** 2.15.47 — Incentive Report: add row selection checkboxes and Mark Paid impact confirmation dialog
+> **Version:** 2.15.49 — Percolate remarks, evidence, and auto-advance reason to sibling months
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4633,3 +4633,9 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix:** Created standalone `/admin/incentive-data-entry` page with its own menu key (`admin-incentive-data`). Reuses existing `UnifiedProductionDataTab` and `EligibilityDataEntry` components. Incentive Config now shows only program configuration (slabs, DQ rules, mappings).
 - **Access control:** New menu key seeded in `menu_access_config`. Admins can grant data entry access to specific roles/users via Menu Access Rights without exposing configuration.
 - **Affected files:** `src/pages/admin/IncentiveDataEntry.tsx` (new), `src/pages/admin/IncentiveConfig.tsx`, `src/App.tsx`, `src/components/layout/AppSidebar.tsx`
+
+### v2.15.49 — Percolate Remarks, Evidence & Auto-Advance Reason to Sibling Months
+- **Root cause:** The `percolate_multimonth_score()` trigger only copied scores, ratings, `achieved_value`, and `is_na` to sibling month records. Remarks (`self_remarks`, `manager_remarks`, etc.), `auto_advance_reason`, evidence URLs, and per-level achieved values were omitted.
+- **Fix:** Updated the trigger to include all remarks columns, `auto_advance_reason`, all `*_evidence_urls` columns, and all per-level `*_achieved_value` columns in both INSERT and ON CONFLICT UPDATE clauses.
+- **Data repair:** Backfilled existing percolated sibling records (identified via `SCORE_PERCOLATED` audit logs) with missing remarks and auto-advance reason from their terminal month source.
+- **Affected:** Database function `percolate_multimonth_score()`
