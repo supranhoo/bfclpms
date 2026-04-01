@@ -125,6 +125,7 @@ export function DisqualificationRulesEditor({ programId }: Props) {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editConfig, setEditConfig] = useState<any>({});
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const existingTypes = rules.map((r: any) => r.rule_type);
   const availableTypes = RULE_TYPES.filter(t => !existingTypes.includes(t.value));
