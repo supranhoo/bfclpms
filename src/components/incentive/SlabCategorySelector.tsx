@@ -31,6 +31,7 @@ export function SlabCategorySelector({ value, onValueChange, allowedValues }: Pr
   const [manageOpen, setManageOpen] = useState(false);
   const [addingInManage, setAddingInManage] = useState(false);
   const [manageNewLabel, setManageNewLabel] = useState('');
+  const [deletingCat, setDeletingCat] = useState<any>(null);
 
   const filtered = allowedValues
     ? categories.filter((c: any) => allowedValues.includes(c.value))
