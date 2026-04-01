@@ -51,6 +51,7 @@ import {
   ShieldCheck,
   Undo2,
   Percent,
+  FileInput,
 } from 'lucide-react';
 import { CollapsibleSidebarGroup } from './CollapsibleSidebarGroup';
 
