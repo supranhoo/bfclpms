@@ -3,14 +3,12 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Progress } from '@/components/ui/progress';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-/** Get the previous N months as { month, year } tuples */
 function getPreviousMonths(currentMonth: string, currentYear: number, count: number) {
   const idx = MONTHS.indexOf(currentMonth);
   if (idx === -1) return [];
@@ -24,7 +22,6 @@ function getPreviousMonths(currentMonth: string, currentYear: number, count: num
   return results;
 }
 
-/** 8-stage fallback */
 function getBestScore(sub: {
   final_score: number | null;
   management_score: number | null;
@@ -50,17 +47,12 @@ function scoreColor(pct: number): string {
   return 'text-red-600 dark:text-red-400';
 }
 
-function progressColor(pct: number): string {
-  if (pct >= 80) return '[&>div]:bg-green-500';
-  if (pct >= 60) return '[&>div]:bg-yellow-500';
-  return '[&>div]:bg-red-500';
-}
-
 interface PreviousMonthsScoreMiniProps {
   employeeId: string;
   currentMonth: string;
   currentYear: number;
   currentScore?: number | null;
+  count?: number;
 }
 
 interface PrevMonthResult {
@@ -75,21 +67,20 @@ export function PreviousMonthsScoreMini({
   currentMonth,
   currentYear,
   currentScore,
+  count = 3,
 }: PreviousMonthsScoreMiniProps) {
   const prevMonths = useMemo(
-    () => getPreviousMonths(currentMonth, currentYear, 2),
-    [currentMonth, currentYear],
+    () => getPreviousMonths(currentMonth, currentYear, count),
+    [currentMonth, currentYear, count],
   );
 
   const { data: results } = useQuery({
-    queryKey: ['prev-months-score', employeeId, currentMonth, currentYear],
+    queryKey: ['prev-months-score', employeeId, currentMonth, currentYear, count],
     queryFn: async (): Promise<PrevMonthResult[]> => {
       if (prevMonths.length === 0) return [];
-
       const out: PrevMonthResult[] = [];
 
       for (const pm of prevMonths) {
-        // 1. Fetch KPIs for this employee + period
         const { data: kpis, error: kErr } = await supabase
           .from('kpis')
           .select('id, weightage')
@@ -103,8 +94,6 @@ export function PreviousMonthsScoreMini({
         }
 
         const kpiIds = kpis.map(k => k.id);
-
-        // 2. Fetch submissions
         const { data: subs } = await supabase
           .from('review_submissions')
           .select('kpi_id, final_score, management_score, auditor_score, hr_pms_score, skip_level_score, manager_score, self_score, is_na')
@@ -116,7 +105,6 @@ export function PreviousMonthsScoreMini({
         }
 
         const subMap = new Map(subs.map(s => [s.kpi_id, s]));
-
         let totalWeight = 0;
         let weightedSum = 0;
         let hasAny = false;
@@ -145,14 +133,12 @@ export function PreviousMonthsScoreMini({
           out.push({ month: pm.month, year: pm.year, score: null, percentage: null });
         }
       }
-
       return out;
     },
     enabled: prevMonths.length > 0 && !!employeeId,
     staleTime: 5 * 60 * 1000,
   });
 
-  // Don't render if no data at all
   if (!results || results.every(r => r.score === null)) return null;
 
   return (
@@ -160,52 +146,38 @@ export function PreviousMonthsScoreMini({
       <p className="text-[10px] font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">
         Previous Months
       </p>
-      <div className="space-y-1.5">
-        {results.map(r => {
+      <div className={cn('grid gap-1', `grid-cols-${results.length}`)}>
+        {results.map((r, idx) => {
           if (r.score === null) {
             return (
-              <div key={`${r.month}-${r.year}`} className="flex items-center justify-between gap-1">
-                <span className="text-[10px] text-muted-foreground truncate">
-                  {r.month.slice(0, 3)} {r.year}
-                </span>
-                <span className="text-[10px] text-muted-foreground italic">No data</span>
+              <div key={`${r.month}-${r.year}`} className="text-center">
+                <p className="text-[10px] text-muted-foreground font-medium">{r.month.slice(0, 3)} {r.year}</p>
+                <p className="text-[10px] text-muted-foreground italic">N/A</p>
               </div>
             );
           }
 
           const pct = r.percentage!;
-          const trendVsCurrent = currentScore != null
-            ? r.score! < currentScore ? 'up' : r.score! > currentScore ? 'down' : 'same'
+          // Compare with next newer month or current score
+          const newerScore = idx === 0 ? currentScore : (results[idx - 1]?.score ?? null);
+          const trend = newerScore != null
+            ? r.score! < newerScore ? 'up' : r.score! > newerScore ? 'down' : 'same'
             : 'same';
 
           return (
-            <div key={`${r.month}-${r.year}`} className="space-y-0.5">
-              <div className="flex items-center justify-between gap-1">
-                <span className="text-[10px] text-muted-foreground font-medium truncate">
-                  {r.month.slice(0, 3)} {r.year}
-                </span>
-                <div className="flex items-center gap-1">
-                  <span className={cn('text-xs font-semibold', scoreColor(pct))}>
-                    {pct.toFixed(1)}%
-                  </span>
-                  {trendVsCurrent === 'up' && (
-                    <TrendingUp className="h-3 w-3 text-green-500" />
-                  )}
-                  {trendVsCurrent === 'down' && (
-                    <TrendingDown className="h-3 w-3 text-red-500" />
-                  )}
-                  {trendVsCurrent === 'same' && (
-                    <Minus className="h-3 w-3 text-muted-foreground" />
-                  )}
-                </div>
-              </div>
-              <Progress
-                value={pct}
-                className={cn('h-1.5', progressColor(pct))}
-              />
-              <p className="text-[10px] text-muted-foreground text-right">
-                {r.score!.toFixed(2)}/5
+            <div key={`${r.month}-${r.year}`} className="text-center">
+              <p className="text-[10px] text-muted-foreground font-medium">
+                {r.month.slice(0, 3)} {r.year}
               </p>
+              <p className={cn('text-xs font-semibold', scoreColor(pct))}>
+                {pct.toFixed(1)}%
+              </p>
+              <div className="flex items-center justify-center gap-0.5">
+                <span className="text-[10px] text-muted-foreground">{r.score!.toFixed(2)}/5</span>
+                {trend === 'up' && <TrendingUp className="h-2.5 w-2.5 text-green-500" />}
+                {trend === 'down' && <TrendingDown className="h-2.5 w-2.5 text-red-500" />}
+                {trend === 'same' && <Minus className="h-2.5 w-2.5 text-muted-foreground" />}
+              </div>
             </div>
           );
         })}

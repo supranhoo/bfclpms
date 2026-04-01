@@ -1402,7 +1402,7 @@ export function UnifiedScorecard({
             <CardTitle className="text-sm">Performance by Category</CardTitle>
             <CardDescription className="text-xs">Score breakdown across KRA categories</CardDescription>
           </CardHeader>
-          <CardContent style={{ height: Math.max(180, scoreData.categoryScores.length * 36) }}>
+          <CardContent style={{ minHeight: Math.max(180, scoreData.categoryScores.length * 36) }}>
             <CategoryScoreChart data={scoreData.categoryScores} sortBy={categorySortBy} onSortChange={setCategorySortBy} />
           </CardContent>
         </Card>
