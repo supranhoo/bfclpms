@@ -1371,11 +1371,7 @@ export function UnifiedScorecard({
       <div className="grid gap-4 grid-cols-1 md:grid-cols-6">
         {/* Overall Score Chart - Small (1/6) */}
         <Card className="md:col-span-1">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Overall</CardTitle>
-            <CardDescription className="text-xs">Performance</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col items-center">
+          <CardContent className="flex flex-col items-center pt-4">
             <div className="h-[120px] sm:h-[140px] w-full">
               <OverallScoreChart percentage={scoreData.overallScore} rating={scoreData.rating} />
             </div>
