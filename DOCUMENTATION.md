@@ -4645,3 +4645,9 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Gap 2 — Full reset:** Added "Clear all review data" checkbox. When checked, ALL scores, ratings, remarks, evidence, achieved values, and `auto_advance_reason` are nullified. KPI is reset to `kra_set` with `kpi_status = 'open'`. Audit action: `ADMIN_FULL_RESET`.
 - **Gap 3 — Multi-month sibling reversion:** When stepping back an `approved` multi-month KPI (Quarterly, Bi-Monthly, etc.), all sibling months in the same cycle are automatically reverted to the same target stage with the same data clearing. Audit action: `SIBLING_STEP_BACK`.
 - **Affected files:** `src/components/admin/AdminStatusStepBackDialog.tsx`, `src/hooks/useAdminDataEntry.ts`
+
+### v2.15.51 — Admin Step-Back Button on KPI Details View
+- Added "Step Back" button to the KPI details header (`KpiHeaderSection`), visible only to admin users when the KPI has a valid previous status.
+- Button appears alongside "Admin KPI Editor" and "Admin Data Entry" in the admin action row.
+- Uses the existing `AdminStatusStepBackDialog` component — no new logic required.
+- **Affected files:** `src/components/review/KpiHeaderSection.tsx`
