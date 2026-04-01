@@ -1371,11 +1371,7 @@ export function UnifiedScorecard({
       <div className="grid gap-4 grid-cols-1 md:grid-cols-6">
         {/* Overall Score Chart - Small (1/6) */}
         <Card className="md:col-span-1">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Overall</CardTitle>
-            <CardDescription className="text-xs">Performance</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col items-center">
+          <CardContent className="flex flex-col items-center pt-4">
             <div className="h-[120px] sm:h-[140px] w-full">
               <OverallScoreChart percentage={scoreData.overallScore} rating={scoreData.rating} />
             </div>
@@ -1387,13 +1383,14 @@ export function UnifiedScorecard({
                 <span className="text-muted-foreground font-normal"> / {(scoreData.totalWeight * 5).toFixed(0)}</span>
               </p>
             </div>
-            {/* Previous 2 months mini trend */}
+            {/* Previous 3 months mini trend */}
             {selectedPeriod && selectedYear && (
               <PreviousMonthsScoreMini
                 employeeId={employee.id}
                 currentMonth={selectedPeriod}
                 currentYear={selectedYear}
                 currentScore={scoreData.rating}
+                count={3}
               />
             )}
           </CardContent>
@@ -1405,7 +1402,7 @@ export function UnifiedScorecard({
             <CardTitle className="text-sm">Performance by Category</CardTitle>
             <CardDescription className="text-xs">Score breakdown across KRA categories</CardDescription>
           </CardHeader>
-          <CardContent style={{ height: Math.max(180, scoreData.categoryScores.length * 36) }}>
+          <CardContent style={{ minHeight: Math.max(180, scoreData.categoryScores.length * 36) }}>
             <CategoryScoreChart data={scoreData.categoryScores} sortBy={categorySortBy} onSortChange={setCategorySortBy} />
           </CardContent>
         </Card>
