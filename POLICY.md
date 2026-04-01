@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-03-31  
-> **Version:** 1.51.0 — §44: DQ records preserve calculated amount for audit visibility
+> **Version:** 1.52.0 — §45: Frequency-aware KRA rollover resolves terminal months
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
