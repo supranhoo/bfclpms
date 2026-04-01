@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-01  
-> **Version:** 2.15.51 — Admin step-back button added to KPI details view
+> **Version:** 2.15.52 — System-wide reconfirmation dialogs for destructive actions
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
