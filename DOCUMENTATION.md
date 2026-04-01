@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-01  
-> **Version:** 2.15.43 — Multi-month KPI score percolation: terminal month approval propagates scores to sibling months
+> **Version:** 2.15.45 — Auto-advance KPIs: populate all stage scores to 0; fix N/A display on journey tiles
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
