@@ -256,13 +256,15 @@ Deno.serve(async (req) => {
     const targetMonthIdx = MONTHS.indexOf(targetMonth);
 
     // Fetch existing target KPIs for all relevant employees (paginated)
-    // We need to check ALL possible terminal months, not just the raw target
+    // We need to check ALL possible cycle months, not just the raw target
     const possibleTargetMonths = new Set<string>();
     possibleTargetMonths.add(targetMonth);
-    // Add all possible terminal months that multi-month frequencies could resolve to
+    // Add all possible cycle months that multi-month frequencies could resolve to
     for (const freq of ['Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly']) {
-      const resolvedIdx = resolveTerminalMonth(targetMonthIdx, freq);
-      possibleTargetMonths.add(MONTHS[resolvedIdx]);
+      const cycleMonths = getCycleMonthsForTarget(targetMonthIdx, freq);
+      for (const m of cycleMonths) {
+        if (m >= targetMonthIdx) possibleTargetMonths.add(MONTHS[m]);
+      }
     }
 
     const empIds = Object.keys(employeeKpis);
