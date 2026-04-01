@@ -184,7 +184,7 @@ export default function IncentiveConfig() {
     <div className="space-y-6">
       <PageHeader
         title="Incentive Configuration"
-        description="Configure incentive programs, slabs, disqualification rules, and employee eligibility data"
+        description="Configure incentive programs, slabs, disqualification rules, and mappings"
       />
 
       <div className="space-y-4">

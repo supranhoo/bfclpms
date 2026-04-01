@@ -332,6 +332,11 @@ const App = () => (
                     <Suspense fallback={<PageFallback />}><IncentiveConfig /></Suspense>
                   </ProtectedRoute>
                 } />
+                <Route path="/admin/incentive-data-entry" element={
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-incentive-data">
+                    <Suspense fallback={<PageFallback />}><IncentiveDataEntry /></Suspense>
+                  </ProtectedRoute>
+                } />
                 <Route path="/admin/employee-development" element={
                   <ProtectedRoute allowedRoles={['admin', 'hr_pms']} menuKey="admin-employee-development">
                     <Suspense fallback={<PageFallback />}><EmployeeDevelopment /></Suspense>
