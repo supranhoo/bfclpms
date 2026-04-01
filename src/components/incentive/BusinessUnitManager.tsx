@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, Save } from 'lucide-react';
 import { useBusinessUnitSubUnits, useUpsertSubUnit, useDeleteSubUnit } from '@/hooks/useProductionTargets';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -14,6 +15,7 @@ export function BusinessUnitManager() {
   const [selectedBU, setSelectedBU] = useState('');
   const [newLabel, setNewLabel] = useState('');
   const [newCapacity, setNewCapacity] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const { data: businessUnits = [] } = useQuery({
     queryKey: ['business-units'],
@@ -83,7 +85,7 @@ export function BusinessUnitManager() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Button size="icon" variant="ghost" onClick={() => deleteSubUnit.mutate(su.id)}>
+                          <Button size="icon" variant="ghost" onClick={() => setDeletingId(su.id)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </TableCell>
@@ -111,6 +113,15 @@ export function BusinessUnitManager() {
           </>
         )}
       </CardContent>
+      <ConfirmDestructiveDialog
+        open={!!deletingId}
+        onConfirm={() => { if (deletingId) deleteSubUnit.mutate(deletingId, { onSuccess: () => setDeletingId(null) }); }}
+        onCancel={() => setDeletingId(null)}
+        title="Delete Sub-Unit"
+        description="Are you sure you want to delete this sub-unit? This action cannot be undone."
+        confirmLabel="Delete Sub-Unit"
+        isLoading={deleteSubUnit.isPending}
+      />
     </Card>
   );
 }

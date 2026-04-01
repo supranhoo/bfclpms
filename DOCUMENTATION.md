@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-01  
-> **Version:** 2.15.51 — Admin step-back button added to KPI details view
+> **Version:** 2.15.52 — System-wide reconfirmation dialogs for destructive actions
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4651,3 +4651,18 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - Button appears alongside "Admin KPI Editor" and "Admin Data Entry" in the admin action row.
 - Uses the existing `AdminStatusStepBackDialog` component — no new logic required.
 - **Affected files:** `src/components/review/KpiHeaderSection.tsx`
+
+### v2.15.52 — System-Wide Reconfirmation Dialogs for Destructive Actions
+- Created reusable `ConfirmDestructiveDialog` component (`src/components/ui/ConfirmDestructiveDialog.tsx`) using Radix AlertDialog with destructive button styling.
+- **Step-Back Full Reset:** The "Confirm Full Reset" button in `AdminStatusStepBackDialog` now triggers a nested confirmation: *"This will permanently delete ALL scores, remarks, evidence, and achieved values for this KPI. This action cannot be undone."*
+- **9 components updated** with confirmation dialogs for previously unprotected delete buttons:
+  - `DisqualificationRulesEditor` — Delete DQ rule
+  - `IncentiveSlabEditor` — Delete slab
+  - `AllocationRulesEditor` — Delete allocation rule
+  - `EligibilityFieldsConfig` — Delete custom field
+  - `BusinessUnitManager` — Delete sub-unit
+  - `CustomTabDataGrid` — Delete data row
+  - `CompetencyManagerTab` — Delete competency
+  - `SlabCategorySelector` — Delete slab category
+- **Already protected (unchanged):** `Organization.tsx`, `TemplateBundles.tsx`, `KRALibrary.tsx`, `WorkflowConfig.tsx`, `KraIssuanceConfirmDialog.tsx`, `KpiObservationsSection.tsx`
+- **Affected files:** `src/components/ui/ConfirmDestructiveDialog.tsx` (new), `AdminStatusStepBackDialog.tsx`, `DisqualificationRulesEditor.tsx`, `IncentiveSlabEditor.tsx`, `AllocationRulesEditor.tsx`, `EligibilityFieldsConfig.tsx`, `BusinessUnitManager.tsx`, `CustomTabDataGrid.tsx`, `CompetencyManagerTab.tsx`, `SlabCategorySelector.tsx`

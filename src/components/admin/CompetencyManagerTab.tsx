@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Pencil, Trash2, Search, GraduationCap, Download } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { toast } from '@/hooks/use-toast';
 import CompetencyAssessmentDialog from './CompetencyAssessmentDialog';
 
@@ -37,6 +38,7 @@ export default function CompetencyManagerTab() {
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingComp, setEditingComp] = useState<any>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [reviewPeriods, setReviewPeriods] = useState<{ period_name: string; review_year: number }[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState('');
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -249,7 +251,7 @@ export default function CompetencyManagerTab() {
                               <Button size="sm" variant="ghost" onClick={() => { setEditingComp(c); setDialogOpen(true); }}>
                                 <Pencil className="h-4 w-4" />
                               </Button>
-                              <Button size="sm" variant="ghost" onClick={() => handleDelete(c.id)}>
+                              <Button size="sm" variant="ghost" onClick={() => setDeletingId(c.id)}>
                                 <Trash2 className="h-4 w-4 text-destructive" />
                               </Button>
                             </div>
@@ -277,6 +279,15 @@ export default function CompetencyManagerTab() {
           onSaved={() => fetchCompetencies(selectedEmployee)}
         />
       )}
+
+      <ConfirmDestructiveDialog
+        open={!!deletingId}
+        onConfirm={() => { if (deletingId) handleDelete(deletingId).then(() => setDeletingId(null)); }}
+        onCancel={() => setDeletingId(null)}
+        title="Delete Competency"
+        description="Are you sure you want to delete this competency assessment? This action cannot be undone."
+        confirmLabel="Delete Competency"
+      />
     </div>
   );
 }

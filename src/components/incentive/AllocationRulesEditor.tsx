@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2 } from 'lucide-react';
 import { useAllocationRules, useUpsertAllocationRule, useDeleteAllocationRule } from '@/hooks/useProductionTargets';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -28,6 +29,7 @@ export function AllocationRulesEditor({ programId }: Props) {
   });
 
   const [newRule, setNewRule] = useState({ source_label: '', target_bu_id: '', target_sub_unit: '', allocation_pct: '' });
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const handleAdd = () => {
     if (!newRule.source_label || !newRule.allocation_pct) return;
@@ -93,7 +95,7 @@ export function AllocationRulesEditor({ programId }: Props) {
                     <TableCell>{r.target_sub_unit || '—'}</TableCell>
                     <TableCell><Badge variant="secondary">{r.allocation_pct}%</Badge></TableCell>
                     <TableCell>
-                      <Button size="icon" variant="ghost" onClick={() => deleteRule.mutate(r.id)}>
+                      <Button size="icon" variant="ghost" onClick={() => setDeletingId(r.id)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </TableCell>
@@ -131,6 +133,15 @@ export function AllocationRulesEditor({ programId }: Props) {
             </TableBody>
           </Table>
         </div>
+        <ConfirmDestructiveDialog
+          open={!!deletingId}
+          onConfirm={() => { if (deletingId) deleteRule.mutate(deletingId, { onSuccess: () => setDeletingId(null) }); }}
+          onCancel={() => setDeletingId(null)}
+          title="Delete Allocation Rule"
+          description="Are you sure you want to delete this allocation rule? This action cannot be undone."
+          confirmLabel="Delete Rule"
+          isLoading={deleteRule.isPending}
+        />
       </CardContent>
     </Card>
   );

@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Plus, Check, X, Settings, Pencil, Trash2 } from 'lucide-react';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import {
   useIncentiveSlabCategories,
   useCreateSlabCategory,
@@ -30,6 +31,7 @@ export function SlabCategorySelector({ value, onValueChange, allowedValues }: Pr
   const [manageOpen, setManageOpen] = useState(false);
   const [addingInManage, setAddingInManage] = useState(false);
   const [manageNewLabel, setManageNewLabel] = useState('');
+  const [deletingCat, setDeletingCat] = useState<any>(null);
 
   const filtered = allowedValues
     ? categories.filter((c: any) => allowedValues.includes(c.value))
@@ -157,7 +159,7 @@ export function SlabCategorySelector({ value, onValueChange, allowedValues }: Pr
                     <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={() => { setEditingId(cat.id); setEditLabel(cat.label); }}>
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
-                    <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive" onClick={() => handleDelete(cat)}>
+                    <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive" onClick={() => setDeletingCat(cat)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </>
@@ -191,6 +193,16 @@ export function SlabCategorySelector({ value, onValueChange, allowedValues }: Pr
           </div>
         </PopoverContent>
       </Popover>
+
+      <ConfirmDestructiveDialog
+        open={!!deletingCat}
+        onConfirm={() => { if (deletingCat) handleDelete(deletingCat); setDeletingCat(null); }}
+        onCancel={() => setDeletingCat(null)}
+        title="Delete Slab Category"
+        description={`Are you sure you want to delete the category "${deletingCat?.label}"? This action cannot be undone.`}
+        confirmLabel="Delete Category"
+        isLoading={deleteCategory.isPending}
+      />
     </div>
   );
 }

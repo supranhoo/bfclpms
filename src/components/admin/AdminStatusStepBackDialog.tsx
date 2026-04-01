@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
@@ -40,6 +41,7 @@ export function AdminStatusStepBackDialog({
   const [reason, setReason] = useState('');
   const [fullReset, setFullReset] = useState(false);
   const [selectedTarget, setSelectedTarget] = useState<ReviewStatus | ''>('');
+  const [showFullResetConfirm, setShowFullResetConfirm] = useState(false);
   const stepBackMutation = useAdminStatusStepBack();
 
   // Fetch employee's actual workflow stages when dialog is open and no external stages provided
@@ -89,6 +91,16 @@ export function AdminStatusStepBackDialog({
   const handleSubmit = () => {
     if (!effectiveTarget || !reason.trim()) return;
 
+    if (fullReset) {
+      setShowFullResetConfirm(true);
+      return;
+    }
+
+    executeStepBack();
+  };
+
+  const executeStepBack = () => {
+    setShowFullResetConfirm(false);
     stepBackMutation.mutate(
       {
         kpi_id: kpiId,
@@ -121,6 +133,16 @@ export function AdminStatusStepBackDialog({
   };
 
   return (
+    <>
+    <ConfirmDestructiveDialog
+      open={showFullResetConfirm}
+      onConfirm={executeStepBack}
+      onCancel={() => setShowFullResetConfirm(false)}
+      title="Confirm Full Data Reset"
+      description="This will permanently delete ALL scores, remarks, evidence, and achieved values for this KPI. This action cannot be undone. Are you sure?"
+      confirmLabel="Yes, Delete All Data"
+      isLoading={stepBackMutation.isPending}
+    />
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -231,5 +253,6 @@ export function AdminStatusStepBackDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 }

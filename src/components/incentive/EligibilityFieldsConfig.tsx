@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, GripVertical } from 'lucide-react';
 import { useEligibilityFields, useCreateEligibilityField, useUpdateEligibilityField, useDeleteEligibilityField } from '@/hooks/useIncentivePrograms';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 const CORE_FIELD_KEYS = [
   'absent_days', 'lwp_days', 'has_warning_letter', 'is_suspended',
@@ -28,6 +29,7 @@ export function EligibilityFieldsConfig({ programId }: Props) {
 
   const [showAdd, setShowAdd] = useState(false);
   const [newField, setNewField] = useState({ field_key: '', field_label: '', field_type: 'number', default_value: '' });
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const handleAdd = () => {
     if (!newField.field_key || !newField.field_label) return;
@@ -143,7 +145,7 @@ export function EligibilityFieldsConfig({ programId }: Props) {
                   </TableCell>
                   <TableCell>
                     {!CORE_FIELD_KEYS.includes(f.field_key) && (
-                      <Button size="icon" variant="ghost" onClick={() => deleteField.mutate(f.id)}>
+                      <Button size="icon" variant="ghost" onClick={() => setDeletingId(f.id)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     )}
@@ -163,7 +165,7 @@ export function EligibilityFieldsConfig({ programId }: Props) {
                     />
                   </TableCell>
                   <TableCell>
-                    <Button size="icon" variant="ghost" onClick={() => deleteField.mutate(f.id)}>
+                    <Button size="icon" variant="ghost" onClick={() => setDeletingId(f.id)}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </TableCell>
@@ -173,6 +175,15 @@ export function EligibilityFieldsConfig({ programId }: Props) {
           </Table>
         </div>
       )}
+      <ConfirmDestructiveDialog
+        open={!!deletingId}
+        onConfirm={() => { if (deletingId) deleteField.mutate(deletingId, { onSuccess: () => setDeletingId(null) }); }}
+        onCancel={() => setDeletingId(null)}
+        title="Delete Eligibility Field"
+        description="Are you sure you want to delete this custom field? This action cannot be undone."
+        confirmLabel="Delete Field"
+        isLoading={deleteField.isPending}
+      />
     </div>
   );
 }

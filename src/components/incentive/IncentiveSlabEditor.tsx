@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Trash2, Plus, Save } from 'lucide-react';
 import { useIncentiveSlabs, useUpsertSlab, useDeleteSlab } from '@/hooks/useIncentivePrograms';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { SlabCategorySelector } from './SlabCategorySelector';
@@ -42,6 +43,7 @@ export function IncentiveSlabEditor({ programId, programType }: Props) {
   const [selectedBU, setSelectedBU] = useState<string | null>(null);
   const [selectedDept, setSelectedDept] = useState<string | null>(null);
   const [newRow, setNewRow] = useState({ min_value: '', max_value: '', incentive_percent: '', rating_label: '', sub_category: '' });
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const filteredSlabs = slabs.filter((s: any) => {
     if (s.slab_category !== selectedCategory) return false;
@@ -132,7 +134,7 @@ export function IncentiveSlabEditor({ programId, programType }: Props) {
                     <TableCell><Badge variant="secondary">{slab.incentive_percent}%</Badge></TableCell>
                     <TableCell>{slab.rating_label || '—'}</TableCell>
                     <TableCell>
-                      <Button size="icon" variant="ghost" onClick={() => deleteSlab.mutate(slab.id)}>
+                      <Button size="icon" variant="ghost" onClick={() => setDeletingId(slab.id)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </TableCell>
@@ -159,6 +161,15 @@ export function IncentiveSlabEditor({ programId, programType }: Props) {
             </TableBody>
           </Table>
         </div>
+        <ConfirmDestructiveDialog
+          open={!!deletingId}
+          onConfirm={() => { if (deletingId) deleteSlab.mutate(deletingId, { onSuccess: () => setDeletingId(null) }); }}
+          onCancel={() => setDeletingId(null)}
+          title="Delete Incentive Slab"
+          description="Are you sure you want to delete this incentive slab? This action cannot be undone."
+          confirmLabel="Delete Slab"
+          isLoading={deleteSlab.isPending}
+        />
       </CardContent>
     </Card>
   );

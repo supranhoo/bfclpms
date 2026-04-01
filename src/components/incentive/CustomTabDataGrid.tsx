@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Edit, Trash2, Save, X, Settings, Plus } from 'lucide-react';
 import { useCustomTabData, useUpsertCustomTabData, useDeleteCustomTabData } from '@/hooks/useIncentiveCustomTabs';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import type { CustomTab, CustomTabField } from '@/hooks/useIncentiveCustomTabs';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,6 +27,7 @@ export function CustomTabDataGrid({ tab, programId, onEditTab, onDeleteTab }: Pr
   const [editId, setEditId] = useState<string | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState('');
   const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Fetch mapped employees for this program
   const { data: mappedEmployees = [] } = useQuery({
@@ -265,7 +267,7 @@ export function CustomTabDataGrid({ tab, programId, onEditTab, onDeleteTab }: Pr
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => deleteRow.mutate({ id: row.id, tabId: tab.id })}
+                          onClick={() => setDeletingId(row.id)}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -278,6 +280,15 @@ export function CustomTabDataGrid({ tab, programId, onEditTab, onDeleteTab }: Pr
           )}
         </TableBody>
       </Table>
+      <ConfirmDestructiveDialog
+        open={!!deletingId}
+        onConfirm={() => { if (deletingId) deleteRow.mutate({ id: deletingId, tabId: tab.id }, { onSuccess: () => setDeletingId(null) }); }}
+        onCancel={() => setDeletingId(null)}
+        title="Delete Row"
+        description="Are you sure you want to delete this data row? This action cannot be undone."
+        confirmLabel="Delete Row"
+        isLoading={deleteRow.isPending}
+      />
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Trash2, Plus, Save, Pencil, X } from 'lucide-react';
 import { useDisqualificationRules, useUpsertDqRule, useDeleteDqRule } from '@/hooks/useIncentivePrograms';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 interface Props {
   programId: string;
@@ -124,6 +125,7 @@ export function DisqualificationRulesEditor({ programId }: Props) {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editConfig, setEditConfig] = useState<any>({});
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const existingTypes = rules.map((r: any) => r.rule_type);
   const availableTypes = RULE_TYPES.filter(t => !existingTypes.includes(t.value));
@@ -204,7 +206,7 @@ export function DisqualificationRulesEditor({ programId }: Props) {
                           <Switch checked={rule.is_active} onCheckedChange={() => handleToggleActive(rule)} />
                         </TableCell>
                         <TableCell>
-                          <Button size="icon" variant="ghost" onClick={() => deleteRule.mutate(rule.id)}>
+                          <Button size="icon" variant="ghost" onClick={() => setDeletingId(rule.id)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </TableCell>
@@ -228,6 +230,15 @@ export function DisqualificationRulesEditor({ programId }: Props) {
           </div>
         )}
       </CardContent>
+      <ConfirmDestructiveDialog
+        open={!!deletingId}
+        onConfirm={() => { if (deletingId) deleteRule.mutate(deletingId, { onSuccess: () => setDeletingId(null) }); }}
+        onCancel={() => setDeletingId(null)}
+        title="Delete Disqualification Rule"
+        description="Are you sure you want to delete this disqualification rule? This action cannot be undone."
+        confirmLabel="Delete Rule"
+        isLoading={deleteRule.isPending}
+      />
     </Card>
   );
 }
