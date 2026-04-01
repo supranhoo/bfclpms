@@ -531,7 +531,8 @@ export function KpiJourneySection({
         {visibleStages.map(stage => {
             const data = stageData[stage];
             const status = getStageStatus(stage, kpiStatus, viewLevel, effectiveStages);
-            const stageIsNA = (globalIsNA && data.score === null && status !== 'pending') || (!globalIsNA && data.score === null && status !== 'pending' && status === 'completed');
+            const isAutoAdvanced = !!(submission as any)?.auto_advance_reason;
+            const stageIsNA = !isAutoAdvanced && ((globalIsNA && data.score === null && status !== 'pending') || (!globalIsNA && data.score === null && status !== 'pending' && status === 'completed'));
             return (
               <ReviewStageCard
                 key={stage}
