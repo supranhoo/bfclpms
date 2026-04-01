@@ -85,7 +85,7 @@ export function BusinessUnitManager() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Button size="icon" variant="ghost" onClick={() => deleteSubUnit.mutate(su.id)}>
+                          <Button size="icon" variant="ghost" onClick={() => setDeletingId(su.id)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </TableCell>
