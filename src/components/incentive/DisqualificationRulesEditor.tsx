@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Trash2, Plus, Save, Pencil, X } from 'lucide-react';
 import { useDisqualificationRules, useUpsertDqRule, useDeleteDqRule } from '@/hooks/useIncentivePrograms';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 interface Props {
   programId: string;
