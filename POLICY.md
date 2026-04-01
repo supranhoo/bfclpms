@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-01  
-> **Version:** 1.53.0 — §46: Daily KPI missed_days_penalty score IS the rating (no threshold re-mapping)
+> **Version:** 1.54.0 — §47: Multi-month KPI score percolation policy
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

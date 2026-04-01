@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-01  
-> **Version:** 2.15.42 — Fix daily KPI aggregation: correct expected days, rating double-conversion, method label
+> **Version:** 2.15.43 — Multi-month KPI score percolation: terminal month approval propagates scores to sibling months
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
