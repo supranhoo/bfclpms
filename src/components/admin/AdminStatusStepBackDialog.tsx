@@ -133,6 +133,16 @@ export function AdminStatusStepBackDialog({
   };
 
   return (
+    <>
+    <ConfirmDestructiveDialog
+      open={showFullResetConfirm}
+      onConfirm={executeStepBack}
+      onCancel={() => setShowFullResetConfirm(false)}
+      title="Confirm Full Data Reset"
+      description="This will permanently delete ALL scores, remarks, evidence, and achieved values for this KPI. This action cannot be undone. Are you sure?"
+      confirmLabel="Yes, Delete All Data"
+      isLoading={stepBackMutation.isPending}
+    />
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
