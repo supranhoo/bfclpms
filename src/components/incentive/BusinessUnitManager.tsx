@@ -15,6 +15,7 @@ export function BusinessUnitManager() {
   const [selectedBU, setSelectedBU] = useState('');
   const [newLabel, setNewLabel] = useState('');
   const [newCapacity, setNewCapacity] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const { data: businessUnits = [] } = useQuery({
     queryKey: ['business-units'],
