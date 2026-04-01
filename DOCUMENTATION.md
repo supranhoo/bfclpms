@@ -4622,3 +4622,14 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix:** Removed KRA-level terminal dedup from `auto-rollover-kpis/index.ts`. The per-month `kra_name+kpi_name` dedup is sufficient and more precise — it allows creating missing sibling months while still preventing true duplicates.
 - **Data repair:** Re-ran rollover for March→April 2026 with `force: true`. Created 75 missing sibling KPI records across 22 employees (Quarterly April/May records alongside existing June).
 - **Affected file:** `supabase/functions/auto-rollover-kpis/index.ts`
+
+### v2.15.47 — Incentive Report: Employee Selection & Mark Paid Impact Preview
+- **Feature:** Added row-level checkbox selection to the Monthly Incentive Report table. "Confirm All" and "Mark Paid" now operate on selected rows when a selection exists.
+- **Impact dialog:** Before executing "Mark Paid", an AlertDialog shows the count of employees, total incentive amount (₹), and a scrollable employee list for confirmation.
+- **Affected file:** `src/components/incentive/MonthlyIncentiveTable.tsx`
+
+### v2.15.48 — Separate Incentive Data Entry Page
+- **Problem:** Production Data and Eligibility Data were tabs inside Incentive Config, requiring full config access for data entry personnel.
+- **Fix:** Created standalone `/admin/incentive-data-entry` page with its own menu key (`admin-incentive-data`). Reuses existing `UnifiedProductionDataTab` and `EligibilityDataEntry` components. Incentive Config now shows only program configuration (slabs, DQ rules, mappings).
+- **Access control:** New menu key seeded in `menu_access_config`. Admins can grant data entry access to specific roles/users via Menu Access Rights without exposing configuration.
+- **Affected files:** `src/pages/admin/IncentiveDataEntry.tsx` (new), `src/pages/admin/IncentiveConfig.tsx`, `src/App.tsx`, `src/components/layout/AppSidebar.tsx`
