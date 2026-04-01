@@ -187,14 +187,7 @@ export default function IncentiveConfig() {
         description="Configure incentive programs, slabs, disqualification rules, and employee eligibility data"
       />
 
-      <Tabs defaultValue="programs">
-        <TabsList>
-          <TabsTrigger value="programs">Programs</TabsTrigger>
-          <TabsTrigger value="production">Production Data</TabsTrigger>
-          <TabsTrigger value="eligibility">Eligibility Data</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="programs" className="space-y-4">
+      <div className="space-y-4">
           <div className="flex justify-end">
             <Button onClick={() => setShowCreateDialog(true)}>
               <Plus className="h-4 w-4 mr-1" /> New Program
