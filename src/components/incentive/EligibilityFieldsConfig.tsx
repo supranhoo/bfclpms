@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, GripVertical } from 'lucide-react';
 import { useEligibilityFields, useCreateEligibilityField, useUpdateEligibilityField, useDeleteEligibilityField } from '@/hooks/useIncentivePrograms';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 const CORE_FIELD_KEYS = [
   'absent_days', 'lwp_days', 'has_warning_letter', 'is_suspended',
