@@ -856,3 +856,16 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Ordering:** The sibling KPI status is set to `approved` BEFORE the review submission is upserted, to prevent the `sync_kpi_status_from_submission` trigger from attempting a `kra_set → self_review` transition (which would be blocked by the frequency lock trigger).
 
 **Audit trail:** Each percolated sibling receives a `kpi_audit_logs` entry with action `SCORE_PERCOLATED`, recording the source terminal KPI ID, source period, and frequency.
+
+## §48 — Auto-Advance KPI Scoring Policy
+
+**Trigger:** When an admin triggers "Auto-Score with Zero" for overdue self-reviews, the system sets the KPI to `approved` status with all scores set to 0.
+
+**All stages populated:** ALL review stage scores (self, manager, skip-level, HR PMS, auditor, management, final) are set to 0 with `red` rating. This ensures:
+1. Journey tiles display "0" instead of "N/A" for skipped stages
+2. Reports show consistent zero scores across all columns
+3. Weighted average calculations include the KPI correctly
+
+**N/A distinction:** Auto-advanced KPIs with 0 scores are NOT the same as N/A KPIs. The `auto_advance_reason` field distinguishes system-auto-scored KPIs from genuinely not-applicable ones. Journey tile UI checks this field to prevent false N/A badges.
+
+**Audit:** Each auto-advance creates a `SYSTEM_AUTO_SCORED` audit log entry with the remark and source.
