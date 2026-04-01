@@ -4576,7 +4576,17 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix 2:** Edge function now deletes all existing records for employee+program+month before upserting fresh computed results
 - **Fix 3:** Standardized support/vessel program `payment_period` from `'full'` to `'Full Month'`
 
+### v2.15.41 — Frequency-Aware KRA Rollover & Service Role Trigger Bypass
+- **Root cause:** Rollover function set `review_period = targetMonth` for ALL KPIs regardless of frequency. Quarterly KPIs rolled to April were blocked by the `kpi_frequency_lock_check` trigger (April is a locked month for Quarterly). Additionally, the trigger's admin bypass failed for service-role callers since `auth.uid()` is NULL.
+- **Fix 1:** Edge function now resolves the target `review_period` to the correct terminal month based on KPI frequency (e.g., Quarterly April → June, Half-Yearly April → June, Bi-Monthly April → April)
+- **Fix 2:** `enforce_frequency_lock_on_submission` trigger now checks `current_setting('role', true) = 'service_role'` to allow edge function callers to bypass the lock
+- **Fix 3:** Dedup check expanded to include `review_period` in the key, so Quarterly KPIs rolled to June don't collide with Monthly KPIs in April
+
 ### v2.15.39 — Ensure All Programs Have Standard DQ Rules Configured
+- **Root cause:** Metal Sizing program had zero DQ rules in `incentive_disqualification_rules` table, causing the DQ evaluation loop to be a no-op — all employees passed as eligible regardless of warning letters, suspensions, etc.
+- **Fix:** Inserted 6 standard DQ rules (warning, suspension, absence, LWP, LTI, contract) for Metal Sizing, CLU Meta Recovery, CLU Metal Recovery, Production Incentive, and completed Port Incentive (had only 1 rule)
+- **Re-computation:** Metal Sizing March 2026 re-computed — 2 employees now correctly show as disqualified with ₹0 amount
+- **Operational note:** Every new incentive program MUST have DQ rules configured via the Incentive Configuration UI before computation; otherwise DQ evaluation is skipped entirely
 - **Root cause:** Metal Sizing program had zero DQ rules in `incentive_disqualification_rules` table, causing the DQ evaluation loop to be a no-op — all employees passed as eligible regardless of warning letters, suspensions, etc.
 - **Fix:** Inserted 6 standard DQ rules (warning, suspension, absence, LWP, LTI, contract) for Metal Sizing, CLU Meta Recovery, CLU Metal Recovery, Production Incentive, and completed Port Incentive (had only 1 rule)
 - **Re-computation:** Metal Sizing March 2026 re-computed — 2 employees now correctly show as disqualified with ₹0 amount
