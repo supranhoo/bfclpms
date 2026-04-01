@@ -1,30 +1,58 @@
 
 
-## Plan: Add Step-Back Button to KPI Details View (Admin Only)
+## Plan: Add Reconfirmation Dialogs for All Destructive Actions
+
+### Problem
+The "Clear all review data (full reset)" in the Step Back dialog executes immediately without a secondary confirmation, risking accidental data deletion. Several other delete buttons across the system also lack confirmation dialogs.
 
 ### Approach
-Add a "Step Back" button in the `KpiHeaderSection` component — alongside the existing "Admin KPI Editor" and "Admin Data Entry" buttons — visible only to admin users. This places the step-back action on the KPI details view page, not on the table listing.
+Create a reusable `ConfirmDestructiveAction` wrapper component, then apply it to the Step Back full-reset flow and all unprotected delete buttons.
 
 ### Changes
 
-**1. `src/components/review/KpiHeaderSection.tsx`**
-- Import `Undo2` icon, `AdminStatusStepBackDialog`, and `getPreviousStatus`
-- Add `stepBackDialogOpen` state
-- Add a "Step Back" button in the admin button row (lines 188-207), conditionally shown when `getPreviousStatus(kpi.status)` returns a valid target
-- Render `AdminStatusStepBackDialog` inside the admin dialogs block (lines 212-228)
-- The dialog is self-contained — it fetches workflow stages internally, only needs `kpiId`, `kpiName`, `kraName`, `employeeId`, `employeeName`, `currentStatus`
+**1. Create `src/components/ui/ConfirmDestructiveDialog.tsx`**
+- A reusable `AlertDialog`-based component with props: `open`, `onConfirm`, `onCancel`, `title`, `description`, `confirmLabel` (default "Delete"), `isLoading`
+- Red destructive styling on the confirm button
+- Used system-wide wherever a delete/reset confirmation is needed
 
-**2. `DOCUMENTATION.md`** — v2.15.51 entry
+**2. `src/components/admin/AdminStatusStepBackDialog.tsx`**
+- When "Confirm Full Reset" is clicked, instead of executing immediately, show a nested `ConfirmDestructiveDialog` with message: *"This will permanently delete ALL scores, remarks, evidence, and achieved values for this KPI. This action cannot be undone. Are you sure?"*
+- Only after confirming the nested dialog does the mutation fire
+- Non-full-reset step-backs proceed as before (single confirmation is sufficient)
 
-### Visual Result
-```text
-Admin buttons row (bottom of KPI header):
-  [⚙ Admin KPI Editor]  [📋 Admin Data Entry]  [↩ Step Back]
-                                                  ^^^ NEW
-```
-The Step Back button only appears when there is a valid previous status to go back to.
+**3. Fix unprotected delete buttons (no confirmation dialog currently)**
+
+These components fire `.mutate()` or `delete()` directly on click with no confirmation:
+
+| Component | Action | Fix |
+|-----------|--------|-----|
+| `DisqualificationRulesEditor.tsx` | Delete DQ rule | Wrap in confirm dialog |
+| `IncentiveSlabEditor.tsx` | Delete slab | Wrap in confirm dialog |
+| `AllocationRulesEditor.tsx` | Delete allocation rule | Wrap in confirm dialog |
+| `EligibilityFieldsConfig.tsx` | Delete custom field | Wrap in confirm dialog |
+| `BusinessUnitManager.tsx` | Delete sub-unit | Wrap in confirm dialog |
+| `CustomTabDataGrid.tsx` | Delete row | Wrap in confirm dialog |
+| `CompetencyManagerTab.tsx` | Delete competency | Wrap in confirm dialog |
+| `ObservationCard.tsx` | Delete observation | Wrap in confirm dialog |
+| `SlabCategorySelector.tsx` | Delete slab category | Wrap in confirm dialog |
+
+Each will use the shared `ConfirmDestructiveDialog` with context-appropriate messages.
+
+**4. Already protected (no changes needed)**
+- `Organization.tsx` — has `AlertDialog`
+- `TemplateBundles.tsx` — has `AlertDialog`
+- `KRALibrary.tsx` — has `AlertDialog`
+- `WorkflowConfig.tsx` — has `AlertDialog`
+- `KraIssuanceConfirmDialog.tsx` — has `AlertDialog`
+
+**5. `DOCUMENTATION.md`** — v2.15.52
+
+### Technical Notes
+- The reusable component uses `AlertDialog` from Radix (already in the project)
+- For the Step Back dialog: a `showFullResetConfirm` state gates the nested confirmation
+- Each unprotected component gets a `deletingId` state + the shared dialog, replacing direct `onClick={() => mutate(id)}` patterns
 
 ### Risk
-- Low — additive; no changes to existing logic or non-admin views
-- Uses the already-implemented `AdminStatusStepBackDialog` component
+- Low — purely additive UI guards; no business logic changes
+- All existing confirmed-delete flows remain unchanged
 
