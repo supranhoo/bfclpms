@@ -4686,3 +4686,7 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - Changed category chart height from fixed `height` to `minHeight` to prevent blank space when few categories exist.
 - Added configurable `count` prop (default 3) to `PreviousMonthsScoreMini`.
 - **Affected files:** `src/components/review/PreviousMonthsScoreMini.tsx`, `src/components/review/UnifiedScorecard.tsx`
+
+### v2.15.56 — Fix Category Chart Bars Not Rendering
+- Reverted category chart container from `minHeight` back to `height` — Recharts' `ResponsiveContainer` requires a parent with a resolved pixel height to render bars.
+- **Affected files:** `src/components/review/UnifiedScorecard.tsx`
