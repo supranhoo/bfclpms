@@ -4666,3 +4666,16 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
   - `SlabCategorySelector` — Delete slab category
 - **Already protected (unchanged):** `Organization.tsx`, `TemplateBundles.tsx`, `KRALibrary.tsx`, `WorkflowConfig.tsx`, `KraIssuanceConfirmDialog.tsx`, `KpiObservationsSection.tsx`
 - **Affected files:** `src/components/ui/ConfirmDestructiveDialog.tsx` (new), `AdminStatusStepBackDialog.tsx`, `DisqualificationRulesEditor.tsx`, `IncentiveSlabEditor.tsx`, `AllocationRulesEditor.tsx`, `EligibilityFieldsConfig.tsx`, `BusinessUnitManager.tsx`, `CustomTabDataGrid.tsx`, `CompetencyManagerTab.tsx`, `SlabCategorySelector.tsx`
+
+### v2.15.53 — Real-Time KPI Sync Across Sessions
+- Enabled Postgres realtime on `kpis`, `review_submissions`, and `org_kpi_values` tables.
+- Created `useRealtimeKpiSync` hook that subscribes to postgres_changes and invalidates relevant React Query caches with 500ms debounce.
+- Mounted in `DashboardLayout` so all authenticated sessions receive live updates when admin edits KPIs, scores, or targets.
+- **Affected files:** `src/hooks/useRealtimeKpiSync.ts` (new), `src/components/layout/DashboardLayout.tsx`
+
+### v2.15.54 — Previous 2 Months' Overall Score on Dashboard
+- Created `PreviousMonthsScoreMini` component showing the previous 2 months' weighted average scores as compact rows with mini progress bars, trend arrows, and score labels.
+- Mounted inside the "Overall Performance" card in `UnifiedScorecard`, below the existing Weighted Score section.
+- Uses the standard 8-stage fallback chain and excludes N/A KPIs for accurate calculation.
+- Mobile-friendly: compact `text-[10px]` labels, thin progress bars, and responsive layout.
+- **Affected files:** `src/components/review/PreviousMonthsScoreMini.tsx` (new), `src/components/review/UnifiedScorecard.tsx`
