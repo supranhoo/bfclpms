@@ -1,84 +1,46 @@
 
 
-## UI/UX Design: Previous 2 Months' Overall Scores on Dashboard
+## Plan: Compact Previous Months Display & Remove Blank Space
 
-### Current Layout Analysis
-The dashboard has a **1:5 grid** — a small "Overall Performance" card (1/6) with the donut chart + weighted score, and a wide "Performance by Category" card (5/6).
+### Problems
+1. "Overall Performance" text above donut is redundant — remove it
+2. Previous months display is vertical, taking too much space — switch to horizontal single row showing 3 months
+3. When few categories exist, the Performance by Category card leaves blank space below
 
-### Recommended Placement: Inside the Existing "Overall" Card
-
-Add a compact **mini trend strip** below the existing "Weighted Score" section in the Overall Performance card. This is the most natural location because:
-- It keeps all "overall score" information grouped together
-- No additional cards or layout disruption
-- Works on mobile since this card already stacks full-width
-
-### Visual Design
-
-```text
-┌─────────────────────┐
-│  Overall             │
-│  Performance         │
-│                      │
-│    ┌──────────┐      │
-│    │  94.4%   │      │  ← existing donut
-│    │  4.72/5  │      │
-│    └──────────┘      │
-│                      │
-│  Weighted Score      │
-│  401.0 / 425         │
-│ ─────────────────── │
-│  Previous Months     │  ← NEW section
-│                      │
-│  Feb 2026   91.2%    │  ← compact row with
-│  ████████░░  4.56/5  │    mini progress bar
-│                      │
-│  Jan 2026   88.0%    │
-│  ███████░░░  4.40/5  │
-│                      │
-└─────────────────────┘
-```
-
-Each previous month row shows:
-- **Month label** (e.g., "Feb 2026")
-- **Percentage** with a thin colored progress bar (color-coded: green/yellow/red based on rating)
-- **Rating** (e.g., 4.56/5) in smaller muted text
-- **Trend arrow** (↑/↓) comparing to current month
-
-### Mobile Behavior
-- On mobile, the Overall card is already full-width, so the mini rows fit naturally
-- Progress bars scale with container width
-- Text stays at `text-xs` for compactness
-
-### Why Not Other Options?
-
-| Alternative | Why Not |
-|---|---|
-| Separate card row above | Adds vertical clutter, pushes KPI Details down |
-| Tabs inside the card | Over-engineered for just 2 data points |
-| Tooltip on hover | Not mobile-friendly, hidden information |
-| Inline next to donut | Too cramped on small screens |
-
-### Technical Approach
+### Changes
 
 **1. `src/components/review/UnifiedScorecard.tsx`**
-- After the existing weighted score block (line ~1388), add a "Previous Months" section
-- Fetch previous 2 months' KPIs + submissions using the same pattern as `KpiJourneySection` (match by employee, KPI name, KRA name)
-- Calculate weighted averages using the standard 8-stage fallback chain
-- Display as compact rows with mini progress bars
+- Remove `CardHeader` with "Overall" / "Performance" from the left card — the donut chart is self-explanatory
+- Change previous months count from 2 → 3
+- Make the category chart height dynamic: use `min-height` instead of fixed height so it doesn't create blank space. Change `style={{ height: ... }}` to `style={{ minHeight: ... }}` on the category card content
 
-**2. Create `src/components/review/PreviousMonthsScoreMini.tsx`**
-- Receives `employeeId`, `currentMonth`, `currentYear`, `reviewPeriodId`
-- Fetches and computes scores for the 2 prior months
-- Renders the compact strip UI
-- Uses `staleTime: 5min` to avoid redundant fetches
+**2. `src/components/review/PreviousMonthsScoreMini.tsx`**
+- Accept a `count` prop (default 3) instead of hardcoded 2
+- Redesign layout from vertical stacked rows to a **horizontal single row**:
 
-**3. `DOCUMENTATION.md`** — v2.15.54
+```text
+Previous Months
+┌──────────┬──────────┬──────────┐
+│ Feb 2026 │ Jan 2026 │ Dec 2025 │
+│  100.0%  │  99.4%   │  95.2%   │
+│  5.00/5 ↗│  4.97/5 ↘│  4.76/5 ↘│
+└──────────┴──────────┴──────────┘
+```
+
+- Each month in a compact column: month label, percentage (color-coded), score, trend icon
+- Remove progress bars to save vertical space
+- Use `grid grid-cols-3` layout — fits mobile since each column is narrow text only
+
+**3. `DOCUMENTATION.md`** — v2.15.55
 
 ### Files Modified
 
 | File | Change |
-|---|---|
-| `src/components/review/PreviousMonthsScoreMini.tsx` | New — compact previous months display |
-| `src/components/review/UnifiedScorecard.tsx` | Mount the new component inside Overall card |
-| `DOCUMENTATION.md` | v2.15.54 |
+|------|--------|
+| `src/components/review/PreviousMonthsScoreMini.tsx` | Horizontal 3-month layout, remove progress bars |
+| `src/components/review/UnifiedScorecard.tsx` | Remove "Overall/Performance" header, pass count=3, fix category chart height |
+| `DOCUMENTATION.md` | v2.15.55 |
+
+### Risk
+- Low — purely visual/layout changes, no business logic affected
 
