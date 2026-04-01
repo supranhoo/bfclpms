@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Trash2, Plus, Save } from 'lucide-react';
 import { useIncentiveSlabs, useUpsertSlab, useDeleteSlab } from '@/hooks/useIncentivePrograms';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { SlabCategorySelector } from './SlabCategorySelector';
