@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-01  
-> **Version:** 2.15.50 — Admin step-back: target stage selector, full reset, multi-month sibling reversion
+> **Version:** 2.15.51 — Admin step-back button added to KPI details view
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
