@@ -334,31 +334,46 @@ Deno.serve(async (req) => {
       const kpisForThisEmployee: any[] = [];
 
       for (const kpi of kpis) {
-        const resolvedIdx = resolveTerminalMonth(targetMonthIdx, kpi.frequency);
-        const resolvedMonth = MONTHS[resolvedIdx];
-
-        const dedupKey = `${resolvedMonth}|||${kpi.kra_name}|||${kpi.kpi_name}`;
-        const kraDedupKey = `${resolvedMonth}|||${kpi.kra_name}`;
         const empExistingKeys = targetByEmployee[empId] || new Set();
         const empExistingKras = targetKrasByEmployee[empId] || new Set();
 
-        if (empExistingKeys.has(dedupKey)) {
-          // Exact match exists — skip
+        // Determine all cycle months for this KPI frequency
+        const cycleMonths = getCycleMonthsForTarget(targetMonthIdx, kpi.frequency);
+        // Only create records for months >= target month (earlier months already exist from prior cycles)
+        const monthsToCreate = cycleMonths.filter(m => m >= targetMonthIdx);
+
+        // Check terminal month for KRA-level dedup (if terminal already has different KPI under same KRA)
+        const terminalIdx = resolveTerminalMonth(targetMonthIdx, kpi.frequency);
+        const terminalMonth = MONTHS[terminalIdx];
+        const terminalKraDedupKey = `${terminalMonth}|||${kpi.kra_name}`;
+        if (empExistingKras.has(terminalKraDedupKey) && !rollover_balance_only) {
           existingCount++;
           existingNames.push(kpi.kpi_name);
           continue;
         }
 
-        if (empExistingKras.has(kraDedupKey) && !rollover_balance_only) {
-          // KRA exists with different KPI name — skip unless balance_only mode
-          existingCount++;
-          existingNames.push(kpi.kpi_name);
-          continue;
+        let anyCreated = false;
+        for (const monthIdx of monthsToCreate) {
+          const month = MONTHS[monthIdx];
+          const dedupKey = `${month}|||${kpi.kra_name}|||${kpi.kpi_name}`;
+
+          if (empExistingKeys.has(dedupKey)) {
+            // Record already exists for this month — skip it
+            continue;
+          }
+
+          kpisForThisEmployee.push(buildNewKpi(kpi, month, targetYear));
+          kpisCopied++;
+          anyCreated = true;
+          // Add to dedup set so subsequent KPIs don't duplicate
+          empExistingKeys.add(dedupKey);
         }
 
-        // This KPI should be rolled over
-        kpisForThisEmployee.push(buildNewKpi(kpi, resolvedMonth, targetYear));
-        kpisCopied++;
+        if (!anyCreated) {
+          // All months already had records
+          existingCount++;
+          existingNames.push(kpi.kpi_name);
+        }
       }
 
       if (dry_run && existingCount > 0 && kpisCopied > 0) {
