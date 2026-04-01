@@ -206,7 +206,7 @@ export function DisqualificationRulesEditor({ programId }: Props) {
                           <Switch checked={rule.is_active} onCheckedChange={() => handleToggleActive(rule)} />
                         </TableCell>
                         <TableCell>
-                          <Button size="icon" variant="ghost" onClick={() => deleteRule.mutate(rule.id)}>
+                          <Button size="icon" variant="ghost" onClick={() => setDeletingId(rule.id)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </TableCell>
