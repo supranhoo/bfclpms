@@ -1,65 +1,75 @@
 
 
-## RCA: Rollover Fails — "Quarterly KPI cannot have review_period = April"
+## RCA: Submit Monthly Review Dialog — Wrong Submitted Days Count & Incorrect Rating
 
-### Root Cause (Two Issues)
+### Issues Found (from screenshots)
 
-**Issue 1 — Rollover copies multi-month KPIs to non-terminal months**
+**Pic 1**: Submit Monthly Review shows "Submitted Days: 22/31, Missed Days: 9, Average Score: 0.00, Rating: Outstanding"
+**Pic 2**: Daily Submission Summary shows "31/31 Submitted, 0 Not Submitted, 100% Completion"
 
-The rollover function blindly sets `review_period: targetMonth` (line 453) for ALL KPIs, regardless of frequency. When rolling March → April:
-- Monthly KPIs → April ✓
-- Quarterly KPIs → April ✗ (April is locked; terminal month is June)
+### Root Cause — Two Bugs
 
-The function should resolve the target period to the correct terminal month for multi-month frequencies (e.g., Quarterly March → June, not April).
+**Bug 1: Submitted Days mismatch (22 vs 31)**
 
-**Issue 2 — Service role bypassed by trigger's admin check**
+In `SelfReviewSheet.tsx` line 214-216, the aggregation filters entries with `achieved_value !== null`:
+```typescript
+const values = selectedKpiSubPeriods
+  .filter(s => s.achieved_value !== null)
+  .map(s => s.achieved_value as number);
+```
+Entries where the user submitted a row but the `achieved_value` is `null` (the "—" entries in pic 2) are excluded. So `submittedDays = values.length = 22`, not 31. But the Daily Submission Summary counts ALL rows as submitted regardless of value.
 
-The `enforce_frequency_lock_on_submission` trigger checks `has_role(auth.uid(), 'admin')`. When the edge function uses `SUPABASE_SERVICE_ROLE_KEY`, `auth.uid()` is NULL, so the admin bypass fails. Even if Issue 1 is fixed, the trigger should also allow service-role callers to pass.
+The confirmation dialog also uses `calculateDailyAggregatedScore` (the backwards-compatible version) which always uses **calendar days** (31 for March) as `totalDays`, ignoring the KPI's `day_count_type` and employee working days configuration.
+
+**Bug 2: Rating shows "Outstanding" for score 0.00**
+
+Line 1259 passes the aggregated score through `calculateScoreFromAchieved`:
+```typescript
+calculateScoreFromAchieved(aggregatedSubPeriodScore ?? 0, selectedKpi).rating
+```
+
+If `dailyAggregationMethod` is `missed_days_penalty`, the returned `score` is already on a 0-5 rating scale (5 = perfect, 0 = 5+ missed). This score is then **re-mapped through KPI thresholds** as if it were a raw achieved value. If the KPI has "Lower is Better" criteria or thresholds where 0 maps to outstanding, the rating becomes 5 (Outstanding) — a double-conversion error.
+
+Even with `average` method: average of twenty-two 0-values = 0.00, passed to `calculateScoreFromAchieved(0, kpi)` — same problem if thresholds treat 0 as best.
 
 ### Fix
 
-**1. Edge function: resolve target period for multi-month frequencies**
+**1. Fix Submitted Days count** (`SelfReviewSheet.tsx` line 212-219)
 
-In `auto-rollover-kpis/index.ts`, before building the cloned KPI record, resolve the target month based on frequency:
+Use `useDailyAggregatedScore` hook (which respects `day_count_type` and employee working days) instead of calling `calculateDailyAggregatedScore` directly. This aligns the confirmation dialog with the Daily Submission Summary.
 
-- Fetch `frequency_config` rows (already available via the locked_months data)
-- For each source KPI with a multi-month frequency (Quarterly, Bi-Monthly, Half-Yearly, Yearly):
-  - Find which cycle the target month falls into
-  - Set `review_period` to that cycle's terminal month instead of the raw target month
-  - E.g., Quarterly + April → June (Q2 terminal)
+Alternatively, keep the direct call but use `calculateDailyAggregatedScoreWithExpectedDays` with proper expected days from `useExpectedDays` hook.
 
-```text
-Frequency    | Target April resolves to
--------------|-------------------------
-Monthly      | April (unchanged)
-Bi-Monthly   | April (terminal of Mar-Apr cycle)
-Quarterly    | June (terminal of Q2: Apr-May-Jun)
-Half-Yearly  | June (terminal of H1: Jan-Jun)
-Yearly       | June (terminal of FY: Jul-Jun)
+**2. Fix Rating display** (`SelfReviewSheet.tsx` line 1255-1264)
+
+For Daily/Weekly KPIs using `missed_days_penalty` method, the aggregated score IS the rating (0-5). Do NOT pass it through `calculateScoreFromAchieved` again. Display it directly:
+
+```typescript
+// For daily KPIs with missed_days_penalty, score IS the rating
+const dailyRating = (selectedKpi?.frequency === 'Daily' || selectedKpi?.frequency === 'Weekly')
+  && dailyAggregationMethod === 'missed_days_penalty'
+  ? Math.round(aggregatedSubPeriodScore ?? 0)
+  : Math.round(calculateScoreFromAchieved(aggregatedSubPeriodScore ?? 0, selectedKpi).rating);
 ```
 
-**2. Trigger: allow service-role bypass**
+**3. Fix "Average Score" label**
 
-Update `enforce_frequency_lock_on_submission()` to also check if the caller is using the service role (no JWT = service role context), adding:
-```sql
-IF current_setting('role', true) = 'service_role' THEN RETURN NEW; END IF;
-```
+The label always says "Average Score" even when the method is `missed_days_penalty`. Should show the correct method label (e.g., "Missed Days Score" or use `getAggregationMethodLabel`).
 
-**3. Deduplication guard**
+**4. Align actual submission logic** (`SelfReviewSheet.tsx` line 383-386)
 
-After resolving the terminal month, the existing dedup check (line 202-206) already prevents duplicates since it matches on `employee_id + kra_name + kpi_name + target_period + target_year`. No additional change needed — the resolved terminal month will correctly match existing records.
+The same bugs exist in `handleSubmitMonthlyReview` where the achieved_value sent to the review is calculated. Ensure it also uses the correct expected days and avoids double-rating.
 
 ### Files Modified
 
 | File | Change |
 |------|--------|
-| `supabase/functions/auto-rollover-kpis/index.ts` | Fetch frequency_config; resolve target period per frequency before cloning |
-| DB migration | Add `service_role` bypass to `enforce_frequency_lock_on_submission` trigger |
-| `DOCUMENTATION.md` | v2.15.41 |
-| `POLICY.md` | Update rollover section |
+| `src/components/review/SelfReviewSheet.tsx` | Use `useDailyAggregatedScore` hook for correct expected days; fix rating double-conversion; fix score label |
+| `DOCUMENTATION.md` | v2.15.42 |
+| `POLICY.md` | Update daily KPI scoring policy |
 
 ### Risk Assessment
-- **Regression**: None — Monthly KPIs unaffected; multi-month KPIs get correct terminal month
-- **Data**: No schema change; trigger update is additive (new bypass path)
-- **Edge case**: If a Quarterly KPI was already rolled to the terminal month by a previous successful run, the dedup guard prevents duplicates
+- **Regression**: Low — changes only affect the confirmation dialog display and the achieved value sent on submission for daily/weekly KPIs
+- **Data**: No schema change. Existing submissions with incorrect scores may need re-submission or manual correction
+- **Downstream**: Manager review will receive correctly calculated scores going forward
 
