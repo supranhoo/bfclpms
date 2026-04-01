@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-03-31  
-> **Version:** 2.15.41 — Frequency-aware KRA rollover; service role trigger bypass
+> **Last Updated:** 2026-04-01  
+> **Version:** 2.15.42 — Fix daily KPI aggregation: correct expected days, rating double-conversion, method label
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
