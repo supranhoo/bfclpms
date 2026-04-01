@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Plus, Check, X, Settings, Pencil, Trash2 } from 'lucide-react';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import {
   useIncentiveSlabCategories,
   useCreateSlabCategory,
