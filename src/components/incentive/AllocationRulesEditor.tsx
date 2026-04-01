@@ -29,6 +29,7 @@ export function AllocationRulesEditor({ programId }: Props) {
   });
 
   const [newRule, setNewRule] = useState({ source_label: '', target_bu_id: '', target_sub_unit: '', allocation_pct: '' });
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const handleAdd = () => {
     if (!newRule.source_label || !newRule.allocation_pct) return;
