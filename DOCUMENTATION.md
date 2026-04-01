@@ -4679,3 +4679,10 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - Uses the standard 8-stage fallback chain and excludes N/A KPIs for accurate calculation.
 - Mobile-friendly: compact `text-[10px]` labels, thin progress bars, and responsive layout.
 - **Affected files:** `src/components/review/PreviousMonthsScoreMini.tsx` (new), `src/components/review/UnifiedScorecard.tsx`
+
+### v2.15.55 — Compact Horizontal 3-Month Trend & Layout Cleanup
+- Redesigned `PreviousMonthsScoreMini` from vertical stacked rows to a horizontal 3-column grid layout, removing progress bars for compactness.
+- Removed redundant "Overall / Performance" `CardHeader` from the left performance card — donut chart is self-explanatory.
+- Changed category chart height from fixed `height` to `minHeight` to prevent blank space when few categories exist.
+- Added configurable `count` prop (default 3) to `PreviousMonthsScoreMini`.
+- **Affected files:** `src/components/review/PreviousMonthsScoreMini.tsx`, `src/components/review/UnifiedScorecard.tsx`
