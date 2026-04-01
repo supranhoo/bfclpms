@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,7 +6,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Download, CheckCircle2, DollarSign, Calculator, Loader2, Users, ShieldAlert, Clock, IndianRupee, Search } from 'lucide-react';
 import { useIncentiveRecords, useConfirmIncentiveRecords, useMarkIncentivePaid, useComputeIncentives, useIncentiveReportData } from '@/hooks/useIncentiveRecords';
 import { useIncentivePrograms } from '@/hooks/useIncentivePrograms';
@@ -32,20 +34,20 @@ export function MonthlyIncentiveTable() {
   const [dryRunResult, setDryRunResult] = useState<any>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [employeeNameMap, setEmployeeNameMap] = useState<Map<string, { name: string; code: string }>>(new Map());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showMarkPaidDialog, setShowMarkPaidDialog] = useState(false);
 
   const { data: programs = [] } = useIncentivePrograms();
   const activePrograms = (programs as any[]).filter((p: any) => p.is_active);
 
   const isAllMode = selectedMonth === 'all' || selectedYear === 'all';
 
-  // Standard fetch for specific month+year
   const { data: standardRecords = [], isLoading: stdLoading, isError: stdError, error: stdErrorObj } = useIncentiveRecords(
     isAllMode ? undefined : selectedMonth,
     isAllMode ? undefined : Number(selectedYear),
     selectedProgram !== 'all' ? selectedProgram : undefined
   );
 
-  // Batched fetch for "All" mode
   const { data: batchedRecords, isLoading: batchLoading } = useIncentiveReportData({
     month: selectedMonth,
     year: selectedYear,
@@ -60,6 +62,11 @@ export function MonthlyIncentiveTable() {
   const confirmRecords = useConfirmIncentiveRecords();
   const markPaid = useMarkIncentivePaid();
   const computeIncentives = useComputeIncentives();
+
+  // Reset selection when filters change
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [selectedMonth, selectedYear, selectedProgram, statusFilter, incentiveStatusFilter, eligibilityFilter, periodFilter, searchTerm]);
 
   const filteredRecords = useMemo(() => {
     return (records as any[]).filter(r => {
@@ -89,6 +96,48 @@ export function MonthlyIncentiveTable() {
     const totalAmount = filteredRecords.reduce((s: number, r: any) => s + (r.incentive_amount || 0), 0);
     return { total, eligible, disqualified, prorata, totalAmount };
   }, [filteredRecords]);
+
+  // Selection helpers
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    const visibleIds = filteredRecords.slice(0, 50).map((r: any) => r.id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id: string) => selectedIds.has(id));
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(visibleIds));
+    }
+  };
+
+  const selectedCount = selectedIds.size;
+  const allVisibleSelected = filteredRecords.slice(0, 50).length > 0 &&
+    filteredRecords.slice(0, 50).every((r: any) => selectedIds.has(r.id));
+
+  // Mark Paid impact data
+  const markPaidTargets = useMemo(() => {
+    const confirmed = filteredRecords.filter((r: any) => r.status === 'confirmed');
+    if (selectedCount > 0) {
+      return confirmed.filter((r: any) => selectedIds.has(r.id));
+    }
+    return confirmed;
+  }, [filteredRecords, selectedIds, selectedCount]);
+
+  const markPaidImpact = useMemo(() => ({
+    count: markPaidTargets.length,
+    totalAmount: markPaidTargets.reduce((s: number, r: any) => s + (r.incentive_amount || 0), 0),
+    employees: markPaidTargets.map((r: any) => ({
+      name: r.profiles?.full_name || 'Unknown',
+      code: r.profiles?.employee_code || '',
+      amount: r.incentive_amount || 0,
+    })),
+  }), [markPaidTargets]);
 
   const handleExport = () => {
     if (!filteredRecords.length) return;
@@ -142,13 +191,25 @@ export function MonthlyIncentiveTable() {
   };
 
   const handleConfirmAll = () => {
-    const draftIds = filteredRecords.filter((r: any) => r.status === 'draft').map((r: any) => r.id);
+    const drafts = filteredRecords.filter((r: any) => r.status === 'draft');
+    const targets = selectedCount > 0
+      ? drafts.filter((r: any) => selectedIds.has(r.id))
+      : drafts;
+    const draftIds = targets.map((r: any) => r.id);
     if (draftIds.length > 0 && user?.id) confirmRecords.mutate({ ids: draftIds, confirmedBy: user.id });
   };
 
   const handleMarkAllPaid = () => {
-    const confirmedIds = filteredRecords.filter((r: any) => r.status === 'confirmed').map((r: any) => r.id);
-    if (confirmedIds.length > 0) markPaid.mutate(confirmedIds);
+    if (markPaidTargets.length > 0) {
+      setShowMarkPaidDialog(true);
+    }
+  };
+
+  const handleConfirmMarkPaid = () => {
+    const ids = markPaidTargets.map((r: any) => r.id);
+    if (ids.length > 0) markPaid.mutate(ids);
+    setShowMarkPaidDialog(false);
+    setSelectedIds(new Set());
   };
 
   const handleCompute = async () => {
@@ -286,7 +347,12 @@ export function MonthlyIncentiveTable() {
               </div>
             </div>
           </div>
-          <div className="flex gap-2 mt-3 justify-end">
+          <div className="flex gap-2 mt-3 justify-end items-center">
+            {selectedCount > 0 && (
+              <Badge variant="secondary" className="text-xs mr-2">
+                {selectedCount} selected
+              </Badge>
+            )}
             <Button variant="outline" size="sm" onClick={handleCompute} disabled={!canCompute || computeIncentives.isPending}>
               {computeIncentives.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Calculator className="h-4 w-4 mr-1" />}
               Compute
@@ -295,10 +361,10 @@ export function MonthlyIncentiveTable() {
               <Download className="h-4 w-4 mr-1" /> Export
             </Button>
             <Button size="sm" onClick={handleConfirmAll} disabled={confirmRecords.isPending || isAllMode}>
-              <CheckCircle2 className="h-4 w-4 mr-1" /> Confirm All
+              <CheckCircle2 className="h-4 w-4 mr-1" /> {selectedCount > 0 ? 'Confirm Selected' : 'Confirm All'}
             </Button>
-            <Button size="sm" variant="secondary" onClick={handleMarkAllPaid} disabled={markPaid.isPending || isAllMode}>
-              <DollarSign className="h-4 w-4 mr-1" /> Mark Paid
+            <Button size="sm" variant="secondary" onClick={handleMarkAllPaid} disabled={markPaid.isPending || isAllMode || markPaidTargets.length === 0}>
+              <DollarSign className="h-4 w-4 mr-1" /> {selectedCount > 0 ? 'Mark Selected Paid' : 'Mark Paid'}
             </Button>
           </div>
         </CardContent>
@@ -327,6 +393,13 @@ export function MonthlyIncentiveTable() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={allVisibleSelected}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label="Select all"
+                    />
+                  </TableHead>
                   <TableHead>Employee</TableHead>
                   <TableHead>Dept</TableHead>
                   <TableHead>Month</TableHead>
@@ -346,14 +419,21 @@ export function MonthlyIncentiveTable() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={15} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={16} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
                 ) : isError ? (
-                  <TableRow><TableCell colSpan={15} className="text-center py-8 text-destructive">Error: {(error as Error)?.message || 'Unknown error'}</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={16} className="text-center py-8 text-destructive">Error: {(error as Error)?.message || 'Unknown error'}</TableCell></TableRow>
                 ) : filteredRecords.length === 0 ? (
-                  <TableRow><TableCell colSpan={15} className="text-center py-8 text-muted-foreground">No records found. Adjust filters or compute incentives first.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={16} className="text-center py-8 text-muted-foreground">No records found. Adjust filters or compute incentives first.</TableCell></TableRow>
                 ) : (
                   filteredRecords.slice(0, 50).map((r: any) => (
                     <TableRow key={r.id} className={r.is_disqualified ? 'bg-destructive/5' : ''}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedIds.has(r.id)}
+                          onCheckedChange={() => toggleSelect(r.id)}
+                          aria-label={`Select ${r.profiles?.full_name}`}
+                        />
+                      </TableCell>
                       <TableCell>
                         <div className="text-sm font-medium">{r.profiles?.full_name}</div>
                         <div className="text-xs text-muted-foreground">{r.profiles?.employee_code}</div>
@@ -435,6 +515,64 @@ export function MonthlyIncentiveTable() {
         isConfirming={computeIncentives.isPending}
         employeeNames={employeeNameMap}
       />
+
+      {/* Mark Paid Impact Dialog */}
+      <AlertDialog open={showMarkPaidDialog} onOpenChange={setShowMarkPaidDialog}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Mark as Paid</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="bg-muted rounded-md p-2 text-center">
+                    <p className="text-xs text-muted-foreground">Employees</p>
+                    <p className="text-lg font-semibold">{markPaidImpact.count}</p>
+                  </div>
+                  <div className="bg-muted rounded-md p-2 text-center">
+                    <p className="text-xs text-muted-foreground">Total Amount</p>
+                    <p className="text-lg font-semibold">₹{markPaidImpact.totalAmount.toLocaleString('en-IN')}</p>
+                  </div>
+                </div>
+                <div className="max-h-48 overflow-auto border rounded-md">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs">Employee</TableHead>
+                        <TableHead className="text-xs text-right">Amount (₹)</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {markPaidImpact.employees.slice(0, 20).map((emp, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="text-xs py-1">
+                            <span className="font-medium">{emp.name}</span>
+                            {emp.code && <span className="text-muted-foreground ml-1">({emp.code})</span>}
+                          </TableCell>
+                          <TableCell className="text-xs py-1 text-right">₹{emp.amount.toLocaleString('en-IN')}</TableCell>
+                        </TableRow>
+                      ))}
+                      {markPaidImpact.employees.length > 20 && (
+                        <TableRow>
+                          <TableCell colSpan={2} className="text-xs text-center text-muted-foreground py-1">
+                            +{markPaidImpact.employees.length - 20} more
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+                <p className="text-xs text-muted-foreground">This action will mark the above records as paid and cannot be undone.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmMarkPaid}>
+              <DollarSign className="h-4 w-4 mr-1" /> Confirm Mark Paid
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
