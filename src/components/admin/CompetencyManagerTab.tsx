@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Pencil, Trash2, Search, GraduationCap, Download } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { toast } from '@/hooks/use-toast';
 import CompetencyAssessmentDialog from './CompetencyAssessmentDialog';
 
