@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Edit, Trash2, Save, X, Settings, Plus } from 'lucide-react';
 import { useCustomTabData, useUpsertCustomTabData, useDeleteCustomTabData } from '@/hooks/useIncentiveCustomTabs';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import type { CustomTab, CustomTabField } from '@/hooks/useIncentiveCustomTabs';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
