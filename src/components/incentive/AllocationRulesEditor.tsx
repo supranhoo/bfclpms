@@ -95,7 +95,7 @@ export function AllocationRulesEditor({ programId }: Props) {
                     <TableCell>{r.target_sub_unit || '—'}</TableCell>
                     <TableCell><Badge variant="secondary">{r.allocation_pct}%</Badge></TableCell>
                     <TableCell>
-                      <Button size="icon" variant="ghost" onClick={() => deleteRule.mutate(r.id)}>
+                      <Button size="icon" variant="ghost" onClick={() => setDeletingId(r.id)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </TableCell>
