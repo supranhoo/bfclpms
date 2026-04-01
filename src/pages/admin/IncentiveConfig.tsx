@@ -184,17 +184,10 @@ export default function IncentiveConfig() {
     <div className="space-y-6">
       <PageHeader
         title="Incentive Configuration"
-        description="Configure incentive programs, slabs, disqualification rules, and employee eligibility data"
+        description="Configure incentive programs, slabs, disqualification rules, and mappings"
       />
 
-      <Tabs defaultValue="programs">
-        <TabsList>
-          <TabsTrigger value="programs">Programs</TabsTrigger>
-          <TabsTrigger value="production">Production Data</TabsTrigger>
-          <TabsTrigger value="eligibility">Eligibility Data</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="programs" className="space-y-4">
+      <div className="space-y-4">
           <div className="flex justify-end">
             <Button onClick={() => setShowCreateDialog(true)}>
               <Plus className="h-4 w-4 mr-1" /> New Program
@@ -255,16 +248,7 @@ export default function IncentiveConfig() {
               ))}
             </Accordion>
           )}
-        </TabsContent>
-
-        <TabsContent value="production" className="space-y-6">
-          <UnifiedProductionDataTab programs={programs as any[]} />
-        </TabsContent>
-
-        <TabsContent value="eligibility">
-          <EligibilityDataEntry />
-        </TabsContent>
-      </Tabs>
+      </div>
 
       {/* Create Program Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
