@@ -134,7 +134,7 @@ export function IncentiveSlabEditor({ programId, programType }: Props) {
                     <TableCell><Badge variant="secondary">{slab.incentive_percent}%</Badge></TableCell>
                     <TableCell>{slab.rating_label || '—'}</TableCell>
                     <TableCell>
-                      <Button size="icon" variant="ghost" onClick={() => deleteSlab.mutate(slab.id)}>
+                      <Button size="icon" variant="ghost" onClick={() => setDeletingId(slab.id)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </TableCell>
