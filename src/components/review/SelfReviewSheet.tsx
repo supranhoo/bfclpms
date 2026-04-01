@@ -218,8 +218,8 @@ export function SelfReviewSheet({
       .filter(s => s.achieved_value !== null)
       .map(s => s.achieved_value as number);
     const isBinaryKpi = selectedKpi?.uom_type === 'binary';
-    return calculateDailyAggregatedScore(values, dailyAggregationMethod, selectedPeriod, selectedYear, isBinaryKpi);
-  }, [selectedKpiSubPeriods, dailyAggregationMethod, selectedPeriod, selectedYear, selectedKpi]);
+    return calculateDailyAggregatedScoreWithExpectedDays(values, dailyAggregationMethod, expectedDays, isBinaryKpi);
+  }, [selectedKpiSubPeriods, dailyAggregationMethod, expectedDays, selectedKpi]);
 
   const aggregatedSubPeriodScore = aggregatedSubPeriodResult?.score ?? null;
 
