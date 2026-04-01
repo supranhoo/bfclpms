@@ -267,7 +267,7 @@ export function CustomTabDataGrid({ tab, programId, onEditTab, onDeleteTab }: Pr
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => deleteRow.mutate({ id: row.id, tabId: tab.id })}
+                          onClick={() => setDeletingId(row.id)}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
