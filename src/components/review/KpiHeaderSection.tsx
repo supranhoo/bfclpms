@@ -33,6 +33,7 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
   const isAdmin = role === 'admin';
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [dataEntryDialogOpen, setDataEntryDialogOpen] = useState(false);
+  const [stepBackDialogOpen, setStepBackDialogOpen] = useState(false);
 
   const categoryName = kpi.kra_categories?.name || 'Uncategorized';
   const categoryColor = kpi.kra_categories?.color || '#6B7280';
