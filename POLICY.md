@@ -775,6 +775,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Invariant:** `ProgramEmployeeMapping` must always render a flat employee table with checkboxes. Bulk operations (select-all-filtered, clear-all-filtered) must use the `useBulkAddProgramMappings` / `useBulkRemoveProgramMappings` hooks for performance.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Abstract entity pickers (tabs for divisions, departments, grades)* — Rejected because it obscures which individual employees are enrolled and risks accidental over-enrollment.
+- *Alternative B: Individual employee search and add* — Rejected because it's impractical for programs with hundreds of employees.
+- *Chosen approach:* Flat employee table with filters and bulk operations. See [ADR-037](docs/adr/ADR-037.md).
+
 ---
 
 ## §38. Dashboard Observation Visibility Invariant
