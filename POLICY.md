@@ -835,6 +835,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Invariant:** The `IncentiveReportExport` component's Excel export must produce at least 28 columns covering Employee Info, Period, Programme, Scores, DQ Fields, Adjustments, Final, and Analytical data.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Minimal export with only summary fields* — Rejected because incomplete reports risk payroll errors and compliance gaps.
+- *Alternative B: Separate DQ report* — Rejected because it forces payroll teams to cross-reference two documents.
+- *Chosen approach:* Unified 28+ column export with all DQ fields included. See [ADR-041](docs/adr/ADR-041.md).
+
 ---
 
 ### §42: Dynamic Program Configuration Tabs
