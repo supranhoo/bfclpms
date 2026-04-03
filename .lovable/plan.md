@@ -1,63 +1,28 @@
 
 
-## Plan: Full-Page Bundle Editor with Enhanced Features
+## Fix: Eye Icon "Click to Expand" Not Working
 
-### Current State
-The "Edit/Create Bundle" experience is a cramped `Dialog` modal (`BundleFormDialog.tsx`) with limited space for template selection, no search/filter for templates, no drag-and-drop reordering, and no preview of the bundle contents.
+### Problem
+In the `BrowserTemplateCard` component, clicking the Eye (👁) icon triggers the parent row's checkbox toggle instead of expanding the template details. Although `e.stopPropagation()` is present, the click event still bubbles to the parent `div` with `onClick={onToggle}`.
 
-### What Changes
+### Root Cause
+The Eye button is inside a parent `div` with `onClick={onToggle}` (line 562). The `stopPropagation` call on the button click handler should work, but the small hit target (h-6 w-6) means clicks sometimes land on the surrounding padding/card area instead of the button itself. Additionally, the button's ghost variant has minimal visual affordance, making it unclear that it's interactive.
 
-**1. New Route & Full-Page Component**
-- Add route `/admin/bundles/new` and `/admin/bundles/:id/edit` in `App.tsx`
-- Create `src/pages/admin/BundleEditor.tsx` as a full-page editor
-- Update `TemplateBundles.tsx` to navigate to the new route instead of opening the dialog
+### Fix (1 file)
 
-**2. Full-Page Layout (BundleEditor.tsx)**
-- **Left Panel (60%)**: Form fields + selected templates with drag-to-reorder
-- **Right Panel (40%)**: Template browser with search, category filter, and department filter
-- **Sticky Header**: Bundle name, status badge, Save/Cancel buttons, breadcrumb navigation
-- **Sticky Footer Bar**: Weightage summary (total %, warning if != 100%), template count, save button
+**`src/pages/admin/BundleEditor.tsx`** — `BrowserTemplateCard` component:
 
-**3. Enhanced Template Selection**
-- Search bar to filter templates by title, KRA name, or KPI name
-- Filter by KRA category dropdown
-- "Select All" / "Deselect All" quick actions
-- Selected templates shown in left panel as a sortable list with:
-  - Drag handle for reordering (updates `sort_order`)
-  - Inline display of weightage, UOM, target, category
-  - Remove button per template
-  - Running total weightage with color indicator (green at 100%, amber otherwise)
+1. Move the Eye button **outside** the clickable toggle row, or restructure so the checkbox area and the eye button are separate click zones:
+   - Split the row into two zones: left side (checkbox + info, triggers toggle) and right side (eye button, triggers expand)
+   - Use `onMouseDown` + `preventDefault` + `stopPropagation` as a more robust event stopper
 
-**4. Template Preview Panel**
-- Clicking a template in the browser shows an expandable detail card with all fields: rating scale (R0-R5), criteria, frequency, source of data, UOM
+2. Improve the Eye button UX:
+   - Make the icon slightly larger and add a tooltip ("View details")
+   - Change icon to `ChevronDown`/`ChevronUp` when expanded (clearer expand/collapse affordance)
+   - Add visual feedback: highlight the eye button area on hover
 
-**5. Unsaved Changes Guard**
-- Track dirty state and show a confirmation prompt when navigating away with unsaved changes
+3. Ensure the expanded section is visually distinct and doesn't collapse when clicking inside it.
 
-**6. Validation & Feedback**
-- Bundle name required
-- At least 1 template required
-- Weightage total warning (non-blocking) if != 100%
-- Toast on save success/failure
-- Disable save button while submitting
-
-### Files Modified/Created
-
-| File | Action |
-|------|--------|
-| `src/pages/admin/BundleEditor.tsx` | **Create** — Full-page editor component |
-| `src/App.tsx` | **Modify** — Add `/admin/bundles/new` and `/admin/bundles/:id/edit` routes |
-| `src/pages/admin/TemplateBundles.tsx` | **Modify** — Navigate to edit route instead of opening dialog; keep dialog for quick-create if desired |
-| `src/components/admin/BundleFormDialog.tsx` | **Keep** — Retained as optional quick-create, or deprecated |
-| `DOCUMENTATION.md` | **Update** — Version bump |
-
-### Technical Approach
-- Use `useParams` to get bundle ID; fetch via `useTemplateBundle(id)` for edit mode
-- Reuse existing `useCreateTemplateBundle` and `useUpdateTemplateBundle` hooks
-- Use `@dnd-kit/sortable` (already likely available) or simple move-up/move-down buttons for reordering
-- `useMemo` for filtered template list; `useBlocker` or `beforeunload` for unsaved changes guard
-
-### Risk Assessment
-- **Low risk**: No schema changes, no RLS changes, read/write patterns identical to existing dialog
-- Existing dialog can remain functional as fallback
+### Technical Detail
+The fix restructures `BrowserTemplateCard` so that `onToggle` is only bound to the checkbox+label area, and the Eye/expand button is a sibling element with its own isolated click handler — eliminating any event bubbling issues.
 
