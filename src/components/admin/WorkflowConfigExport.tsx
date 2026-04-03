@@ -96,6 +96,7 @@ export function WorkflowConfigExport({
       const p = profileMap.get(c.config_value);
       const tmpl = templateMap.get(c.workflow_template_id);
       const manager = p?.reporting_manager_id ? profileMap.get(p.reporting_manager_id) : null;
+      const skipManager = manager?.reporting_manager_id ? profileMap.get(manager.reporting_manager_id) : null;
       return {
         'Employee Name': p?.full_name || '—',
         'Employee Code': p?.employee_code || '—',
@@ -103,6 +104,7 @@ export function WorkflowConfigExport({
         'PMS Grade': p?.pms_grade || '—',
         'Department': p?.department_id ? (deptMap.get(p.department_id) || '—') : '—',
         'Reporting Manager': manager?.full_name || '—',
+        'Skip-Level Manager': skipManager?.full_name || '—',
         'Assigned Template': tmpl?.display_name || '—',
         'Stages': tmpl ? formatStages(tmpl.stages) : '—',
         'Scope': c.review_period ? 'Period-Specific' : 'Global',
