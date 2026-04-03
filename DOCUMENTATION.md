@@ -4690,3 +4690,33 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 ### v2.15.56 — Fix Category Chart Bars Not Rendering
 - Reverted category chart container from `minHeight` back to `height` — Recharts' `ResponsiveContainer` requires a parent with a resolved pixel height to render bars.
 - **Affected files:** `src/components/review/UnifiedScorecard.tsx`
+
+### v2.15.57 — Simplify Previous Months Score Display
+- Removed percentage display, trend arrows, and `/5` suffix from `PreviousMonthsScoreMini`.
+- Each month now shows only the score value (e.g., `5.00`) with color coding.
+- **Affected files:** `src/components/review/PreviousMonthsScoreMini.tsx`
+
+### v2.15.58 — Fix Monthly Review Reminder Email Delivery
+- Added `monthly_review_reminder` to enabled events in `system_settings`.
+- Updated cron schedule to `0 8 1,3,5,7,9 * *` with `X-Cron-Secret` header.
+- **Affected:** `system_settings` data, pg_cron job
+
+### v2.15.59 — Formal ADR System + Enhanced POLICY.md Invariants
+- Created `docs/adr/` directory with ADR template and 21 individual ADR files (ADR-029 through ADR-049).
+- Added "Decision Context & Alternatives Considered" section to each POLICY.md invariant §29–§49.
+- **Affected files:** `docs/adr/ADR-TEMPLATE.md`, `docs/adr/ADR-029.md`–`ADR-049.md`, `POLICY.md`
+
+### v2.15.60 — Hide Inactive Employees + Company Name
+- Added `.eq('is_active', true)` filter to `useProfiles`, `useProfilesByWorkflowStage`, `useSkipLevelTeamMembers`, `useEmployeeFilterOptions`.
+- Added editable company name to Organization Structure page header.
+- **Affected files:** `src/hooks/useOrganization.ts`, `src/hooks/useEmployeeFilterOptions.ts`, `src/pages/admin/Organization.tsx`, `POLICY.md` (§51)
+
+### v2.15.61 — Multi-Company Support with Structure Cloning
+- Created `companies` table with RLS (authenticated read, admin write).
+- Added `company_id` FK to `divisions`, `designations`, `pms_grades`, `levels` tables with backfill to default company.
+- Fixed `useUpdateSystemSetting` to use `.upsert()` instead of `.update()` to prevent crash on missing keys.
+- Created `src/hooks/useCompanies.ts` with CRUD hooks and `useCloneStructure` for copying org structure between companies.
+- Updated `useDivisions`, `useDesignations`, `usePmsGrades`, `useLevels` to accept optional `companyId` filter.
+- Replaced inline company name editor with company selector dropdown, "Manage Companies" dialog, and "Clone Structure From..." dialog on Organization page.
+- BUs/Departments/Sub-Branches filtered by selected company's divisions.
+- **Affected files:** Migration, `src/hooks/useSystemSettings.ts`, `src/hooks/useCompanies.ts` (new), `src/hooks/useOrganization.ts`, `src/pages/admin/Organization.tsx`, `POLICY.md` (§52), `DOCUMENTATION.md`
