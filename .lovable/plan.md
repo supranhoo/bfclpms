@@ -1,26 +1,29 @@
 
 
-## Plan: Add "Edit Template" Button to Selected Templates in Bundle Editor
+## Fix: Make KPI Edit Button Discoverable in Bundle Editor
 
 ### Problem
-Users cannot edit a KPI template directly from the "Selected Templates" list in the Bundle Editor. They must navigate away to the Templates page to make changes.
+The Pencil (edit) button in the Selected Templates list is hidden behind a hover state (`opacity-0 group-hover:opacity-100`). Users cannot discover it — they don't know they can edit a KPI. On touch devices, hover doesn't work at all.
 
-### Solution — 1 file change
+### Fix — 1 file: `src/pages/admin/BundleEditor.tsx`
 
-**`src/pages/admin/BundleEditor.tsx`**
+#### 1. Make the Pencil button always visible
+Move the `onEdit` Pencil button **out** of the hover-hidden action group and place it as a standalone, always-visible button next to the expand/collapse chevron. Keep move-up/down and trash in the hover group since those are less frequent actions.
 
-1. **Import `TemplateFormDialog`** from `@/components/admin/TemplateFormDialog`
-2. **Add state** at the `BundleEditor` level: `editingTemplate: KpiTemplate | null`
-3. **Add an Edit button** (pencil icon) to `SelectedTemplateRow`'s action buttons (next to move up/down and trash) — pass an `onEdit` callback
-4. **Render `TemplateFormDialog`** at the page level, passing `editingTemplate` as the `template` prop
-5. **On close**, set `editingTemplate` to null — the existing `useKpiTemplates` query will auto-refetch and the selected templates list will reflect any changes
+#### 2. Add "Edit" option in the expanded section
+When a template row is expanded, add an explicit "Edit Template" button at the bottom of the expanded details panel — a clear, labeled button (not just an icon) so users know they can modify the KPI.
+
+#### 3. Style the Pencil button for visibility
+- Use `text-primary` color so it stands out
+- Keep it always visible (no opacity transition)
+- Add tooltip text "Edit this KPI template"
 
 ### Technical Detail
-- `SelectedTemplateRow` gets a new `onEdit: () => void` prop
-- A `Pencil` (or `Settings`) icon button is added in the hover-action group, before the trash button
-- `TemplateFormDialog` already handles both create and edit modes — passing an existing template triggers edit mode with full propagation support
-- No schema changes needed
+
+In `SelectedTemplateRow` (around line 558):
+- Move the `<Button onClick={onEdit}>` before the hover group div
+- Add a full "Edit Template" button inside the `isExpanded` section (around line 573)
 
 ### Risk Assessment
-- **No risk**: Reusing an existing, well-tested dialog component with no schema or RLS changes
+- **No risk**: Pure UI visibility change, no logic or data modifications
 
