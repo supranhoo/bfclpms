@@ -688,9 +688,9 @@ function InfoRow({ label, value }: { label: string; value: string | null | undef
 
 function RatingCell({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
-    <div className={`p-1.5 rounded text-center ${className || ''}`}>
-      <div className="font-semibold">{label}</div>
-      <div className="truncate" title={value}>{value}</div>
+    <div className={`p-2 rounded text-center min-w-[60px] ${className || ''}`}>
+      <div className="font-semibold text-xs">{label}</div>
+      <div className="text-xs mt-0.5 break-words" title={value}>{value}</div>
     </div>
   );
 }
