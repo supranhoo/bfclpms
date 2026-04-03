@@ -49,6 +49,7 @@ export default function BundleEditor() {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [expandedTemplateId, setExpandedTemplateId] = useState<string | null>(null);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<KpiTemplate | null>(null);
 
   // Load bundle data in edit mode
   useEffect(() => {
