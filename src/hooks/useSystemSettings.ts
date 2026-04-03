@@ -189,13 +189,15 @@ export function useUpdateSystemSetting() {
   
   return useMutation({
     mutationFn: async ({ key, value }: { key: string; value: string }) => {
-      // Store the value directly as a JSON string
+      // Use upsert so missing keys are created automatically
       const { data, error } = await supabase
         .from('system_settings')
-        .update({ setting_value: JSON.parse(JSON.stringify(value)) })
-        .eq('setting_key', key)
+        .upsert(
+          { setting_key: key, setting_value: JSON.parse(JSON.stringify(value)) },
+          { onConflict: 'setting_key' }
+        )
         .select()
-        .single();
+        .maybeSingle();
       
       if (error) throw error;
       return data;
