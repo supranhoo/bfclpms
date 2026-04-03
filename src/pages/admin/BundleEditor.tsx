@@ -550,15 +550,21 @@ function SelectedTemplateRow({
         <Button
           variant="ghost"
           size="icon"
+          className="h-7 w-7 flex-shrink-0 text-primary"
+          onClick={onEdit}
+          title="Edit this KPI template"
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
           className="h-7 w-7 flex-shrink-0"
           onClick={() => setIsExpanded(!isExpanded)}
         >
           {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </Button>
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onEdit} title="Edit template">
-            <Pencil className="h-3 w-3" />
-          </Button>
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onMoveUp} disabled={index === 0}>
             <ChevronUp className="h-3 w-3" />
           </Button>
@@ -604,6 +610,12 @@ function SelectedTemplateRow({
                 </div>
               </div>
             )}
+            <div className="pt-2 border-t">
+              <Button variant="outline" size="sm" onClick={onEdit} className="gap-1.5">
+                <Pencil className="h-3.5 w-3.5" />
+                Edit Template
+              </Button>
+            </div>
           </div>
         </div>
       )}
