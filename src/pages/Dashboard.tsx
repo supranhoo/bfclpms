@@ -10,6 +10,7 @@ import { MentionedKpiSheet } from '@/components/review/MentionedKpiSheet';
 import { ViewModeToggle, ViewMode } from '@/components/review/ViewModeToggle';
 import { EmployeeSelectorGrid } from '@/components/review/EmployeeSelectorGrid';
 import { UnifiedScorecard } from '@/components/review/UnifiedScorecard';
+import { AlertCircle, RefreshCw, LogOut } from 'lucide-react';
 
 interface EmployeeProfile {
   id: string;
