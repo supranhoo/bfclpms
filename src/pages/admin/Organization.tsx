@@ -1,30 +1,37 @@
 import { useState, useMemo } from 'react';
 import { useDivisions, useBusinessUnits, useDepartments, useSubBranches, useProfiles, useDesignations, usePmsGrades, useLevels } from '@/hooks/useOrganization';
-import { useSystemSetting, useUpdateSystemSetting } from '@/hooks/useSystemSettings';
+import { useCompanies, useCreateCompany, useUpdateCompany, useDeleteCompany, useCloneStructure } from '@/hooks/useCompanies';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TableSkeleton } from '@/components/ui/LoadingSkeletons';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Building2, Plus, Trash2, Pencil, Check, X } from 'lucide-react';
+import { Building2, Plus, Trash2, Pencil, Check, X, Copy, Settings } from 'lucide-react';
 
 export default function Organization() {
-  const { data: divisions, isLoading: divisionsLoading } = useDivisions();
+  const { data: companies, isLoading: companiesLoading } = useCompanies();
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
+
+  // Auto-select default company
+  const activeCompanyId = selectedCompanyId || companies?.find(c => c.is_default)?.id || companies?.[0]?.id || '';
+
+  const { data: divisions, isLoading: divisionsLoading } = useDivisions(activeCompanyId || undefined);
   const { data: businessUnits, isLoading: busLoading } = useBusinessUnits();
   const { data: departments, isLoading: deptsLoading } = useDepartments();
   const { data: subBranches, isLoading: subLoading } = useSubBranches();
-  const { data: designations, isLoading: designationsLoading } = useDesignations();
-  const { data: pmsGrades, isLoading: pmsGradesLoading } = usePmsGrades();
-  const { data: levels, isLoading: levelsLoading } = useLevels();
+  const { data: designations, isLoading: designationsLoading } = useDesignations(activeCompanyId || undefined);
+  const { data: pmsGrades, isLoading: pmsGradesLoading } = usePmsGrades(activeCompanyId || undefined);
+  const { data: levels, isLoading: levelsLoading } = useLevels(activeCompanyId || undefined);
   const { data: profiles } = useProfiles();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -42,14 +49,36 @@ export default function Organization() {
   // Inline code editing state
   const [editingCode, setEditingCode] = useState<{ type: string; id: string; code: string } | null>(null);
 
-  // Company name
-  const { data: companyNameSetting } = useSystemSetting('company_name');
-  const updateSetting = useUpdateSystemSetting();
-  const [editingCompanyName, setEditingCompanyName] = useState(false);
-  const [companyNameDraft, setCompanyNameDraft] = useState('');
-  const companyName = typeof companyNameSetting?.setting_value === 'string'
-    ? companyNameSetting.setting_value.replace(/^"|"$/g, '')
-    : '';
+  // Company management dialog
+  const [manageCompaniesOpen, setManageCompaniesOpen] = useState(false);
+  const [newCompanyName, setNewCompanyName] = useState('');
+  const [newCompanyCode, setNewCompanyCode] = useState('');
+  const [editingCompany, setEditingCompany] = useState<{ id: string; name: string; code: string } | null>(null);
+  const createCompany = useCreateCompany();
+  const updateCompany = useUpdateCompany();
+  const deleteCompany = useDeleteCompany();
+
+  // Clone structure dialog
+  const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
+  const [cloneSourceId, setCloneSourceId] = useState('');
+  const [cloneOptions, setCloneOptions] = useState({
+    divisions: true,
+    businessUnits: true,
+    departments: true,
+    subBranches: true,
+    designations: true,
+    pmsGrades: true,
+    levels: true,
+  });
+  const cloneStructure = useCloneStructure();
+
+  // Filter BUs/Depts/SubBranches by selected company's divisions
+  const companyDivisionIds = useMemo(() => new Set(divisions?.map(d => d.id) || []), [divisions]);
+  const filteredBUs = useMemo(() => businessUnits?.filter(bu => bu.division_id && companyDivisionIds.has(bu.division_id)) || [], [businessUnits, companyDivisionIds]);
+  const filteredBUIds = useMemo(() => new Set(filteredBUs.map(bu => bu.id)), [filteredBUs]);
+  const filteredDepts = useMemo(() => departments?.filter(d => d.business_unit_id && filteredBUIds.has(d.business_unit_id)) || [], [departments, filteredBUIds]);
+  const filteredDeptIds = useMemo(() => new Set(filteredDepts.map(d => d.id)), [filteredDepts]);
+  const filteredSubBranches = useMemo(() => subBranches?.filter(sb => sb.department_id && filteredDeptIds.has(sb.department_id)) || [], [subBranches, filteredDeptIds]);
 
   // Calculate employee counts per department
   const employeeCountByDept = useMemo(() => {
@@ -62,27 +91,18 @@ export default function Organization() {
     return counts;
   }, [profiles]);
 
-  // Calculate which departments have employees (directly)
   const deptsWithEmployees = useMemo(() => new Set(employeeCountByDept.keys()), [employeeCountByDept]);
-
-  // Calculate which business units have employees (through departments)
   const busWithEmployees = useMemo(() => {
     const set = new Set<string>();
     departments?.forEach(d => {
-      if (deptsWithEmployees.has(d.id) && d.business_unit_id) {
-        set.add(d.business_unit_id);
-      }
+      if (deptsWithEmployees.has(d.id) && d.business_unit_id) set.add(d.business_unit_id);
     });
     return set;
   }, [departments, deptsWithEmployees]);
-
-  // Calculate which divisions have employees (through business units)
   const divsWithEmployees = useMemo(() => {
     const set = new Set<string>();
     businessUnits?.forEach(bu => {
-      if (busWithEmployees.has(bu.id) && bu.division_id) {
-        set.add(bu.division_id);
-      }
+      if (busWithEmployees.has(bu.id) && bu.division_id) set.add(bu.division_id);
     });
     return set;
   }, [businessUnits, busWithEmployees]);
@@ -95,6 +115,7 @@ export default function Organization() {
       switch (type) {
         case 'division':
           table = 'divisions';
+          data.company_id = activeCompanyId;
           break;
         case 'bu':
           table = 'business_units';
@@ -110,12 +131,15 @@ export default function Organization() {
           break;
         case 'designation':
           table = 'designations';
+          data.company_id = activeCompanyId;
           break;
         case 'pms-grade':
           table = 'pms_grades';
+          data.company_id = activeCompanyId;
           break;
         case 'level':
           table = 'levels';
+          data.company_id = activeCompanyId;
           break;
       }
 
@@ -143,29 +167,14 @@ export default function Organization() {
     mutationFn: async ({ type, id }: { type: string; id: string }) => {
       let table = '';
       switch (type) {
-        case 'division':
-          table = 'divisions';
-          break;
-        case 'bu':
-          table = 'business_units';
-          break;
-        case 'department':
-          table = 'departments';
-          break;
-        case 'sub-branch':
-          table = 'sub_branches';
-          break;
-        case 'designation':
-          table = 'designations';
-          break;
-        case 'pms-grade':
-          table = 'pms_grades';
-          break;
-        case 'level':
-          table = 'levels';
-          break;
+        case 'division': table = 'divisions'; break;
+        case 'bu': table = 'business_units'; break;
+        case 'department': table = 'departments'; break;
+        case 'sub-branch': table = 'sub_branches'; break;
+        case 'designation': table = 'designations'; break;
+        case 'pms-grade': table = 'pms_grades'; break;
+        case 'level': table = 'levels'; break;
       }
-
       const { error } = await supabase.from(table as any).delete().eq('id', id);
       if (error) throw error;
     },
@@ -190,29 +199,14 @@ export default function Organization() {
     mutationFn: async ({ type, id, code }: { type: string; id: string; code: string }) => {
       let table = '';
       switch (type) {
-        case 'division':
-          table = 'divisions';
-          break;
-        case 'bu':
-          table = 'business_units';
-          break;
-        case 'department':
-          table = 'departments';
-          break;
-        case 'sub-branch':
-          table = 'sub_branches';
-          break;
-        case 'designation':
-          table = 'designations';
-          break;
-        case 'pms-grade':
-          table = 'pms_grades';
-          break;
-        case 'level':
-          table = 'levels';
-          break;
+        case 'division': table = 'divisions'; break;
+        case 'bu': table = 'business_units'; break;
+        case 'department': table = 'departments'; break;
+        case 'sub-branch': table = 'sub_branches'; break;
+        case 'designation': table = 'designations'; break;
+        case 'pms-grade': table = 'pms_grades'; break;
+        case 'level': table = 'levels'; break;
       }
-
       const { error } = await supabase.from(table as any).update({ code }).eq('id', id);
       if (error) throw error;
     },
@@ -268,9 +262,7 @@ export default function Organization() {
     setEditingCode({ type, id, code: currentCode || '' });
   };
 
-  const cancelEditCode = () => {
-    setEditingCode(null);
-  };
+  const cancelEditCode = () => setEditingCode(null);
 
   const saveCode = () => {
     if (editingCode) {
@@ -304,21 +296,34 @@ export default function Organization() {
     return (
       <div className="flex items-center gap-1 group">
         <span>{currentCode || '-'}</span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-          onClick={() => startEditCode(type, id, currentCode)}
-        >
+        <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => startEditCode(type, id, currentCode)}>
           <Pencil className="h-3 w-3 text-muted-foreground" />
         </Button>
       </div>
     );
   };
 
-  const isLoading = divisionsLoading || busLoading || deptsLoading || subLoading || designationsLoading || pmsGradesLoading || levelsLoading;
+  const handleClone = () => {
+    if (!cloneSourceId || !activeCompanyId || cloneSourceId === activeCompanyId) return;
+    cloneStructure.mutate({
+      sourceCompanyId: cloneSourceId,
+      targetCompanyId: activeCompanyId,
+      cloneDivisions: cloneOptions.divisions,
+      cloneBusinessUnits: cloneOptions.businessUnits,
+      cloneDepartments: cloneOptions.departments,
+      cloneSubBranches: cloneOptions.subBranches,
+      cloneDesignations: cloneOptions.designations,
+      clonePmsGrades: cloneOptions.pmsGrades,
+      cloneLevels: cloneOptions.levels,
+    }, {
+      onSuccess: () => setCloneDialogOpen(false),
+    });
+  };
 
-  if (isLoading) {
+  const activeCompany = companies?.find(c => c.id === activeCompanyId);
+  const isLoading = companiesLoading || divisionsLoading || busLoading || deptsLoading || subLoading || designationsLoading || pmsGradesLoading || levelsLoading;
+
+  if (isLoading && !companies) {
     return (
       <div className="space-y-6 animate-fade-in">
         <div className="space-y-2">
@@ -333,52 +338,31 @@ export default function Organization() {
 
   return (
     <div className="space-y-6">
+      {/* Company Selector Header */}
       <div>
-        {companyName && !editingCompanyName && (
-          <div className="flex items-center gap-2 mb-1">
-            <Building2 className="h-4 w-4 text-primary" />
-            <span className="text-sm font-semibold text-primary">{companyName}</span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-5 w-5 opacity-60 hover:opacity-100"
-              onClick={() => { setCompanyNameDraft(companyName); setEditingCompanyName(true); }}
-            >
-              <Pencil className="h-3 w-3" />
-            </Button>
-          </div>
-        )}
-        {!companyName && !editingCompanyName && (
-          <Button variant="outline" size="sm" className="mb-1" onClick={() => { setCompanyNameDraft(''); setEditingCompanyName(true); }}>
-            <Building2 className="h-4 w-4 mr-1" /> Set Company Name
+        <div className="flex items-center gap-3 mb-2 flex-wrap">
+          <Building2 className="h-5 w-5 text-primary" />
+          <Select value={activeCompanyId} onValueChange={setSelectedCompanyId}>
+            <SelectTrigger className="w-64 h-9">
+              <SelectValue placeholder="Select company" />
+            </SelectTrigger>
+            <SelectContent>
+              {companies?.map(c => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name} {c.is_default && '(Default)'}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button variant="outline" size="sm" onClick={() => setManageCompaniesOpen(true)}>
+            <Settings className="h-4 w-4 mr-1" /> Manage Companies
           </Button>
-        )}
-        {editingCompanyName && (
-          <div className="flex items-center gap-2 mb-2">
-            <Building2 className="h-4 w-4 text-primary" />
-            <Input
-              value={companyNameDraft}
-              onChange={(e) => setCompanyNameDraft(e.target.value)}
-              className="h-7 w-64"
-              placeholder="Enter company name"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && companyNameDraft.trim()) {
-                  updateSetting.mutate({ key: 'company_name', value: companyNameDraft.trim() });
-                  setEditingCompanyName(false);
-                }
-                if (e.key === 'Escape') setEditingCompanyName(false);
-              }}
-            />
-            <Button variant="ghost" size="icon" className="h-7 w-7" disabled={!companyNameDraft.trim() || updateSetting.isPending}
-              onClick={() => { updateSetting.mutate({ key: 'company_name', value: companyNameDraft.trim() }); setEditingCompanyName(false); }}>
-              <Check className="h-3.5 w-3.5 text-green-600" />
+          {companies && companies.length > 1 && (
+            <Button variant="outline" size="sm" onClick={() => { setCloneSourceId(''); setCloneDialogOpen(true); }}>
+              <Copy className="h-4 w-4 mr-1" /> Clone Structure From...
             </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingCompanyName(false)}>
-              <X className="h-3.5 w-3.5 text-muted-foreground" />
-            </Button>
-          </div>
-        )}
+          )}
+        </div>
         <h1 className="text-2xl font-bold text-foreground">Organization Structure</h1>
         <p className="text-muted-foreground">Manage divisions, business units, departments, sub-branches, designations, PMS grades and levels</p>
       </div>
@@ -386,9 +370,9 @@ export default function Organization() {
       <Tabs defaultValue="divisions">
         <TabsList className="flex-wrap">
           <TabsTrigger value="divisions">Divisions ({divisions?.length || 0})</TabsTrigger>
-          <TabsTrigger value="business-units">Business Units ({businessUnits?.length || 0})</TabsTrigger>
-          <TabsTrigger value="departments">Departments ({departments?.length || 0})</TabsTrigger>
-          <TabsTrigger value="sub-branches">Sub-Branches ({subBranches?.length || 0})</TabsTrigger>
+          <TabsTrigger value="business-units">Business Units ({filteredBUs.length})</TabsTrigger>
+          <TabsTrigger value="departments">Departments ({filteredDepts.length})</TabsTrigger>
+          <TabsTrigger value="sub-branches">Sub-Branches ({filteredSubBranches.length})</TabsTrigger>
           <TabsTrigger value="designations">Designations ({designations?.length || 0})</TabsTrigger>
           <TabsTrigger value="pms-grades">PMS Grades ({pmsGrades?.length || 0})</TabsTrigger>
           <TabsTrigger value="levels">Levels ({levels?.length || 0})</TabsTrigger>
@@ -420,26 +404,18 @@ export default function Organization() {
                 <TableBody>
                   {divisions?.map(div => {
                     const hasEmployees = divsWithEmployees.has(div.id);
-                    const buCount = businessUnits?.filter(bu => bu.division_id === div.id).length || 0;
+                    const buCount = filteredBUs.filter(bu => bu.division_id === div.id).length;
                     return (
                       <TableRow key={div.id}>
                         <TableCell className="font-medium">{div.name}</TableCell>
                         <TableCell>{renderCodeCell('division', div.id, div.code)}</TableCell>
                         <TableCell>{buCount}</TableCell>
                         <TableCell>
-                          {hasEmployees ? (
-                            <Badge variant="secondary">In Use</Badge>
-                          ) : (
-                            <Badge variant="outline">Unused</Badge>
-                          )}
+                          {hasEmployees ? <Badge variant="secondary">In Use</Badge> : <Badge variant="outline">Unused</Badge>}
                         </TableCell>
                         <TableCell>
                           {!hasEmployees && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => confirmDelete('division', div.id, div.name)}
-                            >
+                            <Button variant="ghost" size="icon" onClick={() => confirmDelete('division', div.id, div.name)}>
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
                           )}
@@ -478,9 +454,9 @@ export default function Organization() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {businessUnits?.map(bu => {
+                  {filteredBUs.map(bu => {
                     const hasEmployees = busWithEmployees.has(bu.id);
-                    const deptCount = departments?.filter(d => d.business_unit_id === bu.id).length || 0;
+                    const deptCount = filteredDepts.filter(d => d.business_unit_id === bu.id).length;
                     return (
                       <TableRow key={bu.id}>
                         <TableCell className="font-medium">{bu.name}</TableCell>
@@ -488,19 +464,11 @@ export default function Organization() {
                         <TableCell>{(bu.divisions as any)?.name || '-'}</TableCell>
                         <TableCell>{deptCount}</TableCell>
                         <TableCell>
-                          {hasEmployees ? (
-                            <Badge variant="secondary">In Use</Badge>
-                          ) : (
-                            <Badge variant="outline">Unused</Badge>
-                          )}
+                          {hasEmployees ? <Badge variant="secondary">In Use</Badge> : <Badge variant="outline">Unused</Badge>}
                         </TableCell>
                         <TableCell>
                           {!hasEmployees && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => confirmDelete('bu', bu.id, bu.name)}
-                            >
+                            <Button variant="ghost" size="icon" onClick={() => confirmDelete('bu', bu.id, bu.name)}>
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
                           )}
@@ -539,10 +507,10 @@ export default function Organization() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {departments?.map(dept => {
+                  {filteredDepts.map(dept => {
                     const empCount = employeeCountByDept.get(dept.id) || 0;
                     const hasEmployees = empCount > 0;
-                    const sbCount = subBranches?.filter(sb => sb.department_id === dept.id).length || 0;
+                    const sbCount = filteredSubBranches.filter(sb => sb.department_id === dept.id).length;
                     return (
                       <TableRow key={dept.id}>
                         <TableCell className="font-medium">{dept.name}</TableCell>
@@ -550,19 +518,11 @@ export default function Organization() {
                         <TableCell>{(dept.business_units as any)?.name || '-'}</TableCell>
                         <TableCell>{sbCount}</TableCell>
                         <TableCell>
-                          {hasEmployees ? (
-                            <Badge variant="secondary">{empCount} employees</Badge>
-                          ) : (
-                            <Badge variant="outline">Unused</Badge>
-                          )}
+                          {hasEmployees ? <Badge variant="secondary">{empCount} employees</Badge> : <Badge variant="outline">Unused</Badge>}
                         </TableCell>
                         <TableCell>
                           {!hasEmployees && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => confirmDelete('department', dept.id, dept.name)}
-                            >
+                            <Button variant="ghost" size="icon" onClick={() => confirmDelete('department', dept.id, dept.name)}>
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
                           )}
@@ -599,17 +559,13 @@ export default function Organization() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {subBranches?.map(sb => (
+                  {filteredSubBranches.map(sb => (
                     <TableRow key={sb.id}>
                       <TableCell className="font-medium">{sb.name}</TableCell>
                       <TableCell>{renderCodeCell('sub-branch', sb.id, sb.code)}</TableCell>
                       <TableCell>{(sb.departments as any)?.name || '-'}</TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => confirmDelete('sub-branch', sb.id, sb.name)}
-                        >
+                        <Button variant="ghost" size="icon" onClick={() => confirmDelete('sub-branch', sb.id, sb.name)}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </TableCell>
@@ -648,11 +604,7 @@ export default function Organization() {
                       <TableCell className="font-medium">{d.name}</TableCell>
                       <TableCell>{renderCodeCell('designation', d.id, d.code)}</TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => confirmDelete('designation', d.id, d.name)}
-                        >
+                        <Button variant="ghost" size="icon" onClick={() => confirmDelete('designation', d.id, d.name)}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </TableCell>
@@ -691,11 +643,7 @@ export default function Organization() {
                       <TableCell className="font-medium">{g.name}</TableCell>
                       <TableCell>{renderCodeCell('pms-grade', g.id, g.code)}</TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => confirmDelete('pms-grade', g.id, g.name)}
-                        >
+                        <Button variant="ghost" size="icon" onClick={() => confirmDelete('pms-grade', g.id, g.name)}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </TableCell>
@@ -734,11 +682,7 @@ export default function Organization() {
                       <TableCell className="font-medium">{l.name}</TableCell>
                       <TableCell>{renderCodeCell('level', l.id, l.code)}</TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => confirmDelete('level', l.id, l.name)}
-                        >
+                        <Button variant="ghost" size="icon" onClick={() => confirmDelete('level', l.id, l.name)}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </TableCell>
@@ -751,7 +695,7 @@ export default function Organization() {
         </TabsContent>
       </Tabs>
 
-      {/* Create Dialog */}
+      {/* Create Entity Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -759,75 +703,49 @@ export default function Organization() {
               Add {dialogType === 'bu' ? 'Business Unit' : dialogType === 'sub-branch' ? 'Sub-Branch' : dialogType === 'pms-grade' ? 'PMS Grade' : dialogType === 'level' ? 'Level' : dialogType.charAt(0).toUpperCase() + dialogType.slice(1)}
             </DialogTitle>
           </DialogHeader>
-
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Name</Label>
-              <Input
-                value={formName}
-                onChange={(e) => setFormName(e.target.value)}
-                placeholder="Enter name"
-              />
+              <Input value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="Enter name" />
             </div>
-
             <div className="space-y-2">
               <Label>Code</Label>
-              <Input
-                value={formCode}
-                onChange={(e) => setFormCode(e.target.value)}
-                placeholder="Enter code (optional)"
-              />
+              <Input value={formCode} onChange={(e) => setFormCode(e.target.value)} placeholder="Enter code (optional)" />
             </div>
-
             {dialogType === 'bu' && (
               <div className="space-y-2">
                 <Label>Division</Label>
                 <Select value={formParentId} onValueChange={setFormParentId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select division" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Select division" /></SelectTrigger>
                   <SelectContent>
-                    {divisions?.map(d => (
-                      <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                    ))}
+                    {divisions?.map(d => (<SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>))}
                   </SelectContent>
                 </Select>
               </div>
             )}
-
             {dialogType === 'department' && (
               <div className="space-y-2">
                 <Label>Business Unit</Label>
                 <Select value={formParentId} onValueChange={setFormParentId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select business unit" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Select business unit" /></SelectTrigger>
                   <SelectContent>
-                    {businessUnits?.map(bu => (
-                      <SelectItem key={bu.id} value={bu.id}>{bu.name}</SelectItem>
-                    ))}
+                    {filteredBUs.map(bu => (<SelectItem key={bu.id} value={bu.id}>{bu.name}</SelectItem>))}
                   </SelectContent>
                 </Select>
               </div>
             )}
-
             {dialogType === 'sub-branch' && (
               <div className="space-y-2">
                 <Label>Department</Label>
                 <Select value={formParentId} onValueChange={setFormParentId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select department" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
                   <SelectContent>
-                    {departments?.map(d => (
-                      <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                    ))}
+                    {filteredDepts.map(d => (<SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>))}
                   </SelectContent>
                 </Select>
               </div>
             )}
           </div>
-
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleCreate} disabled={!formName || createEntity.isPending}>
@@ -848,15 +766,141 @@ export default function Organization() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               {deleteEntity.isPending ? 'Deleting...' : 'Delete'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Manage Companies Dialog */}
+      <Dialog open={manageCompaniesOpen} onOpenChange={setManageCompaniesOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Manage Companies</DialogTitle>
+            <DialogDescription>Create, edit, or delete companies</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {/* Add new company */}
+            <div className="flex items-end gap-2">
+              <div className="flex-1 space-y-1">
+                <Label className="text-xs">Company Name</Label>
+                <Input value={newCompanyName} onChange={e => setNewCompanyName(e.target.value)} placeholder="Enter company name" className="h-8" />
+              </div>
+              <div className="w-24 space-y-1">
+                <Label className="text-xs">Code</Label>
+                <Input value={newCompanyCode} onChange={e => setNewCompanyCode(e.target.value)} placeholder="Code" className="h-8" />
+              </div>
+              <Button size="sm" disabled={!newCompanyName.trim() || createCompany.isPending} onClick={() => {
+                createCompany.mutate({ name: newCompanyName.trim(), code: newCompanyCode.trim() || undefined }, {
+                  onSuccess: () => { setNewCompanyName(''); setNewCompanyCode(''); },
+                });
+              }}>
+                <Plus className="h-4 w-4 mr-1" /> Add
+              </Button>
+            </div>
+
+            {/* Company list */}
+            <div className="border rounded-md divide-y max-h-60 overflow-y-auto">
+              {companies?.map(c => (
+                <div key={c.id} className="flex items-center justify-between px-3 py-2">
+                  {editingCompany?.id === c.id ? (
+                    <div className="flex items-center gap-2 flex-1">
+                      <Input value={editingCompany.name} onChange={e => setEditingCompany({ ...editingCompany, name: e.target.value })} className="h-7 flex-1" autoFocus />
+                      <Input value={editingCompany.code} onChange={e => setEditingCompany({ ...editingCompany, code: e.target.value })} className="h-7 w-20" placeholder="Code" />
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
+                        updateCompany.mutate({ id: c.id, name: editingCompany.name, code: editingCompany.code || undefined }, {
+                          onSuccess: () => setEditingCompany(null),
+                        });
+                      }}>
+                        <Check className="h-3.5 w-3.5 text-green-600" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingCompany(null)}>
+                        <X className="h-3.5 w-3.5 text-muted-foreground" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm">{c.name}</span>
+                        {c.code && <span className="text-xs text-muted-foreground">({c.code})</span>}
+                        {c.is_default && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Default</Badge>}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingCompany({ id: c.id, name: c.name, code: c.code || '' })}>
+                          <Pencil className="h-3 w-3 text-muted-foreground" />
+                        </Button>
+                        {!c.is_default && (
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => deleteCompany.mutate(c.id)} disabled={deleteCompany.isPending}>
+                            <Trash2 className="h-3 w-3 text-destructive" />
+                          </Button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+              {(!companies || companies.length === 0) && (
+                <div className="px-3 py-4 text-sm text-muted-foreground text-center">No companies yet</div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Clone Structure Dialog */}
+      <Dialog open={cloneDialogOpen} onOpenChange={setCloneDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Clone Structure From Another Company</DialogTitle>
+            <DialogDescription>
+              Copy organizational structure from a source company into <strong>{activeCompany?.name}</strong>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Source Company</Label>
+              <Select value={cloneSourceId} onValueChange={setCloneSourceId}>
+                <SelectTrigger><SelectValue placeholder="Select source company" /></SelectTrigger>
+                <SelectContent>
+                  {companies?.filter(c => c.id !== activeCompanyId).map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>What to clone</Label>
+              <div className="space-y-2">
+                {[
+                  { key: 'divisions', label: 'Divisions' },
+                  { key: 'businessUnits', label: 'Business Units' },
+                  { key: 'departments', label: 'Departments' },
+                  { key: 'subBranches', label: 'Sub-Branches' },
+                  { key: 'designations', label: 'Designations' },
+                  { key: 'pmsGrades', label: 'PMS Grades' },
+                  { key: 'levels', label: 'Levels' },
+                ].map(item => (
+                  <div key={item.key} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`clone-${item.key}`}
+                      checked={cloneOptions[item.key as keyof typeof cloneOptions]}
+                      onCheckedChange={(checked) => setCloneOptions(prev => ({ ...prev, [item.key]: !!checked }))}
+                    />
+                    <label htmlFor={`clone-${item.key}`} className="text-sm">{item.label}</label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCloneDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleClone} disabled={!cloneSourceId || cloneStructure.isPending}>
+              {cloneStructure.isPending ? 'Cloning...' : 'Clone Selected'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
