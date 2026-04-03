@@ -218,6 +218,7 @@ export function useProfiles() {
           *,
           departments (id, name, code)
         `)
+        .eq('is_active', true)
         .order('full_name');
 
       if (profilesError) throw profilesError;
@@ -280,6 +281,7 @@ export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: 
       const { data: profiles, error } = await supabase
         .from('profiles')
         .select('*, departments(id, name, code)')
+        .eq('is_active', true)
         .order('full_name');
 
       if (error) throw error;
@@ -334,7 +336,8 @@ export function useSkipLevelTeamMembers(userId: string | undefined) {
       const { data: directReports, error: drError } = await supabase
         .from('profiles')
         .select('id')
-        .eq('reporting_manager_id', userId!);
+        .eq('reporting_manager_id', userId!)
+        .eq('is_active', true);
 
       if (drError) throw drError;
       if (!directReports || directReports.length === 0) return [];
@@ -349,6 +352,7 @@ export function useSkipLevelTeamMembers(userId: string | undefined) {
           departments (id, name, code)
         `)
         .in('reporting_manager_id', directReportIds)
+        .eq('is_active', true)
         .order('full_name');
 
       if (error) throw error;

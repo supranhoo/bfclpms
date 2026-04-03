@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useDivisions, useBusinessUnits, useDepartments, useSubBranches, useProfiles, useDesignations, usePmsGrades, useLevels } from '@/hooks/useOrganization';
+import { useSystemSetting, useUpdateSystemSetting } from '@/hooks/useSystemSettings';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,6 +41,15 @@ export default function Organization() {
 
   // Inline code editing state
   const [editingCode, setEditingCode] = useState<{ type: string; id: string; code: string } | null>(null);
+
+  // Company name
+  const { data: companyNameSetting } = useSystemSetting('company_name');
+  const updateSetting = useUpdateSystemSetting();
+  const [editingCompanyName, setEditingCompanyName] = useState(false);
+  const [companyNameDraft, setCompanyNameDraft] = useState('');
+  const companyName = typeof companyNameSetting?.setting_value === 'string'
+    ? companyNameSetting.setting_value.replace(/^"|"$/g, '')
+    : '';
 
   // Calculate employee counts per department
   const employeeCountByDept = useMemo(() => {
@@ -324,6 +334,51 @@ export default function Organization() {
   return (
     <div className="space-y-6">
       <div>
+        {companyName && !editingCompanyName && (
+          <div className="flex items-center gap-2 mb-1">
+            <Building2 className="h-4 w-4 text-primary" />
+            <span className="text-sm font-semibold text-primary">{companyName}</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5 opacity-60 hover:opacity-100"
+              onClick={() => { setCompanyNameDraft(companyName); setEditingCompanyName(true); }}
+            >
+              <Pencil className="h-3 w-3" />
+            </Button>
+          </div>
+        )}
+        {!companyName && !editingCompanyName && (
+          <Button variant="outline" size="sm" className="mb-1" onClick={() => { setCompanyNameDraft(''); setEditingCompanyName(true); }}>
+            <Building2 className="h-4 w-4 mr-1" /> Set Company Name
+          </Button>
+        )}
+        {editingCompanyName && (
+          <div className="flex items-center gap-2 mb-2">
+            <Building2 className="h-4 w-4 text-primary" />
+            <Input
+              value={companyNameDraft}
+              onChange={(e) => setCompanyNameDraft(e.target.value)}
+              className="h-7 w-64"
+              placeholder="Enter company name"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && companyNameDraft.trim()) {
+                  updateSetting.mutate({ key: 'company_name', value: companyNameDraft.trim() });
+                  setEditingCompanyName(false);
+                }
+                if (e.key === 'Escape') setEditingCompanyName(false);
+              }}
+            />
+            <Button variant="ghost" size="icon" className="h-7 w-7" disabled={!companyNameDraft.trim() || updateSetting.isPending}
+              onClick={() => { updateSetting.mutate({ key: 'company_name', value: companyNameDraft.trim() }); setEditingCompanyName(false); }}>
+              <Check className="h-3.5 w-3.5 text-green-600" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingCompanyName(false)}>
+              <X className="h-3.5 w-3.5 text-muted-foreground" />
+            </Button>
+          </div>
+        )}
         <h1 className="text-2xl font-bold text-foreground">Organization Structure</h1>
         <p className="text-muted-foreground">Manage divisions, business units, departments, sub-branches, designations, PMS grades and levels</p>
       </div>

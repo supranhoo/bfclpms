@@ -13,6 +13,7 @@ export function useEmployeeFilterOptions() {
       const { data } = await supabase
         .from('profiles')
         .select('designation')
+        .eq('is_active', true)
         .not('designation', 'is', null);
       return [...new Set(data?.map(p => p.designation))].filter(Boolean).sort() as string[];
     },
@@ -25,6 +26,7 @@ export function useEmployeeFilterOptions() {
       const { data } = await supabase
         .from('profiles')
         .select('pms_grade')
+        .eq('is_active', true)
         .not('pms_grade', 'is', null);
       return [...new Set(data?.map(p => p.pms_grade))].filter(Boolean).sort() as string[];
     },
@@ -37,6 +39,7 @@ export function useEmployeeFilterOptions() {
       const { data } = await supabase
         .from('profiles')
         .select('id, full_name, reporting_manager_id, employee_code')
+        .eq('is_active', true)
         .order('full_name');
 
       const managerIds = new Set(data?.map(p => p.reporting_manager_id).filter(Boolean));
