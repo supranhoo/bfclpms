@@ -966,6 +966,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Audit:** Each auto-advance creates a `SYSTEM_AUTO_SCORED` audit log entry with the remark and source.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Set only self_score to 0, leave other stages as N/A* — Rejected because journey tiles would show "N/A", reports would have gaps, and weighted averages would be inconsistent.
+- *Alternative B: Mark auto-advanced KPIs as N/A* — Rejected because N/A KPIs are excluded from weighted averages; auto-advanced KPIs should penalize the score.
+- *Chosen approach:* All stages set to 0 with `auto_advance_reason` field for distinction. See [ADR-048](docs/adr/ADR-048.md).
+
 ## §49 — Admin Step-Back Target Selection, Full Reset & Sibling Reversion
 
 **Target selection:** When stepping back a KPI, the admin can select any preceding workflow stage — not just the immediate previous stage. The `kra_set` stage is always available as a target.
