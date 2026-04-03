@@ -39,6 +39,7 @@ const OrgKpiDataEntry = lazy(() => import("./pages/admin/OrgKpiDataEntry"));
 const OrgKpiOverview = lazy(() => import("./pages/admin/OrgKpiOverview"));
 const KRALibrary = lazy(() => import("./pages/admin/KRALibrary"));
 const TemplateBundles = lazy(() => import("./pages/admin/TemplateBundles"));
+const BundleEditor = lazy(() => import("./pages/admin/BundleEditor"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const PIPManagement = lazy(() => import("./pages/admin/PIPManagement"));
 const EmailLogs = lazy(() => import("./pages/admin/EmailLogs"));
@@ -213,6 +214,16 @@ const App = () => (
                 <Route path="/admin/bundles" element={
                   <ProtectedRoute allowedRoles={['admin']} menuKey="admin-bundles">
                     <TemplateBundles />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/bundles/new" element={
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-bundles">
+                    <BundleEditor />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/bundles/:id/edit" element={
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-bundles">
+                    <BundleEditor />
                   </ProtectedRoute>
                 } />
                 

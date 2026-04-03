@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,6 +18,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
 
 export default function TemplateBundles() {
+  const navigate = useNavigate();
   const { data: bundles, isLoading } = useTemplateBundles();
   const deleteBundle = useDeleteTemplateBundle();
   const duplicateBundle = useDuplicateTemplateBundle();
@@ -34,8 +36,7 @@ export default function TemplateBundles() {
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleEdit = (bundle: TemplateBundle) => {
-    setEditingBundle(bundle);
-    setIsFormOpen(true);
+    navigate(`/admin/bundles/${bundle.id}/edit`);
   };
 
   const handleCloseForm = () => {
@@ -117,7 +118,7 @@ export default function TemplateBundles() {
               <Users className="mr-2 h-4 w-4" />
               Assign Bundle
             </Button>
-            <Button onClick={() => setIsFormOpen(true)}>
+            <Button onClick={() => navigate('/admin/bundles/new')}>
               <Plus className="mr-2 h-4 w-4" />
               Create Bundle
             </Button>
@@ -167,7 +168,7 @@ export default function TemplateBundles() {
               <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p className="text-lg font-medium">No bundles created yet</p>
               <p className="text-sm">Create your first bundle to speed up employee onboarding</p>
-              <Button className="mt-4" onClick={() => setIsFormOpen(true)}>
+              <Button className="mt-4" onClick={() => navigate('/admin/bundles/new')}>
                 <Plus className="mr-2 h-4 w-4" />
                 Create Bundle
               </Button>
