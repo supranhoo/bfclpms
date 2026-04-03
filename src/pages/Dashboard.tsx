@@ -26,7 +26,7 @@ interface EmployeeProfile {
 }
 
 export default function Dashboard() {
-  const { profile, effectiveRole: role } = useAuth();
+  const { profile, effectiveRole: role, loading, profileError, signOut, fetchProfile, user } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
