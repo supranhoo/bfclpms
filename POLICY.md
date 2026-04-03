@@ -948,6 +948,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Audit trail:** Each percolated sibling receives a `kpi_audit_logs` entry with action `SCORE_PERCOLATED`, recording the source terminal KPI ID, source period, and frequency.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Manual per-month approval* — Rejected because multi-month KPIs represent a single measurement; separate approvals for identical data are redundant.
+- *Alternative B: Application-level propagation* — Rejected because browser crashes or network failures could leave siblings inconsistent; DB triggers guarantee atomicity.
+- *Chosen approach:* Database trigger for atomic score percolation. See [ADR-047](docs/adr/ADR-047.md).
+
 ## §48 — Auto-Advance KPI Scoring Policy
 
 **Trigger:** When an admin triggers "Auto-Score with Zero" for overdue self-reviews, the system sets the KPI to `approved` status with all scores set to 0.
