@@ -805,6 +805,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Invariant:** When creating notification records in client code (`useKpis.ts`, `useQueryWorkflow.ts`, etc.), always apply `.split('\n')[0].substring(0, 100)` to `kpi_name` before inserting. The `send_email_on_notification` DB trigger must apply `LEFT(SPLIT_PART(..., E'\n', 1), 80)` for all query and observation notification types.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Use full KPI name in notifications* — Rejected because multi-line names with formulas make notifications unreadable.
+- *Alternative B: Maintain a separate `display_name` column* — Rejected because it adds schema complexity and a maintenance burden to keep in sync.
+- *Chosen approach:* First-line extraction with truncation at both client and trigger levels. See [ADR-039](docs/adr/ADR-039.md).
+
 ---
 
 ## §40. Single-Source Query Raised Notifications
