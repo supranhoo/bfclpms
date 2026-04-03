@@ -700,6 +700,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Invariant:** Previous month tiles must never show cached or snapshot data — they must always reflect the current state of the corresponding KPI in the database.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Snapshot/cached previous month data* — Rejected because stale snapshots wouldn't reflect corrections, rollbacks, or late entries.
+- *Alternative B: Match previous KPIs by KPI ID* — Rejected because KPI IDs are unique per period; composite key matching is required.
+- *Chosen approach:* Live database queries with composite key matching and short staleTime. See [ADR-032](docs/adr/ADR-032.md).
+
 ---
 
 ## §33. Rollback Cascade-Clear Invariant
