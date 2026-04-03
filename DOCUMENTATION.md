@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-03  
-> **Version:** 2.15.59 — Formal ADR system: created docs/adr/ with 21 ADR files (ADR-029 through ADR-049), added Decision Context & Alternatives Considered to all POLICY.md invariants (§29–§49), added §50 ADR Index
+> **Version:** 2.15.60 — Hide inactive employees from all dashboards/filters (is_active filter on useProfiles, useProfilesByWorkflowStage, useSkipLevelTeamMembers, useEmployeeFilterOptions); add editable company name to Organization Structure page
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

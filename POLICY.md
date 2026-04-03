@@ -1022,3 +1022,18 @@ All architectural decisions documented as invariants in this policy are also mai
 | [ADR-049](docs/adr/ADR-049.md) | §49 | Admin Step-Back Target Selection, Full Reset & Sibling Reversion |
 
 **Template:** New ADRs should follow [ADR-TEMPLATE.md](docs/adr/ADR-TEMPLATE.md).
+
+---
+
+## §51 — Active-Employee Filtering Invariant
+
+**Rule:** All general-purpose profile-fetching hooks (`useProfiles`, `useProfilesByWorkflowStage`, `useSkipLevelTeamMembers`, `useEmployeeFilterOptions`) MUST include `.eq('is_active', true)` in their database queries. Inactive employees must only be visible in the User Management admin interface.
+
+**Rationale:** Inactive employees (deactivated accounts) should not appear in dashboards, review workflows, filter dropdowns, or assignment selectors. Showing them creates confusion, inflates counts, and allows accidental assignment of work to departed employees. Historical data is preserved via KPI/review records and remains accessible in reports.
+
+**Invariant:** Every Supabase query in a general profile-listing hook filters on `is_active = true`. The User Management page uses its own dedicated query that intentionally includes inactive profiles for administrative purposes.
+
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Filter at the UI layer (post-fetch)* — Rejected because it wastes bandwidth fetching inactive rows and risks UI components forgetting to filter.
+- *Alternative B: Use a database view that excludes inactive* — Rejected because it adds schema complexity and makes the filter implicit/hidden.
+- *Chosen approach:* Explicit `.eq('is_active', true)` at the query level in each hook — simple, auditable, and consistent. See ADR-051.
