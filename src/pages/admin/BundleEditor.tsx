@@ -648,26 +648,28 @@ function BrowserTemplateCard({
       {isExpanded && (
         <div className="px-3 pb-3 pt-0" onClick={(e) => e.stopPropagation()}>
           <Separator className="mb-3" />
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-            <InfoRow label="UOM" value={template.uom} />
-            <InfoRow label="Target" value={template.target_value != null ? String(template.target_value) : null} />
-            <InfoRow label="Frequency" value={template.frequency} />
-            <InfoRow label="Source" value={template.source_of_data} />
-            <InfoRow label="Criteria" value={template.criteria} />
-          </div>
-          {(template.r5 || template.r4 || template.r3 || template.r2 || template.r1 || template.r0) && (
-            <div className="mt-3">
-              <p className="text-xs font-medium mb-1.5 text-muted-foreground">Rating Scale</p>
-              <div className="grid grid-cols-3 gap-1.5 text-xs">
-                {template.r5 && <RatingCell label="R5" value={template.r5} className="text-green-700 bg-green-50" />}
-                {template.r4 && <RatingCell label="R4" value={template.r4} className="text-blue-700 bg-blue-50" />}
-                {template.r3 && <RatingCell label="R3" value={template.r3} className="text-amber-700 bg-amber-50" />}
-                {template.r2 && <RatingCell label="R2" value={template.r2} className="text-orange-700 bg-orange-50" />}
-                {template.r1 && <RatingCell label="R1" value={template.r1} className="text-red-700 bg-red-50" />}
-                {template.r0 && <RatingCell label="R0" value={template.r0} className="text-red-900 bg-red-100" />}
-              </div>
+          <div className="rounded-lg border bg-background p-3 text-foreground space-y-3">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              <InfoRow label="UOM" value={template.uom} />
+              <InfoRow label="Target" value={template.target_value != null ? String(template.target_value) : null} />
+              <InfoRow label="Frequency" value={template.frequency} />
+              <InfoRow label="Source" value={template.source_of_data} />
+              <InfoRow label="Criteria" value={template.criteria} />
             </div>
-          )}
+            {(template.r5 || template.r4 || template.r3 || template.r2 || template.r1 || template.r0) && (
+              <div>
+                <p className="text-xs font-medium mb-1.5 text-muted-foreground">Rating Scale</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {template.r5 && <RatingCell label="R5" value={template.r5} className="text-blue-800 bg-blue-100 dark:text-blue-200 dark:bg-blue-950" />}
+                  {template.r4 && <RatingCell label="R4" value={template.r4} className="text-green-800 bg-green-100 dark:text-green-200 dark:bg-green-950" />}
+                  {template.r3 && <RatingCell label="R3" value={template.r3} className="text-yellow-800 bg-yellow-100 dark:text-yellow-200 dark:bg-yellow-950" />}
+                  {template.r2 && <RatingCell label="R2" value={template.r2} className="text-orange-800 bg-orange-100 dark:text-orange-200 dark:bg-orange-950" />}
+                  {template.r1 && <RatingCell label="R1" value={template.r1} className="text-red-800 bg-red-100 dark:text-red-200 dark:bg-red-950" />}
+                  {template.r0 && <RatingCell label="R0" value={template.r0} className="text-red-100 bg-red-900 dark:text-red-200 dark:bg-red-950" />}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </Card>
