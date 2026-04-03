@@ -760,6 +760,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Invariant:** No component or hook may define a static array of slab category values. All slab category lists must be sourced from the `incentive_slab_categories` table via the `useIncentiveSlabCategories` hook.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Hardcoded category arrays in components* — Rejected because it requires code deployments to change and risks environment drift.
+- *Alternative B: Environment variable-based configuration* — Rejected because it still requires deployment and has no admin UI.
+- *Chosen approach:* Database-driven master data with admin CRUD UI. See [ADR-036](docs/adr/ADR-036.md).
+
 ---
 
 ## §37. Employee Mapping — Resolved List Invariant
