@@ -116,7 +116,7 @@ export function WorkflowConfigExport({
     const ws2 = XLSX.utils.aoa_to_sheet([]);
     addHeader(ws2, allTemplates.length, configs.length);
     XLSX.utils.sheet_add_json(ws2, empRows.length ? empRows : [{ 'Employee Name': 'No employee overrides configured' }], { origin: 'A4' });
-    ws2['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 28 }, { wch: 12 }, { wch: 18 }, { wch: 22 }, { wch: 22 }, { wch: 50 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 20 }];
+    ws2['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 28 }, { wch: 12 }, { wch: 18 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 50 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 20 }];
     XLSX.utils.book_append_sheet(wb, ws2, 'Employee Overrides');
 
     // --- Sheet 3: Department Assignments ---
