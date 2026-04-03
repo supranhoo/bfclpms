@@ -13,6 +13,7 @@ export function useEmployeeFilterOptions() {
       const { data } = await supabase
         .from('profiles')
         .select('designation')
+        .eq('is_active', true)
         .not('designation', 'is', null);
       return [...new Set(data?.map(p => p.designation))].filter(Boolean).sort() as string[];
     },
