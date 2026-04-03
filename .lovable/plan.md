@@ -1,28 +1,38 @@
 
 
-## Fix: Eye Icon "Click to Expand" Not Working
+## Add Click-to-Expand on Selected Templates (Left Panel)
 
 ### Problem
-In the `BrowserTemplateCard` component, clicking the Eye (👁) icon triggers the parent row's checkbox toggle instead of expanding the template details. Although `e.stopPropagation()` is present, the click event still bubbles to the parent `div` with `onClick={onToggle}`.
+In the left panel's "Selected Templates" list, each row shows only a truncated title and KRA→KPI line. Users cannot view full KPI details (target, UOM, criteria, rating scale, frequency, etc.) without scrolling to find it in the right panel browser.
 
-### Root Cause
-The Eye button is inside a parent `div` with `onClick={onToggle}` (line 562). The `stopPropagation` call on the button click handler should work, but the small hit target (h-6 w-6) means clicks sometimes land on the surrounding padding/card area instead of the button itself. Additionally, the button's ghost variant has minimal visual affordance, making it unclear that it's interactive.
+### Fix — 1 file change
 
-### Fix (1 file)
+**`src/pages/admin/BundleEditor.tsx`** — `SelectedTemplateRow` component:
 
-**`src/pages/admin/BundleEditor.tsx`** — `BrowserTemplateCard` component:
+1. Add local `isExpanded` state to each row
+2. Add a `ChevronDown`/`ChevronUp` toggle button (next to the action buttons) that expands/collapses a details section below the row summary
+3. The expanded section shows:
+   - Full KRA name and KPI name (unwrapped, not truncated)
+   - Target value + UOM
+   - Criteria, Frequency, Source of Data
+   - Rating scale (R5→R1) in a compact inline format
+4. Clicking the expand button does **not** affect move/remove actions — isolated click zone
 
-1. Move the Eye button **outside** the clickable toggle row, or restructure so the checkbox area and the eye button are separate click zones:
-   - Split the row into two zones: left side (checkbox + info, triggers toggle) and right side (eye button, triggers expand)
-   - Use `onMouseDown` + `preventDefault` + `stopPropagation` as a more robust event stopper
-
-2. Improve the Eye button UX:
-   - Make the icon slightly larger and add a tooltip ("View details")
-   - Change icon to `ChevronDown`/`ChevronUp` when expanded (clearer expand/collapse affordance)
-   - Add visual feedback: highlight the eye button area on hover
-
-3. Ensure the expanded section is visually distinct and doesn't collapse when clicking inside it.
+### UI Sketch
+```text
+┌─────────────────────────────────────────────────┐
+│ ≡  1.  Template Title        [Category] 20%  ▼ │
+├─────────────────────────────────────────────────┤
+│   KRA: Full KRA name                           │
+│   KPI: Full KPI name                           │
+│   Target: 100 Units  │ Criteria: Higher Better  │
+│   Frequency: Monthly │ Source: SAP              │
+│   R5: ≥120  R4: ≥110  R3: ≥100  R2: ≥90  R1: <90│
+└─────────────────────────────────────────────────┘
+```
 
 ### Technical Detail
-The fix restructures `BrowserTemplateCard` so that `onToggle` is only bound to the checkbox+label area, and the Eye/expand button is a sibling element with its own isolated click handler — eliminating any event bubbling issues.
+- The expand toggle is added as another `Button` in the hover-action group (but always visible, not opacity-gated, so users can discover it)
+- Expanded content renders inside the same `div` below the summary row, with a top border separator
+- No new dependencies needed
 
