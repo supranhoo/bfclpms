@@ -506,7 +506,7 @@ function WeightageBadge({ total }: { total: number }) {
 }
 
 function SelectedTemplateRow({
-  template, index, total, onMoveUp, onMoveDown, onRemove
+  template, index, total, onMoveUp, onMoveDown, onRemove, onEdit
 }: {
   template: KpiTemplate;
   index: number;
@@ -514,6 +514,7 @@ function SelectedTemplateRow({
   onMoveUp: () => void;
   onMoveDown: () => void;
   onRemove: () => void;
+  onEdit: () => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
