@@ -76,15 +76,20 @@ export function useSubBranches() {
   });
 }
 
-export function useDesignations() {
+export function useDesignations(companyId?: string) {
   return useQuery({
-    queryKey: ['designations'],
+    queryKey: ['designations', companyId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('designations')
         .select('*')
         .order('name');
 
+      if (companyId) {
+        query = query.eq('company_id', companyId);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data;
     },
