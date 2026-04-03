@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-03  
-> **Version:** 2.15.60 — Hide inactive employees from all dashboards/filters (is_active filter on useProfiles, useProfilesByWorkflowStage, useSkipLevelTeamMembers, useEmployeeFilterOptions); add editable company name to Organization Structure page
+> **Version:** 2.15.61 — Multi-company support: companies table, company selector on Organization page, clone structure between companies, fix useUpdateSystemSetting upsert
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
