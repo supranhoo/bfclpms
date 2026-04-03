@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
-> **Last Updated:** 2026-04-01  
-> **Version:** 1.58.0 — §51: Active-Employee Filtering Invariant
+> **Last Updated:** 2026-04-03  
+> **Version:** 1.59.0 — §52: Multi-Company Data Isolation Invariant
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
