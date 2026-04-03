@@ -1,35 +1,36 @@
 
 
-## Fix: Unreadable Expanded KPI Details in Bundle Editor
+## Fix: KPI Text Unreadable Due to Truncation in Bundle Editor
 
 ### Problem
-The expanded KPI details in the right-panel browser are nearly unreadable — dark background clashes with muted text colors, tiny font sizes, and the rating scale cards use light backgrounds (e.g., `bg-green-50`) that don't work on dark-themed cards. The screenshot confirms: text is barely visible, ratings are washed out.
+Both the **collapsed row** and **right-panel browser card** truncate the KPI title and subtitle (`truncate` CSS class), rendering long names like "Asset Availability & Reliability" as "Asset Availabilit..." — users cannot understand what the KPI is without expanding.
 
 ### Fix — 1 file: `src/pages/admin/BundleEditor.tsx`
 
-**Both `BrowserTemplateCard` (right panel) and `SelectedTemplateRow` (left panel) expanded sections will be improved:**
+#### 1. Remove `truncate` from title/subtitle in both components
+- **`SelectedTemplateRow`** (line 523-525): Replace `truncate` with `line-clamp-2` on the title and remove truncate from subtitle, allowing text to wrap naturally across up to 2 lines
+- **`BrowserTemplateCard`** (line 619-622): Same treatment — `line-clamp-2` on title, remove truncate from subtitle
 
-#### Right Panel — `BrowserTemplateCard` expanded section (lines 640-663)
-1. Use a **light background container** (`bg-card rounded-lg border`) for the expanded details so text is always readable regardless of parent card theme
-2. Increase text to `text-sm` for key fields (UOM, Target, Criteria, etc.)
-3. Rating Scale cards: use **opaque, high-contrast backgrounds** with larger padding and non-truncated values — matching the reference screenshot style (colored header row with label, value below)
-4. Add `R0` support (already partially there)
-5. Add a proper section layout: metadata grid on top, rating scale grid below with clear "Rating Scale" label
+#### 2. Show full KPI name in the collapsed state
+- Title: use `line-clamp-2` so long names wrap to a second line instead of being cut off
+- Subtitle (KRA → KPI): use `line-clamp-2` as well, so the full mapping is visible
+- This means users can read the full KPI name **without needing to expand**
 
-#### Left Panel — `SelectedTemplateRow` expanded section (lines 559-586)
-1. Same light-background treatment for consistency
-2. Rating scale: switch from inline `R5: value` text to the same colored card grid used in right panel — much easier to scan
-3. Slightly larger text (`text-xs` → `text-sm` for values)
+#### 3. Ensure layout doesn't break
+- Keep `min-w-0` on the text container to prevent overflow
+- The row height will grow slightly for long names (acceptable trade-off for readability)
+- Badge and weightage remain flex-shrink-0, so they stay visible
 
-#### `RatingCell` component (lines 679-685)
-1. Increase padding from `p-1.5` to `p-2`
-2. Remove `truncate` — show full value
-3. Ensure min-width so cells don't collapse on short values
+### Technical Detail
+```css
+/* Before */
+.truncate → text-overflow: ellipsis; white-space: nowrap; overflow: hidden;
 
-### Visual Result
-Both panels will show expanded KPI details with:
-- Clear white/light card background for the details section
-- 2-column metadata grid (UOM, Target, Frequency, Source, Criteria)
-- 3-column rating scale grid with colored, high-contrast cards (matching the uploaded screenshot style)
-- Readable font sizes throughout
+/* After */
+.line-clamp-2 → display: -webkit-box; -webkit-line-clamp: 2; overflow: hidden;
+```
+
+### Risk Assessment
+- **No risk**: Pure CSS change, no logic or data changes
+- Rows will be slightly taller for long KPI names — improves readability with minimal layout impact
 
