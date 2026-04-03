@@ -99,7 +99,7 @@ export default function AuditLogs() {
   const [actionFilter, setActionFilter] = useState<string>('all');
 
   const { data: auditLogs, isLoading } = useQuery({
-    queryKey: ['audit-logs'],
+    queryKey: ['audit-logs', selectedPeriod, selectedYear],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('kpi_audit_logs')
@@ -107,10 +107,12 @@ export default function AuditLogs() {
           id, kpi_id, submission_id, action, performed_by, 
           on_behalf_of, on_behalf_role,
           old_value, new_value, metadata, created_at,
-          kpi:kpi_id(id, kra_name, kpi_name, review_period, review_year, employee_id)
+          kpi:kpi_id!inner(id, kra_name, kpi_name, review_period, review_year, employee_id)
         `)
+        .eq('kpi.review_period', selectedPeriod)
+        .eq('kpi.review_year', selectedYear)
         .order('created_at', { ascending: false })
-        .limit(500);
+        .limit(1000);
 
       if (error) throw error;
       
