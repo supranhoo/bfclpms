@@ -869,6 +869,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Access:** Auditor and Admin roles only. Menu key: `admin-org-kpi-audit`.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Use existing AuditScorecard for org KPIs* — Rejected because reviewing hundreds of employee instances individually is impractical and loses organizational context.
+- *Alternative B: Auto-approve org KPIs at propagation time* — Rejected because it violates workflow policy; configured audit stages must be performed.
+- *Chosen approach:* Dedicated bulk audit review page for org-level KPIs. See [ADR-043](docs/adr/ADR-043.md).
+
 ### §44 — Production Daily Entry Governance
 
 **Rule:** Programs with per-ton production rates use daily achievement grids instead of BU-based production target entry. Employees are auto-populated from programme mappings — no BU dropdown is required.
