@@ -1,53 +1,105 @@
 
 
-## Plan: Hide Inactive Employees from All Dashboards + Add Company Name to Organization Structure
+## Plan: Fix Company Name Error + Multi-Company Support with Structure Cloning
 
-### Problem 1: Inactive Employees Visible Everywhere
-Several hooks fetch profiles without filtering `is_active`, causing inactive employees (e.g., 100003) to appear on Team Reviews, HR PMS, Audit, Management dashboards, and filter dropdowns.
+### Problem 1: "Cannot coerce the result to a single JSON object"
+**Root cause**: `useUpdateSystemSetting` uses `.update().eq('setting_key', key).single()`. When `company_name` doesn't exist in `system_settings`, the update matches 0 rows and `.single()` crashes.
 
-### Problem 2: No Company Name in Organization Structure
-The Organization Structure page has no company name display. `company_name` already exists in `system_settings` (used in reports) — we just need to surface it on this page.
+**Fix**: Change `useUpdateSystemSetting` to use `.upsert()` instead of `.update()`, so it creates the row if missing.
+
+### Problem 2: Multi-Company Support
+Currently company name is a single string in `system_settings`. Need a proper `companies` table and the ability to link org structure entities to companies, plus clone structure between companies.
 
 ---
 
 ### Changes
 
-**1. `src/hooks/useOrganization.ts`** — Add `is_active` filter to 3 hooks:
-- `useProfiles()`: Add `.eq('is_active', true)` — this is the main hook used by EmployeeSelectorGrid and most admin views. User Management has its own separate query, so this won't affect that page.
-- `useProfilesByWorkflowStage()`: Add `.eq('is_active', true)` to the profiles fetch at line 280
-- `useSkipLevelTeamMembers()`: Add `.eq('is_active', true)` to both the direct reports query and the final subordinates query
+**1. Database Migration — Create `companies` table**
 
-**2. `src/hooks/useEmployeeFilterOptions.ts`** — Add `is_active` filter to all 3 profile queries:
-- Designations query: `.eq('is_active', true)`
-- Grades query: `.eq('is_active', true)`
-- Managers list query: `.eq('is_active', true)` — ensures inactive managers don't appear in filter dropdown
+```sql
+CREATE TABLE public.companies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  code TEXT,
+  is_default BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
 
-**3. `src/pages/admin/Organization.tsx`** — Add company name header:
-- Import `useSystemSetting` and fetch `company_name`
-- Display company name above the "Organization Structure" heading as a subtle label (e.g., bold company name with a Building2 icon)
-- Make it editable inline or via a small edit button that updates `system_settings`
+ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
+-- RLS: authenticated users can read; admins can write
 
-**4. `DOCUMENTATION.md`** — v2.15.60
+ALTER TABLE public.divisions ADD COLUMN company_id UUID REFERENCES public.companies(id);
+ALTER TABLE public.designations ADD COLUMN company_id UUID REFERENCES public.companies(id);
+ALTER TABLE public.pms_grades ADD COLUMN company_id UUID REFERENCES public.companies(id);
+ALTER TABLE public.levels ADD COLUMN company_id UUID REFERENCES public.companies(id);
+```
 
-**5. `POLICY.md`** — Add invariant noting that `useProfiles()` must always filter `is_active` except in User Management context
+Migrate existing `company_name` from `system_settings` into a default company row. Backfill existing divisions/designations/grades/levels with that company's ID.
+
+**2. `src/hooks/useSystemSettings.ts`** — Fix upsert
+
+Change `useUpdateSystemSetting` from `.update()` to `.upsert()` with `onConflict: 'setting_key'` and use `.maybeSingle()` instead of `.single()`.
+
+**3. `src/hooks/useCompanies.ts`** — New hook
+
+- `useCompanies()` — fetch all companies
+- `useCreateCompany()` — create company
+- `useDeleteCompany()` — delete (only if no linked entities)
+- `useCloneStructure()` — clone divisions/BUs/departments/sub-branches/designations/grades/levels from source company to target company
+
+**4. `src/pages/admin/Organization.tsx`** — Multi-company UI
+
+- Replace inline company name editor with a **Company selector dropdown** at the top
+- Add "Manage Companies" button opening a dialog to create/edit/delete companies
+- Add "Clone Structure From..." button that opens a dialog to select source company and pick which entity types to clone (divisions, BUs, departments, sub-branches, designations, grades, levels)
+- Filter all tab data by selected `company_id`
+- All create entity mutations now include `company_id`
+
+**5. `src/hooks/useOrganization.ts`** — Add company_id filter
+
+Update `useDivisions`, `useDesignations`, `usePmsGrades`, `useLevels` to accept optional `companyId` parameter and filter accordingly. BUs/Departments/Sub-branches inherit company context through their parent division.
+
+**6. `POLICY.md`** — New invariant for multi-company isolation
+
+**7. `DOCUMENTATION.md`** — v2.15.61
 
 ---
 
-### Verification: User Management Not Affected
-User Management page uses its own profile fetch (not `useProfiles()` from useOrganization), so inactive employees will still be visible there for admin management purposes.
+### Clone Structure Flow
 
-### Files Modified
+```text
+┌─────────────────────────────────┐
+│  Clone Structure From...        │
+│                                 │
+│  Source Company: [Company A ▼]  │
+│                                 │
+│  ☑ Divisions                    │
+│  ☑ Business Units               │
+│  ☑ Departments                  │
+│  ☑ Sub-Branches                 │
+│  ☑ Designations                 │
+│  ☑ PMS Grades                   │
+│  ☑ Levels                       │
+│                                 │
+│  [Cancel]  [Clone Selected]     │
+└─────────────────────────────────┘
+```
+
+Cloning creates new rows with the target company's ID, preserving names/codes and parent relationships (re-mapped to newly created parent IDs).
+
+### Files Created/Modified
 
 | File | Change |
 |------|--------|
-| `src/hooks/useOrganization.ts` | Add `is_active: true` filter to `useProfiles`, `useProfilesByWorkflowStage`, `useSkipLevelTeamMembers` |
-| `src/hooks/useEmployeeFilterOptions.ts` | Add `is_active: true` filter to designations, grades, managers queries |
-| `src/pages/admin/Organization.tsx` | Show editable company name from `system_settings` above page title |
-| `DOCUMENTATION.md` | v2.15.60 |
-| `POLICY.md` | New invariant: active-employee filtering requirement |
+| Migration | Create `companies` table, add `company_id` FK to divisions/designations/pms_grades/levels, backfill |
+| `src/hooks/useSystemSettings.ts` | Fix upsert for missing keys |
+| `src/hooks/useCompanies.ts` | New — CRUD + clone hooks |
+| `src/hooks/useOrganization.ts` | Add optional `companyId` filter |
+| `src/pages/admin/Organization.tsx` | Company selector, manage companies dialog, clone structure dialog |
+| `POLICY.md` | Multi-company data isolation invariant |
+| `DOCUMENTATION.md` | v2.15.61 |
 
 ### Risk
-- **Low** — Adding `.eq('is_active', true)` is additive filtering; no data mutations
-- **User Management**: Unaffected — uses separate query
-- **Reports**: Unaffected — most reports have their own profile fetches; historical data preserved via KPI records
+- **Medium** — Adding `company_id` to existing tables requires backfill; existing queries that don't filter by company will still work (nullable FK)
+- **Mitigation**: Default company auto-assigned to all existing data; FK is nullable so no breaking changes
 
