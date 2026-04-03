@@ -336,7 +336,8 @@ export function useSkipLevelTeamMembers(userId: string | undefined) {
       const { data: directReports, error: drError } = await supabase
         .from('profiles')
         .select('id')
-        .eq('reporting_manager_id', userId!);
+        .eq('reporting_manager_id', userId!)
+        .eq('is_active', true);
 
       if (drError) throw drError;
       if (!directReports || directReports.length === 0) return [];
