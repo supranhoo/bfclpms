@@ -352,6 +352,7 @@ export function useSkipLevelTeamMembers(userId: string | undefined) {
           departments (id, name, code)
         `)
         .in('reporting_manager_id', directReportIds)
+        .eq('is_active', true)
         .order('full_name');
 
       if (error) throw error;

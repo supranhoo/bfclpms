@@ -39,6 +39,7 @@ export function useEmployeeFilterOptions() {
       const { data } = await supabase
         .from('profiles')
         .select('id, full_name, reporting_manager_id, employee_code')
+        .eq('is_active', true)
         .order('full_name');
 
       const managerIds = new Set(data?.map(p => p.reporting_manager_id).filter(Boolean));
