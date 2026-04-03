@@ -16,10 +16,11 @@ import { useDepartments, useDesignations } from '@/hooks/useOrganization';
 import { useKpiTemplates, KpiTemplate } from '@/hooks/useKpiTemplates';
 import { useTemplateBundle, useCreateTemplateBundle, useUpdateTemplateBundle } from '@/hooks/useTemplateBundles';
 import { useToast } from '@/hooks/use-toast';
+import { TemplateFormDialog } from '@/components/admin/TemplateFormDialog';
 import {
   ArrowLeft, Save, Loader2, Search, X, ChevronUp, ChevronDown,
   Trash2, GripVertical, ChevronRight, Package, Filter, CheckSquare,
-  Square, Eye, AlertTriangle
+  Square, Eye, AlertTriangle, Pencil
 } from 'lucide-react';
 
 export default function BundleEditor() {
@@ -48,6 +49,7 @@ export default function BundleEditor() {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [expandedTemplateId, setExpandedTemplateId] = useState<string | null>(null);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<KpiTemplate | null>(null);
 
   // Load bundle data in edit mode
   useEffect(() => {
@@ -360,6 +362,7 @@ export default function BundleEditor() {
                         onMoveUp={() => moveTemplate(index, 'up')}
                         onMoveDown={() => moveTemplate(index, 'down')}
                         onRemove={() => removeTemplate(template.id)}
+                        onEdit={() => setEditingTemplate(template)}
                       />
                     ))}
                   </div>
@@ -482,6 +485,13 @@ export default function BundleEditor() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Edit Template Dialog */}
+      <TemplateFormDialog
+        isOpen={!!editingTemplate}
+        onClose={() => setEditingTemplate(null)}
+        template={editingTemplate || undefined}
+      />
     </div>
   );
 }
@@ -503,7 +513,7 @@ function WeightageBadge({ total }: { total: number }) {
 }
 
 function SelectedTemplateRow({
-  template, index, total, onMoveUp, onMoveDown, onRemove
+  template, index, total, onMoveUp, onMoveDown, onRemove, onEdit
 }: {
   template: KpiTemplate;
   index: number;
@@ -511,6 +521,7 @@ function SelectedTemplateRow({
   onMoveUp: () => void;
   onMoveDown: () => void;
   onRemove: () => void;
+  onEdit: () => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -545,6 +556,9 @@ function SelectedTemplateRow({
           {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </Button>
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onEdit} title="Edit template">
+            <Pencil className="h-3 w-3" />
+          </Button>
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onMoveUp} disabled={index === 0}>
             <ChevronUp className="h-3 w-3" />
           </Button>
