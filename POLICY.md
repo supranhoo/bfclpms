@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-03  
-> **Version:** 1.59.0 — §52: Multi-Company Data Isolation Invariant
+> **Version:** 1.60.0 — §53: Auth Resilience Invariant
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1052,3 +1052,21 @@ All architectural decisions documented as invariants in this policy are also mai
 - *Alternative A: Separate database schemas per company* — Rejected because it adds massive complexity and prevents cross-company reporting.
 - *Alternative B: A single `company_id` on every table including departments, BUs, sub-branches* — Rejected because departments/BUs/sub-branches already inherit company context through their parent division chain; adding redundant FKs risks inconsistency.
 - *Chosen approach:* `company_id` on leaf/root tables (divisions, designations, pms_grades, levels) with hierarchical inheritance for BUs/departments/sub-branches through their parent division. Simple, consistent, and avoids redundant data.
+
+---
+
+### §53 — Auth Resilience: No Indefinite Skeletons on Missing Identity Data
+
+**Rule:** Authenticated entry screens (Dashboard, Home, Profile) must never remain in an indefinite loading/skeleton state when required identity records (profile, role) are missing or fail to load. The UI must fail visibly and recoverably.
+
+**Rationale:** When `fetchProfile()` used `.single()` and the catch block returned `true`, auth loading completed with `profile === null`. Since `Dashboard.tsx` rendered `<DashboardSkeleton />` for `!profile`, users saw an infinite spinner with no way to recover.
+
+**Invariant:**
+1. `AuthContext.fetchProfile()` uses `.maybeSingle()` — never `.single()` — and sets an explicit `profileError` flag on failure or missing rows.
+2. All top-level pages that require a profile must check both `loading` AND `profileError`/`!profile` states, rendering an actionable error (Retry + Sign Out) instead of an infinite skeleton.
+3. The Auth/login page must never block rendering on optional configuration fetches (e.g., branding settings from `app_settings`). These are progressive enhancements with fallback defaults.
+
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Auto-create profile on first login via trigger* — Deferred; already handled by existing `on_auth_user_created` trigger. Backfill migration addresses historical gaps.
+- *Alternative B: Redirect to a setup wizard* — Over-engineered for the current use case where missing profiles indicate a data bug, not a normal flow.
+- *Chosen approach:* Explicit error state with retry capability, plus backfill migration for existing broken records.

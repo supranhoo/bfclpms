@@ -36,6 +36,8 @@ interface AuthContextType {
   /** Toggle admin mode on/off (only relevant for admin users) */
   toggleAdminMode: () => void;
   loading: boolean;
+  /** True when auth bootstrap finished but profile could not be loaded */
+  profileError: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -58,6 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return saved !== null ? saved === 'true' : true; // default ON
   });
   const [loading, setLoading] = useState(true);
+  const [profileError, setProfileError] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const initializedRef = useRef(false);
@@ -69,34 +72,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = async (userId: string): Promise<boolean> => {
     try {
-      const { data: profileData } = await supabase
+      const { data: profileData, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
       
-      if (profileData) {
-        // Check if user is deactivated
-        if (profileData.is_active === false) {
-          toast({
-            title: "Account deactivated",
-            description: "Your account has been deactivated. Contact your administrator.",
-            variant: "destructive",
-          });
-          await supabase.auth.signOut();
-          setUser(null);
-          setSession(null);
-          setProfile(null);
-          setRole(null);
-          setNaturalRole(null);
-          return false;
-        }
-        setProfile(profileData);
+      if (error) {
+        console.error('Failed to fetch profile:', error);
+        setProfileError(true);
+        toast({
+          title: "Failed to load user profile",
+          description: "Please refresh the page to try again.",
+          variant: "destructive",
+        });
         return true;
       }
+
+      if (!profileData) {
+        console.warn('No profile row found for user:', userId);
+        setProfileError(true);
+        toast({
+          title: "Account setup incomplete",
+          description: "Your profile could not be found. Contact your administrator.",
+          variant: "destructive",
+        });
+        return true;
+      }
+
+      // Check if user is deactivated
+      if (profileData.is_active === false) {
+        toast({
+          title: "Account deactivated",
+          description: "Your account has been deactivated. Contact your administrator.",
+          variant: "destructive",
+        });
+        await supabase.auth.signOut();
+        setUser(null);
+        setSession(null);
+        setProfile(null);
+        setRole(null);
+        setNaturalRole(null);
+        return false;
+      }
+      setProfileError(false);
+      setProfile(profileData);
       return true;
     } catch (error) {
       console.error('Failed to fetch profile:', error);
+      setProfileError(true);
       toast({
         title: "Failed to load user profile",
         description: "Please refresh the page to try again.",
@@ -280,7 +304,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{
       user, session, profile, role, effectiveRole, naturalRole,
-      isAdminMode, toggleAdminMode, loading, signIn, signUp, signOut, fetchProfile,
+      isAdminMode, toggleAdminMode, loading, profileError, signIn, signUp, signOut, fetchProfile,
     }}>
       {children}
     </AuthContext.Provider>
