@@ -382,6 +382,30 @@ export type Database = {
           },
         ]
       }
+      companies: {
+        Row: {
+          code: string | null
+          created_at: string | null
+          id: string
+          is_default: boolean | null
+          name: string
+        }
+        Insert: {
+          code?: string | null
+          created_at?: string | null
+          id?: string
+          is_default?: boolean | null
+          name: string
+        }
+        Update: {
+          code?: string | null
+          created_at?: string | null
+          id?: string
+          is_default?: boolean | null
+          name?: string
+        }
+        Relationships: []
+      }
       departments: {
         Row: {
           business_unit_id: string | null
@@ -420,6 +444,7 @@ export type Database = {
       designations: {
         Row: {
           code: string | null
+          company_id: string | null
           created_at: string
           id: string
           level: string | null
@@ -427,6 +452,7 @@ export type Database = {
         }
         Insert: {
           code?: string | null
+          company_id?: string | null
           created_at?: string
           id?: string
           level?: string | null
@@ -434,16 +460,26 @@ export type Database = {
         }
         Update: {
           code?: string | null
+          company_id?: string | null
           created_at?: string
           id?: string
           level?: string | null
           name?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "designations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       divisions: {
         Row: {
           code: string | null
+          company_id: string | null
           created_at: string
           id: string
           level: string | null
@@ -451,6 +487,7 @@ export type Database = {
         }
         Insert: {
           code?: string | null
+          company_id?: string | null
           created_at?: string
           id?: string
           level?: string | null
@@ -458,12 +495,21 @@ export type Database = {
         }
         Update: {
           code?: string | null
+          company_id?: string | null
           created_at?: string
           id?: string
           level?: string | null
           name?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "divisions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       email_logs: {
         Row: {
@@ -2238,6 +2284,7 @@ export type Database = {
       levels: {
         Row: {
           code: string | null
+          company_id: string | null
           created_at: string
           description: string | null
           id: string
@@ -2245,6 +2292,7 @@ export type Database = {
         }
         Insert: {
           code?: string | null
+          company_id?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -2252,12 +2300,21 @@ export type Database = {
         }
         Update: {
           code?: string | null
+          company_id?: string | null
           created_at?: string
           description?: string | null
           id?: string
           name?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "levels_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       menu_access_config: {
         Row: {
@@ -3134,6 +3191,7 @@ export type Database = {
       pms_grades: {
         Row: {
           code: string | null
+          company_id: string | null
           created_at: string
           description: string | null
           id: string
@@ -3142,6 +3200,7 @@ export type Database = {
         }
         Insert: {
           code?: string | null
+          company_id?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -3150,13 +3209,22 @@ export type Database = {
         }
         Update: {
           code?: string | null
+          company_id?: string | null
           created_at?: string
           description?: string | null
           id?: string
           level?: string | null
           name?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "pms_grades_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       production_daily_entries: {
         Row: {
