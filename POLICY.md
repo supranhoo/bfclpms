@@ -664,6 +664,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Invariant:** Any new org KPI mutation path must include an audit log write. Existing history gaps cannot be backfilled — only new operations are logged going forward.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Client-side-only logging* — Rejected because it's unreliable (network failures, browser crashes) and bypassable.
+- *Alternative B: Periodic reconciliation batch job* — Rejected because it cannot reconstruct who made the change or when.
+- *Chosen approach:* Server-side audit log write on every mutation path. See [ADR-030](docs/adr/ADR-030.md).
+
 ---
 
 ## §31. Sent-Back Indicator Detection Invariant
