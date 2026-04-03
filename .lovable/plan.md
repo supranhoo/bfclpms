@@ -1,64 +1,53 @@
 
 
-## Plan: Formal ADR System + Enhanced POLICY.md Invariants
+## Plan: Hide Inactive Employees from All Dashboards + Add Company Name to Organization Structure
 
-### Overview
-Two complementary changes: (1) create a `docs/adr/` directory with a formal ADR template and migrate existing §29–§49 invariants into individual ADR files, and (2) add a "Decision Context & Alternatives Considered" section to each invariant in POLICY.md.
+### Problem 1: Inactive Employees Visible Everywhere
+Several hooks fetch profiles without filtering `is_active`, causing inactive employees (e.g., 100003) to appear on Team Reviews, HR PMS, Audit, Management dashboards, and filter dropdowns.
+
+### Problem 2: No Company Name in Organization Structure
+The Organization Structure page has no company name display. `company_name` already exists in `system_settings` (used in reports) — we just need to surface it on this page.
+
+---
 
 ### Changes
 
-**1. Create `docs/adr/ADR-TEMPLATE.md`**
+**1. `src/hooks/useOrganization.ts`** — Add `is_active` filter to 3 hooks:
+- `useProfiles()`: Add `.eq('is_active', true)` — this is the main hook used by EmployeeSelectorGrid and most admin views. User Management has its own separate query, so this won't affect that page.
+- `useProfilesByWorkflowStage()`: Add `.eq('is_active', true)` to the profiles fetch at line 280
+- `useSkipLevelTeamMembers()`: Add `.eq('is_active', true)` to both the direct reports query and the final subordinates query
 
-Standard ADR template with fields:
-- **ADR Number / Title**
-- **Status**: Accepted | Superseded | Deprecated
-- **Date**
-- **Context**: Problem statement and background
-- **Decision**: What was decided
-- **Alternatives Considered**: Each alternative with reason for rejection
-- **Consequences**: Positive, negative, and neutral impacts
-- **Related**: Links to POLICY.md section, code files
+**2. `src/hooks/useEmployeeFilterOptions.ts`** — Add `is_active` filter to all 3 profile queries:
+- Designations query: `.eq('is_active', true)`
+- Grades query: `.eq('is_active', true)`
+- Managers list query: `.eq('is_active', true)` — ensures inactive managers don't appear in filter dropdown
 
-**2. Create individual ADR files for each existing invariant (§29–§49)**
+**3. `src/pages/admin/Organization.tsx`** — Add company name header:
+- Import `useSystemSetting` and fetch `company_name`
+- Display company name above the "Organization Structure" heading as a subtle label (e.g., bold company name with a Building2 icon)
+- Make it editable inline or via a small edit button that updates `system_settings`
 
-21 files: `docs/adr/ADR-029.md` through `docs/adr/ADR-049.md`. Each migrates the existing Rule/Rationale/Invariant into the formal template and adds reconstructed "Alternatives Considered" based on the rationale text. Examples:
+**4. `DOCUMENTATION.md`** — v2.15.60
 
-| ADR | Title | Key Alternative Rejected |
-|-----|-------|--------------------------|
-| 029 | Scope-Aware Propagation Validation | Check only top-level field (breaks scoped KPIs) |
-| 030 | Org KPI Audit Log Completeness | Client-side-only logging (unreliable, bypassable) |
-| 033 | Rollback Cascade-Clear | Clear only stages after target using `>` (leaves stale target data) |
-| 034 | Admin Edit Final Score Recomputation | Gate recomputation behind advance_status toggle (leaves stale final_score) |
-| 040 | Single-Source Query Notifications | Dual insert from frontend + trigger (duplicates, inconsistent metadata) |
-| 042 | Dynamic Program Config Tabs | Hardcoded tabs in component (requires deployment for changes) |
+**5. `POLICY.md`** — Add invariant noting that `useProfiles()` must always filter `is_active` except in User Management context
 
-**3. Add "Decision Context" to each §29–§49 in `POLICY.md`**
+---
 
-After each existing **Invariant** paragraph, add:
+### Verification: User Management Not Affected
+User Management page uses its own profile fetch (not `useProfiles()` from useOrganization), so inactive employees will still be visible there for admin management purposes.
 
-```markdown
-**Decision Context & Alternatives Considered:**
-- *Alternative A: [description]* — Rejected because [reason].
-- *Alternative B: [description]* — Rejected because [reason].
-- *Chosen approach:* [brief restatement linking to ADR-0XX].
-```
-
-**4. Add ADR index to `POLICY.md`**
-
-New section **§50 — Architectural Decision Record Index** with a table linking ADR numbers to §section numbers and file paths.
-
-**5. Update `DOCUMENTATION.md`** — v2.15.59
-
-### Files Created/Modified
+### Files Modified
 
 | File | Change |
 |------|--------|
-| `docs/adr/ADR-TEMPLATE.md` | New — formal ADR template |
-| `docs/adr/ADR-029.md` through `ADR-049.md` | New — 21 individual ADR files |
-| `POLICY.md` | Add Decision Context to §29–§49; add §50 ADR Index |
-| `DOCUMENTATION.md` | v2.15.59 |
+| `src/hooks/useOrganization.ts` | Add `is_active: true` filter to `useProfiles`, `useProfilesByWorkflowStage`, `useSkipLevelTeamMembers` |
+| `src/hooks/useEmployeeFilterOptions.ts` | Add `is_active: true` filter to designations, grades, managers queries |
+| `src/pages/admin/Organization.tsx` | Show editable company name from `system_settings` above page title |
+| `DOCUMENTATION.md` | v2.15.60 |
+| `POLICY.md` | New invariant: active-employee filtering requirement |
 
 ### Risk
-- **None** — purely documentation; zero code or schema changes
-- Existing invariant text is preserved verbatim; new sections are additive
+- **Low** — Adding `.eq('is_active', true)` is additive filtering; no data mutations
+- **User Management**: Unaffected — uses separate query
+- **Reports**: Unaffected — most reports have their own profile fetches; historical data preserved via KPI records
 
