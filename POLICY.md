@@ -953,3 +953,41 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 2. Mandatory reason field for audit trail
 3. Employee receives notification with reason and transition details
 4. kpi_queries entry created for Review Journey visibility
+
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Allow step-back only to immediate previous stage* — Rejected because it forces multiple sequential rollbacks to reach earlier stages.
+- *Alternative B: Leave sibling months in approved state after step-back* — Rejected because it creates inconsistent state with stale percolated scores.
+- *Alternative C: Auto-delete sibling records on step-back* — Rejected because it destroys audit trail and prevents re-approval.
+- *Chosen approach:* Flexible target selection with automatic sibling reversion. See [ADR-049](docs/adr/ADR-049.md).
+
+---
+
+## §50 — Architectural Decision Record Index
+
+All architectural decisions documented as invariants in this policy are also maintained as formal ADR files in `docs/adr/`.
+
+| ADR | §Section | Title |
+|-----|----------|-------|
+| [ADR-029](docs/adr/ADR-029.md) | §29 | Scope-Aware Propagation Validation |
+| [ADR-030](docs/adr/ADR-030.md) | §30 | Org KPI Audit Log Completeness |
+| [ADR-031](docs/adr/ADR-031.md) | §31 | Sent-Back Indicator Detection |
+| [ADR-032](docs/adr/ADR-032.md) | §32 | Review Journey Previous Month Comparison |
+| [ADR-033](docs/adr/ADR-033.md) | §33 | Rollback Cascade-Clear |
+| [ADR-034](docs/adr/ADR-034.md) | §34 | Admin Edit Final Score Recomputation |
+| [ADR-035](docs/adr/ADR-035.md) | §35 | Admin N/A Toggle Role-Scoped Clearing |
+| [ADR-036](docs/adr/ADR-036.md) | §36 | Slab Categories Zero-Hardcoding |
+| [ADR-037](docs/adr/ADR-037.md) | §37 | Employee Mapping — Resolved List |
+| [ADR-038](docs/adr/ADR-038.md) | §38 | Dashboard Observation Visibility |
+| [ADR-039](docs/adr/ADR-039.md) | §39 | Notification KPI Name Truncation |
+| [ADR-040](docs/adr/ADR-040.md) | §40 | Single-Source Query Raised Notifications |
+| [ADR-041](docs/adr/ADR-041.md) | §41 | Incentive Report Export Completeness |
+| [ADR-042](docs/adr/ADR-042.md) | §42 | Dynamic Program Configuration Tabs |
+| [ADR-043](docs/adr/ADR-043.md) | §43 | Org KPI Audit Review Governance |
+| [ADR-044](docs/adr/ADR-044.md) | §44 | Production Daily Entry Governance |
+| [ADR-045](docs/adr/ADR-045.md) | §45 | Frequency-Aware KRA Rollover |
+| [ADR-046](docs/adr/ADR-046.md) | §46 | Daily KPI Rating Calculation |
+| [ADR-047](docs/adr/ADR-047.md) | §47 | Multi-Month KPI Score Percolation |
+| [ADR-048](docs/adr/ADR-048.md) | §48 | Auto-Advance KPI Scoring Policy |
+| [ADR-049](docs/adr/ADR-049.md) | §49 | Admin Step-Back Target Selection, Full Reset & Sibling Reversion |
+
+**Template:** New ADRs should follow [ADR-TEMPLATE.md](docs/adr/ADR-TEMPLATE.md).
