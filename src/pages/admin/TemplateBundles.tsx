@@ -17,6 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
 
 export default function TemplateBundles() {
+  const navigate = useNavigate();
   const { data: bundles, isLoading } = useTemplateBundles();
   const deleteBundle = useDeleteTemplateBundle();
   const duplicateBundle = useDuplicateTemplateBundle();
