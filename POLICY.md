@@ -681,6 +681,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Invariant:** The sent-back detection must never rely solely on `kpi_queries.status = 'open'`. It must check the KPI's current workflow status.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Filter by `kpi_queries.status = 'open'` only* — Rejected because send-back queries are auto-resolved on status change, so this always returns empty.
+- *Alternative B: Add `was_sent_back` boolean flag to KPIs* — Rejected because it adds schema complexity; existing data already provides sufficient signal.
+- *Chosen approach:* Cross-reference KPI status with query history. See [ADR-031](docs/adr/ADR-031.md).
+
 ---
 
 ## §32. Review Journey Previous Month Comparison Invariant
