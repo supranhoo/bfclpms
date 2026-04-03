@@ -642,6 +642,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Invariant:** Any future refactor of the Propagate button AND the blank-data propagation guard must preserve scope-aware validation logic. Both checks must differentiate org-scope (top-level value) from department/employee-scope (`scopedValues` array).
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Check only top-level field for all scopes* — Rejected because scoped KPIs store values in per-department/per-employee rows, not in the top-level field, permanently disabling propagation.
+- *Alternative B: Disable validation entirely* — Rejected because propagating empty values would overwrite existing employee scores.
+- *Chosen approach:* Scope-aware validation differentiating org vs department/employee scopes. See [ADR-029](docs/adr/ADR-029.md).
+
 ---
 
 ## §30. Org KPI Audit Log Completeness Invariant
