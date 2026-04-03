@@ -281,6 +281,7 @@ export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: 
       const { data: profiles, error } = await supabase
         .from('profiles')
         .select('*, departments(id, name, code)')
+        .eq('is_active', true)
         .order('full_name');
 
       if (error) throw error;
