@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-03  
-> **Version:** 2.15.61 — Multi-company support: companies table, company selector on Organization page, clone structure between companies, fix useUpdateSystemSetting upsert
+> **Version:** 2.15.62 — Workflow Config Export: added Skip-Level Manager column to Employee Overrides sheet
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

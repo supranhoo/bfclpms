@@ -96,6 +96,7 @@ export function WorkflowConfigExport({
       const p = profileMap.get(c.config_value);
       const tmpl = templateMap.get(c.workflow_template_id);
       const manager = p?.reporting_manager_id ? profileMap.get(p.reporting_manager_id) : null;
+      const skipManager = manager?.reporting_manager_id ? profileMap.get(manager.reporting_manager_id) : null;
       return {
         'Employee Name': p?.full_name || '—',
         'Employee Code': p?.employee_code || '—',
@@ -103,6 +104,7 @@ export function WorkflowConfigExport({
         'PMS Grade': p?.pms_grade || '—',
         'Department': p?.department_id ? (deptMap.get(p.department_id) || '—') : '—',
         'Reporting Manager': manager?.full_name || '—',
+        'Skip-Level Manager': skipManager?.full_name || '—',
         'Assigned Template': tmpl?.display_name || '—',
         'Stages': tmpl ? formatStages(tmpl.stages) : '—',
         'Scope': c.review_period ? 'Period-Specific' : 'Global',
@@ -114,7 +116,7 @@ export function WorkflowConfigExport({
     const ws2 = XLSX.utils.aoa_to_sheet([]);
     addHeader(ws2, allTemplates.length, configs.length);
     XLSX.utils.sheet_add_json(ws2, empRows.length ? empRows : [{ 'Employee Name': 'No employee overrides configured' }], { origin: 'A4' });
-    ws2['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 28 }, { wch: 12 }, { wch: 18 }, { wch: 22 }, { wch: 22 }, { wch: 50 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 20 }];
+    ws2['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 28 }, { wch: 12 }, { wch: 18 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 50 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 20 }];
     XLSX.utils.book_append_sheet(wb, ws2, 'Employee Overrides');
 
     // --- Sheet 3: Department Assignments ---
