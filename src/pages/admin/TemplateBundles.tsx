@@ -167,7 +167,7 @@ export default function TemplateBundles() {
               <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p className="text-lg font-medium">No bundles created yet</p>
               <p className="text-sm">Create your first bundle to speed up employee onboarding</p>
-              <Button className="mt-4" onClick={() => setIsFormOpen(true)}>
+              <Button className="mt-4" onClick={() => navigate('/admin/bundles/new')}>
                 <Plus className="mr-2 h-4 w-4" />
                 Create Bundle
               </Button>
