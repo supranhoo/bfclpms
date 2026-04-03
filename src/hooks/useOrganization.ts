@@ -96,15 +96,20 @@ export function useDesignations(companyId?: string) {
   });
 }
 
-export function usePmsGrades() {
+export function usePmsGrades(companyId?: string) {
   return useQuery({
-    queryKey: ['pms-grades'],
+    queryKey: ['pms-grades', companyId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('pms_grades')
         .select('*')
         .order('name');
 
+      if (companyId) {
+        query = query.eq('company_id', companyId);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data;
     },
