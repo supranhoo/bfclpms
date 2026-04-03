@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
-> **Last Updated:** 2026-04-01  
-> **Version:** 1.58.0 — §51: Active-Employee Filtering Invariant
+> **Last Updated:** 2026-04-03  
+> **Version:** 1.59.0 — §52: Multi-Company Data Isolation Invariant
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1037,3 +1037,18 @@ All architectural decisions documented as invariants in this policy are also mai
 - *Alternative A: Filter at the UI layer (post-fetch)* — Rejected because it wastes bandwidth fetching inactive rows and risks UI components forgetting to filter.
 - *Alternative B: Use a database view that excludes inactive* — Rejected because it adds schema complexity and makes the filter implicit/hidden.
 - *Chosen approach:* Explicit `.eq('is_active', true)` at the query level in each hook — simple, auditable, and consistent. See ADR-051.
+
+---
+
+## §52 — Multi-Company Data Isolation Invariant
+
+**Rule:** The `companies` table stores multiple company entities. Organization structure tables (`divisions`, `designations`, `pms_grades`, `levels`) include a `company_id` foreign key. When the Organization Structure page is filtered by a selected company, all CRUD operations and display must be scoped to that company's `company_id`. Business units, departments, and sub-branches inherit company context through their parent division chain.
+
+**Rationale:** Multi-company support allows a single PMS instance to manage organizational structures for multiple legal entities (e.g., parent and subsidiary companies). Without data isolation, structure from one company would bleed into another, causing confusion and incorrect assignments.
+
+**Invariant:** All organization structure queries on the admin Organization page filter by the selected `company_id`. New entities created on that page automatically receive the active company's ID. The clone structure feature copies entities from a source company to a target company with re-mapped parent relationships.
+
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Separate database schemas per company* — Rejected because it adds massive complexity and prevents cross-company reporting.
+- *Alternative B: A single `company_id` on every table including departments, BUs, sub-branches* — Rejected because departments/BUs/sub-branches already inherit company context through their parent division chain; adding redundant FKs risks inconsistency.
+- *Chosen approach:* `company_id` on leaf/root tables (divisions, designations, pms_grades, levels) with hierarchical inheritance for BUs/departments/sub-branches through their parent division. Simple, consistent, and avoids redundant data.

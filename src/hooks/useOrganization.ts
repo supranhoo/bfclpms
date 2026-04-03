@@ -2,15 +2,20 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-export function useDivisions() {
+export function useDivisions(companyId?: string) {
   return useQuery({
-    queryKey: ['divisions'],
+    queryKey: ['divisions', companyId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('divisions')
         .select('*')
         .order('name');
 
+      if (companyId) {
+        query = query.eq('company_id', companyId);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data;
     },
@@ -71,45 +76,60 @@ export function useSubBranches() {
   });
 }
 
-export function useDesignations() {
+export function useDesignations(companyId?: string) {
   return useQuery({
-    queryKey: ['designations'],
+    queryKey: ['designations', companyId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('designations')
         .select('*')
         .order('name');
 
+      if (companyId) {
+        query = query.eq('company_id', companyId);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data;
     },
   });
 }
 
-export function usePmsGrades() {
+export function usePmsGrades(companyId?: string) {
   return useQuery({
-    queryKey: ['pms-grades'],
+    queryKey: ['pms-grades', companyId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('pms_grades')
         .select('*')
         .order('name');
 
+      if (companyId) {
+        query = query.eq('company_id', companyId);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data;
     },
   });
 }
 
-export function useLevels() {
+export function useLevels(companyId?: string) {
   return useQuery({
-    queryKey: ['levels'],
+    queryKey: ['levels', companyId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('levels' as any)
         .select('*')
         .order('name');
 
+      if (companyId) {
+        query = query.eq('company_id', companyId);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data as any[];
     },
