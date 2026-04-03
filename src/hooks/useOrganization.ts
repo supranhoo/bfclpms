@@ -218,6 +218,7 @@ export function useProfiles() {
           *,
           departments (id, name, code)
         `)
+        .eq('is_active', true)
         .order('full_name');
 
       if (profilesError) throw profilesError;
