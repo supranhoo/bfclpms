@@ -72,39 +72,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = async (userId: string): Promise<boolean> => {
     try {
-      const { data: profileData } = await supabase
+      const { data: profileData, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
       
-      if (profileData) {
-        // Check if user is deactivated
-        if (profileData.is_active === false) {
-          toast({
-            title: "Account deactivated",
-            description: "Your account has been deactivated. Contact your administrator.",
-            variant: "destructive",
-          });
-          await supabase.auth.signOut();
-          setUser(null);
-          setSession(null);
-          setProfile(null);
-          setRole(null);
-          setNaturalRole(null);
-          return false;
-        }
-        setProfile(profileData);
+      if (error) {
+        console.error('Failed to fetch profile:', error);
+        setProfileError(true);
+        toast({
+          title: "Failed to load user profile",
+          description: "Please refresh the page to try again.",
+          variant: "destructive",
+        });
         return true;
       }
-      return true;
-    } catch (error) {
-      console.error('Failed to fetch profile:', error);
-      toast({
-        title: "Failed to load user profile",
-        description: "Please refresh the page to try again.",
-        variant: "destructive",
-      });
+
+      if (!profileData) {
+        console.warn('No profile row found for user:', userId);
+        setProfileError(true);
+        toast({
+          title: "Account setup incomplete",
+          description: "Your profile could not be found. Contact your administrator.",
+          variant: "destructive",
+        });
+        return true;
+      }
+
+      // Check if user is deactivated
+      if (profileData.is_active === false) {
+        toast({
+          title: "Account deactivated",
+          description: "Your account has been deactivated. Contact your administrator.",
+          variant: "destructive",
+        });
+        await supabase.auth.signOut();
+        setUser(null);
+        setSession(null);
+        setProfile(null);
+        setRole(null);
+        setNaturalRole(null);
+        return false;
+      }
+      setProfileError(false);
+      setProfile(profileData);
       return true;
     }
   };
