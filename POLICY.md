@@ -715,6 +715,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Invariant:** The cascade-clear condition must use `>=` (not `>`) for stage index comparison, ensuring the target stage itself is included in the clear set.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Clear only stages after target using `>`* — Rejected because stale scores at the target stage would create a false impression of completed re-review.
+- *Alternative B: Clear all stages regardless of target* — Rejected because stages before the target may have valid, current data.
+- *Chosen approach:* `>=` comparison includes target stage in clear set. See [ADR-033](docs/adr/ADR-033.md).
+
 ---
 
 ## §34. Admin Edit Final Score Recomputation Invariant
