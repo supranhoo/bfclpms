@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-03  
-> **Version:** 2.15.58 — Fixed monthly review reminder email delivery (enabled event, corrected cron schedule to 1,3,5,7,9, added X-Cron-Secret auth)
+> **Version:** 2.15.59 — Formal ADR system: created docs/adr/ with 21 ADR files (ADR-029 through ADR-049), added Decision Context & Alternatives Considered to all POLICY.md invariants (§29–§49), added §50 ADR Index
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
