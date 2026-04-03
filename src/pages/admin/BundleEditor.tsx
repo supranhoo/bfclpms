@@ -559,39 +559,45 @@ function BrowserTemplateCard({
 }) {
   return (
     <Card className={`transition-colors ${isSelected ? 'border-primary bg-primary/5' : ''}`}>
-      <div className="flex items-center gap-3 p-3 cursor-pointer" onClick={onToggle}>
-        <div className={`h-4 w-4 rounded border flex items-center justify-center flex-shrink-0 ${
-          isSelected ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground/40'
-        }`}>
-          {isSelected && <span className="text-xs">✓</span>}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="font-medium text-sm truncate">{template.title}</div>
-          <div className="text-xs text-muted-foreground truncate">
-            {template.kra_name} → {template.kpi_name}
+      <div className="flex items-center gap-3 p-3">
+        <div className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer" onClick={onToggle}>
+          <div className={`h-4 w-4 rounded border flex items-center justify-center flex-shrink-0 ${
+            isSelected ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground/40'
+          }`}>
+            {isSelected && <span className="text-xs">✓</span>}
           </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-sm truncate">{template.title}</div>
+            <div className="text-xs text-muted-foreground truncate">
+              {template.kra_name} → {template.kpi_name}
+            </div>
+          </div>
+          {template.kra_categories && (
+            <Badge variant="outline" className="text-xs flex-shrink-0" style={{
+              borderColor: template.kra_categories.color || undefined,
+              color: template.kra_categories.color || undefined,
+            }}>
+              {template.kra_categories.name}
+            </Badge>
+          )}
+          <span className="text-xs text-muted-foreground w-10 text-right flex-shrink-0">
+            {template.weightage || 0}%
+          </span>
         </div>
-        {template.kra_categories && (
-          <Badge variant="outline" className="text-xs flex-shrink-0" style={{
-            borderColor: template.kra_categories.color || undefined,
-            color: template.kra_categories.color || undefined,
-          }}>
-            {template.kra_categories.name}
-          </Badge>
-        )}
-        <span className="text-xs text-muted-foreground w-10 text-right flex-shrink-0">
-          {template.weightage || 0}%
-        </span>
         <Button
-          variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 flex-shrink-0 hover:bg-accent"
+          title="View details"
+          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
           onClick={(e) => { e.stopPropagation(); onExpand(); }}
         >
-          <Eye className="h-3 w-3" />
+          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </Button>
       </div>
 
       {isExpanded && (
-        <div className="px-3 pb-3 pt-0">
+        <div className="px-3 pb-3 pt-0" onClick={(e) => e.stopPropagation()}>
           <Separator className="mb-3" />
           <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
             <InfoRow label="UOM" value={template.uom} />
