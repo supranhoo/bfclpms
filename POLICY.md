@@ -745,6 +745,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Invariant:** The N/A clearing block in `useAdminDataEntry.ts` must never reference scoring fields for roles other than the active `role_level` parameter. The `AdminDataEntryDialog` must track the original `is_na` state and only include `is_na` in the mutation payload when the value differs from the original.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Clear all role levels when N/A is toggled* — Rejected because it causes data loss for already-completed reviews at other stages.
+- *Alternative B: Always send `is_na` in mutation payload* — Rejected because it triggers unnecessary re-clears on subsequent edits.
+- *Chosen approach:* Role-scoped clearing with change-tracking for `is_na`. See [ADR-035](docs/adr/ADR-035.md).
+
 ---
 
 ## §36. Slab Categories Zero-Hardcoding Invariant
