@@ -4720,3 +4720,15 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - Replaced inline company name editor with company selector dropdown, "Manage Companies" dialog, and "Clone Structure From..." dialog on Organization page.
 - BUs/Departments/Sub-Branches filtered by selected company's divisions.
 - **Affected files:** Migration, `src/hooks/useSystemSettings.ts`, `src/hooks/useCompanies.ts` (new), `src/hooks/useOrganization.ts`, `src/pages/admin/Organization.tsx`, `POLICY.md` (§52), `DOCUMENTATION.md`
+
+### v2.15.62 — Workflow Config Export: Skip-Level Manager Column
+- Added skip-level manager column to Employee Overrides sheet in workflow config export.
+- **Affected files:** `src/components/admin/WorkflowConfigExport.tsx`
+
+### v2.15.63 — Auth Resilience: Fix Infinite Skeleton + Decouple Branding
+- **RCA:** Dashboard showed infinite skeleton when `profile` was `null` after auth bootstrap completed. Root cause: `fetchProfile()` used `.single()` which throws on missing rows; catch block returned `true` masking the failure.
+- Replaced `.single()` with `.maybeSingle()` in `AuthContext.fetchProfile()`.
+- Added `profileError` state to `AuthContext` to distinguish missing/broken profiles from loading state.
+- Dashboard now shows actionable error screen (Retry + Sign Out) instead of infinite skeleton when profile is missing.
+- Auth page no longer blocks on `isLoadingSettings` from `useAppSettings()` — branding loads progressively.
+- **Affected files:** `src/contexts/AuthContext.tsx`, `src/pages/Dashboard.tsx`, `src/pages/Auth.tsx`, `POLICY.md` (§53)
