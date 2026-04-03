@@ -1,36 +1,26 @@
 
 
-## Fix: KPI Text Unreadable Due to Truncation in Bundle Editor
+## Plan: Add "Edit Template" Button to Selected Templates in Bundle Editor
 
 ### Problem
-Both the **collapsed row** and **right-panel browser card** truncate the KPI title and subtitle (`truncate` CSS class), rendering long names like "Asset Availability & Reliability" as "Asset Availabilit..." — users cannot understand what the KPI is without expanding.
+Users cannot edit a KPI template directly from the "Selected Templates" list in the Bundle Editor. They must navigate away to the Templates page to make changes.
 
-### Fix — 1 file: `src/pages/admin/BundleEditor.tsx`
+### Solution — 1 file change
 
-#### 1. Remove `truncate` from title/subtitle in both components
-- **`SelectedTemplateRow`** (line 523-525): Replace `truncate` with `line-clamp-2` on the title and remove truncate from subtitle, allowing text to wrap naturally across up to 2 lines
-- **`BrowserTemplateCard`** (line 619-622): Same treatment — `line-clamp-2` on title, remove truncate from subtitle
+**`src/pages/admin/BundleEditor.tsx`**
 
-#### 2. Show full KPI name in the collapsed state
-- Title: use `line-clamp-2` so long names wrap to a second line instead of being cut off
-- Subtitle (KRA → KPI): use `line-clamp-2` as well, so the full mapping is visible
-- This means users can read the full KPI name **without needing to expand**
-
-#### 3. Ensure layout doesn't break
-- Keep `min-w-0` on the text container to prevent overflow
-- The row height will grow slightly for long names (acceptable trade-off for readability)
-- Badge and weightage remain flex-shrink-0, so they stay visible
+1. **Import `TemplateFormDialog`** from `@/components/admin/TemplateFormDialog`
+2. **Add state** at the `BundleEditor` level: `editingTemplate: KpiTemplate | null`
+3. **Add an Edit button** (pencil icon) to `SelectedTemplateRow`'s action buttons (next to move up/down and trash) — pass an `onEdit` callback
+4. **Render `TemplateFormDialog`** at the page level, passing `editingTemplate` as the `template` prop
+5. **On close**, set `editingTemplate` to null — the existing `useKpiTemplates` query will auto-refetch and the selected templates list will reflect any changes
 
 ### Technical Detail
-```css
-/* Before */
-.truncate → text-overflow: ellipsis; white-space: nowrap; overflow: hidden;
-
-/* After */
-.line-clamp-2 → display: -webkit-box; -webkit-line-clamp: 2; overflow: hidden;
-```
+- `SelectedTemplateRow` gets a new `onEdit: () => void` prop
+- A `Pencil` (or `Settings`) icon button is added in the hover-action group, before the trash button
+- `TemplateFormDialog` already handles both create and edit modes — passing an existing template triggers edit mode with full propagation support
+- No schema changes needed
 
 ### Risk Assessment
-- **No risk**: Pure CSS change, no logic or data changes
-- Rows will be slightly taller for long KPI names — improves readability with minimal layout impact
+- **No risk**: Reusing an existing, well-tested dialog component with no schema or RLS changes
 
