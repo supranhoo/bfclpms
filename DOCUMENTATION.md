@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-04-01  
-> **Version:** 2.15.57 — Simplified previous months score display (score only, no %, arrows, /5)
+> **Last Updated:** 2026-04-03  
+> **Version:** 2.15.58 — Fixed monthly review reminder email delivery (enabled event, corrected cron schedule to 1,3,5,7,9, added X-Cron-Secret auth)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
