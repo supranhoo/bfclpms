@@ -512,38 +512,79 @@ function SelectedTemplateRow({
   onMoveDown: () => void;
   onRemove: () => void;
 }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
   return (
-    <div className="flex items-center gap-2 p-3 rounded-md border bg-background group">
-      <GripVertical className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-      <span className="text-xs text-muted-foreground w-5">{index + 1}.</span>
-      <div className="flex-1 min-w-0">
-        <div className="font-medium text-sm truncate">{template.title}</div>
-        <div className="text-xs text-muted-foreground truncate">
-          {template.kra_name} → {template.kpi_name}
+    <div className="rounded-md border bg-background group">
+      <div className="flex items-center gap-2 p-3">
+        <GripVertical className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+        <span className="text-xs text-muted-foreground w-5">{index + 1}.</span>
+        <div className="flex-1 min-w-0">
+          <div className="font-medium text-sm truncate">{template.title}</div>
+          <div className="text-xs text-muted-foreground truncate">
+            {template.kra_name} → {template.kpi_name}
+          </div>
+        </div>
+        {template.kra_categories && (
+          <Badge variant="outline" className="text-xs flex-shrink-0" style={{
+            borderColor: template.kra_categories.color || undefined,
+            color: template.kra_categories.color || undefined,
+          }}>
+            {template.kra_categories.name}
+          </Badge>
+        )}
+        <span className="text-xs text-muted-foreground w-10 text-right flex-shrink-0">
+          {template.weightage || 0}%
+        </span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 flex-shrink-0"
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </Button>
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onMoveUp} disabled={index === 0}>
+            <ChevronUp className="h-3 w-3" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onMoveDown} disabled={index === total - 1}>
+            <ChevronDown className="h-3 w-3" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={onRemove}>
+            <Trash2 className="h-3 w-3" />
+          </Button>
         </div>
       </div>
-      {template.kra_categories && (
-        <Badge variant="outline" className="text-xs flex-shrink-0" style={{
-          borderColor: template.kra_categories.color || undefined,
-          color: template.kra_categories.color || undefined,
-        }}>
-          {template.kra_categories.name}
-        </Badge>
+      {isExpanded && (
+        <div className="border-t px-3 py-2 space-y-1.5 text-xs bg-muted/30">
+          <div><span className="font-medium text-muted-foreground">KRA:</span> {template.kra_name}</div>
+          <div><span className="font-medium text-muted-foreground">KPI:</span> {template.kpi_name}</div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            {template.target_value !== null && template.target_value !== undefined && (
+              <div><span className="font-medium text-muted-foreground">Target:</span> {template.target_value} {template.uom || ''}</div>
+            )}
+            {template.criteria && (
+              <div><span className="font-medium text-muted-foreground">Criteria:</span> {template.criteria}</div>
+            )}
+            {template.frequency && (
+              <div><span className="font-medium text-muted-foreground">Frequency:</span> {template.frequency}</div>
+            )}
+            {template.source_of_data && (
+              <div><span className="font-medium text-muted-foreground">Source:</span> {template.source_of_data}</div>
+            )}
+          </div>
+          {(template.r5 || template.r4 || template.r3 || template.r2 || template.r1) && (
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 pt-1 border-t border-border/50">
+              {template.r5 && <span><span className="font-medium text-blue-600">R5:</span> {template.r5}</span>}
+              {template.r4 && <span><span className="font-medium text-green-600">R4:</span> {template.r4}</span>}
+              {template.r3 && <span><span className="font-medium text-yellow-600">R3:</span> {template.r3}</span>}
+              {template.r2 && <span><span className="font-medium text-orange-600">R2:</span> {template.r2}</span>}
+              {template.r1 && <span><span className="font-medium text-red-600">R1:</span> {template.r1}</span>}
+            </div>
+          )}
+        </div>
       )}
-      <span className="text-xs text-muted-foreground w-10 text-right flex-shrink-0">
-        {template.weightage || 0}%
-      </span>
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onMoveUp} disabled={index === 0}>
-          <ChevronUp className="h-3 w-3" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onMoveDown} disabled={index === total - 1}>
-          <ChevronDown className="h-3 w-3" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={onRemove}>
-          <Trash2 className="h-3 w-3" />
-        </Button>
-      </div>
     </div>
   );
 }
