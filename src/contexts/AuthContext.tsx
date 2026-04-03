@@ -118,6 +118,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfileError(false);
       setProfile(profileData);
       return true;
+    } catch (error) {
+      console.error('Failed to fetch profile:', error);
+      setProfileError(true);
+      toast({
+        title: "Failed to load user profile",
+        description: "Please refresh the page to try again.",
+        variant: "destructive",
+      });
+      return true;
     }
   };
 
