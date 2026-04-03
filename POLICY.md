@@ -820,6 +820,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Invariant:** The `useRaiseQuery` mutation in `useKpis.ts` must NOT insert into the `notifications` table. The DB trigger uses `jsonb_build_object('query_id', NEW.id, 'query_reason', NEW.reason)` to ensure the email trigger can read `metadata->>'query_reason'` correctly.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Dual insert from frontend + trigger* — Rejected because it causes duplicate notifications and inconsistent metadata keys (`reason` vs `query_reason`).
+- *Alternative B: Frontend-only notification creation* — Rejected because it's bypassable via direct API calls and less reliable than server-side triggers.
+- *Chosen approach:* Single-source DB trigger for all query notifications. See [ADR-040](docs/adr/ADR-040.md).
+
 ---
 
 ### §41 — Incentive Report Export Completeness
