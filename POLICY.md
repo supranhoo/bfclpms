@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-03  
-> **Version:** 1.59.0 — §52: Multi-Company Data Isolation Invariant
+> **Version:** 1.60.0 — §53: Auth Resilience Invariant
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
