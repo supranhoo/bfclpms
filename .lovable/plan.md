@@ -1,37 +1,63 @@
 
 
-## Why the Audit Logs Page Shows 0 Results
+## Plan: Full-Page Bundle Editor with Enhanced Features
 
-**Root Cause**: The page fetches only 500 most recent logs from the database with **no server-side period filter**, then filters by review period/year **client-side**. There are 24,113 total audit logs and 11,054 for February 2026 alone. The top 500 logs are likely all from April 2026, so after client-side filtering for February, nothing matches — hence all zeros.
+### Current State
+The "Edit/Create Bundle" experience is a cramped `Dialog` modal (`BundleFormDialog.tsx`) with limited space for template selection, no search/filter for templates, no drag-and-drop reordering, and no preview of the bundle contents.
 
-Additionally, the `queryKey` is hardcoded as `['audit-logs']` and doesn't include `selectedPeriod` or `selectedYear`, so changing the period selector never triggers a refetch.
+### What Changes
 
-## Fix
+**1. New Route & Full-Page Component**
+- Add route `/admin/bundles/new` and `/admin/bundles/:id/edit` in `App.tsx`
+- Create `src/pages/admin/BundleEditor.tsx` as a full-page editor
+- Update `TemplateBundles.tsx` to navigate to the new route instead of opening the dialog
 
-### 1. Add Server-Side Period Filtering (src/pages/AuditLogs.tsx)
+**2. Full-Page Layout (BundleEditor.tsx)**
+- **Left Panel (60%)**: Form fields + selected templates with drag-to-reorder
+- **Right Panel (40%)**: Template browser with search, category filter, and department filter
+- **Sticky Header**: Bundle name, status badge, Save/Cancel buttons, breadcrumb navigation
+- **Sticky Footer Bar**: Weightage summary (total %, warning if != 100%), template count, save button
 
-- Change the Supabase query to use an `!inner` join on `kpis` to filter by `review_period` and `review_year` at the database level:
-  ```
-  .from('kpi_audit_logs')
-  .select(`..., kpi:kpi_id!inner(...)`)
-  .eq('kpi.review_period', selectedPeriod)
-  .eq('kpi.review_year', selectedYear)
-  ```
-- Include `selectedPeriod` and `selectedYear` in the `queryKey` so React Query refetches when filters change.
-- Remove the redundant client-side period/year filter from `filteredLogs`.
+**3. Enhanced Template Selection**
+- Search bar to filter templates by title, KRA name, or KPI name
+- Filter by KRA category dropdown
+- "Select All" / "Deselect All" quick actions
+- Selected templates shown in left panel as a sortable list with:
+  - Drag handle for reordering (updates `sort_order`)
+  - Inline display of weightage, UOM, target, category
+  - Remove button per template
+  - Running total weightage with color indicator (green at 100%, amber otherwise)
 
-### 2. Increase or Paginate the Limit
+**4. Template Preview Panel**
+- Clicking a template in the browser shows an expandable detail card with all fields: rating scale (R0-R5), criteria, frequency, source of data, UOM
 
-- Raise `.limit(500)` to `.limit(1000)` or add pagination for large result sets.
+**5. Unsaved Changes Guard**
+- Track dirty state and show a confirmation prompt when navigating away with unsaved changes
 
-### Files Modified
+**6. Validation & Feedback**
+- Bundle name required
+- At least 1 template required
+- Weightage total warning (non-blocking) if != 100%
+- Toast on save success/failure
+- Disable save button while submitting
 
-| File | Change |
+### Files Modified/Created
+
+| File | Action |
 |------|--------|
-| `src/pages/AuditLogs.tsx` | Server-side filtering via `!inner` join, fix queryKey, remove client-side period filter |
-| `DOCUMENTATION.md` | Version bump with fix note |
+| `src/pages/admin/BundleEditor.tsx` | **Create** — Full-page editor component |
+| `src/App.tsx` | **Modify** — Add `/admin/bundles/new` and `/admin/bundles/:id/edit` routes |
+| `src/pages/admin/TemplateBundles.tsx` | **Modify** — Navigate to edit route instead of opening dialog; keep dialog for quick-create if desired |
+| `src/components/admin/BundleFormDialog.tsx` | **Keep** — Retained as optional quick-create, or deprecated |
+| `DOCUMENTATION.md` | **Update** — Version bump |
+
+### Technical Approach
+- Use `useParams` to get bundle ID; fetch via `useTemplateBundle(id)` for edit mode
+- Reuse existing `useCreateTemplateBundle` and `useUpdateTemplateBundle` hooks
+- Use `@dnd-kit/sortable` (already likely available) or simple move-up/move-down buttons for reordering
+- `useMemo` for filtered template list; `useBlocker` or `beforeunload` for unsaved changes guard
 
 ### Risk Assessment
-- **Low risk**: Read-only query change; no schema or RLS modifications.
-- The `!inner` join ensures only logs linked to KPIs matching the selected period are returned, which is the intended behavior.
+- **Low risk**: No schema changes, no RLS changes, read/write patterns identical to existing dialog
+- Existing dialog can remain functional as fallback
 
