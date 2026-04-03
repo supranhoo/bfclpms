@@ -485,6 +485,13 @@ export default function BundleEditor() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Edit Template Dialog */}
+      <TemplateFormDialog
+        isOpen={!!editingTemplate}
+        onClose={() => setEditingTemplate(null)}
+        template={editingTemplate || undefined}
+      />
     </div>
   );
 }
