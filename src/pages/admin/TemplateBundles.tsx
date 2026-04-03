@@ -117,7 +117,7 @@ export default function TemplateBundles() {
               <Users className="mr-2 h-4 w-4" />
               Assign Bundle
             </Button>
-            <Button onClick={() => setIsFormOpen(true)}>
+            <Button onClick={() => navigate('/admin/bundles/new')}>
               <Plus className="mr-2 h-4 w-4" />
               Create Bundle
             </Button>
