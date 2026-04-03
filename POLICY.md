@@ -929,6 +929,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Expected days source:** The Submit Monthly Review dialog must use `useExpectedDays` (which respects `day_count_type` and employee-specific working days) instead of raw calendar days. This ensures the submitted days count, missed days, and penalty score align with the Daily Submission Summary.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Re-map penalty score through threshold function* — Rejected because it causes double-conversion errors (penalty score already on 0–5 scale).
+- *Alternative B: Use raw calendar days for expected days* — Rejected because it ignores `day_count_type` and employee-specific working days.
+- *Chosen approach:* Penalty score used directly as rating; `useExpectedDays` for day counts. See [ADR-046](docs/adr/ADR-046.md).
+
 ## §47 — Multi-Month KPI Score Percolation
 
 **Trigger:** When a multi-month KPI (Bi-Monthly, Quarterly, Half-Yearly, Yearly) transitions to `approved` on its terminal month, the database trigger `percolate_multimonth_score` automatically propagates the scores and `approved` status to all sibling KPI records in the same cycle.
