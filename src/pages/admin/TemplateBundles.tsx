@@ -35,8 +35,7 @@ export default function TemplateBundles() {
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleEdit = (bundle: TemplateBundle) => {
-    setEditingBundle(bundle);
-    setIsFormOpen(true);
+    navigate(`/admin/bundles/${bundle.id}/edit`);
   };
 
   const handleCloseForm = () => {
