@@ -36,6 +36,8 @@ interface AuthContextType {
   /** Toggle admin mode on/off (only relevant for admin users) */
   toggleAdminMode: () => void;
   loading: boolean;
+  /** True when auth bootstrap finished but profile could not be loaded */
+  profileError: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
