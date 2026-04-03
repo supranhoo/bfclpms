@@ -214,8 +214,37 @@ export default function Dashboard() {
     setAutoOpenKpiId(kpiId || null);
   }, []);
 
-  if (!profile) {
+  if (loading) {
     return <DashboardSkeleton />;
+  }
+
+  if (!profile) {
+    return (
+      <div className="min-h-[400px] flex flex-col items-center justify-center gap-4 text-center p-6">
+        <AlertCircle className="h-12 w-12 text-destructive" />
+        <h2 className="text-xl font-semibold text-foreground">
+          {profileError ? 'Unable to load your profile' : 'Account setup incomplete'}
+        </h2>
+        <p className="text-sm text-muted-foreground max-w-md">
+          {profileError
+            ? 'There was an error loading your profile data. Please try again or contact your administrator.'
+            : 'Your user profile could not be found. Please contact your administrator to complete account setup.'}
+        </p>
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            onClick={() => user && fetchProfile(user.id)}
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Retry
+          </Button>
+          <Button variant="destructive" onClick={signOut}>
+            <LogOut className="h-4 w-4 mr-2" />
+            Sign Out
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   // Render reviewer views (team, audit, management, hr_pms)
