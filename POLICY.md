@@ -730,6 +730,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Invariant:** Post-upsert recomputation must always execute when `currentKpiStatus === 'approved'`, regardless of which role-level score was edited and regardless of the `advance_status` toggle state.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Gate recomputation behind `advance_status` toggle* — Rejected because the toggle controls workflow progression, not score integrity; approved KPIs never advance, leaving `final_score` permanently stale.
+- *Alternative B: Prohibit admin edits on approved KPIs* — Rejected because admins need to correct data entry errors and handle late adjustments.
+- *Chosen approach:* Unconditional recomputation on approved KPI edits. See [ADR-034](docs/adr/ADR-034.md).
+
 ---
 
 ## §35. Admin N/A Toggle Role-Scoped Clearing Invariant
