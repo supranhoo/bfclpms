@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-01  
-> **Version:** 1.57.0 — §50: Formal ADR system with Decision Context on all invariants (§29–§49)
+> **Version:** 1.58.0 — §51: Active-Employee Filtering Invariant
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
