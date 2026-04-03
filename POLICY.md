@@ -902,6 +902,12 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **DQ rule configuration requirement:** Every incentive program MUST have disqualification rules configured in `incentive_disqualification_rules` before computation. If no rules exist for a program, the DQ evaluation loop is a no-op and all employees pass as eligible. Standard rule set: warning, suspension, absence, LWP, LTI, contract. Admins can manage rules via the programme's "Disqualification Rules" tab in Incentive Configuration.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Monthly aggregate entry only* — Rejected because it loses granularity needed for period-based payment splits.
+- *Alternative B: Flat rate for all employees* — Rejected because different roles/departments have different rate structures.
+- *Alternative C: Client-side incentive calculation* — Rejected because client-side calculations are not authoritative.
+- *Chosen approach:* Server-side daily grid with priority-based rate resolution. See [ADR-044](docs/adr/ADR-044.md).
+
 ## §45 — Frequency-Aware KRA Rollover
 
 **Terminal month resolution:** When KPIs are rolled over to a new period, the system resolves the target `review_period` to the correct terminal month based on the KPI's frequency. Monthly KPIs use the raw target month; multi-month frequencies (Bi-Monthly, Quarterly, Half-Yearly, Yearly) are mapped to their cycle's terminal month (e.g., Quarterly April → June). This prevents insertion failures caused by frequency lock triggers blocking non-terminal months.
