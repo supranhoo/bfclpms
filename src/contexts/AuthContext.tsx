@@ -60,6 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return saved !== null ? saved === 'true' : true; // default ON
   });
   const [loading, setLoading] = useState(true);
+  const [profileError, setProfileError] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const initializedRef = useRef(false);
