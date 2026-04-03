@@ -918,6 +918,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Service role bypass:** The `enforce_frequency_lock_on_submission` database trigger allows service-role callers (edge functions) to bypass frequency lock checks. This ensures automated processes like rollover and bulk assignment are not blocked by the trigger.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Create only terminal month record* — Rejected because sibling months would not appear in scorecards or participate in weightage calculations.
+- *Alternative B: KRA-level terminal dedup* — Rejected because it blocks sibling month creation when the terminal already exists.
+- *Chosen approach:* Full-cycle record creation with per-month dedup. See [ADR-045](docs/adr/ADR-045.md).
+
 ## §46 — Daily KPI Rating Calculation
 
 **Missed Days Penalty score IS the rating:** When a Daily/Weekly KPI uses the `missed_days_penalty` aggregation method, the aggregated score (0–5 scale) is the final rating. It must NOT be re-mapped through the KPI's threshold-based `calculateScoreFromAchieved` function, which is designed for raw achieved values. Re-mapping would cause double-conversion errors (e.g., a penalty score of 0 incorrectly mapped to "Outstanding" for Lower-is-Better KPIs).
