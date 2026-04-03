@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-01  
-> **Version:** 1.56.0 — §49: Admin step-back target selection, full reset, sibling reversion
+> **Version:** 1.57.0 — §50: Formal ADR system with Decision Context on all invariants (§29–§49)
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -642,6 +642,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Invariant:** Any future refactor of the Propagate button AND the blank-data propagation guard must preserve scope-aware validation logic. Both checks must differentiate org-scope (top-level value) from department/employee-scope (`scopedValues` array).
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Check only top-level field for all scopes* — Rejected because scoped KPIs store values in per-department/per-employee rows, not in the top-level field, permanently disabling propagation.
+- *Alternative B: Disable validation entirely* — Rejected because propagating empty values would overwrite existing employee scores.
+- *Chosen approach:* Scope-aware validation differentiating org vs department/employee scopes. See [ADR-029](docs/adr/ADR-029.md).
+
 ---
 
 ## §30. Org KPI Audit Log Completeness Invariant
@@ -659,6 +664,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Invariant:** Any new org KPI mutation path must include an audit log write. Existing history gaps cannot be backfilled — only new operations are logged going forward.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Client-side-only logging* — Rejected because it's unreliable (network failures, browser crashes) and bypassable.
+- *Alternative B: Periodic reconciliation batch job* — Rejected because it cannot reconstruct who made the change or when.
+- *Chosen approach:* Server-side audit log write on every mutation path. See [ADR-030](docs/adr/ADR-030.md).
+
 ---
 
 ## §31. Sent-Back Indicator Detection Invariant
@@ -670,6 +680,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Rationale:** Send-back query records are auto-resolved when KPI status changes, so filtering by `status = 'open'` always returns empty results. The correct signal is: KPI is still at `kra_set` AND has a historical send-back query.
 
 **Invariant:** The sent-back detection must never rely solely on `kpi_queries.status = 'open'`. It must check the KPI's current workflow status.
+
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Filter by `kpi_queries.status = 'open'` only* — Rejected because send-back queries are auto-resolved on status change, so this always returns empty.
+- *Alternative B: Add `was_sent_back` boolean flag to KPIs* — Rejected because it adds schema complexity; existing data already provides sufficient signal.
+- *Chosen approach:* Cross-reference KPI status with query history. See [ADR-031](docs/adr/ADR-031.md).
 
 ---
 
@@ -685,6 +700,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Invariant:** Previous month tiles must never show cached or snapshot data — they must always reflect the current state of the corresponding KPI in the database.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Snapshot/cached previous month data* — Rejected because stale snapshots wouldn't reflect corrections, rollbacks, or late entries.
+- *Alternative B: Match previous KPIs by KPI ID* — Rejected because KPI IDs are unique per period; composite key matching is required.
+- *Chosen approach:* Live database queries with composite key matching and short staleTime. See [ADR-032](docs/adr/ADR-032.md).
+
 ---
 
 ## §33. Rollback Cascade-Clear Invariant
@@ -694,6 +714,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Rationale:** If only stages after the target are cleared but the target stage's own data is preserved, stale scores from the previous approval cycle remain visible, creating a false impression that the stage has already been re-reviewed.
 
 **Invariant:** The cascade-clear condition must use `>=` (not `>`) for stage index comparison, ensuring the target stage itself is included in the clear set.
+
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Clear only stages after target using `>`* — Rejected because stale scores at the target stage would create a false impression of completed re-review.
+- *Alternative B: Clear all stages regardless of target* — Rejected because stages before the target may have valid, current data.
+- *Chosen approach:* `>=` comparison includes target stage in clear set. See [ADR-033](docs/adr/ADR-033.md).
 
 ---
 
@@ -705,6 +730,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Invariant:** Post-upsert recomputation must always execute when `currentKpiStatus === 'approved'`, regardless of which role-level score was edited and regardless of the `advance_status` toggle state.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Gate recomputation behind `advance_status` toggle* — Rejected because the toggle controls workflow progression, not score integrity; approved KPIs never advance, leaving `final_score` permanently stale.
+- *Alternative B: Prohibit admin edits on approved KPIs* — Rejected because admins need to correct data entry errors and handle late adjustments.
+- *Chosen approach:* Unconditional recomputation on approved KPI edits. See [ADR-034](docs/adr/ADR-034.md).
+
 ---
 
 ## §35. Admin N/A Toggle Role-Scoped Clearing Invariant
@@ -714,6 +744,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Rationale:** The `is_na` flag is a KPI-level applicability marker. However, clearing scores across all levels when any single level is marked N/A causes data loss for already-completed reviews. The admin dialog must only send the `is_na` flag when it has been explicitly toggled (changed from its original state), preventing accidental re-clears on subsequent edits.
 
 **Invariant:** The N/A clearing block in `useAdminDataEntry.ts` must never reference scoring fields for roles other than the active `role_level` parameter. The `AdminDataEntryDialog` must track the original `is_na` state and only include `is_na` in the mutation payload when the value differs from the original.
+
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Clear all role levels when N/A is toggled* — Rejected because it causes data loss for already-completed reviews at other stages.
+- *Alternative B: Always send `is_na` in mutation payload* — Rejected because it triggers unnecessary re-clears on subsequent edits.
+- *Chosen approach:* Role-scoped clearing with change-tracking for `is_na`. See [ADR-035](docs/adr/ADR-035.md).
 
 ---
 
@@ -725,6 +760,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Invariant:** No component or hook may define a static array of slab category values. All slab category lists must be sourced from the `incentive_slab_categories` table via the `useIncentiveSlabCategories` hook.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Hardcoded category arrays in components* — Rejected because it requires code deployments to change and risks environment drift.
+- *Alternative B: Environment variable-based configuration* — Rejected because it still requires deployment and has no admin UI.
+- *Chosen approach:* Database-driven master data with admin CRUD UI. See [ADR-036](docs/adr/ADR-036.md).
+
 ---
 
 ## §37. Employee Mapping — Resolved List Invariant
@@ -734,6 +774,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Rationale:** Abstract entity pickers obscure which individual employees are actually enrolled. A resolved employee list gives admins immediate visibility into who is mapped, supports multi-select with filters, and prevents accidental over-enrollment.
 
 **Invariant:** `ProgramEmployeeMapping` must always render a flat employee table with checkboxes. Bulk operations (select-all-filtered, clear-all-filtered) must use the `useBulkAddProgramMappings` / `useBulkRemoveProgramMappings` hooks for performance.
+
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Abstract entity pickers (tabs for divisions, departments, grades)* — Rejected because it obscures which individual employees are enrolled and risks accidental over-enrollment.
+- *Alternative B: Individual employee search and add* — Rejected because it's impractical for programs with hundreds of employees.
+- *Chosen approach:* Flat employee table with filters and bulk operations. See [ADR-037](docs/adr/ADR-037.md).
 
 ---
 
@@ -745,6 +790,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Invariant:** `KpiDetailsTable` must accept an `observationCounts` prop and render an Eye+count indicator for KPIs with observations > 0. All scorecard containers must fetch observations via `useObservationsByKpis` and pass the derived counts.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Show observations only inside the review panel* — Rejected because it reduces visibility and delays action on critical feedback.
+- *Alternative B: Separate observations dashboard page* — Rejected because it adds navigation overhead; observations are most actionable in KPI context.
+- *Chosen approach:* Inline Eye+count indicator on every dashboard KPI row. See [ADR-038](docs/adr/ADR-038.md).
+
 ---
 
 ## §39. Notification KPI Name Truncation Invariant
@@ -754,6 +804,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Rationale:** KPI names in the database often contain multi-line text with description, formula, and scoring logic appended. Including this in notifications makes them unreadable and clutters both the notification panel and email inbox.
 
 **Invariant:** When creating notification records in client code (`useKpis.ts`, `useQueryWorkflow.ts`, etc.), always apply `.split('\n')[0].substring(0, 100)` to `kpi_name` before inserting. The `send_email_on_notification` DB trigger must apply `LEFT(SPLIT_PART(..., E'\n', 1), 80)` for all query and observation notification types.
+
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Use full KPI name in notifications* — Rejected because multi-line names with formulas make notifications unreadable.
+- *Alternative B: Maintain a separate `display_name` column* — Rejected because it adds schema complexity and a maintenance burden to keep in sync.
+- *Chosen approach:* First-line extraction with truncation at both client and trigger levels. See [ADR-039](docs/adr/ADR-039.md).
 
 ---
 
@@ -765,6 +820,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Invariant:** The `useRaiseQuery` mutation in `useKpis.ts` must NOT insert into the `notifications` table. The DB trigger uses `jsonb_build_object('query_id', NEW.id, 'query_reason', NEW.reason)` to ensure the email trigger can read `metadata->>'query_reason'` correctly.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Dual insert from frontend + trigger* — Rejected because it causes duplicate notifications and inconsistent metadata keys (`reason` vs `query_reason`).
+- *Alternative B: Frontend-only notification creation* — Rejected because it's bypassable via direct API calls and less reliable than server-side triggers.
+- *Chosen approach:* Single-source DB trigger for all query notifications. See [ADR-040](docs/adr/ADR-040.md).
+
 ---
 
 ### §41 — Incentive Report Export Completeness
@@ -774,6 +834,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Rationale:** Incomplete incentive reports risk payroll errors and compliance gaps. DQ data is critical for audit trails and financial reconciliation.
 
 **Invariant:** The `IncentiveReportExport` component's Excel export must produce at least 28 columns covering Employee Info, Period, Programme, Scores, DQ Fields, Adjustments, Final, and Analytical data.
+
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Minimal export with only summary fields* — Rejected because incomplete reports risk payroll errors and compliance gaps.
+- *Alternative B: Separate DQ report* — Rejected because it forces payroll teams to cross-reference two documents.
+- *Chosen approach:* Unified 28+ column export with all DQ fields included. See [ADR-041](docs/adr/ADR-041.md).
 
 ---
 
@@ -787,6 +852,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Invariant:** The `ProgramInnerTabs` component must always render all active custom tabs from the database after the core tabs.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Hardcoded tabs in component* — Rejected because it requires code deployment for every new tab and cannot vary per program.
+- *Alternative B: JSON configuration file* — Rejected because it still requires deployment and has no admin UI.
+- *Chosen approach:* Database-driven custom tabs via `incentive_program_custom_tabs`. See [ADR-042](docs/adr/ADR-042.md).
+
 ---
 
 ### §43 — Org KPI Audit Review Governance
@@ -798,6 +868,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **Bulk approve:** A single auditor score can be applied to all pending employees under one org KPI definition. Each employee's KPI is advanced individually, respecting their specific workflow.
 
 **Access:** Auditor and Admin roles only. Menu key: `admin-org-kpi-audit`.
+
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Use existing AuditScorecard for org KPIs* — Rejected because reviewing hundreds of employee instances individually is impractical and loses organizational context.
+- *Alternative B: Auto-approve org KPIs at propagation time* — Rejected because it violates workflow policy; configured audit stages must be performed.
+- *Chosen approach:* Dedicated bulk audit review page for org-level KPIs. See [ADR-043](docs/adr/ADR-043.md).
 
 ### §44 — Production Daily Entry Governance
 
@@ -827,6 +902,12 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **DQ rule configuration requirement:** Every incentive program MUST have disqualification rules configured in `incentive_disqualification_rules` before computation. If no rules exist for a program, the DQ evaluation loop is a no-op and all employees pass as eligible. Standard rule set: warning, suspension, absence, LWP, LTI, contract. Admins can manage rules via the programme's "Disqualification Rules" tab in Incentive Configuration.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Monthly aggregate entry only* — Rejected because it loses granularity needed for period-based payment splits.
+- *Alternative B: Flat rate for all employees* — Rejected because different roles/departments have different rate structures.
+- *Alternative C: Client-side incentive calculation* — Rejected because client-side calculations are not authoritative.
+- *Chosen approach:* Server-side daily grid with priority-based rate resolution. See [ADR-044](docs/adr/ADR-044.md).
+
 ## §45 — Frequency-Aware KRA Rollover
 
 **Terminal month resolution:** When KPIs are rolled over to a new period, the system resolves the target `review_period` to the correct terminal month based on the KPI's frequency. Monthly KPIs use the raw target month; multi-month frequencies (Bi-Monthly, Quarterly, Half-Yearly, Yearly) are mapped to their cycle's terminal month (e.g., Quarterly April → June). This prevents insertion failures caused by frequency lock triggers blocking non-terminal months.
@@ -837,11 +918,21 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Service role bypass:** The `enforce_frequency_lock_on_submission` database trigger allows service-role callers (edge functions) to bypass frequency lock checks. This ensures automated processes like rollover and bulk assignment are not blocked by the trigger.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Create only terminal month record* — Rejected because sibling months would not appear in scorecards or participate in weightage calculations.
+- *Alternative B: KRA-level terminal dedup* — Rejected because it blocks sibling month creation when the terminal already exists.
+- *Chosen approach:* Full-cycle record creation with per-month dedup. See [ADR-045](docs/adr/ADR-045.md).
+
 ## §46 — Daily KPI Rating Calculation
 
 **Missed Days Penalty score IS the rating:** When a Daily/Weekly KPI uses the `missed_days_penalty` aggregation method, the aggregated score (0–5 scale) is the final rating. It must NOT be re-mapped through the KPI's threshold-based `calculateScoreFromAchieved` function, which is designed for raw achieved values. Re-mapping would cause double-conversion errors (e.g., a penalty score of 0 incorrectly mapped to "Outstanding" for Lower-is-Better KPIs).
 
 **Expected days source:** The Submit Monthly Review dialog must use `useExpectedDays` (which respects `day_count_type` and employee-specific working days) instead of raw calendar days. This ensures the submitted days count, missed days, and penalty score align with the Daily Submission Summary.
+
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Re-map penalty score through threshold function* — Rejected because it causes double-conversion errors (penalty score already on 0–5 scale).
+- *Alternative B: Use raw calendar days for expected days* — Rejected because it ignores `day_count_type` and employee-specific working days.
+- *Chosen approach:* Penalty score used directly as rating; `useExpectedDays` for day counts. See [ADR-046](docs/adr/ADR-046.md).
 
 ## §47 — Multi-Month KPI Score Percolation
 
@@ -857,6 +948,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Audit trail:** Each percolated sibling receives a `kpi_audit_logs` entry with action `SCORE_PERCOLATED`, recording the source terminal KPI ID, source period, and frequency.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Manual per-month approval* — Rejected because multi-month KPIs represent a single measurement; separate approvals for identical data are redundant.
+- *Alternative B: Application-level propagation* — Rejected because browser crashes or network failures could leave siblings inconsistent; DB triggers guarantee atomicity.
+- *Chosen approach:* Database trigger for atomic score percolation. See [ADR-047](docs/adr/ADR-047.md).
+
 ## §48 — Auto-Advance KPI Scoring Policy
 
 **Trigger:** When an admin triggers "Auto-Score with Zero" for overdue self-reviews, the system sets the KPI to `approved` status with all scores set to 0.
@@ -869,6 +965,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 **N/A distinction:** Auto-advanced KPIs with 0 scores are NOT the same as N/A KPIs. The `auto_advance_reason` field distinguishes system-auto-scored KPIs from genuinely not-applicable ones. Journey tile UI checks this field to prevent false N/A badges.
 
 **Audit:** Each auto-advance creates a `SYSTEM_AUTO_SCORED` audit log entry with the remark and source.
+
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Set only self_score to 0, leave other stages as N/A* — Rejected because journey tiles would show "N/A", reports would have gaps, and weighted averages would be inconsistent.
+- *Alternative B: Mark auto-advanced KPIs as N/A* — Rejected because N/A KPIs are excluded from weighted averages; auto-advanced KPIs should penalize the score.
+- *Chosen approach:* All stages set to 0 with `auto_advance_reason` field for distinction. See [ADR-048](docs/adr/ADR-048.md).
 
 ## §49 — Admin Step-Back Target Selection, Full Reset & Sibling Reversion
 
@@ -883,3 +984,41 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 2. Mandatory reason field for audit trail
 3. Employee receives notification with reason and transition details
 4. kpi_queries entry created for Review Journey visibility
+
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Allow step-back only to immediate previous stage* — Rejected because it forces multiple sequential rollbacks to reach earlier stages.
+- *Alternative B: Leave sibling months in approved state after step-back* — Rejected because it creates inconsistent state with stale percolated scores.
+- *Alternative C: Auto-delete sibling records on step-back* — Rejected because it destroys audit trail and prevents re-approval.
+- *Chosen approach:* Flexible target selection with automatic sibling reversion. See [ADR-049](docs/adr/ADR-049.md).
+
+---
+
+## §50 — Architectural Decision Record Index
+
+All architectural decisions documented as invariants in this policy are also maintained as formal ADR files in `docs/adr/`.
+
+| ADR | §Section | Title |
+|-----|----------|-------|
+| [ADR-029](docs/adr/ADR-029.md) | §29 | Scope-Aware Propagation Validation |
+| [ADR-030](docs/adr/ADR-030.md) | §30 | Org KPI Audit Log Completeness |
+| [ADR-031](docs/adr/ADR-031.md) | §31 | Sent-Back Indicator Detection |
+| [ADR-032](docs/adr/ADR-032.md) | §32 | Review Journey Previous Month Comparison |
+| [ADR-033](docs/adr/ADR-033.md) | §33 | Rollback Cascade-Clear |
+| [ADR-034](docs/adr/ADR-034.md) | §34 | Admin Edit Final Score Recomputation |
+| [ADR-035](docs/adr/ADR-035.md) | §35 | Admin N/A Toggle Role-Scoped Clearing |
+| [ADR-036](docs/adr/ADR-036.md) | §36 | Slab Categories Zero-Hardcoding |
+| [ADR-037](docs/adr/ADR-037.md) | §37 | Employee Mapping — Resolved List |
+| [ADR-038](docs/adr/ADR-038.md) | §38 | Dashboard Observation Visibility |
+| [ADR-039](docs/adr/ADR-039.md) | §39 | Notification KPI Name Truncation |
+| [ADR-040](docs/adr/ADR-040.md) | §40 | Single-Source Query Raised Notifications |
+| [ADR-041](docs/adr/ADR-041.md) | §41 | Incentive Report Export Completeness |
+| [ADR-042](docs/adr/ADR-042.md) | §42 | Dynamic Program Configuration Tabs |
+| [ADR-043](docs/adr/ADR-043.md) | §43 | Org KPI Audit Review Governance |
+| [ADR-044](docs/adr/ADR-044.md) | §44 | Production Daily Entry Governance |
+| [ADR-045](docs/adr/ADR-045.md) | §45 | Frequency-Aware KRA Rollover |
+| [ADR-046](docs/adr/ADR-046.md) | §46 | Daily KPI Rating Calculation |
+| [ADR-047](docs/adr/ADR-047.md) | §47 | Multi-Month KPI Score Percolation |
+| [ADR-048](docs/adr/ADR-048.md) | §48 | Auto-Advance KPI Scoring Policy |
+| [ADR-049](docs/adr/ADR-049.md) | §49 | Admin Step-Back Target Selection, Full Reset & Sibling Reversion |
+
+**Template:** New ADRs should follow [ADR-TEMPLATE.md](docs/adr/ADR-TEMPLATE.md).
