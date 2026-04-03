@@ -790,6 +790,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Invariant:** `KpiDetailsTable` must accept an `observationCounts` prop and render an Eye+count indicator for KPIs with observations > 0. All scorecard containers must fetch observations via `useObservationsByKpis` and pass the derived counts.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Show observations only inside the review panel* — Rejected because it reduces visibility and delays action on critical feedback.
+- *Alternative B: Separate observations dashboard page* — Rejected because it adds navigation overhead; observations are most actionable in KPI context.
+- *Chosen approach:* Inline Eye+count indicator on every dashboard KPI row. See [ADR-038](docs/adr/ADR-038.md).
+
 ---
 
 ## §39. Notification KPI Name Truncation Invariant
