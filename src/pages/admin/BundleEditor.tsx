@@ -16,10 +16,11 @@ import { useDepartments, useDesignations } from '@/hooks/useOrganization';
 import { useKpiTemplates, KpiTemplate } from '@/hooks/useKpiTemplates';
 import { useTemplateBundle, useCreateTemplateBundle, useUpdateTemplateBundle } from '@/hooks/useTemplateBundles';
 import { useToast } from '@/hooks/use-toast';
+import { TemplateFormDialog } from '@/components/admin/TemplateFormDialog';
 import {
   ArrowLeft, Save, Loader2, Search, X, ChevronUp, ChevronDown,
   Trash2, GripVertical, ChevronRight, Package, Filter, CheckSquare,
-  Square, Eye, AlertTriangle
+  Square, Eye, AlertTriangle, Pencil
 } from 'lucide-react';
 
 export default function BundleEditor() {
