@@ -26,6 +26,7 @@ export function useEmployeeFilterOptions() {
       const { data } = await supabase
         .from('profiles')
         .select('pms_grade')
+        .eq('is_active', true)
         .not('pms_grade', 'is', null);
       return [...new Set(data?.map(p => p.pms_grade))].filter(Boolean).sort() as string[];
     },
