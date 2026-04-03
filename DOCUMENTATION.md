@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-03  
-> **Version:** 2.15.62 — Workflow Config Export: added Skip-Level Manager column to Employee Overrides sheet
+> **Version:** 2.15.63 — Auth resilience: fix infinite skeleton + decouple Auth page from branding fetch
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
