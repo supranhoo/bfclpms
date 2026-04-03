@@ -42,6 +42,15 @@ export default function Organization() {
   // Inline code editing state
   const [editingCode, setEditingCode] = useState<{ type: string; id: string; code: string } | null>(null);
 
+  // Company name
+  const { data: companyNameSetting } = useSystemSetting('company_name');
+  const updateSetting = useUpdateSystemSetting();
+  const [editingCompanyName, setEditingCompanyName] = useState(false);
+  const [companyNameDraft, setCompanyNameDraft] = useState('');
+  const companyName = typeof companyNameSetting?.setting_value === 'string'
+    ? companyNameSetting.setting_value.replace(/^"|"$/g, '')
+    : '';
+
   // Calculate employee counts per department
   const employeeCountByDept = useMemo(() => {
     const counts = new Map<string, number>();
