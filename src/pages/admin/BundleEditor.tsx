@@ -362,6 +362,7 @@ export default function BundleEditor() {
                         onMoveUp={() => moveTemplate(index, 'up')}
                         onMoveDown={() => moveTemplate(index, 'down')}
                         onRemove={() => removeTemplate(template.id)}
+                        onEdit={() => setEditingTemplate(template)}
                       />
                     ))}
                   </div>
