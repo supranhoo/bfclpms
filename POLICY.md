@@ -852,6 +852,11 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 **Invariant:** The `ProgramInnerTabs` component must always render all active custom tabs from the database after the core tabs.
 
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Hardcoded tabs in component* — Rejected because it requires code deployment for every new tab and cannot vary per program.
+- *Alternative B: JSON configuration file* — Rejected because it still requires deployment and has no admin UI.
+- *Chosen approach:* Database-driven custom tabs via `incentive_program_custom_tabs`. See [ADR-042](docs/adr/ADR-042.md).
+
 ---
 
 ### §43 — Org KPI Audit Review Governance
