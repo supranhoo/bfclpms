@@ -597,7 +597,7 @@ function BrowserTemplateCard({
       </div>
 
       {isExpanded && (
-        <div className="px-3 pb-3 pt-0">
+        <div className="px-3 pb-3 pt-0" onClick={(e) => e.stopPropagation()}>
           <Separator className="mb-3" />
           <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
             <InfoRow label="UOM" value={template.uom} />
