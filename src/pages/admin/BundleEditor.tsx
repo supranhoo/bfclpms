@@ -549,6 +549,9 @@ function SelectedTemplateRow({
           {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </Button>
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onEdit} title="Edit template">
+            <Pencil className="h-3 w-3" />
+          </Button>
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onMoveUp} disabled={index === 0}>
             <ChevronUp className="h-3 w-3" />
           </Button>
