@@ -216,6 +216,16 @@ const App = () => (
                     <TemplateBundles />
                   </ProtectedRoute>
                 } />
+                <Route path="/admin/bundles/new" element={
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-bundles">
+                    <BundleEditor />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/bundles/:id/edit" element={
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-bundles">
+                    <BundleEditor />
+                  </ProtectedRoute>
+                } />
                 
                 {/* Report routes - dynamic access from report_access_config */}
                 <Route path="/reports" element={
