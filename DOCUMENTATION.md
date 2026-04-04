@@ -4736,4 +4736,9 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 ### v2.15.64 — Org KPI Status: Treat 'approved' as Propagated
 - **RCA:** Scoped org KPI values that advanced to `'approved'` status were not recognized by the UI's status resolution logic, causing propagated KPIs to display as "Entered".
 - Updated all 7 status-resolution checks in `OrgKpiDataEntry.tsx` to treat `'approved'` as equivalent to `'propagated'` (since approved is a later workflow stage).
+
+### v2.15.65 — N/A KPI Final Score: Show "N/A" Badge Instead of Dash
+- **RCA:** KPIs marked as N/A by admin had `final_score = NULL`, but the Final column displayed "—" (indistinguishable from "not yet scored"). Users confused this with a stuck/missing score.
+- Final column now shows an amber "N/A" badge for N/A KPIs instead of a dash.
+- Residual scores (Self, Auditor, Mgmt) on N/A KPIs are rendered with strikethrough styling to indicate they are excluded from calculations.
 - **Affected files:** `src/pages/admin/OrgKpiDataEntry.tsx`, `DOCUMENTATION.md`
