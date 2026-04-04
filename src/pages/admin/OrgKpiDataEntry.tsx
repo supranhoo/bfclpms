@@ -172,7 +172,7 @@ export default function OrgKpiDataEntry() {
       const key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
       const val = existingValuesMap.get(key);
       if ((val?.achieved_value !== null && val?.achieved_value !== undefined) || val?.is_na) {
-        return val?.status === 'propagated' ? 'propagated' : 'entered';
+        return (val?.status === 'propagated' || val?.status === 'approved') ? 'propagated' : 'entered';
       }
       return 'pending';
     }
@@ -181,7 +181,7 @@ export default function OrgKpiDataEntry() {
       k.startsWith(prefix) && ((v.achieved_value !== null && v.achieved_value !== undefined) || v.is_na)
     );
     if (matching.length > 0) {
-      return matching.every(([, v]) => v.status === 'propagated') ? 'propagated' : 'entered';
+      return matching.every(([, v]) => v.status === 'propagated' || v.status === 'approved') ? 'propagated' : 'entered';
     }
     return 'pending';
   }, [existingValuesMap]);
@@ -285,7 +285,7 @@ export default function OrgKpiDataEntry() {
         const key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
         const val = existingValuesMap.get(key);
         if ((val?.achieved_value !== null && val?.achieved_value !== undefined) || val?.is_na) {
-          status = val?.status === 'propagated' ? 'propagated' : 'entered';
+          status = (val?.status === 'propagated' || val?.status === 'approved') ? 'propagated' : 'entered';
         }
       } else {
         const prefix = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||`;
@@ -293,7 +293,7 @@ export default function OrgKpiDataEntry() {
           k.startsWith(prefix) && ((v.achieved_value !== null && v.achieved_value !== undefined) || v.is_na)
         );
         if (matching.length > 0) {
-          const allPropagated = matching.every(([, v]) => v.status === 'propagated');
+          const allPropagated = matching.every(([, v]) => v.status === 'propagated' || v.status === 'approved');
           status = allPropagated ? 'propagated' : 'entered';
         }
       }
@@ -840,7 +840,7 @@ export default function OrgKpiDataEntry() {
         const valKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
         const val = existingValuesMap.get(valKey);
         const hasValue = val?.achieved_value !== null && val?.achieved_value !== undefined;
-        const status = hasValue ? (val?.status === 'propagated' ? 'Propagated' : 'Entered') : 'Pending';
+        const status = hasValue ? ((val?.status === 'propagated' || val?.status === 'approved') ? 'Propagated' : 'Entered') : 'Pending';
         rows.push({
           ...baseRow,
           status: status as PendingReportRow['status'],
@@ -861,7 +861,7 @@ export default function OrgKpiDataEntry() {
           const valKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${dept.id}||null`;
           const val = existingValuesMap.get(valKey);
           const hasValue = val?.achieved_value !== null && val?.achieved_value !== undefined;
-          const status = hasValue ? (val?.status === 'propagated' ? 'Propagated' : 'Entered') : 'Pending';
+          const status = hasValue ? ((val?.status === 'propagated' || val?.status === 'approved') ? 'Propagated' : 'Entered') : 'Pending';
           rows.push({
             ...baseRow,
             status: status as PendingReportRow['status'],
@@ -884,7 +884,7 @@ export default function OrgKpiDataEntry() {
           const valKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||${emp.id}`;
           const val = existingValuesMap.get(valKey);
           const hasValue = val?.achieved_value !== null && val?.achieved_value !== undefined;
-          const status = hasValue ? (val?.status === 'propagated' ? 'Propagated' : 'Entered') : 'Pending';
+          const status = hasValue ? ((val?.status === 'propagated' || val?.status === 'approved') ? 'Propagated' : 'Entered') : 'Pending';
           rows.push({
             ...baseRow,
             status: status as PendingReportRow['status'],
