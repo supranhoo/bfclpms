@@ -1,29 +1,54 @@
 
 
-## Fix: Make KPI Edit Button Discoverable in Bundle Editor
+## Root Cause: Propagated KPIs Showing as "Entered"
 
 ### Problem
-The Pencil (edit) button in the Selected Templates list is hidden behind a hover state (`opacity-0 group-hover:opacity-100`). Users cannot discover it — they don't know they can edit a KPI. On touch devices, hover doesn't work at all.
+In **March 2026**, Sandeep has 4 KPI groups where some scoped `org_kpi_values` rows were individually advanced to `'approved'` status (e.g., after employee KPIs reached final approval). The UI's `getKpiStatus` function uses:
 
-### Fix — 1 file: `src/pages/admin/BundleEditor.tsx`
+```typescript
+matching.every(([, v]) => v.status === 'propagated') ? 'propagated' : 'entered'
+```
 
-#### 1. Make the Pencil button always visible
-Move the `onEdit` Pencil button **out** of the hover-hidden action group and place it as a standalone, always-visible button next to the expand/collapse chevron. Keep move-up/down and trash in the hover group since those are less frequent actions.
+This `every()` check fails when any row has `status = 'approved'` instead of `'propagated'`, causing the card to incorrectly show **"Value Entered"** instead of **"Propagated"**.
 
-#### 2. Add "Edit" option in the expanded section
-When a template row is expanded, add an explicit "Edit Template" button at the bottom of the expanded details panel — a clear, labeled button (not just an icon) so users know they can modify the KPI.
+**Affected data (March 2026):**
+| KRA | Total | Propagated | Approved | UI Shows |
+|-----|-------|-----------|----------|----------|
+| Control dust emission (×2 groups) | 33 each | 31 | 2 | ❌ Entered |
+| Green Belt Enhancement | 15 | 14 | 1 | ❌ Entered |
+| Spillage Control | 6 | 0 | 6 | ❌ Entered |
 
-#### 3. Style the Pencil button for visibility
-- Use `text-primary` color so it stands out
-- Keep it always visible (no opacity transition)
-- Add tooltip text "Edit this KPI template"
+### Fix — 1 file: `src/pages/admin/OrgKpiDataEntry.tsx`
 
-### Technical Detail
+**Change the `getKpiStatus` function** (line 184) and all equivalent status-resolution checks (lines 296-297, 843, 864, 887) to treat `'approved'` as equivalent to `'propagated'`:
 
-In `SelectedTemplateRow` (around line 558):
-- Move the `<Button onClick={onEdit}>` before the hover group div
-- Add a full "Edit Template" button inside the `isExpanded` section (around line 573)
+```typescript
+// Before:
+matching.every(([, v]) => v.status === 'propagated') ? 'propagated' : 'entered'
+
+// After:
+matching.every(([, v]) => v.status === 'propagated' || v.status === 'approved') ? 'propagated' : 'entered'
+```
+
+Same fix for organization-scope checks (line 175, 288):
+```typescript
+// Before:
+val?.status === 'propagated' ? 'propagated' : 'entered'
+
+// After:
+(val?.status === 'propagated' || val?.status === 'approved') ? 'propagated' : 'entered'
+```
+
+**5 locations** in the file need this change — all in `OrgKpiDataEntry.tsx`.
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `src/pages/admin/OrgKpiDataEntry.tsx` | Treat `'approved'` as equivalent to `'propagated'` in all 5 status resolution checks |
+| `DOCUMENTATION.md` | Version bump with fix note |
 
 ### Risk Assessment
-- **No risk**: Pure UI visibility change, no logic or data modifications
+- **No risk**: Pure display logic fix. No data changes, no schema changes.
+- `'approved'` is a later stage than `'propagated'`, so treating it as "propagated or better" is semantically correct.
 
