@@ -285,7 +285,7 @@ export default function OrgKpiDataEntry() {
         const key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
         const val = existingValuesMap.get(key);
         if ((val?.achieved_value !== null && val?.achieved_value !== undefined) || val?.is_na) {
-          status = val?.status === 'propagated' ? 'propagated' : 'entered';
+          status = (val?.status === 'propagated' || val?.status === 'approved') ? 'propagated' : 'entered';
         }
       } else {
         const prefix = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||`;
