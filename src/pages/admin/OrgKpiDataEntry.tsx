@@ -181,7 +181,7 @@ export default function OrgKpiDataEntry() {
       k.startsWith(prefix) && ((v.achieved_value !== null && v.achieved_value !== undefined) || v.is_na)
     );
     if (matching.length > 0) {
-      return matching.every(([, v]) => v.status === 'propagated') ? 'propagated' : 'entered';
+      return matching.every(([, v]) => v.status === 'propagated' || v.status === 'approved') ? 'propagated' : 'entered';
     }
     return 'pending';
   }, [existingValuesMap]);
