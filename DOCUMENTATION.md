@@ -4732,3 +4732,8 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - Dashboard now shows actionable error screen (Retry + Sign Out) instead of infinite skeleton when profile is missing.
 - Auth page no longer blocks on `isLoadingSettings` from `useAppSettings()` — branding loads progressively.
 - **Affected files:** `src/contexts/AuthContext.tsx`, `src/pages/Dashboard.tsx`, `src/pages/Auth.tsx`, `POLICY.md` (§53)
+
+### v2.15.64 — Org KPI Status: Treat 'approved' as Propagated
+- **RCA:** Scoped org KPI values that advanced to `'approved'` status were not recognized by the UI's status resolution logic, causing propagated KPIs to display as "Entered".
+- Updated all 7 status-resolution checks in `OrgKpiDataEntry.tsx` to treat `'approved'` as equivalent to `'propagated'` (since approved is a later workflow stage).
+- **Affected files:** `src/pages/admin/OrgKpiDataEntry.tsx`, `DOCUMENTATION.md`
