@@ -861,7 +861,7 @@ export default function OrgKpiDataEntry() {
           const valKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${dept.id}||null`;
           const val = existingValuesMap.get(valKey);
           const hasValue = val?.achieved_value !== null && val?.achieved_value !== undefined;
-          const status = hasValue ? (val?.status === 'propagated' ? 'Propagated' : 'Entered') : 'Pending';
+          const status = hasValue ? ((val?.status === 'propagated' || val?.status === 'approved') ? 'Propagated' : 'Entered') : 'Pending';
           rows.push({
             ...baseRow,
             status: status as PendingReportRow['status'],
