@@ -172,7 +172,7 @@ export default function OrgKpiDataEntry() {
       const key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
       const val = existingValuesMap.get(key);
       if ((val?.achieved_value !== null && val?.achieved_value !== undefined) || val?.is_na) {
-        return val?.status === 'propagated' ? 'propagated' : 'entered';
+        return (val?.status === 'propagated' || val?.status === 'approved') ? 'propagated' : 'entered';
       }
       return 'pending';
     }
