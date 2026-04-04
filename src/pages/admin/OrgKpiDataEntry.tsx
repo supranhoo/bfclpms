@@ -293,7 +293,7 @@ export default function OrgKpiDataEntry() {
           k.startsWith(prefix) && ((v.achieved_value !== null && v.achieved_value !== undefined) || v.is_na)
         );
         if (matching.length > 0) {
-          const allPropagated = matching.every(([, v]) => v.status === 'propagated');
+          const allPropagated = matching.every(([, v]) => v.status === 'propagated' || v.status === 'approved');
           status = allPropagated ? 'propagated' : 'entered';
         }
       }
