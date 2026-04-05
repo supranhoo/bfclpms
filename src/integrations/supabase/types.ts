@@ -1534,7 +1534,7 @@ export type Database = {
           old_value: Json | null
           on_behalf_of: string | null
           on_behalf_role: string | null
-          performed_by: string
+          performed_by: string | null
           submission_id: string | null
         }
         Insert: {
@@ -1547,7 +1547,7 @@ export type Database = {
           old_value?: Json | null
           on_behalf_of?: string | null
           on_behalf_role?: string | null
-          performed_by: string
+          performed_by?: string | null
           submission_id?: string | null
         }
         Update: {
@@ -1560,7 +1560,7 @@ export type Database = {
           old_value?: Json | null
           on_behalf_of?: string | null
           on_behalf_role?: string | null
-          performed_by?: string
+          performed_by?: string | null
           submission_id?: string | null
         }
         Relationships: [
