@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 1.69.0 — §62: ViewLevel must be determined from reporting chain, not grid metadata
+> **Version:** 1.70.0 — §63: Daily email reminders for unresponded queries & observations
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1235,3 +1235,16 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
 **Rationale:** The `relationship` tag set by the grid is fragile — it depends on skip-level data being fully loaded, is absent during URL restoration and deep-links, and is subject to race conditions. Skip-level managers (e.g., employee 101125 reviewing 101358) were unable to review KPIs at `manager_check` status because `viewLevel` incorrectly resolved to `manager`.
 
 **RCA (2026-04-05):** Employee 101125 is the skip-level manager for several HR department employees including 101358. When viewing 101358's scorecard in team view, the `viewLevel` resolved to `manager` instead of `skip_level` because the `relationship` property was missing (URL restoration path). This caused the scorecard to use `viewType = 'team-review'`, which blocks review actions on KPIs at `manager_check` status.
+
+---
+
+### §63 — Daily Email Reminders for Unresponded Queries & Observations
+
+**Policy:**
+
+1. **Automatic daily reminders**: The system sends daily email reminders (at 9:00 AM IST) to employees who have open (unresponded) queries or unacknowledged observations.
+2. **Consolidated emails**: Each recipient receives a single consolidated email listing all their pending queries or observations, not individual emails per item.
+3. **Auto-stop**: Reminders cease automatically once the employee responds to/resolves the query or acknowledges the observation.
+4. **Admin control**: Both reminder types (`query_response_reminder`, `observation_response_reminder`) are independently toggleable via Email Notification Settings.
+5. **Respects global toggle**: Reminders are only sent when the global email notifications toggle is enabled.
+6. **No duplicate sends**: Reminders are stateless — they query current `open` status each day. Once status changes, the item is excluded from future reminders.
