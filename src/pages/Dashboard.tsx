@@ -26,6 +26,40 @@ interface EmployeeProfile {
   departments?: { id: string; name: string; code: string | null } | null;
 }
 
+/**
+ * Resolve the relationship between the current user and an employee
+ * by checking the actual reporting chain in the database.
+ * Returns the employee with the `relationship` field set.
+ */
+async function resolveRelationship(
+  employee: EmployeeProfile,
+  currentUserId: string
+): Promise<EmployeeProfile> {
+  // Already tagged by grid — trust it
+  if (employee.relationship) return employee;
+
+  // Direct manager check
+  if (employee.reporting_manager_id === currentUserId) {
+    return { ...employee, relationship: 'direct' };
+  }
+
+  // Skip-level check: fetch the employee's manager's reporting_manager_id
+  if (employee.reporting_manager_id) {
+    const { data: managerProfile } = await supabase
+      .from('profiles')
+      .select('reporting_manager_id')
+      .eq('id', employee.reporting_manager_id)
+      .single();
+
+    if (managerProfile?.reporting_manager_id === currentUserId) {
+      return { ...employee, relationship: 'indirect' };
+    }
+  }
+
+  // Default: treat as direct (admin/hr viewing non-chain employee)
+  return { ...employee, relationship: 'direct' };
+}
+
 export default function Dashboard() {
   const { profile, effectiveRole: role, loading, profileError, signOut, fetchProfile, user } = useAuth();
   const navigate = useNavigate();
@@ -122,7 +156,8 @@ export default function Dashboard() {
           } else if (viewMode === 'self') {
             setViewMode('team');
           }
-          handleSelectEmployee(empProfile as EmployeeProfile, kpiParam);
+          const resolved = await resolveRelationship(empProfile as EmployeeProfile, profile!.id);
+          handleSelectEmployee(resolved, kpiParam);
         }
 
         // Only clean up one-time deep-link params; keep employee for persistence
@@ -167,7 +202,8 @@ export default function Dashboard() {
           } else if (viewMode === 'self') {
             setViewMode('team');
           }
-          handleSelectEmployee(empProfile as EmployeeProfile);
+          const resolved = await resolveRelationship(empProfile as EmployeeProfile, profile!.id);
+          handleSelectEmployee(resolved);
         }
 
         // Only clean up one-time params; keep employee for persistence
@@ -236,7 +272,8 @@ export default function Dashboard() {
           .eq('id', employeeParam)
           .single();
         if (empProfile) {
-          setSelectedEmployee(empProfile as EmployeeProfile);
+          const resolved = await resolveRelationship(empProfile as EmployeeProfile, profile!.id);
+          setSelectedEmployee(resolved);
         }
       };
       restoreEmployee();
@@ -257,10 +294,11 @@ export default function Dashboard() {
   }, [setSearchParams]);
 
   // Handle employee selection from grid
-  const handleSelectEmployee = useCallback((employee: EmployeeProfile, kpiId?: string | null) => {
-    setSelectedEmployee(employee);
+  const handleSelectEmployee = useCallback(async (employee: EmployeeProfile, kpiId?: string | null) => {
+    const resolved = await resolveRelationship(employee, profile!.id);
+    setSelectedEmployee(resolved);
     setAutoOpenKpiId(kpiId || null);
-  }, []);
+  }, [profile]);
 
   if (loading) {
     return <DashboardSkeleton />;
