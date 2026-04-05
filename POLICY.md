@@ -1112,3 +1112,21 @@ All architectural decisions documented as invariants in this policy are also mai
 - *Alternative A: Create a dedicated "system" user account* — Rejected; adds complexity and doesn't prevent future fallback bugs.
 - *Alternative B: Keep NOT NULL constraint and use a sentinel UUID* — Rejected; sentinel values are brittle and require coordination.
 - *Chosen approach:* NULL performer = system action. Simple, explicit, and handled gracefully in UI.
+
+---
+
+## §56 — Mandatory Audit Trail for Review Submission Score Changes
+
+**Effective Date:** 2026-04-05
+
+All changes to score fields in `review_submissions` (self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score) MUST produce an audit trail entry in `kpi_audit_logs`.
+
+**Rules:**
+1. Application code performing score updates must write a corresponding `kpi_audit_logs` entry in the same operation.
+2. A safety-net database trigger (`trg_log_untracked_submission_changes`) automatically logs any score change as `SUBMISSION_SCORE_CHANGED` with `metadata.source = 'safety_net_trigger'`.
+3. The presence of `safety_net_trigger` entries in production indicates a code path that bypassed proper audit logging and must be investigated and fixed.
+4. No bulk update to `review_submissions` score fields is permitted without a corresponding audit trail — whether via migration, edge function, or admin tool.
+
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Rely solely on application-level logging* — Rejected; a silent bulk operation on 2026-04-01 zeroed 159 management_scores with no trace.
+- *Chosen approach:* Database-level safety-net trigger ensures no score change goes unlogged, regardless of the source.
