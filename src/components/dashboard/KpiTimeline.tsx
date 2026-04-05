@@ -298,7 +298,11 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
                                 {config.label}
                               </h4>
                               <p className="text-sm text-muted-foreground mt-1">
-                                by {performer?.full_name || performer?.email || 'Unknown user'}
+                                by {log.performed_by ? (performer?.full_name || performer?.email || 'Unknown user') : (
+                                  <span className="inline-flex items-center gap-1 text-muted-foreground font-medium">
+                                    <span className="px-1.5 py-0.5 rounded bg-muted text-xs">System</span>
+                                  </span>
+                                )}
                                 {log.on_behalf_of && onBehalfProfile && (
                                   <span className="text-rose-600 dark:text-rose-400">
                                     {' '}(on behalf of {onBehalfProfile.full_name || onBehalfProfile.email})

@@ -90,10 +90,12 @@ export function OrgKpiHistoryTimeline({ categoryId, kraName, kpiName, reviewPeri
               <div className="text-right text-xs text-muted-foreground shrink-0 ml-4">
                 <div>{format(new Date(entry.created_at), 'dd MMM yyyy')}</div>
                 <div>{format(new Date(entry.created_at), 'HH:mm')}</div>
-                {entry.changed_by_profile && (
+                {entry.changed_by_profile ? (
                   <div className="mt-1 font-medium text-foreground">
                     {(entry.changed_by_profile as any)?.full_name}
                   </div>
+                ) : (
+                  <div className="mt-1 font-medium text-muted-foreground text-xs">System</div>
                 )}
               </div>
             </div>
