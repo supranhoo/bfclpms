@@ -1,41 +1,63 @@
 
 
-## RCA: Accidental Auto-Propagation via Per-Row Propagate Button
+## RCA: Approved KPIs Not Re-evaluated After Workflow Change
 
 ### Root Cause
 
-**No confirmation dialog on per-row propagate button.** The scoped entry table (`OrgKpiScopedEntryTable.tsx`) renders a small (28x28px) arrow button per employee row that directly calls `handleSaveAndPropagate([scopeId])` with zero confirmation. This button sits adjacent to the file upload and remarks columns.
+**No workflow-change impact detection.** When an admin changes an employee's workflow template (e.g., from `self_l1_hr_pms` → `self_l1_audit`), the system only updates the `workflow_config` table. It does NOT check whether any KPIs for the affected period were already approved under the old workflow with a now-insufficient terminal reviewer.
 
-On Biswajit's mobile device (389px viewport), while scrolling horizontally or entering data values, accidental taps on this button trigger immediate propagation for that employee — saving the value AND pushing it to the employee's scorecard, AND setting `org_kpi_values.status = 'propagated'` (which locks the card for non-admins).
+**Timeline for KPI `ee7db054` (Samir Dey, employee 100482):**
+- **Mar 28**: HR PMS approved the KPI → status set to `approved`, `final_score = 5` (HR PMS was terminal reviewer under `self_l1_hr_pms`)
+- **Apr 4**: Admin changed Samir Dey's March workflow from `self_l1_hr_pms` (stages: kra_set → self_review → manager_check → hr_pms_review → approved) to `self_l1_audit` (stages: kra_set → self_review → manager_check → audit → approved)
+- **Result**: KPI shows `approved` but has never been through `audit` — the new terminal stage
 
-**Evidence:**
-- The main "Propagate" button (line 732) has an `AlertDialog` confirmation
-- The "Propagate Selected" button (line 688) has an `AlertDialog` confirmation  
-- The per-row button (line 594-600) calls `onPropagateRow?.(row.scopeId)` directly — **no confirmation**
-- Biswajit is a `manager` role, not `admin`, so once status becomes `propagated`, the card locks (`isLocked = data.status === 'propagated' && !isAdmin`)
-- Audit logs show "updated" entries (auto-save) mixed with propagated status changes, consistent with accidental taps during data entry
+### Data Impact — 39 KPIs across 7 employees
 
-### Fix — 2 parts
+| Employee | Code | KPI Count |
+|----------|------|-----------|
+| Samir Dey | 100482 | 1 |
+| PRATIK KEDIA | 100741 | 1 |
+| Jitendra Bharti | 101715 | 8 |
+| Vivek Kumar Dansena | 101784 | 5 |
+| Amit Kumar Shaw | 101804 | 15 |
+| Rupesh Kumar Sharma | 101851 | 1 |
+| Preetam Sagar | 101852 | 8 |
 
-#### Part 1: Add AlertDialog Confirmation to Per-Row Propagate Button
+All 39 KPIs were approved by HR PMS before the workflow was changed to require audit on April 4.
 
-Wrap the per-row propagate button in an `AlertDialog` matching the same pattern used by the main propagate buttons. The dialog should:
-- Show the employee name being propagated
-- Warn that it will update their scorecard
-- Require explicit confirmation via "Propagate" button
+### Fix — 3 parts
 
-This applies in `OrgKpiScopedEntryTable.tsx`, in the `EmployeeRow` component.
+#### Part 1: Database Migration — Step Back 39 Affected KPIs
 
-#### Part 2: Documentation
+Reset these 39 KPIs from `approved` to the stage preceding the new terminal reviewer (`audit`). Specifically, set status to `manager_check` (the stage before `audit` in the new workflow), so they appear in the auditor's pending queue. Clear `final_score` and `final_rating` (since approval is revoked) but preserve all existing reviewer scores (self, manager, HR PMS). Log `WORKFLOW_CHANGE_STEP_BACK` audit entries with `performed_by = NULL` (System).
+
+#### Part 2: Workflow Change Hook — Auto-detect & Step Back on Future Changes
+
+Add a database trigger `trg_workflow_change_step_back` on `workflow_config` that fires on INSERT or UPDATE (when `workflow_template_id` changes). The trigger:
+
+1. Identifies all KPIs for the affected employee + period that are at `approved` status
+2. Resolves the old and new workflow templates' stages
+3. For each approved KPI: if the new workflow has stages beyond what the old terminal reviewer covered (e.g., old terminal was `hr_pms_review`, new has `audit` after it), step the KPI back to the stage preceding the new uncovered stage
+4. Clear `final_score`/`final_rating` on stepped-back KPIs
+5. Log `WORKFLOW_CHANGE_STEP_BACK` audit entries
+
+This is the **preventive mechanism** — any future workflow change that adds stages beyond the old terminal will automatically revert affected KPIs.
+
+#### Part 3: UI Notification in Workflow Config
+
+In the workflow assignment UI (`useWorkflowConfig.ts`), after a successful workflow config save, show a toast warning if the change affected any already-approved KPIs: "X KPIs were stepped back to [stage] due to workflow change. Affected employees: [names]."
+
+#### Part 4: Documentation
 
 | File | Change |
 |------|--------|
-| `src/components/admin/OrgKpiScopedEntryTable.tsx` | Add `AlertDialog` confirmation to per-row propagate button |
-| `POLICY.md` | Add §59: All propagation actions require explicit user confirmation |
+| Migration SQL | Step back 39 KPIs + create trigger |
+| `src/hooks/useWorkflowConfig.ts` | Add post-save check for affected KPIs, show toast |
+| `POLICY.md` | Add §60: Workflow changes that add stages beyond current terminal must revert approved KPIs |
 | `DOCUMENTATION.md` | Version bump |
 
 ### Risk Assessment
-- **No regression**: Additive confirmation dialog. Propagation logic untouched.
-- **Fixes existing UX issue**: Prevents accidental propagation on mobile/small screens.
-- **Forward-looking**: Policy ensures any future propagation path also requires confirmation.
+- **Step-back**: All reviewer scores preserved. Only `final_score`/`final_rating` cleared and status moved to pre-audit. Auditor will see these in their queue.
+- **Trigger**: Only fires when workflow template actually changes. Does not fire on same-template re-saves. Only affects `approved` KPIs where new stages were added beyond old terminal.
+- **No data loss**: HR PMS scores remain on `review_submissions`. Once auditor reviews and re-approves, `final_score` recalculates from the new terminal reviewer.
 
