@@ -201,6 +201,39 @@ export default function Dashboard() {
     }, { replace: true });
   }, [viewMode]);
 
+  // Persist selected employee in URL for refresh restoration
+  useEffect(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (selectedEmployee) {
+        next.set('employee', selectedEmployee.id);
+      } else {
+        next.delete('employee');
+      }
+      return next;
+    }, { replace: true });
+  }, [selectedEmployee]);
+
+  // Restore selected employee from URL on mount (when no deep-link processing happened)
+  useEffect(() => {
+    const employeeParam = searchParams.get('employee');
+    const kpiParam = searchParams.get('kpi');
+    // Only restore if employee param exists, no KPI deep-link is being processed, and no employee is already selected
+    if (employeeParam && !kpiParam && !selectedEmployee && viewMode !== 'self') {
+      const restoreEmployee = async () => {
+        const { data: empProfile } = await supabase
+          .from('profiles')
+          .select('id, full_name, email, designation, employee_code, avatar_url, department_id, reporting_manager_id, departments(id, name, code)')
+          .eq('id', employeeParam)
+          .single();
+        if (empProfile) {
+          setSelectedEmployee(empProfile as EmployeeProfile);
+        }
+      };
+      restoreEmployee();
+    }
+  }, []);
+
   // Handle mode change
   const handleModeChange = useCallback((mode: ViewMode) => {
     setViewMode(mode);
