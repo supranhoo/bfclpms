@@ -1,48 +1,59 @@
 
 
-## RCA: Previous Months Showing Current Workflow Instead of Historical Workflow
+## Persist Filters & Selected Employee Across Refresh/Navigation
+
+### Problem
+When a reviewer applies filters (department, designation, grade, etc.) in any review view (Team, Audit, HR PMS, Management), selects an employee, reviews KPIs, then refreshes or navigates back — all filters reset and the selected employee is lost. This wastes reviewer time re-applying filters.
 
 ### Root Cause
+- **Filters** in `EmployeeSelectorGrid.tsx` (lines 186-193) use plain `useState` — no URL or storage persistence.
+- **Selected employee** in `Dashboard.tsx` (line 38) uses plain `useState` — lost on refresh.
+- Only `viewMode` is synced to URL params (`?view=team`).
 
-**Parameter name mismatch in RPC call.** In `KpiJourneySection.tsx` (line 187-191), the code calls `get_bulk_employee_workflows` with parameters named `p_review_periods` (plural, array) and `p_review_years` (plural, array). However, the database function only accepts `p_review_period` (singular, TEXT) and `p_review_year` (singular, INTEGER).
+### Fix — Sync filters & selected employee to URL search params
 
-PostgREST silently ignores unknown parameters, so the function executes with `NULL` period/year — which skips all period-specific workflow lookups and falls back to the **current global/default workflow template**. This means employee 100482's Jan and Feb previous months show the current `self_l1_audit` workflow (with Auditor tile) instead of the `self_l1_hr_pms` workflow (with HR PMS tile) that was active when those months were actually reviewed.
+#### Part 1: Persist Filters in `EmployeeSelectorGrid`
 
-**This affects every employee whose workflow was changed after their old months were reviewed** — the Previous Months section always shows the current workflow instead of the historical one.
+Replace plain `useState` for all 6 filter fields with URL search param sync:
 
-### Impact
+| Filter | URL Param | Example |
+|--------|-----------|---------|
+| `searchQuery` | `q` | `?q=samir` |
+| `selectedDepartment` | `dept` | `?dept=uuid` |
+| `selectedDesignation` | `desig` | `?desig=Manager` |
+| `selectedGrade` | `grade` | `?grade=A` |
+| `selectedManager` | `mgr` | `?mgr=uuid` |
+| `statusFilter` | `status` | `?status=pending` |
+| `auditorFilter` | `auditor` | `?auditor=uuid` |
 
-Every "Previous Months" tile in the Review Journey for any employee who has had a workflow change will display incorrect reviewer stages. The screenshot shows employee 100482 displaying an "Auditor" tile for Jan and Feb 2026, even though those months were reviewed under a workflow that had HR PMS as the terminal reviewer.
+On mount, read from URL params. On change, update URL params with `replace: true`. The "Clear All" action removes all filter params.
 
-### Fix — 2 parts
+#### Part 2: Persist Selected Employee in `Dashboard.tsx`
 
-#### Part 1: Fix RPC Call — Fetch Workflow Per Period Individually
+When an employee is selected, write `?employee=<id>` to URL params (already partially supported for deep-links). On mount/refresh, if `?employee=` is present along with `?view=`, fetch that employee profile and restore the selection.
 
-The existing `get_bulk_employee_workflows` RPC accepts a single period+year, not arrays. The fix is to call the RPC once per previous month period, then merge results into the workflow map.
+Currently the deep-link code (lines 94-176) deletes the `employee` param after processing. Change this: keep the `employee` param in the URL while the employee is selected, and remove it only when the user clicks "Back" to return to the grid.
 
-In `KpiJourneySection.tsx`, replace the single RPC call (lines 187-198) with a loop that calls the RPC for each unique period:
+#### Part 3: Restore flow on Back/Refresh
 
-```text
-For each previous month period:
-  Call get_bulk_employee_workflows({
-    employee_ids: [kpi.employee_id],
-    p_review_period: period.month,   // singular
-    p_review_year: period.year       // singular
-  })
-  Store result in wfMap keyed by "month_year"
-```
+- **Refresh**: URL has `?view=team&dept=xxx&employee=yyy` → restores view mode, filters, and selected employee.
+- **Back button** (line 274-277 `onBack`): Remove only `employee` param, keep filter params → user returns to filtered grid.
+- **Browser back**: URL params preserved naturally.
 
-This ensures each previous month resolves the workflow that was configured for that specific period, not the current one.
-
-#### Part 2: Documentation
+### Files to Change
 
 | File | Change |
 |------|--------|
-| `src/components/review/KpiJourneySection.tsx` | Fix RPC call to use correct singular param names per period |
-| `DOCUMENTATION.md` | Version bump with fix note |
+| `src/components/review/EmployeeSelectorGrid.tsx` | Read/write 7 filter states from/to URL search params instead of plain useState |
+| `src/pages/Dashboard.tsx` | Persist `employee` param in URL during selection; restore on refresh; keep filter params on back |
+| `DOCUMENTATION.md` | Version bump |
+
+### Technical Approach
+
+Create a small utility hook `useUrlFilterState(paramName, defaultValue)` that wraps `useSearchParams` for individual filter values — keeps the code clean and avoids repetition across 7 filters. The hook returns `[value, setValue]` matching the `useState` API.
 
 ### Risk Assessment
-- **No data migration needed**: This is a display-only bug. The workflow configs in the database are correct per period — they were just never being queried properly.
-- **No regression**: The fix changes how the RPC is called, not the RPC itself. All other consumers of `get_bulk_employee_workflows` already use the correct singular params.
-- **Immediate fix for all cases**: Every employee with historical workflow changes will immediately show correct historical stages once the RPC call is fixed.
+- **No data changes**: Pure UI/UX improvement.
+- **Backward compatible**: Existing bookmarks/deep-links without filter params work exactly as before (default to no filters).
+- **No regression**: Filter logic unchanged — only the storage mechanism changes from memory to URL.
 
