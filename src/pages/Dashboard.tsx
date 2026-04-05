@@ -26,6 +26,40 @@ interface EmployeeProfile {
   departments?: { id: string; name: string; code: string | null } | null;
 }
 
+/**
+ * Resolve the relationship between the current user and an employee
+ * by checking the actual reporting chain in the database.
+ * Returns the employee with the `relationship` field set.
+ */
+async function resolveRelationship(
+  employee: EmployeeProfile,
+  currentUserId: string
+): Promise<EmployeeProfile> {
+  // Already tagged by grid — trust it
+  if (employee.relationship) return employee;
+
+  // Direct manager check
+  if (employee.reporting_manager_id === currentUserId) {
+    return { ...employee, relationship: 'direct' };
+  }
+
+  // Skip-level check: fetch the employee's manager's reporting_manager_id
+  if (employee.reporting_manager_id) {
+    const { data: managerProfile } = await supabase
+      .from('profiles')
+      .select('reporting_manager_id')
+      .eq('id', employee.reporting_manager_id)
+      .single();
+
+    if (managerProfile?.reporting_manager_id === currentUserId) {
+      return { ...employee, relationship: 'indirect' };
+    }
+  }
+
+  // Default: treat as direct (admin/hr viewing non-chain employee)
+  return { ...employee, relationship: 'direct' };
+}
+
 export default function Dashboard() {
   const { profile, effectiveRole: role, loading, profileError, signOut, fetchProfile, user } = useAuth();
   const navigate = useNavigate();
