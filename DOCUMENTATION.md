@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 2.16.68 — §58: Multi-month cycle completion gate; bulk step-back of 18 premature KPIs; enhanced frequency lock trigger
+> **Version:** 2.16.69 — §59: Mandatory propagation confirmation on all Org KPI propagate actions
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
