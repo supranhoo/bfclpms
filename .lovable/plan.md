@@ -1,63 +1,80 @@
 
 
-## Fix: "Unknown User" on Admin Actions in Review Timeline — Existing + Future
+## RCA: Multi-Month KPIs Reviewed Before Cycle Completion + Bulk Step-Back
 
 ### Root Cause
 
-The `profiles` table RLS prevents employees from seeing admin/auditor/management profiles outside their reporting chain. When the timeline fetches performer names via `.from('profiles').select().in('id', ...)`, RLS silently filters out admins → UI shows "Unknown user".
+**Two gaps in the frequency lock enforcement:**
 
-Secondary: `ADMIN_FAST_TRACK_APPROVED` and `DATA_REPAIR` actions are missing from the `actionConfig` map in `KpiTimeline.tsx`.
+1. **No date-based cycle completion check.** The `enforce_frequency_lock_on_submission` trigger blocks non-terminal months (e.g., Jan/Feb for Q1) from transitioning `kra_set → self_review`, but does NOT check whether the terminal month's cycle has actually ended. A Quarterly March KPI can be reviewed on March 1 — before Q1 data is complete.
 
-### Fix — 3 parts
+2. **Trigger only guards one transition.** The trigger fires only on `INSERT` or `kra_set → self_review`. Once a sibling month KPI is past `kra_set` (e.g., due to being reviewed before the trigger existed on Feb 19), subsequent transitions (self_review → manager_check → approved) are not blocked. This allowed 10 Quarterly January KPIs and 6 Bi-Monthly February KPIs to be fully approved on sibling months.
 
-#### Part 1: Database — SECURITY DEFINER function for audit display profiles
+**UI has no cycle-completion gate either** — `isKpiLockedForPeriod` only checks if the month is a sibling (locked) month, not whether the terminal month's cycle period has elapsed.
 
-Create `get_profiles_for_audit_display(p_user_ids uuid[])` that returns `(id, full_name, email)` bypassing RLS. Safe because:
-- Only returns display-name fields (no sensitive data)
-- Caller already has access to the audit log entries containing these IDs
+### Data Impact — 18 Prematurely Reviewed KPIs
+
+| Category | Count | Status | Details |
+|----------|-------|--------|---------|
+| Quarterly January (sibling) | 10 | 9 approved, 1 self_review | Reviewed Feb 14-18 (before trigger existed) |
+| Quarterly February (sibling) | 1 | manager_check | Swaraj Mukhopadhyay — the screenshot KPI |
+| Quarterly March (terminal, early) | 1 | self_review | Piyush Bansal — reviewed Mar 31, before Q1 ended |
+| Bi-Monthly February (sibling) | 6 | all approved | Reviewed Feb 18-Mar 2 (before trigger existed) |
+| **Total** | **18** | | |
+
+### Percolation Verification
+
+Percolation is working correctly by design: it only fires when a terminal month KPI transitions to `approved`. For the screenshot KPI (Swaraj, Q1 Cost Saving), March is at `self_review` — once it completes the full workflow and reaches `approved`, the trigger will propagate scores to Jan and Feb siblings (only if they've independently reached their terminal workflow stage, per ADR-047 amendment).
+
+### Fix — 4 parts
+
+#### Part 1: Database Migration — Bulk Step-Back 18 Prematurely Reviewed KPIs
+
+Reset all 18 KPIs to `kra_set` status, clear all review submission data (scores, ratings, remarks), and log `ADMIN_BULK_STEP_BACK` with `performed_by = NULL` (System) and reason "Reverting premature review — multi-month KPI reviewed before cycle completion."
 
 ```sql
-CREATE OR REPLACE FUNCTION public.get_profiles_for_audit_display(p_user_ids uuid[])
-RETURNS TABLE(id uuid, full_name text, email text)
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public'
-AS $$
-  SELECT p.id, p.full_name, p.email
-  FROM profiles p
-  WHERE p.id = ANY(p_user_ids);
-$$;
+-- Identify: Quarterly Jan/Feb 2026 beyond kra_set + Bi-Monthly Feb 2026 beyond kra_set
+-- + Quarterly March reviewed before April 1
+-- Reset status to kra_set, clear review_submissions
 ```
 
-#### Part 2: Code — Fix EXISTING displays in KpiTimeline + OrgKpiHistoryTimeline
+#### Part 2: Database Trigger — Add Cycle Completion Date Check
 
-Replace the direct `.from('profiles').select().in('id', ...)` query with `.rpc('get_profiles_for_audit_display', { p_user_ids: allUserIds })` in **both** timeline components:
+Enhance `enforce_frequency_lock_on_submission` to:
+1. Block ALL status transitions (not just `kra_set → self_review`) for non-terminal months — remove the narrow condition
+2. For terminal months, add a date check: block `kra_set → self_review` if `CURRENT_DATE <= last day of terminal month`
 
-- `src/components/dashboard/KpiTimeline.tsx` (employee/manager view)
-- `src/components/admin/OrgKpiHistoryTimeline.tsx` (if it also uses direct profile query)
+```text
+Logic:
+  month_num = extract month from review_period
+  IF month is in locked_months → BLOCK (sibling month, never reviewable directly)
+  IF month is terminal → check CURRENT_DATE > end_of_month(review_period, review_year)
+     If not past cycle end → BLOCK with message "Cycle not yet complete"
+```
 
-This fixes ALL existing audit log entries that currently show "Unknown user" — no data migration needed, just the query change.
+Admin bypass remains intact. Service role bypass remains intact.
 
-Also add missing action types to `actionConfig`:
-- `ADMIN_FAST_TRACK_APPROVED` (rose theme)
-- `DATA_REPAIR` (teal theme)
-- `SUBMISSION_SCORE_CHANGED` (slate theme)
-- `PERCOLATION_DEFERRED` (amber theme)
-- `SCORE_PERCOLATED` (teal theme)
-- `RECONCILE_STATUS` (orange theme)
-- `ADMIN_BULK_STEP_BACK` (rose theme)
+#### Part 3: UI — Add Cycle Completion Gate
 
-#### Part 3: Documentation
+Add a new utility function `isCycleComplete(frequency, reviewMonth, reviewYear)` in `frequencyUtils.ts`:
+- For terminal months: returns `true` only if `today > last day of terminal month`
+- For sibling months: always returns `false` (already handled by `isKpiLockedForPeriod`)
+
+Use this in:
+- `SelfReviewSheet.tsx`: Alongside `isFrequencyLocked`, add `isCycleIncomplete` check that shows a message like "This quarterly KPI can be reviewed from April 1 after Q1 ends"
+- `UnifiedScorecard.tsx`: Grey out review actions for terminal-month KPIs where cycle is incomplete
+- Review journey components: Show "Cycle in progress" indicator
+
+#### Part 4: Documentation
 
 | File | Change |
 |------|--------|
-| New migration SQL | Create `get_profiles_for_audit_display` function |
-| `src/components/dashboard/KpiTimeline.tsx` | Use RPC for profile fetch + add missing actionConfig entries |
-| `src/components/admin/OrgKpiHistoryTimeline.tsx` | Use RPC for profile fetch (if applicable) |
-| `POLICY.md` | Add §57: Audit log performer names must be visible to any user who can view the log entry |
+| `POLICY.md` | Add §58: Multi-month KPIs can only enter workflow after terminal month ends |
+| `docs/adr/ADR-045.md` | Amend with cycle-completion gate requirement |
 | `DOCUMENTATION.md` | Version bump |
 
 ### Risk Assessment
-- **No data leakage**: Function only exposes name/email for users already identified in visible audit logs
-- **Fixes existing displays**: Every past "Unknown user" entry resolves immediately — no data migration required
-- **Forward-looking**: Any future action with any performer will resolve correctly regardless of RLS
-- **No regression**: Additive function, existing RLS policies untouched
+- **Step-back**: 18 KPIs return to kra_set. For the 15 that were approved, their scores were on sibling months — not the terminal month. No terminal month data is lost.
+- **Trigger enhancement**: Broadens blocking from one transition to all transitions on sibling months. Adds date gate for terminal months. Admin bypass preserved.
+- **UI gate**: Additive check. Employees see clear messaging about when review opens.
 
