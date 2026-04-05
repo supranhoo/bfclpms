@@ -55,6 +55,8 @@ const EMAIL_EVENTS: { key: EmailEventType; label: string; description: string }[
   { key: 'org_kpi_pending_reminder', label: 'Pending KPI Reminder', description: 'Send pending report to data owners with outstanding KPIs' },
   { key: 'system_auto_scored', label: 'System Auto-Score', description: 'Notify employee & manager when system auto-scores KPIs due to overdue review' },
   { key: 'monthly_review_reminder', label: 'Monthly Review Reminder', description: 'Send monthly reminder on 1st of every month to all employees with active KRAs for self-review & team review' },
+  { key: 'query_response_reminder', label: 'Query Response Reminder', description: 'Send daily reminder to employees who have unresponded open queries' },
+  { key: 'observation_response_reminder', label: 'Observation Response Reminder', description: 'Send daily reminder to employees who have unacknowledged open observations' },
 ];
 
 export function EmailNotificationSettings() {

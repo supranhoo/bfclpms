@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 2.16.75 — Fix: Org KPI achieved value shown in Review Journey via fallback from org_kpi_values
+> **Version:** 2.16.76 — Feature: Daily email reminders for unresponded queries & observations
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4761,3 +4761,11 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix:** Added `resolveRelationship()` helper that queries the actual reporting chain (employee → manager → manager's manager) to determine `direct` vs `indirect` relationship. Applied to all employee selection paths: grid click, deep-link with KPI, deep-link without KPI, and URL restoration.
 - **Policy:** Added §62 requiring `viewLevel` to be determined from the reporting chain, not from grid-only metadata.
 - **Affected files:** `src/pages/Dashboard.tsx`, `POLICY.md` (§62), `DOCUMENTATION.md`
+
+### v2.16.76 — Feature: Daily Email Reminders for Unresponded Queries & Observations
+- **New edge function:** `send-query-observation-reminders` — triggered daily at 9:00 AM IST via pg_cron.
+- **Logic:** Queries `kpi_queries` (status='open') grouped by `raised_to`, and `kpi_observations` (status='open') grouped by KPI employee. Sends consolidated reminder emails per recipient.
+- **New event types:** `query_response_reminder` and `observation_response_reminder` added to `send-email-notification` templates, `useEmailNotificationSettings`, `EmailNotificationSettings` UI, and `EmailTemplateEditor`.
+- **Admin control:** Both events are independently toggleable in Email Settings. Respects global email enabled toggle.
+- **Policy:** Added §63 governing reminder behavior, auto-stop, and consolidation rules.
+- **Affected files:** `supabase/functions/send-query-observation-reminders/index.ts` (new), `supabase/functions/send-email-notification/index.ts`, `supabase/config.toml`, `src/hooks/useEmailNotificationSettings.ts`, `src/components/admin/EmailNotificationSettings.tsx`, `src/components/admin/EmailTemplateEditor.tsx`, `POLICY.md` (§63), `DOCUMENTATION.md`
