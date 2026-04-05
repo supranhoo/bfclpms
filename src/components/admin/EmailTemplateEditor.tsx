@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { FileText, Save, RotateCcw, Eye } from 'lucide-react';
+import { FileText, Save, RotateCcw, Eye, Clock } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -18,6 +18,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { useEmailTemplateSchedules, type EmailScheduleConfig } from '@/hooks/useEmailTemplateSchedules';
 
 interface EmailTemplate {
   key: string;
@@ -522,6 +525,8 @@ export function EmailTemplateEditor() {
   const [selectedTemplate, setSelectedTemplate] = useState(DEFAULT_TEMPLATES[0].key);
   const [editedTemplates, setEditedTemplates] = useState<Record<string, { subject: string; body: string }>>({});
   const [hasChanges, setHasChanges] = useState(false);
+  const { getSchedule, updateSchedule, isUpdating: isScheduleUpdating } = useEmailTemplateSchedules();
+  const [scheduleEdits, setScheduleEdits] = useState<Record<string, EmailScheduleConfig>>({});
 
   // Fetch saved templates from system_settings
   const { data: savedTemplates, isLoading } = useQuery({
@@ -742,6 +747,75 @@ export function EmailTemplateEditor() {
                   <p className="text-sm text-muted-foreground">{template.description}</p>
                 </div>
                 <div className="flex gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="relative">
+                        <Clock className="h-4 w-4 mr-1" />
+                        Schedule
+                        {(scheduleEdits[template.key]?.mode || getSchedule(template.key).mode) === 'scheduled' && (
+                          <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-primary" />
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-72" align="end">
+                      <div className="space-y-4">
+                        <h4 className="font-medium text-sm">Email Dispatch Schedule</h4>
+                        <RadioGroup
+                          value={scheduleEdits[template.key]?.mode || getSchedule(template.key).mode}
+                          onValueChange={(val) => {
+                            const current = scheduleEdits[template.key] || getSchedule(template.key);
+                            setScheduleEdits(prev => ({
+                              ...prev,
+                              [template.key]: { ...current, mode: val as 'immediate' | 'scheduled' },
+                            }));
+                          }}
+                        >
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="immediate" id={`immediate-${template.key}`} />
+                            <Label htmlFor={`immediate-${template.key}`} className="text-sm font-normal">
+                              Send Immediately
+                            </Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="scheduled" id={`scheduled-${template.key}`} />
+                            <Label htmlFor={`scheduled-${template.key}`} className="text-sm font-normal">
+                              Send at Scheduled Time
+                            </Label>
+                          </div>
+                        </RadioGroup>
+                        {(scheduleEdits[template.key]?.mode || getSchedule(template.key).mode) === 'scheduled' && (
+                          <div className="space-y-2">
+                            <Label className="text-sm">Send Time (24h)</Label>
+                            <Input
+                              type="time"
+                              value={scheduleEdits[template.key]?.time || getSchedule(template.key).time}
+                              onChange={(e) => {
+                                const current = scheduleEdits[template.key] || getSchedule(template.key);
+                                setScheduleEdits(prev => ({
+                                  ...prev,
+                                  [template.key]: { ...current, time: e.target.value },
+                                }));
+                              }}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Timezone: Asia/Kolkata (IST)
+                            </p>
+                          </div>
+                        )}
+                        <Button
+                          size="sm"
+                          className="w-full"
+                          disabled={isScheduleUpdating}
+                          onClick={() => {
+                            const config = scheduleEdits[template.key] || getSchedule(template.key);
+                            updateSchedule({ templateKey: template.key, config });
+                          }}
+                        >
+                          {isScheduleUpdating ? 'Saving...' : 'Save Schedule'}
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                   <Dialog>
                     <DialogTrigger asChild>
                       <Button variant="outline" size="sm">
