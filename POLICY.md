@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 1.67.0 — §60: Workflow change step-back for approved KPIs
+> **Version:** 1.68.0 — §61: Reviewer filter & selection persistence across refresh
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
