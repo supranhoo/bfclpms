@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 2.16.72 — Fix: Persist reviewer filters & selected employee across refresh/navigation
+> **Version:** 2.16.73 — Fix: Eliminate circular effect loop in filter/employee URL persistence
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
