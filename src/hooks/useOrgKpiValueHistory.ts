@@ -29,15 +29,12 @@ export function useOrgKpiValueHistory(
   reviewPeriod?: string,
   reviewYear?: number
 ) {
-  return useQuery({
+  const historyQuery = useQuery({
     queryKey: ['org-kpi-value-history', categoryId, kraName, kpiName, reviewPeriod, reviewYear],
     queryFn: async () => {
       let query = supabase
         .from('org_kpi_value_history')
-        .select(`
-          *,
-          changed_by_profile:profiles!org_kpi_value_history_changed_by_fkey(full_name, employee_code)
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -49,10 +46,28 @@ export function useOrgKpiValueHistory(
 
       const { data, error } = await query;
       if (error) throw error;
-      return data as OrgKpiValueHistoryEntry[];
+      
+      // Fetch profiles via SECURITY DEFINER RPC to bypass RLS
+      const userIds = [...new Set((data || []).map(d => d.changed_by).filter(Boolean))] as string[];
+      let profileMap = new Map<string, { full_name: string; employee_code: string | null }>();
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase.rpc('get_profiles_for_audit_display', { p_user_ids: userIds });
+        if (profiles) {
+          for (const p of profiles) {
+            profileMap.set(p.id, { full_name: p.full_name || p.email, employee_code: null });
+          }
+        }
+      }
+      
+      return (data || []).map(entry => ({
+        ...entry,
+        changed_by_profile: entry.changed_by ? (profileMap.get(entry.changed_by) || null) : null,
+      })) as OrgKpiValueHistoryEntry[];
     },
     enabled: !!categoryId || !!reviewPeriod,
   });
+
+  return historyQuery;
 }
 
 export function useInsertOrgKpiValueHistory() {

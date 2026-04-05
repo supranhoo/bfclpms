@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 1.63.0 — §56: Mandatory audit trail for review submission score changes
+> **Version:** 1.64.0 — §57: Audit log performer visibility via SECURITY DEFINER RPC
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

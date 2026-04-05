@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 2.15.66 — Data repair: restored 21 zeroed management_scores from audit logs; added safety-net trigger for untracked score changes (§56)
+> **Version:** 2.15.67 — Fixed "Unknown user" in timeline: added get_profiles_for_audit_display RPC; added missing actionConfig entries (§57)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
