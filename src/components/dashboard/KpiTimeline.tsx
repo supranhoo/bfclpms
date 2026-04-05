@@ -88,6 +88,14 @@ const actionConfig: Record<string, { icon: React.ElementType; color: string; lab
   // Org KPI Propagation actions
   'ORG_KPI_PROPAGATED': { icon: Briefcase, color: 'bg-teal-500', label: 'Org KPI Data Entered' },
   'ORG_KPI_VALUE_UPDATED': { icon: Edit, color: 'bg-teal-500', label: 'Org KPI Value Updated' },
+  // RCA fix actions
+  'ADMIN_FAST_TRACK_APPROVED': { icon: UserCog, color: 'bg-rose-500', label: 'Admin Fast-Track Approved' },
+  'DATA_REPAIR': { icon: Edit, color: 'bg-teal-500', label: 'Data Repair' },
+  'SUBMISSION_SCORE_CHANGED': { icon: AlertCircle, color: 'bg-slate-500', label: 'Score Changed (Safety Net)' },
+  'PERCOLATION_DEFERRED': { icon: Clock, color: 'bg-amber-500', label: 'Percolation Deferred' },
+  'SCORE_PERCOLATED': { icon: CheckCircle, color: 'bg-teal-500', label: 'Score Percolated' },
+  'RECONCILE_STATUS': { icon: AlertCircle, color: 'bg-orange-500', label: 'Status Reconciled' },
+  'ADMIN_BULK_STEP_BACK': { icon: UserCog, color: 'bg-rose-600', label: 'Admin Bulk Step Back' },
 };
 
 export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }: KpiTimelineProps) {
@@ -122,12 +130,10 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
       if (allUserIds.length === 0) return [];
       
       const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, email')
-        .in('id', allUserIds);
+        .rpc('get_profiles_for_audit_display', { p_user_ids: allUserIds });
 
       if (error) throw error;
-      return data as Profile[];
+      return (data ?? []) as Profile[];
     },
     enabled: allUserIds.length > 0,
   });

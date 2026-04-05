@@ -4726,6 +4726,14 @@ export type Database = {
         }
         Returns: Json
       }
+      get_profiles_for_audit_display: {
+        Args: { p_user_ids: string[] }
+        Returns: {
+          email: string
+          full_name: string
+          id: string
+        }[]
+      }
       get_skip_level_manager: {
         Args: { employee_uuid: string }
         Returns: string
