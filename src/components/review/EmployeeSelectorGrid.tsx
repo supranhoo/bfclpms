@@ -73,6 +73,7 @@ const STATUS_OPTIONS_BY_LEVEL: Record<Exclude<ViewMode, 'self'>, Array<{ value: 
     { value: 'pending', label: 'With Pending Audit' },
     { value: 'in_audit', label: 'In Audit' },
     { value: 'forwarded', label: 'Forwarded' },
+    { value: 'cross_check', label: 'All Employees (Cross-Check)' },
   ],
   management: [
     { value: 'all', label: 'All Employees' },
@@ -219,7 +220,9 @@ export function EmployeeSelectorGrid({
       const indirectIds = (skipLevelMembers || []).map(p => p.id);
       return [...new Set([...directIds, ...indirectIds])];
     }
-    const source = requiredStage ? stageFilteredProfiles : (isFullAccess ? allProfiles : teamMembers);
+    // Cross-check mode: include ALL profiles so workflowMap covers everyone
+    const isCrossCheck = viewLevel === 'audit' && statusFilter === 'cross_check';
+    const source = isCrossCheck ? allProfiles : (requiredStage ? stageFilteredProfiles : (isFullAccess ? allProfiles : teamMembers));
     if (!source) return [];
     return source.map((p: { id: string }) => p.id);
   }, [viewLevel, requiredStage, stageFilteredProfiles, isFullAccess, allProfiles, teamMembers, skipLevelMembers]);
@@ -254,11 +257,14 @@ export function EmployeeSelectorGrid({
   };
 
   // isLoading accounts for stage-filtered fetch when a required stage is active
+  const isCrossCheckMode = viewLevel === 'audit' && statusFilter === 'cross_check';
   const isLoading = viewLevel === 'team'
     ? (isFullAccess ? profilesLoading : (teamLoading || skipLevelLoading))
-    : requiredStage
-      ? stageFilteredLoading
-      : (isFullAccess ? profilesLoading : teamLoading);
+    : isCrossCheckMode
+      ? profilesLoading
+      : requiredStage
+        ? stageFilteredLoading
+        : (isFullAccess ? profilesLoading : teamLoading);
 
   // Build merged base members with relationship tags for team view
   const baseMembers: EmployeeProfile[] | undefined = useMemo(() => {
@@ -277,6 +283,10 @@ export function EmployeeSelectorGrid({
       const directTagged = (teamMembers || []).map(m => ({ ...m, relationship: 'direct' as const }));
       const indirectTagged = (skipLevelMembers || []).filter(m => !directSet.has(m.id)).map(m => ({ ...m, relationship: 'indirect' as const }));
       return [...directTagged, ...indirectTagged];
+    }
+    // Cross-check mode: bypass workflow stage filter, show ALL employees
+    if (viewLevel === 'audit' && statusFilter === 'cross_check') {
+      return (allProfiles as EmployeeProfile[] | undefined) || [];
     }
     // For reviewer panels (hr_pms, audit, management, skip_level):
     // Only show employees whose resolved workflow template includes the required stage.
@@ -550,6 +560,8 @@ export function EmployeeSelectorGrid({
         (myAssignedEmployeeIds instanceof Set && myAssignedEmployeeIds.has(m.id)) ||
         (myKpiLevelData?.allAssignedEmployeeIds?.has(m.id))
       );
+    } else if (statusFilter === 'cross_check' && viewLevel === 'audit') {
+      // Cross-check: show ALL employees, no KPI-status filtering (demographic filters still apply above)
     } else if (statusFilter !== 'all' && statusFilter !== 'my_assigned' && periodKpis) {
       const employeeIds = new Set<string>();
       // For merged team view, build skip-level member set for relationship detection
