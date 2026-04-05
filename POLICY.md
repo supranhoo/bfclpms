@@ -1194,3 +1194,24 @@ All propagation actions in the Org KPI Data Entry system **must** require explic
 **Rationale:** Accidental propagation (especially on mobile devices with small tap targets) locks the Org KPI entry for non-admin users and pushes potentially incomplete data to employee scorecards. Requiring explicit confirmation prevents data integrity issues caused by accidental taps.
 
 **RCA (2026-04-05):** A manager (Biswajit) accidentally propagated Org KPI values while entering data on a mobile device (389px viewport). The per-row propagate button (28×28px) was adjacent to input fields and had no confirmation gate, unlike the main propagate buttons.
+
+---
+
+## §60 — Workflow Change Step-Back for Approved KPIs
+
+**Effective Date:** 2026-04-05
+
+When an admin changes an employee's (or department's/PMS grade's) workflow template assignment, the system **must** automatically detect and step back any `approved` KPIs if the new workflow introduces review stages beyond the old workflow's terminal reviewer.
+
+### Rules
+
+1. **Detection**: The database trigger `trg_workflow_change_step_back` fires on INSERT or UPDATE of `workflow_config` when `workflow_template_id` changes.
+2. **Comparison**: The trigger compares old and new workflow stages using canonical stage ordering (`kra_set < self_review < manager_check < skip_level_check < hr_pms_review < audit < management_review`).
+3. **Step-back**: If the new workflow has stages canonically beyond the old terminal reviewer, all `approved` KPIs for the affected employees/period are reverted to the stage preceding the new uncovered stage.
+4. **Score preservation**: All existing reviewer scores (self, manager, HR PMS, etc.) are preserved. Only `final_score` and `final_rating` are cleared.
+5. **Audit trail**: Each stepped-back KPI receives a `WORKFLOW_CHANGE_STEP_BACK` audit log entry with old/new template IDs and the step-back reason.
+6. **UI notification**: The workflow config UI shows a toast warning when KPIs are stepped back, informing the admin of the count and target stage.
+
+**Rationale:** KPIs approved under a shorter workflow (e.g., HR PMS as terminal) must not remain `approved` when the workflow is extended (e.g., adding audit). The new terminal reviewer must review and approve these KPIs.
+
+**RCA (2026-04-05):** KPI `ee7db054` (employee 100482, Samir Dey) was approved by HR PMS on Mar 28 under `self_l1_hr_pms`. On Apr 4, admin changed the workflow to `self_l1_audit`. The KPI remained `approved` despite never going through audit. 39 KPIs across 7 employees were affected.
