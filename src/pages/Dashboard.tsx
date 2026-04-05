@@ -156,7 +156,8 @@ export default function Dashboard() {
           } else if (viewMode === 'self') {
             setViewMode('team');
           }
-          handleSelectEmployee(empProfile as EmployeeProfile, kpiParam);
+          const resolved = await resolveRelationship(empProfile as EmployeeProfile, profile!.id);
+          handleSelectEmployee(resolved, kpiParam);
         }
 
         // Only clean up one-time deep-link params; keep employee for persistence
@@ -201,7 +202,8 @@ export default function Dashboard() {
           } else if (viewMode === 'self') {
             setViewMode('team');
           }
-          handleSelectEmployee(empProfile as EmployeeProfile);
+          const resolved = await resolveRelationship(empProfile as EmployeeProfile, profile!.id);
+          handleSelectEmployee(resolved);
         }
 
         // Only clean up one-time params; keep employee for persistence
@@ -270,7 +272,8 @@ export default function Dashboard() {
           .eq('id', employeeParam)
           .single();
         if (empProfile) {
-          setSelectedEmployee(empProfile as EmployeeProfile);
+          const resolved = await resolveRelationship(empProfile as EmployeeProfile, profile!.id);
+          setSelectedEmployee(resolved);
         }
       };
       restoreEmployee();
@@ -291,10 +294,11 @@ export default function Dashboard() {
   }, [setSearchParams]);
 
   // Handle employee selection from grid
-  const handleSelectEmployee = useCallback((employee: EmployeeProfile, kpiId?: string | null) => {
-    setSelectedEmployee(employee);
+  const handleSelectEmployee = useCallback(async (employee: EmployeeProfile, kpiId?: string | null) => {
+    const resolved = await resolveRelationship(employee, profile!.id);
+    setSelectedEmployee(resolved);
     setAutoOpenKpiId(kpiId || null);
-  }, []);
+  }, [profile]);
 
   if (loading) {
     return <DashboardSkeleton />;
