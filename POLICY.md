@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 1.70.0 — §63: Daily email reminders for unresponded queries & observations
+> **Version:** 1.71.0 — §64: Auditor cross-check visibility for all employees
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1248,3 +1248,17 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
 4. **Admin control**: Both reminder types (`query_response_reminder`, `observation_response_reminder`) are independently toggleable via Email Notification Settings.
 5. **Respects global toggle**: Reminders are only sent when the global email notifications toggle is enabled.
 6. **No duplicate sends**: Reminders are stateless — they query current `open` status each day. Once status changes, the item is excluded from future reminders.
+
+---
+
+### §64 — Auditor Cross-Check Visibility
+
+**Effective Date:** 2026-04-05
+
+**Policy:**
+
+1. **Cross-check filter**: The Audit Panel includes an "All Employees (Cross-Check)" status filter that shows ALL active employees regardless of whether their workflow includes an audit stage.
+2. **Read-only access**: When viewing employees via cross-check whose workflow does not include an audit stage, the auditor can view scores from other reviewers but cannot submit audit scores.
+3. **No workflow bypass**: The cross-check mode does not add audit capability to employees' workflows — it only provides read-only visibility for score verification purposes.
+4. **Demographic filters apply**: Standard demographic filters (department, designation, grade, manager) still apply in cross-check mode.
+5. **Existing filters unchanged**: All existing audit panel filters (All Employees, My Assignments, Pending, In Audit, Forwarded) continue to respect workflow stage requirements.

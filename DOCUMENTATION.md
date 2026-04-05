@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 2.16.76 — Feature: Daily email reminders for unresponded queries & observations
+> **Version:** 2.16.77 — Feature: Auditor cross-check filter for all employees visibility
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
