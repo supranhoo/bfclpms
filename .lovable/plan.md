@@ -1,56 +1,82 @@
 
 
-## Root Cause: KPI Marked as N/A by Admin — Final Score is NULL by Design
+## RCA Fix: Multi-Month Score Percolation Bypass + Bulk Step-Back of Affected KPIs
 
-### Investigation Findings
+### Problem
+The `percolate_multimonth_score()` database trigger blindly approves sibling months when the terminal month is approved, bypassing all intermediate workflow stages (including audit). This caused ~51 KPIs to be forwarded and approved without auditor action.
 
-This KPI (`f457fd99`) belongs to **Dippendu Das (101773)**, February 2026. The database shows:
+### Policy Addition (Per User Direction)
+- Quarterly, Bi-Monthly, Half-Yearly, and Yearly KPIs must complete the full workflow independently — the system must NOT auto-score or auto-approve sibling months
+- System scores 0 only when self-review is overdue (not submitted by the 10th), per ADR-048. No other system-initiated scoring is permitted
+- Score percolation copies scores only to siblings that have already independently reached their terminal workflow stage
 
-| Field | Value |
-|-------|-------|
-| `is_na` | `true` |
-| `na_marked_by_role` | `admin` |
-| `self_score` | 5 |
-| `auditor_score` | 0 |
-| `management_score` | 0 |
-| `final_score` | **NULL** |
-| `final_rating` | **NULL** |
-| `status` | `approved` |
-| `auto_advance_reason` | "Scored by Admin on behalf of management" |
+### Data Impact: 40 Confirmed Percolated KPIs
+Database query confirms **40 KPIs** currently in `approved` status with `SCORE_PERCOLATED` audit logs (2026). An additional ~11 were affected by `WORKFLOW_RECONCILED` actions — total aligns with the auditor's ~51 claim.
 
-**What happened:** An admin marked this KPI as **N/A** during management data entry on March 31. Per policy (ADR-048 / weighted-score-calculation-logic), when a KPI is marked N/A and approved, `final_score` and `final_rating` are explicitly set to NULL so it is **excluded from weighted average calculations**.
+---
 
-The Self=5, Auditor=0, Mgmt=0 scores are residual values from before the N/A flag was applied — they were not cleared.
+### Fix — 3 parts
 
-### The Real Problem (UX)
+#### Part 1: Database Migration — Fix the Trigger
 
-The Final column shows "—" (a dash) for N/A KPIs, which looks identical to "not yet scored" KPIs. Users cannot distinguish between "N/A — excluded from scoring" and "stuck — no final score computed." The table doesn't surface the N/A status in the score columns at all.
+Recreate `percolate_multimonth_score()` with a workflow-stage guard:
 
-### Fix — 2 changes in `src/components/review/KpiDetailsTable.tsx`
+```sql
+-- Before approving a sibling:
+SELECT stages INTO v_sibling_stages
+FROM get_employee_workflow_info(NEW.employee_id, v_sibling.review_period, NEW.review_year);
 
-1. **Final column: Show "N/A" badge instead of "—"** when `submission.is_na === true` and status is `approved`
-2. **Score columns: Dim/grey-out scores for N/A KPIs** — show the residual scores but with a visual indicator (e.g., strikethrough or muted text) so users understand these scores are not counted
+v_terminal := v_sibling_stages[array_length(v_sibling_stages, 1)];
 
-### Technical Detail
-
-In `getScoreForColumn` (line 137-139):
-```typescript
-case 'final_score':
-  // If N/A, return a sentinel or handle in renderer
-  if (submission.is_na) return 'N/A'; // handled specially in cell renderer
-  return kpiStatus === 'approved' ? (submission.final_score ?? null) : null;
+IF v_sibling.kpi_status = 'approved' THEN
+  -- Already approved: update scores only, no status change
+ELSIF v_sibling.kpi_status = v_terminal THEN
+  -- At terminal stage: safe to approve + copy scores
+ELSE
+  -- Mid-workflow: DO NOT touch, log PERCOLATION_DEFERRED
+  CONTINUE;
+END IF;
 ```
 
-In the cell renderer for score columns, check `submission.is_na` and render scores with `line-through text-muted-foreground` styling + an "N/A" badge in the Final column.
+Key changes:
+- Workflow guard checks sibling's terminal stage before approving
+- Deferred percolation logged as `PERCOLATION_DEFERRED` in audit
+- `auto_advance_reason` set to `'Score percolated from terminal month'` for traceability
 
-### Additional: Data Integrity Question
+#### Part 2: Database Migration — Bulk Step-Back All Percolated KPIs
 
-If this KPI was **not** supposed to be N/A (admin error), the fix is a data correction — not a code change. The admin can use the existing Admin KPI Editor to unmark N/A and re-approve. The plan above addresses the UX confusion regardless.
+A one-time migration to revert all system-percolated KPIs back to their correct pre-percolation workflow stage:
 
-### Files Modified
+```sql
+-- For each KPI with SCORE_PERCOLATED audit log that is currently approved:
+-- 1. Look up the employee's workflow for that month
+-- 2. Determine the stage the KPI was at BEFORE percolation (from audit log old_value)
+-- 3. Step it back to that original stage
+-- 4. Clear all review submission data from that stage onward (cascade-clear per ADR-033)
+-- 5. Log ADMIN_BULK_STEP_BACK audit entry with reason "Reverting system percolation bypass"
+```
+
+Logic:
+1. Query all KPIs where `kpi_audit_logs.action = 'SCORE_PERCOLATED'` AND `kpis.status = 'approved'`
+2. For each, read the `old_value->>'status'` from the SCORE_PERCOLATED log — this is the stage before percolation
+3. Reset `kpis.status` to that original stage
+4. Clear review_submissions fields for that stage and all subsequent stages (same logic as `buildCascadeClearFields`)
+5. Insert audit log: action = `ADMIN_BULK_STEP_BACK`, metadata includes `reason: 'Reverting system percolation — KPI must complete workflow independently'`
+
+Additionally, check for KPIs affected by `WORKFLOW_RECONCILED` that were also system-advanced (the remaining ~11). If they are currently `approved` without legitimate reviewer action at their terminal stage, include them in the revert.
+
+Estimated affected: **40-51 KPIs** across February, March, and April 2026.
+
+#### Part 3: Documentation Updates
 
 | File | Change |
 |------|--------|
-| `src/components/review/KpiDetailsTable.tsx` | Show "N/A" in Final column for N/A KPIs; dim residual scores |
-| `DOCUMENTATION.md` | Version bump |
+| `POLICY.md` | Add §51: Multi-month workflow independence + system scoring restriction |
+| `docs/adr/ADR-047.md` | Amend with workflow guard requirement, note bulk revert |
+| `DOCUMENTATION.md` | Version bump with RCA note |
+
+### Risk Assessment
+- **Bulk step-back**: KPIs will return to their pre-percolation stage. Employees/reviewers will need to re-process them through the workflow. No data loss — scores from the terminal month remain on the terminal month's KPI.
+- **Trigger fix**: Forward-looking. Siblings stay at their current stage until reviewers complete. Terminal month approval no longer cascades.
+- **Regression risk**: Low — additive guard in trigger, one-time migration for revert.
 
