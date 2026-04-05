@@ -81,6 +81,7 @@ interface KpiJourneySectionProps {
   employeeName?: string;
   employeeCode?: string;
   reportingManagerName?: string;
+  orgAchievedValue?: number | null;
 }
 
 // Determine the status of each review stage based on KPI status and view level
@@ -338,7 +339,7 @@ export function KpiJourneySection({
       submission?.self_score ?? null, submission?.self_rating ?? null,
       submission?.self_remarks ?? null,
       buildEvidenceUrls(submission?.self_evidence_urls, submission?.self_evidence_url),
-      submission?.achieved_value ?? null
+      submission?.achieved_value ?? orgAchievedValue ?? null
     ),
     manager: buildStage(
       Briefcase, 'amber', 'Manager',
