@@ -130,12 +130,10 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
       if (allUserIds.length === 0) return [];
       
       const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, email')
-        .in('id', allUserIds);
+        .rpc('get_profiles_for_audit_display', { p_user_ids: allUserIds });
 
       if (error) throw error;
-      return data as Profile[];
+      return (data ?? []) as Profile[];
     },
     enabled: allUserIds.length > 0,
   });
