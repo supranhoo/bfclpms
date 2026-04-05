@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-04-03  
-> **Version:** 2.15.64 — RCA fix: percolate_multimonth_score trigger now respects workflow stages; bulk step-back of 40 incorrectly percolated KPIs
+> **Last Updated:** 2026-04-05  
+> **Version:** 2.15.65 — Fix performer attribution: triggers use NULL for system actions; cleaned up 80 misleading audit logs; UI shows "System" for NULL performers
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
