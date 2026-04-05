@@ -511,6 +511,36 @@ export type Database = {
           },
         ]
       }
+      email_dispatch_queue: {
+        Row: {
+          created_at: string
+          id: string
+          metadata: Json | null
+          recipient_email: string
+          recipient_name: string | null
+          sent_at: string | null
+          template_key: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          recipient_email: string
+          recipient_name?: string | null
+          sent_at?: string | null
+          template_key: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          recipient_email?: string
+          recipient_name?: string | null
+          sent_at?: string | null
+          template_key?: string
+        }
+        Relationships: []
+      }
       email_logs: {
         Row: {
           created_at: string
