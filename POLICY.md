@@ -1130,3 +1130,25 @@ All changes to score fields in `review_submissions` (self_score, manager_score, 
 **Decision Context & Alternatives Considered:**
 - *Alternative A: Rely solely on application-level logging* — Rejected; a silent bulk operation on 2026-04-01 zeroed 159 management_scores with no trace.
 - *Chosen approach:* Database-level safety-net trigger ensures no score change goes unlogged, regardless of the source.
+
+---
+
+## §57 — Audit Log Performer Visibility
+
+**Effective Date:** 2026-04-05
+
+Audit log performer names must be visible to any user who can view the audit log entry, regardless of the viewer's reporting chain or RLS restrictions on the `profiles` table.
+
+**Rules:**
+1. All timeline/audit display components must fetch performer profiles via the `get_profiles_for_audit_display(p_user_ids uuid[])` SECURITY DEFINER function, NOT via direct `profiles` table queries.
+2. The function only returns `id`, `full_name`, and `email` — no sensitive fields are exposed.
+3. This applies to both `KpiTimeline` (employee/manager view) and `OrgKpiHistoryTimeline` (admin/data-owner view).
+4. Any new timeline or audit display component must use this same RPC pattern.
+5. All action types that can appear in `kpi_audit_logs` must have a corresponding entry in the `actionConfig` map in `KpiTimeline.tsx` with appropriate icon, color, and label.
+
+**Rationale:** Employees viewing their own KPI timeline could not see admin/auditor names because the `profiles` table RLS correctly restricts visibility to the reporting chain. However, hiding the performer's name on an audit entry the user already has access to adds no security — only confusion ("Unknown user"). The SECURITY DEFINER function resolves this for all existing and future audit log entries.
+
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Relax profiles RLS policies* — Rejected; would expose all profile data to all users.
+- *Alternative B: Store performer name directly in audit log* — Rejected; duplicates data and doesn't handle name changes.
+- *Chosen approach:* SECURITY DEFINER function scoped to display-only fields, called exclusively by timeline components.
