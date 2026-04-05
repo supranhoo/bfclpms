@@ -332,6 +332,56 @@ const obsStatusConfig: Record<string, { label: string; variant: 'outline' | 'sec
   resolved: { label: 'Resolved', variant: 'default' },
 };
 
+// ---- Per-row propagate cell with confirmation dialog ----
+function PerRowPropagateCell({ canPropagate, isPropagating, employeeName, onConfirm }: {
+  canPropagate: boolean;
+  isPropagating?: boolean;
+  employeeName: string;
+  onConfirm: () => void;
+}) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  return (
+    <TableCell className="py-1.5 w-16 text-center">
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              disabled={!canPropagate || isPropagating}
+              onClick={() => setConfirmOpen(true)}
+            >
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            Propagate this employee only
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Propagate to Employee Scorecard?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will push the Org KPI score for <strong className="text-foreground">{employeeName}</strong> to their individual scorecard. This action will lock this entry from further edits (unless rolled back by an admin).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setConfirmOpen(false); onConfirm(); }}>
+              Propagate
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </TableCell>
+  );
+}
+
 // ---- Employee row (with expandable observation sub-row) ----
 interface EmployeeRowProps {
   row: ScopedRow;
