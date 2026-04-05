@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 2.16.69 — §59: Mandatory propagation confirmation on all Org KPI propagate actions
+> **Version:** 2.16.70 — §60: Workflow change auto-step-back for approved KPIs
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4742,3 +4742,10 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - Final column now shows an amber "N/A" badge for N/A KPIs instead of a dash.
 - Residual scores (Self, Auditor, Mgmt) on N/A KPIs are rendered with strikethrough styling to indicate they are excluded from calculations.
 - **Affected files:** `src/pages/admin/OrgKpiDataEntry.tsx`, `DOCUMENTATION.md`
+
+### v2.16.70 — §60: Workflow Change Auto-Step-Back for Approved KPIs
+- **RCA:** KPI `ee7db054` (employee 100482) was approved by HR PMS on Mar 28 under `self_l1_hr_pms` workflow. On Apr 4, admin changed workflow to `self_l1_audit` (adding audit stage). KPI remained `approved` despite never going through audit. 39 KPIs across 7 employees were affected.
+- **Data fix:** Reset 39 KPIs from `approved` to `manager_check` (pre-audit stage). Cleared `final_score`/`final_rating`. Preserved all reviewer scores.
+- **Trigger:** Added `trg_workflow_change_step_back` on `workflow_config`. Auto-detects when new workflow adds stages beyond old terminal reviewer and steps back approved KPIs.
+- **UI:** Post-save toast notification in workflow config UI warns admin when KPIs are stepped back.
+- **Affected files:** Migration SQL, `src/hooks/useWorkflowConfig.ts`, `POLICY.md` (§60), `DOCUMENTATION.md`

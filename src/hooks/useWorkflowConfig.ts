@@ -216,11 +216,31 @@ export function useUpsertWorkflowConfig() {
         return data;
       }
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: async (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['workflow-configs'] });
       queryClient.invalidateQueries({ queryKey: ['employee-workflow'] });
       queryClient.invalidateQueries({ queryKey: ['employee-workflow-stages'] });
       queryClient.invalidateQueries({ queryKey: ['bulk-employee-workflows'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+
+      // Check if the trigger stepped back any KPIs
+      try {
+        const { data: stepBackLogs } = await supabase
+          .from('kpi_audit_logs')
+          .select('kpi_id, metadata')
+          .eq('action', 'WORKFLOW_CHANGE_STEP_BACK')
+          .gte('created_at', new Date(Date.now() - 10000).toISOString())
+          .order('created_at', { ascending: false });
+
+        if (stepBackLogs && stepBackLogs.length > 0) {
+          const { toast } = await import('sonner');
+          const stepBackTo = (stepBackLogs[0].metadata as any)?.step_back_to || 'earlier stage';
+          toast.warning(
+            `${stepBackLogs.length} approved KPI(s) were stepped back to "${getStageLabel(stepBackTo)}" because the new workflow adds review stages beyond the previous terminal reviewer.`,
+            { duration: 8000 }
+          );
+        }
+      } catch { /* best-effort notification */ }
 
       // Auto-reconcile in-flight KPIs for the affected period
       const period = variables.reviewPeriod;
