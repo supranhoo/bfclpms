@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { FILTER_PARAM_NAMES } from '@/hooks/useUrlFilterState';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { useSkipLevelTeamMembers } from '@/hooks/useOrganization';
@@ -201,12 +202,51 @@ export default function Dashboard() {
     }, { replace: true });
   }, [viewMode]);
 
+  // Persist selected employee in URL for refresh restoration
+  useEffect(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (selectedEmployee) {
+        next.set('employee', selectedEmployee.id);
+      } else {
+        next.delete('employee');
+      }
+      return next;
+    }, { replace: true });
+  }, [selectedEmployee]);
+
+  // Restore selected employee from URL on mount (when no deep-link processing happened)
+  useEffect(() => {
+    const employeeParam = searchParams.get('employee');
+    const kpiParam = searchParams.get('kpi');
+    // Only restore if employee param exists, no KPI deep-link is being processed, and no employee is already selected
+    if (employeeParam && !kpiParam && !selectedEmployee && viewMode !== 'self') {
+      const restoreEmployee = async () => {
+        const { data: empProfile } = await supabase
+          .from('profiles')
+          .select('id, full_name, email, designation, employee_code, avatar_url, department_id, reporting_manager_id, departments(id, name, code)')
+          .eq('id', employeeParam)
+          .single();
+        if (empProfile) {
+          setSelectedEmployee(empProfile as EmployeeProfile);
+        }
+      };
+      restoreEmployee();
+    }
+  }, []);
+
   // Handle mode change
   const handleModeChange = useCallback((mode: ViewMode) => {
     setViewMode(mode);
     setSelectedEmployee(null);
     setAutoOpenKpiId(null);
-  }, []);
+    // Clear filter params when switching view modes
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      FILTER_PARAM_NAMES.forEach((p) => next.delete(p));
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   // Handle employee selection from grid
   const handleSelectEmployee = useCallback((employee: EmployeeProfile, kpiId?: string | null) => {

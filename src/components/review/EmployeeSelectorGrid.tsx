@@ -1,5 +1,6 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useUrlFilterState, useUrlFilterStateNullable, useClearAllFilters } from '@/hooks/useUrlFilterState';
 import { useMyAuditAssignments } from '@/hooks/useAuditAssignments';
 import { useMyKpiLevelAssignments } from '@/hooks/useMyKpiLevelAssignments';
 import { useAuditorWorkloadSummary } from '@/hooks/useAuditorWorkloadSummary';
@@ -183,14 +184,15 @@ export function EmployeeSelectorGrid({
   const selectedPeriod = periodSelection.selectedMonth;
   const selectedYear = periodSelection.selectedYear;
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
-  const [selectedDesignation, setSelectedDesignation] = useState<string | null>(null);
-  const [selectedGrade, setSelectedGrade] = useState<string | null>(null);
-  const [selectedManager, setSelectedManager] = useState<string | null>(null);
+  // Persist filters in URL search params so they survive refresh/navigation
+  const [searchQuery, setSearchQuery] = useUrlFilterState('q', '');
+  const [statusFilter, setStatusFilter] = useUrlFilterState('status', 'all');
+  const [selectedDepartment, setSelectedDepartment] = useUrlFilterStateNullable('dept');
+  const [selectedDesignation, setSelectedDesignation] = useUrlFilterStateNullable('desig');
+  const [selectedGrade, setSelectedGrade] = useUrlFilterStateNullable('grade');
+  const [selectedManager, setSelectedManager] = useUrlFilterStateNullable('mgr');
   const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
-  const [auditorFilter, setAuditorFilter] = useState<string | null>(null);
+  const [auditorFilter, setAuditorFilter] = useUrlFilterStateNullable('auditor');
   const [auditorWorkloadExpanded, setAuditorWorkloadExpanded] = useState(true);
 
   // Audit assignments: fetch current user's assigned employees
@@ -915,7 +917,7 @@ export function EmployeeSelectorGrid({
 
   // Render stats cards based on view level
   const toggleStatusFilter = (filter: string) => {
-    setStatusFilter(prev => prev === filter ? 'all' : filter);
+    setStatusFilter(statusFilter === filter ? 'all' : filter);
   };
 
   const renderStatsCards = () => {
@@ -1347,7 +1349,7 @@ export function EmployeeSelectorGrid({
               {auditorWorkloadStats.map(a => (
                 <button
                   key={a.auditorId}
-                  onClick={() => setAuditorFilter(prev => prev === a.auditorId ? null : a.auditorId)}
+                  onClick={() => setAuditorFilter(auditorFilter === a.auditorId ? null : a.auditorId)}
                   className={`shrink-0 rounded-lg border px-3 py-2 text-left transition-all min-w-[140px] ${
                     auditorFilter === a.auditorId
                       ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
@@ -1384,7 +1386,7 @@ export function EmployeeSelectorGrid({
               ))}
               {unassignedStats && (
                 <button
-                  onClick={() => setAuditorFilter(prev => prev === '__unassigned__' ? null : '__unassigned__')}
+                  onClick={() => setAuditorFilter(auditorFilter === '__unassigned__' ? null : '__unassigned__')}
                   className={`shrink-0 rounded-lg border px-3 py-2 text-left transition-all min-w-[140px] ${
                     auditorFilter === '__unassigned__'
                       ? 'border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/30'

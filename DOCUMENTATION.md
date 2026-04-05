@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 2.16.71 — Fix: Previous months show historical workflow instead of current
+> **Version:** 2.16.72 — Fix: Persist reviewer filters & selected employee across refresh/navigation
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
