@@ -1216,7 +1216,7 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       kra_list, kra_count, employee_name, total_weightage,
       old_email, new_email,
       observation_title, observation_type, observation_description, reply_content,
-      auto_score_reason, kpi_list, final_score } = body;
+      auto_score_reason, kpi_list, final_score, _from_scheduler } = body;
 
     // Check if email notifications are enabled
     const { data: enabledSetting } = await supabase
@@ -1264,6 +1264,60 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
         status: 200,
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
+    }
+
+    // --- Schedule check: if template is "scheduled" and NOT called from scheduler, queue it ---
+    if (!_from_scheduler) {
+      const { data: scheduleSetting } = await supabase
+        .from("system_settings")
+        .select("setting_value")
+        .eq("setting_key", `email_schedule_${event_type}`)
+        .maybeSingle();
+
+      if (scheduleSetting?.setting_value) {
+        try {
+          const schedConfig = typeof scheduleSetting.setting_value === "string"
+            ? JSON.parse(scheduleSetting.setting_value)
+            : scheduleSetting.setting_value;
+
+          if (schedConfig && schedConfig.mode === "scheduled") {
+            // Queue the email instead of sending immediately
+            const metadata = { ...body };
+            delete metadata.event_type;
+            delete metadata.recipient_email;
+            delete metadata.recipient_name;
+
+            const { error: queueError } = await supabase
+              .from("email_dispatch_queue")
+              .insert({
+                template_key: event_type,
+                recipient_email,
+                recipient_name: recipient_name || null,
+                metadata,
+              });
+
+            if (queueError) {
+              console.error("Failed to queue scheduled email:", queueError);
+              // Fall through to send immediately as fallback
+            } else {
+              console.log(`Email queued for scheduled delivery: ${event_type} → ${recipient_email}`);
+              await logEmail({
+                event_type,
+                recipient_email,
+                recipient_name,
+                status: 'queued',
+                metadata: { reason: `Queued for scheduled delivery at ${schedConfig.time}` },
+              });
+              return new Response(
+                JSON.stringify({ queued: true, scheduled_time: schedConfig.time }),
+                { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+              );
+            }
+          }
+        } catch {
+          // Invalid config, proceed with immediate send
+        }
+      }
     }
 
     // Get all settings including provider and SMTP config
