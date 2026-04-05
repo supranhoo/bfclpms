@@ -4755,3 +4755,9 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix:** Changed to call RPC once per unique historical period with correct singular parameter names. Each previous month now resolves its own period-specific workflow configuration.
 - **Impact:** All employees with historical workflow changes now correctly display the workflow that was active during each past period.
 - **Affected files:** `src/components/review/KpiJourneySection.tsx`, `DOCUMENTATION.md`
+
+### v2.16.74 — Fix: Skip-Level ViewLevel Resolved from Reporting Chain
+- **RCA:** Employee 101125 (skip-level manager for HR dept) could not review KPIs at `manager_check` status for indirect report 101358. The `viewLevel` resolved to `manager` instead of `skip_level` because the `relationship` property was only set by the grid component and was missing during URL restoration, deep-links, and race conditions.
+- **Fix:** Added `resolveRelationship()` helper that queries the actual reporting chain (employee → manager → manager's manager) to determine `direct` vs `indirect` relationship. Applied to all employee selection paths: grid click, deep-link with KPI, deep-link without KPI, and URL restoration.
+- **Policy:** Added §62 requiring `viewLevel` to be determined from the reporting chain, not from grid-only metadata.
+- **Affected files:** `src/pages/Dashboard.tsx`, `POLICY.md` (§62), `DOCUMENTATION.md`

@@ -1215,3 +1215,23 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
 **Rationale:** KPIs approved under a shorter workflow (e.g., HR PMS as terminal) must not remain `approved` when the workflow is extended (e.g., adding audit). The new terminal reviewer must review and approve these KPIs.
 
 **RCA (2026-04-05):** KPI `ee7db054` (employee 100482, Samir Dey) was approved by HR PMS on Mar 28 under `self_l1_hr_pms`. On Apr 4, admin changed the workflow to `self_l1_audit`. The KPI remained `approved` despite never going through audit. 39 KPIs across 7 employees were affected.
+
+---
+
+### §62 — ViewLevel Determination from Reporting Chain
+
+**Effective Date:** 2026-04-05
+
+**Policy:**
+
+1. **Reporting chain is the authority**: The `viewLevel` for a reviewer scorecard (e.g., `manager` vs `skip_level`) MUST be determined by querying the actual reporting chain in the database, NOT by relying on in-memory metadata tags from the employee selector grid.
+2. **Resolution logic**: When an employee is selected for review in `team` view mode:
+   - If the employee's `reporting_manager_id` equals the current user's ID → `viewLevel = 'manager'`
+   - If the employee's manager's `reporting_manager_id` equals the current user's ID → `viewLevel = 'skip_level'`
+   - Otherwise → `viewLevel = 'manager'` (default for admin/HR viewing non-chain employees)
+3. **All selection paths**: This resolution must occur in every path that selects an employee: grid click, deep-link with KPI, deep-link without KPI, and URL restoration on refresh.
+4. **No regression**: Grid-tagged `relationship` values are trusted if present (optimization). The reporting chain lookup is the fallback guarantee.
+
+**Rationale:** The `relationship` tag set by the grid is fragile — it depends on skip-level data being fully loaded, is absent during URL restoration and deep-links, and is subject to race conditions. Skip-level managers (e.g., employee 101125 reviewing 101358) were unable to review KPIs at `manager_check` status because `viewLevel` incorrectly resolved to `manager`.
+
+**RCA (2026-04-05):** Employee 101125 is the skip-level manager for several HR department employees including 101358. When viewing 101358's scorecard in team view, the `viewLevel` resolved to `manager` instead of `skip_level` because the `relationship` property was missing (URL restoration path). This caused the scorecard to use `viewType = 'team-review'`, which blocks review actions on KPIs at `manager_check` status.
