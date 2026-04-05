@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { OrgKpiFileUpload } from '@/components/admin/OrgKpiFileUpload';
 import { isValueOutOfRange, RatingThresholds, calculateRating } from '@/lib/ratingCalculation';
 import { RatingBadge } from '@/components/ui/RatingBadge';
@@ -331,6 +332,56 @@ const obsStatusConfig: Record<string, { label: string; variant: 'outline' | 'sec
   resolved: { label: 'Resolved', variant: 'default' },
 };
 
+// ---- Per-row propagate cell with confirmation dialog ----
+function PerRowPropagateCell({ canPropagate, isPropagating, employeeName, onConfirm }: {
+  canPropagate: boolean;
+  isPropagating?: boolean;
+  employeeName: string;
+  onConfirm: () => void;
+}) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  return (
+    <TableCell className="py-1.5 w-16 text-center">
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              disabled={!canPropagate || isPropagating}
+              onClick={() => setConfirmOpen(true)}
+            >
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            Propagate this employee only
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Propagate to Employee Scorecard?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will push the Org KPI score for <strong className="text-foreground">{employeeName}</strong> to their individual scorecard. This action will lock this entry from further edits (unless rolled back by an admin).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setConfirmOpen(false); onConfirm(); }}>
+              Propagate
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </TableCell>
+  );
+}
+
 // ---- Employee row (with expandable observation sub-row) ----
 interface EmployeeRowProps {
   row: ScopedRow;
@@ -585,28 +636,14 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
           )}
         </TableCell>
 
-        {/* Per-row propagate action */}
+        {/* Per-row propagate action with confirmation dialog */}
         {hasRowPropagation && (
-          <TableCell className="py-1.5 w-16 text-center">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0"
-                    disabled={!canPropagate}
-                    onClick={() => onPropagateRow?.(row.scopeId)}
-                  >
-                    <ArrowUpRight className="h-3.5 w-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">
-                  Propagate this employee only
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </TableCell>
+          <PerRowPropagateCell
+            canPropagate={canPropagate}
+            isPropagating={isPropagating}
+            employeeName={row.scopeName}
+            onConfirm={() => onPropagateRow?.(row.scopeId)}
+          />
         )}
       </TableRow>
 

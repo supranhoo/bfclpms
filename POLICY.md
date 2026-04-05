@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 1.65.0 — §58: Multi-month cycle completion gate
+> **Version:** 1.66.0 — §59: Mandatory propagation confirmation
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1177,3 +1177,20 @@ Multi-month KPIs (Quarterly, Bi-Monthly, Half-Yearly, Yearly) can only enter the
 - *Alternative A: UI-only gate (no trigger)* — Rejected; would not prevent API-level premature reviews.
 - *Alternative B: Lock based on a configurable date offset* — Rejected; adds unnecessary complexity. The natural cycle end (last day of terminal month) is the correct boundary.
 - *Chosen approach:* Database trigger blocks all non-admin transitions + UI shows clear messaging.
+
+---
+
+## §59 — Mandatory Propagation Confirmation
+
+**Effective Date:** 2026-04-05
+
+All propagation actions in the Org KPI Data Entry system **must** require explicit user confirmation via a confirmation dialog before execution. This applies to:
+
+1. **Main "Propagate" button** — already gated by `AlertDialog` (existing).
+2. **"Propagate Selected" button** — already gated by `AlertDialog` (existing).
+3. **Per-row propagate button** — now gated by `AlertDialog` (added in this policy).
+4. **Any future propagation path** — must include a confirmation dialog before triggering the propagation RPC.
+
+**Rationale:** Accidental propagation (especially on mobile devices with small tap targets) locks the Org KPI entry for non-admin users and pushes potentially incomplete data to employee scorecards. Requiring explicit confirmation prevents data integrity issues caused by accidental taps.
+
+**RCA (2026-04-05):** A manager (Biswajit) accidentally propagated Org KPI values while entering data on a mobile device (389px viewport). The per-row propagate button (28×28px) was adjacent to input fields and had no confirmation gate, unlike the main propagate buttons.
