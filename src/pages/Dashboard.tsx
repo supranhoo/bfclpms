@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { FILTER_PARAM_NAMES } from '@/hooks/useUrlFilterState';
@@ -39,6 +39,7 @@ export default function Dashboard() {
   const [selectedEmployee, setSelectedEmployee] = useState<EmployeeProfile | null>(null);
   const [autoOpenKpiId, setAutoOpenKpiId] = useState<string | null>(null);
   const [mentionedKpi, setMentionedKpi] = useState<{ kpiId: string; employeeId: string } | null>(null);
+  const deepLinkProcessedRef = useRef(false);
 
   // Detect skip-level subordinates
   const { data: skipLevelMembers } = useSkipLevelTeamMembers(profile?.id);
@@ -83,8 +84,10 @@ export default function Dashboard() {
     }
   }, [searchParams, availableModes]);
 
-  // Deep-link: auto-open KPI from URL params
+  // Deep-link: auto-open KPI from URL params (runs once per mount)
   useEffect(() => {
+    if (deepLinkProcessedRef.current) return;
+
     const kpiParam = searchParams.get('kpi');
     const panelParam = searchParams.get('panel');
     const employeeParam = searchParams.get('employee');
@@ -93,6 +96,7 @@ export default function Dashboard() {
 
     // Cross-user deep-link (reviewer flow)
     if (employeeParam && kpiParam) {
+      deepLinkProcessedRef.current = true;
       const fetchAndSelectEmployee = async () => {
         if (periodParam && yearParam) {
           const yr = parseInt(yearParam, 10);
@@ -121,11 +125,11 @@ export default function Dashboard() {
           handleSelectEmployee(empProfile as EmployeeProfile, kpiParam);
         }
 
+        // Only clean up one-time deep-link params; keep employee for persistence
         setSearchParams((prev) => {
           const next = new URLSearchParams(prev);
           next.delete('kpi');
           next.delete('panel');
-          next.delete('employee');
           next.delete('period');
           next.delete('year');
           return next;
@@ -137,6 +141,7 @@ export default function Dashboard() {
 
     // Employee-only deep-link (e.g. from Direct Reportees monitor)
     if (employeeParam && !kpiParam) {
+      deepLinkProcessedRef.current = true;
       const fetchAndSelectEmployee = async () => {
         if (periodParam && yearParam) {
           const yr = parseInt(yearParam, 10);
@@ -165,9 +170,9 @@ export default function Dashboard() {
           handleSelectEmployee(empProfile as EmployeeProfile);
         }
 
+        // Only clean up one-time params; keep employee for persistence
         setSearchParams((prev) => {
           const next = new URLSearchParams(prev);
-          next.delete('employee');
           next.delete('period');
           next.delete('year');
           return next;
@@ -179,6 +184,7 @@ export default function Dashboard() {
 
     // Self-view deep-link: pass kpiId to UnifiedScorecard
     if (kpiParam) {
+      deepLinkProcessedRef.current = true;
       setAutoOpenKpiId(kpiParam);
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
@@ -217,10 +223,12 @@ export default function Dashboard() {
 
   // Restore selected employee from URL on mount (when no deep-link processing happened)
   useEffect(() => {
+    if (deepLinkProcessedRef.current) return;
     const employeeParam = searchParams.get('employee');
     const kpiParam = searchParams.get('kpi');
     // Only restore if employee param exists, no KPI deep-link is being processed, and no employee is already selected
     if (employeeParam && !kpiParam && !selectedEmployee && viewMode !== 'self') {
+      deepLinkProcessedRef.current = true;
       const restoreEmployee = async () => {
         const { data: empProfile } = await supabase
           .from('profiles')
@@ -314,6 +322,11 @@ export default function Dashboard() {
             onBack={() => {
               setSelectedEmployee(null);
               setAutoOpenKpiId(null);
+              setSearchParams((prev) => {
+                const next = new URLSearchParams(prev);
+                next.delete('employee');
+                return next;
+              }, { replace: true });
             }}
             autoOpenKpiId={autoOpenKpiId}
           />
