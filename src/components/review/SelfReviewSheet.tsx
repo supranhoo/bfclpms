@@ -19,8 +19,10 @@ import {
   FrequencyType,
   requiresSubPeriodSelection,
   isKpiLockedForPeriod,
+  isCycleComplete,
   hasMultiMonthCycle,
   getMonthNumber,
+  getActiveMonthForCycle,
 } from '@/lib/frequencyUtils';
 import { useFrequencyConfig } from '@/hooks/useFrequencyConfig';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -153,6 +155,15 @@ export function SelfReviewSheet({
     selectedKpi.frequency, selectedPeriod, selectedYear,
     selectedKpi.frequency_cycle_start, frequencyConfig
   ) : false;
+
+  // Cycle completion gate: terminal month must have ended before review is allowed
+  const isCycleIncomplete = selectedKpi ? !isCycleComplete(
+    selectedKpi.frequency, selectedPeriod, selectedYear,
+    selectedKpi.frequency_cycle_start, frequencyConfig
+  ) : false;
+
+  // Combined lock: either sibling month or cycle not yet complete
+  const isMultiMonthBlocked = isFrequencyLocked || isCycleIncomplete;
 
   // Month-end gate: prevent premature Submit Month for Daily/Weekly KPIs
   const isMonthStillActive = useMemo(() => {
