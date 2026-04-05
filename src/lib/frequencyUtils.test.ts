@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   getMonthNumber,
   getMonthName,
@@ -10,6 +10,7 @@ import {
   requiresSubPeriodSelection,
   hasMultiMonthCycle,
   normalizeFrequency,
+  isCycleComplete,
 } from './frequencyUtils';
 
 describe('normalizeFrequency', () => {
@@ -167,5 +168,57 @@ describe('hasMultiMonthCycle', () => {
     expect(hasMultiMonthCycle('Daily')).toBe(false);
     expect(hasMultiMonthCycle('Monthly')).toBe(false);
     expect(hasMultiMonthCycle(null)).toBe(false);
+  });
+});
+
+describe('isCycleComplete', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns true for Monthly (no cycle gate)', () => {
+    expect(isCycleComplete('Monthly', 'March', 2026)).toBe(true);
+  });
+
+  it('returns true for Daily (no cycle gate)', () => {
+    expect(isCycleComplete('Daily', 'March', 2026)).toBe(true);
+  });
+
+  it('returns false for sibling month (Quarterly January)', () => {
+    expect(isCycleComplete('Quarterly', 'January', 2026)).toBe(false);
+  });
+
+  it('returns false for terminal month when cycle not ended', () => {
+    // March 2026 ends on March 31. If today is March 15, cycle not complete.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 15)); // March 15
+    expect(isCycleComplete('Quarterly', 'March', 2026)).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it('returns true for terminal month when cycle has ended', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 3, 1)); // April 1
+    expect(isCycleComplete('Quarterly', 'March', 2026)).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('returns false for Bi-Monthly sibling (January)', () => {
+    expect(isCycleComplete('Bi-Monthly', 'January', 2026)).toBe(false);
+  });
+
+  it('returns true for Bi-Monthly terminal (February) after month ends', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 1)); // March 1
+    expect(isCycleComplete('Bi-Monthly', 'February', 2026)).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('returns false for Half-Yearly sibling', () => {
+    expect(isCycleComplete('Half-Yearly', 'March', 2026)).toBe(false);
+  });
+
+  it('returns true for null frequency', () => {
+    expect(isCycleComplete(null, 'March', 2026)).toBe(true);
   });
 });
