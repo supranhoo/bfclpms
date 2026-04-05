@@ -33,7 +33,9 @@ export type EmailEventType =
   | 'email_changed'
   | 'org_kpi_pending_reminder'
   | 'system_auto_scored'
-  | 'monthly_review_reminder';
+  | 'monthly_review_reminder'
+  | 'query_response_reminder'
+  | 'observation_response_reminder';
 
 export type EmailProvider = 'resend' | 'smtp' | 'microsoft_graph';
 export type SmtpSecurity = 'tls' | 'starttls' | 'none';
