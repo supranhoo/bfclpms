@@ -1,54 +1,74 @@
 
 
-## RCA: Org KPI Achieved Value Not Shown in Review Journey
+## Daily Email Reminders for Unresponded Queries & Observations
 
-### Root Cause
+### What This Does
+A new automated daily job that sends email reminders to employees who have open (unresponded) queries or observations. Reminders continue daily until the employee responds. Two new email event types are added so admins can toggle these reminders independently.
 
-**The Review Journey section only reads `achieved_value` from `review_submissions`, but for Org KPIs the achieved value is stored in `org_kpi_values` — and never copied to `review_submissions` until self-review is submitted.**
+### Architecture
 
-| Component | Data Source | Shows 27.9%? |
-|-----------|-----------|:---:|
-| KPI Details Table (line 544) | `orgValue?.achieved_value ?? submission?.achieved_value` | ✅ |
-| Review Journey (line 341) | `submission?.achieved_value` only | ❌ |
-
-For KPI `c401adcb` (employee 100316, WHRB, Feb-Mar Bi-Monthly):
-- `org_kpi_values` has `achieved_value = 27.9` for March (terminal month), status `approved`
-- `review_submissions` has `achieved_value = null` (KPI still at `kra_set` — no self-review yet)
-- Result: Details table shows 27.9% via org lookup; Journey cards show nothing
-
-### Fix
-
-Pass the org KPI achieved value into `KpiJourneySection` so the Self stage card can display it as a fallback when `submission?.achieved_value` is null.
-
-#### Part 1: Add `orgAchievedValue` prop to `KpiJourneySection`
-
-Add an optional `orgAchievedValue?: number | null` prop. In the Self stage `buildStage` call (line 341), use:
-```
-submission?.achieved_value ?? orgAchievedValue ?? null
+```text
+pg_cron (daily at 9 AM) 
+  → net.http_post → send-query-observation-reminders (Edge Function)
+    → Finds open queries where raised_to has NOT responded
+    → Finds open observations where tagged employee has NOT acknowledged
+    → Groups by recipient
+    → Calls send-email-notification for each recipient
 ```
 
-#### Part 2: Pass org value from `KpiReviewPanel`
+### Implementation Plan
 
-`KpiReviewPanel` already receives `getOrgKpiValue` or the org value lookup is available in its parent. Add the org achieved value as a prop when rendering `KpiJourneySection`.
+#### 1. New Edge Function: `send-query-observation-reminders`
 
-Check how `KpiReviewPanel` gets org KPI data — it may need to be threaded from the scorecard.
+- Triggered daily via pg_cron
+- Queries `kpi_queries` where `status = 'open'` (not responded) — groups by `raised_to`
+- Queries `kpi_observations` where `status = 'open'` (not acknowledged) — groups by `employee_id` (the tagged employee)
+- For each recipient, builds a consolidated email listing all their pending queries and observations
+- Calls `send-email-notification` with new event types `query_response_reminder` and `observation_response_reminder`
+- Respects `email_notifications_enabled` and per-event toggles
 
-#### Part 3: Thread from Scorecard → ReviewPanel → JourneySection
+#### 2. New Email Templates in `send-email-notification`
 
-The `UnifiedScorecard` and `EmployeeScorecard` already compute `orgKpiValuesMap`. When they render `KpiReviewPanel`, pass the resolved org achieved value for the selected KPI.
+Two new event types added to the templates and banner config:
+- **`query_response_reminder`**: "You have X open queries pending your response" with a table of KPI names, query raisers, and dates
+- **`observation_response_reminder`**: "You have X open observations pending acknowledgment" with details
+
+#### 3. Email Settings Update
+
+- Add `query_response_reminder` and `observation_response_reminder` to `EmailEventType` in `useEmailNotificationSettings.ts`
+- Add corresponding labels in the Email Settings UI so admins can enable/disable these reminders
+
+#### 4. pg_cron Job
+
+Schedule the edge function to run daily at 9:00 AM IST:
+```sql
+SELECT cron.schedule(
+  'daily-query-observation-reminder',
+  '30 3 * * *',  -- 3:30 UTC = 9:00 AM IST
+  $$ SELECT net.http_post(...) $$
+);
+```
+
+#### 5. Admin Toggle (Optional Enhancement)
+
+Add a system setting `reminder_frequency_days` (default: 1) so admins can adjust frequency if needed in the future.
 
 ### Files to Change
 
 | File | Change |
 |------|--------|
-| `src/components/review/KpiJourneySection.tsx` | Add `orgAchievedValue` prop; use as fallback for Self stage achieved value |
-| `src/components/review/KpiReviewPanel.tsx` | Accept and forward `orgAchievedValue` prop to `KpiJourneySection` |
-| `src/components/review/UnifiedScorecard.tsx` | Pass resolved org achieved value to `KpiReviewPanel` |
-| `src/components/review/EmployeeScorecard.tsx` | Pass resolved org achieved value to `KpiReviewPanel` |
+| `supabase/functions/send-query-observation-reminders/index.ts` | **New** — Edge function that finds open queries/observations and sends reminder emails |
+| `supabase/functions/send-email-notification/index.ts` | Add `query_response_reminder` and `observation_response_reminder` templates and banner configs |
+| `supabase/config.toml` | Add `[functions.send-query-observation-reminders]` with `verify_jwt = false` |
+| `src/hooks/useEmailNotificationSettings.ts` | Add two new event types |
+| Email Settings UI component | Add labels for the two new reminder events |
+| DB (via insert tool) | pg_cron job to invoke the function daily |
+| `POLICY.md` | Add policy for daily query/observation reminders |
 | `DOCUMENTATION.md` | Version bump |
 
 ### Risk Assessment
-- **No data changes**: Display-only fix, no schema or RLS changes.
-- **No regression**: Additive fallback — if `submission?.achieved_value` exists, it takes priority.
-- **Immediate fix**: All org KPIs currently at `kra_set` with entered data will immediately show achieved values in the Journey.
+- **No schema changes**: Only reads existing `kpi_queries` and `kpi_observations` tables
+- **No regression**: Additive — new edge function and email templates, no existing logic modified
+- **Admin control**: Reminders only sent if the corresponding event type is enabled in email settings
+- **Dedup safety**: Only sends for items still in `open` status; once employee responds, reminders stop automatically
 
