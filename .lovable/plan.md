@@ -1,74 +1,44 @@
 
 
-## Daily Email Reminders for Unresponded Queries & Observations
+## Add "All Employees (Cross-Check)" Filter to Audit Panel
 
-### What This Does
-A new automated daily job that sends email reminders to employees who have open (unresponded) queries or observations. Reminders continue daily until the employee responds. Two new email event types are added so admins can toggle these reminders independently.
+### Problem
+The Audit Panel currently only shows employees whose resolved workflow includes an `audit` stage (via `useProfilesByWorkflowStage`). Auditors need to cross-check scores of ALL employees, including those without audit in their workflow.
 
-### Architecture
+### Root Cause
+Line 165: `audit: 'audit'` in `PANEL_REQUIRED_STAGE` → line 177: `useProfilesByWorkflowStage('audit', ...)` → line 283: `baseMembers` is set to only stage-filtered profiles. The "All Employees" status filter (line 71) shows all employees *within that already-filtered set*, not all employees organization-wide.
 
-```text
-pg_cron (daily at 9 AM) 
-  → net.http_post → send-query-observation-reminders (Edge Function)
-    → Finds open queries where raised_to has NOT responded
-    → Finds open observations where tagged employee has NOT acknowledged
-    → Groups by recipient
-    → Calls send-email-notification for each recipient
+### Fix
+
+Add a new status filter option `cross_check` to the audit panel that bypasses the workflow stage filter and shows ALL active employees in read-only mode.
+
+#### Part 1: Add filter option
+In `STATUS_OPTIONS_BY_LEVEL.audit` (line 70-76), add:
+```
+{ value: 'cross_check', label: 'All Employees (Cross-Check)' }
 ```
 
-### Implementation Plan
+#### Part 2: Expand `baseMembers` when cross-check is active
+When `statusFilter === 'cross_check'` and `viewLevel === 'audit'`, use `allProfiles` instead of `stageFilteredProfiles` for `baseMembers`. This requires:
+- Modifying the `baseMembers` useMemo (line 264-287) to check for cross-check mode
+- Also adjusting `allEmployeeIds` (line 222) and loading state (line 257) similarly
 
-#### 1. New Edge Function: `send-query-observation-reminders`
+#### Part 3: Filter logic for cross-check
+In the status-based filtering block (line 553+), when `statusFilter === 'cross_check'`, show ALL employees (no KPI-status filtering — just demographic filters apply).
 
-- Triggered daily via pg_cron
-- Queries `kpi_queries` where `status = 'open'` (not responded) — groups by `raised_to`
-- Queries `kpi_observations` where `status = 'open'` (not acknowledged) — groups by `employee_id` (the tagged employee)
-- For each recipient, builds a consolidated email listing all their pending queries and observations
-- Calls `send-email-notification` with new event types `query_response_reminder` and `observation_response_reminder`
-- Respects `email_notifications_enabled` and per-event toggles
-
-#### 2. New Email Templates in `send-email-notification`
-
-Two new event types added to the templates and banner config:
-- **`query_response_reminder`**: "You have X open queries pending your response" with a table of KPI names, query raisers, and dates
-- **`observation_response_reminder`**: "You have X open observations pending acknowledgment" with details
-
-#### 3. Email Settings Update
-
-- Add `query_response_reminder` and `observation_response_reminder` to `EmailEventType` in `useEmailNotificationSettings.ts`
-- Add corresponding labels in the Email Settings UI so admins can enable/disable these reminders
-
-#### 4. pg_cron Job
-
-Schedule the edge function to run daily at 9:00 AM IST:
-```sql
-SELECT cron.schedule(
-  'daily-query-observation-reminder',
-  '30 3 * * *',  -- 3:30 UTC = 9:00 AM IST
-  $$ SELECT net.http_post(...) $$
-);
-```
-
-#### 5. Admin Toggle (Optional Enhancement)
-
-Add a system setting `reminder_frequency_days` (default: 1) so admins can adjust frequency if needed in the future.
+#### Part 4: Read-only indicator
+When an auditor opens an employee via cross-check who does NOT have audit in their workflow, the scorecard already handles this gracefully — the auditor fields won't appear since the workflow doesn't include audit. The employee's scores from other reviewers will be visible for cross-checking purposes.
 
 ### Files to Change
 
 | File | Change |
 |------|--------|
-| `supabase/functions/send-query-observation-reminders/index.ts` | **New** — Edge function that finds open queries/observations and sends reminder emails |
-| `supabase/functions/send-email-notification/index.ts` | Add `query_response_reminder` and `observation_response_reminder` templates and banner configs |
-| `supabase/config.toml` | Add `[functions.send-query-observation-reminders]` with `verify_jwt = false` |
-| `src/hooks/useEmailNotificationSettings.ts` | Add two new event types |
-| Email Settings UI component | Add labels for the two new reminder events |
-| DB (via insert tool) | pg_cron job to invoke the function daily |
-| `POLICY.md` | Add policy for daily query/observation reminders |
+| `src/components/review/EmployeeSelectorGrid.tsx` | Add `cross_check` filter option; expand `baseMembers` to all profiles when active; bypass workflow guard in filtering |
+| `POLICY.md` | Add policy for auditor cross-check visibility |
 | `DOCUMENTATION.md` | Version bump |
 
 ### Risk Assessment
-- **No schema changes**: Only reads existing `kpi_queries` and `kpi_observations` tables
-- **No regression**: Additive — new edge function and email templates, no existing logic modified
-- **Admin control**: Reminders only sent if the corresponding event type is enabled in email settings
-- **Dedup safety**: Only sends for items still in `open` status; once employee responds, reminders stop automatically
+- **No data changes**: Read-only cross-check, no new write paths
+- **No regression**: Existing audit filters unchanged; cross-check is additive
+- **Security**: Uses existing `allProfiles` hook (already RLS-protected); no new data exposure
 
