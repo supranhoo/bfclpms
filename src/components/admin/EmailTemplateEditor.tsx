@@ -448,6 +448,36 @@ Best regards,
     color: '#3b82f6',
     emoji: '📋',
   },
+  {
+    key: 'query_response_reminder',
+    label: 'Query Response Reminder',
+    description: 'Sent daily to employees with unresponded open queries',
+    subject: '[PMS] ⏳ Reminder: {{pending_count}} Open Query(ies) Pending Your Response',
+    bodyTemplate: `Hi {{recipient_name}},
+
+This is a daily reminder that you have {{pending_count}} open query(ies) pending your response.
+
+{{pending_list}}
+
+Please log in and respond to these queries at your earliest convenience.`,
+    color: '#f97316',
+    emoji: '⏳',
+  },
+  {
+    key: 'observation_response_reminder',
+    label: 'Observation Response Reminder',
+    description: 'Sent daily to employees with unacknowledged open observations',
+    subject: '[PMS] ⏳ Reminder: {{pending_count}} Open Observation(s) Pending Acknowledgment',
+    bodyTemplate: `Hi {{recipient_name}},
+
+This is a daily reminder that you have {{pending_count}} open observation(s) pending your acknowledgment.
+
+{{pending_list}}
+
+Please log in and acknowledge these observations at your earliest convenience.`,
+    color: '#f97316',
+    emoji: '⏳',
+  },
 ];
 
 const PLACEHOLDERS = [
@@ -482,6 +512,8 @@ const PLACEHOLDERS = [
   { key: '{{kpi_list}}', description: 'Bullet list of auto-scored KPI names (system auto-score only)' },
   { key: '{{pending_kpis_count}}', description: 'Number of pending KPIs (monthly review reminder only)' },
   { key: '{{pending_kpis_list}}', description: 'List of pending KPI names (monthly review reminder only)' },
+  { key: '{{pending_count}}', description: 'Number of pending queries/observations (reminder emails only)' },
+  { key: '{{pending_list}}', description: 'Formatted list of pending items (reminder emails only)' },
 ];
 
 export function EmailTemplateEditor() {
