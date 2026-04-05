@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-03  
-> **Version:** 2.15.63 — Auth resilience: fix infinite skeleton + decouple Auth page from branding fetch
+> **Version:** 2.15.64 — RCA fix: percolate_multimonth_score trigger now respects workflow stages; bulk step-back of 40 incorrectly percolated KPIs
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
