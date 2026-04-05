@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 2.15.65 — Fix performer attribution: triggers use NULL for system actions; cleaned up 80 misleading audit logs; UI shows "System" for NULL performers
+> **Version:** 2.15.66 — Data repair: restored 21 zeroed management_scores from audit logs; added safety-net trigger for untracked score changes (§56)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

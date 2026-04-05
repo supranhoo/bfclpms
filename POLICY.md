@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 1.62.0 — §55: System audit log performer attribution invariant
+> **Version:** 1.63.0 — §56: Mandatory audit trail for review submission score changes
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
