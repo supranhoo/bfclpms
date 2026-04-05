@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 2.16.74 — Fix: Skip-level viewLevel resolved from reporting chain, not grid metadata
+> **Version:** 2.16.75 — Fix: Org KPI achieved value shown in Review Journey via fallback from org_kpi_values
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

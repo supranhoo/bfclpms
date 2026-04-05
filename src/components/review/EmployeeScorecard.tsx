@@ -831,6 +831,7 @@ export function EmployeeScorecard({
                 workflowStages={effectiveStages}
                 orgKpiEnteredByName={getOrgKpiValue(selectedKpi)?.entered_by_name}
                 orgKpiDataOwnerNames={getOwnerNamesForKpi(dataOwnerNamesMap, selectedKpi)}
+                orgAchievedValue={getOrgKpiValue(selectedKpi)?.achieved_value ?? null}
                 employeeName={employee.full_name || undefined}
                 employeeCode={employee.employee_code || undefined}
               />
