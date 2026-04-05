@@ -1,44 +1,96 @@
 
 
-## Add "All Employees (Cross-Check)" Filter to Audit Panel
+## Per-Template Email Schedule & Auto-Trigger
 
-### Problem
-The Audit Panel currently only shows employees whose resolved workflow includes an `audit` stage (via `useProfilesByWorkflowStage`). Auditors need to cross-check scores of ALL employees, including those without audit in their workflow.
+### What This Does
+Adds a **Schedule** button (clock icon) next to Preview on each email template tab. Admins can choose per template whether the email should:
+- **Send Immediately** (default, current behavior) — fires on event
+- **Send at Scheduled Time** — batches and sends at a fixed daily time (e.g., 9:00 AM)
 
-### Root Cause
-Line 165: `audit: 'audit'` in `PANEL_REQUIRED_STAGE` → line 177: `useProfilesByWorkflowStage('audit', ...)` → line 283: `baseMembers` is set to only stage-filtered profiles. The "All Employees" status filter (line 71) shows all employees *within that already-filtered set*, not all employees organization-wide.
+Scheduled templates accumulate notifications in `notifications` table as usual, but the actual email dispatch is deferred. A single cron-triggered edge function processes all scheduled templates at their configured times.
 
-### Fix
+### Architecture
 
-Add a new status filter option `cross_check` to the audit panel that bypasses the workflow stage filter and shows ALL active employees in read-only mode.
-
-#### Part 1: Add filter option
-In `STATUS_OPTIONS_BY_LEVEL.audit` (line 70-76), add:
+```text
+Admin sets schedule per template (system_settings)
+  → event occurs → notification created → email NOT sent immediately
+  → pg_cron (every 15 min) → send-scheduled-emails (Edge Function)
+    → reads schedule config from system_settings
+    → checks if current time matches any template's scheduled time
+    → fetches unsent notifications for those templates
+    → sends batched emails via send-email-notification
 ```
-{ value: 'cross_check', label: 'All Employees (Cross-Check)' }
+
+### Implementation Plan
+
+#### 1. Database: Store Schedule Config per Template
+Use `system_settings` with key pattern `email_schedule_{template_key}`:
+```json
+{
+  "mode": "immediate" | "scheduled",
+  "time": "09:00",
+  "timezone": "Asia/Kolkata"
+}
 ```
+No migration needed — reuses existing `system_settings` table.
 
-#### Part 2: Expand `baseMembers` when cross-check is active
-When `statusFilter === 'cross_check'` and `viewLevel === 'audit'`, use `allProfiles` instead of `stageFilteredProfiles` for `baseMembers`. This requires:
-- Modifying the `baseMembers` useMemo (line 264-287) to check for cross-check mode
-- Also adjusting `allEmployeeIds` (line 222) and loading state (line 257) similarly
+#### 2. New DB Table: `email_dispatch_queue`
+A lightweight queue to hold pending emails when a template is in "scheduled" mode. When an event fires and the template is set to "scheduled", instead of calling `send-email-notification`, the system inserts a row into this queue. The cron job processes the queue at scheduled times.
 
-#### Part 3: Filter logic for cross-check
-In the status-based filtering block (line 553+), when `statusFilter === 'cross_check'`, show ALL employees (no KPI-status filtering — just demographic filters apply).
+Columns: `id`, `template_key`, `recipient_email`, `recipient_name`, `metadata` (jsonb), `created_at`, `sent_at` (nullable).
 
-#### Part 4: Read-only indicator
-When an auditor opens an employee via cross-check who does NOT have audit in their workflow, the scorecard already handles this gracefully — the auditor fields won't appear since the workflow doesn't include audit. The employee's scores from other reviewers will be visible for cross-checking purposes.
+#### 3. UI: Schedule Popover per Template
+In `EmailTemplateEditor.tsx`, add a **Schedule** button (Clock icon) between the template header and Preview/Reset buttons. Clicking opens a popover with:
+- Radio: Immediate / Scheduled
+- Time picker (HH:MM, 24h format) — shown when "Scheduled" selected
+- Save Schedule button
+
+#### 4. Hook: `useEmailTemplateSchedules`
+- Fetches all `email_schedule_*` from `system_settings`
+- Provides `getSchedule(templateKey)` and `updateSchedule(templateKey, config)` 
+- Caches via react-query
+
+#### 5. Edge Function: `send-scheduled-emails`
+- Triggered by pg_cron every 15 minutes
+- Reads all `email_schedule_*` settings
+- For each template in "scheduled" mode, checks if current time (in configured timezone) matches the scheduled window
+- Fetches pending rows from `email_dispatch_queue` for matching templates
+- Sends via `send-email-notification`
+- Marks rows as sent
+
+#### 6. Modify Email Dispatch Logic
+In `send-email-notification` edge function and all callers (triggers, other edge functions):
+- Before sending, check if the template has a schedule config
+- If mode = "scheduled", insert into `email_dispatch_queue` instead of sending immediately
+- If mode = "immediate" or no config, send as usual (current behavior)
+
+This check is added in the `send-email-notification` function itself so ALL callers automatically respect the schedule without modification.
+
+#### 7. pg_cron Job
+```sql
+SELECT cron.schedule(
+  'process-scheduled-emails',
+  '*/15 * * * *',
+  $$ SELECT net.http_post(...) $$
+);
+```
 
 ### Files to Change
 
 | File | Change |
 |------|--------|
-| `src/components/review/EmployeeSelectorGrid.tsx` | Add `cross_check` filter option; expand `baseMembers` to all profiles when active; bypass workflow guard in filtering |
-| `POLICY.md` | Add policy for auditor cross-check visibility |
+| **DB Migration** | Create `email_dispatch_queue` table with RLS |
+| `src/components/admin/EmailTemplateEditor.tsx` | Add Schedule button + popover UI per template |
+| `src/hooks/useEmailTemplateSchedules.ts` | **New** — hook to read/write schedule configs from system_settings |
+| `supabase/functions/send-email-notification/index.ts` | Add queue-or-send check: if template is scheduled, insert to queue instead |
+| `supabase/functions/send-scheduled-emails/index.ts` | **New** — processes queued emails at scheduled times |
+| `supabase/config.toml` | Add `[functions.send-scheduled-emails]` |
+| `POLICY.md` | Add policy §65 for email scheduling |
 | `DOCUMENTATION.md` | Version bump |
 
 ### Risk Assessment
-- **No data changes**: Read-only cross-check, no new write paths
-- **No regression**: Existing audit filters unchanged; cross-check is additive
-- **Security**: Uses existing `allProfiles` hook (already RLS-protected); no new data exposure
+- **Data Impact**: New table `email_dispatch_queue` — no effect on existing data. Schedule configs stored in existing `system_settings`.
+- **Workflow Impact**: Default is "immediate" for all templates — zero change to current behavior until admin explicitly schedules a template.
+- **Regression Risk**: Low. The check is added inside `send-email-notification` as a gatekeeper, so all existing callers work unchanged.
+- **Mitigation**: Queue rows have `created_at` timestamps; stale items older than 24h are auto-skipped to prevent floods after downtime.
 
