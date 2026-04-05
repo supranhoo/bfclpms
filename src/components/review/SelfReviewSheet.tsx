@@ -736,7 +736,7 @@ export function SelfReviewSheet({
             {!isReadOnly && selectedKpi && (
               <>
               {/* Frequency Lock */}
-              {isKraSet && isFrequencyLocked ? (
+              {isKraSet && isMultiMonthBlocked ? (
                 <Card>
                   <CardContent className="py-12 text-center space-y-3">
                     <div className="flex justify-center">
@@ -744,16 +744,30 @@ export function SelfReviewSheet({
                         <Lock className="h-8 w-8 text-muted-foreground" />
                       </div>
                     </div>
-                    <h3 className="font-semibold text-foreground">Entry not allowed yet</h3>
+                    <h3 className="font-semibold text-foreground">
+                      {isFrequencyLocked ? 'Entry not allowed yet' : 'Cycle in progress'}
+                    </h3>
                     <p className="text-sm text-muted-foreground">
-                      This <strong>{selectedKpi.frequency}</strong> KPI is locked for{' '}
-                      <strong>{selectedPeriod}</strong>.{' '}
-                      Data entry opens in the active review month of the cycle.
+                      {isFrequencyLocked ? (
+                        <>
+                          This <strong>{selectedKpi.frequency}</strong> KPI is locked for{' '}
+                          <strong>{selectedPeriod}</strong>.{' '}
+                          Data entry opens in the active review month of the cycle.
+                        </>
+                      ) : (
+                        <>
+                          This <strong>{selectedKpi.frequency}</strong> KPI for{' '}
+                          <strong>{selectedPeriod} {selectedYear}</strong> can be reviewed after the cycle ends.{' '}
+                          Please wait until <strong>{selectedPeriod}</strong> is complete.
+                        </>
+                      )}
                     </p>
-                    <p className="text-xs text-muted-foreground">
-                      For Quarterly KPIs (Jan–Mar), entry opens in <strong>March</strong>.
-                      For Bi-Monthly KPIs (Feb–Mar), entry opens in <strong>March</strong>.
-                    </p>
+                    {isFrequencyLocked && (
+                      <p className="text-xs text-muted-foreground">
+                        For Quarterly KPIs (Jan–Mar), entry opens in <strong>March</strong>.
+                        For Bi-Monthly KPIs (Feb–Mar), entry opens in <strong>March</strong>.
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               ) : isOrgLocked ? (
@@ -1087,7 +1101,7 @@ export function SelfReviewSheet({
                         variant="secondary"
                         onClick={handleSubmitReview}
                         disabled={
-                          isFrequencyLocked ||
+                          isMultiMonthBlocked ||
                           (needsSubPeriodForKpi && (!selectedSubPeriod || (!isNa && !achievedValue))) ||
                           (!needsSubPeriodForKpi && !isNa && !achievedValue) ||
                           (isNa && selfRemarks.trim().length < 50) ||
