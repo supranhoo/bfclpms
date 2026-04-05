@@ -1,5 +1,6 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useUrlFilterState, useUrlFilterStateNullable, useClearAllFilters } from '@/hooks/useUrlFilterState';
 import { useMyAuditAssignments } from '@/hooks/useAuditAssignments';
 import { useMyKpiLevelAssignments } from '@/hooks/useMyKpiLevelAssignments';
 import { useAuditorWorkloadSummary } from '@/hooks/useAuditorWorkloadSummary';
@@ -183,14 +184,15 @@ export function EmployeeSelectorGrid({
   const selectedPeriod = periodSelection.selectedMonth;
   const selectedYear = periodSelection.selectedYear;
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
-  const [selectedDesignation, setSelectedDesignation] = useState<string | null>(null);
-  const [selectedGrade, setSelectedGrade] = useState<string | null>(null);
-  const [selectedManager, setSelectedManager] = useState<string | null>(null);
+  // Persist filters in URL search params so they survive refresh/navigation
+  const [searchQuery, setSearchQuery] = useUrlFilterState('q', '');
+  const [statusFilter, setStatusFilter] = useUrlFilterState('status', 'all');
+  const [selectedDepartment, setSelectedDepartment] = useUrlFilterStateNullable('dept');
+  const [selectedDesignation, setSelectedDesignation] = useUrlFilterStateNullable('desig');
+  const [selectedGrade, setSelectedGrade] = useUrlFilterStateNullable('grade');
+  const [selectedManager, setSelectedManager] = useUrlFilterStateNullable('mgr');
   const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
-  const [auditorFilter, setAuditorFilter] = useState<string | null>(null);
+  const [auditorFilter, setAuditorFilter] = useUrlFilterStateNullable('auditor');
   const [auditorWorkloadExpanded, setAuditorWorkloadExpanded] = useState(true);
 
   // Audit assignments: fetch current user's assigned employees
