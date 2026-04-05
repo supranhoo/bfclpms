@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 2.16.69 — §59: Mandatory propagation confirmation on all Org KPI propagate actions
+> **Version:** 2.16.70 — §60: Workflow change auto-step-back for approved KPIs
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
