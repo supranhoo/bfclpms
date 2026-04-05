@@ -1092,3 +1092,23 @@ All architectural decisions documented as invariants in this policy are also mai
 - *Chosen approach:* Workflow-stage guard in the trigger + `PERCOLATION_DEFERRED` audit trail for mid-workflow siblings.
 
 **Related ADR:** [ADR-047](docs/adr/ADR-047.md)
+
+---
+
+### §55 — System Audit Log Performer Attribution Invariant
+
+**Rule:** All system-initiated actions (triggers, migrations, automated workflows) MUST use `performed_by = NULL` in audit logs. Triggers and functions must NOT fall back to arbitrary admin users or KPI owners when `auth.uid()` is NULL. The UI must display "System" for NULL performers.
+
+**Rationale:** Two bugs caused misleading attribution: (1) `percolate_multimonth_score` fell back to `SELECT user_id FROM user_roles WHERE role = 'admin' LIMIT 1`, attributing system actions to an arbitrary admin; (2) `log_kpi_status_transition` used `COALESCE(auth.uid(), NEW.employee_id)`, making it appear employees changed their own status during migrations.
+
+**Invariant:**
+1. `performed_by` column in `kpi_audit_logs` is nullable.
+2. When `auth.uid()` returns NULL (no user session), `performed_by` must be set to NULL.
+3. No trigger or function may use fallback patterns like `SELECT user_id FROM user_roles` or `COALESCE(auth.uid(), NEW.employee_id)`.
+4. The Review Timeline UI displays "System" with a distinct visual badge for NULL performers.
+5. Cleanup was applied to 80 incorrectly attributed logs from the 2026-04-05 bulk step-back migration.
+
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Create a dedicated "system" user account* — Rejected; adds complexity and doesn't prevent future fallback bugs.
+- *Alternative B: Keep NOT NULL constraint and use a sentinel UUID* — Rejected; sentinel values are brittle and require coordination.
+- *Chosen approach:* NULL performer = system action. Simple, explicit, and handled gracefully in UI.
