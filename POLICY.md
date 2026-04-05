@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
-> **Last Updated:** 2026-04-03  
-> **Version:** 1.61.0 — §54: Multi-Month Workflow Independence Invariant
+> **Last Updated:** 2026-04-05  
+> **Version:** 1.62.0 — §55: System audit log performer attribution invariant
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
