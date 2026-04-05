@@ -134,6 +134,7 @@ export function KpiJourneySection({
   employeeName,
   employeeCode,
   reportingManagerName,
+  orgAchievedValue,
 }: KpiJourneySectionProps) {
   const { data: profileData } = useEmployeeProfileForPdf(kpi.employee_id);
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;

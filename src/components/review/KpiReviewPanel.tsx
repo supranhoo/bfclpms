@@ -37,6 +37,7 @@ interface KpiReviewPanelProps {
   workflowStages?: string[];
   orgKpiEnteredByName?: string | null;
   orgKpiDataOwnerNames?: string[];
+  orgAchievedValue?: number | null;
 }
 
 export function KpiReviewPanel({
@@ -58,6 +59,7 @@ export function KpiReviewPanel({
   workflowStages,
   orgKpiEnteredByName,
   orgKpiDataOwnerNames,
+  orgAchievedValue,
 }: KpiReviewPanelProps) {
   const isOwnKpi = currentUserId ? kpi.employee_id === currentUserId : false;
   return (
