@@ -632,6 +632,39 @@ export function hasMultiMonthCycle(rawFrequency: FrequencyType | string | null):
 }
 
 /**
+ * Check if the cycle for a multi-month frequency has completed.
+ * For terminal months: returns true only if today > last day of terminal month.
+ * For sibling months: always returns false (handled by isKpiLockedForPeriod).
+ * For single-month frequencies (Daily/Weekly/Monthly): always returns true.
+ */
+export function isCycleComplete(
+  rawFrequency: FrequencyType | string | null,
+  reviewMonth: string,
+  reviewYear: number,
+  frequencyCycleStart?: string | null,
+  config?: FrequencyConfig | null
+): boolean {
+  const frequency = normalizeFrequency(rawFrequency);
+  if (!frequency) return true;
+
+  // Single-month frequencies: always reviewable (no cycle to wait for)
+  if (!hasMultiMonthCycle(frequency)) return true;
+
+  // If month is a sibling (locked), it's never directly reviewable
+  if (isKpiLockedForPeriod(frequency, reviewMonth, reviewYear, frequencyCycleStart, config)) {
+    return false;
+  }
+
+  // Terminal month: check if the month has actually ended
+  const monthNum = getMonthNumber(reviewMonth);
+  const lastDayOfMonth = new Date(reviewYear, monthNum, 0); // day 0 of next month = last day of this month
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return today > lastDayOfMonth;
+}
+
+/**
  * Get all possible review_period values that cover a given month.
  * Used by KRA Issuance to fetch non-monthly KPIs whose cycle includes the selected month.
  * E.g. for "February" → ['February', 'Q1', 'Q3', 'Q4', 'H1', 'H2', 'Jan-Dec', 'Apr-Mar', 'Jul-Jun', 'Jan-Feb', 'Feb-Mar']

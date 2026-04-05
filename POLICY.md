@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 1.64.0 — §57: Audit log performer visibility via SECURITY DEFINER RPC
+> **Version:** 1.65.0 — §58: Multi-month cycle completion gate
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1152,3 +1152,28 @@ Audit log performer names must be visible to any user who can view the audit log
 - *Alternative A: Relax profiles RLS policies* — Rejected; would expose all profile data to all users.
 - *Alternative B: Store performer name directly in audit log* — Rejected; duplicates data and doesn't handle name changes.
 - *Chosen approach:* SECURITY DEFINER function scoped to display-only fields, called exclusively by timeline components.
+
+---
+
+## §58 — Multi-Month Cycle Completion Gate
+
+**Effective Date:** 2026-04-05
+
+Multi-month KPIs (Quarterly, Bi-Monthly, Half-Yearly, Yearly) can only enter the review workflow after the terminal month's cycle period has ended. This prevents premature reviews with incomplete data.
+
+**Rules:**
+1. **Sibling months** (non-terminal months in a cycle) are blocked from ALL status transitions — not just the initial submission. They are never directly reviewable.
+2. **Terminal months** are blocked from transitioning `kra_set → self_review` until `CURRENT_DATE > last day of terminal month`. For example, a Q1 March KPI can only be reviewed starting April 1.
+3. **Admin bypass** is preserved — administrators can step back or modify KPIs regardless of cycle status.
+4. **Service role bypass** is preserved — automated processes (rollover, percolation) are not affected.
+5. **UI enforcement**: The `isCycleComplete()` utility function mirrors the trigger logic in the frontend, showing "Cycle in progress" messaging when the terminal month hasn't ended yet.
+6. **Score percolation** from terminal to sibling months remains unchanged — it fires only when the terminal month reaches `approved` status after completing the full workflow.
+
+**Data Correction (2026-04-05):** 18 KPIs that were prematurely reviewed before cycle completion were bulk-reset to `kra_set` status with full audit trail.
+
+**Rationale:** Performance data for a quarter/bi-monthly/half-yearly/yearly period is only complete after the terminal month ends. Allowing reviews before this date risks scoring based on incomplete data, which undermines the integrity of the review process.
+
+**Decision Context & Alternatives Considered:**
+- *Alternative A: UI-only gate (no trigger)* — Rejected; would not prevent API-level premature reviews.
+- *Alternative B: Lock based on a configurable date offset* — Rejected; adds unnecessary complexity. The natural cycle end (last day of terminal month) is the correct boundary.
+- *Chosen approach:* Database trigger blocks all non-admin transitions + UI shows clear messaging.
