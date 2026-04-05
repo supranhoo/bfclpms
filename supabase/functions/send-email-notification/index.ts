@@ -665,6 +665,26 @@ Note: If you have already completed your review and team's review (if applicable
 Best regards,
 {{company_name}} PMS System`,
   },
+  query_response_reminder: {
+    subject: '[PMS] ⏳ Reminder: {{pending_count}} Open Query(ies) Pending Your Response',
+    body: `Hi {{recipient_name}},
+
+This is a daily reminder that you have {{pending_count}} open query(ies) pending your response.
+
+{{pending_list}}
+
+Please log in and respond to these queries at your earliest convenience. Reminders will continue daily until all queries are addressed.`,
+  },
+  observation_response_reminder: {
+    subject: '[PMS] ⏳ Reminder: {{pending_count}} Open Observation(s) Pending Acknowledgment',
+    body: `Hi {{recipient_name}},
+
+This is a daily reminder that you have {{pending_count}} open observation(s) pending your acknowledgment.
+
+{{pending_list}}
+
+Please log in and acknowledge these observations at your earliest convenience. Reminders will continue daily until all observations are addressed.`,
+  },
 };
 
 const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string }> = {
@@ -702,6 +722,8 @@ const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string
   pending_review_reminder: { color: '#f59e0b', emoji: '🔔', title: 'Sent-Back KPI Reminder' },
   incentive_retroactive_alert: { color: '#ef4444', emoji: '⚠️', title: 'Incentive Slab Changes' },
   monthly_review_reminder: { color: '#3b82f6', emoji: '📋', title: 'Monthly Review Reminder' },
+  query_response_reminder: { color: '#f97316', emoji: '⏳', title: 'Query Response Reminder' },
+  observation_response_reminder: { color: '#f97316', emoji: '⏳', title: 'Observation Response Reminder' },
 };
 
 // Build KRA table HTML for batch assignment emails
