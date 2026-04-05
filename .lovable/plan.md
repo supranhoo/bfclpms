@@ -1,63 +1,48 @@
 
 
-## RCA: Approved KPIs Not Re-evaluated After Workflow Change
+## RCA: Previous Months Showing Current Workflow Instead of Historical Workflow
 
 ### Root Cause
 
-**No workflow-change impact detection.** When an admin changes an employee's workflow template (e.g., from `self_l1_hr_pms` → `self_l1_audit`), the system only updates the `workflow_config` table. It does NOT check whether any KPIs for the affected period were already approved under the old workflow with a now-insufficient terminal reviewer.
+**Parameter name mismatch in RPC call.** In `KpiJourneySection.tsx` (line 187-191), the code calls `get_bulk_employee_workflows` with parameters named `p_review_periods` (plural, array) and `p_review_years` (plural, array). However, the database function only accepts `p_review_period` (singular, TEXT) and `p_review_year` (singular, INTEGER).
 
-**Timeline for KPI `ee7db054` (Samir Dey, employee 100482):**
-- **Mar 28**: HR PMS approved the KPI → status set to `approved`, `final_score = 5` (HR PMS was terminal reviewer under `self_l1_hr_pms`)
-- **Apr 4**: Admin changed Samir Dey's March workflow from `self_l1_hr_pms` (stages: kra_set → self_review → manager_check → hr_pms_review → approved) to `self_l1_audit` (stages: kra_set → self_review → manager_check → audit → approved)
-- **Result**: KPI shows `approved` but has never been through `audit` — the new terminal stage
+PostgREST silently ignores unknown parameters, so the function executes with `NULL` period/year — which skips all period-specific workflow lookups and falls back to the **current global/default workflow template**. This means employee 100482's Jan and Feb previous months show the current `self_l1_audit` workflow (with Auditor tile) instead of the `self_l1_hr_pms` workflow (with HR PMS tile) that was active when those months were actually reviewed.
 
-### Data Impact — 39 KPIs across 7 employees
+**This affects every employee whose workflow was changed after their old months were reviewed** — the Previous Months section always shows the current workflow instead of the historical one.
 
-| Employee | Code | KPI Count |
-|----------|------|-----------|
-| Samir Dey | 100482 | 1 |
-| PRATIK KEDIA | 100741 | 1 |
-| Jitendra Bharti | 101715 | 8 |
-| Vivek Kumar Dansena | 101784 | 5 |
-| Amit Kumar Shaw | 101804 | 15 |
-| Rupesh Kumar Sharma | 101851 | 1 |
-| Preetam Sagar | 101852 | 8 |
+### Impact
 
-All 39 KPIs were approved by HR PMS before the workflow was changed to require audit on April 4.
+Every "Previous Months" tile in the Review Journey for any employee who has had a workflow change will display incorrect reviewer stages. The screenshot shows employee 100482 displaying an "Auditor" tile for Jan and Feb 2026, even though those months were reviewed under a workflow that had HR PMS as the terminal reviewer.
 
-### Fix — 3 parts
+### Fix — 2 parts
 
-#### Part 1: Database Migration — Step Back 39 Affected KPIs
+#### Part 1: Fix RPC Call — Fetch Workflow Per Period Individually
 
-Reset these 39 KPIs from `approved` to the stage preceding the new terminal reviewer (`audit`). Specifically, set status to `manager_check` (the stage before `audit` in the new workflow), so they appear in the auditor's pending queue. Clear `final_score` and `final_rating` (since approval is revoked) but preserve all existing reviewer scores (self, manager, HR PMS). Log `WORKFLOW_CHANGE_STEP_BACK` audit entries with `performed_by = NULL` (System).
+The existing `get_bulk_employee_workflows` RPC accepts a single period+year, not arrays. The fix is to call the RPC once per previous month period, then merge results into the workflow map.
 
-#### Part 2: Workflow Change Hook — Auto-detect & Step Back on Future Changes
+In `KpiJourneySection.tsx`, replace the single RPC call (lines 187-198) with a loop that calls the RPC for each unique period:
 
-Add a database trigger `trg_workflow_change_step_back` on `workflow_config` that fires on INSERT or UPDATE (when `workflow_template_id` changes). The trigger:
+```text
+For each previous month period:
+  Call get_bulk_employee_workflows({
+    employee_ids: [kpi.employee_id],
+    p_review_period: period.month,   // singular
+    p_review_year: period.year       // singular
+  })
+  Store result in wfMap keyed by "month_year"
+```
 
-1. Identifies all KPIs for the affected employee + period that are at `approved` status
-2. Resolves the old and new workflow templates' stages
-3. For each approved KPI: if the new workflow has stages beyond what the old terminal reviewer covered (e.g., old terminal was `hr_pms_review`, new has `audit` after it), step the KPI back to the stage preceding the new uncovered stage
-4. Clear `final_score`/`final_rating` on stepped-back KPIs
-5. Log `WORKFLOW_CHANGE_STEP_BACK` audit entries
+This ensures each previous month resolves the workflow that was configured for that specific period, not the current one.
 
-This is the **preventive mechanism** — any future workflow change that adds stages beyond the old terminal will automatically revert affected KPIs.
-
-#### Part 3: UI Notification in Workflow Config
-
-In the workflow assignment UI (`useWorkflowConfig.ts`), after a successful workflow config save, show a toast warning if the change affected any already-approved KPIs: "X KPIs were stepped back to [stage] due to workflow change. Affected employees: [names]."
-
-#### Part 4: Documentation
+#### Part 2: Documentation
 
 | File | Change |
 |------|--------|
-| Migration SQL | Step back 39 KPIs + create trigger |
-| `src/hooks/useWorkflowConfig.ts` | Add post-save check for affected KPIs, show toast |
-| `POLICY.md` | Add §60: Workflow changes that add stages beyond current terminal must revert approved KPIs |
-| `DOCUMENTATION.md` | Version bump |
+| `src/components/review/KpiJourneySection.tsx` | Fix RPC call to use correct singular param names per period |
+| `DOCUMENTATION.md` | Version bump with fix note |
 
 ### Risk Assessment
-- **Step-back**: All reviewer scores preserved. Only `final_score`/`final_rating` cleared and status moved to pre-audit. Auditor will see these in their queue.
-- **Trigger**: Only fires when workflow template actually changes. Does not fire on same-template re-saves. Only affects `approved` KPIs where new stages were added beyond old terminal.
-- **No data loss**: HR PMS scores remain on `review_submissions`. Once auditor reviews and re-approves, `final_score` recalculates from the new terminal reviewer.
+- **No data migration needed**: This is a display-only bug. The workflow configs in the database are correct per period — they were just never being queried properly.
+- **No regression**: The fix changes how the RPC is called, not the RPC itself. All other consumers of `get_bulk_employee_workflows` already use the correct singular params.
+- **Immediate fix for all cases**: Every employee with historical workflow changes will immediately show correct historical stages once the RPC call is fixed.
 
