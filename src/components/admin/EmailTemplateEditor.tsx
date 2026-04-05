@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { FileText, Save, RotateCcw, Eye } from 'lucide-react';
+import { FileText, Save, RotateCcw, Eye, Clock } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -18,6 +18,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { useEmailTemplateSchedules, type EmailScheduleConfig } from '@/hooks/useEmailTemplateSchedules';
 
 interface EmailTemplate {
   key: string;
@@ -522,6 +525,8 @@ export function EmailTemplateEditor() {
   const [selectedTemplate, setSelectedTemplate] = useState(DEFAULT_TEMPLATES[0].key);
   const [editedTemplates, setEditedTemplates] = useState<Record<string, { subject: string; body: string }>>({});
   const [hasChanges, setHasChanges] = useState(false);
+  const { getSchedule, updateSchedule, isUpdating: isScheduleUpdating } = useEmailTemplateSchedules();
+  const [scheduleEdits, setScheduleEdits] = useState<Record<string, EmailScheduleConfig>>({});
 
   // Fetch saved templates from system_settings
   const { data: savedTemplates, isLoading } = useQuery({
