@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { FILTER_PARAM_NAMES } from '@/hooks/useUrlFilterState';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { useSkipLevelTeamMembers } from '@/hooks/useOrganization';
@@ -239,7 +240,13 @@ export default function Dashboard() {
     setViewMode(mode);
     setSelectedEmployee(null);
     setAutoOpenKpiId(null);
-  }, []);
+    // Clear filter params when switching view modes
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      FILTER_PARAM_NAMES.forEach((p) => next.delete(p));
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   // Handle employee selection from grid
   const handleSelectEmployee = useCallback((employee: EmployeeProfile, kpiId?: string | null) => {
