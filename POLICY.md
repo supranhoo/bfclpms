@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 1.71.0 — §64: Auditor cross-check visibility for all employees
+> **Version:** 1.72.0 — §65: Per-template email dispatch scheduling
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1262,3 +1262,20 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
 3. **No workflow bypass**: The cross-check mode does not add audit capability to employees' workflows — it only provides read-only visibility for score verification purposes.
 4. **Demographic filters apply**: Standard demographic filters (department, designation, grade, manager) still apply in cross-check mode.
 5. **Existing filters unchanged**: All existing audit panel filters (All Employees, My Assignments, Pending, In Audit, Forwarded) continue to respect workflow stage requirements.
+
+---
+
+## §65 — Per-Template Email Dispatch Scheduling
+
+**Effective Date:** 2026-04-05
+
+**Policy:**
+
+1. **Per-template configuration**: Each email template can be independently configured to send either immediately (on event) or at a scheduled daily time.
+2. **Default behavior**: All templates default to "Send Immediately" — no change to existing behavior until explicitly configured by an admin.
+3. **Queue mechanism**: When a template is set to "Scheduled", triggered emails are queued in `email_dispatch_queue` and dispatched at the configured time (checked every 15 minutes).
+4. **Stale protection**: Queued emails older than 24 hours are automatically skipped to prevent email floods after system downtime.
+5. **Cleanup**: Sent queue entries are automatically purged after 7 days.
+6. **Security exceptions**: Security-critical events (`email_changed`, `password_rollout`) bypass the schedule check and always send immediately regardless of schedule configuration.
+7. **Timezone**: Schedule times are evaluated in the configured timezone (default: Asia/Kolkata).
+8. **Fallback**: If queuing fails, the email is sent immediately as a failsafe.

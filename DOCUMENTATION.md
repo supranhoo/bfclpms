@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 2.16.77 — Feature: Auditor cross-check filter for all employees visibility
+> **Version:** 2.16.78 — Feature: Per-template email dispatch scheduling (immediate or scheduled)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
