@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 2.16.70 — §60: Workflow change auto-step-back for approved KPIs
+> **Version:** 2.16.71 — Fix: Previous months show historical workflow instead of current
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4749,3 +4749,9 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Trigger:** Added `trg_workflow_change_step_back` on `workflow_config`. Auto-detects when new workflow adds stages beyond old terminal reviewer and steps back approved KPIs.
 - **UI:** Post-save toast notification in workflow config UI warns admin when KPIs are stepped back.
 - **Affected files:** Migration SQL, `src/hooks/useWorkflowConfig.ts`, `POLICY.md` (§60), `DOCUMENTATION.md`
+
+### v2.16.71 — Fix: Previous Months Show Historical Workflow Instead of Current
+- **RCA:** `KpiJourneySection.tsx` called `get_bulk_employee_workflows` with plural parameter names (`p_review_periods`, `p_review_years`) but the RPC only accepts singular (`p_review_period`, `p_review_year`). PostgREST silently ignored unknown params, causing fallback to current/default workflow for all historical months.
+- **Fix:** Changed to call RPC once per unique historical period with correct singular parameter names. Each previous month now resolves its own period-specific workflow configuration.
+- **Impact:** All employees with historical workflow changes now correctly display the workflow that was active during each past period.
+- **Affected files:** `src/components/review/KpiJourneySection.tsx`, `DOCUMENTATION.md`
