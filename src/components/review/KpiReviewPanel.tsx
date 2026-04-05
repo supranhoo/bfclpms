@@ -102,6 +102,7 @@ export function KpiReviewPanel({
             employeeName={employeeName}
             employeeCode={employeeCode}
             reportingManagerName={reportingManagerName}
+            orgAchievedValue={orgAchievedValue}
           />
           
           <KpiObservationsSection
