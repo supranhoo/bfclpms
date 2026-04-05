@@ -917,7 +917,7 @@ export function EmployeeSelectorGrid({
 
   // Render stats cards based on view level
   const toggleStatusFilter = (filter: string) => {
-    setStatusFilter(prev => prev === filter ? 'all' : filter);
+    setStatusFilter(statusFilter === filter ? 'all' : filter);
   };
 
   const renderStatsCards = () => {
@@ -1349,7 +1349,7 @@ export function EmployeeSelectorGrid({
               {auditorWorkloadStats.map(a => (
                 <button
                   key={a.auditorId}
-                  onClick={() => setAuditorFilter(prev => prev === a.auditorId ? null : a.auditorId)}
+                  onClick={() => setAuditorFilter(auditorFilter === a.auditorId ? null : a.auditorId)}
                   className={`shrink-0 rounded-lg border px-3 py-2 text-left transition-all min-w-[140px] ${
                     auditorFilter === a.auditorId
                       ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
@@ -1386,7 +1386,7 @@ export function EmployeeSelectorGrid({
               ))}
               {unassignedStats && (
                 <button
-                  onClick={() => setAuditorFilter(prev => prev === '__unassigned__' ? null : '__unassigned__')}
+                  onClick={() => setAuditorFilter(auditorFilter === '__unassigned__' ? null : '__unassigned__')}
                   className={`shrink-0 rounded-lg border px-3 py-2 text-left transition-all min-w-[140px] ${
                     auditorFilter === '__unassigned__'
                       ? 'border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/30'
