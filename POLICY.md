@@ -1070,3 +1070,25 @@ All architectural decisions documented as invariants in this policy are also mai
 - *Alternative A: Auto-create profile on first login via trigger* — Deferred; already handled by existing `on_auth_user_created` trigger. Backfill migration addresses historical gaps.
 - *Alternative B: Redirect to a setup wizard* — Over-engineered for the current use case where missing profiles indicate a data bug, not a normal flow.
 - *Chosen approach:* Explicit error state with retry capability, plus backfill migration for existing broken records.
+
+---
+
+### §54 — Multi-Month Workflow Independence Invariant
+
+**Rule:** Quarterly, Bi-Monthly, Half-Yearly, and Yearly KPIs must complete the full workflow independently in each month. The `percolate_multimonth_score` trigger must NOT auto-approve sibling months that have not independently reached their terminal workflow stage. System auto-scoring (score=0, rating=red) applies exclusively to overdue self-reviews (not submitted by the 10th) per ADR-048. No other system-initiated scoring is permitted.
+
+**Rationale:** The original trigger blindly set sibling KPIs to `approved` status, bypassing all intermediate workflow stages including audit. This caused ~40 KPIs in 2026 to be approved without auditor review.
+
+**Invariant:**
+1. When a terminal-month KPI is approved, the trigger checks each sibling's current workflow stage against its terminal stage.
+2. If a sibling is already `approved`, only scores are copied (no status change).
+3. If a sibling is at its terminal workflow stage, it is approved and scores are copied.
+4. If a sibling is mid-workflow, its status is NOT touched and a `PERCOLATION_DEFERRED` audit log is recorded.
+5. All percolated submissions include `auto_advance_reason = 'Score percolated from terminal month'` for traceability.
+
+**Decision Context & Alternatives Considered:**
+- *Alternative A: Allow percolation to bypass workflow* — Rejected; caused auditor bypass and 40+ incorrectly approved KPIs.
+- *Alternative B: Disable percolation entirely* — Rejected; score consistency across cycle months is still needed for already-completed KPIs.
+- *Chosen approach:* Workflow-stage guard in the trigger + `PERCOLATION_DEFERRED` audit trail for mid-workflow siblings.
+
+**Related ADR:** [ADR-047](docs/adr/ADR-047.md)
