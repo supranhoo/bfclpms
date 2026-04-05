@@ -183,17 +183,22 @@ export function KpiJourneySection({
       if (sErr) throw sErr;
       const subMap = new Map((subs || []).map(s => [s.kpi_id, s]));
 
-      // Fetch workflows
-      const { data: wfData } = await supabase.rpc('get_bulk_employee_workflows', {
-        employee_ids: [kpi.employee_id],
-        p_review_periods: filtered.map(k => k.review_period),
-        p_review_years: filtered.map(k => k.review_year),
-      });
+      // Fetch workflows per period individually (RPC accepts singular period/year)
+      const uniquePeriods = Array.from(
+        new Map(filtered.map(k => [`${k.review_period}_${k.review_year}`, { month: k.review_period, year: k.review_year }])).values()
+      );
       const wfMap = new Map<string, string[]>();
-      if (wfData) {
-        for (const w of wfData as any[]) {
-          const key = `${w.review_period}_${w.review_year}`;
-          wfMap.set(key, w.stages || DEFAULT_WORKFLOW_STAGES);
+      for (const period of uniquePeriods) {
+        const { data: wfData } = await supabase.rpc('get_bulk_employee_workflows', {
+          employee_ids: [kpi.employee_id],
+          p_review_period: period.month,
+          p_review_year: period.year,
+        });
+        if (wfData) {
+          for (const w of wfData as any[]) {
+            const key = `${period.month}_${period.year}`;
+            wfMap.set(key, w.stages || DEFAULT_WORKFLOW_STAGES);
+          }
         }
       }
 
