@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 2.15.67 — Fixed "Unknown user" in timeline: added get_profiles_for_audit_display RPC; added missing actionConfig entries (§57)
+> **Version:** 2.16.68 — §58: Multi-month cycle completion gate; bulk step-back of 18 premature KPIs; enhanced frequency lock trigger
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
