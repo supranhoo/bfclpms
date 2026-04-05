@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 2.16.73 — Fix: Eliminate circular effect loop in filter/employee URL persistence
+> **Version:** 2.16.74 — Fix: Skip-level viewLevel resolved from reporting chain, not grid metadata
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

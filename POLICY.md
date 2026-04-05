@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-05  
-> **Version:** 1.68.0 — §61: Reviewer filter & selection persistence across refresh
+> **Version:** 1.69.0 — §62: ViewLevel must be determined from reporting chain, not grid metadata
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
