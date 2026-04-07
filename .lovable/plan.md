@@ -1,83 +1,54 @@
 
 
-## Add Company Filter to All Reports
+## Auto-Logout (Idle Timeout) Feature
 
-### Problem
-Reports currently fetch ALL data across all companies with no company-level filtering. The user needs a Company selector on every report, and data should be scoped to the selected company.
+### What This Does
+Adds a configurable auto-logout feature that signs users out after a period of inactivity. Admins can set the idle timeout duration (e.g., 15, 30, 60 minutes) from System Settings. The system tracks mouse, keyboard, scroll, and touch events to detect activity.
 
-### Root Cause of "Blank Reports"
-The user likely expected company-scoped data but reports have no company awareness. All 461 employees belong to "Bihar Foundry & Casting Limited" (BFCL); "Saibal Kunar" has 0 employees. Selecting Saibal would correctly show empty data since no employees are mapped to it.
+### How It Works
 
-### Data Chain
 ```text
-profiles.department_id → departments.business_unit_id → business_units.division_id → divisions.company_id → companies
+User active → reset timer
+User idle for X minutes → show warning toast (60s before logout)
+Still idle → auto sign-out → redirect to /auth
 ```
 
-### Architecture
+### Implementation
 
-#### 1. Shared Hook: `useCompanyFilter`
-A new reusable hook that:
-- Fetches all companies from `companies` table
-- Maintains `selectedCompanyId` state (defaults to the default company or "all")
-- Provides a `filterByCompany(employeeIds)` function that resolves employee → department → BU → division → company chain
-- Caches the employee-to-company mapping for performance
-- Returns `{ companies, selectedCompanyId, setSelectedCompanyId, companyEmployeeIds, CompanyFilterSelect }`
+**1. New System Setting: `auto_logout_minutes`**
+- Stored in `system_settings` table (no migration needed — uses existing upsert pattern)
+- Default: `30` minutes
+- Options: 5, 10, 15, 30, 45, 60, 90, 120 minutes, or "Disabled"
 
-#### 2. Shared Component: `CompanyFilter`
-A reusable `<Select>` component rendered in each report's filter area:
-- Options: "All Companies" + list of companies from DB
-- Compact design matching existing filter patterns
+**2. New Hook: `src/hooks/useIdleTimeout.ts`**
+- Reads `auto_logout_minutes` from `useSystemSetting`
+- Listens to `mousemove`, `keydown`, `scroll`, `click`, `touchstart` events (throttled)
+- Sets a `setTimeout` for the configured duration
+- Shows a warning toast 60 seconds before logout
+- Calls `supabase.auth.signOut()` on expiry
+- Cleans up listeners on unmount
 
-#### 3. Integration Strategy
-Two patterns exist across reports:
+**3. Integrate into `DashboardLayout.tsx`**
+- Call `useIdleTimeout()` inside the layout so it's active on all authenticated pages
 
-**Pattern A — Reports using `useAllKpis()`** (Performance, Query, Completion, Department, KRA Issuance):
-- Filter `allKpis` by checking if `kpi.employee_id` is in `companyEmployeeIds`
-
-**Pattern B — Reports with direct Supabase queries** (KPI Scorecard Detail, Employee Performance Summary, Monthly Scorecard, Incentive, etc.):
-- Add company filter to the query by joining through the department → BU → division → company chain, OR
-- Post-filter results using the employee-to-company map from the hook
-
-**Recommended approach**: Build a DB view or use the hook to pre-compute `employeeId → companyId` mapping. Post-filter in each report using this map. This avoids modifying 15+ different Supabase queries.
-
-#### 4. Employee-Company Mapping
-Create a `useEmployeeCompanyMap` hook that:
-```typescript
-// Fetches departments with BU → division → company chain
-// Returns Map<employeeId, companyId>
-```
-Each report filters its data: `kpis.filter(k => !selectedCompanyId || employeeCompanyMap.get(k.employee_id) === selectedCompanyId)`
+**4. Admin UI in `SystemSettings.tsx`**
+- Add an "Auto Logout" card under the "General" or "Controls" section
+- Dropdown to select timeout duration
+- Uses existing `useUpdateSystemSetting` to save
 
 ### Files to Change
 
 | File | Change |
 |------|--------|
-| `src/hooks/useCompanyFilter.ts` | **New** — shared hook with company selector state + employee-company mapping |
-| `src/components/reports/CompanyFilter.tsx` | **New** — reusable company selector component |
-| `src/pages/reports/PerformanceReport.tsx` | Add CompanyFilter + filter scopedKpis by company |
-| `src/pages/reports/QueryReport.tsx` | Add CompanyFilter + filter queries by company |
-| `src/pages/reports/CompletionReport.tsx` | Add CompanyFilter + filter KPIs by company |
-| `src/pages/reports/DepartmentReport.tsx` | Add CompanyFilter + filter KPIs by company |
-| `src/pages/reports/KRAIssuance.tsx` | Add CompanyFilter + filter KPIs by company |
-| `src/pages/reports/KpiScorecardDetail.tsx` | Add CompanyFilter + filter rows by company |
-| `src/pages/reports/EmployeePerformanceSummary.tsx` | Add CompanyFilter + filter data by company |
-| `src/pages/reports/MonthlyScorecardReport.tsx` | Add CompanyFilter + filter data by company |
-| `src/pages/reports/IncentiveReport.tsx` | Add CompanyFilter + filter data by company |
-| `src/pages/reports/BottleneckReport.tsx` | Add CompanyFilter + filter data by company |
-| `src/pages/reports/KpiDetailReport.tsx` | Add CompanyFilter + filter data by company |
-| `src/pages/reports/KpiJourneyReport.tsx` | Add CompanyFilter + filter data by company |
-| `src/pages/reports/KpiStatusTracker.tsx` | Add CompanyFilter + filter data by company |
-| `src/pages/reports/ManagerTeamKpiReport.tsx` | Add CompanyFilter + filter data by company |
-| `src/pages/reports/AuditTrailReport.tsx` | Add CompanyFilter + filter data by company |
-| `src/pages/reports/TNIReport.tsx` | Add CompanyFilter + filter data by company |
-| `src/pages/reports/TeamVsManagerScoreReport.tsx` | Add CompanyFilter + filter data by company |
-| `src/pages/reports/VarianceReport.tsx` | Add CompanyFilter + filter data by company |
-| `src/pages/reports/IssuesReport.tsx` | Add CompanyFilter + filter data by company |
+| `src/hooks/useIdleTimeout.ts` | New hook — idle detection + auto sign-out |
+| `src/hooks/useSystemSettings.ts` | Add `useAutoLogoutMinutes()` convenience hook |
+| `src/components/layout/DashboardLayout.tsx` | Call `useIdleTimeout()` |
+| `src/pages/admin/SystemSettings.tsx` | Add Auto Logout duration selector in Controls section |
 | `DOCUMENTATION.md` | Version bump |
 
 ### Risk Assessment
-- **No data changes**: Read-only filter, no schema modifications
-- **No regression**: Default is "All Companies" — existing behavior preserved
-- **Performance**: One additional query for department-BU-division-company chain (small, cached)
-- **Consistency**: Same component used across all 19 reports ensures uniform UX
+- **No data changes**: Uses existing `system_settings` table with upsert
+- **No regression**: Default is 30 minutes; "Disabled" option available
+- **Performance**: Event listeners are throttled (1 check per second max); negligible overhead
+- **Security**: Enhances security by preventing unattended sessions
 
