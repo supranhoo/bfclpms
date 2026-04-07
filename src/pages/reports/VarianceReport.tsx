@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useReportAccess } from '@/hooks/useReportAccess';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { CompanyFilter } from '@/components/reports/CompanyFilter';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -22,6 +24,7 @@ const PAGE_SIZE = 50;
 
 interface VarianceRow {
   kpiId: string;
+  employeeId: string;
   employeeCode: string;
   employeeName: string;
   department: string;
@@ -41,6 +44,7 @@ export default function VarianceReport() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const { canDownload } = useReportAccess();
+  const { getCompanyCode } = useCompanyFilter();
 
   const { data: rawData, isLoading } = useQuery({
     queryKey: ['variance-report', month, year],
@@ -84,6 +88,7 @@ export default function VarianceReport() {
 
       result.push({
         kpiId: kpi.id,
+        employeeId: kpi.employee_id || '',
         employeeCode: profile?.employee_code || '—',
         employeeName: profile?.full_name || 'Unknown',
         department: (Array.isArray(dept) ? dept[0]?.name : dept?.name) || '—',
@@ -126,6 +131,7 @@ export default function VarianceReport() {
     if (!filtered.length) return;
     const ws = XLSX.utils.json_to_sheet(
       filtered.map((r) => ({
+        'Company': getCompanyCode(r.employeeId),
         'Employee Code': r.employeeCode,
         'Employee Name': r.employeeName,
         Department: r.department,

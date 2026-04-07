@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useReportAccess } from '@/hooks/useReportAccess';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { CompanyFilter } from '@/components/reports/CompanyFilter';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -68,6 +70,7 @@ export default function TeamVsManagerScoreReport() {
     </TableHead>
   );
   const { canDownload } = useReportAccess();
+  const { getCompanyCode } = useCompanyFilter();
 
   const { data: rawData, isLoading } = useQuery({
     queryKey: ['team-vs-manager-score-report', month, year],
@@ -216,6 +219,7 @@ export default function TeamVsManagerScoreReport() {
 
   const handleExport = () => {
     const exportData = filtered.map(r => ({
+      'Company': getCompanyCode(r.employeeId),
       'Employee Code': r.employeeCode,
       'Employee Name': r.employeeName,
       'Designation': r.designation,

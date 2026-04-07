@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { useReportAccess } from '@/hooks/useReportAccess';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { CompanyFilter } from '@/components/reports/CompanyFilter';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -81,6 +83,7 @@ interface EmployeePerformance {
 export default function EmployeePerformanceSummary() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('employee-summary');
+  const { getCompanyCode } = useCompanyFilter();
   const currentYear = new Date().getFullYear();
   
   const [selectedYear, setSelectedYear] = useState(currentYear.toString());
@@ -503,6 +506,7 @@ export default function EmployeePerformanceSummary() {
       const rating = calculateRating(row.totalScore, row.outOfScore, row.totalWeight);
 
       return {
+        'Company': getCompanyCode(row.employeeId),
         'Month': formatPeriod(row.reviewPeriod, row.reviewYear),
         'Employee ID': row.employeeCode,
         'Full Name': row.fullName,

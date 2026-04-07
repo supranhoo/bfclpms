@@ -26,6 +26,7 @@ export const ALL_STAGES = Object.keys(STAGE_LABELS) as StageKey[];
 
 export interface BottleneckRow {
   kpiId: string;
+  employeeId: string;
   employeeCode: string;
   employeeName: string;
   departmentName: string;
@@ -152,6 +153,7 @@ export function useBottleneckReport() {
 
         return {
           kpiId: kpi.id,
+          employeeId: employeeId || '',
           employeeCode,
           employeeName,
           departmentName: deptInfo?.name || '-',

@@ -2,6 +2,8 @@ import { useState, useMemo, useEffect } from 'react';
 import { useReportAccess } from '@/hooks/useReportAccess';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { CompanyFilter } from '@/components/reports/CompanyFilter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,6 +33,7 @@ const RATING_COLORS: Record<string, string> = {
 export default function MonthlyScorecardReport() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('monthly-scorecard');
+  const { getCompanyCode } = useCompanyFilter();
   const currentYear = new Date().getFullYear();
   const currentMonth = MONTHS[new Date().getMonth()];
   
@@ -388,6 +391,7 @@ export default function MonthlyScorecardReport() {
 
   const handleExportExcel = () => {
     const exportData = filteredScorecards.map(sc => ({
+      'Company': getCompanyCode(sc.employeeId),
       'Employee Code': sc.employeeCode,
       'Employee Name': sc.employeeName,
       'Designation': sc.designation,

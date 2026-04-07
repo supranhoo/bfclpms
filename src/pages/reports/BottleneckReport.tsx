@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useReportAccess } from '@/hooks/useReportAccess';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -64,6 +65,7 @@ function SummaryCard({
 export default function BottleneckReport() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('bottleneck');
+  const { getCompanyCode } = useCompanyFilter();
   const { toast } = useToast();
   const {
     rows, allFilteredRows, stats, urgencyStats, topHolders, chartData, isLoading,
@@ -106,6 +108,7 @@ export default function BottleneckReport() {
       return;
     }
     const data = allFilteredRows.map((r: BottleneckRow) => ({
+      'Company': getCompanyCode(r.employeeId),
       'Emp Code': r.employeeCode,
       'Employee Name': r.employeeName,
       'Department': r.departmentName,

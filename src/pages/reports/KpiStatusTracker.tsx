@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { useReportAccess } from '@/hooks/useReportAccess';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { CompanyFilter } from '@/components/reports/CompanyFilter';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -97,6 +99,7 @@ const PAGE_SIZE = 50;
 export default function KpiStatusTracker() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('kpi-status-tracker');
+  const { getCompanyCode } = useCompanyFilter();
   const currentYear = new Date().getFullYear();
   const currentMonthIdx = new Date().getMonth();
 
@@ -280,6 +283,7 @@ export default function KpiStatusTracker() {
     if (!filteredRows.length) return;
     const exportData = filteredRows.map((r, i) => ({
       '#': i + 1,
+      'Company': getCompanyCode(r.employeeId),
       'Employee Code': r.employeeCode,
       'Employee Name': r.employeeName,
       'Designation': r.designation,

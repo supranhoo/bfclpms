@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { useReportAccess } from '@/hooks/useReportAccess';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { CompanyFilter } from '@/components/reports/CompanyFilter';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -94,6 +96,7 @@ function CalcCell({ value, isNa, isLocked, format }: { value: number | null; isN
 export default function KpiDetailReport() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('kpi-detail');
+  const { getCompanyCode } = useCompanyFilter();
   const currentYear = new Date().getFullYear();
 
   const [selectedYear, setSelectedYear] = useState(currentYear.toString());
@@ -360,6 +363,7 @@ export default function KpiDetailReport() {
   const handleExport = () => {
     if (!filteredRows.length) return;
     const exportData = filteredRows.map(r => ({
+      'Company': getCompanyCode(r.employeeId),
       'Employee Code': r.employeeCode,
       'Employee Name': r.employeeName,
       'Department': r.department,
