@@ -282,6 +282,7 @@ export default function KpiStatusTracker() {
     if (!filteredRows.length) return;
     const exportData = filteredRows.map((r, i) => ({
       '#': i + 1,
+      'Company': getCompanyCode(r.employeeId),
       'Employee Code': r.employeeCode,
       'Employee Name': r.employeeName,
       'Designation': r.designation,

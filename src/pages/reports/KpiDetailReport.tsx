@@ -362,6 +362,7 @@ export default function KpiDetailReport() {
   const handleExport = () => {
     if (!filteredRows.length) return;
     const exportData = filteredRows.map(r => ({
+      'Company': getCompanyCode(r.employeeId),
       'Employee Code': r.employeeCode,
       'Employee Name': r.employeeName,
       'Department': r.department,

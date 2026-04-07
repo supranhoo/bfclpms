@@ -218,6 +218,7 @@ export default function TeamVsManagerScoreReport() {
 
   const handleExport = () => {
     const exportData = filtered.map(r => ({
+      'Company': getCompanyCode(r.employeeId),
       'Employee Code': r.employeeCode,
       'Employee Name': r.employeeName,
       'Designation': r.designation,

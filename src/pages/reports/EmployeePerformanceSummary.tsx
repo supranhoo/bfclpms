@@ -505,6 +505,7 @@ export default function EmployeePerformanceSummary() {
       const rating = calculateRating(row.totalScore, row.outOfScore, row.totalWeight);
 
       return {
+        'Company': getCompanyCode(row.employeeId),
         'Month': formatPeriod(row.reviewPeriod, row.reviewYear),
         'Employee ID': row.employeeCode,
         'Full Name': row.fullName,

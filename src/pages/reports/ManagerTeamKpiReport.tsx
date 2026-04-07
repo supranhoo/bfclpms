@@ -24,6 +24,7 @@ const PAGE_SIZE = 50;
 
 interface MismatchRow {
   kpiId: string;
+  employeeId: string;
   employeeCode: string;
   employeeName: string;
   department: string;
@@ -156,6 +157,7 @@ export default function ManagerTeamKpiReport() {
     const ws = XLSX.utils.json_to_sheet(
       filtered.map((r) => ({
         'Month': month,
+        'Company': getCompanyCode(r.employeeId),
         'Employee Code': r.employeeCode,
         'Employee Name': r.employeeName,
         Department: r.department,
