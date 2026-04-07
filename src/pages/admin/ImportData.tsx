@@ -1610,6 +1610,7 @@ export default function ImportData() {
           full_name,
           email,
           designation,
+          company_id,
           pms_grade,
           level,
           department_id,
