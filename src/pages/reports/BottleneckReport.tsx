@@ -65,6 +65,7 @@ function SummaryCard({
 export default function BottleneckReport() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('bottleneck');
+  const { getCompanyCode } = useCompanyFilter();
   const { toast } = useToast();
   const {
     rows, allFilteredRows, stats, urgencyStats, topHolders, chartData, isLoading,
@@ -107,6 +108,7 @@ export default function BottleneckReport() {
       return;
     }
     const data = allFilteredRows.map((r: BottleneckRow) => ({
+      'Company': getCompanyCode(r.employeeId),
       'Emp Code': r.employeeCode,
       'Employee Name': r.employeeName,
       'Department': r.departmentName,
