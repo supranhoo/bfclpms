@@ -320,6 +320,12 @@ export default function KpiScorecardDetail() {
               </SelectContent>
             </Select>
 
+            <CompanyFilter
+              companies={companies}
+              selectedCompanyId={selectedCompanyId}
+              onCompanyChange={v => { setSelectedCompanyId(v); setCurrentPage(1); }}
+            />
+
             <Select value={selectedDept} onValueChange={v => { setSelectedDept(v); setCurrentPage(1); }}>
               <SelectTrigger className="w-[160px] h-8 text-xs">
                 <SelectValue placeholder="All Departments" />
