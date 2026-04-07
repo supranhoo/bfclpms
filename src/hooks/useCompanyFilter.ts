@@ -59,9 +59,13 @@ export function useCompanyFilter() {
       const buToDiv = new Map(bus?.map(b => [b.id, b.division_id]) ?? []);
       const divToCompany = new Map(divs?.map(d => [d.id, d.company_id]) ?? []);
 
-      // Build employee → company map
+      // Build employee → company map and employee_code → employee_id map
       const map = new Map<string, string>();
+      const codeToIdMap = new Map<string, string>();
       (profiles ?? []).forEach(p => {
+        if ((p as any).employee_code) {
+          codeToIdMap.set((p as any).employee_code, p.id);
+        }
         // Priority 1: Direct company_id on profile
         if ((p as any).company_id) {
           map.set(p.id, (p as any).company_id);
@@ -77,7 +81,7 @@ export function useCompanyFilter() {
         if (companyId) map.set(p.id, companyId);
       });
 
-      return map;
+      return { companyMap: map, codeToIdMap };
     },
     staleTime: 10 * 60 * 1000,
   });
