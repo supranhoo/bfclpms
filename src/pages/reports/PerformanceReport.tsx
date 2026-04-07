@@ -3,6 +3,8 @@ import { useReportAccess } from '@/hooks/useReportAccess';
 import { useAllKpis, useReviewSubmissions } from '@/hooks/useKpis';
 import { useProfiles, useKraCategories } from '@/hooks/useOrganization';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { CompanyFilter } from '@/components/reports/CompanyFilter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -33,15 +35,16 @@ export default function PerformanceReport() {
   const isOrgWideRole = ['admin', 'management', 'auditor', 'hr_pms'].includes(effectiveRole || '');
   const scopeLabel = isOrgWideRole ? 'Organization Performance' : 'Team Performance';
 
-  // Filter KPIs based on role scope
+  const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany } = useCompanyFilter();
+
+  // Filter KPIs based on role scope + company
   const scopedKpis = useMemo(() => {
     if (!allKpis) return [];
-    if (isOrgWideRole) return allKpis;
-    // For managers/employees: exclude own KPIs and org-level KPIs
-    return allKpis.filter(k =>
+    const roleFiltered = isOrgWideRole ? allKpis : allKpis.filter(k =>
       k.employee_id !== user?.id && !(k as any).is_org_level
     );
-  }, [allKpis, isOrgWideRole, user?.id]);
+    return roleFiltered.filter(k => filterByCompany(k.employee_id));
+  }, [allKpis, isOrgWideRole, user?.id, filterByCompany]);
 
   const kpiIds = scopedKpis.map(k => k.id);
   const { data: submissions } = useReviewSubmissions(kpiIds);
@@ -126,6 +129,7 @@ export default function PerformanceReport() {
         backTo="/reports"
         actions={
           <div className="flex items-center gap-2">
+            <CompanyFilter companies={companies} selectedCompanyId={selectedCompanyId} onCompanyChange={setSelectedCompanyId} />
             <Badge variant={isOrgWideRole ? 'default' : 'secondary'}>
               {scopeLabel}
             </Badge>
