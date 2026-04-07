@@ -96,6 +96,7 @@ export default function UserManagement() {
   const [newManagerId, setNewManagerId] = useState('');
   const [newDivisionId, setNewDivisionId] = useState('');  // UI-only cascading filter
   const [newCompanyId, setNewCompanyId] = useState('');
+  const [newPortalAccess, setNewPortalAccess] = useState(true);
 
   // Bulk Action Dialog
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
@@ -271,6 +272,7 @@ export default function UserManagement() {
       pms_grade?: string;
       reporting_manager_id?: string;
       company_id?: string;
+      portal_access?: boolean;
     }) => {
       const { data: session } = await supabase.auth.getSession();
       
@@ -284,6 +286,7 @@ export default function UserManagement() {
           pms_grade: data.pms_grade || undefined,
           reporting_manager_id: data.reporting_manager_id || undefined,
           company_id: data.company_id || undefined,
+          portal_access: data.portal_access,
         },
       });
 
@@ -488,7 +491,7 @@ export default function UserManagement() {
     }
     createUser.mutate({
       full_name: newFullName,
-      email: newEmail,
+      email: newPortalAccess ? newEmail : '',
       employee_code: newEmployeeCode,
       role: newRole,
       department_id: newDepartmentId || undefined,
@@ -496,6 +499,7 @@ export default function UserManagement() {
       pms_grade: newPmsGrade || undefined,
       reporting_manager_id: newManagerId || undefined,
       company_id: newCompanyId || undefined,
+      portal_access: newPortalAccess,
     });
   };
 
@@ -510,6 +514,7 @@ export default function UserManagement() {
     setNewManagerId('');
     setNewDivisionId('');
     setNewCompanyId('');
+    setNewPortalAccess(true);
   };
 
   const handleBulkUpdate = () => {
