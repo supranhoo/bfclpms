@@ -420,6 +420,61 @@ export default function SystemSettings() {
                 </div>
               </CardContent>
             </Card>
+
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Undo2 className="h-5 w-5" />
+                  Self-Review Recall Window
+                </CardTitle>
+                <CardDescription>
+                  Allow employees to withdraw and correct their self-review submission within a defined time window, as long as the manager hasn't reviewed it yet.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-4 p-4 rounded-lg border">
+                  <div className="flex-1 space-y-1">
+                    <Label htmlFor="recall-window" className="text-base font-medium">
+                      Recall Duration
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Employees can recall their submission within this duration after submitting, provided the manager hasn't acted.
+                    </p>
+                  </div>
+                  <Select value={selectedRecallWindow} onValueChange={handleRecallWindowChange}>
+                    <SelectTrigger className="w-40" id="recall-window">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="disabled">Disabled</SelectItem>
+                      <SelectItem value="1">1 hour</SelectItem>
+                      <SelectItem value="2">2 hours</SelectItem>
+                      <SelectItem value="4">4 hours</SelectItem>
+                      <SelectItem value="6">6 hours</SelectItem>
+                      <SelectItem value="12">12 hours</SelectItem>
+                      <SelectItem value="24">24 hours</SelectItem>
+                      <SelectItem value="48">48 hours</SelectItem>
+                      <SelectItem value="72">72 hours</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="mt-4 flex items-center justify-between border-t pt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Current setting: <span className="font-medium text-foreground">
+                      {recallWindowHours === 0 ? 'Disabled' : `${recallWindowHours} hours`}
+                    </span>
+                  </p>
+                  <Button
+                    onClick={handleSaveRecallWindow}
+                    disabled={!hasRecallWindowChanges || updateSetting.isPending}
+                    className="gap-2"
+                  >
+                    <Save className="h-4 w-4" />
+                    {updateSetting.isPending ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </>
         );
       case 'scoring':
