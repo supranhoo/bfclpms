@@ -1283,7 +1283,7 @@ export default function ImportData() {
         }
 
         return { success: true, userId: existingEmployee.id };
-      } else if (row.email) {
+      } else {
         // Create new user via edge function
         const departmentId = departments?.find(d => 
           d.name.toLowerCase() === row.department?.toLowerCase()
@@ -1302,17 +1302,22 @@ export default function ImportData() {
             )?.id || undefined
           : undefined;
 
+        // Determine portal access from import column
+        const portalAccessValue = row.portalAccess?.toLowerCase();
+        const hasPortalAccess = portalAccessValue === 'no' || portalAccessValue === 'false' || portalAccessValue === '0' ? false : !!row.email;
+
         const { data: fnData, error: fnError } = await supabase.functions.invoke('create-employee', {
           body: {
             employee_code: String(row.employeeCode),
             full_name: sanitizeText(row.fullName),
-            email: sanitizeText(row.email),
+            email: sanitizeText(row.email) || undefined,
             designation: sanitizeText(row.designation) || undefined,
             department_id: departmentId || undefined,
             pms_grade: sanitizeText(row.pmsGrade) || undefined,
             level: sanitizeText(row.level) || undefined,
             reporting_manager_id: managerId || undefined,
             company_id: newCompanyId,
+            portal_access: hasPortalAccess,
           },
         });
 
@@ -1335,8 +1340,6 @@ export default function ImportData() {
         }
 
         return { success: true, userId: newUserId };
-      } else {
-        throw new Error(`Employee not found and no email provided to create new user`);
       }
     };
 
