@@ -42,6 +42,7 @@ export default function ManagerTeamKpiReport() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const { canDownload } = useReportAccess();
+  const { getCompanyCode } = useCompanyFilter();
 
   const { data: rawData, isLoading } = useQuery({
     queryKey: ['manager-team-kpi-report', month, year],
@@ -116,6 +117,7 @@ export default function ManagerTeamKpiReport() {
 
       result.push({
         kpiId: kpi.id,
+        employeeId: kpi.employee_id || '',
         employeeCode: profile?.employee_code || '—',
         employeeName: profile?.full_name || 'Unknown',
         department: (Array.isArray(dept) ? dept[0]?.name : dept?.name) || '—',

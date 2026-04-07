@@ -99,6 +99,7 @@ const PAGE_SIZE = 50;
 export default function KpiStatusTracker() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('kpi-status-tracker');
+  const { getCompanyCode } = useCompanyFilter();
   const currentYear = new Date().getFullYear();
   const currentMonthIdx = new Date().getMonth();
 

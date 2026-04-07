@@ -70,6 +70,7 @@ export default function TeamVsManagerScoreReport() {
     </TableHead>
   );
   const { canDownload } = useReportAccess();
+  const { getCompanyCode } = useCompanyFilter();
 
   const { data: rawData, isLoading } = useQuery({
     queryKey: ['team-vs-manager-score-report', month, year],

@@ -96,6 +96,7 @@ function CalcCell({ value, isNa, isLocked, format }: { value: number | null; isN
 export default function KpiDetailReport() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('kpi-detail');
+  const { getCompanyCode } = useCompanyFilter();
   const currentYear = new Date().getFullYear();
 
   const [selectedYear, setSelectedYear] = useState(currentYear.toString());
