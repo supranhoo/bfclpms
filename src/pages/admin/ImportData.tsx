@@ -1292,6 +1292,14 @@ export default function ImportData() {
           (row.managerName && p.full_name?.toLowerCase() === row.managerName?.toLowerCase())
         )?.id || null;
 
+        // Resolve company by code or name (case-insensitive)
+        const newCompanyId = row.companyCode
+          ? (companiesList || []).find((c: any) =>
+              c.code?.toLowerCase() === row.companyCode!.toLowerCase() ||
+              c.name?.toLowerCase() === row.companyCode!.toLowerCase()
+            )?.id || undefined
+          : undefined;
+
         const { data: fnData, error: fnError } = await supabase.functions.invoke('create-employee', {
           body: {
             employee_code: String(row.employeeCode),
@@ -1302,6 +1310,7 @@ export default function ImportData() {
             pms_grade: sanitizeText(row.pmsGrade) || undefined,
             level: sanitizeText(row.level) || undefined,
             reporting_manager_id: managerId || undefined,
+            company_id: newCompanyId,
           },
         });
 
