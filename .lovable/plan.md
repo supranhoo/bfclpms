@@ -1,51 +1,60 @@
 
 
-## Fix: Enable Self-Review Recall Button
+## RCA: Incentive Report Redirecting to Dashboard
 
 ### Root Cause
-The Recall hook queries `kpi_audit_logs` for `action = 'SELF_REVIEW_SUBMITTED'` to get the submission timestamp. But the self-review submission code in `useKpis.ts` (line 594-619) never writes this audit log. Result: the hook always returns "No submission record found" and hides the button.
+The system has **two independent access control layers** that are not synchronized:
 
-### Why Not Use the KPI Status Directly?
-The KPI `status` field tells us *current state* but not *when* the submission happened. The `updated_at` column changes on any update (not just submission), making it unreliable for the recall countdown timer. A dedicated audit log entry gives us the exact submission timestamp.
+1. **Menu Access** (sidebar visibility) — `menu_access_config` + `menu_access_user_overrides`
+2. **Report Access** (route guard) — `report_access_config` + `report_access_user_overrides`
 
-### Why Not Use a DB Trigger?
-The `notify_on_kpi_status_change` trigger already fires on `kra_set → self_review`, but it creates **notifications**, not audit logs. Adding audit logging to the same trigger would mix concerns. The cleanest approach is a single `INSERT` in the application code, matching the pattern used everywhere else (e.g., `MANAGER_APPROVED`, `QUERY_RAISED`, `MANAGER_SENT_BACK` — all logged from hooks, not triggers).
+The admin granted user 101715 (Jitendra Bharti, role: Manager) an override in the **Menu Access** system for "Incentive Report" — so the sidebar link is visible. However, the **route** `/reports/incentive` is wrapped in `<ReportRoute reportKey="incentive">`, which checks the **Report Access** system. The `incentive` report's `view_roles` are `[admin, management, hr_pms]` — Manager is not included, and no user-level override exists in `report_access_user_overrides`. So `ReportRoute` returns `<Navigate to="/dashboard" />`.
 
-### Safety Assessment
-- `SELF_REVIEW_SUBMITTED` is a **brand-new action string** — no existing code, trigger, or RLS policy references it
-- All display components (AuditLogs, KpiTimeline, AuditTrailReport, KpiJourneySection) already have labels/icons/colors for it (added in previous implementation) — they're just dormant
-- It's a pure INSERT into `kpi_audit_logs` — zero side effects on any workflow
+```text
+User clicks "Incentive Report" in sidebar
+  → Sidebar visible? YES (menu_access_user_overrides has entry) ✓
+  → Route allowed?  NO  (report_access_user_overrides has NO entry) ✗
+  → ReportRoute redirects to /dashboard
+```
+
+### Fix: Sync Menu Overrides into Report Route Checks
+
+When a menu override exists for a report-type menu item, the `ReportRoute` guard should also honor it. This avoids forcing admins to configure the same override in two places.
+
+**Approach**: Modify `ReportRoute` to also check `useMenuAccess().canAccess()` as a fallback. If the menu key maps to a report key, grant route access.
 
 ### Implementation
 
-**1. `src/hooks/useKpis.ts`** — Add audit log after successful self-review submission (after line 619):
+**1. Create a menu-key → report-key mapping**
+
+Report menu items in the sidebar already have a `menuKey` (e.g., `incentive-report`). The `ReportRoute` uses a `reportKey` (e.g., `incentive`). We need a simple lookup.
+
+**2. Update `src/components/layout/ReportRoute.tsx`**
+
+Add a fallback check: if `canView(reportKey)` is false, also check `useMenuAccess().canAccess(correspondingMenuKey)`. If either passes, allow access.
+
 ```typescript
-// Fire-and-forget audit log for recall eligibility tracking
-supabase.from('kpi_audit_logs').insert({
-  kpi_id,
-  action: 'SELF_REVIEW_SUBMITTED',
-  performed_by: user?.id,
-  old_value: { status: 'kra_set' },
-  new_value: { status: 'self_review', achieved_value, self_score, self_rating },
-}).then(); // non-blocking
+// Pseudocode
+const menuKeyForReport = REPORT_TO_MENU_MAP[reportKey];
+if (!canView(reportKey) && !(menuKeyForReport && canAccessMenu(menuKeyForReport))) {
+  return <Navigate to="/dashboard" />;
+}
 ```
 
-**2. `DOCUMENTATION.md`** — Version bump
+**3. Determine the menu key mapping**
 
-### What This Enables
-- After this fix, any **new** self-review submission will create the audit entry
-- The Recall button + countdown timer will appear immediately when reopening the KPI sheet
-- Previously submitted KPIs (before this fix) will NOT show the Recall button — this is by design (no historical timestamp to calculate from)
+Need to check the sidebar config to find the exact menu keys used for report items.
 
 ### Files to Change
 
 | File | Change |
 |------|--------|
-| `src/hooks/useKpis.ts` | Add `SELF_REVIEW_SUBMITTED` audit log insert after line 619 |
-| `DOCUMENTATION.md` | Version bump |
+| `src/components/layout/ReportRoute.tsx` | Add `useMenuAccess` fallback check |
+| `DOCUMENTATION.md` | Version bump, document the sync logic |
 
 ### Risk Assessment
-- **Data Impact**: Additive only — new rows in existing table. No schema changes.
-- **Workflow Impact**: Zero — audit log is informational; no trigger, RLS, or workflow depends on its presence or absence.
-- **Regression Risk**: Zero — fire-and-forget pattern; if insert fails, submission itself is unaffected.
+- **Data Impact**: None — read-only check addition
+- **Workflow Impact**: Positive — admins no longer need to configure two systems for the same access
+- **Regression Risk**: Low — additive fallback; existing `canView` logic unchanged
+- **Security**: Safe — only grants access if an explicit override exists in either system
 
