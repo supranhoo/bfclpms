@@ -135,6 +135,12 @@ export default function SystemSettings() {
     }
   }, [autoLogoutMinutes, autoLogoutLoading]);
 
+  useEffect(() => {
+    if (!recallWindowLoading) {
+      setSelectedRecallWindow(recallWindowHours === 0 ? 'disabled' : String(recallWindowHours));
+    }
+  }, [recallWindowHours, recallWindowLoading]);
+
   const handleModeChange = (value: ScoreCalculationMode) => {
     setSelectedMode(value);
     setHasChanges(value !== mode);
