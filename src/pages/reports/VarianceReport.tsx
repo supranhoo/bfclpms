@@ -131,6 +131,7 @@ export default function VarianceReport() {
     if (!filtered.length) return;
     const ws = XLSX.utils.json_to_sheet(
       filtered.map((r) => ({
+        'Company': getCompanyCode(r.employeeId),
         'Employee Code': r.employeeCode,
         'Employee Name': r.employeeName,
         Department: r.department,
