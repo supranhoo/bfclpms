@@ -18,7 +18,7 @@ export function useCompanyFilter() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('companies')
-        .select('id, name, is_default')
+        .select('id, name, code, is_default')
         .order('name');
       if (error) throw error;
       return (data ?? []) as CompanyOption[];
@@ -99,6 +99,14 @@ export function useCompanyFilter() {
     const companyId = employeeCompanyMap.get(employeeId);
     if (!companyId) return '';
     return companies.find(c => c.id === companyId)?.name ?? '';
+  };
+
+  // Get company code for an employee
+  const getCompanyCode = (employeeId: string): string => {
+    if (!employeeCompanyMap || !companies) return '';
+    const companyId = employeeCompanyMap.get(employeeId);
+    if (!companyId) return '';
+    return companies.find(c => c.id === companyId)?.code ?? '';
   };
 
   return {
