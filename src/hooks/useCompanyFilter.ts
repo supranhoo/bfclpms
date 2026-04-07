@@ -33,7 +33,7 @@ export function useCompanyFilter() {
       // Fetch all profiles with department_id and company_id
       const { data: profiles, error: pErr } = await supabase
         .from('profiles')
-        .select('id, department_id, company_id');
+        .select('id, department_id, company_id, employee_code');
       if (pErr) throw pErr;
 
       // Fetch departments → BU
