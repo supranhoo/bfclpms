@@ -270,6 +270,7 @@ export default function UserManagement() {
       designation?: string;
       pms_grade?: string;
       reporting_manager_id?: string;
+      company_id?: string;
     }) => {
       const { data: session } = await supabase.auth.getSession();
       
@@ -282,6 +283,7 @@ export default function UserManagement() {
           designation: data.designation || undefined,
           pms_grade: data.pms_grade || undefined,
           reporting_manager_id: data.reporting_manager_id || undefined,
+          company_id: data.company_id || undefined,
         },
       });
 
