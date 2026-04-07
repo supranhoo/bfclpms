@@ -617,6 +617,15 @@ export function useSubmitSelfReview() {
         .eq('id', kpi_id);
 
       if (kpiError) throw kpiError;
+
+      // Fire-and-forget audit log for recall eligibility tracking
+      supabase.from('kpi_audit_logs').insert({
+        kpi_id,
+        action: 'SELF_REVIEW_SUBMITTED',
+        performed_by: user?.id,
+        old_value: { status: 'kra_set' } as any,
+        new_value: { status: 'self_review', achieved_value, self_score, self_rating } as any,
+      }).then();
       
       return { kpi_id, achieved_value, self_rating, self_score, self_remarks, self_evidence_url, is_na };
     },
