@@ -132,6 +132,7 @@ interface EmployeeImportRow {
   managerEmployeeId?: string;
   managerName?: string;
   role?: string;
+  portalAccess?: string;
 }
 
 export default function ImportData() {
@@ -661,6 +662,7 @@ export default function ImportData() {
       managerEmployeeId: getValue(['managerEmployeeId', 'manageremployeeid', 'manager_employee_id', 'managerId', 'managerid', 'manager_id', 'reportingTo', 'reportingto', 'reporting_to', 'reportsTo', 'reportsto', 'reports_to']),
       managerName: getValue(['managerName', 'managername', 'manager_name', 'reportingManager', 'reportingmanager', 'reporting_manager', 'supervisor']),
       role: getValue(['role', 'appRole', 'approle', 'app_role', 'userRole', 'userrole', 'user_role', 'systemRole', 'systemrole', 'system_role']),
+      portalAccess: getValue(['portalAccess', 'portalaccess', 'portal_access', 'loginAccess', 'loginaccess', 'login_access']),
     };
   };
 
@@ -1580,6 +1582,7 @@ export default function ImportData() {
         email: 'john.doe@company.com',
         designation: 'Manager',
         role: 'employee',
+        portalAccess: 'Yes',
         companyCode: 'BFCL',
         division: 'Operations',
         businessUnit: 'Plant',

@@ -747,6 +747,9 @@ export default function UserManagement() {
                       {(profile as any).is_active === false && (
                         <Badge variant="destructive" className="text-xs">Inactive</Badge>
                       )}
+                      {(profile as any).portal_access === false && (
+                        <Badge variant="secondary" className="text-xs">No Portal</Badge>
+                      )}
                     </div>
                     <div className="grid grid-cols-2 gap-1 text-xs text-muted-foreground">
                       <span>Code: {profile.employee_code || '-'}</span>
