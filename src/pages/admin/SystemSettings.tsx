@@ -94,6 +94,7 @@ export default function SystemSettings() {
   const { method: dailyMethod, isLoading: dailyMethodLoading } = useDailyAggregationMethod();
   const { data: rolloverLogs, isLoading: logsLoading } = useRolloverLogs();
   const { data: uploadLimitSetting, isLoading: uploadLimitLoading } = useSystemSetting('max_upload_size_mb');
+  const { minutes: autoLogoutMinutes, isLoading: autoLogoutLoading } = useAutoLogoutMinutes();
   const updateSetting = useUpdateSystemSetting();
   const isMobile = useIsMobile();
   
@@ -105,6 +106,8 @@ export default function SystemSettings() {
   const [rolloverDialogOpen, setRolloverDialogOpen] = useState(false);
   const [uploadLimitMb, setUploadLimitMb] = useState(5);
   const [hasUploadLimitChanges, setHasUploadLimitChanges] = useState(false);
+  const [selectedAutoLogout, setSelectedAutoLogout] = useState<string>(String(autoLogoutMinutes));
+  const [hasAutoLogoutChanges, setHasAutoLogoutChanges] = useState(false);
 
   useEffect(() => {
     if (mode) setSelectedMode(mode);
