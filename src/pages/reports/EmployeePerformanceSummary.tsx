@@ -83,6 +83,7 @@ interface EmployeePerformance {
 export default function EmployeePerformanceSummary() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('employee-summary');
+  const { getCompanyCode } = useCompanyFilter();
   const currentYear = new Date().getFullYear();
   
   const [selectedYear, setSelectedYear] = useState(currentYear.toString());
