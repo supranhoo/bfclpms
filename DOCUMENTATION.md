@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-04-05  
-> **Version:** 2.16.78 — Feature: Per-template email dispatch scheduling (immediate or scheduled)
+> **Last Updated:** 2026-04-07  
+> **Version:** 2.16.79 — Enhancement: KPI Scorecard Detail report now includes Frequency, Org KPI Type, and Data Owner columns
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

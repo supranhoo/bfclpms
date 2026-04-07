@@ -29,6 +29,10 @@ interface FlatRow {
   category: string;
   kraName: string;
   kpiName: string;
+  frequency: string;
+  isOrgKpi: boolean;
+  orgKpiScope: string;
+  dataOwnerNames: string;
   weightage: number;
   selfScore: number | null;
   managerScore: number | null;
@@ -100,6 +104,7 @@ export default function KpiScorecardDetail() {
           .from('kpis')
           .select(`
             id, employee_id, kra_name, kpi_name, weightage, review_period, review_year, status,
+            frequency, is_org_level, org_level_scope, category_id,
             kra_categories ( name ),
             review_submissions ( self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score, is_na )
           `)
@@ -122,6 +127,21 @@ export default function KpiScorecardDetail() {
         .select('id, employee_code, full_name, designation, departments ( name )');
       if (pErr) throw pErr;
 
+      // Fetch org KPI data owners
+      const { data: dataOwners, error: doErr } = await supabase
+        .from('org_kpi_data_owners')
+        .select('category_id, kra_name, kpi_name, owner_id, profiles ( full_name )');
+      if (doErr) throw doErr;
+
+      // Build data owner lookup: categoryId||kraName||kpiName -> owner names[]
+      const ownerMap = new Map<string, string[]>();
+      (dataOwners ?? []).forEach((o: any) => {
+        const key = `${o.category_id}||${o.kra_name}||${o.kpi_name}`;
+        const name = o.profiles?.full_name ?? '';
+        if (!ownerMap.has(key)) ownerMap.set(key, []);
+        if (name) ownerMap.get(key)!.push(name);
+      });
+
       const profileMap = new Map((profiles ?? []).map(p => [p.id, p]));
 
       return allKpis.map((kpi): FlatRow => {
@@ -129,6 +149,9 @@ export default function KpiScorecardDetail() {
         const sub = Array.isArray(kpi.review_submissions) ? kpi.review_submissions[0] : kpi.review_submissions;
         const isNa = sub?.is_na ?? false;
         const dept = profile?.departments;
+        const isOrgKpi = kpi.is_org_level === true;
+        const ownerKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+        const owners = isOrgKpi ? (ownerMap.get(ownerKey) ?? []) : [];
         return {
           employeeCode: profile?.employee_code ?? '',
           employeeName: profile?.full_name ?? '',
@@ -138,6 +161,10 @@ export default function KpiScorecardDetail() {
           category: (kpi.kra_categories && typeof kpi.kra_categories === 'object' && 'name' in kpi.kra_categories ? (kpi.kra_categories as any).name : '') ?? '',
           kraName: kpi.kra_name ?? '',
           kpiName: kpi.kpi_name ?? '',
+          frequency: kpi.frequency ?? 'Monthly',
+          isOrgKpi,
+          orgKpiScope: isOrgKpi ? (kpi.org_level_scope ?? 'organization') : '',
+          dataOwnerNames: owners.join(', '),
           weightage: kpi.weightage ?? 0,
           selfScore: isNa ? null : (sub?.self_score ?? null),
           managerScore: isNa ? null : (sub?.manager_score ?? null),
@@ -208,6 +235,23 @@ export default function KpiScorecardDetail() {
       : <ArrowDown className="h-3 w-3 ml-1 inline" />;
   };
 
+  const getOrgTypeLabel = (row: FlatRow) => {
+    if (!row.isOrgKpi) return 'Individual';
+    const scopeLabels: Record<string, string> = {
+      organization: 'Org (Organization)',
+      department: 'Org (Department)',
+      employee: 'Org (Employee)',
+    };
+    return scopeLabels[row.orgKpiScope] ?? 'Org';
+  };
+
+  const orgTypeColors: Record<string, string> = {
+    'Individual': 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+    'Org (Organization)': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+    'Org (Department)': 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-400',
+    'Org (Employee)': 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-400',
+  };
+
   const handleExport = () => {
     if (!filtered.length) return;
     const exportData = filtered.map(r => ({
@@ -219,6 +263,9 @@ export default function KpiScorecardDetail() {
       'Category': r.category,
       'KRA': r.kraName,
       'KPI': r.kpiName,
+      'Frequency': r.frequency,
+      'Type': getOrgTypeLabel(r),
+      'Data Owner': r.dataOwnerNames || '',
       'Weightage': r.weightage,
       'Self': r.isNa ? 'N/A' : (r.selfScore ?? ''),
       'Manager': r.isNa ? 'N/A' : (r.managerScore ?? ''),
@@ -319,6 +366,9 @@ export default function KpiScorecardDetail() {
                       <TableHead className={thClass} onClick={() => toggleSort('category')}>Category<SortIcon field="category" /></TableHead>
                       <TableHead className={thClass} onClick={() => toggleSort('kraName')}>KRA<SortIcon field="kraName" /></TableHead>
                       <TableHead className={`${thClass} max-w-[200px]`} onClick={() => toggleSort('kpiName')}>KPI<SortIcon field="kpiName" /></TableHead>
+                      <TableHead className={thClass} onClick={() => toggleSort('frequency')}>Freq<SortIcon field="frequency" /></TableHead>
+                      <TableHead className={thClass} onClick={() => toggleSort('orgKpiScope')}>Type<SortIcon field="orgKpiScope" /></TableHead>
+                      <TableHead className={thClass} onClick={() => toggleSort('dataOwnerNames')}>Data Owner<SortIcon field="dataOwnerNames" /></TableHead>
                       <TableHead className={`${thClass} text-right`} onClick={() => toggleSort('weightage')}>Wt%<SortIcon field="weightage" /></TableHead>
                       <TableHead className={`${thClass} text-right`} onClick={() => toggleSort('selfScore')}>Self<SortIcon field="selfScore" /></TableHead>
                       <TableHead className={`${thClass} text-right`} onClick={() => toggleSort('managerScore')}>Mgr<SortIcon field="managerScore" /></TableHead>
@@ -333,32 +383,42 @@ export default function KpiScorecardDetail() {
                   <TableBody>
                     {paged.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={16} className="text-center text-muted-foreground py-8">No KPIs found for the selected filters</TableCell>
+                        <TableCell colSpan={19} className="text-center text-muted-foreground py-8">No KPIs found for the selected filters</TableCell>
                       </TableRow>
-                    ) : paged.map((r, i) => (
-                      <TableRow key={i} className="hover:bg-muted/30">
-                        <TableCell className="text-xs py-1.5 px-2 whitespace-nowrap">{r.employeeCode || '—'}</TableCell>
-                        <TableCell className="text-xs py-1.5 px-2 whitespace-nowrap font-medium">{r.employeeName || '—'}</TableCell>
-                        <TableCell className="text-xs py-1.5 px-2 whitespace-nowrap">{r.designation || '—'}</TableCell>
-                        <TableCell className="text-xs py-1.5 px-2 whitespace-nowrap">{r.department || '—'}</TableCell>
-                        <TableCell className="text-xs py-1.5 px-2 whitespace-nowrap">{r.category || '—'}</TableCell>
-                        <TableCell className="text-xs py-1.5 px-2 max-w-[150px] truncate" title={r.kraName}>{r.kraName || '—'}</TableCell>
-                        <TableCell className="text-xs py-1.5 px-2 max-w-[200px] truncate" title={r.kpiName}>{r.kpiName || '—'}</TableCell>
-                        <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{r.weightage}%</TableCell>
-                        <TableCell className="text-xs py-1.5 px-2 text-right"><ScoreCell score={r.selfScore} isNa={r.isNa} /></TableCell>
-                        <TableCell className="text-xs py-1.5 px-2 text-right"><ScoreCell score={r.managerScore} isNa={r.isNa} /></TableCell>
-                        <TableCell className="text-xs py-1.5 px-2 text-right"><ScoreCell score={r.skipLevelScore} isNa={r.isNa} /></TableCell>
-                        <TableCell className="text-xs py-1.5 px-2 text-right"><ScoreCell score={r.hrPmsScore} isNa={r.isNa} /></TableCell>
-                        <TableCell className="text-xs py-1.5 px-2 text-right"><ScoreCell score={r.auditorScore} isNa={r.isNa} /></TableCell>
-                        <TableCell className="text-xs py-1.5 px-2 text-right"><ScoreCell score={r.managementScore} isNa={r.isNa} /></TableCell>
-                        <TableCell className="text-xs py-1.5 px-2 text-right font-semibold"><ScoreCell score={r.finalScore} isNa={r.isNa} /></TableCell>
-                        <TableCell className="text-xs py-1.5 px-2">
-                          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 border-0 ${statusColors[r.status] ?? ''}`}>
-                            {statusLabels[r.status] ?? r.status}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    ) : paged.map((r, i) => {
+                      const typeLabel = getOrgTypeLabel(r);
+                      return (
+                        <TableRow key={i} className="hover:bg-muted/30">
+                          <TableCell className="text-xs py-1.5 px-2 whitespace-nowrap">{r.employeeCode || '—'}</TableCell>
+                          <TableCell className="text-xs py-1.5 px-2 whitespace-nowrap font-medium">{r.employeeName || '—'}</TableCell>
+                          <TableCell className="text-xs py-1.5 px-2 whitespace-nowrap">{r.designation || '—'}</TableCell>
+                          <TableCell className="text-xs py-1.5 px-2 whitespace-nowrap">{r.department || '—'}</TableCell>
+                          <TableCell className="text-xs py-1.5 px-2 whitespace-nowrap">{r.category || '—'}</TableCell>
+                          <TableCell className="text-xs py-1.5 px-2 max-w-[150px] truncate" title={r.kraName}>{r.kraName || '—'}</TableCell>
+                          <TableCell className="text-xs py-1.5 px-2 max-w-[200px] truncate" title={r.kpiName}>{r.kpiName || '—'}</TableCell>
+                          <TableCell className="text-xs py-1.5 px-2 whitespace-nowrap">
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-0 bg-muted/50">{r.frequency}</Badge>
+                          </TableCell>
+                          <TableCell className="text-xs py-1.5 px-2 whitespace-nowrap">
+                            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 border-0 ${orgTypeColors[typeLabel] ?? ''}`}>{typeLabel}</Badge>
+                          </TableCell>
+                          <TableCell className="text-xs py-1.5 px-2 max-w-[120px] truncate" title={r.dataOwnerNames}>{r.dataOwnerNames || '—'}</TableCell>
+                          <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{r.weightage}%</TableCell>
+                          <TableCell className="text-xs py-1.5 px-2 text-right"><ScoreCell score={r.selfScore} isNa={r.isNa} /></TableCell>
+                          <TableCell className="text-xs py-1.5 px-2 text-right"><ScoreCell score={r.managerScore} isNa={r.isNa} /></TableCell>
+                          <TableCell className="text-xs py-1.5 px-2 text-right"><ScoreCell score={r.skipLevelScore} isNa={r.isNa} /></TableCell>
+                          <TableCell className="text-xs py-1.5 px-2 text-right"><ScoreCell score={r.hrPmsScore} isNa={r.isNa} /></TableCell>
+                          <TableCell className="text-xs py-1.5 px-2 text-right"><ScoreCell score={r.auditorScore} isNa={r.isNa} /></TableCell>
+                          <TableCell className="text-xs py-1.5 px-2 text-right"><ScoreCell score={r.managementScore} isNa={r.isNa} /></TableCell>
+                          <TableCell className="text-xs py-1.5 px-2 text-right font-semibold"><ScoreCell score={r.finalScore} isNa={r.isNa} /></TableCell>
+                          <TableCell className="text-xs py-1.5 px-2">
+                            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 border-0 ${statusColors[r.status] ?? ''}`}>
+                              {statusLabels[r.status] ?? r.status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
