@@ -130,10 +130,19 @@ export default function KpiScorecardDetail() {
         .select('id, employee_code, full_name, designation, departments ( name )');
       if (pErr) throw pErr;
 
-      // Fetch org KPI data owners
-      const { data: dataOwners, error: doErr } = await supabase
-        .from('org_kpi_data_owners')
-        .select('category_id, kra_name, kpi_name, owner_id, profiles ( full_name )');
+      // Fetch org KPI data owners (use explicit FK to avoid ambiguity)
+      let ownerMap = new Map<string, string[]>();
+      try {
+        const { data: dataOwners } = await supabase
+          .from('org_kpi_data_owners')
+          .select('category_id, kra_name, kpi_name, owner:profiles!org_kpi_data_owners_owner_id_fkey(full_name)');
+        (dataOwners ?? []).forEach((o: any) => {
+          const key = `${o.category_id}||${o.kra_name}||${o.kpi_name}`;
+          const name = o.owner?.full_name ?? '';
+          if (!ownerMap.has(key)) ownerMap.set(key, []);
+          if (name) ownerMap.get(key)!.push(name);
+        });
+      } catch { /* non-critical */ }
       if (doErr) throw doErr;
 
       // Build data owner lookup: categoryId||kraName||kpiName -> owner names[]
