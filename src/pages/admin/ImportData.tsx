@@ -1627,12 +1627,17 @@ export default function ImportData() {
         const div = bu?.divisions;
         const manager = profile.reporting_manager_id ? profileMap.get(profile.reporting_manager_id) : null;
         
+        // Resolve company name from company_id
+        const companyId = (profile as any).company_id;
+        const companyObj = companyId ? (companiesList || []).find((c: any) => c.id === companyId) : null;
+
         return {
           employeeCode: profile.employee_code || '',
           fullName: profile.full_name || '',
           email: profile.email || '',
           designation: profile.designation || '',
           role: roleMap.get(profile.id) || 'employee',
+          companyCode: companyObj?.code || companyObj?.name || '',
           division: div?.name || '',
           businessUnit: bu?.name || '',
           department: dept?.name || '',
