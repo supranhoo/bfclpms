@@ -10,6 +10,7 @@ import { useIsOrgKpiDataOwner, useOrgKpiOwners } from '@/hooks/useOrgKpiDataOwne
 import { useToast } from '@/hooks/use-toast';
 import { useSubPeriodSubmissionsByKpis, useSubmitSubPeriod, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { useDailyAggregationMethod } from '@/hooks/useSystemSettings';
+import { useCanRecallSubmission, useRecallSubmission } from '@/hooks/useRecallSubmission';
 import { calculateDailyAggregatedScoreWithExpectedDays, getAggregationMethodLabel } from '@/lib/dailyAggregation';
 import { useExpectedDays } from '@/hooks/useDailyAggregation';
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
@@ -188,11 +189,16 @@ export function SelfReviewSheet({
   const [pendingResubmitReason, setPendingResubmitReason] = useState('');
   const [showMonthlySubmitConfirm, setShowMonthlySubmitConfirm] = useState(false);
   const [isSubmittingMonthly, setIsSubmittingMonthly] = useState(false);
+  const [showRecallConfirm, setShowRecallConfirm] = useState(false);
 
   // Sub-panels
   const [queryHistoryOpen, setQueryHistoryOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [trackerModalOpen, setTrackerModalOpen] = useState(false);
+
+  // Recall submission
+  const { data: recallEligibility } = useCanRecallSubmission(selectedKpi?.id, selectedKpi?.status, selectedKpi?.employee_id);
+  const recallMutation = useRecallSubmission();
 
   // Inline query response state
   const kpiIdsForQueries = useMemo(() => selectedKpi ? [selectedKpi.id] : [], [selectedKpi]);
