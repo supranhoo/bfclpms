@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { useReportAccess } from '@/hooks/useReportAccess';
 import { useKpiJourneyReport, fetchKpiJourneyExportData, KpiJourneyFilters, SendBackEntry } from '@/hooks/useKpiJourneyReport';
 import { PageHeader } from '@/components/layout/PageHeader';
