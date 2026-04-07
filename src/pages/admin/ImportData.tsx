@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useProfiles, useKraCategories, useDepartments, useDivisions, useBusinessUnits, useDesignations } from '@/hooks/useOrganization';
+import { useCompanies } from '@/hooks/useCompanies';
 import { useCreateKpi } from '@/hooks/useKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
