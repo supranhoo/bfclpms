@@ -375,15 +375,10 @@ export default function KpiScorecardDetail() {
                     <TableRow className="bg-muted/30">
                       <TableHead className={thClass} onClick={() => toggleSort('employeeCode')}>Code<SortIcon field="employeeCode" /></TableHead>
                       <TableHead className={thClass} onClick={() => toggleSort('employeeName')}>Name<SortIcon field="employeeName" /></TableHead>
-                      <TableHead className={thClass} onClick={() => toggleSort('designation')}>Designation<SortIcon field="designation" /></TableHead>
-                      <TableHead className={thClass} onClick={() => toggleSort('department')}>Department<SortIcon field="department" /></TableHead>
-                      <TableHead className={thClass} onClick={() => toggleSort('category')}>Category<SortIcon field="category" /></TableHead>
-                      <TableHead className={thClass} onClick={() => toggleSort('kraName')}>KRA<SortIcon field="kraName" /></TableHead>
                       <TableHead className={`${thClass} max-w-[200px]`} onClick={() => toggleSort('kpiName')}>KPI<SortIcon field="kpiName" /></TableHead>
                       <TableHead className={thClass} onClick={() => toggleSort('frequency')}>Freq<SortIcon field="frequency" /></TableHead>
                       <TableHead className={thClass} onClick={() => toggleSort('orgKpiScope')}>Type<SortIcon field="orgKpiScope" /></TableHead>
                       <TableHead className={thClass} onClick={() => toggleSort('dataOwnerNames')}>Data Owner<SortIcon field="dataOwnerNames" /></TableHead>
-                      <TableHead className={`${thClass} text-right`} onClick={() => toggleSort('weightage')}>Wt%<SortIcon field="weightage" /></TableHead>
                       <TableHead className={`${thClass} text-right`} onClick={() => toggleSort('selfScore')}>Self<SortIcon field="selfScore" /></TableHead>
                       <TableHead className={`${thClass} text-right`} onClick={() => toggleSort('managerScore')}>Mgr<SortIcon field="managerScore" /></TableHead>
                       <TableHead className={`${thClass} text-right`} onClick={() => toggleSort('skipLevelScore')}>Skip<SortIcon field="skipLevelScore" /></TableHead>
@@ -397,7 +392,7 @@ export default function KpiScorecardDetail() {
                   <TableBody>
                     {paged.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={19} className="text-center text-muted-foreground py-8">No KPIs found for the selected filters</TableCell>
+                        <TableCell colSpan={14} className="text-center text-muted-foreground py-8">No KPIs found for the selected filters</TableCell>
                       </TableRow>
                     ) : paged.map((r, i) => {
                       const typeLabel = getOrgTypeLabel(r);
@@ -405,10 +400,6 @@ export default function KpiScorecardDetail() {
                         <TableRow key={i} className="hover:bg-muted/30">
                           <TableCell className="text-xs py-1.5 px-2 whitespace-nowrap">{r.employeeCode || '—'}</TableCell>
                           <TableCell className="text-xs py-1.5 px-2 whitespace-nowrap font-medium">{r.employeeName || '—'}</TableCell>
-                          <TableCell className="text-xs py-1.5 px-2 whitespace-nowrap">{r.designation || '—'}</TableCell>
-                          <TableCell className="text-xs py-1.5 px-2 whitespace-nowrap">{r.department || '—'}</TableCell>
-                          <TableCell className="text-xs py-1.5 px-2 whitespace-nowrap">{r.category || '—'}</TableCell>
-                          <TableCell className="text-xs py-1.5 px-2 max-w-[150px] truncate" title={r.kraName}>{r.kraName || '—'}</TableCell>
                           <TableCell className="text-xs py-1.5 px-2 max-w-[200px] truncate" title={r.kpiName}>{r.kpiName || '—'}</TableCell>
                           <TableCell className="text-xs py-1.5 px-2 whitespace-nowrap">
                             <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-0 bg-muted/50">{r.frequency}</Badge>
@@ -417,7 +408,6 @@ export default function KpiScorecardDetail() {
                             <Badge variant="outline" className={`text-[10px] px-1.5 py-0 border-0 ${orgTypeColors[typeLabel] ?? ''}`}>{typeLabel}</Badge>
                           </TableCell>
                           <TableCell className="text-xs py-1.5 px-2 max-w-[120px] truncate" title={r.dataOwnerNames}>{r.dataOwnerNames || '—'}</TableCell>
-                          <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{r.weightage}%</TableCell>
                           <TableCell className="text-xs py-1.5 px-2 text-right"><ScoreCell score={r.selfScore} isNa={r.isNa} /></TableCell>
                           <TableCell className="text-xs py-1.5 px-2 text-right"><ScoreCell score={r.managerScore} isNa={r.isNa} /></TableCell>
                           <TableCell className="text-xs py-1.5 px-2 text-right"><ScoreCell score={r.skipLevelScore} isNa={r.isNa} /></TableCell>
