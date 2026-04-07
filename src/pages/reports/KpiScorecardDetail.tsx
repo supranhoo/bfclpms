@@ -143,16 +143,6 @@ export default function KpiScorecardDetail() {
           if (name) ownerMap.get(key)!.push(name);
         });
       } catch { /* non-critical */ }
-      if (doErr) throw doErr;
-
-      // Build data owner lookup: categoryId||kraName||kpiName -> owner names[]
-      const ownerMap = new Map<string, string[]>();
-      (dataOwners ?? []).forEach((o: any) => {
-        const key = `${o.category_id}||${o.kra_name}||${o.kpi_name}`;
-        const name = o.profiles?.full_name ?? '';
-        if (!ownerMap.has(key)) ownerMap.set(key, []);
-        if (name) ownerMap.get(key)!.push(name);
-      });
 
       const profileMap = new Map((profiles ?? []).map(p => [p.id, p]));
 
