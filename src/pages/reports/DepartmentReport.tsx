@@ -191,16 +191,17 @@ export default function DepartmentReport() {
           <div className="flex flex-wrap items-center gap-3">
             <CompanyFilter companies={companies} selectedCompanyId={selectedCompanyId} onCompanyChange={setSelectedCompanyId} />
             <Select value={selectedDivision} onValueChange={setSelectedDivision}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Filter by division" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Divisions</SelectItem>
-              {divisions?.map(div => (
-                <SelectItem key={div.id} value={div.id}>{div.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Filter by division" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Divisions</SelectItem>
+                {divisions?.map(div => (
+                  <SelectItem key={div.id} value={div.id}>{div.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </CardContent>
       </Card>
 
