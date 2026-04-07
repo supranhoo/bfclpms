@@ -15,6 +15,7 @@ interface CreateEmployeeRequest {
   pms_grade?: string;
   level?: string;
   reporting_manager_id?: string;
+  company_id?: string;
 }
 
 Deno.serve(async (req) => {
@@ -87,6 +88,7 @@ Deno.serve(async (req) => {
       pms_grade: body.pms_grade || null,
       level: body.level || null,
       reporting_manager_id: body.reporting_manager_id || null,
+      company_id: body.company_id || null,
     }
 
     // Admin account protection — never overwrite this profile
