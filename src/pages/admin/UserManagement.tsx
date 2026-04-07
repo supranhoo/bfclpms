@@ -1171,7 +1171,7 @@ export default function UserManagement() {
                 </div>
                 <Separator />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
+                   <div className="space-y-2">
                     <Label>Full Name <span className="text-destructive">*</span></Label>
                     <Input
                       value={newFullName}
@@ -1179,15 +1179,17 @@ export default function UserManagement() {
                       placeholder="John Doe"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label>Email</Label>
-                    <Input
-                      type="email"
-                      value={newEmail}
-                      onChange={(e) => setNewEmail(e.target.value)}
-                      placeholder="john@example.com"
-                    />
-                  </div>
+                  {newPortalAccess && (
+                    <div className="space-y-2">
+                      <Label>Email</Label>
+                      <Input
+                        type="email"
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value)}
+                        placeholder="john@example.com"
+                      />
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label>Employee Code <span className="text-destructive">*</span></Label>
                     <Input
@@ -1322,6 +1324,18 @@ export default function UserManagement() {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border p-3 h-fit">
+                    <div className="space-y-0.5">
+                      <Label>Portal Access</Label>
+                      <p className="text-xs text-muted-foreground">
+                        {newPortalAccess ? 'User can log in to the portal' : 'Data-only user — no login access'}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={newPortalAccess}
+                      onCheckedChange={setNewPortalAccess}
+                    />
                   </div>
                 </div>
               </div>
