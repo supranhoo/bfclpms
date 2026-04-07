@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-07  
-> **Version:** 2.16.83 — Added Non-Login Users (Profile-Only) support with portal access toggle
+> **Version:** 2.16.84 — Added SELF_REVIEW_SUBMITTED audit log for recall eligibility tracking
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
