@@ -81,6 +81,7 @@ const actionLabels: Record<string, string> = {
   'ADMIN_STATUS_OVERRIDE': 'Admin: Status Override',
   'ADMIN_OVERRIDE': 'Admin: KPI Override',
   'MANAGER_DAILY_OVERRIDE': 'Manager: Daily Override',
+  'SELF_REVIEW_RECALLED': 'Self Review Recalled',
 };
 
 const actionColors: Record<string, string> = {
@@ -124,6 +125,7 @@ const actionColors: Record<string, string> = {
   'ADMIN_STATUS_OVERRIDE': 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200',
   'ADMIN_OVERRIDE': 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200',
   'MANAGER_DAILY_OVERRIDE': 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+  'SELF_REVIEW_RECALLED': 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
 };
 
 export default function AuditTrailReport() {
