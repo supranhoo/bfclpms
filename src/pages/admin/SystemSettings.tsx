@@ -96,6 +96,7 @@ export default function SystemSettings() {
   const { data: rolloverLogs, isLoading: logsLoading } = useRolloverLogs();
   const { data: uploadLimitSetting, isLoading: uploadLimitLoading } = useSystemSetting('max_upload_size_mb');
   const { minutes: autoLogoutMinutes, isLoading: autoLogoutLoading } = useAutoLogoutMinutes();
+  const { hours: recallWindowHours, isLoading: recallWindowLoading } = useRecallWindowHours();
   const updateSetting = useUpdateSystemSetting();
   const isMobile = useIsMobile();
   
@@ -109,6 +110,8 @@ export default function SystemSettings() {
   const [hasUploadLimitChanges, setHasUploadLimitChanges] = useState(false);
   const [selectedAutoLogout, setSelectedAutoLogout] = useState<string>(String(autoLogoutMinutes));
   const [hasAutoLogoutChanges, setHasAutoLogoutChanges] = useState(false);
+  const [selectedRecallWindow, setSelectedRecallWindow] = useState<string>(recallWindowHours === 0 ? 'disabled' : String(recallWindowHours));
+  const [hasRecallWindowChanges, setHasRecallWindowChanges] = useState(false);
 
   useEffect(() => {
     if (mode) setSelectedMode(mode);
