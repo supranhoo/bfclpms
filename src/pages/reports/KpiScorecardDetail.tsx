@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { useReportAccess } from '@/hooks/useReportAccess';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { CompanyFilter } from '@/components/reports/CompanyFilter';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -21,6 +23,7 @@ const MONTHS = [
 const PAGE_SIZES = [50, 100, 200, 500];
 
 interface FlatRow {
+  employeeId: string;
   employeeCode: string;
   employeeName: string;
   designation: string;
@@ -79,6 +82,7 @@ const statusLabels: Record<string, string> = {
 export default function KpiScorecardDetail() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('kpi-scorecard-detail');
+  const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany, getCompanyName } = useCompanyFilter();
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[now.getMonth()]);
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -127,20 +131,19 @@ export default function KpiScorecardDetail() {
         .select('id, employee_code, full_name, designation, departments ( name )');
       if (pErr) throw pErr;
 
-      // Fetch org KPI data owners
-      const { data: dataOwners, error: doErr } = await supabase
-        .from('org_kpi_data_owners')
-        .select('category_id, kra_name, kpi_name, owner_id, profiles ( full_name )');
-      if (doErr) throw doErr;
-
-      // Build data owner lookup: categoryId||kraName||kpiName -> owner names[]
-      const ownerMap = new Map<string, string[]>();
-      (dataOwners ?? []).forEach((o: any) => {
-        const key = `${o.category_id}||${o.kra_name}||${o.kpi_name}`;
-        const name = o.profiles?.full_name ?? '';
-        if (!ownerMap.has(key)) ownerMap.set(key, []);
-        if (name) ownerMap.get(key)!.push(name);
-      });
+      // Fetch org KPI data owners (use explicit FK to avoid ambiguity)
+      let ownerMap = new Map<string, string[]>();
+      try {
+        const { data: dataOwners } = await supabase
+          .from('org_kpi_data_owners')
+          .select('category_id, kra_name, kpi_name, owner:profiles!org_kpi_data_owners_owner_id_fkey(full_name)');
+        (dataOwners ?? []).forEach((o: any) => {
+          const key = `${o.category_id}||${o.kra_name}||${o.kpi_name}`;
+          const name = o.owner?.full_name ?? '';
+          if (!ownerMap.has(key)) ownerMap.set(key, []);
+          if (name) ownerMap.get(key)!.push(name);
+        });
+      } catch { /* non-critical */ }
 
       const profileMap = new Map((profiles ?? []).map(p => [p.id, p]));
 
@@ -153,6 +156,7 @@ export default function KpiScorecardDetail() {
         const ownerKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
         const owners = isOrgKpi ? (ownerMap.get(ownerKey) ?? []) : [];
         return {
+          employeeId: kpi.employee_id ?? '',
           employeeCode: profile?.employee_code ?? '',
           employeeName: profile?.full_name ?? '',
           designation: profile?.designation ?? '',
@@ -185,13 +189,16 @@ export default function KpiScorecardDetail() {
   // Departments for filter
   const departments = useMemo(() => {
     if (!rows) return [];
-    return [...new Set(rows.map(r => r.department).filter(Boolean))].sort();
-  }, [rows]);
+    const companyFiltered = rows.filter(r => filterByCompany(r.employeeId));
+    return [...new Set(companyFiltered.map(r => r.department).filter(Boolean))].sort();
+  }, [rows, filterByCompany]);
 
   // Filter + sort
   const filtered = useMemo(() => {
     if (!rows) return [];
     let result = rows;
+    // Company filter
+    result = result.filter(r => filterByCompany(r.employeeId));
     if (selectedDept !== 'all') result = result.filter(r => r.department === selectedDept);
     if (searchTerm) {
       const s = searchTerm.toLowerCase();
@@ -213,7 +220,7 @@ export default function KpiScorecardDetail() {
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return result;
-  }, [rows, selectedDept, searchTerm, sortField, sortDir]);
+  }, [rows, selectedDept, searchTerm, sortField, sortDir, filterByCompany]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -313,6 +320,12 @@ export default function KpiScorecardDetail() {
                 {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
               </SelectContent>
             </Select>
+
+            <CompanyFilter
+              companies={companies}
+              selectedCompanyId={selectedCompanyId}
+              onCompanyChange={v => { setSelectedCompanyId(v); setCurrentPage(1); }}
+            />
 
             <Select value={selectedDept} onValueChange={v => { setSelectedDept(v); setCurrentPage(1); }}>
               <SelectTrigger className="w-[160px] h-8 text-xs">
