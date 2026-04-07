@@ -59,7 +59,7 @@ function DurationBadge({ days, isApproved }: { days: number; isApproved: boolean
 
 export default function KpiJourneyReport() {
   const { canDownload } = useReportAccess();
-  const { getCompanyCode } = useCompanyFilter();
+  const { getCompanyCodeByEmpCode } = useCompanyFilter();
   const canExport = canDownload('kpi-journey');
   const currentYear = new Date().getFullYear();
   const currentMonthIdx = new Date().getMonth();
@@ -135,7 +135,7 @@ export default function KpiJourneyReport() {
       };
 
       const exportData = allRows.map(r => ({
-        'Company': getCompanyCode((r as any).employeeId || ''),
+        'Company': getCompanyCodeByEmpCode(r.employeeCode),
         'Emp Code': r.employeeCode,
         'Employee': r.employeeName,
         'Department': r.department,
