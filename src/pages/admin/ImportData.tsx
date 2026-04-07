@@ -1235,6 +1235,14 @@ export default function ImportData() {
           (row.managerName && p.full_name?.toLowerCase() === row.managerName?.toLowerCase())
         )?.id || null;
 
+        // Resolve company by code or name (case-insensitive)
+        const resolvedCompanyId = row.companyCode
+          ? (companiesList || []).find((c: any) =>
+              c.code?.toLowerCase() === row.companyCode!.toLowerCase() ||
+              c.name?.toLowerCase() === row.companyCode!.toLowerCase()
+            )?.id || null
+          : null;
+
         const { error } = await supabase
           .from('profiles')
           .update({
@@ -1245,7 +1253,8 @@ export default function ImportData() {
             pms_grade: row.pmsGrade || existingEmployee.pms_grade,
             level: row.level || (existingEmployee as any).level,
             reporting_manager_id: managerId || existingEmployee.reporting_manager_id,
-          })
+            ...(resolvedCompanyId ? { company_id: resolvedCompanyId } : {}),
+          } as any)
           .eq('id', existingEmployee.id);
 
         if (error) throw error;
