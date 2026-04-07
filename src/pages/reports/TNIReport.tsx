@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useReportAccess } from '@/hooks/useReportAccess';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -56,6 +57,7 @@ const STATUS_BADGE: Record<TNIStatus, 'destructive' | 'outline' | 'secondary' | 
 export default function TNIReport() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('tni');
+  const { getCompanyCode } = useCompanyFilter();
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedPeriod, setSelectedPeriod] = useState<string>('');
@@ -112,6 +114,7 @@ export default function TNIReport() {
   const handleExport = () => {
     if (!trainingNeeds) return;
     const exportData = trainingNeeds.map(tn => ({
+      'Company': getCompanyCode(tn.employee_id || ''),
       'Employee Name': tn.employee?.full_name || '',
       'Employee Code': tn.employee?.employee_code || '',
       'Designation': tn.employee?.designation || '',
