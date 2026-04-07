@@ -23,6 +23,7 @@ const MONTHS = [
 const PAGE_SIZES = [50, 100, 200, 500];
 
 interface FlatRow {
+  employeeId: string;
   employeeCode: string;
   employeeName: string;
   designation: string;
@@ -155,6 +156,7 @@ export default function KpiScorecardDetail() {
         const ownerKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
         const owners = isOrgKpi ? (ownerMap.get(ownerKey) ?? []) : [];
         return {
+          employeeId: kpi.employee_id ?? '',
           employeeCode: profile?.employee_code ?? '',
           employeeName: profile?.full_name ?? '',
           designation: profile?.designation ?? '',
@@ -194,6 +196,8 @@ export default function KpiScorecardDetail() {
   const filtered = useMemo(() => {
     if (!rows) return [];
     let result = rows;
+    // Company filter
+    result = result.filter(r => filterByCompany(r.employeeId));
     if (selectedDept !== 'all') result = result.filter(r => r.department === selectedDept);
     if (searchTerm) {
       const s = searchTerm.toLowerCase();
