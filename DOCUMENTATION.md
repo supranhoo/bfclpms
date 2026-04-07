@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-07  
-> **Version:** 2.16.82 — Added configurable Auto-Logout (Idle Timeout) feature with admin settings
+> **Version:** 2.16.83 — Added Non-Login Users (Profile-Only) support with portal access toggle
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

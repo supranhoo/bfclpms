@@ -3430,6 +3430,7 @@ export type Database = {
           level: string | null
           mobile_number: string | null
           pms_grade: string | null
+          portal_access: boolean
           reporting_manager_id: string | null
           updated_at: string
         }
@@ -3448,6 +3449,7 @@ export type Database = {
           level?: string | null
           mobile_number?: string | null
           pms_grade?: string | null
+          portal_access?: boolean
           reporting_manager_id?: string | null
           updated_at?: string
         }
@@ -3466,6 +3468,7 @@ export type Database = {
           level?: string | null
           mobile_number?: string | null
           pms_grade?: string | null
+          portal_access?: boolean
           reporting_manager_id?: string | null
           updated_at?: string
         }

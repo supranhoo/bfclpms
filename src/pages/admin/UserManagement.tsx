@@ -96,6 +96,7 @@ export default function UserManagement() {
   const [newManagerId, setNewManagerId] = useState('');
   const [newDivisionId, setNewDivisionId] = useState('');  // UI-only cascading filter
   const [newCompanyId, setNewCompanyId] = useState('');
+  const [newPortalAccess, setNewPortalAccess] = useState(true);
 
   // Bulk Action Dialog
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
@@ -271,6 +272,7 @@ export default function UserManagement() {
       pms_grade?: string;
       reporting_manager_id?: string;
       company_id?: string;
+      portal_access?: boolean;
     }) => {
       const { data: session } = await supabase.auth.getSession();
       
@@ -284,6 +286,7 @@ export default function UserManagement() {
           pms_grade: data.pms_grade || undefined,
           reporting_manager_id: data.reporting_manager_id || undefined,
           company_id: data.company_id || undefined,
+          portal_access: data.portal_access,
         },
       });
 
@@ -488,7 +491,7 @@ export default function UserManagement() {
     }
     createUser.mutate({
       full_name: newFullName,
-      email: newEmail,
+      email: newPortalAccess ? newEmail : '',
       employee_code: newEmployeeCode,
       role: newRole,
       department_id: newDepartmentId || undefined,
@@ -496,6 +499,7 @@ export default function UserManagement() {
       pms_grade: newPmsGrade || undefined,
       reporting_manager_id: newManagerId || undefined,
       company_id: newCompanyId || undefined,
+      portal_access: newPortalAccess,
     });
   };
 
@@ -510,6 +514,7 @@ export default function UserManagement() {
     setNewManagerId('');
     setNewDivisionId('');
     setNewCompanyId('');
+    setNewPortalAccess(true);
   };
 
   const handleBulkUpdate = () => {
@@ -742,6 +747,9 @@ export default function UserManagement() {
                       {(profile as any).is_active === false && (
                         <Badge variant="destructive" className="text-xs">Inactive</Badge>
                       )}
+                      {(profile as any).portal_access === false && (
+                        <Badge variant="secondary" className="text-xs">No Portal</Badge>
+                      )}
                     </div>
                     <div className="grid grid-cols-2 gap-1 text-xs text-muted-foreground">
                       <span>Code: {profile.employee_code || '-'}</span>
@@ -853,6 +861,9 @@ export default function UserManagement() {
                           <Badge variant="destructive" className="text-xs">Inactive</Badge>
                         ) : (
                           <Badge variant="outline" className="text-xs border-primary/30 text-primary">Active</Badge>
+                        )}
+                        {(profile as any).portal_access === false && (
+                          <Badge variant="secondary" className="text-xs ml-1">No Portal</Badge>
                         )}
                       </TableCell>
                       <TableCell>{manager?.full_name || '-'}</TableCell>
@@ -1163,7 +1174,7 @@ export default function UserManagement() {
                 </div>
                 <Separator />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
+                   <div className="space-y-2">
                     <Label>Full Name <span className="text-destructive">*</span></Label>
                     <Input
                       value={newFullName}
@@ -1171,15 +1182,17 @@ export default function UserManagement() {
                       placeholder="John Doe"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label>Email</Label>
-                    <Input
-                      type="email"
-                      value={newEmail}
-                      onChange={(e) => setNewEmail(e.target.value)}
-                      placeholder="john@example.com"
-                    />
-                  </div>
+                  {newPortalAccess && (
+                    <div className="space-y-2">
+                      <Label>Email</Label>
+                      <Input
+                        type="email"
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value)}
+                        placeholder="john@example.com"
+                      />
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label>Employee Code <span className="text-destructive">*</span></Label>
                     <Input
@@ -1314,6 +1327,18 @@ export default function UserManagement() {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border p-3 h-fit">
+                    <div className="space-y-0.5">
+                      <Label>Portal Access</Label>
+                      <p className="text-xs text-muted-foreground">
+                        {newPortalAccess ? 'User can log in to the portal' : 'Data-only user — no login access'}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={newPortalAccess}
+                      onCheckedChange={setNewPortalAccess}
+                    />
                   </div>
                 </div>
               </div>
