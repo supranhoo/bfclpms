@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-07  
-> **Version:** 2.16.84 — Added SELF_REVIEW_SUBMITTED audit log for recall eligibility tracking
+> **Version:** 2.16.85 — Sync ReportRoute with Menu Access overrides to prevent redirect when sidebar override is granted
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
