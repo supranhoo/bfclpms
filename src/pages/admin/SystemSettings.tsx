@@ -205,6 +205,20 @@ export default function SystemSettings() {
     );
   };
 
+  const handleRecallWindowChange = (value: string) => {
+    setSelectedRecallWindow(value);
+    const currentVal = recallWindowHours === 0 ? 'disabled' : String(recallWindowHours);
+    setHasRecallWindowChanges(value !== currentVal);
+  };
+
+  const handleSaveRecallWindow = () => {
+    const saveValue = selectedRecallWindow === 'disabled' ? 'disabled' : selectedRecallWindow;
+    updateSetting.mutate(
+      { key: 'self_review_recall_hours', value: saveValue },
+      { onSuccess: () => setHasRecallWindowChanges(false) }
+    );
+  };
+
   const lastRollover = rolloverLogs?.[0];
   const isLoading = modeLoading || rolloverLoading || dailyMethodLoading;
 
