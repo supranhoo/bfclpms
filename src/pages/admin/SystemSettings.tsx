@@ -341,6 +341,61 @@ export default function SystemSettings() {
                 </div>
               </CardContent>
             </Card>
+
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <LogOut className="h-5 w-5" />
+                  Auto Logout (Idle Timeout)
+                </CardTitle>
+                <CardDescription>
+                  Automatically sign out users after a period of inactivity to enhance security.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-4 p-4 rounded-lg border">
+                  <div className="flex-1 space-y-1">
+                    <Label htmlFor="auto-logout" className="text-base font-medium">
+                      Idle Timeout Duration
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Users will be signed out after this period of inactivity. A warning appears 60 seconds before logout.
+                    </p>
+                  </div>
+                  <Select value={selectedAutoLogout} onValueChange={handleAutoLogoutChange}>
+                    <SelectTrigger className="w-40" id="auto-logout">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="disabled">Disabled</SelectItem>
+                      <SelectItem value="5">5 minutes</SelectItem>
+                      <SelectItem value="10">10 minutes</SelectItem>
+                      <SelectItem value="15">15 minutes</SelectItem>
+                      <SelectItem value="30">30 minutes</SelectItem>
+                      <SelectItem value="45">45 minutes</SelectItem>
+                      <SelectItem value="60">60 minutes</SelectItem>
+                      <SelectItem value="90">90 minutes</SelectItem>
+                      <SelectItem value="120">120 minutes</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="mt-4 flex items-center justify-between border-t pt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Current setting: <span className="font-medium text-foreground">
+                      {autoLogoutMinutes === 0 ? 'Disabled' : `${autoLogoutMinutes} minutes`}
+                    </span>
+                  </p>
+                  <Button
+                    onClick={handleSaveAutoLogout}
+                    disabled={!hasAutoLogoutChanges || updateSetting.isPending}
+                    className="gap-2"
+                  >
+                    <Save className="h-4 w-4" />
+                    {updateSetting.isPending ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </>
         );
       case 'scoring':

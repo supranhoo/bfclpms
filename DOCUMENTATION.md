@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-07  
-> **Version:** 2.16.81 — Added Company Code column to employee import template, export, and processing
+> **Version:** 2.16.82 — Added configurable Auto-Logout (Idle Timeout) feature with admin settings
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
