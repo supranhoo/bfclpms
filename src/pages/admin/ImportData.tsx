@@ -123,6 +123,7 @@ interface EmployeeImportRow {
   fullName: string;
   email: string;
   designation?: string;
+  companyCode?: string;
   division?: string;
   businessUnit?: string;
   department?: string;
@@ -141,6 +142,7 @@ export default function ImportData() {
   const { data: businessUnits } = useBusinessUnits();
   const { data: departments } = useDepartments();
   const { data: designations } = useDesignations();
+  const { data: companiesList } = useCompanies();
   const createKpi = useCreateKpi();
   const { toast } = useToast();
 
@@ -650,6 +652,7 @@ export default function ImportData() {
       fullName: getValue(['fullName', 'fullname', 'full_name', 'name', 'employeeName', 'employeename', 'employee_name', 'empName', 'empname', 'emp_name']),
       email: getValue(['email', 'emailAddress', 'emailaddress', 'email_address', 'mail', 'emailId', 'emailid', 'email_id']),
       designation: getValue(['designation', 'title', 'position', 'jobTitle', 'jobtitle', 'job_title']),
+      companyCode: getValue(['companyCode', 'companycode', 'company_code', 'company', 'companyName', 'companyname', 'company_name']),
       division: getValue(['division', 'div']),
       businessUnit: getValue(['businessUnit', 'businessunit', 'business_unit', 'bu', 'unit']),
       department: getValue(['department', 'dept', 'dep', 'departmentName', 'departmentname', 'department_name']),
@@ -1559,6 +1562,7 @@ export default function ImportData() {
         email: 'john.doe@company.com',
         designation: 'Manager',
         role: 'employee',
+        companyCode: 'BFCL',
         division: 'Operations',
         businessUnit: 'Plant',
         department: 'HR',
