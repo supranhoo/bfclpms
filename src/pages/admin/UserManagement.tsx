@@ -859,6 +859,9 @@ export default function UserManagement() {
                         ) : (
                           <Badge variant="outline" className="text-xs border-primary/30 text-primary">Active</Badge>
                         )}
+                        {(profile as any).portal_access === false && (
+                          <Badge variant="secondary" className="text-xs ml-1">No Portal</Badge>
+                        )}
                       </TableCell>
                       <TableCell>{manager?.full_name || '-'}</TableCell>
                       <TableCell>
