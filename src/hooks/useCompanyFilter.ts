@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 export interface CompanyOption {
   id: string;
   name: string;
+  code: string | null;
   is_default: boolean | null;
 }
 
