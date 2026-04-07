@@ -6,6 +6,7 @@ import { AppSidebar } from './AppSidebar';
 import { Loader2 } from 'lucide-react';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { useRealtimeKpiSync } from '@/hooks/useRealtimeKpiSync';
+import { useIdleTimeout } from '@/hooks/useIdleTimeout';
 
 function DashboardContent() {
   const { state, isMobile, openMobile } = useSidebar();
@@ -42,6 +43,7 @@ function DashboardContent() {
 export function DashboardLayout() {
   const { user, loading } = useAuth();
   useRealtimeKpiSync();
+  useIdleTimeout();
 
   if (loading) {
     return (
