@@ -16,6 +16,7 @@ interface CreateEmployeeRequest {
   level?: string;
   reporting_manager_id?: string;
   company_id?: string;
+  portal_access?: boolean;
 }
 
 Deno.serve(async (req) => {
@@ -77,8 +78,8 @@ Deno.serve(async (req) => {
       })
     }
 
-    const sanitizedCode = body.employee_code.toLowerCase().replace(/[^a-z0-9]/g, '')
-    const email = body.email || `${sanitizedCode || 'user'}@placeholder-pms.com`
+    // Determine portal access: explicit flag or infer from email
+    const portalAccess = body.portal_access !== undefined ? body.portal_access : !!body.email;
 
     const profilePayload = {
       employee_code: body.employee_code,
@@ -89,6 +90,7 @@ Deno.serve(async (req) => {
       level: body.level || null,
       reporting_manager_id: body.reporting_manager_id || null,
       company_id: body.company_id || null,
+      portal_access: portalAccess,
     }
 
     // Admin account protection — never overwrite this profile
@@ -109,7 +111,33 @@ Deno.serve(async (req) => {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
-    // If existingProfile matches admin, skip — fall through to create a new user
+
+    // ─── PROFILE-ONLY PATH (no portal access) ───
+    if (!portalAccess) {
+      const newId = crypto.randomUUID()
+      const { error: insertError } = await supabaseAdmin
+        .from('profiles')
+        .insert({ id: newId, email: body.email || null, ...profilePayload })
+
+      if (insertError) {
+        console.error('Failed to insert profile-only user:', insertError)
+        return new Response(JSON.stringify({ error: `Failed to create profile: ${insertError.message}` }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      // Assign default employee role
+      await supabaseAdmin.from('user_roles').insert({ user_id: newId, role: 'employee' })
+
+      const { data: profile } = await supabaseAdmin.from('profiles').select('*').eq('id', newId).single()
+      return new Response(JSON.stringify({ profile }), {
+        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
+    // ─── AUTH + PROFILE PATH (portal access) ───
+    const sanitizedCode = body.employee_code.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const email = body.email || `${sanitizedCode || 'user'}@placeholder-pms.com`
 
     // Step 2: Try to create the auth user
     const randomPassword = crypto.randomUUID() + 'Aa1!'
@@ -136,7 +164,6 @@ Deno.serve(async (req) => {
           userId = existingByEmail.id
         } else {
           // Profile not found by email — search auth users to get the ID
-          // Use a paginated scan to find the user by email
           let found = false
           let page = 1
           while (!found) {
