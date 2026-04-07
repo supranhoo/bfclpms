@@ -81,6 +81,7 @@ const statusLabels: Record<string, string> = {
 export default function KpiScorecardDetail() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('kpi-scorecard-detail');
+  const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany, getCompanyName } = useCompanyFilter();
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[now.getMonth()]);
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
