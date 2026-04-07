@@ -82,7 +82,7 @@ const statusLabels: Record<string, string> = {
 export default function KpiScorecardDetail() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('kpi-scorecard-detail');
-  const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany, getCompanyName } = useCompanyFilter();
+  const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany, getCompanyName, getCompanyCode } = useCompanyFilter();
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[now.getMonth()]);
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -262,6 +262,7 @@ export default function KpiScorecardDetail() {
   const handleExport = () => {
     if (!filtered.length) return;
     const exportData = filtered.map(r => ({
+      'Company': getCompanyCode(r.employeeId),
       'Employee Code': r.employeeCode,
       'Name': r.employeeName,
       'Designation': r.designation,
