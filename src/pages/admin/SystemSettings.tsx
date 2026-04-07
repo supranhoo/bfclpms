@@ -125,6 +125,12 @@ export default function SystemSettings() {
     }
   }, [uploadLimitSetting]);
 
+  useEffect(() => {
+    if (!autoLogoutLoading) {
+      setSelectedAutoLogout(autoLogoutMinutes === 0 ? 'disabled' : String(autoLogoutMinutes));
+    }
+  }, [autoLogoutMinutes, autoLogoutLoading]);
+
   const handleModeChange = (value: ScoreCalculationMode) => {
     setSelectedMode(value);
     setHasChanges(value !== mode);
@@ -172,6 +178,20 @@ export default function SystemSettings() {
     updateSetting.mutate(
       { key: 'max_upload_size_mb', value: String(uploadLimitMb) },
       { onSuccess: () => setHasUploadLimitChanges(false) }
+    );
+  };
+
+  const handleAutoLogoutChange = (value: string) => {
+    setSelectedAutoLogout(value);
+    const currentVal = autoLogoutMinutes === 0 ? 'disabled' : String(autoLogoutMinutes);
+    setHasAutoLogoutChanges(value !== currentVal);
+  };
+
+  const handleSaveAutoLogout = () => {
+    const saveValue = selectedAutoLogout === 'disabled' ? 'disabled' : selectedAutoLogout;
+    updateSetting.mutate(
+      { key: 'auto_logout_minutes', value: saveValue },
+      { onSuccess: () => setHasAutoLogoutChanges(false) }
     );
   };
 
