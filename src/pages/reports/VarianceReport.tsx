@@ -24,6 +24,7 @@ const PAGE_SIZE = 50;
 
 interface VarianceRow {
   kpiId: string;
+  employeeId: string;
   employeeCode: string;
   employeeName: string;
   department: string;
