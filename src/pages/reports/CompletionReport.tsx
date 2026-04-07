@@ -1,6 +1,8 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useReportAccess } from '@/hooks/useReportAccess';
 import { useAllKpis } from '@/hooks/useKpis';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { CompanyFilter } from '@/components/reports/CompanyFilter';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -23,7 +25,7 @@ export default function CompletionReport() {
   const { toast } = useToast();
 
   const [selectedYear, setSelectedYear] = useState<string>('all');
-
+  const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany } = useCompanyFilter();
   // Get available years
   const availableYears = useMemo(() => {
     if (!allKpis) return [];
@@ -36,9 +38,10 @@ export default function CompletionReport() {
     if (!allKpis) return [];
 
     // Filter by year if selected
-    const filteredKpis = selectedYear === 'all' 
+    const filteredKpis = (selectedYear === 'all' 
       ? allKpis 
-      : allKpis.filter(k => k.review_year?.toString() === selectedYear);
+      : allKpis.filter(k => k.review_year?.toString() === selectedYear))
+      .filter(k => filterByCompany(k.employee_id));
 
     // Group by period
     const periodMap = new Map<string, { 
@@ -270,7 +273,9 @@ export default function CompletionReport() {
           <CardTitle className="text-lg">Filters</CardTitle>
         </CardHeader>
         <CardContent>
-          <Select value={selectedYear} onValueChange={setSelectedYear}>
+          <div className="flex flex-wrap items-center gap-3">
+            <CompanyFilter companies={companies} selectedCompanyId={selectedCompanyId} onCompanyChange={setSelectedCompanyId} />
+            <Select value={selectedYear} onValueChange={setSelectedYear}>
             <SelectTrigger className="w-48">
               <SelectValue placeholder="Filter by year" />
             </SelectTrigger>
@@ -281,6 +286,7 @@ export default function CompletionReport() {
               ))}
             </SelectContent>
           </Select>
+          </div>
         </CardContent>
       </Card>
 

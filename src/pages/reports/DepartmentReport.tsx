@@ -2,6 +2,8 @@ import { useState, useMemo, useCallback } from 'react';
 import { useReportAccess } from '@/hooks/useReportAccess';
 import { useAllKpis } from '@/hooks/useKpis';
 import { useDepartments, useDivisions } from '@/hooks/useOrganization';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { CompanyFilter } from '@/components/reports/CompanyFilter';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -22,7 +24,7 @@ export default function DepartmentReport() {
   const { toast } = useToast();
 
   const [selectedDivision, setSelectedDivision] = useState<string>('all');
-
+  const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany } = useCompanyFilter();
   // Build department stats
   const departmentData = useMemo(() => {
     if (!allKpis || !departments) return [];
@@ -36,7 +38,7 @@ export default function DepartmentReport() {
       // Get KPIs for employees in this department
       const deptKpis = allKpis.filter(kpi => {
         const employee = kpi.profiles as { department_id?: string } | null;
-        return employee?.department_id === dept.id;
+        return employee?.department_id === dept.id && filterByCompany(kpi.employee_id);
       });
 
       const totalKpis = deptKpis.length;
@@ -186,7 +188,9 @@ export default function DepartmentReport() {
           <CardTitle className="text-lg">Filters</CardTitle>
         </CardHeader>
         <CardContent>
-          <Select value={selectedDivision} onValueChange={setSelectedDivision}>
+          <div className="flex flex-wrap items-center gap-3">
+            <CompanyFilter companies={companies} selectedCompanyId={selectedCompanyId} onCompanyChange={setSelectedCompanyId} />
+            <Select value={selectedDivision} onValueChange={setSelectedDivision}>
             <SelectTrigger className="w-48">
               <SelectValue placeholder="Filter by division" />
             </SelectTrigger>
