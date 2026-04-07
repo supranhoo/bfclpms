@@ -189,8 +189,9 @@ export default function KpiScorecardDetail() {
   // Departments for filter
   const departments = useMemo(() => {
     if (!rows) return [];
-    return [...new Set(rows.map(r => r.department).filter(Boolean))].sort();
-  }, [rows]);
+    const companyFiltered = rows.filter(r => filterByCompany(r.employeeId));
+    return [...new Set(companyFiltered.map(r => r.department).filter(Boolean))].sort();
+  }, [rows, filterByCompany]);
 
   // Filter + sort
   const filtered = useMemo(() => {
