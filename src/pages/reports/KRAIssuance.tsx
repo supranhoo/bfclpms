@@ -2,6 +2,8 @@ import { useMemo, useCallback } from 'react';
 import { useReportAccess } from '@/hooks/useReportAccess';
 import { useAllKpis } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { CompanyFilter } from '@/components/reports/CompanyFilter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -40,6 +42,9 @@ export default function KRAIssuance() {
   const canExport = canDownload('kra-issuance');
   const { data: allKpis, isLoading } = useAllKpis();
   const { data: categories } = useKraCategories();
+  const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany } = useCompanyFilter();
+
+  const filteredKpis = useMemo(() => allKpis?.filter(k => filterByCompany(k.employee_id)) ?? [], [allKpis, filterByCompany]);
 
   const statusCounts = {
     kra_set: allKpis?.filter(k => k.status === 'kra_set').length || 0,

@@ -2,6 +2,8 @@ import { useState, useMemo, useCallback } from 'react';
 import { useReportAccess } from '@/hooks/useReportAccess';
 import { useAllKpis, useKpiQueries } from '@/hooks/useKpis';
 import { useProfiles } from '@/hooks/useOrganization';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { CompanyFilter } from '@/components/reports/CompanyFilter';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,7 +26,7 @@ export default function QueryReport() {
   const { toast } = useToast();
 
   const [statusFilter, setStatusFilter] = useState<string>('all');
-
+  const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany } = useCompanyFilter();
   // Create lookup maps
   const profileMap = useMemo(() => {
     return new Map(profiles?.map(p => [p.id, p]) || []);
@@ -40,6 +42,10 @@ export default function QueryReport() {
 
     return queries
       .filter(q => statusFilter === 'all' || q.status === statusFilter)
+      .filter(q => {
+        const kpi = kpiMap.get(q.kpi_id);
+        return filterByCompany(kpi?.employee_id);
+      })
       .map(q => {
         const kpi = kpiMap.get(q.kpi_id);
         const raisedBy = profileMap.get(q.raised_by);
@@ -60,7 +66,7 @@ export default function QueryReport() {
           daysToResolve,
         };
       });
-  }, [queries, statusFilter, kpiMap, profileMap]);
+  }, [queries, statusFilter, kpiMap, profileMap, filterByCompany]);
 
   // Stats
   const stats = useMemo(() => {
@@ -183,16 +189,19 @@ export default function QueryReport() {
           <CardTitle className="text-lg">Filters</CardTitle>
         </CardHeader>
         <CardContent>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Filter by status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Queries</SelectItem>
-              <SelectItem value="open">Open</SelectItem>
-              <SelectItem value="resolved">Resolved</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex flex-wrap items-center gap-3">
+            <CompanyFilter companies={companies} selectedCompanyId={selectedCompanyId} onCompanyChange={setSelectedCompanyId} />
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Queries</SelectItem>
+                <SelectItem value="open">Open</SelectItem>
+                <SelectItem value="resolved">Resolved</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardContent>
       </Card>
 
