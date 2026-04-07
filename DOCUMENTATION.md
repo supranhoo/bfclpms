@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-07  
-> **Version:** 2.16.80 — Added company_id to profiles, BFCL mapped to all employees, Company dropdown on Add New User, Company column in all report exports
+> **Version:** 2.16.81 — Added Company Code column to employee import template, export, and processing
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

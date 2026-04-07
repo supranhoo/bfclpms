@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useProfiles, useKraCategories, useDepartments, useDivisions, useBusinessUnits, useDesignations } from '@/hooks/useOrganization';
+import { useCompanies } from '@/hooks/useCompanies';
 import { useCreateKpi } from '@/hooks/useKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -122,6 +123,7 @@ interface EmployeeImportRow {
   fullName: string;
   email: string;
   designation?: string;
+  companyCode?: string;
   division?: string;
   businessUnit?: string;
   department?: string;
@@ -140,6 +142,7 @@ export default function ImportData() {
   const { data: businessUnits } = useBusinessUnits();
   const { data: departments } = useDepartments();
   const { data: designations } = useDesignations();
+  const { data: companiesList } = useCompanies();
   const createKpi = useCreateKpi();
   const { toast } = useToast();
 
@@ -649,6 +652,7 @@ export default function ImportData() {
       fullName: getValue(['fullName', 'fullname', 'full_name', 'name', 'employeeName', 'employeename', 'employee_name', 'empName', 'empname', 'emp_name']),
       email: getValue(['email', 'emailAddress', 'emailaddress', 'email_address', 'mail', 'emailId', 'emailid', 'email_id']),
       designation: getValue(['designation', 'title', 'position', 'jobTitle', 'jobtitle', 'job_title']),
+      companyCode: getValue(['companyCode', 'companycode', 'company_code', 'company', 'companyName', 'companyname', 'company_name']),
       division: getValue(['division', 'div']),
       businessUnit: getValue(['businessUnit', 'businessunit', 'business_unit', 'bu', 'unit']),
       department: getValue(['department', 'dept', 'dep', 'departmentName', 'departmentname', 'department_name']),
@@ -1231,6 +1235,14 @@ export default function ImportData() {
           (row.managerName && p.full_name?.toLowerCase() === row.managerName?.toLowerCase())
         )?.id || null;
 
+        // Resolve company by code or name (case-insensitive)
+        const resolvedCompanyId = row.companyCode
+          ? (companiesList || []).find((c: any) =>
+              c.code?.toLowerCase() === row.companyCode!.toLowerCase() ||
+              c.name?.toLowerCase() === row.companyCode!.toLowerCase()
+            )?.id || null
+          : null;
+
         const { error } = await supabase
           .from('profiles')
           .update({
@@ -1241,7 +1253,8 @@ export default function ImportData() {
             pms_grade: row.pmsGrade || existingEmployee.pms_grade,
             level: row.level || (existingEmployee as any).level,
             reporting_manager_id: managerId || existingEmployee.reporting_manager_id,
-          })
+            ...(resolvedCompanyId ? { company_id: resolvedCompanyId } : {}),
+          } as any)
           .eq('id', existingEmployee.id);
 
         if (error) throw error;
@@ -1279,6 +1292,14 @@ export default function ImportData() {
           (row.managerName && p.full_name?.toLowerCase() === row.managerName?.toLowerCase())
         )?.id || null;
 
+        // Resolve company by code or name (case-insensitive)
+        const newCompanyId = row.companyCode
+          ? (companiesList || []).find((c: any) =>
+              c.code?.toLowerCase() === row.companyCode!.toLowerCase() ||
+              c.name?.toLowerCase() === row.companyCode!.toLowerCase()
+            )?.id || undefined
+          : undefined;
+
         const { data: fnData, error: fnError } = await supabase.functions.invoke('create-employee', {
           body: {
             employee_code: String(row.employeeCode),
@@ -1289,6 +1310,7 @@ export default function ImportData() {
             pms_grade: sanitizeText(row.pmsGrade) || undefined,
             level: sanitizeText(row.level) || undefined,
             reporting_manager_id: managerId || undefined,
+            company_id: newCompanyId,
           },
         });
 
@@ -1558,6 +1580,7 @@ export default function ImportData() {
         email: 'john.doe@company.com',
         designation: 'Manager',
         role: 'employee',
+        companyCode: 'BFCL',
         division: 'Operations',
         businessUnit: 'Plant',
         department: 'HR',
@@ -1587,6 +1610,7 @@ export default function ImportData() {
           full_name,
           email,
           designation,
+          company_id,
           pms_grade,
           level,
           department_id,
@@ -1622,12 +1646,17 @@ export default function ImportData() {
         const div = bu?.divisions;
         const manager = profile.reporting_manager_id ? profileMap.get(profile.reporting_manager_id) : null;
         
+        // Resolve company name from company_id
+        const companyId = (profile as any).company_id;
+        const companyObj = companyId ? (companiesList || []).find((c: any) => c.id === companyId) : null;
+
         return {
           employeeCode: profile.employee_code || '',
           fullName: profile.full_name || '',
           email: profile.email || '',
           designation: profile.designation || '',
           role: roleMap.get(profile.id) || 'employee',
+          companyCode: companyObj?.code || companyObj?.name || '',
           division: div?.name || '',
           businessUnit: bu?.name || '',
           department: dept?.name || '',
