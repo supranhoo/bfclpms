@@ -1200,6 +1200,20 @@ export default function UserManagement() {
                 <Separator />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
+                    <Label>Company</Label>
+                    <Select value={newCompanyId || '__none__'} onValueChange={(val) => setNewCompanyId(val === '__none__' ? '' : val)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select company" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {companiesList?.map(c => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
                     <Label>Division</Label>
                     <Select value={newDivisionId || '__all__'} onValueChange={(val) => {
                       const newDiv = val === '__all__' ? '' : val;
