@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-07  
-> **Version:** 2.16.79 — Enhancement: KPI Scorecard Detail report now includes Frequency, Org KPI Type, and Data Owner columns
+> **Version:** 2.16.80 — Added company_id to profiles, BFCL mapped to all employees, Company dropdown on Add New User, Company column in all report exports
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
