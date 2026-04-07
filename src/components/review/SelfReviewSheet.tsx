@@ -1354,7 +1354,51 @@ export function SelfReviewSheet({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Query History Dialog */}
+      {/* Recall Confirmation Dialog */}
+      <AlertDialog open={showRecallConfirm} onOpenChange={setShowRecallConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Undo2 className="h-5 w-5 text-blue-500" />
+              Recall Self Review?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>This will withdraw your self-review submission and allow you to edit and resubmit.</p>
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-200">
+                  <p className="font-medium">The following data will be cleared:</p>
+                  <ul className="list-disc ml-4 mt-1 space-y-0.5">
+                    <li>Achieved value / score</li>
+                    <li>Self rating</li>
+                    <li>Self remarks</li>
+                    <li>Evidence files</li>
+                  </ul>
+                </div>
+                <p className="text-sm">The KPI status will revert to <strong>Pending</strong> and you can re-enter your data.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={recallMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (selectedKpi) {
+                  recallMutation.mutate(selectedKpi.id, {
+                    onSuccess: () => {
+                      setShowRecallConfirm(false);
+                      onOpenChange(false);
+                    },
+                  });
+                }
+              }}
+              disabled={recallMutation.isPending}
+            >
+              {recallMutation.isPending ? 'Recalling...' : 'Confirm Recall'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {selectedKpi && (
         <QueryHistoryDialog
           kpiId={selectedKpi.id}
