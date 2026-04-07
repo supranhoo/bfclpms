@@ -495,6 +495,7 @@ export default function UserManagement() {
       designation: newDesignation || undefined,
       pms_grade: newPmsGrade || undefined,
       reporting_manager_id: newManagerId || undefined,
+      company_id: newCompanyId || undefined,
     });
   };
 
@@ -508,6 +509,7 @@ export default function UserManagement() {
     setNewPmsGrade('');
     setNewManagerId('');
     setNewDivisionId('');
+    setNewCompanyId('');
   };
 
   const handleBulkUpdate = () => {
