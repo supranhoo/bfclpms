@@ -86,6 +86,9 @@ export function useCompanyFilter() {
     staleTime: 10 * 60 * 1000,
   });
 
+  const employeeCompanyMap = useMemo(() => employeeCompanyData?.companyMap ?? new Map<string, string>(), [employeeCompanyData]);
+  const codeToIdMap = useMemo(() => employeeCompanyData?.codeToIdMap ?? new Map<string, string>(), [employeeCompanyData]);
+
   // Set of employee IDs for the selected company
   const companyEmployeeIds = useMemo(() => {
     if (selectedCompanyId === 'all' || !employeeCompanyMap) return null;
@@ -111,12 +114,19 @@ export function useCompanyFilter() {
     return companies.find(c => c.id === companyId)?.name ?? '';
   };
 
-  // Get company code for an employee
+  // Get company code for an employee (by employee ID)
   const getCompanyCode = (employeeId: string): string => {
     if (!employeeCompanyMap || !companies) return '';
     const companyId = employeeCompanyMap.get(employeeId);
     if (!companyId) return '';
     return companies.find(c => c.id === companyId)?.code ?? '';
+  };
+
+  // Get company code by employee code (for reports that don't have employee ID)
+  const getCompanyCodeByEmpCode = (empCode: string): string => {
+    const empId = codeToIdMap.get(empCode);
+    if (!empId) return '';
+    return getCompanyCode(empId);
   };
 
   return {
@@ -127,6 +137,7 @@ export function useCompanyFilter() {
     filterByCompany,
     getCompanyName,
     getCompanyCode,
-    employeeCompanyMap: employeeCompanyMap ?? new Map<string, string>(),
+    getCompanyCodeByEmpCode,
+    employeeCompanyMap,
   };
 }
