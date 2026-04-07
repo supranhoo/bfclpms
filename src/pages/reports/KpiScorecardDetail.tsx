@@ -219,7 +219,7 @@ export default function KpiScorecardDetail() {
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return result;
-  }, [rows, selectedDept, searchTerm, sortField, sortDir]);
+  }, [rows, selectedDept, searchTerm, sortField, sortDir, filterByCompany]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
