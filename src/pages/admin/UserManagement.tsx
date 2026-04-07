@@ -3,6 +3,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useProfiles, useDepartments, useDesignations, usePmsGrades, useDivisions, useBusinessUnits } from '@/hooks/useOrganization';
+import { useCompanies } from '@/hooks/useCompanies';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -55,6 +56,7 @@ export default function UserManagement() {
   const { data: pmsGradesList } = usePmsGrades();
   const { data: divisions } = useDivisions();
   const { data: businessUnits } = useBusinessUnits();
+  const { data: companiesList } = useCompanies();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -93,6 +95,7 @@ export default function UserManagement() {
   const [newPmsGrade, setNewPmsGrade] = useState('');
   const [newManagerId, setNewManagerId] = useState('');
   const [newDivisionId, setNewDivisionId] = useState('');  // UI-only cascading filter
+  const [newCompanyId, setNewCompanyId] = useState('');
 
   // Bulk Action Dialog
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);

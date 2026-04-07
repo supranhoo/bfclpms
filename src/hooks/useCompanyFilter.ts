@@ -26,14 +26,14 @@ export function useCompanyFilter() {
     staleTime: 10 * 60 * 1000,
   });
 
-  // Build employee → company mapping via department → BU → division → company chain
+  // Build employee → company mapping via direct company_id OR department → BU → division → company chain
   const { data: employeeCompanyMap } = useQuery({
     queryKey: ['employee-company-map'],
     queryFn: async () => {
-      // Fetch all profiles with department_id
+      // Fetch all profiles with department_id and company_id
       const { data: profiles, error: pErr } = await supabase
         .from('profiles')
-        .select('id, department_id');
+        .select('id, department_id, company_id');
       if (pErr) throw pErr;
 
       // Fetch departments → BU
@@ -62,6 +62,12 @@ export function useCompanyFilter() {
       // Build employee → company map
       const map = new Map<string, string>();
       (profiles ?? []).forEach(p => {
+        // Priority 1: Direct company_id on profile
+        if ((p as any).company_id) {
+          map.set(p.id, (p as any).company_id);
+          return;
+        }
+        // Priority 2: Derive from department chain
         if (!p.department_id) return;
         const buId = deptToBu.get(p.department_id);
         if (!buId) return;
