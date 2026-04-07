@@ -116,6 +116,7 @@ export function useCompanyFilter() {
     companyEmployeeIds,
     filterByCompany,
     getCompanyName,
+    getCompanyCode,
     employeeCompanyMap: employeeCompanyMap ?? new Map<string, string>(),
   };
 }
