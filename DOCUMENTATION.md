@@ -4769,3 +4769,13 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Admin control:** Both events are independently toggleable in Email Settings. Respects global email enabled toggle.
 - **Policy:** Added §63 governing reminder behavior, auto-stop, and consolidation rules.
 - **Affected files:** `supabase/functions/send-query-observation-reminders/index.ts` (new), `supabase/functions/send-email-notification/index.ts`, `supabase/config.toml`, `src/hooks/useEmailNotificationSettings.ts`, `src/components/admin/EmailNotificationSettings.tsx`, `src/components/admin/EmailTemplateEditor.tsx`, `POLICY.md` (§63), `DOCUMENTATION.md`
+
+### v2.16.77 — Feature: Self-Review Recall (Withdraw & Correct)
+- **Feature:** Employees can recall (withdraw) their self-review submission within a configurable time window, as long as the manager hasn't reviewed it yet.
+- **Admin Setting:** `self_review_recall_hours` in System Settings → General section. Options: 1, 2, 4, 6, 12, 24, 48, 72 hours, or Disabled. Default: 24 hours.
+- **Eligibility:** KPI must be in `self_review` status, current user must be the KPI owner, within configured recall window, and no manager scores/remarks exist.
+- **Recall Action:** Reverts KPI status to `kra_set`, clears self-review fields (achieved_value, self_score, self_rating, self_remarks, self_evidence), logs `SELF_REVIEW_RECALLED` audit action.
+- **UI:** "Recall" button in SelfReviewSheet footer with countdown timer showing remaining time. Confirmation dialog warns about data that will be cleared.
+- **Audit Trail:** `SELF_REVIEW_RECALLED` action added to KpiTimeline, AuditLogs, and AuditTrailReport.
+- **Policy:** Added §66 Self-Review Recall Policy.
+- **Affected files:** `src/hooks/useRecallSubmission.ts` (new), `src/components/review/SelfReviewSheet.tsx`, `src/pages/admin/SystemSettings.tsx`, `src/components/dashboard/KpiTimeline.tsx`, `src/pages/AuditLogs.tsx`, `src/pages/reports/AuditTrailReport.tsx`, `POLICY.md` (§66), `DOCUMENTATION.md`

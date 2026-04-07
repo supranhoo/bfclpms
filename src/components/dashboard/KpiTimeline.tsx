@@ -96,6 +96,7 @@ const actionConfig: Record<string, { icon: React.ElementType; color: string; lab
   'SCORE_PERCOLATED': { icon: CheckCircle, color: 'bg-teal-500', label: 'Score Percolated' },
   'RECONCILE_STATUS': { icon: AlertCircle, color: 'bg-orange-500', label: 'Status Reconciled' },
   'ADMIN_BULK_STEP_BACK': { icon: UserCog, color: 'bg-rose-600', label: 'Admin Bulk Step Back' },
+  'SELF_REVIEW_RECALLED': { icon: Undo2, color: 'bg-blue-400', label: 'Self Review Recalled' },
 };
 
 export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }: KpiTimelineProps) {

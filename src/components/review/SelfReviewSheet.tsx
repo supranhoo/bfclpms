@@ -10,6 +10,7 @@ import { useIsOrgKpiDataOwner, useOrgKpiOwners } from '@/hooks/useOrgKpiDataOwne
 import { useToast } from '@/hooks/use-toast';
 import { useSubPeriodSubmissionsByKpis, useSubmitSubPeriod, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { useDailyAggregationMethod } from '@/hooks/useSystemSettings';
+import { useCanRecallSubmission, useRecallSubmission } from '@/hooks/useRecallSubmission';
 import { calculateDailyAggregatedScoreWithExpectedDays, getAggregationMethodLabel } from '@/lib/dailyAggregation';
 import { useExpectedDays } from '@/hooks/useDailyAggregation';
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
@@ -188,11 +189,16 @@ export function SelfReviewSheet({
   const [pendingResubmitReason, setPendingResubmitReason] = useState('');
   const [showMonthlySubmitConfirm, setShowMonthlySubmitConfirm] = useState(false);
   const [isSubmittingMonthly, setIsSubmittingMonthly] = useState(false);
+  const [showRecallConfirm, setShowRecallConfirm] = useState(false);
 
   // Sub-panels
   const [queryHistoryOpen, setQueryHistoryOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [trackerModalOpen, setTrackerModalOpen] = useState(false);
+
+  // Recall submission
+  const { data: recallEligibility } = useCanRecallSubmission(selectedKpi?.id, selectedKpi?.status, selectedKpi?.employee_id);
+  const recallMutation = useRecallSubmission();
 
   // Inline query response state
   const kpiIdsForQueries = useMemo(() => selectedKpi ? [selectedKpi.id] : [], [selectedKpi]);
@@ -1076,6 +1082,25 @@ export function SelfReviewSheet({
                     Rollback requested
                   </span>
                 )}
+                {/* Recall Submission button - shown when KPI is self_review and recall is eligible */}
+                {isSelfReview && recallEligibility?.canRecall && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950"
+                    onClick={() => setShowRecallConfirm(true)}
+                    disabled={recallMutation.isPending}
+                  >
+                    <Undo2 className="h-3 w-3 mr-1" />
+                    {recallMutation.isPending ? 'Recalling...' : (() => {
+                      if (!recallEligibility.remainingMs) return 'Recall';
+                      const totalMin = Math.floor(recallEligibility.remainingMs / 60000);
+                      const h = Math.floor(totalMin / 60);
+                      const m = totalMin % 60;
+                      return `Recall (${h > 0 ? `${h}h ` : ''}${m}m left)`;
+                    })()}
+                  </Button>
+                )}
               </div>
 
               {!isReadOnly && (
@@ -1329,7 +1354,51 @@ export function SelfReviewSheet({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Query History Dialog */}
+      {/* Recall Confirmation Dialog */}
+      <AlertDialog open={showRecallConfirm} onOpenChange={setShowRecallConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Undo2 className="h-5 w-5 text-blue-500" />
+              Recall Self Review?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>This will withdraw your self-review submission and allow you to edit and resubmit.</p>
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-200">
+                  <p className="font-medium">The following data will be cleared:</p>
+                  <ul className="list-disc ml-4 mt-1 space-y-0.5">
+                    <li>Achieved value / score</li>
+                    <li>Self rating</li>
+                    <li>Self remarks</li>
+                    <li>Evidence files</li>
+                  </ul>
+                </div>
+                <p className="text-sm">The KPI status will revert to <strong>Pending</strong> and you can re-enter your data.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={recallMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (selectedKpi) {
+                  recallMutation.mutate(selectedKpi.id, {
+                    onSuccess: () => {
+                      setShowRecallConfirm(false);
+                      onOpenChange(false);
+                    },
+                  });
+                }
+              }}
+              disabled={recallMutation.isPending}
+            >
+              {recallMutation.isPending ? 'Recalling...' : 'Confirm Recall'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {selectedKpi && (
         <QueryHistoryDialog
           kpiId={selectedKpi.id}

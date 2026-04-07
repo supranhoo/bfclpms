@@ -1279,3 +1279,20 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
 6. **Security exceptions**: Security-critical events (`email_changed`, `password_rollout`) bypass the schedule check and always send immediately regardless of schedule configuration.
 7. **Timezone**: Schedule times are evaluated in the configured timezone (default: Asia/Kolkata).
 8. **Fallback**: If queuing fails, the email is sent immediately as a failsafe.
+
+---
+
+## §66 — Self-Review Recall Policy
+
+**Effective Date:** 2026-04-07
+
+**Policy:**
+
+1. **Recall window**: Employees may withdraw (recall) their submitted self-review within a configurable time window set by the Admin in System Settings.
+2. **Default duration**: 24 hours from the time of submission.
+3. **Manager gate**: Recall is blocked if the manager has entered any scores or remarks for the KPI. In such cases, the employee must use the formal Rollback Request process.
+4. **Status revert**: Upon recall, the KPI status reverts from `self_review` to `kra_set`, and all self-review fields (achieved value, score, rating, remarks, evidence) are cleared.
+5. **Audit trail**: Every recall action is logged as `SELF_REVIEW_RECALLED` in the KPI audit log with the performer's identity and timestamp.
+6. **No limit on resubmissions**: After a recall, the employee may edit and resubmit without restriction (subject to governance window rules).
+7. **Admin control**: The recall window can be set to 1, 2, 4, 6, 12, 24, 48, or 72 hours, or disabled entirely. When disabled, employees must use Rollback Requests for corrections.
+8. **Ownership**: Only the KPI owner (employee_id) can recall their own submission. Managers and admins cannot recall on behalf of employees.

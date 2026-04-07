@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle, Mail, Building2, CalendarDays, SlidersHorizontal, Database, KeyRound, Upload, Shield, Menu, LogOut } from 'lucide-react';
+import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle, Mail, Building2, CalendarDays, SlidersHorizontal, Database, KeyRound, Upload, Shield, Menu, LogOut, Undo2 } from 'lucide-react';
 import { useScoreCalculationMode, useUpdateSystemSetting, ScoreCalculationMode, useAutoRolloverSetting, useRolloverLogs, useDailyAggregationMethod, DailyAggregationMethod, useSystemSetting, useAutoLogoutMinutes } from '@/hooks/useSystemSettings';
+import { useRecallWindowHours } from '@/hooks/useRecallSubmission';
 import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
@@ -95,6 +96,7 @@ export default function SystemSettings() {
   const { data: rolloverLogs, isLoading: logsLoading } = useRolloverLogs();
   const { data: uploadLimitSetting, isLoading: uploadLimitLoading } = useSystemSetting('max_upload_size_mb');
   const { minutes: autoLogoutMinutes, isLoading: autoLogoutLoading } = useAutoLogoutMinutes();
+  const { hours: recallWindowHours, isLoading: recallWindowLoading } = useRecallWindowHours();
   const updateSetting = useUpdateSystemSetting();
   const isMobile = useIsMobile();
   
@@ -108,6 +110,8 @@ export default function SystemSettings() {
   const [hasUploadLimitChanges, setHasUploadLimitChanges] = useState(false);
   const [selectedAutoLogout, setSelectedAutoLogout] = useState<string>(String(autoLogoutMinutes));
   const [hasAutoLogoutChanges, setHasAutoLogoutChanges] = useState(false);
+  const [selectedRecallWindow, setSelectedRecallWindow] = useState<string>(recallWindowHours === 0 ? 'disabled' : String(recallWindowHours));
+  const [hasRecallWindowChanges, setHasRecallWindowChanges] = useState(false);
 
   useEffect(() => {
     if (mode) setSelectedMode(mode);
@@ -130,6 +134,12 @@ export default function SystemSettings() {
       setSelectedAutoLogout(autoLogoutMinutes === 0 ? 'disabled' : String(autoLogoutMinutes));
     }
   }, [autoLogoutMinutes, autoLogoutLoading]);
+
+  useEffect(() => {
+    if (!recallWindowLoading) {
+      setSelectedRecallWindow(recallWindowHours === 0 ? 'disabled' : String(recallWindowHours));
+    }
+  }, [recallWindowHours, recallWindowLoading]);
 
   const handleModeChange = (value: ScoreCalculationMode) => {
     setSelectedMode(value);
@@ -192,6 +202,20 @@ export default function SystemSettings() {
     updateSetting.mutate(
       { key: 'auto_logout_minutes', value: saveValue },
       { onSuccess: () => setHasAutoLogoutChanges(false) }
+    );
+  };
+
+  const handleRecallWindowChange = (value: string) => {
+    setSelectedRecallWindow(value);
+    const currentVal = recallWindowHours === 0 ? 'disabled' : String(recallWindowHours);
+    setHasRecallWindowChanges(value !== currentVal);
+  };
+
+  const handleSaveRecallWindow = () => {
+    const saveValue = selectedRecallWindow === 'disabled' ? 'disabled' : selectedRecallWindow;
+    updateSetting.mutate(
+      { key: 'self_review_recall_hours', value: saveValue },
+      { onSuccess: () => setHasRecallWindowChanges(false) }
     );
   };
 
@@ -388,6 +412,61 @@ export default function SystemSettings() {
                   <Button
                     onClick={handleSaveAutoLogout}
                     disabled={!hasAutoLogoutChanges || updateSetting.isPending}
+                    className="gap-2"
+                  >
+                    <Save className="h-4 w-4" />
+                    {updateSetting.isPending ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Undo2 className="h-5 w-5" />
+                  Self-Review Recall Window
+                </CardTitle>
+                <CardDescription>
+                  Allow employees to withdraw and correct their self-review submission within a defined time window, as long as the manager hasn't reviewed it yet.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-4 p-4 rounded-lg border">
+                  <div className="flex-1 space-y-1">
+                    <Label htmlFor="recall-window" className="text-base font-medium">
+                      Recall Duration
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Employees can recall their submission within this duration after submitting, provided the manager hasn't acted.
+                    </p>
+                  </div>
+                  <Select value={selectedRecallWindow} onValueChange={handleRecallWindowChange}>
+                    <SelectTrigger className="w-40" id="recall-window">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="disabled">Disabled</SelectItem>
+                      <SelectItem value="1">1 hour</SelectItem>
+                      <SelectItem value="2">2 hours</SelectItem>
+                      <SelectItem value="4">4 hours</SelectItem>
+                      <SelectItem value="6">6 hours</SelectItem>
+                      <SelectItem value="12">12 hours</SelectItem>
+                      <SelectItem value="24">24 hours</SelectItem>
+                      <SelectItem value="48">48 hours</SelectItem>
+                      <SelectItem value="72">72 hours</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="mt-4 flex items-center justify-between border-t pt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Current setting: <span className="font-medium text-foreground">
+                      {recallWindowHours === 0 ? 'Disabled' : `${recallWindowHours} hours`}
+                    </span>
+                  </p>
+                  <Button
+                    onClick={handleSaveRecallWindow}
+                    disabled={!hasRecallWindowChanges || updateSetting.isPending}
                     className="gap-2"
                   >
                     <Save className="h-4 w-4" />
