@@ -108,6 +108,29 @@ export function useDailyAggregationMethod() {
   return { method, isLoading };
 }
 
+export function useAutoLogoutMinutes() {
+  const { data, isLoading } = useSystemSetting('auto_logout_minutes');
+  
+  let minutes = 30; // Default 30 minutes
+  if (data?.setting_value) {
+    const value = data.setting_value;
+    if (typeof value === 'number') {
+      minutes = value;
+    } else if (typeof value === 'string') {
+      const parsed = parseInt(value.replace(/^"|"$/g, ''), 10);
+      if (!isNaN(parsed)) {
+        minutes = parsed;
+      }
+      // "disabled" or "0" means no auto-logout
+      if (value.replace(/^"|"$/g, '').toLowerCase() === 'disabled') {
+        minutes = 0;
+      }
+    }
+  }
+  
+  return { minutes, isLoading };
+}
+
 export function useWorkingDaysPerMonth() {
   const { data, isLoading } = useSystemSetting('working_days_per_month');
   
