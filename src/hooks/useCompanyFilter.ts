@@ -26,59 +26,64 @@ export function useCompanyFilter() {
     staleTime: 10 * 60 * 1000,
   });
 
-  // Build employee → company mapping via department → BU → division → company chain
-  const { data: employeeCompanyMap } = useQuery({
+  // Build employee → company mapping via direct company_id OR department → BU → division → company chain
+  const { data: mapData } = useQuery({
     queryKey: ['employee-company-map'],
     queryFn: async () => {
-      // Fetch all profiles with department_id
       const { data: profiles, error: pErr } = await supabase
         .from('profiles')
-        .select('id, department_id');
+        .select('id, department_id, company_id, employee_code');
       if (pErr) throw pErr;
 
-      // Fetch departments → BU
       const { data: departments, error: dErr } = await supabase
         .from('departments')
         .select('id, business_unit_id');
       if (dErr) throw dErr;
 
-      // Fetch BUs → division
       const { data: bus, error: bErr } = await supabase
         .from('business_units')
         .select('id, division_id');
       if (bErr) throw bErr;
 
-      // Fetch divisions → company
       const { data: divs, error: divErr } = await supabase
         .from('divisions')
         .select('id, company_id');
       if (divErr) throw divErr;
 
-      // Build lookup maps
       const deptToBu = new Map(departments?.map(d => [d.id, d.business_unit_id]) ?? []);
       const buToDiv = new Map(bus?.map(b => [b.id, b.division_id]) ?? []);
       const divToCompany = new Map(divs?.map(d => [d.id, d.company_id]) ?? []);
 
-      // Build employee → company map
-      const map = new Map<string, string>();
+      const companyMap = new Map<string, string>();
+      const codeToIdMap = new Map<string, string>();
+
       (profiles ?? []).forEach(p => {
+        if ((p as any).employee_code) {
+          codeToIdMap.set((p as any).employee_code, p.id);
+        }
+        if ((p as any).company_id) {
+          companyMap.set(p.id, (p as any).company_id);
+          return;
+        }
         if (!p.department_id) return;
         const buId = deptToBu.get(p.department_id);
         if (!buId) return;
         const divId = buToDiv.get(buId);
         if (!divId) return;
         const companyId = divToCompany.get(divId);
-        if (companyId) map.set(p.id, companyId);
+        if (companyId) companyMap.set(p.id, companyId);
       });
 
-      return map;
+      return { companyMap, codeToIdMap };
     },
     staleTime: 10 * 60 * 1000,
   });
 
-  // Set of employee IDs for the selected company
+  const employeeCompanyMap = useMemo(() => mapData?.companyMap ?? new Map<string, string>(), [mapData]);
+  const codeToIdMap = useMemo(() => mapData?.codeToIdMap ?? new Map<string, string>(), [mapData]);
+
   const companyEmployeeIds = useMemo(() => {
-    if (selectedCompanyId === 'all' || !employeeCompanyMap) return null;
+    if (selectedCompanyId === 'all' || !employeeCompanyMap.size) return null;
     const ids = new Set<string>();
     employeeCompanyMap.forEach((companyId, empId) => {
       if (companyId === selectedCompanyId) ids.add(empId);
@@ -86,27 +91,30 @@ export function useCompanyFilter() {
     return ids;
   }, [selectedCompanyId, employeeCompanyMap]);
 
-  // Filter function: returns true if employee passes the company filter
   const filterByCompany = (employeeId: string | undefined | null): boolean => {
     if (selectedCompanyId === 'all' || !companyEmployeeIds) return true;
     if (!employeeId) return false;
     return companyEmployeeIds.has(employeeId);
   };
 
-  // Get company name for an employee
   const getCompanyName = (employeeId: string): string => {
-    if (!employeeCompanyMap || !companies) return '';
+    if (!companies) return '';
     const companyId = employeeCompanyMap.get(employeeId);
     if (!companyId) return '';
     return companies.find(c => c.id === companyId)?.name ?? '';
   };
 
-  // Get company code for an employee
   const getCompanyCode = (employeeId: string): string => {
-    if (!employeeCompanyMap || !companies) return '';
+    if (!companies) return '';
     const companyId = employeeCompanyMap.get(employeeId);
     if (!companyId) return '';
     return companies.find(c => c.id === companyId)?.code ?? '';
+  };
+
+  const getCompanyCodeByEmpCode = (empCode: string): string => {
+    const empId = codeToIdMap.get(empCode);
+    if (!empId) return '';
+    return getCompanyCode(empId);
   };
 
   return {
@@ -117,6 +125,7 @@ export function useCompanyFilter() {
     filterByCompany,
     getCompanyName,
     getCompanyCode,
-    employeeCompanyMap: employeeCompanyMap ?? new Map<string, string>(),
+    getCompanyCodeByEmpCode,
+    employeeCompanyMap,
   };
 }

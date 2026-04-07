@@ -26,7 +26,7 @@ export default function QueryReport() {
   const { toast } = useToast();
 
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany } = useCompanyFilter();
+  const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany, getCompanyCode } = useCompanyFilter();
   // Create lookup maps
   const profileMap = useMemo(() => {
     return new Map(profiles?.map(p => [p.id, p]) || []);
@@ -92,7 +92,10 @@ export default function QueryReport() {
       return;
     }
 
-    const exportData = enrichedQueries.map(q => ({
+    const exportData = enrichedQueries.map(q => {
+      const kpi = kpiMap.get(q.kpi_id);
+      return {
+      'Company': getCompanyCode(kpi?.employee_id || ''),
       'Ticket #': (q as any).ticket_number || '',
       'KPI': q.kpiName,
       'KRA': q.kraName,
@@ -104,7 +107,8 @@ export default function QueryReport() {
       'Created Date': format(new Date(q.created_at), 'dd MMM yyyy'),
       'Days Open': q.status === 'open' ? q.daysSinceCreated : q.daysToResolve,
       'Resolution Notes': q.resolution_notes || '',
-    }));
+    };
+    });
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();

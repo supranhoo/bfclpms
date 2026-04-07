@@ -3,6 +3,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useProfiles, useDepartments, useDesignations, usePmsGrades, useDivisions, useBusinessUnits } from '@/hooks/useOrganization';
+import { useCompanies } from '@/hooks/useCompanies';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -55,6 +56,7 @@ export default function UserManagement() {
   const { data: pmsGradesList } = usePmsGrades();
   const { data: divisions } = useDivisions();
   const { data: businessUnits } = useBusinessUnits();
+  const { data: companiesList } = useCompanies();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -93,6 +95,7 @@ export default function UserManagement() {
   const [newPmsGrade, setNewPmsGrade] = useState('');
   const [newManagerId, setNewManagerId] = useState('');
   const [newDivisionId, setNewDivisionId] = useState('');  // UI-only cascading filter
+  const [newCompanyId, setNewCompanyId] = useState('');
 
   // Bulk Action Dialog
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
@@ -267,6 +270,7 @@ export default function UserManagement() {
       designation?: string;
       pms_grade?: string;
       reporting_manager_id?: string;
+      company_id?: string;
     }) => {
       const { data: session } = await supabase.auth.getSession();
       
@@ -279,6 +283,7 @@ export default function UserManagement() {
           designation: data.designation || undefined,
           pms_grade: data.pms_grade || undefined,
           reporting_manager_id: data.reporting_manager_id || undefined,
+          company_id: data.company_id || undefined,
         },
       });
 
@@ -490,6 +495,7 @@ export default function UserManagement() {
       designation: newDesignation || undefined,
       pms_grade: newPmsGrade || undefined,
       reporting_manager_id: newManagerId || undefined,
+      company_id: newCompanyId || undefined,
     });
   };
 
@@ -503,6 +509,7 @@ export default function UserManagement() {
     setNewPmsGrade('');
     setNewManagerId('');
     setNewDivisionId('');
+    setNewCompanyId('');
   };
 
   const handleBulkUpdate = () => {
@@ -1192,6 +1199,20 @@ export default function UserManagement() {
                 </div>
                 <Separator />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Company</Label>
+                    <Select value={newCompanyId || '__none__'} onValueChange={(val) => setNewCompanyId(val === '__none__' ? '' : val)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select company" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {companiesList?.map(c => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="space-y-2">
                     <Label>Division</Label>
                     <Select value={newDivisionId || '__all__'} onValueChange={(val) => {
