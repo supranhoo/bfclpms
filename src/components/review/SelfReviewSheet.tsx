@@ -1082,6 +1082,25 @@ export function SelfReviewSheet({
                     Rollback requested
                   </span>
                 )}
+                {/* Recall Submission button - shown when KPI is self_review and recall is eligible */}
+                {isSelfReview && recallEligibility?.canRecall && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950"
+                    onClick={() => setShowRecallConfirm(true)}
+                    disabled={recallMutation.isPending}
+                  >
+                    <Undo2 className="h-3 w-3 mr-1" />
+                    {recallMutation.isPending ? 'Recalling...' : (() => {
+                      if (!recallEligibility.remainingMs) return 'Recall';
+                      const totalMin = Math.floor(recallEligibility.remainingMs / 60000);
+                      const h = Math.floor(totalMin / 60);
+                      const m = totalMin % 60;
+                      return `Recall (${h > 0 ? `${h}h ` : ''}${m}m left)`;
+                    })()}
+                  </Button>
+                )}
               </div>
 
               {!isReadOnly && (
