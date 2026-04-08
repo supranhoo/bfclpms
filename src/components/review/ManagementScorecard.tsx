@@ -53,6 +53,7 @@ import {
 import { MobileKpiCard } from '@/components/review/MobileKpiCard';
 import { NaConfirmationCard } from '@/components/review/NaConfirmationCard';
 import { OrgKpiRatingOverrideWarning } from '@/components/review/OrgKpiRatingOverrideWarning';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { GovernanceLockBanner } from '@/components/review/GovernanceLockBanner';
 import { SentBackBanner } from '@/components/review/SentBackBanner';
