@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-08  
-> **Version:** 1.74.0 — §3.6 hard-lock clarification, §55 edge function attribution fix
+> **Version:** 1.75.0 — Management draft vs. approved distinction, bulk approve policy
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1327,3 +1327,19 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
 3. **Branch 2b (Scored not forwarded)**: Fires when a KPI has a score at its current stage but hasn't been forwarded. **Guarded**: only advances if no subsequent reviewer stage exists in the workflow. If a next reviewer exists, the branch is skipped (the KPI is at a valid resting state).
 4. **Branch 3 (Review stage mismatch)**: Scans backwards from the last workflow stage to find downstream scores that exist while the KPI is at an earlier status. **Rollback-aware**: checks `kpi_audit_logs` for recent rollback/step-back actions. If a rollback is more recent than the submission, the downstream score is ignored (it's pre-rollback stale data).
 5. **Branch interaction safety**: Branch 2b and Branch 3 do not conflict because Branch 2b only fires for the current stage (and only when no next reviewer exists), while Branch 3 only fires for stages beyond the current one (and respects rollback history). Both branches are mutually exclusive per KPI per reconciliation run.
+
+---
+
+## §57. Management Draft vs. Approved Distinction
+
+**Effective Date:** 2026-04-08
+
+**Policy:**
+
+1. **Draft Save** (`MANAGEMENT_REVIEWED`): When a management reviewer scores a KPI and clicks "Save Draft", the `management_score` and `management_remarks` are persisted, but `final_score` remains `NULL` and status stays at `management_review`. This is an intermediate state — the KPI has NOT been finalized.
+
+2. **Approval** (`MANAGEMENT_APPROVED`): When a management reviewer clicks "Approve", the `management_score` is copied to `final_score`/`final_rating`, and the KPI status transitions to `approved`. This is the terminal action that finalizes the KPI.
+
+3. **Bulk Approve**: Management reviewers may use the "Approve All Drafted" button to batch-approve all KPIs that have been drafted (scored but not approved) for a given employee and period. Each KPI receives the same individual approval treatment: `management_score` → `final_score`, status → `approved`, audit log entry with `MANAGEMENT_APPROVED` action and `bulk_approve: true` metadata.
+
+4. **Visual Indicator**: Drafted KPIs display an amber "Drafted" badge in the action column to distinguish them from unscored KPIs awaiting review. This badge is visible to management reviewers and to other review levels (as "Draft (Mgmt)").
