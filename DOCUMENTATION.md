@@ -4779,3 +4779,9 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Audit Trail:** `SELF_REVIEW_RECALLED` action added to KpiTimeline, AuditLogs, and AuditTrailReport.
 - **Policy:** Added §66 Self-Review Recall Policy.
 - **Affected files:** `src/hooks/useRecallSubmission.ts` (new), `src/components/review/SelfReviewSheet.tsx`, `src/pages/admin/SystemSettings.tsx`, `src/components/dashboard/KpiTimeline.tsx`, `src/pages/AuditLogs.tsx`, `src/pages/reports/AuditTrailReport.tsx`, `POLICY.md` (§66), `DOCUMENTATION.md`
+
+### v2.17.2 — Fix: Universal 8-Stage Fallback Chain for All View Levels
+- **RCA:** `getRelevantScore` in `UnifiedScorecard.tsx` used truncated per-viewLevel score chains. Manager view only checked `manager_score → self_score`, ignoring skip-level and downstream corrections. Employee 100360 showed 450/450 (manager's 5/5) despite skip-level scoring much lower.
+- **Fix:** Replaced all per-viewLevel branches with a single universal 8-stage fallback chain (management → auditor → hr_pms → skip_level → manager → self) applied to ALL view levels. Every viewer now sees the most advanced assessment available.
+- **Policy alignment:** Aligns with POLICY §33 authoritative scoring method and memory `architecture/pms/scoring-engine`.
+- **Affected files:** `src/components/review/UnifiedScorecard.tsx`, `DOCUMENTATION.md`
