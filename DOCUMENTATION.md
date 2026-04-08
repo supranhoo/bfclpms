@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-08  
-> **Version:** 2.17.1 — Fix Re-review badge (rollback-only), self-view weighted score uses 8-stage fallback
+> **Version:** 2.17.3 — Send-back trigger preserves self-review data (§67)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4785,3 +4785,9 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix:** Replaced all per-viewLevel branches with a single universal 8-stage fallback chain (management → auditor → hr_pms → skip_level → manager → self) applied to ALL view levels. Every viewer now sees the most advanced assessment available.
 - **Policy alignment:** Aligns with POLICY §33 authoritative scoring method and memory `architecture/pms/scoring-engine`.
 - **Affected files:** `src/components/review/UnifiedScorecard.tsx`, `DOCUMENTATION.md`
+
+### v2.17.3 — Fix: Send-Back Trigger Preserves Self-Review Data
+- **RCA:** The `sync_submission_on_kra_set` database trigger (v1.45.1) cleared ALL submission fields including the employee's own `self_score`, `self_remarks`, `self_evidence_urls`, and `achieved_value` when a KPI was sent back to `kra_set`. This conflicted with the application-level surgical clear in `UnifiedScorecard.tsx` which deliberately preserved self-review data.
+- **Fix:** Updated the trigger to only clear manager-and-above reviewer fields (manager, skip-level, HR PMS, auditor, management) plus final scores and NA flags. Self-review fields are now preserved so employees can see their original submission when revising.
+- **Policy:** Added §67 (Send-Back Data Preservation Policy) and §68 (Workflow Reconciliation Branch Precedence) to POLICY.md.
+- **Affected files:** Database migration (trigger), `POLICY.md` (§67, §68), `DOCUMENTATION.md`
