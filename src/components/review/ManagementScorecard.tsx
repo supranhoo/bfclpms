@@ -922,6 +922,39 @@ export function ManagementScorecard({
         </Card>
       </div>
 
+      {/* Bulk Approve Drafted KPIs */}
+      {draftedCount > 0 && !isGovLocked && (
+        <Card className="border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800">
+          <CardContent className="py-3 px-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-amber-600" />
+              <span className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                {draftedCount} KPI{draftedCount > 1 ? 's' : ''} drafted but not approved
+              </span>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => setBulkApproveDialogOpen(true)}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              <Check className="h-3.5 w-3.5 mr-1" />
+              Approve All Drafted
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Bulk Approve Confirmation Dialog */}
+      <ConfirmDestructiveDialog
+        open={bulkApproveDialogOpen}
+        onConfirm={() => bulkApproveManagement.mutate()}
+        onCancel={() => setBulkApproveDialogOpen(false)}
+        title={`Approve ${draftedCount} Drafted KPIs?`}
+        description={`This will finalize ${draftedCount} KPI${draftedCount > 1 ? 's' : ''} that have management scores saved as drafts. Each KPI's management score will become the final score. This action cannot be undone.`}
+        confirmLabel="Approve All"
+        isLoading={bulkApproveManagement.isPending}
+      />
+
       {/* KPI Table */}
       <Card>
         <CardHeader>
