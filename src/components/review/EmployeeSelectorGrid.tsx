@@ -564,22 +564,24 @@ export function EmployeeSelectorGrid({
       // Cross-check: show ALL employees, no KPI-status filtering (demographic filters still apply above)
     } else if (statusFilter !== 'all' && statusFilter !== 'my_assigned' && periodKpis) {
       const employeeIds = new Set<string>();
-      // For merged team view, build skip-level member set for relationship detection
+      // For merged team view, build direct + skip-level member sets for relationship detection
       const skipIds = viewLevel === 'team' ? new Set(skipLevelMembers?.map(m => m.id) || []) : new Set<string>();
+      const directIds = viewLevel === 'team' ? new Set(teamMembers?.map(m => m.id) || []) : new Set<string>();
       
       periodKpis.forEach(kpi => {
         const stages = getStages(kpi.employee_id);
         const isIndirect = skipIds.has(kpi.employee_id);
+        const isDirect = directIds.has(kpi.employee_id);
         const engineLevel = viewLevel === 'team' && isIndirect ? 'skip_level' as const : getEngineViewLevel();
         const reviewableStatuses = resolveReviewableStatuses(engineLevel, stages);
         
         if (viewLevel === 'team') {
-          if (statusFilter === 'pending_direct' && !isIndirect && kpi.status === 'self_review') {
+          if (statusFilter === 'pending_direct' && isDirect && kpi.status === 'self_review') {
             employeeIds.add(kpi.employee_id);
           } else if (statusFilter === 'pending_skip' && isIndirect && reviewableStatuses.includes(kpi.status || '')) {
             employeeIds.add(kpi.employee_id);
           } else if (statusFilter === 'reviewed') {
-            if (!isIndirect && !['kra_set', 'self_review'].includes(kpi.status || '')) {
+            if (isDirect && !['kra_set', 'self_review'].includes(kpi.status || '')) {
               employeeIds.add(kpi.employee_id);
             } else if (isIndirect) {
               const slIdx = stages.indexOf('skip_level_check');
@@ -664,7 +666,7 @@ export function EmployeeSelectorGrid({
     });
 
     return filtered;
-  }, [demographicFilteredMembers, statusFilter, periodKpis, viewLevel, workflowMap, skipLevelMembers, myAssignedEmployeeIds, myKpiLevelData, auditorFilter, auditorWorkloadMap, unassignedStats]);
+  }, [demographicFilteredMembers, statusFilter, periodKpis, viewLevel, workflowMap, skipLevelMembers, teamMembers, myAssignedEmployeeIds, myKpiLevelData, auditorFilter, auditorWorkloadMap, unassignedStats]);
 
   // Split display members into assigned/others for audit view
   const { assignedMembers, otherMembers } = useMemo(() => {
@@ -693,12 +695,14 @@ export function EmployeeSelectorGrid({
     const memberIds = new Set(demographicFilteredMembers.map(m => m.id));
     const relevantKpis = periodKpis.filter(k => memberIds.has(k.employee_id));
     const skipIds = new Set(skipLevelMembers?.map(m => m.id) || []);
+    const directIds = new Set(teamMembers?.map(m => m.id) || []);
 
     if (viewLevel === 'team') {
       // Merged view: separate direct pending, skip-level pending, and reviewed counts
       let directPending = 0, skipPending = 0, reviewed = 0;
       relevantKpis.forEach(k => {
         const isIndirect = skipIds.has(k.employee_id);
+        const isDirect = directIds.has(k.employee_id);
         if (isIndirect) {
           const stages = getStages(k.employee_id);
           const reviewable = resolveReviewableStatuses('skip_level', stages);
@@ -707,10 +711,11 @@ export function EmployeeSelectorGrid({
             const slIdx = stages.indexOf('skip_level_check');
             if (slIdx >= 0 && stages.slice(slIdx).includes(k.status || '')) reviewed++;
           }
-        } else {
+        } else if (isDirect) {
           if (k.status === 'self_review') directPending++;
           else if (!['kra_set', 'self_review'].includes(k.status || '')) reviewed++;
         }
+        // Employees with no reporting relationship (undefined) are excluded from direct/skip counts
       });
       return {
         totalEmployees: demographicFilteredMembers.length,
@@ -794,7 +799,7 @@ export function EmployeeSelectorGrid({
         totalKpis: relevantKpis.length,
       };
     }
-  }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipLevelMembers]);
+  }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipLevelMembers, teamMembers]);
 
 
 
