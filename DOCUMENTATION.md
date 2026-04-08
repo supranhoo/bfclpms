@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-08  
-> **Version:** 2.17.3 — Send-back trigger preserves self-review data (§67)
+> **Version:** 2.17.4 — SSOT alignment: percolation docs, daily bypass clarification, system attribution fix
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4600,8 +4600,12 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 
 ### v2.15.43 — Multi-Month KPI Score Percolation Trigger
 - **Root cause:** Terminal-month approval for multi-month KPIs (Quarterly, Bi-Monthly, Half-Yearly, Yearly) did not propagate scores/status to sibling months in the same cycle.
-- **Fix:** Added `percolate_multimonth_score()` DB trigger on `kpis` table. When a multi-month KPI is set to `approved`, it automatically syncs scores and status to all sibling records in the same cycle via `get_cycle_months()`.
-- **Audit:** Each percolated sibling gets a `SCORE_PERCOLATED` entry in `kpi_audit_logs`.
+- **Fix:** Added `percolate_multimonth_score()` DB trigger on `kpis` table. When a multi-month KPI is set to `approved`, it propagates scores to sibling records in the same cycle via `get_cycle_months()`, using a **3-way workflow-stage guard**:
+  - **Already-approved siblings**: Scores and remarks are updated (upserted) but status remains `approved`. Audit action: `SCORE_PERCOLATED` with `scores_only: true`.
+  - **Terminal-stage siblings** (at their workflow's last review stage): Status advanced to `approved`, scores/remarks/evidence copied. Audit action: `SCORE_PERCOLATED`.
+  - **Mid-workflow siblings** (not yet at terminal stage): Status is NOT touched. A `PERCOLATION_DEFERRED` audit log is created instead, recording the reason ("Sibling has not reached terminal workflow stage"). These siblings must complete their own review workflow independently before being approved.
+- **Audit:** Each percolated sibling gets a `SCORE_PERCOLATED` entry in `kpi_audit_logs`. Mid-workflow siblings get `PERCOLATION_DEFERRED`.
+- **Policy alignment:** Implements POLICY §54 (Multi-Month Workflow Independence Invariant).
 - **Backfill:** One-time migration propagated scores for all approved multi-month KPIs from Jan 2026 onwards.
 
 ### v2.15.44 — Full-Cycle Rollover for Multi-Month KPIs
@@ -4791,3 +4795,9 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix:** Updated the trigger to only clear manager-and-above reviewer fields (manager, skip-level, HR PMS, auditor, management) plus final scores and NA flags. Self-review fields are now preserved so employees can see their original submission when revising.
 - **Policy:** Added §67 (Send-Back Data Preservation Policy) and §68 (Workflow Reconciliation Branch Precedence) to POLICY.md.
 - **Affected files:** Database migration (trigger), `POLICY.md` (§67, §68), `DOCUMENTATION.md`
+
+### v2.17.4 — SSOT Alignment: Percolation Docs, Daily Bypass Clarification, System Attribution Fix
+- **Issue 3.1 (Percolation docs):** Updated v2.15.43 entry to document the 3-way workflow-stage guard (approved/terminal/mid-workflow) and `PERCOLATION_DEFERRED` audit behavior. Previously stated trigger "automatically syncs scores and status to all sibling records" — now accurately reflects the §54 independence invariant.
+- **Issue 1.2 (Daily bypass):** Added hard-lock precedence clarification to POLICY §3.6: Daily KPI governance bypass applies only to role-permission governance locks, NOT to period hard-locks (`is_period_locked`).
+- **Issue 3.2 (System attribution):** Fixed `fix-corrupted-binary-scores` edge function: changed `performed_by` fallback from `"system"` string to `null`, aligning with §55 System Performer Attribution Invariant.
+- **Affected files:** `supabase/functions/fix-corrupted-binary-scores/index.ts`, `POLICY.md` (§3.6), `DOCUMENTATION.md`

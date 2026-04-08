@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const dryRun = body.dry_run !== false; // Default to dry_run=true for safety
-    const performedBy = body.performed_by || "system";
+    const performedBy = body.performed_by || null;
 
     // ===== PHASE 1: Binary KPIs where achieved_value = 5 but score = 0 =====
     // These are unambiguous - the achieved value IS the rating
