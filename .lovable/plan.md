@@ -1,60 +1,25 @@
 
 
-## RCA: Incentive Report Redirecting to Dashboard
+## Fix: Show Observation Replies by Default
 
-### Root Cause
-The system has **two independent access control layers** that are not synchronized:
+### Problem
+The `ObservationReplyThread` component starts collapsed (`isOpen = false`) and only fetches replies when opened. All replies remain hidden until the user manually clicks to expand.
 
-1. **Menu Access** (sidebar visibility) — `menu_access_config` + `menu_access_user_overrides`
-2. **Report Access** (route guard) — `report_access_config` + `report_access_user_overrides`
+### Solution
+Two changes in `src/components/review/ObservationReplyThread.tsx`:
 
-The admin granted user 101715 (Jitendra Bharti, role: Manager) an override in the **Menu Access** system for "Incentive Report" — so the sidebar link is visible. However, the **route** `/reports/incentive` is wrapped in `<ReportRoute reportKey="incentive">`, which checks the **Report Access** system. The `incentive` report's `view_roles` are `[admin, management, hr_pms]` — Manager is not included, and no user-level override exists in `report_access_user_overrides`. So `ReportRoute` returns `<Navigate to="/dashboard" />`.
-
-```text
-User clicks "Incentive Report" in sidebar
-  → Sidebar visible? YES (menu_access_user_overrides has entry) ✓
-  → Route allowed?  NO  (report_access_user_overrides has NO entry) ✗
-  → ReportRoute redirects to /dashboard
-```
-
-### Fix: Sync Menu Overrides into Report Route Checks
-
-When a menu override exists for a report-type menu item, the `ReportRoute` guard should also honor it. This avoids forcing admins to configure the same override in two places.
-
-**Approach**: Modify `ReportRoute` to also check `useMenuAccess().canAccess()` as a fallback. If the menu key maps to a report key, grant route access.
-
-### Implementation
-
-**1. Create a menu-key → report-key mapping**
-
-Report menu items in the sidebar already have a `menuKey` (e.g., `incentive-report`). The `ReportRoute` uses a `reportKey` (e.g., `incentive`). We need a simple lookup.
-
-**2. Update `src/components/layout/ReportRoute.tsx`**
-
-Add a fallback check: if `canView(reportKey)` is false, also check `useMenuAccess().canAccess(correspondingMenuKey)`. If either passes, allow access.
-
-```typescript
-// Pseudocode
-const menuKeyForReport = REPORT_TO_MENU_MAP[reportKey];
-if (!canView(reportKey) && !(menuKeyForReport && canAccessMenu(menuKeyForReport))) {
-  return <Navigate to="/dashboard" />;
-}
-```
-
-**3. Determine the menu key mapping**
-
-Need to check the sidebar config to find the exact menu keys used for report items.
+1. **Always fetch replies** — remove the conditional from the query so replies load regardless of collapse state (line 39: change `isOpen ? observationId : undefined` → `observationId`)
+2. **Default to open** — change `useState(false)` to `useState(true)` on line 33 so the thread is expanded by default
 
 ### Files to Change
 
 | File | Change |
 |------|--------|
-| `src/components/layout/ReportRoute.tsx` | Add `useMenuAccess` fallback check |
-| `DOCUMENTATION.md` | Version bump, document the sync logic |
+| `src/components/review/ObservationReplyThread.tsx` | Set `isOpen` default to `true`; always pass `observationId` to the query |
+| `DOCUMENTATION.md` | Version bump |
 
 ### Risk Assessment
-- **Data Impact**: None — read-only check addition
-- **Workflow Impact**: Positive — admins no longer need to configure two systems for the same access
-- **Regression Risk**: Low — additive fallback; existing `canView` logic unchanged
-- **Security**: Safe — only grants access if an explicit override exists in either system
+- **Data Impact**: None — read-only change
+- **Performance**: Minimal — replies are lightweight; query was already cached by react-query
+- **Regression Risk**: None — collapsible still works for toggling; just starts open
 
