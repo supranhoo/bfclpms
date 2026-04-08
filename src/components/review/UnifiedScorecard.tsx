@@ -492,8 +492,9 @@ export function UnifiedScorecard({
       return submission.final_score;
     }
     // Fallback to level-specific scores for in-progress reviews
-    if (viewLevel === 'self') {
-      return submission.self_score ?? 0;
+     if (viewLevel === 'self') {
+       // Use 8-stage fallback chain so employees see the most current assessment
+       return submission.management_score ?? submission.auditor_score ?? submission.hr_pms_score ?? submission.skip_level_score ?? submission.manager_score ?? submission.self_score ?? 0;
     } else if (viewLevel === 'manager') {
       return submission.manager_score ?? submission.self_score ?? 0;
     } else if (viewLevel === 'auditor') {

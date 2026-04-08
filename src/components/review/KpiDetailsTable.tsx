@@ -581,10 +581,18 @@ export function KpiDetailsTable({
                   
                   // Show N/A if: (1) stage completed with no score, OR (2) KPI is marked N/A, no score, and stage has been reached
                   const showNA = score === null && (stageCompleted || (submission?.is_na && stageReached));
-                  // Show "Re-review" indicator when score is null and KPI is AT that stage (rolled back)
-                  const stageName = COLUMN_TO_STAGE[col.key];
-                  const isAtCurrentStage = stageName === (kpi.status || 'kra_set');
-                  const showReReview = score === null && isAtCurrentStage && !showNA && col.key !== 'self_score';
+                   // Show "Re-review" indicator ONLY when score is null, KPI is AT that stage,
+                   // AND a later stage already has a score (evidence of rollback per POLICY §33).
+                   // Without a downstream score, the null simply means the stage is pending.
+                   const stageName = COLUMN_TO_STAGE[col.key];
+                   const isAtCurrentStage = stageName === (kpi.status || 'kra_set');
+                   const SCORE_COLS_ORDERED = ['self_score', 'manager_score', 'skip_level_score', 'hr_pms_score', 'auditor_score', 'management_score'];
+                   const currentColIdx = SCORE_COLS_ORDERED.indexOf(col.key);
+                   const hasDownstreamScore = currentColIdx >= 0 && SCORE_COLS_ORDERED.slice(currentColIdx + 1).some(laterCol => {
+                     const laterScore = submission?.[laterCol as keyof typeof submission];
+                     return laterScore !== null && laterScore !== undefined;
+                   });
+                   const showReReview = score === null && isAtCurrentStage && !showNA && col.key !== 'self_score' && hasDownstreamScore;
                   return (
                     <TableCell key={col.key} className="text-center">
                       {showNA ? (
