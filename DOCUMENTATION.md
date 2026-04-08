@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-08  
-> **Version:** 2.17.4 — SSOT alignment: percolation docs, daily bypass clarification, system attribution fix
+> **Version:** 2.17.5 — Management bulk approve for drafted KPIs, drafted badge indicators
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4801,3 +4801,9 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Issue 1.2 (Daily bypass):** Added hard-lock precedence clarification to POLICY §3.6: Daily KPI governance bypass applies only to role-permission governance locks, NOT to period hard-locks (`is_period_locked`).
 - **Issue 3.2 (System attribution):** Fixed `fix-corrupted-binary-scores` edge function: changed `performed_by` fallback from `"system"` string to `null`, aligning with §55 System Performer Attribution Invariant.
 - **Affected files:** `supabase/functions/fix-corrupted-binary-scores/index.ts`, `POLICY.md` (§3.6), `DOCUMENTATION.md`
+
+### v2.17.5 — Management Bulk Approve for Drafted KPIs
+- **RCA**: Employee 100856 (Feb 2026) had 6 KPIs stuck at `management_review` with management scores saved as drafts (`MANAGEMENT_REVIEWED`). System-wide: 22 KPIs across 5 employees in the same state. Root cause: UX gap — reviewers use "Save Draft" but don't realize a separate "Approve" click is required.
+- **Fix 1 (Bulk Approve)**: Added "Approve All Drafted" button to `ManagementScorecard.tsx`. Appears as an amber banner when drafted KPIs exist (status = `management_review`, `management_score` not null). On confirm: batch-updates each KPI to `approved`, copies `management_score` → `final_score`, logs `MANAGEMENT_APPROVED` with `bulk_approve: true` metadata.
+- **Fix 2 (Draft Badge)**: Added amber "Drafted" badge in `KpiDetailsTable.tsx` action column for management viewType when a KPI has a management score but hasn't been approved. Also visible in other review views as "Draft (Mgmt)".
+- **Affected files:** `src/components/review/ManagementScorecard.tsx`, `src/components/review/KpiDetailsTable.tsx`, `POLICY.md`, `DOCUMENTATION.md`

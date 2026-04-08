@@ -257,6 +257,13 @@ export function KpiDetailsTable({
       <div className="flex items-center gap-1">
         {canReviewKpiCheck(kpi) ? (
           <>
+            {/* Drafted indicator for management view */}
+            {viewType === 'management' && kpi.status === 'management_review' && submission?.management_score != null && (
+              <Badge variant="outline" className="bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-300 text-[10px]">
+                <Clock className="h-3 w-3 mr-0.5" />
+                Drafted
+              </Badge>
+            )}
             <Button size="sm" onClick={() => onReview?.(kpi)}>
               {viewType === 'audit' && kpi.status === 'audit' ? 'Continue' : 'Review'}
             </Button>

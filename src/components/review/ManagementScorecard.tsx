@@ -53,6 +53,7 @@ import {
 import { MobileKpiCard } from '@/components/review/MobileKpiCard';
 import { NaConfirmationCard } from '@/components/review/NaConfirmationCard';
 import { OrgKpiRatingOverrideWarning } from '@/components/review/OrgKpiRatingOverrideWarning';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { GovernanceLockBanner } from '@/components/review/GovernanceLockBanner';
 import { SentBackBanner } from '@/components/review/SentBackBanner';
@@ -281,6 +282,63 @@ export function ManagementScorecard({
   const approvedCount = kpis?.filter(k => k.status === 'approved').length || 0;
   const auditCompleteCount = kpis?.filter(k => ['audit', 'management_review', 'approved'].includes(k.status || '')).length || 0;
   const totalKpis = kpis?.length || 0;
+
+  // Drafted KPIs: scored at management level but not yet approved
+  const draftedKpis = useMemo(() => {
+    if (!kpis || !submissions) return [];
+    return kpis.filter(k => {
+      if (k.status !== 'management_review') return false;
+      const sub = submissionMap.get(k.id);
+      return sub?.management_score != null;
+    });
+  }, [kpis, submissions, submissionMap]);
+  const draftedCount = draftedKpis.length;
+
+  // Bulk approve confirmation dialog state
+  const [bulkApproveDialogOpen, setBulkApproveDialogOpen] = useState(false);
+
+  const bulkApproveManagement = useMutation({
+    mutationFn: async () => {
+      for (const kpi of draftedKpis) {
+        const sub = submissionMap.get(kpi.id);
+        if (!sub || sub.management_score == null) continue;
+
+        const mgmtRating = sub.management_rating || scoreToRating(sub.management_score);
+
+        await supabase
+          .from('review_submissions')
+          .update({
+            final_score: sub.management_score,
+            final_rating: mgmtRating,
+          })
+          .eq('kpi_id', kpi.id);
+
+        await supabase
+          .from('kpis')
+          .update({ status: 'approved' as any })
+          .eq('id', kpi.id);
+
+        if (user?.id) {
+          await supabase.from('kpi_audit_logs').insert({
+            kpi_id: kpi.id,
+            action: 'MANAGEMENT_APPROVED',
+            performed_by: user.id,
+            new_value: { management_score: sub.management_score, management_rating: mgmtRating },
+            metadata: { approved_at: new Date().toISOString(), bulk_approve: true },
+          });
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+      toast({ title: `${draftedKpis.length} KPIs approved successfully` });
+      setBulkApproveDialogOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Bulk approve failed', description: error.message, variant: 'destructive' });
+    },
+  });
 
   const submitManagementReview = useMutation({
     mutationFn: async ({
@@ -863,6 +921,39 @@ export function ManagementScorecard({
           </CardContent>
         </Card>
       </div>
+
+      {/* Bulk Approve Drafted KPIs */}
+      {draftedCount > 0 && !isGovLocked && (
+        <Card className="border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800">
+          <CardContent className="py-3 px-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-amber-600" />
+              <span className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                {draftedCount} KPI{draftedCount > 1 ? 's' : ''} drafted but not approved
+              </span>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => setBulkApproveDialogOpen(true)}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              <Check className="h-3.5 w-3.5 mr-1" />
+              Approve All Drafted
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Bulk Approve Confirmation Dialog */}
+      <ConfirmDestructiveDialog
+        open={bulkApproveDialogOpen}
+        onConfirm={() => bulkApproveManagement.mutate()}
+        onCancel={() => setBulkApproveDialogOpen(false)}
+        title={`Approve ${draftedCount} Drafted KPIs?`}
+        description={`This will finalize ${draftedCount} KPI${draftedCount > 1 ? 's' : ''} that have management scores saved as drafts. Each KPI's management score will become the final score. This action cannot be undone.`}
+        confirmLabel="Approve All"
+        isLoading={bulkApproveManagement.isPending}
+      />
 
       {/* KPI Table */}
       <Card>
