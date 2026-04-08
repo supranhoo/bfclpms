@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
-> **Last Updated:** 2026-04-05  
-> **Version:** 1.72.0 — §65: Per-template email dispatch scheduling
+> **Last Updated:** 2026-04-08  
+> **Version:** 1.73.0 — §67: Send-back data preservation, §68: Reconciliation branch precedence
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1296,3 +1296,32 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
 6. **No limit on resubmissions**: After a recall, the employee may edit and resubmit without restriction (subject to governance window rules).
 7. **Admin control**: The recall window can be set to 1, 2, 4, 6, 12, 24, 48, or 72 hours, or disabled entirely. When disabled, employees must use Rollback Requests for corrections.
 8. **Ownership**: Only the KPI owner (employee_id) can recall their own submission. Managers and admins cannot recall on behalf of employees.
+
+---
+
+## §67 — Send-Back Data Preservation Policy
+
+**Effective Date:** 2026-04-08
+
+**Policy:**
+
+1. **Self-review data preserved**: When a KPI is sent back to `kra_set` (by any reviewer level), the employee's self-review data (`self_score`, `self_rating`, `self_remarks`, `self_evidence_url`, `self_evidence_urls`, `achieved_value`) is **preserved**. The employee can see what they originally submitted and make targeted corrections.
+2. **Reviewer data cleared**: All reviewer-level fields (manager, skip-level, HR PMS, auditor, management) are cleared to prevent stale assessment data from persisting through a revision cycle.
+3. **Final scores cleared**: `final_score` and `final_rating` are always cleared on send-back, as the KPI must go through the full review chain again.
+4. **NA flags reset**: `is_na` and `na_marked_by_role` are reset to `false`/`NULL` on send-back.
+5. **Database trigger enforcement**: The `sync_submission_on_kra_set` database trigger enforces this policy at the database level, ensuring consistency regardless of which application path triggers the send-back.
+6. **Send-back context**: The reason for send-back is stored in `kpi_queries` (type: `send_back`) and displayed via `SentBackBanner` on the employee's review sheet.
+
+---
+
+## §68 — Workflow Reconciliation Branch Precedence
+
+**Effective Date:** 2026-04-08
+
+**Policy:**
+
+1. **Branch 1 (Orphaned status)**: Fires when a KPI's current status is not in its workflow template stages. Maps to the next canonical stage present in the workflow, or approves if none found. This handles workflow template changes that removed a stage.
+2. **Branch 2a (Terminal stage completed)**: Fires when a KPI is at the last workflow stage and has a score. Advances to `approved` and sets `final_score`/`final_rating` from the terminal reviewer.
+3. **Branch 2b (Scored not forwarded)**: Fires when a KPI has a score at its current stage but hasn't been forwarded. **Guarded**: only advances if no subsequent reviewer stage exists in the workflow. If a next reviewer exists, the branch is skipped (the KPI is at a valid resting state).
+4. **Branch 3 (Review stage mismatch)**: Scans backwards from the last workflow stage to find downstream scores that exist while the KPI is at an earlier status. **Rollback-aware**: checks `kpi_audit_logs` for recent rollback/step-back actions. If a rollback is more recent than the submission, the downstream score is ignored (it's pre-rollback stale data).
+5. **Branch interaction safety**: Branch 2b and Branch 3 do not conflict because Branch 2b only fires for the current stage (and only when no next reviewer exists), while Branch 3 only fires for stages beyond the current one (and respects rollback history). Both branches are mutually exclusive per KPI per reconciliation run.
