@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-08  
-> **Version:** 1.73.0 — §67: Send-back data preservation, §68: Reconciliation branch precedence
+> **Version:** 1.74.0 — §3.6 hard-lock clarification, §55 edge function attribution fix
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -112,6 +112,7 @@ Daily-frequency KPIs require continuous data entry throughout the month. When go
 - **Behavior:** The `SelfReviewSheet` bypasses `isGovernanceLocked` when `isDailyUnlocked` is true.
 - **UI:** A blue info banner ("Daily data entry is permitted for this KPI even during restricted review periods.") is displayed when the bypass is active.
 - **Security:** Employees can only edit their own KPIs (RLS enforced). The bypass does not affect other roles or frequency types.
+- **Hard-lock precedence:** This bypass applies **only to governance-level restrictions** (role permission toggles). It does **NOT** override period hard-locks (`is_period_locked = true`). When a period is hard-locked, daily KPIs are blocked like all other KPIs — only admins can modify data in hard-locked periods.
 
 ### 3.4 Review Period Locking
 
@@ -598,6 +599,7 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.74.0 | 2026-04-08 | SSOT alignment: §3.6 clarified that Daily KPI governance bypass does NOT override period hard-locks. Edge function `fix-corrupted-binary-scores` performer attribution fixed per §55. |
 | 1.9.0 | 2026-03-07 | Daily-Frequency KPI Governance Bypass (§3.6): Daily KPIs at `kra_set` status bypass governance read-only locks to allow continuous data entry. Blue info banner shown when bypass is active. |
 | 2.0.0 | 2026-03-23 | Auto-Advance Zero Sent-Back Exclusion: edge function now checks both kpi_queries AND kpi_audit_logs for sent-back KPIs before auto-scoring zero. Rolled back 16 incorrectly penalized KPIs across 8 employees. |
 | 1.9.0 | 2026-03-21 | Pending Self-Reviews Admin Page (§24): Admin page for bulk zero-scoring overdue kra_set KPIs past configurable deadline. Manager/skip-level penalty for overdue manager_check KPIs targeting KRA "Implementation of common - policies / systems / processes". Configurable deadline day, employee remark, and manager remark via system_settings. |
