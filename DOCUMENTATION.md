@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-08  
-> **Version:** 2.16.87 — Show observation replies expanded by default
+> **Version:** 2.17.0 — Backup optimization: 81 tables, parallel batches, storage manifest, data pruning
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
