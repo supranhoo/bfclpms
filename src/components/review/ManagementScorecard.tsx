@@ -282,6 +282,63 @@ export function ManagementScorecard({
   const auditCompleteCount = kpis?.filter(k => ['audit', 'management_review', 'approved'].includes(k.status || '')).length || 0;
   const totalKpis = kpis?.length || 0;
 
+  // Drafted KPIs: scored at management level but not yet approved
+  const draftedKpis = useMemo(() => {
+    if (!kpis || !submissions) return [];
+    return kpis.filter(k => {
+      if (k.status !== 'management_review') return false;
+      const sub = submissionMap.get(k.id);
+      return sub?.management_score != null;
+    });
+  }, [kpis, submissions, submissionMap]);
+  const draftedCount = draftedKpis.length;
+
+  // Bulk approve confirmation dialog state
+  const [bulkApproveDialogOpen, setBulkApproveDialogOpen] = useState(false);
+
+  const bulkApproveManagement = useMutation({
+    mutationFn: async () => {
+      for (const kpi of draftedKpis) {
+        const sub = submissionMap.get(kpi.id);
+        if (!sub || sub.management_score == null) continue;
+
+        const mgmtRating = sub.management_rating || scoreToRating(sub.management_score);
+
+        await supabase
+          .from('review_submissions')
+          .update({
+            final_score: sub.management_score,
+            final_rating: mgmtRating,
+          })
+          .eq('kpi_id', kpi.id);
+
+        await supabase
+          .from('kpis')
+          .update({ status: 'approved' as any })
+          .eq('id', kpi.id);
+
+        if (user?.id) {
+          await supabase.from('kpi_audit_logs').insert({
+            kpi_id: kpi.id,
+            action: 'MANAGEMENT_APPROVED',
+            performed_by: user.id,
+            new_value: { management_score: sub.management_score, management_rating: mgmtRating },
+            metadata: { approved_at: new Date().toISOString(), bulk_approve: true },
+          });
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+      toast({ title: `${draftedKpis.length} KPIs approved successfully` });
+      setBulkApproveDialogOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Bulk approve failed', description: error.message, variant: 'destructive' });
+    },
+  });
+
   const submitManagementReview = useMutation({
     mutationFn: async ({
       kpi_id,
