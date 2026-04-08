@@ -491,17 +491,15 @@ export function UnifiedScorecard({
     if (kpiStatus === 'approved' && submission.final_score !== null && submission.final_score !== undefined) {
       return submission.final_score;
     }
-    // Fallback to level-specific scores for in-progress reviews
-     if (viewLevel === 'self') {
-       // Use 8-stage fallback chain so employees see the most current assessment
-       return submission.management_score ?? submission.auditor_score ?? submission.hr_pms_score ?? submission.skip_level_score ?? submission.manager_score ?? submission.self_score ?? 0;
-    } else if (viewLevel === 'manager') {
-      return submission.manager_score ?? submission.self_score ?? 0;
-    } else if (viewLevel === 'auditor') {
-      return submission.auditor_score ?? submission.manager_score ?? submission.self_score ?? 0;
-    } else {
-      return submission.management_score ?? submission.auditor_score ?? submission.manager_score ?? submission.self_score ?? 0;
-    }
+    // Universal 8-stage fallback chain for ALL view levels (POLICY §33)
+    // Every viewer sees the most advanced assessment available — not a frozen snapshot from their own review stage
+    return submission.management_score
+      ?? submission.auditor_score
+      ?? submission.hr_pms_score
+      ?? submission.skip_level_score
+      ?? submission.manager_score
+      ?? submission.self_score
+      ?? 0;
   };
 
   // Calculate scores
