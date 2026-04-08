@@ -1,92 +1,99 @@
 
 
-## Brainstorm: Workflow & Status Consistency Fixes
+## SSOT Bug-Risk Analysis — Triage Results
 
-### Two Issues Identified
-
-**Issue A: Reconciliation "scored not forwarded" can skip workflow stages**
-
-The `reconcile_workflow_statuses` function (Branch 2b) detects KPIs where the current stage has a score but status wasn't forwarded. It checks if a "next reviewer exists" in the workflow — if one does, it skips (CONTINUEs). If not, it advances the status to `v_stage_keys[v_current_idx + 1]`.
-
-The guard logic is correct: it only advances when no subsequent reviewer stage exists. The `v_next_reviewer_exists` check prevents stage-skipping. However, there's a subtle fragmentation risk: Branch 3 ("review_stage_mismatch") scans backwards from the end and can jump a KPI forward to a later stage if a downstream score exists — even if intermediate stages haven't been scored. This is rollback-aware (checks `kpi_audit_logs`), but the interaction between Branch 2b and Branch 3 is under-documented.
-
-**Recommendation**: No code change needed. Add documentation clarifying the reconciliation branch precedence and interaction. Branch 2b is safe (guarded). Branch 3 is safe (rollback-aware). Document this explicitly in POLICY.md.
+After detailed code inspection of all 5 flagged issues, here is the assessment of what needs fixing vs. what's already addressed.
 
 ---
 
-**Issue B: Send-back to `kra_set` erases ALL reviewer context**
+### Issue 1.1: Reconciliation vs. Multi-Month Independence — NO CODE FIX NEEDED
 
-Two competing data-clearing mechanisms exist:
+**Finding**: The report claims `reconcile_workflow_statuses` violates §54 by auto-advancing multi-month siblings. This is **incorrect** — the reconciler operates on individual KPIs based on their own workflow stages and scores. It does NOT perform cross-month sibling logic. The `percolate_multimonth_score` trigger (separate from the reconciler) already has the workflow-stage guard (added in the April 5 migration):
+- Already-approved siblings: scores only
+- Terminal-stage siblings: approve + copy
+- Mid-workflow siblings: skip, log `PERCOLATION_DEFERRED`
 
-1. **Application-level clear** (UnifiedScorecard line 707-774): Surgically clears fields from the target stage onward. When `newStatus === 'kra_set'`, it only sets `kpi_status = 'open'` and preserves self-level data.
+**Verdict**: No conflict exists. Both functions are safe and guarded. Already documented in POLICY §54.
 
-2. **Database trigger** (`trg_sync_submission_on_kra_set`, migration `20260217...`): Fires on ANY `kpis.status` → `kra_set` transition and nukes ALL fields including self-review data.
+---
 
-The trigger overrides the application's surgical clear. Even though the app code preserves self data (line 717-719), the trigger immediately wipes everything. The employee loses their own remarks, achieved values, and evidence — plus all reviewer feedback context.
+### Issue 1.2: Daily KPI Bypass vs. Period Hard-Lock — NO CODE FIX NEEDED
 
-The `SentBackBanner` partially mitigates this by showing the send-back reason from `kpi_queries`, but the detailed reviewer remarks (which explain what was wrong with specific scores) are destroyed.
+**Finding**: The `prevent_locked_period_updates` trigger (latest migration `20260314...`) has clear precedence:
+1. Legacy hard-lock (`is_period_locked`) → blocks everyone except admins
+2. Daily bypass → only applies to `kra_set → self_review` transition
+3. Sent-back bypass → only applies to `kra_set → self_review` with prior submission
+4. Governance check → standard permission check
 
-**Root Cause**: The trigger was enhanced in v1.45.1 as a "safety net" to guarantee no stale data, but it's now overly aggressive — it conflicts with the deliberate preservation logic added later in the UnifiedScorecard.
+The Daily bypass fires AFTER the hard-lock check. If a period is hard-locked, the admin-only gate (line 12) fires first. Daily KPIs are NOT exempt from hard locks — only from governance-level restrictions.
 
-### Proposed Fix for Issue B
+**Verdict**: No conflict. The code hierarchy is correct. Minor documentation gap — POLICY could explicitly state "Daily bypass applies only to governance restrictions, not hard locks."
 
-**Modify `trg_sync_submission_on_kra_set` to preserve employee self-review data.**
+---
 
-Current trigger clears ALL 30+ fields. Change it to only clear manager-and-above fields, matching the application-level intent:
+### Issue 2.1: N/A Reversibility and Data Loss — DOCUMENTATION FIX ONLY
 
-```sql
-CREATE OR REPLACE FUNCTION public.sync_submission_on_kra_set()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF NEW.status = 'kra_set' AND OLD.status IS DISTINCT FROM 'kra_set' THEN
-    UPDATE public.review_submissions
-    SET kpi_status = 'open',
-        -- Preserve self_* fields so employee sees what they submitted
-        manager_rating = NULL, manager_score = NULL, manager_remarks = NULL,
-        manager_evidence_url = NULL, manager_evidence_urls = NULL,
-        manager_achieved_value = NULL,
-        skip_level_rating = NULL, skip_level_score = NULL, skip_level_remarks = NULL,
-        skip_level_evidence_url = NULL, skip_level_evidence_urls = NULL,
-        skip_level_achieved_value = NULL,
-        hr_pms_rating = NULL, hr_pms_score = NULL, hr_pms_remarks = NULL,
-        hr_pms_evidence_url = NULL, hr_pms_evidence_urls = NULL,
-        hr_pms_achieved_value = NULL,
-        auditor_rating = NULL, auditor_score = NULL, auditor_remarks = NULL,
-        auditor_evidence_url = NULL, auditor_evidence_urls = NULL,
-        auditor_achieved_value = NULL,
-        management_rating = NULL, management_score = NULL, management_remarks = NULL,
-        management_evidence_url = NULL, management_evidence_urls = NULL,
-        management_achieved_value = NULL,
-        final_rating = NULL, final_score = NULL,
-        is_na = false, na_marked_by_role = NULL,
-        updated_at = now()
-    WHERE kpi_id = NEW.id;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+**Finding**: The report references §19 claiming N/A is "fully reversible." However, §19 does not exist in POLICY.md (search returned no results). The actual N/A implementation in `UnifiedScorecard.tsx` (lines 1005-1012) allows reviewers to override N/A by submitting a new score (`is_na: false, na_marked_by_role: null`), which works correctly. The `trg_sync_submission_on_kra_set` trigger (just updated to preserve self-data) is irrelevant here — N/A marking does NOT transition status to `kra_set`.
+
+**Verdict**: N/A override works correctly in code. If "fully reversible" language exists anywhere, it's aspirational — the practical behavior (reviewer overrides N/A with a score) is functional and correct. No code fix needed.
+
+---
+
+### Issue 2.2: Daily Binary KPI Rating Double-Conversion — ALREADY FIXED
+
+**Finding**: `SelfReviewSheet.tsx` (lines 414-427) explicitly handles this:
+```typescript
+if (isDailyWeekly && isMissedDaysPenalty) {
+  finalRating = Math.min(5, Math.max(0, Math.round(effectiveScore)));
+  selfRating = scoreToRatingLevel(finalRating);
+} else {
+  const result = calculateScoreFromAchieved(effectiveScore, selectedKpi);
+  // ...
+}
 ```
+The `missed_days_penalty` result is treated as the final rating (0-5) and is NOT re-mapped through thresholds. This fix was already applied in v2.15.42.
 
-This preserves: `self_score`, `self_rating`, `self_remarks`, `self_evidence_url`, `self_evidence_urls`, `achieved_value`. Employee can see what they originally submitted when revising.
+**Verdict**: Already fixed. No regression risk detected.
 
-### Also fix: `useSendBackKpi` hook (manager send-back)
+---
 
-The `useSendBackKpi` hook (line 1017-1049) clears manager+ fields but the trigger then fires and redundantly clears everything again (including self fields the hook preserved). After fixing the trigger, the hook's clear logic becomes consistent with the trigger.
+### Issue 3.1: Percolation Logic — Documentation Not Updated — DOCUMENTATION FIX NEEDED ✓
 
-However, `useSendBackKpi` also clears `final_rating` and `final_score` — this is correct and should stay.
+**Finding**: DOCUMENTATION.md v2.15.43 still says the trigger "automatically syncs scores and status to all sibling records." The workflow-stage guard (3-way branch: approved/terminal/mid-workflow) added in the April 5 migration is NOT reflected in DOCUMENTATION.md, though it IS correctly documented in POLICY.md §54 and ADR-047.
+
+**Fix needed**: Update DOCUMENTATION.md to reflect the workflow-stage guard and `PERCOLATION_DEFERRED` behavior.
+
+---
+
+### Issue 3.2: System Performer Attribution in Edge Functions — MINOR GAP ✓
+
+**Finding**: The `fix-corrupted-binary-scores` edge function uses `performed_by: performedBy` where `performedBy = body.performed_by || "system"` — this sets performer to the string `"system"` instead of `NULL`. This violates §55 (system actions should use `performed_by = NULL`). The other edge functions (`auto-reconcile-workflow`, `restore-backup`, `propagate-template-change`) correctly use `user.id` for human-initiated actions, which is correct since those are admin-triggered.
+
+**Fix needed**: Update `fix-corrupted-binary-scores` to use `NULL` instead of `"system"` string for automated performer attribution.
+
+---
+
+### Summary: Only 2 items need fixes
+
+| # | Issue | Status | Fix Type |
+|---|-------|--------|----------|
+| 1.1 | Reconciler vs §54 | Already safe | None |
+| 1.2 | Daily bypass vs hard-lock | Already correct | Documentation clarification in POLICY |
+| 2.1 | N/A reversibility | Working correctly | None |
+| 2.2 | Binary double-conversion | Already fixed | None |
+| 3.1 | Percolation docs outdated | DOCUMENTATION.md stale | Update DOCUMENTATION.md |
+| 3.2 | Performer attribution | Minor gap in 1 edge function | Fix `fix-corrupted-binary-scores` |
 
 ### Files to Change
 
 | File | Change |
 |------|--------|
-| Database migration | Update `sync_submission_on_kra_set` to preserve self-review fields |
-| `POLICY.md` | Document send-back data preservation policy (self data kept, reviewer data cleared) |
-| `POLICY.md` | Document reconciliation branch precedence (Branch 2b guarded, Branch 3 rollback-aware) |
-| `DOCUMENTATION.md` | Version bump, update send-back trigger description |
+| `DOCUMENTATION.md` | Update v2.15.43 percolation entry to include workflow-stage guard and `PERCOLATION_DEFERRED` behavior; version bump |
+| `POLICY.md` | Add clarification to Daily bypass section: applies to governance restrictions only, not hard locks |
+| `supabase/functions/fix-corrupted-binary-scores/index.ts` | Change `performedBy = body.performed_by \|\| "system"` to use `null` for system-initiated actions per §55 |
 
 ### Risk Assessment
-- **Data Impact**: Self-review data will now persist through send-backs. This is additive — employees see their original submission instead of a blank form.
-- **Workflow Impact**: None — status transitions unchanged. The trigger still fires on `kra_set` transitions.
-- **Regression Risk**: Low — the trigger's field-clearing is narrowed, not removed. All reviewer-level fields are still cleared. The application-level code in UnifiedScorecard already handles this identically.
-- **Security**: No RLS changes. The trigger remains `SECURITY DEFINER`.
+- **Data Impact**: None — documentation + one performer field fix
+- **Workflow Impact**: None
+- **Regression Risk**: Minimal — the edge function fix changes audit log attribution only
 
