@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-04-07  
-> **Version:** 2.16.85 — Sync ReportRoute with Menu Access overrides to prevent redirect when sidebar override is granted
+> **Last Updated:** 2026-04-08  
+> **Version:** 2.16.86 — Fix Team Reviews direct/skip-level pending misclassification for full-access users
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
