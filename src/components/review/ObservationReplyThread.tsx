@@ -30,13 +30,13 @@ export function ObservationReplyThread({
   isReadOnly,
 }: ObservationReplyThreadProps) {
   const { user } = useAuth();
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
   const [replyText, setReplyText] = useState('');
   const [replyEvidenceUrls, setReplyEvidenceUrls] = useState<string[]>([]);
   const [showReplyForm, setShowReplyForm] = useState(false);
   const [mentionedUserIds, setMentionedUserIds] = useState<string[]>([]);
 
-  const { data: replies = [], isLoading } = useObservationReplies(isOpen ? observationId : undefined);
+  const { data: replies = [], isLoading } = useObservationReplies(observationId);
   const createReplyMutation = useCreateObservationReply();
   const resolveMutation = useResolveObservation();
 
