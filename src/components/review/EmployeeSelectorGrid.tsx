@@ -564,22 +564,24 @@ export function EmployeeSelectorGrid({
       // Cross-check: show ALL employees, no KPI-status filtering (demographic filters still apply above)
     } else if (statusFilter !== 'all' && statusFilter !== 'my_assigned' && periodKpis) {
       const employeeIds = new Set<string>();
-      // For merged team view, build skip-level member set for relationship detection
+      // For merged team view, build direct + skip-level member sets for relationship detection
       const skipIds = viewLevel === 'team' ? new Set(skipLevelMembers?.map(m => m.id) || []) : new Set<string>();
+      const directIds = viewLevel === 'team' ? new Set(teamMembers?.map(m => m.id) || []) : new Set<string>();
       
       periodKpis.forEach(kpi => {
         const stages = getStages(kpi.employee_id);
         const isIndirect = skipIds.has(kpi.employee_id);
+        const isDirect = directIds.has(kpi.employee_id);
         const engineLevel = viewLevel === 'team' && isIndirect ? 'skip_level' as const : getEngineViewLevel();
         const reviewableStatuses = resolveReviewableStatuses(engineLevel, stages);
         
         if (viewLevel === 'team') {
-          if (statusFilter === 'pending_direct' && !isIndirect && kpi.status === 'self_review') {
+          if (statusFilter === 'pending_direct' && isDirect && kpi.status === 'self_review') {
             employeeIds.add(kpi.employee_id);
           } else if (statusFilter === 'pending_skip' && isIndirect && reviewableStatuses.includes(kpi.status || '')) {
             employeeIds.add(kpi.employee_id);
           } else if (statusFilter === 'reviewed') {
-            if (!isIndirect && !['kra_set', 'self_review'].includes(kpi.status || '')) {
+            if (isDirect && !['kra_set', 'self_review'].includes(kpi.status || '')) {
               employeeIds.add(kpi.employee_id);
             } else if (isIndirect) {
               const slIdx = stages.indexOf('skip_level_check');
