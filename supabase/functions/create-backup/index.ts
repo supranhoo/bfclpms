@@ -5,35 +5,86 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 }
 
+// All 81 public tables — grouped by dependency tier
 const TABLES_TO_BACKUP = [
-  'divisions', 'designations', 'pms_grades', 'kra_categories', 'modules',
+  // Tier 1: Root/independent tables
+  'companies', 'divisions', 'designations', 'pms_grades', 'kra_categories', 'modules',
   'system_settings', 'app_settings', 'workflow_templates', 'frequency_config',
-  'review_periods', 'levels', 'report_access_config', 'business_units',
-  'departments', 'sub_branches', 'profiles', 'user_roles',
+  'review_periods', 'levels', 'report_access_config', 'incentive_program_types',
+  'incentive_slab_categories',
+  // Tier 2: Depend on tier 1
+  'business_units', 'departments', 'menu_access_config',
+  'review_period_locks', 'review_period_stages', 'review_period_auto_rules',
+  'incentive_programs',
+  // Tier 3: Depend on tier 2
+  'sub_branches', 'business_unit_sub_units', 'employee_job_descriptions',
+  'incentive_program_mappings', 'incentive_program_custom_tabs',
+  'incentive_slabs', 'incentive_allocation_rules', 'incentive_disqualification_rules',
+  'incentive_eligibility_fields', 'incentive_production_rates', 'incentive_vessel_rates',
+  // Tier 4: Profiles (depends on departments, designations, etc.)
+  'profiles', 'user_roles', 'skill_competencies',
+  'menu_access_user_overrides',
+  // Tier 5: Depend on profiles
   'password_rollout_logs', 'employee_working_days', 'org_kpi_data_owners',
   'audit_kpi_assignments', 'kpi_templates', 'template_bundles',
-  'template_bundle_items', 'bundle_assignment_logs', 'workflow_config',
-  'workflow_settings', 'kpis', 'kpi_rollback_requests',
-  'audit_kpi_level_assignments', 'review_submissions', 'sub_period_submissions',
-  'performance_reviews', 'kpi_queries', 'kpi_audit_logs', 'kpi_observations',
-  'kpi_observation_replies', 'notifications', 'email_logs', 'kra_rollover_logs',
-  'org_kpi_values', 'org_kpi_data_entry_logs', 'org_kpi_value_history',
-  'report_access_user_overrides', 'import_progress',
+  'report_access_user_overrides',
+  'production_targets', 'production_daily_entries', 'vessel_monthly_entries',
+  'employee_incentive_eligibility', 'incentive_custom_tab_data',
+  // Tier 6: Depend on tier 5
+  'template_bundle_items', 'bundle_assignment_logs', 'template_change_logs',
+  'workflow_config', 'workflow_settings',
+  // Tier 7: KPIs (depend on profiles, categories, templates)
+  'kpis', 'kpi_rollback_requests', 'kpi_mention_access',
+  'audit_kpi_level_assignments',
+  // Tier 8: Depend on KPIs
+  'review_submissions', 'sub_period_submissions', 'performance_reviews',
+  'kpi_queries', 'kpi_audit_logs', 'kpi_observations',
+  'org_kpi_values', 'org_kpi_data_entry_logs',
+  'employee_incentive_records', 'incentive_score_revisions',
+  // Tier 9: Depend on tier 8
+  'kpi_observation_replies', 'org_kpi_value_history',
+  // Tier 10: Transient/operational
+  'notifications', 'email_logs', 'email_dispatch_queue',
+  'kra_rollover_logs', 'import_progress',
+  'review_period_audit_log',
+  // Tier 11: PIP
   'performance_improvement_plans', 'pip_milestones', 'pip_audit_logs',
-  'training_needs', 'backup_logs',
+  'training_needs',
+  // Tier 12: Backup meta (last)
+  'backup_logs',
 ]
 
-async function fetchAllRows(supabase: ReturnType<typeof createClient>, tableName: string): Promise<unknown[]> {
+// Buckets to inventory for storage manifest
+const STORAGE_BUCKETS = ['review-evidence', 'avatars']
+
+// Tables with high-volume transient data — prune rows older than 90 days
+const PRUNE_TABLES: Record<string, string> = {
+  notifications: 'created_at',
+  email_logs: 'created_at',
+  email_dispatch_queue: 'created_at',
+}
+
+const NINETY_DAYS_AGO = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+
+async function fetchAllRows(
+  supabase: ReturnType<typeof createClient>,
+  tableName: string,
+  pruneColumn?: string
+): Promise<unknown[]> {
   let allRows: unknown[] = []
   let offset = 0
   const pageSize = 1000
   let hasMore = true
 
   while (hasMore) {
-    const { data, error } = await supabase
-      .from(tableName)
-      .select('*')
-      .range(offset, offset + pageSize - 1)
+    let query = supabase.from(tableName).select('*').range(offset, offset + pageSize - 1)
+
+    // Apply date pruning for transient tables
+    if (pruneColumn) {
+      query = query.gte(pruneColumn, NINETY_DAYS_AGO)
+    }
+
+    const { data, error } = await query
 
     if (error) {
       console.warn(`Warning: Could not backup table ${tableName}: ${error.message}`)
@@ -50,6 +101,97 @@ async function fetchAllRows(supabase: ReturnType<typeof createClient>, tableName
   }
 
   return allRows
+}
+
+async function processTableBatch(
+  supabase: ReturnType<typeof createClient>,
+  tables: string[],
+  folderPath: string
+): Promise<Array<{ table: string; rows: number; file: string; sizeBytes: number }>> {
+  const results: Array<{ table: string; rows: number; file: string; sizeBytes: number }> = []
+
+  const promises = tables.map(async (tableName) => {
+    try {
+      const pruneColumn = PRUNE_TABLES[tableName]
+      const rows = await fetchAllRows(supabase, tableName, pruneColumn)
+
+      const filePath = `${folderPath}/${tableName}.json`
+      const json = JSON.stringify(rows)
+      const sizeBytes = new Blob([json]).size
+
+      const { error: uploadError } = await supabase.storage
+        .from('database-backups')
+        .upload(filePath, json, { contentType: 'application/json', upsert: false })
+
+      if (uploadError) {
+        console.warn(`Warning: Failed to upload ${tableName}: ${uploadError.message}`)
+        return null
+      }
+
+      return { table: tableName, rows: rows.length, file: filePath, sizeBytes }
+    } catch (err) {
+      console.warn(`Warning: Skipping table ${tableName}: ${err}`)
+      return null
+    }
+  })
+
+  const settled = await Promise.all(promises)
+  for (const result of settled) {
+    if (result) results.push(result)
+  }
+
+  return results
+}
+
+async function listBucketFiles(
+  supabase: ReturnType<typeof createClient>,
+  bucketName: string
+): Promise<Array<{ name: string; size: number; created_at: string }>> {
+  const allFiles: Array<{ name: string; size: number; created_at: string }> = []
+  
+  try {
+    // List root-level items (files and folders)
+    const { data: rootItems, error } = await supabase.storage
+      .from(bucketName)
+      .list('', { limit: 1000 })
+
+    if (error || !rootItems) {
+      console.warn(`Warning: Could not list bucket ${bucketName}: ${error?.message}`)
+      return allFiles
+    }
+
+    for (const item of rootItems) {
+      if (item.metadata && item.metadata.size !== undefined) {
+        // It's a file
+        allFiles.push({
+          name: item.name,
+          size: item.metadata.size,
+          created_at: item.created_at || '',
+        })
+      } else {
+        // It's a folder — list its contents (one level deep)
+        const { data: subItems } = await supabase.storage
+          .from(bucketName)
+          .list(item.name, { limit: 10000 })
+
+        if (subItems) {
+          for (const sub of subItems) {
+            if (sub.metadata && sub.metadata.size !== undefined) {
+              allFiles.push({
+                name: `${item.name}/${sub.name}`,
+                size: sub.metadata.size,
+                created_at: sub.created_at || '',
+              })
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`Warning: Error listing bucket ${bucketName}: ${err}`)
+  }
+
+  return allFiles
 }
 
 Deno.serve(async (req) => {
@@ -125,42 +267,64 @@ Deno.serve(async (req) => {
     let totalSizeBytes = 0
     const tableManifest: Array<{ table: string; rows: number; file: string }> = []
 
-    // --- Process each table: fetch, upload, release ---
-    for (const tableName of TABLES_TO_BACKUP) {
+    // --- Process tables in parallel batches of 8 ---
+    const BATCH_SIZE = 8
+    for (let i = 0; i < TABLES_TO_BACKUP.length; i += BATCH_SIZE) {
+      const batch = TABLES_TO_BACKUP.slice(i, i + BATCH_SIZE)
+
       try {
-        const rows = await fetchAllRows(supabase, tableName)
+        const results = await processTableBatch(supabase, batch, folderPath)
 
-        const filePath = `${folderPath}/${tableName}.json`
-        const json = JSON.stringify(rows)
-        const sizeBytes = new Blob([json]).size
-
-        const { error: uploadError } = await supabase.storage
-          .from('database-backups')
-          .upload(filePath, json, { contentType: 'application/json', upsert: false })
-
-        if (uploadError) {
-          console.warn(`Warning: Failed to upload ${tableName}: ${uploadError.message}`)
-          continue
+        for (const r of results) {
+          tableManifest.push({ table: r.table, rows: r.rows, file: r.file })
+          totalRows += r.rows
+          totalSizeBytes += r.sizeBytes
+          tablesCount++
         }
-
-        tableManifest.push({ table: tableName, rows: rows.length, file: filePath })
-        totalRows += rows.length
-        totalSizeBytes += sizeBytes
-        tablesCount++
-      } catch (err) {
-        console.warn(`Warning: Skipping table ${tableName}: ${err}`)
+      } catch (batchErr) {
+        console.error(`Batch error (tables ${i}-${i + BATCH_SIZE}):`, batchErr)
+        // Update log with partial error but continue
+        await supabase.from('backup_logs').update({
+          error_message: `Partial batch error at index ${i}: ${batchErr}`,
+        }).eq('id', logEntry.id)
       }
     }
 
-    // --- Create manifest file ---
+    // --- Generate storage manifest ---
+    const storageManifest: Record<string, Array<{ name: string; size: number; created_at: string }>> = {}
+    let totalStorageFiles = 0
+
+    for (const bucket of STORAGE_BUCKETS) {
+      const files = await listBucketFiles(supabase, bucket)
+      storageManifest[bucket] = files
+      totalStorageFiles += files.length
+    }
+
+    const storageManifestPath = `${folderPath}/storage-manifest.json`
+    const storageManifestJson = JSON.stringify({
+      generated_at: new Date().toISOString(),
+      buckets: STORAGE_BUCKETS,
+      total_files: totalStorageFiles,
+      files: storageManifest,
+    })
+
+    await supabase.storage
+      .from('database-backups')
+      .upload(storageManifestPath, storageManifestJson, { contentType: 'application/json', upsert: false })
+
+    // --- Create table manifest file ---
     const manifest = {
-      version: 2,
+      version: 3,
       format: 'chunked',
       created_at: new Date().toISOString(),
       backup_type,
       tables_count: tablesCount,
       total_rows: totalRows,
+      total_storage_files: totalStorageFiles,
+      pruned_tables: Object.keys(PRUNE_TABLES),
+      prune_cutoff: NINETY_DAYS_AGO,
       tables: tableManifest,
+      storage_manifest_file: storageManifestPath,
     }
 
     const manifestPath = `${folderPath}/manifest.json`
@@ -196,6 +360,7 @@ Deno.serve(async (req) => {
         tables_count: tablesCount,
         total_rows: totalRows,
         file_size_bytes: totalSizeBytes,
+        storage_files_inventoried: totalStorageFiles,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )

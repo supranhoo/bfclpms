@@ -7,46 +7,105 @@ const corsHeaders = {
 
 // Delete order: leaf tables first (reverse of insert order)
 const DELETE_ORDER = [
-  'training_needs', 'pip_audit_logs', 'pip_milestones',
-  'performance_improvement_plans', 'report_access_user_overrides',
-  'org_kpi_value_history', 'org_kpi_data_entry_logs', 'kra_rollover_logs',
-  'org_kpi_values', 'import_progress', 'email_logs', 'notifications',
-  'kpi_observation_replies', 'kpi_observations', 'kpi_audit_logs',
-  'kpi_queries', 'sub_period_submissions', 'review_submissions',
-  'performance_reviews', 'audit_kpi_level_assignments', 'kpi_rollback_requests',
-  'kpis', 'workflow_settings', 'workflow_config', 'bundle_assignment_logs',
-  'template_bundle_items', 'template_bundles', 'kpi_templates',
-  'audit_kpi_assignments', 'org_kpi_data_owners', 'employee_working_days',
-  'password_rollout_logs', 'user_roles', 'profiles', 'sub_branches',
-  'departments', 'business_units', 'report_access_config', 'levels',
-  'divisions', 'designations', 'pms_grades', 'kra_categories', 'modules',
-  'system_settings', 'app_settings', 'workflow_templates', 'frequency_config',
-  'review_periods', 'backup_logs',
+  // Tier 12: Backup meta
+  'backup_logs',
+  // Tier 11: PIP + Training
+  'training_needs', 'pip_audit_logs', 'pip_milestones', 'performance_improvement_plans',
+  // Tier 10: Transient/operational
+  'review_period_audit_log', 'import_progress', 'kra_rollover_logs',
+  'email_dispatch_queue', 'email_logs', 'notifications',
+  // Tier 9
+  'org_kpi_value_history', 'kpi_observation_replies',
+  // Tier 8
+  'incentive_score_revisions', 'employee_incentive_records',
+  'org_kpi_data_entry_logs', 'org_kpi_values',
+  'kpi_observations', 'kpi_audit_logs', 'kpi_queries',
+  'performance_reviews', 'sub_period_submissions', 'review_submissions',
+  // Tier 7
+  'audit_kpi_level_assignments', 'kpi_mention_access',
+  'kpi_rollback_requests', 'kpis',
+  // Tier 6
+  'workflow_settings', 'workflow_config',
+  'template_change_logs', 'bundle_assignment_logs', 'template_bundle_items',
+  // Tier 5
+  'incentive_custom_tab_data', 'employee_incentive_eligibility',
+  'vessel_monthly_entries', 'production_daily_entries', 'production_targets',
+  'report_access_user_overrides',
+  'template_bundles', 'kpi_templates',
+  'audit_kpi_assignments', 'org_kpi_data_owners',
+  'employee_working_days', 'password_rollout_logs',
+  // Tier 4
+  'menu_access_user_overrides', 'skill_competencies',
+  'user_roles', 'profiles',
+  // Tier 3
+  'incentive_vessel_rates', 'incentive_production_rates',
+  'incentive_eligibility_fields', 'incentive_disqualification_rules',
+  'incentive_allocation_rules', 'incentive_slabs',
+  'incentive_program_custom_tabs', 'incentive_program_mappings',
+  'employee_job_descriptions', 'business_unit_sub_units', 'sub_branches',
+  // Tier 2
+  'incentive_programs', 'review_period_auto_rules', 'review_period_stages',
+  'review_period_locks', 'menu_access_config',
+  'departments', 'business_units',
+  // Tier 1
+  'incentive_slab_categories', 'incentive_program_types',
+  'report_access_config', 'levels', 'review_periods',
+  'frequency_config', 'workflow_templates', 'app_settings', 'system_settings',
+  'modules', 'kra_categories', 'pms_grades', 'designations', 'divisions',
+  'companies',
 ]
 
-// Insert order: parent tables first
+// Insert order: parent tables first (reverse of delete order)
 const INSERT_ORDER = [
-  'divisions', 'designations', 'pms_grades', 'kra_categories', 'modules',
+  // Tier 1
+  'companies', 'divisions', 'designations', 'pms_grades', 'kra_categories', 'modules',
   'system_settings', 'app_settings', 'workflow_templates', 'frequency_config',
-  'review_periods', 'levels', 'report_access_config', 'business_units',
-  'departments', 'sub_branches', 'profiles', 'user_roles',
+  'review_periods', 'levels', 'report_access_config',
+  'incentive_program_types', 'incentive_slab_categories',
+  // Tier 2
+  'business_units', 'departments', 'menu_access_config',
+  'review_period_locks', 'review_period_stages', 'review_period_auto_rules',
+  'incentive_programs',
+  // Tier 3
+  'sub_branches', 'business_unit_sub_units', 'employee_job_descriptions',
+  'incentive_program_mappings', 'incentive_program_custom_tabs',
+  'incentive_slabs', 'incentive_allocation_rules', 'incentive_disqualification_rules',
+  'incentive_eligibility_fields', 'incentive_production_rates', 'incentive_vessel_rates',
+  // Tier 4
+  'profiles', 'user_roles', 'skill_competencies', 'menu_access_user_overrides',
+  // Tier 5
   'password_rollout_logs', 'employee_working_days', 'org_kpi_data_owners',
   'audit_kpi_assignments', 'kpi_templates', 'template_bundles',
-  'template_bundle_items', 'bundle_assignment_logs', 'workflow_config',
-  'workflow_settings', 'kpis', 'kpi_rollback_requests',
-  'audit_kpi_level_assignments', 'review_submissions', 'sub_period_submissions',
-  'performance_reviews', 'kpi_queries', 'kpi_audit_logs', 'kpi_observations',
-  'kpi_observation_replies', 'notifications', 'email_logs', 'kra_rollover_logs',
-  'org_kpi_values', 'org_kpi_data_entry_logs', 'org_kpi_value_history',
-  'report_access_user_overrides', 'import_progress',
+  'report_access_user_overrides',
+  'production_targets', 'production_daily_entries', 'vessel_monthly_entries',
+  'employee_incentive_eligibility', 'incentive_custom_tab_data',
+  // Tier 6
+  'template_bundle_items', 'bundle_assignment_logs', 'template_change_logs',
+  'workflow_config', 'workflow_settings',
+  // Tier 7
+  'kpis', 'kpi_rollback_requests', 'kpi_mention_access',
+  'audit_kpi_level_assignments',
+  // Tier 8
+  'review_submissions', 'sub_period_submissions', 'performance_reviews',
+  'kpi_queries', 'kpi_audit_logs', 'kpi_observations',
+  'org_kpi_values', 'org_kpi_data_entry_logs',
+  'employee_incentive_records', 'incentive_score_revisions',
+  // Tier 9
+  'kpi_observation_replies', 'org_kpi_value_history',
+  // Tier 10
+  'notifications', 'email_logs', 'email_dispatch_queue',
+  'kra_rollover_logs', 'import_progress', 'review_period_audit_log',
+  // Tier 11
   'performance_improvement_plans', 'pip_milestones', 'pip_audit_logs',
   'training_needs',
+  // Tier 12 (backup_logs deliberately excluded from restore insert — would be self-referential)
 ]
 
 interface ManifestV2 {
   version: number
   format: string
   tables: Array<{ table: string; rows: number; file: string }>
+  storage_manifest_file?: string
 }
 
 async function loadChunkedBackupData(
@@ -82,7 +141,6 @@ async function loadLegacyBackupData(
     throw new Error(`Failed to download backup: ${error?.message}`)
   }
   const content = JSON.parse(await fileData.text())
-  // Legacy format: { metadata: {...}, data: {...} } or just { tableName: [...] }
   return content.data || content
 }
 
@@ -134,6 +192,53 @@ async function restoreData(
   }
 
   return { tablesRestored, errors }
+}
+
+async function validateStorageManifest(
+  supabase: ReturnType<typeof createClient>,
+  manifest: ManifestV2
+): Promise<string[]> {
+  const warnings: string[] = []
+
+  if (!manifest.storage_manifest_file) return warnings
+
+  try {
+    const { data: manifestFile, error } = await supabase.storage
+      .from('database-backups')
+      .download(manifest.storage_manifest_file)
+
+    if (error || !manifestFile) {
+      warnings.push(`Could not download storage manifest: ${error?.message}`)
+      return warnings
+    }
+
+    const storageData = JSON.parse(await manifestFile.text())
+    const backupFileSet = new Set<string>()
+
+    // Build set of all files that existed at backup time
+    if (storageData.files) {
+      for (const bucket of Object.keys(storageData.files)) {
+        for (const file of storageData.files[bucket]) {
+          backupFileSet.add(`${bucket}/${file.name}`)
+        }
+      }
+    }
+
+    // Check current files in review-evidence bucket
+    const { data: currentFiles } = await supabase.storage
+      .from('review-evidence')
+      .list('', { limit: 1 })
+
+    if (currentFiles && currentFiles.length > 0) {
+      warnings.push(`Storage validation: ${backupFileSet.size} files were inventoried at backup time. Current storage appears intact.`)
+    } else if (backupFileSet.size > 0) {
+      warnings.push(`WARNING: ${backupFileSet.size} files were inventoried at backup time but review-evidence bucket appears empty now. Files may need manual recovery.`)
+    }
+  } catch (err) {
+    warnings.push(`Storage manifest validation error: ${err}`)
+  }
+
+  return warnings
 }
 
 Deno.serve(async (req) => {
@@ -193,10 +298,10 @@ Deno.serve(async (req) => {
 
     // Detect format and load data
     let backupData: Record<string, unknown[]>
+    let manifest: ManifestV2 | null = null
     const isChunked = backupLog.file_path.endsWith('manifest.json')
 
     if (isChunked) {
-      // Chunked format: download manifest, then each table file
       const { data: manifestFile, error: dlError } = await supabase.storage
         .from('database-backups')
         .download(backupLog.file_path)
@@ -205,10 +310,9 @@ Deno.serve(async (req) => {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
-      const manifest: ManifestV2 = JSON.parse(await manifestFile.text())
-      backupData = await loadChunkedBackupData(supabase, manifest)
+      manifest = JSON.parse(await manifestFile.text())
+      backupData = await loadChunkedBackupData(supabase, manifest!)
     } else {
-      // Legacy single-file format
       backupData = await loadLegacyBackupData(supabase, backupLog.file_path)
     }
 
@@ -219,6 +323,12 @@ Deno.serve(async (req) => {
     }
 
     const { tablesRestored, errors } = await restoreData(supabase, backupData)
+
+    // Validate storage manifest if available
+    let storageWarnings: string[] = []
+    if (manifest) {
+      storageWarnings = await validateStorageManifest(supabase, manifest)
+    }
 
     // Log the restore action
     try {
@@ -231,6 +341,7 @@ Deno.serve(async (req) => {
           backup_date: backupLog.created_at,
           tables_restored: tablesRestored,
           errors: errors.length > 0 ? errors : null,
+          storage_warnings: storageWarnings.length > 0 ? storageWarnings : null,
         },
       })
     } catch { /* Don't fail restore if audit log fails */ }
@@ -240,6 +351,7 @@ Deno.serve(async (req) => {
         success: errors.length === 0,
         tables_restored: tablesRestored,
         errors: errors.length > 0 ? errors : null,
+        storage_warnings: storageWarnings.length > 0 ? storageWarnings : null,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
