@@ -666,7 +666,7 @@ export function EmployeeSelectorGrid({
     });
 
     return filtered;
-  }, [demographicFilteredMembers, statusFilter, periodKpis, viewLevel, workflowMap, skipLevelMembers, myAssignedEmployeeIds, myKpiLevelData, auditorFilter, auditorWorkloadMap, unassignedStats]);
+  }, [demographicFilteredMembers, statusFilter, periodKpis, viewLevel, workflowMap, skipLevelMembers, teamMembers, myAssignedEmployeeIds, myKpiLevelData, auditorFilter, auditorWorkloadMap, unassignedStats]);
 
   // Split display members into assigned/others for audit view
   const { assignedMembers, otherMembers } = useMemo(() => {
@@ -799,7 +799,7 @@ export function EmployeeSelectorGrid({
         totalKpis: relevantKpis.length,
       };
     }
-  }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipLevelMembers]);
+  }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipLevelMembers, teamMembers]);
 
 
 
