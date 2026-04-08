@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-08  
-> **Version:** 2.16.86 — Fix Team Reviews direct/skip-level pending misclassification for full-access users
+> **Version:** 2.16.87 — Show observation replies expanded by default
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
