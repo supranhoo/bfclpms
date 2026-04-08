@@ -693,12 +693,14 @@ export function EmployeeSelectorGrid({
     const memberIds = new Set(demographicFilteredMembers.map(m => m.id));
     const relevantKpis = periodKpis.filter(k => memberIds.has(k.employee_id));
     const skipIds = new Set(skipLevelMembers?.map(m => m.id) || []);
+    const directIds = new Set(teamMembers?.map(m => m.id) || []);
 
     if (viewLevel === 'team') {
       // Merged view: separate direct pending, skip-level pending, and reviewed counts
       let directPending = 0, skipPending = 0, reviewed = 0;
       relevantKpis.forEach(k => {
         const isIndirect = skipIds.has(k.employee_id);
+        const isDirect = directIds.has(k.employee_id);
         if (isIndirect) {
           const stages = getStages(k.employee_id);
           const reviewable = resolveReviewableStatuses('skip_level', stages);
@@ -707,10 +709,11 @@ export function EmployeeSelectorGrid({
             const slIdx = stages.indexOf('skip_level_check');
             if (slIdx >= 0 && stages.slice(slIdx).includes(k.status || '')) reviewed++;
           }
-        } else {
+        } else if (isDirect) {
           if (k.status === 'self_review') directPending++;
           else if (!['kra_set', 'self_review'].includes(k.status || '')) reviewed++;
         }
+        // Employees with no reporting relationship (undefined) are excluded from direct/skip counts
       });
       return {
         totalEmployees: demographicFilteredMembers.length,
