@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-08  
-> **Version:** 2.17.0 — Backup optimization: 81 tables, parallel batches, storage manifest, data pruning
+> **Version:** 2.17.1 — Fix Re-review badge (rollback-only), self-view weighted score uses 8-stage fallback
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
