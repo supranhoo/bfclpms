@@ -38,58 +38,99 @@ interface RolloverRequest {
 // --- Frequency resolution helpers ---
 
 /**
- * Given a target month index (0-based) and a KPI frequency, resolve
- * the correct terminal month index for the cycle that contains the target month.
- * Monthly / Weekly / Daily → return target as-is.
+ * Parse a cycle_start string (e.g., 'Feb-Mar', 'Apr-Jun') into its start month index (0-based).
  */
-function resolveTerminalMonth(targetMonthIdx: number, frequency: string | null): number {
+function parseCycleStartIdx(cycleStart: string | null | undefined): number | null {
+  if (!cycleStart) return null;
+  const abbrevMap: Record<string, number> = {
+    Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+    Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
+  };
+  const first = cycleStart.split('-')[0];
+  return abbrevMap[first] ?? null;
+}
+
+function getCycleLength(frequency: string): number {
+  switch (frequency.trim()) {
+    case 'Bi-Monthly': return 2;
+    case 'Quarterly': return 3;
+    case 'Half-Yearly': return 6;
+    case 'Yearly': return 12;
+    default: return 1;
+  }
+}
+
+/**
+ * Given a target month index (0-based), a KPI frequency, and optional cycle start,
+ * resolve the correct terminal month index for the cycle that contains the target month.
+ */
+function resolveTerminalMonth(targetMonthIdx: number, frequency: string | null, cycleStart?: string | null): number {
   if (!frequency) return targetMonthIdx;
+  const len = getCycleLength(frequency);
+  if (len <= 1) return targetMonthIdx;
 
+  const csIdx = parseCycleStartIdx(cycleStart);
+  if (csIdx !== null) {
+    // Dynamic: offset from cycle start, find terminal
+    const offset = ((targetMonthIdx - csIdx) % 12 + 12) % 12;
+    const cycleIdx = Math.floor(offset / len);
+    const terminalIdx = (csIdx + (cycleIdx + 1) * len - 1) % 12;
+    return terminalIdx;
+  }
+
+  // Fallback: hardcoded standard cycles
   const freq = frequency.trim();
-
   switch (freq) {
-    case 'Bi-Monthly': {
-      // Pairs: Jan-Feb(1), Mar-Apr(3), May-Jun(5), Jul-Aug(7), Sep-Oct(9), Nov-Dec(11)
-      // Terminal is the even-indexed month (Feb=1, Apr=3, Jun=5, …)
+    case 'Bi-Monthly':
       return targetMonthIdx % 2 === 0 ? targetMonthIdx + 1 : targetMonthIdx;
-    }
-    case 'Quarterly': {
-      // Q1: Jan-Mar(2), Q2: Apr-Jun(5), Q3: Jul-Sep(8), Q4: Oct-Dec(11)
-      if (targetMonthIdx <= 2) return 2;   // March
-      if (targetMonthIdx <= 5) return 5;   // June
-      if (targetMonthIdx <= 8) return 8;   // September
-      return 11;                            // December
-    }
-    case 'Half-Yearly': {
-      // H1: Jan-Jun(5), H2: Jul-Dec(11)
+    case 'Quarterly':
+      if (targetMonthIdx <= 2) return 2;
+      if (targetMonthIdx <= 5) return 5;
+      if (targetMonthIdx <= 8) return 8;
+      return 11;
+    case 'Half-Yearly':
       return targetMonthIdx <= 5 ? 5 : 11;
-    }
-    case 'Yearly': {
-      return 11; // December
-    }
+    case 'Yearly':
+      return 11;
     default:
       return targetMonthIdx;
   }
 }
 
 /**
- * Given a target month index (0-based) and a KPI frequency, return ALL month
- * indices that belong to the same cycle.
+ * Given a target month index (0-based), a KPI frequency, and optional cycle start,
+ * return ALL month indices that belong to the same cycle.
  */
-function getCycleMonthsForTarget(targetMonthIdx: number, frequency: string | null): number[] {
+function getCycleMonthsForTarget(targetMonthIdx: number, frequency: string | null, cycleStart?: string | null): number[] {
   if (!frequency) return [targetMonthIdx];
+  const len = getCycleLength(frequency);
+  if (len <= 1) return [targetMonthIdx];
+
+  const csIdx = parseCycleStartIdx(cycleStart);
+  if (csIdx !== null) {
+    // Dynamic: compute cycle boundaries
+    const offset = ((targetMonthIdx - csIdx) % 12 + 12) % 12;
+    const cycleIdx = Math.floor(offset / len);
+    const cycleStartPos = (csIdx + cycleIdx * len) % 12;
+    const months: number[] = [];
+    for (let i = 0; i < len; i++) {
+      months.push((cycleStartPos + i) % 12);
+    }
+    return months;
+  }
+
+  // Fallback: hardcoded standard cycles
   const freq = frequency.trim();
   switch (freq) {
     case 'Bi-Monthly': {
       const pairStart = targetMonthIdx % 2 === 0 ? targetMonthIdx : targetMonthIdx - 1;
       return [pairStart, pairStart + 1];
     }
-    case 'Quarterly': {
+    case 'Quarterly':
       if (targetMonthIdx <= 2) return [0, 1, 2];
       if (targetMonthIdx <= 5) return [3, 4, 5];
       if (targetMonthIdx <= 8) return [6, 7, 8];
       return [9, 10, 11];
-    }
     case 'Half-Yearly':
       return targetMonthIdx <= 5 ? [0, 1, 2, 3, 4, 5] : [6, 7, 8, 9, 10, 11];
     case 'Yearly':
