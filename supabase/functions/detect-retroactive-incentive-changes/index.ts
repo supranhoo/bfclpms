@@ -54,13 +54,35 @@ serve(async (req) => {
     }
 
     // Map of frequency → cycle months (simplified mapping)
-    const getCycleMonths = (frequency: string, period: string): string[] => {
+    const getCycleMonths = (frequency: string, period: string, cycleStart?: string | null): string[] => {
       const allMonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
       const idx = allMonths.indexOf(period);
       if (idx === -1) return [period];
 
+      // If cycleStart is provided, use dynamic resolution
+      if (cycleStart) {
+        const abbrevMap: Record<string, number> = {
+          Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+          Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
+        };
+        const csIdx = abbrevMap[cycleStart.split('-')[0]];
+        if (csIdx !== undefined) {
+          const cycleLength = frequency === 'Quarterly' ? 3 : frequency === 'Bi-Monthly' ? 2 : 1;
+          if (cycleLength > 1) {
+            const offset = ((idx - csIdx) % 12 + 12) % 12;
+            const cycleIdx = Math.floor(offset / cycleLength);
+            const cycleStartPos = (csIdx + cycleIdx * cycleLength) % 12;
+            const months: string[] = [];
+            for (let i = 0; i < cycleLength; i++) {
+              months.push(allMonths[(cycleStartPos + i) % 12]);
+            }
+            return months;
+          }
+        }
+      }
+
+      // Fallback: hardcoded standard cycles
       if (frequency === 'Quarterly') {
-        // Q1: Jul-Sep, Q2: Oct-Dec, Q3: Jan-Mar, Q4: Apr-Jun (fiscal year)
         const qStart = Math.floor(idx / 3) * 3;
         return [allMonths[qStart], allMonths[qStart + 1], allMonths[qStart + 2]].filter(Boolean);
       }
