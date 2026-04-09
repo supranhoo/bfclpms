@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-09  
-> **Version:** 1.76.0 — Migration scope guards for multi-month KPIs
+> **Version:** 1.77.0 — Unscored KPI exclusion from weighted averages (§70)
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -191,7 +191,7 @@ overallRating = Σ(score × weightage) / Σ(effectiveWeightage)
 ```
 
 - N/A KPIs excluded from **both** numerator and denominator
-- Zero/NULL scores **included** in both (penalizes unscored KPIs)
+- Unscored KPIs (all score fields NULL across all 8 stages) excluded from **both** numerator and denominator — identical to N/A treatment (§70)
 
 ### 5.5 Daily Binary KPI Scoring (Missed Days Penalty)
 
