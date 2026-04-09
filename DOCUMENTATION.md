@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-09  
-> **Version:** 2.17.7 — Fix unscored KPI weighted average deflation in UnifiedScorecard
+> **Version:** 2.17.8 — Cycle-aware multi-month KPI resolution across DB, triggers, and edge functions
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

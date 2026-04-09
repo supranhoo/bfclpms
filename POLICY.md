@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-09  
-> **Version:** 1.77.0 — Unscored KPI exclusion from weighted averages (§70)
+> **Version:** 1.78.0 — Cycle-aware multi-month KPI resolution (§71)
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
