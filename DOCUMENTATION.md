@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-04-08  
-> **Version:** 2.17.5 — Management bulk approve for drafted KPIs, drafted badge indicators
+> **Last Updated:** 2026-04-09  
+> **Version:** 2.17.6 — Restore incorrectly reset Bi-Monthly January 2026 KPIs
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4807,3 +4807,10 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix 1 (Bulk Approve)**: Added "Approve All Drafted" button to `ManagementScorecard.tsx`. Appears as an amber banner when drafted KPIs exist (status = `management_review`, `management_score` not null). On confirm: batch-updates each KPI to `approved`, copies `management_score` → `final_score`, logs `MANAGEMENT_APPROVED` with `bulk_approve: true` metadata.
 - **Fix 2 (Draft Badge)**: Added amber "Drafted" badge in `KpiDetailsTable.tsx` action column for management viewType when a KPI has a management score but hasn't been approved. Also visible in other review views as "Draft (Mgmt)".
 - **Affected files:** `src/components/review/ManagementScorecard.tsx`, `src/components/review/KpiDetailsTable.tsx`, `POLICY.md`, `DOCUMENTATION.md`
+
+### v2.17.6 — Data Fix: Restore Bi-Monthly January 2026 KPIs
+- **Incident**: The April 5 migration (`20260405...`) intended to revert premature reviews for Q1 and Feb-Mar Bi-Monthly cycles. However, the filter `frequency = 'Bi-Monthly' AND review_period = 'January'` also matched the **Dec-Jan cycle** KPIs. The Dec-Jan cycle was already complete (December 2025 ended Dec 31), so these 28 KPIs were legitimately approved and should not have been reset.
+- **Impact**: 28 Bi-Monthly January 2026 KPIs across 12 employees were reset to `kra_set` with submissions deleted. 24 remained stuck; 4 were manually re-progressed.
+- **Fix**: Corrective migration re-percolates scores from intact December 2025 terminal KPIs to their January siblings. Each restored KPI gets `auto_advance_reason = 'Restored: re-percolated from Dec 2025 terminal month'` and an `ADMIN_BULK_RESTORE` audit entry.
+- **Policy**: Added §69 (Migration Scope Guards) requiring cycle-aware period filters for all multi-month migrations.
+- **Affected files:** Database migration, `POLICY.md` (§69), `DOCUMENTATION.md`

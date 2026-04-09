@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
-> **Last Updated:** 2026-04-08  
-> **Version:** 1.75.0 — Management draft vs. approved distinction, bulk approve policy
+> **Last Updated:** 2026-04-09  
+> **Version:** 1.76.0 — Migration scope guards for multi-month KPIs
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1343,3 +1343,21 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
 3. **Bulk Approve**: Management reviewers may use the "Approve All Drafted" button to batch-approve all KPIs that have been drafted (scored but not approved) for a given employee and period. Each KPI receives the same individual approval treatment: `management_score` → `final_score`, status → `approved`, audit log entry with `MANAGEMENT_APPROVED` action and `bulk_approve: true` metadata.
 
 4. **Visual Indicator**: Drafted KPIs display an amber "Drafted" badge in the action column to distinguish them from unscored KPIs awaiting review. This badge is visible to management reviewers and to other review levels (as "Draft (Mgmt)").
+
+---
+
+## §69. Migration Scope Guards for Multi-Month KPIs
+
+**Effective Date:** 2026-04-09
+
+**Policy:**
+
+1. **Cycle-Aware Filtering**: All database migrations that target multi-month KPIs (Bi-Monthly, Quarterly, Half-Yearly, Yearly) MUST include explicit cycle-aware period filters. Filtering by `review_period` alone is insufficient — the migration must determine which cycle the period belongs to and whether that cycle was complete at the time of the migration.
+
+2. **Bi-Monthly Cycle Awareness**: In the Bi-Monthly scheme, each period belongs to one of six cycles: Dec-Jan, Feb-Mar, Apr-May, Jun-Jul, Aug-Sep, Oct-Nov. January belongs to the Dec-Jan cycle (terminal = December) AND the Feb-Mar cycle (as a non-member). Migrations must not conflate these.
+
+3. **Quarterly Cycle Awareness**: Q1 = Jan-Mar (terminal = March), Q2 = Apr-Jun, Q3 = Jul-Sep, Q4 = Oct-Dec. January is a Q1 sibling, not a standalone entity.
+
+4. **Completion Check**: A cycle is considered "complete" when its terminal month's calendar end date has passed. Migrations targeting "premature" reviews must verify the cycle is NOT yet complete before resetting.
+
+5. **Incident Reference**: On April 5, 2026, a migration reset 28 Bi-Monthly January 2026 KPIs belonging to the completed Dec-Jan cycle. These were restored via re-percolation from intact December 2025 terminal data (`ADMIN_BULK_RESTORE` audit action).
