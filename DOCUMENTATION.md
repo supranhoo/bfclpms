@@ -4814,3 +4814,10 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix**: Corrective migration re-percolates scores from intact December 2025 terminal KPIs to their January siblings. Each restored KPI gets `auto_advance_reason = 'Restored: re-percolated from Dec 2025 terminal month'` and an `ADMIN_BULK_RESTORE` audit entry.
 - **Policy**: Added §69 (Migration Scope Guards) requiring cycle-aware period filters for all multi-month migrations.
 - **Affected files:** Database migration, `POLICY.md` (§69), `DOCUMENTATION.md`
+
+### v2.17.7 — Fix Unscored KPI Weighted Average Deflation
+- **RCA**: `getRelevantScore()` in `UnifiedScorecard.tsx` returned `0` as final fallback when all 8 score fields were NULL (empty submissions from `trg_sync_submission_on_kra_set`). The grid hook `useEmployeeScoresForPeriod.getBestScore()` correctly returned `null`. This caused score mismatches: grid showed correct weighted averages while scorecard detail deflated scores by including unscored KPIs as 0.
+- **Impact**: Employees 100017 (Satyam, Feb 2026: grid=3.9, scorecard=3.4) and 101773 (Dippendu, Feb 2026: grid=3.9, scorecard=3.7). System-wide: 72 KPIs with empty submission rows at `kra_set` status.
+- **Fix**: Changed `getRelevantScore` fallback from `?? 0` to `?? null`. Updated scoring loop to skip KPIs where score is `null` (same as N/A exclusion). All scoring consumers now align on the same exclusion logic.
+- **Policy**: Added §70 (Unscored KPI Exclusion) formalizing that KPIs with all-null scores are excluded from weighted averages, identical to N/A treatment.
+- **Affected files:** `src/components/review/UnifiedScorecard.tsx`, `POLICY.md` (§70, §5.4), `DOCUMENTATION.md`
