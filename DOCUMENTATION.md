@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-09  
-> **Version:** 2.17.6 — Restore incorrectly reset Bi-Monthly January 2026 KPIs
+> **Version:** 2.17.7 — Fix unscored KPI weighted average deflation in UnifiedScorecard
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

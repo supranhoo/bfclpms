@@ -1361,3 +1361,19 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
 4. **Completion Check**: A cycle is considered "complete" when its terminal month's calendar end date has passed. Migrations targeting "premature" reviews must verify the cycle is NOT yet complete before resetting.
 
 5. **Incident Reference**: On April 5, 2026, a migration reset 28 Bi-Monthly January 2026 KPIs belonging to the completed Dec-Jan cycle. These were restored via re-percolation from intact December 2025 terminal data (`ADMIN_BULK_RESTORE` audit action).
+
+## §70. Unscored KPI Exclusion from Weighted Averages
+
+**Effective Date:** 2026-04-09
+
+**Policy:**
+
+1. **Definition**: An "unscored KPI" is one where a `review_submissions` row exists but ALL score fields across all 8 stages (self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score) are NULL. This typically occurs for KPIs at the `kra_set` stage where the submission row was auto-created by the `trg_sync_submission_on_kra_set` trigger.
+
+2. **Exclusion Rule**: Unscored KPIs MUST be excluded from both the numerator and denominator of weighted average calculations — identical to N/A KPI treatment.
+
+3. **Rationale**: Including unscored KPIs as score=0 artificially deflates the weighted average. An unscored KPI represents incomplete data, not a zero rating. The 8-stage fallback chain returning `null` (no score available) is semantically different from a reviewer explicitly assigning score=0.
+
+4. **Invariant**: All scoring consumers (`useEmployeeScoresForPeriod`, `UnifiedScorecard`, `PreviousMonthsScoreMini`, Management Dashboard) must use the same exclusion logic: if the 8-stage fallback chain returns `null`, the KPI is excluded from weighted average calculations.
+
+5. **Incident Reference**: Employees 100017 (Satyam) and 101773 (Dippendu) showed mismatched scores between the Employee Grid (correct: excluded unscored KPIs) and Scorecard Detail (incorrect: counted unscored KPIs as 0). Fixed in v2.17.7 by aligning `getRelevantScore` fallback from `?? 0` to `?? null`.
