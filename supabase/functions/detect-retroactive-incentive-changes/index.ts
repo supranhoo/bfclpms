@@ -43,7 +43,7 @@ serve(async (req) => {
     // Find Q/BM KPIs approved in this period
     const { data: resolvedKpis } = await supabase
       .from('kpis')
-      .select('id, employee_id, frequency, review_period, review_year, weightage, status, review_submissions(self_score, manager_score, hr_pms_score, skip_level_score, auditor_score, management_score, final_score, is_na)')
+      .select('id, employee_id, frequency, frequency_cycle_start, review_period, review_year, weightage, status, review_submissions(self_score, manager_score, hr_pms_score, skip_level_score, auditor_score, management_score, final_score, is_na)')
       .eq('review_period', review_period)
       .eq('review_year', review_year)
       .eq('status', 'approved')
@@ -54,13 +54,35 @@ serve(async (req) => {
     }
 
     // Map of frequency → cycle months (simplified mapping)
-    const getCycleMonths = (frequency: string, period: string): string[] => {
+    const getCycleMonths = (frequency: string, period: string, cycleStart?: string | null): string[] => {
       const allMonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
       const idx = allMonths.indexOf(period);
       if (idx === -1) return [period];
 
+      // If cycleStart is provided, use dynamic resolution
+      if (cycleStart) {
+        const abbrevMap: Record<string, number> = {
+          Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+          Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
+        };
+        const csIdx = abbrevMap[cycleStart.split('-')[0]];
+        if (csIdx !== undefined) {
+          const cycleLength = frequency === 'Quarterly' ? 3 : frequency === 'Bi-Monthly' ? 2 : 1;
+          if (cycleLength > 1) {
+            const offset = ((idx - csIdx) % 12 + 12) % 12;
+            const cycleIdx = Math.floor(offset / cycleLength);
+            const cycleStartPos = (csIdx + cycleIdx * cycleLength) % 12;
+            const months: string[] = [];
+            for (let i = 0; i < cycleLength; i++) {
+              months.push(allMonths[(cycleStartPos + i) % 12]);
+            }
+            return months;
+          }
+        }
+      }
+
+      // Fallback: hardcoded standard cycles
       if (frequency === 'Quarterly') {
-        // Q1: Jul-Sep, Q2: Oct-Dec, Q3: Jan-Mar, Q4: Apr-Jun (fiscal year)
         const qStart = Math.floor(idx / 3) * 3;
         return [allMonths[qStart], allMonths[qStart + 1], allMonths[qStart + 2]].filter(Boolean);
       }
@@ -75,7 +97,7 @@ serve(async (req) => {
     const affectedEmployeeMonths = new Map<string, Set<string>>();
 
     for (const kpi of resolvedKpis) {
-      const cycleMonths = getCycleMonths(kpi.frequency!, kpi.review_period!);
+      const cycleMonths = getCycleMonths(kpi.frequency!, kpi.review_period!, kpi.frequency_cycle_start);
       const pastMonths = cycleMonths.filter(m => m !== review_period);
 
       for (const month of pastMonths) {
@@ -133,7 +155,7 @@ serve(async (req) => {
         // Also include the resolved Q/BM KPIs that affect this month
         const qbmForThisMonth = resolvedKpis.filter(k =>
           k.employee_id === employeeId &&
-          getCycleMonths(k.frequency!, k.review_period!).includes(affectedMonth)
+          getCycleMonths(k.frequency!, k.review_period!, k.frequency_cycle_start).includes(affectedMonth)
         );
         for (const qbm of qbmForThisMonth) {
           if (!allKpis.find(k => k.id === qbm.id)) allKpis.push(qbm);

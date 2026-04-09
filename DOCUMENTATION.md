@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-09  
-> **Version:** 2.17.7 — Fix unscored KPI weighted average deflation in UnifiedScorecard
+> **Version:** 2.17.8 — Cycle-aware multi-month KPI resolution across DB, triggers, and edge functions
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4821,3 +4821,12 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix**: Changed `getRelevantScore` fallback from `?? 0` to `?? null`. Updated scoring loop to skip KPIs where score is `null` (same as N/A exclusion). All scoring consumers now align on the same exclusion logic.
 - **Policy**: Added §70 (Unscored KPI Exclusion) formalizing that KPIs with all-null scores are excluded from weighted averages, identical to N/A treatment.
 - **Affected files:** `src/components/review/UnifiedScorecard.tsx`, `POLICY.md` (§70, §5.4), `DOCUMENTATION.md`
+
+### v2.17.8 — Cycle-Aware Multi-Month KPI Resolution
+- **RCA**: The `get_cycle_months()` DB function was hardcoded to standard calendar cycles (Jan-Feb, Jan-Mar, etc.), ignoring the per-KPI `frequency_cycle_start` column. 132 out of 135 Bi-Monthly KPIs use `frequency_cycle_start = 'Feb-Mar'` (cycles: Dec-Jan, Feb-Mar, Apr-May). When January (terminal of Dec-Jan) was approved, percolation incorrectly copied scores to February (which belongs to the Feb-Mar cycle), causing cross-cycle contamination. Similarly, `enforce_frequency_lock_on_submission` and both rollover/incentive edge functions used hardcoded cycle logic.
+- **Fix 1 (DB)**: Updated `get_cycle_months()` to accept optional `p_cycle_start TEXT` parameter. When provided, dynamically computes cycle boundaries from the start month and cycle length instead of using hardcoded assumptions. Falls back to original logic when NULL.
+- **Fix 2 (Percolation)**: Updated `percolate_multimonth_score` trigger to pass `NEW.frequency_cycle_start` to `get_cycle_months()`, ensuring siblings are resolved from the correct cycle.
+- **Fix 3 (Locking)**: Updated `enforce_frequency_lock_on_submission` trigger to read `NEW.frequency_cycle_start` for per-KPI cycle-aware locking. Falls back to `frequency_config` table when override is NULL.
+- **Fix 4 (Edge Functions)**: Updated `auto-rollover-kpis` and `detect-retroactive-incentive-changes` edge functions with cycle-start-aware helpers that accept `cycleStart` parameter.
+- **Policy**: Added §71 (Cycle-Aware Multi-Month KPI Resolution) mandating per-KPI cycle start resolution across all layers.
+- **Affected files:** Database migration (`get_cycle_months`, `percolate_multimonth_score`, `enforce_frequency_lock_on_submission`), `supabase/functions/auto-rollover-kpis/index.ts`, `supabase/functions/detect-retroactive-incentive-changes/index.ts`, `POLICY.md` (§71), `DOCUMENTATION.md`

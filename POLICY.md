@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-09  
-> **Version:** 1.77.0 — Unscored KPI exclusion from weighted averages (§70)
+> **Version:** 1.78.0 — Cycle-aware multi-month KPI resolution (§71)
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1377,3 +1377,21 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
 4. **Invariant**: All scoring consumers (`useEmployeeScoresForPeriod`, `UnifiedScorecard`, `PreviousMonthsScoreMini`, Management Dashboard) must use the same exclusion logic: if the 8-stage fallback chain returns `null`, the KPI is excluded from weighted average calculations.
 
 5. **Incident Reference**: Employees 100017 (Satyam) and 101773 (Dippendu) showed mismatched scores between the Employee Grid (correct: excluded unscored KPIs) and Scorecard Detail (incorrect: counted unscored KPIs as 0). Fixed in v2.17.7 by aligning `getRelevantScore` fallback from `?? 0` to `?? null`.
+
+## §71. Cycle-Aware Multi-Month KPI Resolution
+
+**Effective Date:** 2026-04-09
+
+**Policy:**
+
+1. **Per-KPI Cycle Start**: All multi-month frequency operations (percolation, locking, rollover, retroactive incentive detection) MUST resolve cycle boundaries using the KPI's `frequency_cycle_start` column. The global `frequency_config` table is a fallback ONLY when `frequency_cycle_start` is NULL.
+
+2. **Resolution Priority**: Per-KPI override (`kpis.frequency_cycle_start`) → Global config (`frequency_config.sub_frequency`) → Hardcoded calendar default (first option in `frequencyCycleOptions.ts`).
+
+3. **Cross-Cycle Contamination Prevention**: Score percolation MUST NOT copy scores from a terminal month to a sibling that belongs to a different cycle. The `get_cycle_months()` DB function must receive the KPI's `frequency_cycle_start` to correctly identify same-cycle siblings.
+
+4. **Locking Invariant**: The `enforce_frequency_lock_on_submission` trigger must use the KPI's `frequency_cycle_start` to determine which months are locked (sibling/non-terminal) and which are terminal (reviewable). Incorrect locking due to mismatched cycle assumptions violates workflow integrity.
+
+5. **Edge Function Alignment**: All edge functions that compute cycle months (`auto-rollover-kpis`, `detect-retroactive-incentive-changes`) must pass `frequency_cycle_start` from the source KPI when resolving cycle boundaries.
+
+6. **Incident Reference**: 132 Bi-Monthly KPIs with `frequency_cycle_start = 'Feb-Mar'` were subject to cross-cycle contamination: January (terminal of Dec-Jan) incorrectly percolated scores to February (start of Feb-Mar cycle). Fixed in v2.17.8 by parameterizing `get_cycle_months()` with `p_cycle_start`.
