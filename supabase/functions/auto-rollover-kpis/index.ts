@@ -381,7 +381,7 @@ Deno.serve(async (req) => {
         const empExistingKras = targetKrasByEmployee[empId] || new Set();
 
         // Determine all cycle months for this KPI frequency
-        const cycleMonths = getCycleMonthsForTarget(targetMonthIdx, kpi.frequency);
+        const cycleMonths = getCycleMonthsForTarget(targetMonthIdx, kpi.frequency, kpi.frequency_cycle_start);
         // Only create records for months >= target month (earlier months already exist from prior cycles)
         const monthsToCreate = cycleMonths.filter(m => m >= targetMonthIdx);
 

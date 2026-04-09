@@ -43,7 +43,7 @@ serve(async (req) => {
     // Find Q/BM KPIs approved in this period
     const { data: resolvedKpis } = await supabase
       .from('kpis')
-      .select('id, employee_id, frequency, review_period, review_year, weightage, status, review_submissions(self_score, manager_score, hr_pms_score, skip_level_score, auditor_score, management_score, final_score, is_na)')
+      .select('id, employee_id, frequency, frequency_cycle_start, review_period, review_year, weightage, status, review_submissions(self_score, manager_score, hr_pms_score, skip_level_score, auditor_score, management_score, final_score, is_na)')
       .eq('review_period', review_period)
       .eq('review_year', review_year)
       .eq('status', 'approved')
