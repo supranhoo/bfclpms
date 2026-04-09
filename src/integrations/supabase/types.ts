@@ -4723,7 +4723,12 @@ export type Database = {
         }[]
       }
       get_cycle_months: {
-        Args: { p_frequency: string; p_month: string; p_year: number }
+        Args: {
+          p_cycle_start?: string
+          p_frequency: string
+          p_month: string
+          p_year: number
+        }
         Returns: string[]
       }
       get_direct_report_ids: {
