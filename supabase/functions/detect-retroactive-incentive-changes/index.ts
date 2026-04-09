@@ -97,7 +97,7 @@ serve(async (req) => {
     const affectedEmployeeMonths = new Map<string, Set<string>>();
 
     for (const kpi of resolvedKpis) {
-      const cycleMonths = getCycleMonths(kpi.frequency!, kpi.review_period!);
+      const cycleMonths = getCycleMonths(kpi.frequency!, kpi.review_period!, kpi.frequency_cycle_start);
       const pastMonths = cycleMonths.filter(m => m !== review_period);
 
       for (const month of pastMonths) {
@@ -155,7 +155,7 @@ serve(async (req) => {
         // Also include the resolved Q/BM KPIs that affect this month
         const qbmForThisMonth = resolvedKpis.filter(k =>
           k.employee_id === employeeId &&
-          getCycleMonths(k.frequency!, k.review_period!).includes(affectedMonth)
+          getCycleMonths(k.frequency!, k.review_period!, k.frequency_cycle_start).includes(affectedMonth)
         );
         for (const qbm of qbmForThisMonth) {
           if (!allKpis.find(k => k.id === qbm.id)) allKpis.push(qbm);
