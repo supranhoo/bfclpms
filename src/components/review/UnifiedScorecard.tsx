@@ -485,21 +485,22 @@ export function UnifiedScorecard({
   }, [queries]);
 
   // Get the relevant score based on view level (cascade down the chain)
-  const getRelevantScore = (submission: any, kpiStatus?: string) => {
-    if (!submission) return 0;
+  const getRelevantScore = (submission: any, kpiStatus?: string): number | null => {
+    if (!submission) return null;
     // Only use final_score when KPI is approved — prevents stale imported values from overriding actual reviewer scores
     if (kpiStatus === 'approved' && submission.final_score !== null && submission.final_score !== undefined) {
       return submission.final_score;
     }
     // Universal 8-stage fallback chain for ALL view levels (POLICY §33)
     // Every viewer sees the most advanced assessment available — not a frozen snapshot from their own review stage
+    // Returns null when all scores are null — KPI excluded from weighted average (same as N/A) per POLICY §70
     return submission.management_score
       ?? submission.auditor_score
       ?? submission.hr_pms_score
       ?? submission.skip_level_score
       ?? submission.manager_score
       ?? submission.self_score
-      ?? 0;
+      ?? null;
   };
 
   // Calculate scores
@@ -536,10 +537,10 @@ export function UnifiedScorecard({
       const weight = kpi.weightage || 0;
       existing.dynamicWeightage += weight;
       
-      // Only contribute to scores if submission exists and not NA
+      // Only contribute to scores if submission exists, not NA, and has at least one score (POLICY §70)
       if (submission && !submission.is_na) {
         const score = getRelevantScore(submission, kpi.status);
-        if (weight > 0) {
+        if (score !== null && weight > 0) {
           totalWeightedScore += score * weight;
           totalWeight += weight;
           existing.totalScore += score * weight;
