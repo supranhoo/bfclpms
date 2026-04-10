@@ -21,6 +21,7 @@ import { RolloverDialog } from '@/components/admin/RolloverDialog';
 import { PasswordPolicyTab } from '@/components/admin/PasswordPolicyTab';
 import { ReportAccessTab } from '@/components/admin/ReportAccessTab';
 import { MenuAccessTab } from '@/components/admin/MenuAccessTab';
+import { DataRepairTab } from '@/components/admin/DataRepairTab';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -620,6 +621,8 @@ export default function SystemSettings() {
         return <PasswordPolicyTab />;
       case 'backups':
         return <BackupRestoreTab />;
+      case 'data-repair':
+        return <DataRepairTab />;
       default:
         return null;
     }
