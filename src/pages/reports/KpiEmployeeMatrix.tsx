@@ -66,6 +66,9 @@ export default function KpiEmployeeMatrix() {
       employeeScores: Object.fromEntries(
         Object.entries(row.employeeScores).filter(([eid]) => empIds.has(eid))
       ),
+      employeeWeightages: Object.fromEntries(
+        Object.entries(row.employeeWeightages).filter(([eid]) => empIds.has(eid))
+      ),
       employeeCount: Object.keys(row.employeeScores).filter(eid => empIds.has(eid)).length,
     }));
   }, [data, selectedCompanyId, filteredEmployees]);
@@ -336,13 +339,21 @@ export default function KpiEmployeeMatrix() {
                       <TableCell className="text-center text-xs">{row.employeeCount}</TableCell>
                       {filteredEmployees.map(emp => {
                         const score = row.employeeScores[emp.id];
+                        const wt = row.employeeWeightages[emp.id];
                         const isMapped = emp.id in row.employeeScores;
                         return (
                           <TableCell
                             key={emp.id}
-                            className={`text-center text-xs ${isMapped ? (score != null ? 'bg-primary/5 font-medium' : 'bg-muted/30') : ''}`}
+                            className={`text-center text-xs ${isMapped ? (score != null ? 'bg-primary/5' : 'bg-muted/30') : ''}`}
                           >
-                            {isMapped ? (score != null ? score : '—') : ''}
+                            {isMapped ? (
+                              <div className="flex flex-col items-center gap-0.5">
+                                <span className="font-semibold">{wt != null ? `${wt}%` : '—'}</span>
+                                {score != null && (
+                                  <span className="text-[10px] text-muted-foreground">{score}</span>
+                                )}
+                              </div>
+                            ) : ''}
                           </TableCell>
                         );
                       })}
