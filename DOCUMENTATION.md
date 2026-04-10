@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.32.0 — Add "Remember Me" checkbox to login page
+> **Version:** 2.33.0 — Employee-level Bulk Zero-Score on dashboard for admins
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4949,6 +4949,13 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Root Cause**: The admin tools were receiving a valid bearer token from the browser, but shared admin auth used session-based identity resolution that could still fail with `Auth session missing!` in backend execution paths.
 - **Fix**: Hardened `requireAdminUser()` to validate the explicit bearer token via claims, added a deployment-sync marker to `bulk-zero-score-non-submitters`, and switched the Bulk Zero-Score UI to explicit authenticated `fetch()` via a shared helper.
 - **Regression Protection**: Added `adminEdgeFunction.test.ts` to verify bearer token forwarding and unauthenticated failure handling.
+
+### v2.33.0 — Employee-level Bulk Zero-Score on dashboard
+- **Feature**: Admins can now zero-score non-submitted KPIs for a specific employee directly from the Employee Dashboard (UnifiedScorecard), without navigating to the Data Repair tab.
+- **UI**: A "Zero-Score" button (Ban icon) appears in the KPI Details header for admin users. Opens `EmployeeBulkZeroScoreDialog` with Scan → Select → Confirm ("ZERO") → Execute flow.
+- **Edge Function**: `bulk-zero-score-non-submitters` now accepts an optional `employee_id` parameter to scope scan/execute to a single employee.
+- **New files**: `src/components/review/EmployeeBulkZeroScoreDialog.tsx`
+- **Modified files**: `src/components/review/UnifiedScorecard.tsx`, `supabase/functions/bulk-zero-score-non-submitters/index.ts`
 
 ### v2.31.6 — Force redeploy after stale kpiErr fix
 - **Root Cause**: The v2.31.5 code fix (removing orphaned `kpiErr` reference) was applied to the repo but the edge function was never redeployed. The Supabase runtime continued executing the old compiled version, causing persistent 500 errors on every scan attempt.

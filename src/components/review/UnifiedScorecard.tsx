@@ -46,7 +46,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowLeft, Target, CheckCircle2, Clock, 
-  Info, Lock, MessageSquare, Undo2, Check, Eye, ChevronDown, ChevronUp, History, Edit2, Send, Shield, Briefcase, User, CalendarDays, UserCheck, ClipboardCheck, AlertTriangle, X
+  Info, Lock, MessageSquare, Undo2, Check, Eye, ChevronDown, ChevronUp, History, Edit2, Send, Shield, Briefcase, User, CalendarDays, UserCheck, ClipboardCheck, AlertTriangle, X, Ban
 } from 'lucide-react';
 import { SelfReviewSheet } from '@/components/review/SelfReviewSheet';
 import { ProfileCard } from '@/components/dashboard/ProfileCard';
@@ -70,6 +70,7 @@ import { RollbackRequestDialog } from '@/components/review/RollbackRequestDialog
 import { usePendingRollbackRequest } from '@/hooks/useKpiRollbackRequests';
 import { useAuditKpiAssignments } from '@/hooks/useAuditKpiAssignments';
 import { KraExportMenu } from '@/components/review/KraExportMenu';
+import { EmployeeBulkZeroScoreDialog } from '@/components/review/EmployeeBulkZeroScoreDialog';
 import { useAppSettings } from '@/hooks/useAppSettings';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
 import { useRemarksMandatorySettings } from '@/hooks/useWorkflowSettings';
@@ -180,7 +181,9 @@ export function UnifiedScorecard({
   const selectedPeriod = periodSelection.selectedMonth;
   const selectedYear = periodSelection.selectedYear;
   const isMobile = useIsMobile();
-  const { user } = useAuth();
+  const { user, effectiveRole } = useAuth();
+  const isAdmin = effectiveRole === 'admin';
+  const [zeroScoreDialogOpen, setZeroScoreDialogOpen] = useState(false);
   const { data: allKpis, isLoading } = useKpisByEmployee(employee.id);
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -1463,6 +1466,16 @@ export function UnifiedScorecard({
                   Self reviewed: {formatDate(lastSelfReviewDate)}
                 </span>
               )}
+              {isAdmin && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                  onClick={() => setZeroScoreDialogOpen(true)}
+                >
+                  <Ban className="h-3.5 w-3.5 mr-1" /> Zero-Score
+                </Button>
+              )}
               <KraExportMenu
                 kpis={kpis || []}
                 employeeProfile={{
@@ -1997,6 +2010,17 @@ export function UnifiedScorecard({
         })()}
         newScore={reviewerScore ?? 0}
       />
+      {/* Employee Bulk Zero-Score Dialog (Admin only) */}
+      {isAdmin && (
+        <EmployeeBulkZeroScoreDialog
+          employeeId={employee.id}
+          employeeName={employee.full_name || employee.email}
+          reviewPeriod={selectedPeriod}
+          reviewYear={selectedYear}
+          open={zeroScoreDialogOpen}
+          onOpenChange={setZeroScoreDialogOpen}
+        />
+      )}
     </div>
   );
 }

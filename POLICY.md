@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 1.91.0 — §77 Remember Me login option for session persistence control
+> **Version:** 1.92.0 — §78 Employee-level Bulk Zero-Score from employee dashboard
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1532,4 +1532,4 @@ This ensures the correct stages are zeroed per employee.
 The scan query uses batched fetching (500 rows per batch) to bypass the default 1000-row limit, ensuring all non-submitters are visible.
 
 ### Access
-Admin-only. Accessible via **System Settings → Data Repair → Bulk Zero-Score Non-Submitters**.
+Admin-only. Accessible via **System Settings → Data Repair → Bulk Zero-Score Non-Submitters** or via the **Zero-Score button** on an individual employee's KPI Details header in the dashboard.
