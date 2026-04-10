@@ -147,15 +147,16 @@ Deno.serve(async (req) => {
       let offset = 0;
       let hasMore = true;
       while (hasMore) {
-        const { data: batch, error: bErr } = await supabase
+        let query = supabase
           .from("kpis")
           .select(
             "id, employee_id, kpi_name, kra_name, category_id, review_period, review_year, status, frequency, frequency_cycle_start",
           )
           .eq("review_period", reviewPeriod)
           .eq("review_year", reviewYear)
-          .in("status", ["kra_set", "self_review"])
-          .range(offset, offset + BATCH_SIZE - 1);
+          .in("status", ["kra_set", "self_review"]);
+        if (employeeId) query = query.eq("employee_id", employeeId);
+        const { data: batch, error: bErr } = await query.range(offset, offset + BATCH_SIZE - 1);
         if (bErr) throw bErr;
         const rows = batch ?? [];
         allStuckKpis = allStuckKpis.concat(rows);
