@@ -481,6 +481,13 @@ export function EmployeeScorecard({
           new_value: { na_remarks: naRemarks },
           metadata: { confirmed_at: new Date().toISOString() },
         });
+
+        // Persist N/A remarks to review_submissions so Review Journey tiles show them
+        if (naRemarks.trim()) {
+          await supabase.from('review_submissions')
+            .update({ manager_remarks: naRemarks } as any)
+            .eq('kpi_id', selectedKpi.id);
+        }
       }
       
       const { error: kpiError } = await supabase

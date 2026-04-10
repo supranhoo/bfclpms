@@ -470,6 +470,13 @@ export function AuditScorecard({
       if (!naConfirmed) return;
       if (user?.id) {
         await supabase.from('kpi_audit_logs').insert({ kpi_id: selectedKpi.id, action: 'AUDITOR_NA_CONFIRMED', performed_by: user.id, new_value: { na_remarks: naRemarks }, metadata: { confirmed_at: new Date().toISOString() } });
+
+        // Persist N/A remarks to review_submissions so Review Journey tiles show them
+        if (naRemarks.trim()) {
+          await supabase.from('review_submissions')
+            .update({ auditor_remarks: naRemarks } as any)
+            .eq('kpi_id', selectedKpi.id);
+        }
       }
       const newStatus = approve ? resolveForwardStatus('auditor', effectiveStages) : 'audit';
       const { error: kpiError } = await supabase.from('kpis').update({ status: newStatus as any }).eq('id', selectedKpi.id);
