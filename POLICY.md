@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 1.82.0 — Incentive edge function RBAC centralized via shared helper; role-agnostic menu overrides (§73)
+> **Version:** 1.82.1 — Incentive RBAC accepts multiple menu keys; `reports-incentive` override now authorizes edge functions (§73)
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1428,15 +1428,15 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
 
 2. **Authorization Tiers**:
    - **Tier 1 — Privileged Roles**: Users with `admin` or `hr_pms` roles in `user_roles` are always authorized.
-   - **Tier 2 — Menu Override (Role-Agnostic)**: Users with **any** base role (`employee`, `manager`, `auditor`, etc.) are authorized if they have a matching entry in `menu_access_user_overrides` for the specified menu key (e.g., `admin-incentive`).
+   - **Tier 2 — Menu Override (Role-Agnostic)**: Users with **any** base role (`employee`, `manager`, `auditor`, etc.) are authorized if they have a matching entry in `menu_access_user_overrides` for **any** of the specified menu keys. The helper accepts a single key or an array of keys.
    - **Service Role Token**: Internal/cron calls using the service role key bypass all checks.
 
 3. **Menu Key Mapping**:
-   | Edge Function | Required Menu Key |
+   | Edge Function | Accepted Menu Keys (any one suffices) |
    |---|---|
-   | `compute-monthly-incentives` | `admin-incentive` |
-   | `detect-retroactive-incentive-changes` | `admin-incentive` |
+   | `compute-monthly-incentives` | `admin-incentive`, `reports-incentive` |
+   | `detect-retroactive-incentive-changes` | `admin-incentive`, `reports-incentive` |
 
-4. **Granting Access**: Admins use **System Settings → Menu Access → User Overrides** to grant `admin-incentive` to any user. No code change or redeployment is required.
+4. **Granting Access**: Admins use **System Settings → Menu Access → User Overrides** to grant `admin-incentive` or `reports-incentive` to any user. Either override authorizes edge function execution. No code change or redeployment is required.
 
 5. **Security**: The shared helper validates the JWT, checks roles, and checks overrides in a deterministic order. It never exposes internal error details to the client.
