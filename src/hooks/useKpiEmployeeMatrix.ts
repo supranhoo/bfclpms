@@ -25,6 +25,8 @@ export interface MatrixKpiRow {
   kpiName: string;
   /** Base weightage (first occurrence) */
   weightage: number;
+  /** employee_id → assigned weightage % */
+  employeeWeightages: Record<string, number>;
   /** employee_id → weighted score (weightage × bestScore / 5) or null */
   employeeScores: Record<string, number | null>;
   /** How many employees have this KPI */
@@ -167,6 +169,7 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters) {
             kraName: kpi.kra_name,
             kpiName: kpi.kpi_name,
             weightage: Number(kpi.weightage) || 0,
+            employeeWeightages: {},
             employeeScores: {},
             employeeCount: 0,
           });
@@ -185,6 +188,7 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters) {
           }
         }
 
+        row.employeeWeightages[empId] = Number(kpi.weightage) || 0;
         row.employeeScores[empId] = cellValue;
       }
 
