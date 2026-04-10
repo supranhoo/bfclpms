@@ -117,6 +117,49 @@ Deno.serve(async (req) => {
     const catNameMap = new Map<string, string>();
     categories?.forEach(c => catNameMap.set(c.id, c.name));
 
+    // === BATCH PRE-FETCH: review_submissions ===
+    const allKpiIds = targetKpis.map(k => k.id);
+    const existingSubSet = new Set<string>();
+    for (let i = 0; i < allKpiIds.length; i += 500) {
+      const batch = allKpiIds.slice(i, i + 500);
+      const { data: subs } = await supabase
+        .from("review_submissions")
+        .select("kpi_id")
+        .in("kpi_id", batch);
+      subs?.forEach(s => existingSubSet.add(s.kpi_id));
+    }
+
+    // === BATCH PRE-FETCH: org_kpi_values ===
+    const uniqueCatIds = [...new Set(targetKpis.map(k => k.category_id))];
+    const uniquePeriods = [...new Set(targetKpis.map(k => k.review_period))];
+    const uniqueYears = [...new Set(targetKpis.map(k => k.review_year))];
+    const allOrgValues: any[] = [];
+    for (let i = 0; i < uniqueCatIds.length; i += 100) {
+      const catBatch = uniqueCatIds.slice(i, i + 100);
+      const { data: ovBatch } = await supabase
+        .from("org_kpi_values")
+        .select("category_id, kra_name, kpi_name, review_period, review_year, achieved_value, is_na, remarks, employee_id, department_id")
+        .in("category_id", catBatch)
+        .in("review_period", uniquePeriods)
+        .in("review_year", uniqueYears)
+        .in("status", ["propagated", "approved", "entered"])
+        .limit(5000);
+      if (ovBatch) allOrgValues.push(...ovBatch);
+    }
+
+    // Build lookup maps for org_kpi_values
+    const orgExactMap = new Map<string, any[]>();
+    const orgFallbackMap = new Map<string, any[]>();
+    for (const ov of allOrgValues) {
+      const exactKey = `${ov.category_id}|${ov.kra_name}|${ov.kpi_name}|${ov.review_period}|${ov.review_year}`;
+      if (!orgExactMap.has(exactKey)) orgExactMap.set(exactKey, []);
+      orgExactMap.get(exactKey)!.push(ov);
+
+      const fallbackKey = `${ov.category_id}|${ov.kra_name}|${ov.review_period}|${ov.review_year}`;
+      if (!orgFallbackMap.has(fallbackKey)) orgFallbackMap.set(fallbackKey, []);
+      orgFallbackMap.get(fallbackKey)!.push(ov);
+    }
+
     const details: any[] = [];
     let repairedCount = 0;
     let skippedCount = 0;
@@ -127,10 +170,8 @@ Deno.serve(async (req) => {
         const empName = empNameMap.get(kpi.employee_id) || "Unknown";
         const catName = catNameMap.get(kpi.category_id) || "";
 
-        // Check if review_submission already exists
-        const { data: existingSub } = await supabase
-          .from("review_submissions").select("id").eq("kpi_id", kpi.id).maybeSingle();
-        if (existingSub) {
+        // Check if review_submission already exists (from pre-fetched Set)
+        if (existingSubSet.has(kpi.id)) {
           skippedCount++;
           details.push({
             kpi_id: kpi.id, kpi_name: kpi.kpi_name, kra_name: kpi.kra_name,
@@ -142,29 +183,13 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Find matching org_kpi_value
-        let orgValues: any[] | null = null;
-        const { data: exactMatch } = await supabase
-          .from("org_kpi_values")
-          .select("achieved_value, is_na, remarks, employee_id, department_id")
-          .eq("category_id", kpi.category_id)
-          .eq("kra_name", kpi.kra_name)
-          .eq("kpi_name", kpi.kpi_name)
-          .eq("review_period", kpi.review_period)
-          .eq("review_year", kpi.review_year)
-          .in("status", ["propagated", "approved", "entered"]);
-        orgValues = exactMatch;
+        // Find matching org_kpi_value (from pre-fetched Maps)
+        const exactKey = `${kpi.category_id}|${kpi.kra_name}|${kpi.kpi_name}|${kpi.review_period}|${kpi.review_year}`;
+        let orgValues = orgExactMap.get(exactKey) || null;
 
         if (!orgValues || orgValues.length === 0) {
-          const { data: fallbackMatch } = await supabase
-            .from("org_kpi_values")
-            .select("achieved_value, is_na, remarks, employee_id, department_id")
-            .eq("category_id", kpi.category_id)
-            .eq("kra_name", kpi.kra_name)
-            .eq("review_period", kpi.review_period)
-            .eq("review_year", kpi.review_year)
-            .in("status", ["propagated", "approved", "entered"]);
-          orgValues = fallbackMatch;
+          const fallbackKey = `${kpi.category_id}|${kpi.kra_name}|${kpi.review_period}|${kpi.review_year}`;
+          orgValues = orgFallbackMap.get(fallbackKey) || null;
         }
 
         if (!orgValues || orgValues.length === 0) {
