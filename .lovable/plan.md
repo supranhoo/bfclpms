@@ -1,73 +1,50 @@
 
 
-## RCA + CAPA: Missing Department & BU Filters on Bulk Zero-Score
+## RCA + CAPA: "kpiErr is not defined" — Propagation Failure
 
 ### 1. Root Cause
 
-The `BulkZeroScoreSection` UI and the `bulk-zero-score-non-submitters` edge function were designed with only Period/Year filters. No organizational scoping (Division, Business Unit, Department) was implemented, despite the scan returning up to 1000+ rows. This is a **design gap**, not a bug — the feature was shipped without the cascading org filters that exist elsewhere in the admin suite (e.g., KPI Mapping Matrix).
-
-Additionally, the scan query uses `limit(1500)` but the UI badge shows "1000 found" — suggesting the Supabase default 1000-row cap is truncating results, meaning some non-submitters are invisible to the admin.
-
-### 2. Impact
-
-- Admin cannot scope zero-scoring to a specific department or BU — forced to review 1000+ rows
-- Risk of accidentally zero-scoring the wrong employees
-- Possible data truncation at 1000 rows hides affected KPIs
-
-### 3. Corrective Action
-
-#### A. Edge Function Changes (`bulk-zero-score-non-submitters/index.ts`)
-
-Accept new optional filter parameters in the request body:
+**Line 169** of `supabase/functions/bulk-zero-score-non-submitters/index.ts` contains a stale reference:
 
 ```typescript
-division_id?: string
-business_unit_id?: string
-department_id?: string
+if (kpiErr) throw kpiErr;  // ← kpiErr does NOT exist in this scope
 ```
 
-**Scan mode logic:**
-1. If `department_id` is provided → filter `kpis` by employees in that department (`profiles.department_id`)
-2. If `business_unit_id` is provided → resolve all departments under that BU, then filter
-3. If `division_id` is provided → resolve BUs under that division, then departments, then filter
-4. Build an `employee_id` allowlist from the org filter, then apply `.in("employee_id", allowlist)` to the stuck KPIs query
+When the code was refactored from a single query to batched fetching (using `bErr` inside the while loop), this old error-check line was left behind. Since `kpiErr` is undefined, JavaScript throws a `ReferenceError` at runtime, returning a 500 to the client.
 
-**Execute mode:** Same filters passed through for consistency (though execute uses explicit `kpi_ids`, the filters serve as a safety cross-check).
+Note: `kpiErr` IS correctly defined later in the file (line 573, execute mode) — but line 169 is in the scan mode block where it was never declared.
 
-#### B. UI Changes (`BulkZeroScoreSection.tsx`)
+**This is NOT a propagation logic bug** — the scan phase crashes before it can return results, so the admin never reaches the execute/propagate step.
 
-Add three cascading Select dropdowns after the Year selector:
+### 2. Evidence
 
-```text
-[Period ▼] [Year ▼] [Division ▼] [Business Unit ▼] [Department ▼] ☐ Include Org KPIs [Scan]
-```
+- Runtime error: `{"error":"kpiErr is not defined"}` — classic ReferenceError
+- Line 169 sits after the batched fetch loop (lines 147-162) which uses `bErr`, not `kpiErr`
+- The error check is redundant anyway — each batch already throws on `bErr` (line 157)
 
-- Fetch divisions, BUs, departments from existing tables
-- BU options filtered by selected division; Department options filtered by selected BU
-- Changing a parent filter clears child selections (same pattern as KPI Mapping Matrix)
-- Pass selected IDs to the edge function scan/execute calls
+### 3. Impact
 
-#### C. Row Limit Fix
+- 100% of scan attempts fail with 500
+- Admin cannot scan for non-submitters, blocking the entire bulk zero-score workflow
+- The screenshot from Biswajit shows data stuck at "Entered" / not propagated — consistent with the tool being unusable
 
-In the edge function scan query, increase the effective limit by paginating or removing the cap. Use batched fetching (500 per batch) to bypass the 1000-row default.
+### 4. Corrective Action
 
-### 4. Preventive Action
-
-- Update `DOCUMENTATION.md` with the organizational filter requirement for all bulk admin tools
-- Add this as a checklist item: "Does the feature need org-scoping filters?"
-
-### 5. Files to Create/Modify
+**Delete line 169** — it is a dead reference. Error handling is already covered by `if (bErr) throw bErr` on line 157 inside the fetch loop.
 
 | File | Change |
 |------|--------|
-| `supabase/functions/bulk-zero-score-non-submitters/index.ts` | Accept division/BU/department filters; resolve employee allowlist; fix row limit with batched fetch |
-| `src/components/admin/BulkZeroScoreSection.tsx` | Add cascading Division → BU → Department dropdowns; pass filter IDs to scan/execute |
-| `DOCUMENTATION.md` | Update feature spec with org filter support |
+| `supabase/functions/bulk-zero-score-non-submitters/index.ts` | Remove line 169 (`if (kpiErr) throw kpiErr;`) |
+| `DOCUMENTATION.md` | Log RCA v2.31.5 — stale variable reference after batch refactor |
 | `POLICY.md` | Sync version |
+
+### 5. Preventive Action
+
+- Add to the Edge Function Checklist in DOCUMENTATION.md: "After refactoring queries, search for all prior variable references to ensure none are orphaned"
 
 ### 6. Risk Assessment
 
-- **Data impact**: None — filters are additive constraints, no schema changes
-- **Regression risk**: Low — existing unfiltered behavior preserved when no filter is selected ("All" default)
-- **Security**: No change — `requireAdminUser()` still gates access
+- **Data impact**: None — removing a dead line
+- **Regression risk**: Zero — the line only ever crashes; removing it restores correct flow
+- **Security**: No change
 
