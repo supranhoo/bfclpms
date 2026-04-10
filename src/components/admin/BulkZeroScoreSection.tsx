@@ -114,9 +114,9 @@ export function BulkZeroScoreSection() {
       setPriorBatchWarning(data.prior_batch_warning || null);
 
       // Auto-select all zero-scorable
-      const kpiIds = new Set((data.details || []).filter((d: ScanDetailRow) => d.action === 'zero_scorable').map((d: ScanDetailRow) => d.kpi_id));
+      const kpiIds = new Set<string>((data.details || []).filter((d: ScanDetailRow) => d.action === 'zero_scorable').map((d: ScanDetailRow) => d.kpi_id));
       setSelectedKpiIds(kpiIds);
-      const orgIds = new Set((data.org_details || []).map((d: OrgDetailRow) => d.org_kpi_id));
+      const orgIds = new Set<string>((data.org_details || []).map((d: OrgDetailRow) => d.org_kpi_id));
       setSelectedOrgIds(orgIds);
 
       toast({
