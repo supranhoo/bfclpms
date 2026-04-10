@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.19.0 — compute-monthly-incentives RBAC fix for admin-incentive override
+> **Version:** 2.21.0 — Company filter added to Incentive Employee Mapping
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

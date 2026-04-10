@@ -10,12 +10,14 @@ import { Users, Search, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-re
 import { useProgramMappings, useAddProgramMapping, useRemoveProgramMapping, useBulkAddProgramMappings, useBulkRemoveProgramMappings } from '@/hooks/useIncentivePrograms';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { CompanyFilter } from '@/components/reports/CompanyFilter';
 
 interface Props {
   programId: string;
 }
 
-type SortKey = 'full_name' | 'designation' | 'department_name' | 'bu_name' | 'division_name' | 'level' | 'pms_grade';
+type SortKey = 'full_name' | 'company_name' | 'designation' | 'department_name' | 'bu_name' | 'division_name' | 'level' | 'pms_grade';
 type SortDir = 'asc' | 'desc';
 
 const PAGE_SIZE = 20;
@@ -26,6 +28,14 @@ export function ProgramEmployeeMapping({ programId }: Props) {
   const removeMapping = useRemoveProgramMapping();
   const bulkAdd = useBulkAddProgramMappings();
   const bulkRemove = useBulkRemoveProgramMappings();
+
+  const {
+    companies,
+    selectedCompanyId,
+    setSelectedCompanyId,
+    filterByCompany,
+    getCompanyName,
+  } = useCompanyFilter();
 
   const [search, setSearch] = useState('');
   const [filterDivision, setFilterDivision] = useState<string>('all');
@@ -63,6 +73,14 @@ export function ProgramEmployeeMapping({ programId }: Props) {
     },
   });
 
+  // Enrich employees with company_name
+  const employeesWithCompany = useMemo(() => {
+    return allEmployees.map((e: any) => ({
+      ...e,
+      company_name: getCompanyName(e.id),
+    }));
+  }, [allEmployees, getCompanyName]);
+
   // Build mapped employee IDs set + id lookup
   const mappedSet = useMemo(() => {
     const s = new Set<string>();
@@ -87,7 +105,7 @@ export function ProgramEmployeeMapping({ programId }: Props) {
     const depts = new Set<string>();
     const desigs = new Set<string>();
     const grades = new Set<string>();
-    allEmployees.forEach((e: any) => {
+    employeesWithCompany.forEach((e: any) => {
       if (e.division_name) divs.add(e.division_name);
       if (e.bu_name) bus.add(e.bu_name);
       if (e.department_name) depts.add(e.department_name);
@@ -101,11 +119,15 @@ export function ProgramEmployeeMapping({ programId }: Props) {
       desigs: [...desigs].sort(),
       grades: [...grades].sort(),
     };
-  }, [allEmployees]);
+  }, [employeesWithCompany]);
 
   // Filter + search
   const filtered = useMemo(() => {
-    let list = allEmployees;
+    let list = employeesWithCompany;
+    // Company filter
+    if (selectedCompanyId !== 'all') {
+      list = list.filter((e: any) => filterByCompany(e.id));
+    }
     if (search) {
       const q = search.toLowerCase();
       list = list.filter((e: any) =>
@@ -118,7 +140,7 @@ export function ProgramEmployeeMapping({ programId }: Props) {
     if (filterDesig !== 'all') list = list.filter((e: any) => e.designation === filterDesig);
     if (filterGrade !== 'all') list = list.filter((e: any) => e.pms_grade === filterGrade);
     return list;
-  }, [allEmployees, search, filterDivision, filterBU, filterDept, filterDesig, filterGrade]);
+  }, [employeesWithCompany, selectedCompanyId, filterByCompany, search, filterDivision, filterBU, filterDept, filterDesig, filterGrade]);
 
   // Sort
   const sorted = useMemo(() => {
@@ -177,6 +199,7 @@ export function ProgramEmployeeMapping({ programId }: Props) {
 
   const clearFilters = () => {
     setSearch('');
+    setSelectedCompanyId('all');
     setFilterDivision('all');
     setFilterBU('all');
     setFilterDept('all');
@@ -185,7 +208,7 @@ export function ProgramEmployeeMapping({ programId }: Props) {
     resetPage();
   };
 
-  const hasFilters = search || filterDivision !== 'all' || filterBU !== 'all' || filterDept !== 'all' || filterDesig !== 'all' || filterGrade !== 'all';
+  const hasFilters = search || selectedCompanyId !== 'all' || filterDivision !== 'all' || filterBU !== 'all' || filterDept !== 'all' || filterDesig !== 'all' || filterGrade !== 'all';
 
   const SortHeader = ({ label, field }: { label: string; field: SortKey }) => (
     <Button variant="ghost" size="sm" className="h-auto p-0 font-medium text-muted-foreground hover:text-foreground" onClick={() => toggleSort(field)}>
@@ -211,7 +234,13 @@ export function ProgramEmployeeMapping({ programId }: Props) {
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Filters */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+          <CompanyFilter
+            companies={companies}
+            selectedCompanyId={selectedCompanyId}
+            onCompanyChange={(v) => { setSelectedCompanyId(v); resetPage(); }}
+            className="h-8 text-xs"
+          />
           <Select value={filterDivision} onValueChange={(v) => { setFilterDivision(v); resetPage(); }}>
             <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Division" /></SelectTrigger>
             <SelectContent>
@@ -280,6 +309,7 @@ export function ProgramEmployeeMapping({ programId }: Props) {
                     disabled={filtered.length === 0}
                   />
                 </TableHead>
+                <TableHead><SortHeader label="Company" field="company_name" /></TableHead>
                 <TableHead><SortHeader label="Employee (Code)" field="full_name" /></TableHead>
                 <TableHead><SortHeader label="Designation" field="designation" /></TableHead>
                 <TableHead><SortHeader label="Department" field="department_name" /></TableHead>
@@ -292,7 +322,7 @@ export function ProgramEmployeeMapping({ programId }: Props) {
             <TableBody>
               {paged.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-8">
+                  <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-8">
                     No employees found
                   </TableCell>
                 </TableRow>
@@ -305,6 +335,7 @@ export function ProgramEmployeeMapping({ programId }: Props) {
                       onClick={(e) => e.stopPropagation()}
                     />
                   </TableCell>
+                  <TableCell className="text-sm">{emp.company_name}</TableCell>
                   <TableCell className="text-sm font-medium">
                     {emp.full_name}
                     {emp.employee_code && <span className="text-muted-foreground ml-1">({emp.employee_code})</span>}
