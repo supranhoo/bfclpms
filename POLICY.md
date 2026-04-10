@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 1.90.2 — §76 schema alignment fix (is_na)
+> **Version:** 1.90.3 — §76 org-filter support for bulk zero-score
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1524,6 +1524,10 @@ This ensures the correct stages are zeroed per employee.
 3. **Prior batch detection**: If a bulk zero-score batch was already executed for the same period/year, a warning is displayed.
 4. **Post-execution verification**: The system confirms KPIs advanced to `approved` and submissions contain `final_score = 0`.
 5. **Excel reporting**: Both scan results and execution results can be exported as multi-sheet Excel files.
+6. **Organizational scoping**: Cascading Division → Business Unit → Department filters allow admins to scope the scan to a specific org unit, reducing accidental zero-scoring risk.
+
+### Batched Data Fetching
+The scan query uses batched fetching (500 rows per batch) to bypass the default 1000-row limit, ensuring all non-submitters are visible.
 
 ### Access
 Admin-only. Accessible via **System Settings → Data Repair → Bulk Zero-Score Non-Submitters**.
