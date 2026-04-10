@@ -427,6 +427,8 @@ The `kpis` table has specific UPDATE policies for workflow progression:
 | `app_role` | admin, manager, employee, auditor, management |
 | `review_status` | kra_set, self_review, manager_check, audit, management_review, approved |
 | `kpi_status` | open, submitted, approved_by_manager, locked |
+
+> **⚠️ Enum Warning:** `review_status` (used by `kpis.status`) and `kpi_status` (used by `review_submissions.kpi_status`) are **different enums** with different valid values. `review_status` has `approved`; `kpi_status` does **not** — its terminal state is `locked`. Never write `"approved"` to `review_submissions.kpi_status`.
 | `rating_level` | red, yellow, green, blue |
 | `query_status` | open, resolved |
 | `observation_type` | positive, concern, neutral |
