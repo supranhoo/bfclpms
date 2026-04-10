@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.23.0 — Add KPI-Employee Weighted Score Matrix report (cross-tab pivot of KPIs vs Employees with weighted scores)
+> **Version:** 2.23.1 — Register KPI-Employee Score Matrix in report_access_config for visibility
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
