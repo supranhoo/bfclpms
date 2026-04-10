@@ -149,36 +149,15 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, serviceKey);
-
-    // Verify caller is admin
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // Shared two-client admin auth (CAPA: replaces brittle getClaims pattern)
+    const auth = await requireAdminUser(req);
+    if (!auth.authorized || !auth.adminClient) {
+      return new Response(JSON.stringify({ error: auth.error }), {
+        status: auth.status ?? 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const token = authHeader.replace("Bearer ", "");
-    const authClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: claimsData, error: claimsErr } = await authClient.auth.getClaims(token);
-    const userId = claimsData?.claims?.sub;
-    if (claimsErr || !userId) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const user = { id: userId };
-    const { data: roleCheck } = await supabase
-      .from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin").maybeSingle();
-    if (!roleCheck) {
-      return new Response(JSON.stringify({ error: "Admin only" }), {
-        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const supabase = auth.adminClient;
 
     // Parse request
     let mode: "scan" | "repair" = "scan";
