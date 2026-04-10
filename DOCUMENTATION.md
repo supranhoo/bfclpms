@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.30.0 — Cross-year cycle recovery for sibling re-percolation repair (§75)
+> **Version:** 2.31.0 — Bulk Zero-Score Non-Submitters admin tool (§76)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4921,6 +4921,17 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Problem**: Users with `reports-incentive` menu override could see the Incentive Report page but got 403 on Compute/Detect edge functions, which only checked `admin-incentive`.
 - **Solution**: Updated `checkIncentiveAccess()` to accept `string | string[]` for menu keys and use `.in()` filter. Both edge functions now pass `['admin-incentive', 'reports-incentive']`, so either override authorizes execution.
 - **Affected files**: `incentive-auth.ts`, `compute-monthly-incentives/index.ts`, `detect-retroactive-incentive-changes/index.ts`
+
+### v2.31.0 — Bulk Zero-Score Non-Submitters (§76)
+- **Problem**: Admins had no streamlined way to assign 0 scores across all review levels when employees missed submission deadlines. Manual per-KPI intervention was time-consuming and error-prone.
+- **Solution**: New `bulk-zero-score-non-submitters` edge function with scan + execute modes, plus `BulkZeroScoreSection` UI in Data Repair tab.
+- **Scan logic**: Identifies KPIs stuck at `kra_set` or `self_review` for a given period/year. Excludes sent-back KPIs (open queries), N/A KPIs, and non-terminal multi-month KPIs. Optionally scans `org_kpi_values` with no data entered.
+- **Execute logic**: Resolves each employee's workflow template (period-specific → global → system default). Upserts `review_submissions` with 0 for every applicable stage (self, manager, skip_level, hr_pms, auditor, management, final). Sets `kpi_status = 'locked'`, advances `kpis.status` to `approved`. For Org KPIs, sets `achieved_value = 0` and status to `propagated`.
+- **Audit trail**: `kpi_audit_logs.action = 'ADMIN_BULK_ZERO_SCORE'` per KPI with `batch_id` linking all entries. `org_kpi_data_entry_logs.action = 'admin_zero_scored'` per Org KPI. Admin remarks visible in `auto_advance_reason` across all review levels.
+- **Safety**: Elevated confirmation requires typing "ZERO". Prior batch detection warns if the same period was already zero-scored. Post-execution verification confirms KPIs at `approved` and submissions at 0.
+- **Workflow awareness**: Uses `workflow_config` → `workflow_templates` resolution (period-specific → global → default) to determine which stages to zero-score per employee.
+- **New files**: `supabase/functions/bulk-zero-score-non-submitters/index.ts`, `src/components/admin/BulkZeroScoreSection.tsx`
+- **Modified files**: `DataRepairTab.tsx`, `DOCUMENTATION.md`, `POLICY.md`
 
 ### v2.22.0 — Incentive Edge Function RBAC Centralized (§73)
 - **Problem**: Both `compute-monthly-incentives` and `detect-retroactive-incentive-changes` hardcoded `['admin', 'hr_pms']` as allowed roles. Users with `employee` or `manager` roles granted `admin-incentive` menu overrides were blocked with 403 on the detect function (compute had a partial fix).
