@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.22.2 — Add missing UPDATE RLS policy for `menu_access_user_overrides` to fix admin upsert failures
+> **Version:** 2.23.0 — Add KPI-Employee Weighted Score Matrix report (cross-tab pivot of KPIs vs Employees with weighted scores)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
