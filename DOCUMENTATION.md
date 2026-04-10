@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.21.0 — Company filter added to Incentive Employee Mapping
+> **Version:** 2.22.0 — Incentive edge function RBAC centralized via shared auth helper (§73)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4858,3 +4858,14 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **File naming**: `{ProgramName}_{Month}_{Year}.xlsx`
 - **New file**: `src/components/incentive/IncentiveDataExport.tsx`
 - **Modified files**: `UnifiedProductionDataTab.tsx`, `VesselDataEntryGrid.tsx`, `ProductionDailyGrid.tsx`, `ProductionTargetGrid.tsx`
+
+### v2.21.0 — Company Filter Added to Incentive Employee Mapping
+- **Feature**: Added a Company filter dropdown and Company column to the ProgramEmployeeMapping component.
+- **Affected files**: `ProgramEmployeeMapping.tsx`, `DOCUMENTATION.md`
+
+### v2.22.0 — Incentive Edge Function RBAC Centralized (§73)
+- **Problem**: Both `compute-monthly-incentives` and `detect-retroactive-incentive-changes` hardcoded `['admin', 'hr_pms']` as allowed roles. Users with `employee` or `manager` roles granted `admin-incentive` menu overrides were blocked with 403 on the detect function (compute had a partial fix).
+- **Solution**: Created shared auth helper `supabase/functions/_shared/incentive-auth.ts` with `checkIncentiveAccess()` — a two-tier authorization check (privileged roles → menu override fallback). Both edge functions now import and use this helper.
+- **Key benefit**: Any role (employee, manager, etc.) can access incentive functions if granted the `admin-incentive` menu override via System Settings → Menu Access → User Overrides. No code changes needed to grant/revoke access.
+- **New file**: `supabase/functions/_shared/incentive-auth.ts`
+- **Modified files**: `compute-monthly-incentives/index.ts`, `detect-retroactive-incentive-changes/index.ts`, `POLICY.md` (§73), `DOCUMENTATION.md`
