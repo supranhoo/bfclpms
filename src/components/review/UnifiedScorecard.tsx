@@ -2010,6 +2010,17 @@ export function UnifiedScorecard({
         })()}
         newScore={reviewerScore ?? 0}
       />
+      {/* Employee Bulk Zero-Score Dialog (Admin only) */}
+      {isAdmin && (
+        <EmployeeBulkZeroScoreDialog
+          employeeId={employee.id}
+          employeeName={employee.full_name || employee.email}
+          reviewPeriod={selectedPeriod}
+          reviewYear={selectedYear}
+          open={zeroScoreDialogOpen}
+          onOpenChange={setZeroScoreDialogOpen}
+        />
+      )}
     </div>
   );
 }
