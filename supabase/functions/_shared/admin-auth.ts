@@ -34,17 +34,29 @@ export async function requireAdminUser(req: Request): Promise<AdminAuthResult> {
     return { authorized: false, user: null, adminClient: null, error: 'Unauthorized', status: 401 };
   }
 
+  const token = authHeader.replace('Bearer ', '').trim();
+  if (!token) {
+    console.warn('[admin-auth] Bearer token was empty');
+    return { authorized: false, user: null, adminClient: null, error: 'Unauthorized', status: 401 };
+  }
+
   // Step 2: Validate identity via user-context client
   const userClient = createClient(supabaseUrl, anonKey, {
     global: { headers: { Authorization: authHeader } },
   });
 
-  const { data: { user }, error: authError } = await userClient.auth.getUser();
+  const { data: claimsData, error: authError } = await userClient.auth.getClaims(token);
+  const claims = claimsData?.claims;
 
-  if (authError || !user) {
+  if (authError || !claims?.sub) {
     console.warn('[admin-auth] Identity validation failed:', authError?.message ?? 'no user returned');
     return { authorized: false, user: null, adminClient: null, error: 'Unauthorized', status: 401 };
   }
+
+  const user = {
+    id: claims.sub,
+    email: typeof claims.email === 'string' ? claims.email : undefined,
+  };
 
   // Step 3: Verify admin role via service-role client
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
@@ -60,7 +72,7 @@ export async function requireAdminUser(req: Request): Promise<AdminAuthResult> {
     console.warn('[admin-auth] User resolved but not admin:', user.id);
     return {
       authorized: false,
-      user: { id: user.id, email: user.email },
+      user,
       adminClient: null,
       error: 'Admin access required',
       status: 403,
@@ -70,7 +82,7 @@ export async function requireAdminUser(req: Request): Promise<AdminAuthResult> {
   console.info('[admin-auth] Admin verified:', user.id);
   return {
     authorized: true,
-    user: { id: user.id, email: user.email },
+    user,
     adminClient,
   };
 }

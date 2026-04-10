@@ -13,9 +13,9 @@ import {
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { AlertCircle, AlertTriangle, Ban, CheckCircle2, Download, RefreshCw, Search } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
+import { invokeAdminEdgeFunction } from '@/lib/adminEdgeFunction';
 
 const ALL_MONTHS = [
   'January','February','March','April','May','June',
@@ -109,10 +109,12 @@ export function BulkZeroScoreSection() {
     setPriorBatchWarning(null);
     setConfirmText('');
     try {
-      const { data, error } = await supabase.functions.invoke('bulk-zero-score-non-submitters', {
-        body: { mode: 'scan', review_period: reviewPeriod, review_year: reviewYear, include_org_kpis: includeOrgKpis },
+      const data = await invokeAdminEdgeFunction<any>('bulk-zero-score-non-submitters', {
+        mode: 'scan',
+        review_period: reviewPeriod,
+        review_year: reviewYear,
+        include_org_kpis: includeOrgKpis,
       });
-      if (error) throw error;
 
       setScanDetails(data.details || []);
       setOrgDetails(data.org_details || []);
@@ -140,17 +142,14 @@ export function BulkZeroScoreSection() {
     setConfirmText('');
     setIsExecuting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('bulk-zero-score-non-submitters', {
-        body: {
-          mode: 'execute',
-          review_period: reviewPeriod,
-          review_year: reviewYear,
-          kpi_ids: Array.from(selectedKpiIds),
-          org_kpi_ids: includeOrgKpis ? Array.from(selectedOrgIds) : [],
-          admin_remarks: adminRemarks,
-        },
+      const data = await invokeAdminEdgeFunction<ExecuteResult>('bulk-zero-score-non-submitters', {
+        mode: 'execute',
+        review_period: reviewPeriod,
+        review_year: reviewYear,
+        kpi_ids: Array.from(selectedKpiIds),
+        org_kpi_ids: includeOrgKpis ? Array.from(selectedOrgIds) : [],
+        admin_remarks: adminRemarks,
       });
-      if (error) throw error;
       setExecuteResult(data);
       setScanDetails(null);
       setOrgDetails([]);

@@ -23,6 +23,8 @@ const corsHeaders = {
  *   admin_remarks: string      (execute only)
  */
 
+// Deploy sync marker: 2026-04-10 auth-forwarding hardening.
+
 // ── Helpers ──────────────────────────────────────────────────────────────
 
 const ALL_MONTHS = [
