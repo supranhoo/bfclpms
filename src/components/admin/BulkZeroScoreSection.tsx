@@ -322,7 +322,7 @@ export function BulkZeroScoreSection() {
           </p>
         </div>
 
-        {/* Filters */}
+        {/* Filters Row 1: Period & Year */}
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Period</label>
@@ -339,6 +339,36 @@ export function BulkZeroScoreSection() {
               <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {[2025, 2026, 2027].map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Division</label>
+            <Select value={divisionId ?? 'all'} onValueChange={handleDivisionChange}>
+              <SelectTrigger className="w-[160px]"><SelectValue placeholder="All Divisions" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Divisions</SelectItem>
+                {(divisions ?? []).map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Business Unit</label>
+            <Select value={businessUnitId ?? 'all'} onValueChange={handleBuChange}>
+              <SelectTrigger className="w-[160px]"><SelectValue placeholder="All BUs" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All BUs</SelectItem>
+                {(businessUnits ?? []).map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Department</label>
+            <Select value={departmentId ?? 'all'} onValueChange={handleDeptChange}>
+              <SelectTrigger className="w-[160px]"><SelectValue placeholder="All Depts" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Departments</SelectItem>
+                {(departments ?? []).map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
