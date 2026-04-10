@@ -1,33 +1,34 @@
 
 
-## Show Assigned Weightage % per Employee in KPI-Employee Matrix
+## Add Business Unit Filter to KPI-Employee Matrix + Fix Runtime Error
 
 ### Problem
-Currently, each KPI row shows a single "Wt%" column (from the first occurrence) and employee cells show weighted scores. But each employee can have a **different weightage** assigned for the same KRA/KPI. The user wants to see the **assigned weightage %** per employee in the employee columns.
-
-### Solution
-Store per-employee weightage in the matrix data and display it in the employee cells — either replacing the weighted score or showing both (weightage with score below).
+1. The KPI-Employee Weighted Score Matrix report lacks a **Business Unit** filter — the user needs to filter employees by BU.
+2. A runtime error (`Cannot read properties of undefined`) occurs because some `filteredRows` entries have `employeeWeightages` as `undefined` when the company filter strips them.
 
 ### Changes
 
-**1. `src/hooks/useKpiEmployeeMatrix.ts`**
-- Add `employeeWeightages: Record<string, number>` to `MatrixKpiRow` interface
-- Populate it during the pivot loop: `row.employeeWeightages[empId] = Number(kpi.weightage) || 0`
-- Keep `employeeScores` as-is for the Excel export and totals
+**1. `src/pages/reports/KpiEmployeeMatrix.tsx`**
+- Add `businessUnitId` state variable
+- Import `useBusinessUnits` from `useOrganization`
+- Add a Business Unit `<Select>` dropdown between the Department filter and Category filter (or before Department, following hierarchy: Company → BU → Department)
+- Pass `businessUnitId` into the `MatrixFilters` object
+- Filter the `departments` dropdown to only show departments belonging to the selected BU
+- Reset `departmentId` when `businessUnitId` changes (cascading filter)
+- Fix the `filteredRows` mapping to safely handle missing `employeeWeightages` (add `|| {}` fallback)
 
-**2. `src/pages/reports/KpiEmployeeMatrix.tsx`**
-- Update employee cells to display the assigned weightage % as the primary value
-- Show format like `10%` (the weightage) with the weighted score as secondary text below if a score exists
-- Update the company-filter logic in `filteredRows` to also carry `employeeWeightages`
-- Update Excel export to include a weightage row or column
+**2. `src/hooks/useKpiEmployeeMatrix.ts`**
+- The `MatrixFilters` interface already has `businessUnitId` defined
+- Add BU-based filtering in the KPI processing loop: look up each employee's department → BU mapping and skip if it doesn't match `filters.businessUnitId`
+- To do this, fetch `departments` table (id, business_unit_id) alongside KPIs, then filter employees whose department's BU matches
 
 **3. `DOCUMENTATION.md` / `POLICY.md`** — version bump
 
-### Cell Display Format
-```text
-  10%        ← assigned weightage (bold)
-  3.50       ← weighted score (smaller, muted) — only if score exists
-```
+### Runtime Error Fix
+In `filteredRows` mapping (line ~69), `row.employeeWeightages` can be undefined for rows created before this field was added. Fix: `Object.entries(row.employeeWeightages || {})`.
 
-Unmapped cells remain blank. Mapped but unscored cells show only the weightage.
+### Risk Assessment
+- **Data Impact**: None — read-only filters
+- **Regression**: Low — cascading reset logic follows existing pattern
+- **UI**: Adding one more dropdown to the filter grid; existing 6-column grid accommodates it
 
