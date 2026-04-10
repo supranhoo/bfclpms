@@ -79,11 +79,9 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters) {
             category_id,
             kra_categories(name),
             profiles!kpis_employee_id_fkey(
-              full_name, employee_code, department_id, designation_id,
-              pms_grade_id, is_active,
-              departments(name),
-              designations(name),
-              pms_grades(name)
+              full_name, employee_code, department_id, designation,
+              pms_grade, is_active,
+              departments(name)
             )
           `;
 
