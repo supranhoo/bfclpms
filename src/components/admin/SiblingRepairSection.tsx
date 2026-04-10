@@ -254,6 +254,11 @@ export function SiblingRepairSection() {
                         {crossYearCount} cross-year
                       </Badge>
                     )}
+                    {auditLogCount > 0 && (
+                      <Badge variant="outline" className="border-purple-400 text-purple-700 dark:text-purple-400">
+                        {auditLogCount} audit-log
+                      </Badge>
+                    )}
                     <Badge variant="outline">{selectedIds.size} selected</Badge>
                   </div>
                   <div className="flex gap-2">

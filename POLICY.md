@@ -1469,9 +1469,11 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
 
 1. **Guard Rule**: Bulk step-back operations targeting multi-month KPIs (Bi-Monthly, Quarterly, Half-Yearly, Yearly) **must preserve non-terminal sibling months** when the terminal month of that cycle is already independently `approved` with a `final_score`. Only genuinely prematurely reviewed KPIs should be stepped back.
 
-2. **Recovery Tool**: The `repair-stepped-back-siblings` edge function provides a managed two-phase recovery for siblings incorrectly stepped back:
-   - **Scan Phase** (`mode: "scan"`): Identifies multi-month KPIs at `kra_set` (2026+) where the terminal sibling in the same cycle is `approved` with a `final_score`. Returns per-KPI detail rows.
-   - **Repair Phase** (`mode: "repair"`, `kpi_ids: [...]`): Copies the terminal sibling's full submission data (all reviewer scores, ratings, remarks, evidence) to the stuck KPI. Advances status to `approved`. Logs `SIBLING_RE_PERCOLATION` audit entry.
+2. **Recovery Tool**: The `repair-stepped-back-siblings` edge function provides a managed two-phase recovery with three recovery paths:
+   - **Same-Year Sibling Recovery**: Non-terminal KPIs recover from their approved terminal sibling in the same review year.
+   - **Cross-Year Sibling Recovery**: Non-terminal KPIs in wrapping cycles (e.g., Dec-Jan) recover from their terminal sibling in the previous year.
+   - **Audit-Log Self-Recovery**: Terminal months that were previously approved and then bulk-stepped-back reconstruct their submission data from audit log entries (ORG_KPI_PROPAGATED, MANAGER_FORWARDED, SKIP_LEVEL_FORWARDED, HR_PMS_FORWARDED, etc.).
+   - All paths: Scan phase returns per-KPI detail rows with `recovery_type`. Repair phase copies/reconstructs submission data, advances status to `approved`, logs `SIBLING_RE_PERCOLATION` audit entry. Post-repair verification confirms advancement.
    - **Post-Repair Verification**: Confirms KPIs advanced to `approved`, submissions exist, and reports remaining stuck count.
 
 3. **Cycle Resolution**: The function uses `frequency_cycle_start` to correctly identify cycle boundaries and terminal months. Non-terminal months within a cycle are candidates; terminal months themselves are skipped.
