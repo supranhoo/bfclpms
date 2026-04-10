@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 1.88.0 — §75: Step-back sibling preservation and re-percolation repair tool
+> **Version:** 1.89.0 — §75: Cross-year cycle recovery for sibling re-percolation
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1469,13 +1469,17 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
 
 1. **Guard Rule**: Bulk step-back operations targeting multi-month KPIs (Bi-Monthly, Quarterly, Half-Yearly, Yearly) **must preserve non-terminal sibling months** when the terminal month of that cycle is already independently `approved` with a `final_score`. Only genuinely prematurely reviewed KPIs should be stepped back.
 
-2. **Recovery Tool**: The `repair-stepped-back-siblings` edge function provides a managed two-phase recovery for siblings incorrectly stepped back:
-   - **Scan Phase** (`mode: "scan"`): Identifies multi-month KPIs at `kra_set` (2026+) where the terminal sibling in the same cycle is `approved` with a `final_score`. Returns per-KPI detail rows.
-   - **Repair Phase** (`mode: "repair"`, `kpi_ids: [...]`): Copies the terminal sibling's full submission data (all reviewer scores, ratings, remarks, evidence) to the stuck KPI. Advances status to `approved`. Logs `SIBLING_RE_PERCOLATION` audit entry.
+2. **Recovery Tool**: The `repair-stepped-back-siblings` edge function provides a managed two-phase recovery with three recovery paths:
+   - **Same-Year Sibling Recovery**: Non-terminal KPIs recover from their approved terminal sibling in the same review year.
+   - **Cross-Year Sibling Recovery**: Non-terminal KPIs in wrapping cycles (e.g., Dec-Jan) recover from their terminal sibling in the previous year.
+   - **Audit-Log Self-Recovery**: Terminal months that were previously approved and then bulk-stepped-back reconstruct their submission data from audit log entries (ORG_KPI_PROPAGATED, MANAGER_FORWARDED, SKIP_LEVEL_FORWARDED, HR_PMS_FORWARDED, etc.).
+   - All paths: Scan phase returns per-KPI detail rows with `recovery_type`. Repair phase copies/reconstructs submission data, advances status to `approved`, logs `SIBLING_RE_PERCOLATION` audit entry. Post-repair verification confirms advancement.
    - **Post-Repair Verification**: Confirms KPIs advanced to `approved`, submissions exist, and reports remaining stuck count.
 
 3. **Cycle Resolution**: The function uses `frequency_cycle_start` to correctly identify cycle boundaries and terminal months. Non-terminal months within a cycle are candidates; terminal months themselves are skipped.
 
-4. **Scope Restriction**: This repair tool only targets KPIs with `review_year >= 2026` to preserve historical data integrity (per Migration Governance §69).
+4. **Cross-Year Cycle Recovery**: For cycles that span a year boundary (e.g., Dec-Jan Bi-Monthly with `cycle_start = "Feb-Mar"`), the repair tool resolves the terminal sibling in the **previous calendar year**. Example: a January 2026 KPI stuck at `kra_set` will be matched to its terminal sibling December 2025 if that sibling is `approved` with a `final_score`. Audit logs include `recovery_type: "cross_year"` for traceability.
 
-5. **Access**: Admin-only. Accessible via **System Settings → Data Repair → Repair Stepped-Back Siblings**.
+5. **Scope Restriction**: This repair tool only targets KPIs with `review_year >= 2026` to preserve historical data integrity (per Migration Governance §69). Cross-year lookups extend to `review_year >= 2025` for terminal siblings only.
+
+6. **Access**: Admin-only. Accessible via **System Settings → Data Repair → Repair Stepped-Back Siblings**.

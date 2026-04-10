@@ -21,8 +21,10 @@ interface SiblingDetailRow {
   review_period: string;
   review_year: number;
   terminal_period: string | null;
+  terminal_year: number | null;
   terminal_score: number | null;
   terminal_rating: string | null;
+  recovery_type: 'same_year' | 'cross_year' | 'audit_log' | null;
   action: 'repairable' | 'skippable' | 'repaired' | 'error';
   reason: string;
 }
@@ -44,11 +46,16 @@ interface SiblingRepairResult {
 
 const REASON_LABELS: Record<string, string> = {
   no_cycle_match: 'No cycle match found',
-  is_terminal_month: 'Is terminal month (not a sibling)',
+  is_terminal_month: 'Is terminal month (genuinely pending)',
   terminal_not_approved: 'Terminal month not yet approved',
   terminal_no_final_score: 'Terminal has no final score',
+  same_year_terminal_recoverable: 'Recoverable — same-year terminal approved',
+  cross_year_terminal_recoverable: 'Recoverable — cross-year terminal approved',
+  audit_log_recoverable: 'Recoverable — prior approved journey in audit log',
+  audit_data_insufficient: 'Audit log has insufficient data to reconstruct',
   sibling_recoverable: 'Recoverable — terminal sibling approved',
   sibling_re_percolated: 'Score re-percolated from terminal',
+  audit_log_restored: 'Restored from audit log data',
 };
 
 export function SiblingRepairSection() {
@@ -63,6 +70,16 @@ export function SiblingRepairSection() {
   const repairableRows = useMemo(
     () => scanResults?.filter(r => r.action === 'repairable') ?? [],
     [scanResults]
+  );
+
+  const crossYearCount = useMemo(
+    () => repairableRows.filter(r => r.recovery_type === 'cross_year').length,
+    [repairableRows]
+  );
+
+  const auditLogCount = useMemo(
+    () => repairableRows.filter(r => r.recovery_type === 'audit_log').length,
+    [repairableRows]
   );
 
   const handleScan = async () => {
@@ -140,8 +157,10 @@ export function SiblingRepairSection() {
       'Period': r.review_period,
       'Year': r.review_year,
       'Terminal Period': r.terminal_period ?? '',
+      'Terminal Year': r.terminal_year ?? '',
       'Terminal Score': r.terminal_score ?? '',
       'Terminal Rating': r.terminal_rating ?? '',
+      'Recovery Type': r.recovery_type === 'cross_year' ? 'Cross-Year' : r.recovery_type === 'same_year' ? 'Same-Year' : r.recovery_type === 'audit_log' ? 'Audit Log' : '',
       'Status': r.action,
       'Reason': REASON_LABELS[r.reason] || r.reason,
     }));
@@ -165,8 +184,8 @@ export function SiblingRepairSection() {
     const detWs = XLSX.utils.json_to_sheet(detailSheet);
     detWs['!cols'] = [
       { wch: 22 }, { wch: 18 }, { wch: 25 }, { wch: 35 },
-      { wch: 12 }, { wch: 8 }, { wch: 14 }, { wch: 12 },
-      { wch: 12 }, { wch: 12 }, { wch: 30 },
+      { wch: 12 }, { wch: 8 }, { wch: 14 }, { wch: 8 },
+      { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 35 },
     ];
     XLSX.utils.book_append_sheet(wb, detWs, 'Details');
 
@@ -195,7 +214,7 @@ export function SiblingRepairSection() {
                   Repair Stepped-Back Siblings
                 </CardTitle>
                 <CardDescription className="mt-1">
-                  Recover multi-month KPIs stuck at "KRA Set" after bulk step-back, where the terminal sibling is already approved.
+                  Recover multi-month KPIs stuck at "KRA Set" after bulk step-back, including cross-year cycles (e.g. Dec 2025 → Jan 2026).
                 </CardDescription>
               </div>
               <ChevronDown className={`h-5 w-5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -207,7 +226,7 @@ export function SiblingRepairSection() {
             <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 text-sm">
               <AlertCircle className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
               <p className="text-muted-foreground">
-                <strong>Step 1:</strong> Scan for non-terminal multi-month KPIs at "KRA Set" whose terminal month is approved.{' '}
+                <strong>Step 1:</strong> Scan for non-terminal multi-month KPIs at "KRA Set" whose terminal month is approved (same-year and cross-year).{' '}
                 <strong>Step 2:</strong> Review and select entries.{' '}
                 <strong>Step 3:</strong> Re-percolate scores from terminal siblings.
               </p>
@@ -226,10 +245,20 @@ export function SiblingRepairSection() {
             {/* Scan Results Table */}
             {scanResults && scanResults.length > 0 && (
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Badge variant="secondary">{scanResults.length} found</Badge>
                     <Badge variant="outline">{repairableRows.length} recoverable</Badge>
+                    {crossYearCount > 0 && (
+                      <Badge variant="outline" className="border-amber-400 text-amber-700 dark:text-amber-400">
+                        {crossYearCount} cross-year
+                      </Badge>
+                    )}
+                    {auditLogCount > 0 && (
+                      <Badge variant="outline" className="border-purple-400 text-purple-700 dark:text-purple-400">
+                        {auditLogCount} audit-log
+                      </Badge>
+                    )}
                     <Badge variant="outline">{selectedIds.size} selected</Badge>
                   </div>
                   <div className="flex gap-2">
@@ -268,6 +297,7 @@ export function SiblingRepairSection() {
                         <TableHead>Period</TableHead>
                         <TableHead>Terminal</TableHead>
                         <TableHead>Score</TableHead>
+                        <TableHead>Type</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Reason</TableHead>
                       </TableRow>
@@ -288,8 +318,21 @@ export function SiblingRepairSection() {
                           <TableCell className="text-sm">{row.employee_name}</TableCell>
                           <TableCell className="text-sm max-w-[180px] truncate">{row.kpi_name}</TableCell>
                           <TableCell className="text-xs whitespace-nowrap">{row.review_period} {row.review_year}</TableCell>
-                          <TableCell className="text-xs whitespace-nowrap">{row.terminal_period ?? '—'}</TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">
+                            {row.terminal_period ? `${row.terminal_period} ${row.terminal_year ?? ''}` : '—'}
+                          </TableCell>
                           <TableCell className="text-sm">{row.terminal_score ?? '—'}</TableCell>
+                          <TableCell>
+                            {row.recovery_type === 'cross_year' ? (
+                              <Badge variant="outline" className="text-xs border-amber-400 text-amber-700 dark:text-amber-400">Cross-Year</Badge>
+                            ) : row.recovery_type === 'audit_log' ? (
+                              <Badge variant="outline" className="text-xs border-purple-400 text-purple-700 dark:text-purple-400">Audit Log</Badge>
+                            ) : row.recovery_type === 'same_year' ? (
+                              <Badge variant="outline" className="text-xs">Same-Year</Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
                           <TableCell>
                             <Badge variant={row.action === 'repairable' ? 'default' : 'secondary'} className="text-xs">
                               {row.action}
@@ -353,7 +396,9 @@ export function SiblingRepairSection() {
                           <TableHead>Employee</TableHead>
                           <TableHead>KPI</TableHead>
                           <TableHead>Period</TableHead>
+                          <TableHead>Terminal</TableHead>
                           <TableHead>Score</TableHead>
+                          <TableHead>Type</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead>Reason</TableHead>
                         </TableRow>
@@ -364,7 +409,21 @@ export function SiblingRepairSection() {
                             <TableCell className="text-sm">{row.employee_name}</TableCell>
                             <TableCell className="text-sm max-w-[200px] truncate">{row.kpi_name}</TableCell>
                             <TableCell className="text-xs whitespace-nowrap">{row.review_period} {row.review_year}</TableCell>
+                            <TableCell className="text-xs whitespace-nowrap">
+                              {row.terminal_period ? `${row.terminal_period} ${row.terminal_year ?? ''}` : '—'}
+                            </TableCell>
                             <TableCell className="text-sm">{row.terminal_score ?? '—'}</TableCell>
+                            <TableCell>
+                              {row.recovery_type === 'cross_year' ? (
+                                <Badge variant="outline" className="text-xs border-amber-400 text-amber-700 dark:text-amber-400">Cross-Year</Badge>
+                              ) : row.recovery_type === 'audit_log' ? (
+                                <Badge variant="outline" className="text-xs border-purple-400 text-purple-700 dark:text-purple-400">Audit Log</Badge>
+                              ) : row.recovery_type === 'same_year' ? (
+                                <Badge variant="outline" className="text-xs">Same-Year</Badge>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
                             <TableCell>
                               <Badge
                                 variant={row.action === 'repaired' ? 'default' : row.action === 'error' ? 'destructive' : 'secondary'}
@@ -395,23 +454,18 @@ export function SiblingRepairSection() {
                       </div>
                       <div className="text-center p-2 rounded bg-background">
                         <div className="text-lg font-bold">{repairResults.verification.remaining_stuck}</div>
-                        <div className="text-xs text-muted-foreground">Remaining Stuck</div>
+                        <div className="text-xs text-muted-foreground">Still Stuck</div>
                       </div>
                     </div>
-                    {repairResults.verification.kpis_verified < repairResults.repaired && (
-                      <p className="text-xs text-amber-600">
-                        ⚠ {repairResults.repaired - repairResults.verification.kpis_verified} KPI(s) did not advance to Approved — investigate manually.
-                      </p>
-                    )}
                   </div>
                 )}
 
                 {repairResults.errors.length > 0 && (
-                  <div className="space-y-1">
-                    <span className="text-xs font-medium text-destructive">Errors ({repairResults.errors.length}):</span>
-                    {repairResults.errors.map((e, i) => (
-                      <p key={i} className="text-xs text-destructive/80 font-mono">{e}</p>
-                    ))}
+                  <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3">
+                    <span className="text-sm font-medium text-destructive">Errors ({repairResults.errors.length})</span>
+                    <ul className="mt-1 text-xs text-muted-foreground list-disc list-inside">
+                      {repairResults.errors.slice(0, 10).map((e, i) => <li key={i}>{e}</li>)}
+                    </ul>
                   </div>
                 )}
               </div>
@@ -424,9 +478,9 @@ export function SiblingRepairSection() {
         open={showConfirm}
         onConfirm={handleRepairSelected}
         onCancel={() => setShowConfirm(false)}
-        title={`Re-percolate ${selectedIds.size} KPI(s)?`}
-        description={`This will copy scores from approved terminal siblings and advance ${selectedIds.size} KPI(s) from "KRA Set" to "Approved". This action cannot be undone.`}
-        confirmLabel="Repair Selected"
+        title={`Re-percolate ${selectedIds.size} sibling KPIs?`}
+        description="This will copy terminal sibling scores to the selected KPIs and advance them to 'approved'. This action is logged but cannot be automatically reversed."
+        confirmLabel="Re-percolate Selected"
         isLoading={isRepairing}
       />
     </Card>

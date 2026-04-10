@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.29.0 — Sibling re-percolation repair tool for stepped-back multi-month KPIs (§75)
+> **Version:** 2.30.0 — Cross-year cycle recovery for sibling re-percolation repair (§75)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
