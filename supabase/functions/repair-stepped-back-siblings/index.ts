@@ -159,6 +159,7 @@ Deno.serve(async (req) => {
       });
     }
     const supabase = auth.adminClient;
+    const user = auth.user; // CAPA: ensure user is in scope for audit logs (kpi_status ≠ review_status)
 
     // Parse request
     let mode: "scan" | "repair" = "scan";
