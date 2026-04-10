@@ -212,6 +212,9 @@ export function BulkZeroScoreSection() {
         kpi_ids: Array.from(selectedKpiIds),
         org_kpi_ids: includeOrgKpis ? Array.from(selectedOrgIds) : [],
         admin_remarks: adminRemarks,
+        division_id: divisionId,
+        business_unit_id: businessUnitId,
+        department_id: departmentId,
       });
       setExecuteResult(data);
       setScanDetails(null);
