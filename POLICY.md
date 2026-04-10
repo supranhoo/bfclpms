@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 1.81.0 — admin-incentive override grants compute-monthly-incentives access (§72)
+> **Version:** 1.82.0 — Incentive edge function RBAC centralized via shared helper; role-agnostic menu overrides (§73)
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1419,3 +1419,24 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
 5. **Security**: All access is gated by the `has_menu_access_override()` SECURITY DEFINER function, which checks the `menu_access_user_overrides` table. Only admins can grant overrides via the Menu Access Rights UI.
 
 6. **Incident Reference**: User 201091 (Upendra Singh, role: manager) was granted `admin-incentive-data` override but could not see any employees on Incentive Data Entry. Root cause: (a) `profiles` RLS had no policy for this menu key, and (b) eligibility/production tables checked for `admin-incentive` instead of `admin-incentive-data`. Fixed in v1.79.0 by adding dedicated RLS policies.
+
+---
+
+### §73 — Incentive Edge Function RBAC: Shared Auth Helper
+
+1. **Mandate**: All incentive edge functions (`compute-monthly-incentives`, `detect-retroactive-incentive-changes`, and any future incentive functions) **must** use the shared `checkIncentiveAccess()` helper from `supabase/functions/_shared/incentive-auth.ts`. Inline hardcoded role checks are prohibited.
+
+2. **Authorization Tiers**:
+   - **Tier 1 — Privileged Roles**: Users with `admin` or `hr_pms` roles in `user_roles` are always authorized.
+   - **Tier 2 — Menu Override (Role-Agnostic)**: Users with **any** base role (`employee`, `manager`, `auditor`, etc.) are authorized if they have a matching entry in `menu_access_user_overrides` for the specified menu key (e.g., `admin-incentive`).
+   - **Service Role Token**: Internal/cron calls using the service role key bypass all checks.
+
+3. **Menu Key Mapping**:
+   | Edge Function | Required Menu Key |
+   |---|---|
+   | `compute-monthly-incentives` | `admin-incentive` |
+   | `detect-retroactive-incentive-changes` | `admin-incentive` |
+
+4. **Granting Access**: Admins use **System Settings → Menu Access → User Overrides** to grant `admin-incentive` to any user. No code change or redeployment is required.
+
+5. **Security**: The shared helper validates the JWT, checks roles, and checks overrides in a deterministic order. It never exposes internal error details to the client.
