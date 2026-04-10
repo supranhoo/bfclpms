@@ -1,48 +1,26 @@
 
 
-## Fix: Allow `reports-incentive` Menu Override to Authorize Edge Functions
+## Fix: Add Missing UPDATE RLS Policy for Menu Access Overrides
 
-### Problem
-A Manager/Employee with `reports-incentive` menu override can **see** the Incentive Report page but gets a 403 when clicking **Compute** or **Retroactive Detection**. The edge functions only check for `admin-incentive` override — a separate admin-section key that isn't visible or intuitive for report-level users.
+### Root Cause
+The `menu_access_user_overrides` table has INSERT, SELECT, and DELETE RLS policies but **no UPDATE policy**. The code uses `.upsert()` with `onConflict: 'menu_key,user_id'`, which requires UPDATE permission when a matching row already exists. This causes a silent RLS violation → the "Failed to grant access" error.
 
 ### Solution
-Update the shared auth helper to accept **multiple menu keys** instead of a single key. The edge functions will pass both `admin-incentive` and `reports-incentive`, so a user with **either** override can execute the function.
 
-### Changes
+**1. Database Migration** — Add an UPDATE RLS policy:
+```sql
+CREATE POLICY "Admins can update menu user overrides"
+ON public.menu_access_user_overrides
+FOR UPDATE
+TO authenticated
+USING (has_role(auth.uid(), 'admin'::app_role))
+WITH CHECK (has_role(auth.uid(), 'admin'::app_role));
+```
 
-**File: `supabase/functions/_shared/incentive-auth.ts`**
-- Change `menuKey: string` parameter to `menuKeys: string | string[]`
-- Normalize to array internally
-- Update the Tier 2 query to use `.in('menu_key', menuKeysArray)` instead of `.eq('menu_key', menuKey)`
-
-**File: `supabase/functions/compute-monthly-incentives/index.ts`**
-- Change line 19 from:
-  `checkIncentiveAccess(supabase, ..., 'admin-incentive')`
-  to:
-  `checkIncentiveAccess(supabase, ..., ['admin-incentive', 'reports-incentive'])`
-
-**File: `supabase/functions/detect-retroactive-incentive-changes/index.ts`**
-- Same change — pass both keys
-
-**File: `POLICY.md`**
-- Update §73 to document that edge functions accept multiple menu keys
-
-**File: `DOCUMENTATION.md`**
-- Record the fix
-
-### Access Matrix After Fix
-
-| User Role | Override | Compute? | Detect? |
-|---|---|---|---|
-| admin | N/A | YES (role) | YES (role) |
-| hr_pms | N/A | YES (role) | YES (role) |
-| manager | `reports-incentive` | YES | YES |
-| manager | `admin-incentive` | YES | YES |
-| employee | `reports-incentive` | YES | YES |
-| employee | none | NO | NO |
+**2. Documentation** — Update POLICY.md and DOCUMENTATION.md to record the fix.
 
 ### Risk Assessment
-- **Data Impact**: None — no schema changes
-- **Security**: Maintained — access still requires explicit menu override grant by admin
-- **Regression**: None — existing `admin-incentive` overrides continue to work; additive only
+- **Data Impact**: None — additive policy only
+- **Security**: Maintained — same admin-only guard as INSERT/DELETE
+- **Regression**: None — only enables the upsert that was already intended
 
