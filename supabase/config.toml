@@ -48,6 +48,9 @@ verify_jwt = false
 [functions.repair-orphaned-propagations]
 verify_jwt = false
 
+[functions.repair-stepped-back-siblings]
+verify_jwt = false
+
 [functions.send-pending-report-reminder]
 verify_jwt = false
 
