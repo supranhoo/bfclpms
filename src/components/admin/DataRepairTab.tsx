@@ -26,6 +26,12 @@ interface DetailRow {
   reason: string;
 }
 
+interface Verification {
+  kpis_verified: number;
+  submissions_verified: number;
+  remaining_orphans: number;
+}
+
 interface RepairResult {
   mode: 'scan' | 'repair';
   repaired: number;
@@ -36,6 +42,7 @@ interface RepairResult {
   details: DetailRow[];
   ran_at: string;
   message?: string;
+  verification?: Verification | null;
 }
 
 const REASON_LABELS: Record<string, string> = {
@@ -67,7 +74,7 @@ export function DataRepairTab() {
     setSelectedIds(new Set());
     try {
       const { data, error } = await supabase.functions.invoke('repair-orphaned-propagations', {
-        body: { mode: 'scan', limit: 500 },
+        body: { mode: 'scan', limit: 1500 },
       });
       if (error) throw error;
       const result = data as RepairResult;
@@ -93,7 +100,7 @@ export function DataRepairTab() {
     try {
       const ids = Array.from(selectedIds);
       const { data, error } = await supabase.functions.invoke('repair-orphaned-propagations', {
-        body: { mode: 'repair', kpi_ids: ids, limit: 500, fix_null_values: true },
+        body: { mode: 'repair', kpi_ids: ids, limit: 1500, fix_null_values: true },
       });
       if (error) throw error;
       const result = data as RepairResult;
@@ -370,6 +377,31 @@ export function DataRepairTab() {
                       ))}
                     </TableBody>
                   </Table>
+                </div>
+              )}
+
+              {repairResults.verification && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/30 p-3 space-y-2">
+                  <span className="text-sm font-medium">Post-Repair Verification</span>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="text-center p-2 rounded bg-background">
+                      <div className="text-lg font-bold">{repairResults.verification.kpis_verified}</div>
+                      <div className="text-xs text-muted-foreground">KPIs → Self Review ✓</div>
+                    </div>
+                    <div className="text-center p-2 rounded bg-background">
+                      <div className="text-lg font-bold">{repairResults.verification.submissions_verified}</div>
+                      <div className="text-xs text-muted-foreground">Submissions Created ✓</div>
+                    </div>
+                    <div className="text-center p-2 rounded bg-background">
+                      <div className="text-lg font-bold">{repairResults.verification.remaining_orphans}</div>
+                      <div className="text-xs text-muted-foreground">Remaining Orphans</div>
+                    </div>
+                  </div>
+                  {repairResults.verification.kpis_verified < repairResults.repaired && (
+                    <p className="text-xs text-amber-600">
+                      ⚠ {repairResults.repaired - repairResults.verification.kpis_verified} KPI(s) did not advance to Self Review — investigate manually.
+                    </p>
+                  )}
                 </div>
               )}
 

@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.26.0 — Two-phase scan-select-repair workflow with downloadable reports
+> **Version:** 2.27.0 — Post-repair verification checks, category name fix, increased scan limit to 1500
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
