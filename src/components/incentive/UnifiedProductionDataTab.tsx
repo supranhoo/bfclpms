@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ProductionTargetGrid } from './ProductionTargetGrid';
 import { VesselDataEntryGrid } from './VesselDataEntryGrid';
 import { ProductionDailyGrid } from './ProductionDailyGrid';
+import { IncentiveDataExport } from './IncentiveDataExport';
 
 interface Program {
   id: string;
@@ -17,8 +18,11 @@ interface Program {
 }
 
 export function UnifiedProductionDataTab({ programs }: { programs: Program[] }) {
+  const now = new Date();
   const activePrograms = programs.filter(p => p.is_active);
   const [selectedProgramId, setSelectedProgramId] = useState('');
+  const [currentMonth, setCurrentMonth] = useState(['January','February','March','April','May','June','July','August','September','October','November','December'][now.getMonth()]);
+  const [currentYear, setCurrentYear] = useState(now.getFullYear());
 
   const selectedProgram = activePrograms.find(p => p.id === selectedProgramId);
 
@@ -52,6 +56,13 @@ export function UnifiedProductionDataTab({ programs }: { programs: Program[] }) 
   const isProductionRateProgram = (productionRateCount ?? 0) > 0;
   const countLoading = vesselCountLoading || prodCountLoading;
 
+  const programType: 'vessel' | 'daily' | 'target' = isVesselProgram ? 'vessel' : isProductionRateProgram ? 'daily' : 'target';
+
+  const handleMonthYearChange = (m: string, y: number) => {
+    setCurrentMonth(m);
+    setCurrentYear(y);
+  };
+
   return (
     <div className="space-y-4">
       <Card>
@@ -67,6 +78,15 @@ export function UnifiedProductionDataTab({ programs }: { programs: Program[] }) 
                 ))}
               </SelectContent>
             </Select>
+            {selectedProgramId && !countLoading && selectedProgram && (
+              <IncentiveDataExport
+                programId={selectedProgramId}
+                programName={selectedProgram.name}
+                programType={programType}
+                month={currentMonth}
+                year={currentYear}
+              />
+            )}
           </div>
         </CardHeader>
       </Card>
@@ -91,14 +111,16 @@ export function UnifiedProductionDataTab({ programs }: { programs: Program[] }) 
             name: selectedProgram!.name,
             min_kra_score: selectedProgram!.min_kra_score,
           }]}
+          onMonthYearChange={handleMonthYearChange}
         />
       ) : isProductionRateProgram ? (
         <ProductionDailyGrid
           programId={selectedProgramId}
           programName={selectedProgram?.name}
+          onMonthYearChange={handleMonthYearChange}
         />
       ) : (
-        <ProductionTargetGrid controlledProgramId={selectedProgramId} />
+        <ProductionTargetGrid controlledProgramId={selectedProgramId} onMonthYearChange={handleMonthYearChange} />
       )}
     </div>
   );

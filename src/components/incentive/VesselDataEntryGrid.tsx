@@ -18,9 +18,10 @@ const MONTHS = [
 
 interface VesselDataEntryGridProps {
   programs: Array<{ id: string; name: string; min_kra_score: number }>;
+  onMonthYearChange?: (month: string, year: number) => void;
 }
 
-export function VesselDataEntryGrid({ programs }: VesselDataEntryGridProps) {
+export function VesselDataEntryGrid({ programs, onMonthYearChange }: VesselDataEntryGridProps) {
   const now = new Date();
   const [selectedProgram, setSelectedProgram] = useState(programs[0]?.id || '');
   const [month, setMonth] = useState(MONTHS[now.getMonth()]);
@@ -47,6 +48,10 @@ export function VesselDataEntryGrid({ programs }: VesselDataEntryGridProps) {
     });
     setLocalData(init);
   }, [vesselRates, existingEntries]);
+
+  useEffect(() => {
+    onMonthYearChange?.(month, year);
+  }, [month, year, onMonthYearChange]);
 
   const handleSave = () => {
     const entries = Object.entries(localData).map(([employeeId, val]) => ({

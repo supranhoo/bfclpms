@@ -27,7 +27,7 @@ interface LocalRow {
   remarks: string;
 }
 
-export function ProductionTargetGrid({ controlledProgramId }: { controlledProgramId?: string } = {}) {
+export function ProductionTargetGrid({ controlledProgramId, onMonthYearChange }: { controlledProgramId?: string; onMonthYearChange?: (month: string, year: number) => void } = {}) {
   const { user } = useAuth();
   const now = new Date();
   const [internalProgram, setInternalProgram] = useState('');
@@ -57,6 +57,10 @@ export function ProductionTargetGrid({ controlledProgramId }: { controlledProgra
   );
 
   const upsert = useUpsertProductionTargets();
+
+  useEffect(() => {
+    onMonthYearChange?.(selectedMonth, selectedYear);
+  }, [selectedMonth, selectedYear, onMonthYearChange]);
 
   // Sync DB data into local state
   useEffect(() => {

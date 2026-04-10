@@ -4848,3 +4848,13 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix**: Added a fallback RBAC check in the edge function: if the user lacks `admin`/`hr_pms` role, query `menu_access_user_overrides` for `admin-incentive` key before rejecting. Only `admin-incentive` (not `admin-incentive-data` or `reports-incentive`) grants compute authority.
 - **Policy**: Updated §72 to clarify that `admin-incentive` grants compute access in addition to configuration access.
 - **Affected files:** `supabase/functions/compute-monthly-incentives/index.ts`, `POLICY.md` (§72), `DOCUMENTATION.md`
+
+### v2.20.0 — Excel Download for Incentive Data Entry
+- **Feature**: Added "Download Excel" button to the Incentive Data Entry page, next to the program selector.
+- **Behavior**: Exports the currently selected program's data as `.xlsx`, adapting columns based on program type:
+  - **Vessel**: Employee, Code, Rate/Vessel, Vessels Handled, Total, Remarks
+  - **Production Daily**: Employee, Code, Designation, Department, Rate/Ton, Day 1–31, Total, Amount
+  - **Production Target**: Sub-Unit, Category, Target, Achieved, Incentive %, Remarks
+- **File naming**: `{ProgramName}_{Month}_{Year}.xlsx`
+- **New file**: `src/components/incentive/IncentiveDataExport.tsx`
+- **Modified files**: `UnifiedProductionDataTab.tsx`, `VesselDataEntryGrid.tsx`, `ProductionDailyGrid.tsx`, `ProductionTargetGrid.tsx`

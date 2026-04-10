@@ -22,9 +22,10 @@ type DateRange = 'all' | '1-10' | '11-20' | '21-31';
 interface Props {
   programId: string;
   programName?: string;
+  onMonthYearChange?: (month: string, year: number) => void;
 }
 
-export function ProductionDailyGrid({ programId, programName }: Props) {
+export function ProductionDailyGrid({ programId, programName, onMonthYearChange }: Props) {
   const now = new Date();
   const [month, setMonth] = useState(MONTHS[now.getMonth()]);
   const [year, setYear] = useState(now.getFullYear());
@@ -34,6 +35,10 @@ export function ProductionDailyGrid({ programId, programName }: Props) {
   const { data: rates = [], isLoading: ratesLoading } = useProductionRates(programId);
   const { data: entries = [], isLoading: entriesLoading } = useProductionDailyEntries(programId, month, year);
   const bulkUpsert = useBulkUpsertDailyEntries();
+
+  useEffect(() => {
+    onMonthYearChange?.(month, year);
+  }, [month, year, onMonthYearChange]);
 
   // Fetch mapped employees for this program (from mappings)
   const { data: mappedEmployees = [], isLoading: mappedLoading } = useQuery({
