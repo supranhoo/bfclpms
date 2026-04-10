@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 1.92.0 — §78 Employee-level Bulk Zero-Score from employee dashboard
+> **Version:** 1.92.1 — §78 Fix enum type mismatch in bulk zero-score ratings
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
