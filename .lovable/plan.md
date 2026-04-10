@@ -1,56 +1,63 @@
 
 
-## RCA + CAPA: "invalid input value for enum rating_level: '0'" — Bulk Zero-Score Failure
+## RCA + CAPA: N/A Confirmation Remarks Not Shown in Review Journey Tiles
 
 ### 1. Root Cause
 
-The `rating_level` column on `review_submissions` is a **Postgres enum** with valid values: `{red, yellow, green, blue}`. The bulk zero-score function sets all `*_rating` fields to `0` (a number), which is not a valid enum value.
+When a reviewer (Manager, Auditor, Management, or any unified level) confirms a KPI as N/A and enters remarks, the remarks are **only saved to `kpi_audit_logs`** as `new_value.na_remarks`. They are **never written** to the `review_submissions` table's corresponding `*_remarks` column (e.g., `manager_remarks`, `auditor_remarks`, `management_remarks`).
 
-**Failing lines (index.ts):**
-```typescript
-submissionData.self_rating = 0;      // ← invalid enum
-submissionData.manager_rating = 0;   // ← invalid enum
-submissionData.skip_level_rating = 0;
-submissionData.hr_pms_rating = 0;
-submissionData.auditor_rating = 0;
-submissionData.management_rating = 0;
-submissionData.final_rating = 0;     // ← invalid enum
-```
+The Review Journey tiles (`ReviewStageCard`) read remarks exclusively from `submission.*_remarks` fields. Since those fields remain NULL after N/A confirmation, the tiles display "No remarks".
 
-All 7 rating fields are typed `rating_level` enum (`red | yellow | green | blue`). Writing `0` causes a Postgres type error on every upsert, resulting in **0 KPIs zeroed** and errors for all records.
+**Affected files (4 scorecards with the same bug):**
+- `UnifiedScorecard.tsx` — lines ~1084-1092
+- `EmployeeScorecard.tsx` — lines ~476-484
+- `AuditScorecard.tsx` — lines ~471-472
+- `ManagementScorecard.tsx` — lines ~628-629
 
 ### 2. Impact
 
-- 100% of bulk zero-score execute operations fail for this employee (and likely all employees)
-- The scan phase works fine; only the execute/upsert phase is broken
-- No data corruption — writes are rejected, not silently mangled
+- All N/A confirmation remarks entered by any reviewer are invisible in the Review Journey
+- Audit trail in `kpi_audit_logs` is intact — no data loss, but the user-facing UI never surfaces these remarks
+- Affects all review levels across all scorecards
 
 ### 3. Corrective Action
 
+In each of the 4 scorecard files, after the `kpi_audit_logs` insert for N/A confirmation, add a `review_submissions` update to persist `naRemarks` into the reviewer's `*_remarks` column:
+
 | File | Change |
 |------|--------|
-| `supabase/functions/bulk-zero-score-non-submitters/index.ts` | Replace all `*_rating = 0` assignments with `*_rating = 'red'` (the lowest rating in the enum, appropriate for a zero-score) |
-| `DOCUMENTATION.md` | Log RCA v2.33.1 — enum type mismatch in bulk zero-score |
+| `UnifiedScorecard.tsx` | After audit log insert (~line 1092), add `supabase.from('review_submissions').update({ [remarksField]: naRemarks }).eq('kpi_id', selectedKpi.id)` where `remarksField` maps from `viewLevel` (e.g., `manager` → `manager_remarks`) |
+| `EmployeeScorecard.tsx` | Same pattern — save `naRemarks` to `manager_remarks` column |
+| `AuditScorecard.tsx` | Same pattern — save `naRemarks` to `auditor_remarks` column |
+| `ManagementScorecard.tsx` | Same pattern — save `naRemarks` to `management_remarks` column |
+| `DOCUMENTATION.md` | Log RCA v2.33.2 — N/A remarks not persisted to review_submissions |
 | `POLICY.md` | Sync version |
 
-**Specific fix** — change all 7 rating assignments:
+**Mapping logic (for UnifiedScorecard which handles multiple levels):**
 ```typescript
-// Before:
-submissionData.self_rating = 0;
-// After:
-submissionData.self_rating = 'red';
+const remarksFieldMap: Record<string, string> = {
+  manager: 'manager_remarks',
+  skip_level: 'skip_level_remarks',
+  hr_pms: 'hr_pms_remarks',
+  auditor: 'auditor_remarks',
+  management: 'management_remarks',
+};
+const remarksField = remarksFieldMap[viewLevel];
+if (remarksField && naRemarks.trim()) {
+  await supabase.from('review_submissions')
+    .update({ [remarksField]: naRemarks })
+    .eq('kpi_id', selectedKpi.id);
+}
 ```
-
-Apply the same change for: `manager_rating`, `skip_level_rating`, `hr_pms_rating`, `auditor_rating`, `management_rating`, `final_rating`.
 
 ### 4. Preventive Action
 
-- Add to the Edge Function Checklist: "Verify enum column types before assigning literal values — never use numeric literals for enum fields"
-- The scoring engine elsewhere in the codebase correctly maps scores to rating levels; the bulk zero-score function bypassed this mapping
+- Any flow that writes to `kpi_audit_logs` with user-entered text must also persist that text to the corresponding `review_submissions` column so it is visible in the Review Journey
+- Add to the Scorecard Checklist: "Verify all user-entered remarks are written to both audit logs AND review_submissions"
 
 ### 5. Risk Assessment
 
-- **Data impact**: None — fix changes rejected writes to valid writes
-- **Regression risk**: Zero — `'red'` is the correct semantic value for a zero score
-- **Security**: No change
+- **Data impact**: Additive only — writes remarks to a previously-NULL column
+- **Regression risk**: Zero — existing non-N/A flows are untouched
+- **Security**: No change — same RLS policies govern `review_submissions` updates
 
