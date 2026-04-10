@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.33.2 — RCA: N/A confirmation remarks now persisted to review_submissions for Review Journey visibility
+> **Version:** 2.33.5 — Fix: Prior batch warning scoped to employee_id in single-employee zero-score mode
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

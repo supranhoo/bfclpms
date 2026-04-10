@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 1.92.2 — §79 N/A confirmation remarks persisted to review_submissions
+> **Version:** 1.92.5 — §80 Prior batch warning scoped to employee in single-employee zero-score mode
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1524,7 +1524,7 @@ This ensures the correct stages are zeroed per employee.
 ### Safety Controls
 1. **Scan-before-execute**: Admins must first scan to preview affected KPIs before any zero-scoring occurs.
 2. **Elevated confirmation**: The execution dialog requires typing "ZERO" to confirm — standard button-click is insufficient.
-3. **Prior batch detection**: If a bulk zero-score batch was already executed for the same period/year, a warning is displayed.
+3. **Prior batch detection**: If a bulk zero-score batch was already executed for the same period/year, a warning is displayed. When scanning a single employee, the warning is scoped to that employee only.
 4. **Post-execution verification**: The system confirms KPIs advanced to `approved` and submissions contain `final_score = 0`.
 5. **Excel reporting**: Both scan results and execution results can be exported as multi-sheet Excel files.
 6. **Organizational scoping**: Cascading Division → Business Unit → Department filters allow admins to scope the scan to a specific org unit, reducing accidental zero-scoring risk.
