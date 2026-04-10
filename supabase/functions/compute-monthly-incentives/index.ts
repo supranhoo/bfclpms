@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { checkIncentiveAccess } from '../_shared/incentive-auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,34 +15,10 @@ serve(async (req) => {
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // --- Mandatory auth: require admin or hr_pms role ---
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-    const token = authHeader.replace('Bearer ', '');
-    if (token !== serviceKey) {
-      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-      if (authError || !user) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-      const { data: roles } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
-        .in('role', ['admin', 'hr_pms']);
-      if (!roles || roles.length === 0) {
-        // Fallback: check menu override for admin-incentive
-        const { data: overrides } = await supabase
-          .from('menu_access_user_overrides')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('menu_key', 'admin-incentive')
-          .limit(1);
-        if (!overrides || overrides.length === 0) {
-          return new Response(JSON.stringify({ error: 'Admin, HR PMS, or Incentive Admin access required' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
-      }
+    // --- Configurable RBAC via shared helper (§73) ---
+    const auth = await checkIncentiveAccess(supabase, req.headers.get('Authorization'), 'admin-incentive');
+    if (!auth.authorized) {
+      return new Response(JSON.stringify({ error: auth.error }), { status: auth.status || 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const { review_period, review_year, program_id, dry_run = false } = await req.json();
