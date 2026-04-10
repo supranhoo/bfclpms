@@ -4950,6 +4950,11 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix**: Hardened `requireAdminUser()` to validate the explicit bearer token via claims, added a deployment-sync marker to `bulk-zero-score-non-submitters`, and switched the Bulk Zero-Score UI to explicit authenticated `fetch()` via a shared helper.
 - **Regression Protection**: Added `adminEdgeFunction.test.ts` to verify bearer token forwarding and unauthenticated failure handling.
 
+### v2.33.4 — UX: Accept "0" and "zero" in bulk zero-score confirmation
+- **Root Cause**: The confirmation field required the exact uppercase string `ZERO`, but users naturally typed `0` (digit) or `zero` (lowercase), leaving the execute button permanently disabled.
+- **Fix**: Relaxed the confirmation check to accept `ZERO`, `zero`, or `0` (case-insensitive). Updated the label to "Type ZERO or 0 to confirm".
+- **Affected files**: `src/components/review/EmployeeBulkZeroScoreDialog.tsx`
+
 ### v2.33.1 — Fix enum type mismatch in bulk zero-score ratings
 - **Root Cause**: The `rating_level` column on `review_submissions` is a Postgres enum (`red | yellow | green | blue`). The bulk zero-score function assigned numeric `0` to all 7 `*_rating` fields, causing `invalid input value for enum rating_level: '0'` on every upsert — 100% execute failure.
 - **Fix**: Replaced all `*_rating = 0` assignments with `*_rating = 'red'` (the lowest valid enum value, semantically correct for a zero score).
