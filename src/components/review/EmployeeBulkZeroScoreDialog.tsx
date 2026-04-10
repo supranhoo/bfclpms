@@ -122,7 +122,7 @@ export function EmployeeBulkZeroScoreDialog({ employeeId, employeeName, reviewPe
   };
 
   const handleExecute = async () => {
-    if (confirmText !== 'ZERO') return;
+    if (!['ZERO', 'zero', '0'].includes(confirmText.trim())) return;
     setStep('executing');
     try {
       const result = await invokeAdminEdgeFunction<any>('bulk-zero-score-non-submitters', {
@@ -296,7 +296,7 @@ export function EmployeeBulkZeroScoreDialog({ employeeId, employeeName, reviewPe
 
                 {/* Confirm */}
                 <div className="space-y-1.5">
-                  <Label className="text-sm">Type <span className="font-mono font-bold text-destructive">ZERO</span> to confirm</Label>
+                  <Label className="text-sm">Type <span className="font-mono font-bold text-destructive">ZERO</span> or <span className="font-mono font-bold text-destructive">0</span> to confirm</Label>
                   <Input
                     value={confirmText}
                     onChange={e => setConfirmText(e.target.value)}
@@ -343,7 +343,7 @@ export function EmployeeBulkZeroScoreDialog({ employeeId, employeeName, reviewPe
           {step === 'results' && (selectedKpiIds.size > 0 || selectedOrgIds.size > 0) && (
             <Button
               variant="destructive"
-              disabled={confirmText !== 'ZERO'}
+              disabled={!['ZERO', 'zero', '0'].includes(confirmText.trim())}
               onClick={handleExecute}
             >
               <Ban className="h-4 w-4 mr-2" />

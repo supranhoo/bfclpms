@@ -599,6 +599,7 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.92.4 | 2026-04-10 | UX fix: bulk zero-score confirmation now accepts `ZERO`, `zero`, or `0` — previously only exact `ZERO` was accepted, blocking users who typed `0`. |
 | 1.90.4 | 2026-04-10 | Technical sync: §76 bulk zero-score edge function force-redeployed after stale kpiErr fix; added mandatory deployment verification to Edge Function Checklist. |
 | 1.90.3 | 2026-04-10 | Technical sync: §76 orphaned `kpiErr` variable reference removed from scan-mode block in `bulk-zero-score-non-submitters`. |
 | 1.90.2 | 2026-04-10 | Technical sync: §76 bulk zero-score scan query fixed — `is_na` exclusion now correctly queries `review_submissions` instead of non-existent `kpis.is_na` column. |
