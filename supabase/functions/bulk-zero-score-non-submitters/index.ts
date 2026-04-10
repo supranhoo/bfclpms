@@ -522,38 +522,38 @@ Deno.serve(async (req) => {
           // Zero out ALL stages present in the workflow
           if (stages.includes("self_review")) {
             submissionData.self_score = 0;
-            submissionData.self_rating = 0;
+            submissionData.self_rating = 'red';
             submissionData.self_remarks = zeroRemark;
           }
           if (stages.includes("manager_check")) {
             submissionData.manager_score = 0;
-            submissionData.manager_rating = 0;
+            submissionData.manager_rating = 'red';
             submissionData.manager_remarks = zeroRemark;
           }
           if (stages.includes("skip_level_check")) {
             submissionData.skip_level_score = 0;
-            submissionData.skip_level_rating = 0;
+            submissionData.skip_level_rating = 'red';
             submissionData.skip_level_remarks = zeroRemark;
           }
           if (stages.includes("hr_pms_review")) {
             submissionData.hr_pms_score = 0;
-            submissionData.hr_pms_rating = 0;
+            submissionData.hr_pms_rating = 'red';
             submissionData.hr_pms_remarks = zeroRemark;
           }
           if (stages.includes("audit")) {
             submissionData.auditor_score = 0;
-            submissionData.auditor_rating = 0;
+            submissionData.auditor_rating = 'red';
             submissionData.auditor_remarks = zeroRemark;
           }
           if (stages.includes("management_review")) {
             submissionData.management_score = 0;
-            submissionData.management_rating = 0;
+            submissionData.management_rating = 'red';
             submissionData.management_remarks = zeroRemark;
           }
 
           // Always set final
           submissionData.final_score = 0;
-          submissionData.final_rating = 0;
+          submissionData.final_rating = 'red';
 
           // Upsert review_submissions
           const { error: subErr } = await supabase

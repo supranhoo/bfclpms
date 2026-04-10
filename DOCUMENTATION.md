@@ -4950,6 +4950,12 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix**: Hardened `requireAdminUser()` to validate the explicit bearer token via claims, added a deployment-sync marker to `bulk-zero-score-non-submitters`, and switched the Bulk Zero-Score UI to explicit authenticated `fetch()` via a shared helper.
 - **Regression Protection**: Added `adminEdgeFunction.test.ts` to verify bearer token forwarding and unauthenticated failure handling.
 
+### v2.33.1 — Fix enum type mismatch in bulk zero-score ratings
+- **Root Cause**: The `rating_level` column on `review_submissions` is a Postgres enum (`red | yellow | green | blue`). The bulk zero-score function assigned numeric `0` to all 7 `*_rating` fields, causing `invalid input value for enum rating_level: '0'` on every upsert — 100% execute failure.
+- **Fix**: Replaced all `*_rating = 0` assignments with `*_rating = 'red'` (the lowest valid enum value, semantically correct for a zero score).
+- **Preventive**: Added to Edge Function Checklist: "Verify enum column types before assigning literal values — never use numeric literals for enum fields."
+- **Affected files**: `supabase/functions/bulk-zero-score-non-submitters/index.ts`
+
 ### v2.33.0 — Employee-level Bulk Zero-Score on dashboard
 - **Feature**: Admins can now zero-score non-submitted KPIs for a specific employee directly from the Employee Dashboard (UnifiedScorecard), without navigating to the Data Repair tab.
 - **UI**: A "Zero-Score" button (Ban icon) appears in the KPI Details header for admin users. Opens `EmployeeBulkZeroScoreDialog` with Scan → Select → Confirm ("ZERO") → Execute flow.
