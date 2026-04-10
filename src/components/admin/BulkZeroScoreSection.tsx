@@ -174,6 +174,9 @@ export function BulkZeroScoreSection() {
         review_period: reviewPeriod,
         review_year: reviewYear,
         include_org_kpis: includeOrgKpis,
+        division_id: divisionId,
+        business_unit_id: businessUnitId,
+        department_id: departmentId,
       });
 
       setScanDetails(data.details || []);
