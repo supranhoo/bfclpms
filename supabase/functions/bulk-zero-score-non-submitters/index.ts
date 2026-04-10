@@ -166,7 +166,7 @@ Deno.serve(async (req) => {
         ? allStuckKpis.filter((k: any) => orgEmployeeAllowlist!.has(k.employee_id))
         : allStuckKpis;
 
-      if (kpiErr) throw kpiErr;
+      
 
       // 2. Exclude sent-back KPIs (have open kpi_queries)
       const stuckIds = (stuckKpis ?? []).map((k: any) => k.id);
