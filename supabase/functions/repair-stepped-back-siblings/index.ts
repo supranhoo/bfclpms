@@ -359,7 +359,8 @@ Deno.serve(async (req) => {
             skip_level_score: termSub.skip_level_score, skip_level_rating: termSub.skip_level_rating, skip_level_remarks: termSub.skip_level_remarks,
             hr_pms_score: termSub.hr_pms_score, hr_pms_rating: termSub.hr_pms_rating, hr_pms_remarks: termSub.hr_pms_remarks,
             final_score: termSub.final_score, final_rating: termSub.final_rating,
-            kpi_status: "approved",
+            // NOTE: review_submissions.kpi_status uses kpi_status enum (open|submitted|approved_by_manager|locked), NOT review_status
+            kpi_status: "locked",
           }, { onConflict: "kpi_id" });
 
           if (upsertErr) {
