@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.33.0 — Employee-level Bulk Zero-Score on dashboard for admins
+> **Version:** 2.33.2 — RCA: N/A confirmation remarks now persisted to review_submissions for Review Journey visibility
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

@@ -1089,6 +1089,21 @@ export function UnifiedScorecard({
           new_value: { na_remarks: naRemarks },
           metadata: { confirmed_at: new Date().toISOString() },
         });
+
+        // Persist N/A remarks to review_submissions so Review Journey tiles show them
+        const remarksFieldMap: Record<string, string> = {
+          manager: 'manager_remarks',
+          skip_level: 'skip_level_remarks',
+          hr_pms: 'hr_pms_remarks',
+          auditor: 'auditor_remarks',
+          management: 'management_remarks',
+        };
+        const remarksField = remarksFieldMap[viewLevel];
+        if (remarksField && naRemarks.trim()) {
+          await supabase.from('review_submissions')
+            .update({ [remarksField]: naRemarks } as any)
+            .eq('kpi_id', selectedKpi.id);
+        }
       }
       
       const newStatus = approve ? config.forwardStatus : config.activeReviewStage;
