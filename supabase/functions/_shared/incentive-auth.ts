@@ -26,8 +26,9 @@ const PRIVILEGED_ROLES = ['admin', 'hr_pms'];
 export async function checkIncentiveAccess(
   supabase: SupabaseClient,
   authHeader: string | null,
-  menuKey: string,
+  menuKeys: string | string[],
 ): Promise<IncentiveAuthResult> {
+  const keysArray = Array.isArray(menuKeys) ? menuKeys : [menuKeys];
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -63,7 +64,7 @@ export async function checkIncentiveAccess(
     .from('menu_access_user_overrides')
     .select('id')
     .eq('user_id', user.id)
-    .eq('menu_key', menuKey)
+    .in('menu_key', keysArray)
     .limit(1);
 
   if (overrides && overrides.length > 0) {

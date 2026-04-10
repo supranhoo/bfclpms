@@ -16,7 +16,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceKey);
 
     // --- Configurable RBAC via shared helper (§73) ---
-    const auth = await checkIncentiveAccess(supabase, req.headers.get('Authorization'), 'admin-incentive');
+    const auth = await checkIncentiveAccess(supabase, req.headers.get('Authorization'), ['admin-incentive', 'reports-incentive']);
     if (!auth.authorized) {
       return new Response(JSON.stringify({ error: auth.error }), { status: auth.status || 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
