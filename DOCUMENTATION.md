@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.31.4 — Add Division/BU/Department org filters to Bulk Zero-Score + batched fetch
+> **Version:** 2.31.5 — Fix kpiErr ReferenceError in bulk-zero-score scan (stale variable after batch refactor)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
