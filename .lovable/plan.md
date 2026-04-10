@@ -1,71 +1,41 @@
 
 
-## RCA: "Computation failed — Edge Function returned a non-2xx status code" (403)
+## Add Excel Download to Incentive Data Entry
 
-### Root Cause
+### What
+Add a "Download Excel" button next to the program selector in the `UnifiedProductionDataTab`. The export will download the currently visible grid data as an `.xlsx` file, adapting columns based on the program type (Vessel, Production Daily, or Production Target).
 
-The `compute-monthly-incentives` edge function (line 28-35) enforces RBAC by checking the `user_roles` table for `admin` or `hr_pms` roles only:
+### How
 
-```typescript
-const { data: roles } = await supabase
-  .from('user_roles')
-  .select('role')
-  .eq('user_id', user.id)
-  .in('role', ['admin', 'hr_pms']);
-if (!roles || roles.length === 0) {
-  return new Response(..., { status: 403 });
-}
-```
+**File: `src/components/incentive/UnifiedProductionDataTab.tsx`**
+- Add a `Download` button next to the program `Select` dropdown (visible only when a program is selected and data is loaded)
+- Pass `selectedProgramId`, `selectedProgram.name`, and the detected program type (`vessel` / `daily` / `target`) to a new export utility
 
-The user triggering the compute (likely Jitendra Bharti — 101715, or another user with `reports-incentive` / `admin-incentive` menu override) has role `manager` in `user_roles`. The function does not check `menu_access_user_overrides` for `admin-incentive` or `reports-incentive`, so it returns **403 Forbidden**.
+**New File: `src/components/incentive/IncentiveDataExport.tsx`**
+- A button component that accepts `programId`, `programName`, and `programType`
+- On click, fetches the relevant data from the database and exports via `xlsx`:
 
-| User | Employee Code | `user_roles.role` | Menu Overrides | Can Compute? |
-|------|--------------|-------------------|----------------|--------------|
-| Jitendra Bharti | 101715 | manager | `admin-incentive`, `admin-incentive-data`, `reports-incentive` | NO (403) |
-| Upendra Singh | 201091 | manager | `admin-incentive-data`, `reports-incentive` | NO (403) |
-| Sandeep Kumar | 200291 | (unknown) | `admin-incentive-data`, `reports-incentive` | NO (403) |
+| Program Type | Data Source | Export Columns |
+|---|---|---|
+| **Vessel** | `incentive_vessel_rates` + `vessel_monthly_entries` | Employee, Code, Rate/Vessel, Vessels Handled, Total, Remarks |
+| **Production Daily** | `incentive_production_rates` + `production_daily_entries` | Employee, Code, Designation, Department, Rate/Ton, Day 1..31, Total, Amount |
+| **Production Target** | `incentive_production_targets` | Sub-Unit, Category, Target, Achieved, Incentive %, Remarks |
 
-### Fix
+- Uses month/year filters matching the currently selected period
+- File name: `{ProgramName}_{Month}_{Year}.xlsx`
 
-Update the RBAC check in `compute-monthly-incentives` to also allow users with `admin-incentive` menu override. The `reports-incentive` key should grant **read-only** access (view/export), NOT compute — computation is a write operation that should require `admin-incentive`.
-
-**Change in `supabase/functions/compute-monthly-incentives/index.ts` (lines 28-35):**
-
-After the `user_roles` check fails, add a fallback check against `menu_access_user_overrides` for the `admin-incentive` menu key:
-
-```typescript
-// Existing role check
-const { data: roles } = await supabase
-  .from('user_roles')
-  .select('role')
-  .eq('user_id', user.id)
-  .in('role', ['admin', 'hr_pms']);
-
-if (!roles || roles.length === 0) {
-  // Fallback: check menu override for admin-incentive
-  const { data: overrides } = await supabase
-    .from('menu_access_user_overrides')
-    .select('id')
-    .eq('user_id', user.id)
-    .eq('menu_key', 'admin-incentive')
-    .limit(1);
-  if (!overrides || overrides.length === 0) {
-    return new Response(JSON.stringify({ error: 'Admin, HR PMS, or Incentive Admin access required' }), 
-      { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-  }
-}
-```
+### Technical Details
+- Reuses existing `xlsx` library (already in the project via `OrgKpiBulkExport`)
+- The export component will accept the grid's current state data as props (no extra DB fetch needed) OR re-fetch from DB to ensure completeness
+- For Production Daily, all 31 day columns will be included regardless of the date-range toggle (full month export)
 
 ### Files to Change
-
 | File | Change |
-|------|--------|
-| `supabase/functions/compute-monthly-incentives/index.ts` | Add menu override fallback in RBAC check (lines 28-35) |
-| `POLICY.md` | Document that `admin-incentive` menu override grants compute access |
-| `DOCUMENTATION.md` | Record RCA and fix |
-
-### Risk Assessment
-- **Data Impact**: None — no schema changes
-- **Security**: Controlled — only `admin-incentive` override holders gain compute access; `admin-incentive-data` (data entry only) and `reports-incentive` (read-only) do NOT get compute rights
-- **Regression Risk**: None — additive check, existing admin/hr_pms users unaffected
+|---|---|
+| `src/components/incentive/IncentiveDataExport.tsx` | New — export button component with xlsx generation logic |
+| `src/components/incentive/UnifiedProductionDataTab.tsx` | Add export button next to program selector |
+| `src/components/incentive/VesselDataEntryGrid.tsx` | Pass export-ready data up or add download button inline |
+| `src/components/incentive/ProductionDailyGrid.tsx` | Add download button inline |
+| `src/components/incentive/ProductionTargetGrid.tsx` | Add download button inline |
+| `DOCUMENTATION.md` | Document export feature |
 
