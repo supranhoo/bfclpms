@@ -1,63 +1,44 @@
 
 
-## RCA + CAPA: N/A Confirmation Remarks Not Shown in Review Journey Tiles
+## Fix: "Zero-Score N Items" Button Not Activating
 
-### 1. Root Cause
+### Root Cause
 
-When a reviewer (Manager, Auditor, Management, or any unified level) confirms a KPI as N/A and enters remarks, the remarks are **only saved to `kpi_audit_logs`** as `new_value.na_remarks`. They are **never written** to the `review_submissions` table's corresponding `*_remarks` column (e.g., `manager_remarks`, `auditor_remarks`, `management_remarks`).
+The user typed `0` (the digit) in the confirmation field, but the code requires the exact uppercase string `ZERO`. The button's `disabled` condition is `confirmText !== 'ZERO'`, so it remains unclickable. This is a UX clarity problem — the label says "Type ZERO to confirm" but users naturally type the numeral.
 
-The Review Journey tiles (`ReviewStageCard`) read remarks exclusively from `submission.*_remarks` fields. Since those fields remain NULL after N/A confirmation, the tiles display "No remarks".
+### Corrective Action
 
-**Affected files (4 scorecards with the same bug):**
-- `UnifiedScorecard.tsx` — lines ~1084-1092
-- `EmployeeScorecard.tsx` — lines ~476-484
-- `AuditScorecard.tsx` — lines ~471-472
-- `ManagementScorecard.tsx` — lines ~628-629
-
-### 2. Impact
-
-- All N/A confirmation remarks entered by any reviewer are invisible in the Review Journey
-- Audit trail in `kpi_audit_logs` is intact — no data loss, but the user-facing UI never surfaces these remarks
-- Affects all review levels across all scorecards
-
-### 3. Corrective Action
-
-In each of the 4 scorecard files, after the `kpi_audit_logs` insert for N/A confirmation, add a `review_submissions` update to persist `naRemarks` into the reviewer's `*_remarks` column:
+Make the confirmation case-insensitive and accept both `ZERO` and `0` as valid inputs:
 
 | File | Change |
 |------|--------|
-| `UnifiedScorecard.tsx` | After audit log insert (~line 1092), add `supabase.from('review_submissions').update({ [remarksField]: naRemarks }).eq('kpi_id', selectedKpi.id)` where `remarksField` maps from `viewLevel` (e.g., `manager` → `manager_remarks`) |
-| `EmployeeScorecard.tsx` | Same pattern — save `naRemarks` to `manager_remarks` column |
-| `AuditScorecard.tsx` | Same pattern — save `naRemarks` to `auditor_remarks` column |
-| `ManagementScorecard.tsx` | Same pattern — save `naRemarks` to `management_remarks` column |
-| `DOCUMENTATION.md` | Log RCA v2.33.2 — N/A remarks not persisted to review_submissions |
+| `EmployeeBulkZeroScoreDialog.tsx` | Change the disabled check from `confirmText !== 'ZERO'` to `!['ZERO', 'zero', '0'].includes(confirmText.trim())` — accepts `ZERO`, `zero`, or `0` |
+| `DOCUMENTATION.md` | Log UX fix v2.33.4 |
 | `POLICY.md` | Sync version |
 
-**Mapping logic (for UnifiedScorecard which handles multiple levels):**
+**Line ~130 (handleExecute guard):**
 ```typescript
-const remarksFieldMap: Record<string, string> = {
-  manager: 'manager_remarks',
-  skip_level: 'skip_level_remarks',
-  hr_pms: 'hr_pms_remarks',
-  auditor: 'auditor_remarks',
-  management: 'management_remarks',
-};
-const remarksField = remarksFieldMap[viewLevel];
-if (remarksField && naRemarks.trim()) {
-  await supabase.from('review_submissions')
-    .update({ [remarksField]: naRemarks })
-    .eq('kpi_id', selectedKpi.id);
-}
+// Before:
+if (confirmText !== 'ZERO') return;
+// After:
+if (!['ZERO', 'zero', '0'].includes(confirmText.trim())) return;
 ```
 
-### 4. Preventive Action
+**Line ~345 (button disabled prop):**
+```typescript
+// Before:
+disabled={confirmText !== 'ZERO'}
+// After:
+disabled={!['ZERO', 'zero', '0'].includes(confirmText.trim())}
+```
 
-- Any flow that writes to `kpi_audit_logs` with user-entered text must also persist that text to the corresponding `review_submissions` column so it is visible in the Review Journey
-- Add to the Scorecard Checklist: "Verify all user-entered remarks are written to both audit logs AND review_submissions"
+Also update the label text to clarify accepted inputs:
+```
+Type ZERO or 0 to confirm
+```
 
-### 5. Risk Assessment
-
-- **Data impact**: Additive only — writes remarks to a previously-NULL column
-- **Regression risk**: Zero — existing non-N/A flows are untouched
-- **Security**: No change — same RLS policies govern `review_submissions` updates
+### Risk Assessment
+- **Data impact**: None
+- **Regression risk**: Zero — only relaxes the confirmation input matching
+- **UX improvement**: Users who type `0` or `zero` are no longer blocked
 
