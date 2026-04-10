@@ -181,7 +181,9 @@ export function UnifiedScorecard({
   const selectedPeriod = periodSelection.selectedMonth;
   const selectedYear = periodSelection.selectedYear;
   const isMobile = useIsMobile();
-  const { user } = useAuth();
+  const { user, effectiveRole } = useAuth();
+  const isAdmin = effectiveRole === 'admin';
+  const [zeroScoreDialogOpen, setZeroScoreDialogOpen] = useState(false);
   const { data: allKpis, isLoading } = useKpisByEmployee(employee.id);
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -1463,6 +1465,16 @@ export function UnifiedScorecard({
                   <CalendarDays className="h-3.5 w-3.5" />
                   Self reviewed: {formatDate(lastSelfReviewDate)}
                 </span>
+              )}
+              {isAdmin && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                  onClick={() => setZeroScoreDialogOpen(true)}
+                >
+                  <Ban className="h-3.5 w-3.5 mr-1" /> Zero-Score
+                </Button>
               )}
               <KraExportMenu
                 kpis={kpis || []}
