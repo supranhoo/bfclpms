@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 1.80.0 — Add production_daily_entries RLS for admin-incentive-data (§72)
+> **Version:** 1.81.0 — admin-incentive override grants compute-monthly-incentives access (§72)
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -599,6 +599,7 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.81.0 | 2026-04-10 | `admin-incentive` menu override now grants compute access to `compute-monthly-incentives` edge function (§72 updated) |
 | 1.74.0 | 2026-04-08 | SSOT alignment: §3.6 clarified that Daily KPI governance bypass does NOT override period hard-locks. Edge function `fix-corrupted-binary-scores` performer attribution fixed per §55. |
 | 1.9.0 | 2026-03-07 | Daily-Frequency KPI Governance Bypass (§3.6): Daily KPIs at `kra_set` status bypass governance read-only locks to allow continuous data entry. Blue info banner shown when bypass is active. |
 | 2.0.0 | 2026-03-23 | Auto-Advance Zero Sent-Back Exclusion: edge function now checks both kpi_queries AND kpi_audit_logs for sent-back KPIs before auto-scoring zero. Rolled back 16 incorrectly penalized KPIs across 8 employees. |
@@ -1413,7 +1414,7 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
    - `production_daily_entries`: View, Create, Edit, Remove
    - `incentive_eligibility_fields`: View (configuration read-only)
 
-4. **Distinction from `admin-incentive`**: The `admin-incentive` menu key grants full incentive program configuration access (programs, slabs, rules). The `admin-incentive-data` key grants only data entry capabilities. Both keys are independently checked in RLS — a user may have one or both.
+4. **Distinction from `admin-incentive`**: The `admin-incentive` menu key grants full incentive program configuration access (programs, slabs, rules) **and** compute authority (triggering `compute-monthly-incentives` edge function). The `admin-incentive-data` key grants only data entry capabilities. Both keys are independently checked in RLS — a user may have one or both.
 
 5. **Security**: All access is gated by the `has_menu_access_override()` SECURITY DEFINER function, which checks the `menu_access_user_overrides` table. Only admins can grant overrides via the Menu Access Rights UI.
 

@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.18.0 — production_daily_entries RLS fix for admin-incentive-data
+> **Version:** 2.19.0 — compute-monthly-incentives RBAC fix for admin-incentive override
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4842,3 +4842,9 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix**: Added a `FOR ALL` RLS policy on `production_daily_entries` gated by `has_menu_access_override(auth.uid(), 'admin-incentive-data')`.
 - **Policy**: Updated §72 table access list to include `production_daily_entries`.
 - **Affected files:** Database migration (1 RLS policy), `POLICY.md` (§72), `DOCUMENTATION.md`
+
+### v2.19.0 — compute-monthly-incentives RBAC Fix for Menu Override Users
+- **RCA**: Users with `admin-incentive` menu override (e.g., Jitendra Bharti — 101715, role: `manager`) received 403 Forbidden when triggering incentive computation. The `compute-monthly-incentives` edge function only checked `user_roles` for `admin` or `hr_pms` — it did not fall back to `menu_access_user_overrides`.
+- **Fix**: Added a fallback RBAC check in the edge function: if the user lacks `admin`/`hr_pms` role, query `menu_access_user_overrides` for `admin-incentive` key before rejecting. Only `admin-incentive` (not `admin-incentive-data` or `reports-incentive`) grants compute authority.
+- **Policy**: Updated §72 to clarify that `admin-incentive` grants compute access in addition to configuration access.
+- **Affected files:** `supabase/functions/compute-monthly-incentives/index.ts`, `POLICY.md` (§72), `DOCUMENTATION.md`

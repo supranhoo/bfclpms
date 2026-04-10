@@ -31,7 +31,16 @@ serve(async (req) => {
         .eq('user_id', user.id)
         .in('role', ['admin', 'hr_pms']);
       if (!roles || roles.length === 0) {
-        return new Response(JSON.stringify({ error: 'Admin or HR PMS access required' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        // Fallback: check menu override for admin-incentive
+        const { data: overrides } = await supabase
+          .from('menu_access_user_overrides')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('menu_key', 'admin-incentive')
+          .limit(1);
+        if (!overrides || overrides.length === 0) {
+          return new Response(JSON.stringify({ error: 'Admin, HR PMS, or Incentive Admin access required' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
       }
     }
 
