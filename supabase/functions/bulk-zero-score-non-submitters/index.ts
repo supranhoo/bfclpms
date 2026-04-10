@@ -1,3 +1,4 @@
+// deploy-sync: 2026-04-10T19:15 — force redeploy after kpiErr fix
 import { requireAdminUser } from "../_shared/admin-auth.ts";
 
 const corsHeaders = {
