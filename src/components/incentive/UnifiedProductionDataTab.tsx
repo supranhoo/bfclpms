@@ -111,14 +111,16 @@ export function UnifiedProductionDataTab({ programs }: { programs: Program[] }) 
             name: selectedProgram!.name,
             min_kra_score: selectedProgram!.min_kra_score,
           }]}
+          onMonthYearChange={handleMonthYearChange}
         />
       ) : isProductionRateProgram ? (
         <ProductionDailyGrid
           programId={selectedProgramId}
           programName={selectedProgram?.name}
+          onMonthYearChange={handleMonthYearChange}
         />
       ) : (
-        <ProductionTargetGrid controlledProgramId={selectedProgramId} />
+        <ProductionTargetGrid controlledProgramId={selectedProgramId} onMonthYearChange={handleMonthYearChange} />
       )}
     </div>
   );

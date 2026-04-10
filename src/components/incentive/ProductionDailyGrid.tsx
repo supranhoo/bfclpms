@@ -22,9 +22,10 @@ type DateRange = 'all' | '1-10' | '11-20' | '21-31';
 interface Props {
   programId: string;
   programName?: string;
+  onMonthYearChange?: (month: string, year: number) => void;
 }
 
-export function ProductionDailyGrid({ programId, programName }: Props) {
+export function ProductionDailyGrid({ programId, programName, onMonthYearChange }: Props) {
   const now = new Date();
   const [month, setMonth] = useState(MONTHS[now.getMonth()]);
   const [year, setYear] = useState(now.getFullYear());
