@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 1.82.2 — Add missing UPDATE RLS policy for `menu_access_user_overrides` to fix admin upsert failures
+> **Version:** 1.83.0 — Add KPI-Employee Weighted Score Matrix report for role planning and KPI flow analysis
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

@@ -179,6 +179,14 @@ const reports: ReportCard[] = [
     color: 'text-lime-600',
     reportKey: 'kpi-scorecard-detail',
   },
+  {
+    title: 'KPI-Employee Score Matrix',
+    description: 'Cross-tab view of KPIs vs Employees with weighted scores — for role planning and KPI flow analysis',
+    icon: Grid3X3,
+    path: '/reports/kpi-employee-matrix',
+    color: 'text-cyan-600',
+    reportKey: 'kpi-employee-matrix',
+  },
 ];
 
 export default function ReportsHub() {
