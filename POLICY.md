@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 1.85.0 — Two-phase scan-select-repair workflow for orphaned propagations
+> **Version:** 1.86.0 — Post-repair verification, category table fix, limit raised to 1500
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1459,5 +1459,6 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
 4. **Repair Mechanism**: The `repair-orphaned-propagations` edge function supports a two-phase workflow:
    - **Scan Phase** (`mode: "scan"`): Read-only scan that identifies orphaned KPIs and returns detailed per-KPI information without modifying data. Admin reviews results in a data table with checkboxes.
    - **Repair Phase** (`mode: "repair"`, `kpi_ids: [...]`): Repairs only the admin-selected KPIs. Requires explicit confirmation via a destructive action dialog before execution.
-   - Downloadable Excel reports are available after both scan (scan report) and repair (multi-sheet repair report with summary, details, and errors).
-   - Accessible via **System Settings → Data Repair → Repair Orphaned Propagations**. Each run processes up to 500 records.
+    - Downloadable Excel reports are available after both scan (scan report) and repair (multi-sheet repair report with summary, details, and errors).
+    - **Post-Repair Verification**: After repair, three automated checks validate results: (1) KPIs confirmed in `self_review`, (2) `review_submissions` confirmed created, (3) remaining orphan count. Results are displayed in the UI and included in reports.
+    - Accessible via **System Settings → Data Repair → Repair Orphaned Propagations**. Each run processes up to 1,500 records.

@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
     let kpiIds: string[] = [];
     try {
       const body = await req.json();
-      if (body?.limit) batchLimit = Math.min(body.limit, 500);
+      if (body?.limit) batchLimit = Math.min(body.limit, 1500);
       if (body?.fix_null_values === false) fixNullValues = false;
       if (body?.mode === "scan") mode = "scan";
       if (Array.isArray(body?.kpi_ids)) kpiIds = body.kpi_ids;
@@ -111,7 +111,7 @@ Deno.serve(async (req) => {
     // Pre-fetch category names
     const catIds = [...new Set(targetKpis.map(k => k.category_id))];
     const { data: categories } = await supabase
-      .from("kpi_categories")
+      .from("kra_categories")
       .select("id, name")
       .in("id", catIds);
     const catNameMap = new Map<string, string>();
@@ -295,6 +295,48 @@ Deno.serve(async (req) => {
       }
     }
 
+    // === POST-REPAIR VERIFICATION (only in repair mode with actual repairs) ===
+    let verification: { kpis_verified: number; submissions_verified: number; remaining_orphans: number } | null = null;
+    if (mode === "repair" && repairedCount > 0) {
+      const repairedIds = details
+        .filter(d => d.action === "repaired")
+        .map(d => d.kpi_id);
+
+      // Check 1: Verify repaired KPIs moved to self_review
+      let kpisVerified = 0;
+      if (repairedIds.length > 0) {
+        const { data: verifiedKpis } = await supabase
+          .from("kpis")
+          .select("id")
+          .in("id", repairedIds.slice(0, 200))
+          .eq("status", "self_review");
+        kpisVerified = verifiedKpis?.length ?? 0;
+      }
+
+      // Check 2: Verify review_submissions exist
+      let subsVerified = 0;
+      if (repairedIds.length > 0) {
+        const { data: verifiedSubs } = await supabase
+          .from("review_submissions")
+          .select("kpi_id")
+          .in("kpi_id", repairedIds.slice(0, 200));
+        subsVerified = verifiedSubs?.length ?? 0;
+      }
+
+      // Check 3: Count remaining orphans
+      const { count: remainingOrphans } = await supabase
+        .from("kpis")
+        .select("id", { count: "exact", head: true })
+        .eq("is_org_level", true)
+        .eq("status", "kra_set");
+
+      verification = {
+        kpis_verified: kpisVerified,
+        submissions_verified: subsVerified,
+        remaining_orphans: remainingOrphans ?? 0,
+      };
+    }
+
     return new Response(
       JSON.stringify({
         mode,
@@ -303,7 +345,8 @@ Deno.serve(async (req) => {
         skipped: skippedCount,
         total_checked: targetKpis.length,
         errors: errors.slice(0, 20),
-        details: details.slice(0, 500),
+        details: details.slice(0, 1500),
+        verification,
         ran_at: new Date().toISOString(),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
