@@ -91,7 +91,7 @@ export default function KpiEmployeeMatrix() {
     }
 
     const headers = ['Sr. No.', 'Category', 'KRA', 'KPI', 'Weightage', 'Employee Count',
-      ...filteredEmployees.map(e => `${e.fullName} (${e.employeeCode})`)
+      ...filteredEmployees.flatMap(e => [`${e.fullName} (Wt%)`, `${e.fullName} (Score)`])
     ];
 
     const wsData: any[][] = [headers];
@@ -105,7 +105,9 @@ export default function KpiEmployeeMatrix() {
         row.employeeCount,
       ];
       filteredEmployees.forEach(emp => {
+        const wt = row.employeeWeightages[emp.id];
         const score = row.employeeScores[emp.id];
+        rowData.push(wt != null ? wt : '');
         rowData.push(score != null ? score : '');
       });
       wsData.push(rowData);
