@@ -1,52 +1,69 @@
 
 
-## RCA + CAPA: 401 Unauthorized on `bulk-zero-score-non-submitters`
+## RCA + CAPA: Persistent 401 on `bulk-zero-score-non-submitters` (Post Config Fix)
 
 ### 1. Root Cause
 
-The function `bulk-zero-score-non-submitters` is **missing from `supabase/config.toml`**. Without an entry, it defaults to `verify_jwt = true`, which causes the Supabase gateway to reject the request at the infrastructure level before the function code even runs.
+The `supabase/config.toml` entry for `bulk-zero-score-non-submitters` with `verify_jwt = false` **is present** (line 72-73), and the function code is correct. However, the edge function logs still show `[admin-auth] Identity validation failed: Auth session missing!` — meaning the function IS reached but `getUser()` fails.
 
-All other admin edge functions (repair-orphaned-propagations, repair-stepped-back-siblings, etc.) have explicit `verify_jwt = false` entries in config.toml and handle auth internally via the shared `requireAdminUser()` helper.
+This is a **deployment synchronization issue**: the config.toml was updated in the codebase but the function was not force-redeployed afterward. The Supabase gateway may still be using stale JWT verification config from before the entry was added.
 
-The function's own auth code is correct — `requireAdminUser(req)` properly validates identity and admin role. But the gateway blocks the request before it reaches that code.
+**Evidence:**
+- Config.toml has the correct entry on line 72-73
+- Function boots successfully (logs show "booted" messages)
+- The `requireAdminUser()` helper runs but fails at `getUser()` with "Auth session missing!"
+- The repair functions (identical code pattern, identical `supabase.functions.invoke()` call) work correctly — they were deployed AFTER their config.toml entries were added
+- All three UI components use the exact same `supabase.functions.invoke()` calling pattern
 
-### 2. Evidence
-
-- Logs show `[admin-auth] Identity validation failed: Auth session missing!` — this occurs because the gateway strips/rejects the token before forwarding
-- Every other admin function in config.toml has `verify_jwt = false`
-- The function was newly created and the config.toml entry was missed
-
-### 3. Impact
+### 2. Impact
 
 - 100% of scan and execute attempts fail with 401
-- Zero functionality — the entire Bulk Zero-Score feature is unusable
+- The entire Bulk Zero-Score feature remains unusable despite the config fix being in the codebase
 
-### 4. Corrective Action
+### 3. Corrective Action
 
-Add to `supabase/config.toml`:
+**Force-redeploy the edge function** by making a trivial change (add a deployment timestamp comment) to `supabase/functions/bulk-zero-score-non-submitters/index.ts`. This triggers a fresh deployment with the updated config.toml settings applied.
 
-```toml
-[functions.bulk-zero-score-non-submitters]
-verify_jwt = false
-```
+Additionally, as a belt-and-suspenders measure, add explicit session token forwarding to the UI component using `supabase.auth.getSession()` to manually construct the Authorization header — ensuring the token is always present regardless of SDK behavior.
 
-This is consistent with all other admin functions that use `requireAdminUser()` for in-code auth.
-
-### 5. Preventive Action
-
-- Update `DOCUMENTATION.md` with a checklist: every new edge function must have a `config.toml` entry
-- This is the third time a config.toml omission has caused a 401 — the pattern must be documented as a mandatory step
-
-### 6. Files to update
+### 4. Changes
 
 | File | Change |
 |------|--------|
-| `supabase/config.toml` | Add `[functions.bulk-zero-score-non-submitters]` with `verify_jwt = false` |
-| `DOCUMENTATION.md` | Add "New Edge Function Checklist" noting config.toml entry is mandatory |
+| `supabase/functions/bulk-zero-score-non-submitters/index.ts` | Add deployment timestamp comment to force redeploy |
+| `src/components/admin/BulkZeroScoreSection.tsx` | Switch from `supabase.functions.invoke()` to explicit `fetch()` with manual Authorization header (matching the recommended pattern for admin functions) |
+| `DOCUMENTATION.md` | Add note about deployment sync requirement |
+
+### 5. Technical Detail — Explicit Fetch Pattern
+
+Replace `supabase.functions.invoke()` with:
+
+```typescript
+const { data: { session } } = await supabase.auth.getSession();
+const response = await fetch(
+  `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bulk-zero-score-non-submitters`,
+  {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session?.access_token}`,
+      'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    },
+    body: JSON.stringify({ mode: 'scan', ... }),
+  }
+);
+```
+
+This guarantees the Authorization header is present and correctly formatted, eliminating reliance on SDK internal behavior.
+
+### 6. Preventive Action
+
+- Document that **every new edge function requires a force-redeploy** after config.toml changes — adding the config entry alone is insufficient
+- Apply the explicit `fetch` pattern to all admin edge function calls to eliminate this class of auth-forwarding bugs entirely
 
 ### 7. Risk Assessment
 
-- **Data impact**: None — config-only change
-- **Regression risk**: Zero — adding a config entry cannot affect other functions
-- **Security**: Maintained — the function enforces admin auth internally via `requireAdminUser()`
+- **Data impact**: None — no schema changes
+- **Regression risk**: Zero — switching to explicit fetch is a more reliable invocation method
+- **Security**: Maintained — `requireAdminUser()` still validates identity and admin role in-function
 
