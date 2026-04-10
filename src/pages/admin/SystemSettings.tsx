@@ -39,6 +39,7 @@ const SETTINGS_SECTIONS = [
   { key: 'templates', label: 'Templates', icon: FileText },
   { key: 'passwords', label: 'Passwords', icon: KeyRound },
   { key: 'backups', label: 'Backups', icon: Database },
+  { key: 'data-repair', label: 'Data Repair', icon: Undo2 },
 ] as const;
 
 type SectionKey = typeof SETTINGS_SECTIONS[number]['key'];
