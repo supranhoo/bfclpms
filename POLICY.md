@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 1.83.2 — Fix Binary/Tiered KPI Target & Achieved display to show qualitative labels
+> **Version:** 1.84.0 — Fix org KPI propagation gap: default status 'entered', phantom score guard
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

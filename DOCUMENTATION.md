@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.23.2 — Fix Binary/Tiered KPI Target & Achieved display to show qualitative labels
+> **Version:** 2.24.0 — Fix org KPI propagation gap: default status 'entered', phantom score guard
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
