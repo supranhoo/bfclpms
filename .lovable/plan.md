@@ -1,48 +1,25 @@
 
 
-## RCA: Binary/Tiered KPI Display Issues in Target & Achieved Columns
+## Diagnosis: Runtime Error — `getQualitativeTargetLabel is not defined`
 
-### Root Cause Analysis
+### What you're seeing
+The KPI detail panel crashes because the browser is running a **stale cached version** of `KpiDetailsTable.tsx`. The error says line 1042, but the current file is only 687 lines — proof the browser hasn't picked up the latest code.
 
-**Issue 1 — Target shows raw numeric value for Binary/Tiered KPIs**
-- **Location**: `KpiDetailsTable.tsx:538` and `MobileKpiCard.tsx:314`
-- **Cause**: Code renders `kpi.target_value ?? '-'` directly. For binary KPIs, `target_value` is typically `null` (shows "—") or `0` (shows "0 Number"). Neither conveys meaning.
-- **Expected**: For Binary/Tiered KPIs, the "Target" should display the **Rating 5 label** from `qualitative_options` (e.g., "No" for a safety KPI where No non-compliance = Rating 5).
-- **DB evidence**: The KPI `1e4998ef` has `target_value: null`, `uom_type: binary`, `qualitative_options: [{label: "Yes", rating: 0}, {label: "No", rating: 5}]`. Target should show **"No"** (the R5 option).
+### Why it's happening
+The previous edit added the `getQualitativeTargetLabel` usage (line 540) and the import (line 18) in the same change, but Vite's hot-module-reload (HMR) served a partially-updated module where the usage was injected but the import wasn't re-evaluated. This is a transient HMR cache inconsistency — **not a code bug**.
 
-**Issue 2 — Achieved shows raw rating number instead of label**
-- **Location**: `KpiDetailsTable.tsx:551-558`
-- **Cause**: Code renders `achievedVal` (a number like `5`) with the UOM suffix (e.g., "5 Number"). For Binary/Tiered KPIs, `achieved_value` stores the **rating score** (0-5), not a measured quantity.
-- **Expected**: Should resolve the numeric rating back to the qualitative label (e.g., `5` → "No" for inverted binary).
-- **DB evidence**: KPI `855f4a7f` has `achieved_value: 5`, `qualitative_options: [{label: "Yes", rating: 0}, {label: "No", rating: 5}]`. Achieved should show **"No"** not "5 Number".
+### The code is correct
+- `getQualitativeTargetLabel` is properly exported from `src/lib/qualitativeUom.ts` (line 134)
+- It is properly imported in `src/components/review/KpiDetailsTable.tsx` (line 18)
+- The usage on line 540 matches the function signature
 
-**Issue 3 — Achieved data present but Self score blank**
-- **DB evidence**: Query confirms **zero** cases of `achieved_value IS NOT NULL AND self_score IS NULL` for binary/tiered KPIs in 2026 data. This is likely a visual observation caused by Org KPI propagation showing an achieved value in the Achieved column while the employee hasn't yet submitted a self-review. Not a data bug — but worth adding a visual indicator to clarify Org KPI source.
+### Fix
+A **no-op rebuild trigger** (e.g., adding a blank line or trivial comment to `KpiDetailsTable.tsx`) will force Vite to re-bundle the module with the correct import. This will:
 
-### Plan
+1. Clear the stale HMR cache
+2. Resolve the `ReferenceError`
+3. Make Target show the Rating-5 label (e.g., "No" for LTI) instead of "N/A"
+4. Make Achieved show the qualitative label instead of raw numbers
 
-**1. Create utility function** `getQualitativeDisplayLabel` in `src/lib/qualitativeUom.ts`
-- Input: rating number, uom_type, qualitative_options
-- Output: the matching label string or fallback to the number
-- Reusable across all components
-
-**2. Update `src/components/review/KpiDetailsTable.tsx`**
-
-Target column (line ~537):
-- If `uom_type` is `binary` or `tiered`: find the option with the **highest rating** (Rating 5) from `qualitative_options` (or `BINARY_OPTIONS` fallback) and display its label
-- Otherwise: keep current `target_value` display
-
-Achieved column (line ~549):
-- If `uom_type` is `binary` or `tiered` and `achievedVal` is a number: look up the matching label from `qualitative_options` using the new utility
-- Otherwise: keep current numeric display
-
-**3. Update `src/components/review/MobileKpiCard.tsx`**
-- Apply same Target display logic (line ~314)
-
-**4. Update `DOCUMENTATION.md` / `POLICY.md`** — version bump
-
-### Risk Assessment
-- **Data Impact**: None — display-only changes, no schema or data modifications
-- **Regression Risk**: Low — changes are scoped to display rendering for specific UOM types with clear fallback to existing behavior
-- **UI Consistency**: Improves clarity by showing human-readable labels instead of raw numbers
+No logic changes needed — just a rebuild trigger.
 
