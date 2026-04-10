@@ -70,6 +70,7 @@ import { RollbackRequestDialog } from '@/components/review/RollbackRequestDialog
 import { usePendingRollbackRequest } from '@/hooks/useKpiRollbackRequests';
 import { useAuditKpiAssignments } from '@/hooks/useAuditKpiAssignments';
 import { KraExportMenu } from '@/components/review/KraExportMenu';
+import { EmployeeBulkZeroScoreDialog } from '@/components/review/EmployeeBulkZeroScoreDialog';
 import { useAppSettings } from '@/hooks/useAppSettings';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
 import { useRemarksMandatorySettings } from '@/hooks/useWorkflowSettings';
