@@ -86,6 +86,7 @@ Deno.serve(async (req) => {
     const divisionId: string | null = body?.division_id ?? null;
     const businessUnitId: string | null = body?.business_unit_id ?? null;
     const departmentId: string | null = body?.department_id ?? null;
+    const employeeId: string | null = body?.employee_id ?? null;
 
     if (!reviewPeriod || !reviewYear) {
       return new Response(
