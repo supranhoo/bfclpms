@@ -4868,6 +4868,11 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Solution**: Added `Admins can update menu user overrides` RLS policy for UPDATE with `has_role(auth.uid(), 'admin')` guard — same pattern as existing INSERT/DELETE policies.
 - **Affected table**: `menu_access_user_overrides`
 
+### v2.25.0 — Admin Data Repair UI (§74)
+- **Added**: "Data Repair" section in System Settings with a "Repair Orphaned Propagations" button.
+- **UI**: `DataRepairTab.tsx` — invokes the `repair-orphaned-propagations` edge function with limit 200, displays results (repaired, NULL fixed, skipped, checked, errors).
+- **Affected files**: `SystemSettings.tsx`, `DataRepairTab.tsx`
+
 ### v2.24.0 — Fix Org KPI Propagation Gap (§74)
 - **Root Cause**: `org_kpi_values.status` defaulted to `'approved'`, causing "Save" (without propagate) to mark records as approved. The `propagate_org_kpi_value` RPC was never invoked, leaving employee KPIs stuck at `kra_set` with no `review_submission` records.
 - **Fix 1 — DB Default**: Changed `org_kpi_values.status` default from `'approved'` to `'entered'`. New records now start as "entered" and only advance through explicit propagation actions.
