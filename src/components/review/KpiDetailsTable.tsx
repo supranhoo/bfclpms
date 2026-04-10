@@ -15,6 +15,7 @@ import { DailyBadge } from '@/components/review/DailyKpiExpandButton';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { getKpiSummaryText } from '@/lib/textFormatting';
+import { getQualitativeTargetLabel, getQualitativeAchievedLabel } from '@/lib/qualitativeUom';
 import { canReviewKpi as workflowCanReview, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { 
   Info, Lock, CheckCircle2, Calendar, ChevronDown, ChevronUp, Undo2, Eye, 
