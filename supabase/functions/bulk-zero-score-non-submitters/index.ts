@@ -201,21 +201,30 @@ Deno.serve(async (req) => {
       // 3. Check for prior zero-score batches on this period (scoped to employee if provided)
       let priorBatchWarning: string | null = null;
       {
-        let priorQuery = supabase
+        const { data: priorLogs } = await supabase
           .from("kpi_audit_logs")
-          .select("id, metadata")
+          .select("id, metadata, kpi_id")
           .eq("action", "ADMIN_BULK_ZERO_SCORE")
-          .limit(10);
-        // When scanning a specific employee, only warn if THAT employee was already zero-scored
-        if (employeeId) {
-          priorQuery = priorQuery.eq("on_behalf_of", employeeId);
-        }
-        const { data: priorLogs } = await priorQuery;
-        const hasMatch = (priorLogs ?? []).some((l: any) => {
+          .limit(50);
+        // Filter for period/year match
+        let matched = (priorLogs ?? []).filter((l: any) => {
           const meta = typeof l.metadata === "string" ? JSON.parse(l.metadata) : l.metadata;
           return meta?.period === reviewPeriod && meta?.year === reviewYear;
         });
-        if (hasMatch) {
+        // When scanning a specific employee, check if any matched KPIs belong to that employee
+        if (employeeId && matched.length > 0) {
+          const matchedKpiIds = matched.map((l: any) => l.kpi_id).filter(Boolean);
+          if (matchedKpiIds.length > 0) {
+            const { data: kpiOwners } = await supabase
+              .from("kpis")
+              .select("id")
+              .in("id", matchedKpiIds)
+              .eq("employee_id", employeeId)
+              .limit(1);
+            matched = kpiOwners && kpiOwners.length > 0 ? matched : [];
+          }
+        }
+        if (matched.length > 0) {
           const scope = employeeId ? "this employee" : `${reviewPeriod} ${reviewYear}`;
           priorBatchWarning = `A bulk zero-score batch was already executed for ${scope}. Proceeding will create additional zero-score entries.`;
         }
