@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.24.0 — Fix org KPI propagation gap: default status 'entered', phantom score guard
+> **Version:** 2.26.0 — Two-phase scan-select-repair workflow with downloadable reports
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4867,6 +4867,14 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Problem**: Granting an employee-level menu override that already existed failed with "Failed to grant access" because the `menu_access_user_overrides` table had no UPDATE RLS policy, and `.upsert()` requires UPDATE when a matching row exists.
 - **Solution**: Added `Admins can update menu user overrides` RLS policy for UPDATE with `has_role(auth.uid(), 'admin')` guard — same pattern as existing INSERT/DELETE policies.
 - **Affected table**: `menu_access_user_overrides`
+
+### v2.26.0 — Two-Phase Scan-Select-Repair Workflow (§74)
+- **Enhanced**: Data Repair tool now uses a two-phase workflow: Scan (read-only preview) → Select → Repair (with confirmation dialog).
+- **Scan mode**: Edge function returns per-KPI details (employee, KRA, KPI, achieved value, score, action, reason) without modifying data.
+- **Selective repair**: Admin selects specific KPIs via checkboxes; `ConfirmDestructiveDialog` gates the repair action.
+- **Downloadable reports**: Excel export available after both scan and repair phases (multi-sheet: Summary, Details, Errors).
+- **Edge function**: Added `mode` ("scan"/"repair"), `kpi_ids` filtering, and `details` array to response.
+- **Affected files**: `repair-orphaned-propagations/index.ts`, `DataRepairTab.tsx`
 
 ### v2.25.0 — Admin Data Repair UI (§74)
 - **Added**: "Data Repair" section in System Settings with a "Repair Orphaned Propagations" button.

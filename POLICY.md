@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 1.84.0 — Fix org KPI propagation gap: default status 'entered', phantom score guard
+> **Version:** 1.85.0 — Two-phase scan-select-repair workflow for orphaned propagations
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1456,4 +1456,8 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
 
 3. **Display Guard**: The Review Journey "Self" stage MUST NOT display a computed rating from `org_kpi_values` when no `review_submission` record exists. The `orgAchievedValue` fallback is only used when a submission record is present (i.e., propagation has already occurred).
 
-4. **Repair Mechanism**: The `repair-orphaned-propagations` edge function identifies org-level KPIs stuck at `kra_set` with no `review_submission` and creates the missing records. This is an admin-only operation, accessible via **System Settings → Data Repair → Repair Orphaned Propagations**. Each run processes up to 200 records.
+4. **Repair Mechanism**: The `repair-orphaned-propagations` edge function supports a two-phase workflow:
+   - **Scan Phase** (`mode: "scan"`): Read-only scan that identifies orphaned KPIs and returns detailed per-KPI information without modifying data. Admin reviews results in a data table with checkboxes.
+   - **Repair Phase** (`mode: "repair"`, `kpi_ids: [...]`): Repairs only the admin-selected KPIs. Requires explicit confirmation via a destructive action dialog before execution.
+   - Downloadable Excel reports are available after both scan (scan report) and repair (multi-sheet repair report with summary, details, and errors).
+   - Accessible via **System Settings → Data Repair → Repair Orphaned Propagations**. Each run processes up to 500 records.
