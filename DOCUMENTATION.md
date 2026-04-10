@@ -2384,6 +2384,26 @@ All edge functions use `verify_jwt = false` in `config.toml` and implement their
 
 **Important:** After adding or changing the `CRON_SECRET`, admins must re-save the backup schedule from the Backup Settings UI so the cron job picks up the new secret value.
 
+#### Shared Admin Auth Helper — Standard Destructuring
+
+All admin-only edge functions MUST use the shared `requireAdminUser` helper and destructure `user` into local scope to prevent `ReferenceError` regressions when referencing `user.id` in audit logs:
+
+```typescript
+import { requireAdminUser } from "../_shared/admin-auth.ts";
+
+const auth = await requireAdminUser(req);
+if (!auth.authorized || !auth.adminClient) {
+  return new Response(JSON.stringify({ error: auth.error }), {
+    status: auth.status ?? 401,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+const supabase = auth.adminClient;
+const user = auth.user; // MANDATORY — keeps user.id in scope for audit logs
+```
+
+**CAPA Note (2026-04-10):** The `user` alias was missing after the auth refactor, causing `ReferenceError: user is not defined` in `repair-stepped-back-siblings`. Always destructure `user` alongside `adminClient`.
+
 ---
 
 ## 6. Key Components & Hooks
