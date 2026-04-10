@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.32.0 — Add "Remember Me" checkbox to login page
+> **Version:** 2.33.0 — Employee-level Bulk Zero-Score on dashboard for admins
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

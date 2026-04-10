@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 1.91.0 — §77 Remember Me login option for session persistence control
+> **Version:** 1.92.0 — §78 Employee-level Bulk Zero-Score from employee dashboard
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
