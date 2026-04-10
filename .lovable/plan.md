@@ -1,70 +1,56 @@
 
 
-## Plan: Add Bulk Zero-Score Button on Employee Dashboard for Admin
+## RCA + CAPA: "invalid input value for enum rating_level: '0'" — Bulk Zero-Score Failure
 
-### What This Does
+### 1. Root Cause
 
-Adds a "Zero-Score" action button in the KPI Details header of the UnifiedScorecard (next to KRA Export and Sort controls), visible only to admin users. When clicked, it opens a dialog that lets the admin zero-score all non-submitted KPIs for that specific employee in the selected period — without navigating to the Data Repair tab.
+The `rating_level` column on `review_submissions` is a **Postgres enum** with valid values: `{red, yellow, green, blue}`. The bulk zero-score function sets all `*_rating` fields to `0` (a number), which is not a valid enum value.
 
-### Design
-
-The feature reuses the existing `bulk-zero-score-non-submitters` edge function, scoping it to a single employee by passing the `employee_id` parameter. The UI follows the same Scan → Select → Confirm ("ZERO") → Execute flow as the existing BulkZeroScoreSection, but in a compact dialog format.
-
-### Changes
-
-#### 1. New Component: `src/components/review/EmployeeBulkZeroScoreDialog.tsx`
-- A dialog triggered by a button in the KPI Details header
-- Props: `employeeId`, `employeeName`, `reviewPeriod`, `reviewYear`, `open`, `onOpenChange`
-- Implements the 3-step flow:
-  - **Scan**: Calls the edge function with `mode: 'scan'` + `employee_id` filter to find non-submitted KPIs for this employee only
-  - **Select**: Shows results table with checkboxes (pre-selects all zero-scorable)
-  - **Execute**: Requires typing "ZERO" to confirm, calls edge function with `mode: 'execute'` + selected KPI IDs
-- Includes optional "Include Org KPIs" checkbox
-- Admin remarks input field
-- Excel export of results
-- Invalidates relevant query caches on success
-
-#### 2. Update Edge Function: `supabase/functions/bulk-zero-score-non-submitters/index.ts`
-- Add support for an optional `employee_id` parameter in both scan and execute modes
-- When `employee_id` is provided, filter KPIs to only that employee (adds `.eq('employee_id', employee_id)` to the query)
-- No schema changes needed
-
-#### 3. Update: `src/components/review/UnifiedScorecard.tsx`
-- Import `useAuth` already exists — check `effectiveRole` or `role` for `'admin'`
-- Add the Zero-Score button (Ban icon) next to KRA Export in the KPI Details CardHeader
-- Only render when user role is `'admin'`
-- Pass `employee.id`, `employee.full_name`, `selectedPeriod`, `selectedYear` to the dialog
-
-#### 4. Documentation
-- `DOCUMENTATION.md`: Add section for employee-level bulk zero-score (v2.33.0)
-- `POLICY.md`: Sync version
-
-### Technical Details
-
-```text
-KPI Details Header (Admin view):
-┌──────────────────────────────────────────────────────────────────┐
-│ KPI Details                    [⊘ Zero-Score] [📄 KRA Export] Sort: ... │
-│ Click on a KPI to review...                                      │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-**Edge function filter addition** (scan mode):
+**Failing lines (index.ts):**
 ```typescript
-if (employee_id) {
-  query = query.eq('employee_id', employee_id);
-}
+submissionData.self_rating = 0;      // ← invalid enum
+submissionData.manager_rating = 0;   // ← invalid enum
+submissionData.skip_level_rating = 0;
+submissionData.hr_pms_rating = 0;
+submissionData.auditor_rating = 0;
+submissionData.management_rating = 0;
+submissionData.final_rating = 0;     // ← invalid enum
 ```
 
-**Admin role check** in UnifiedScorecard:
+All 7 rating fields are typed `rating_level` enum (`red | yellow | green | blue`). Writing `0` causes a Postgres type error on every upsert, resulting in **0 KPIs zeroed** and errors for all records.
+
+### 2. Impact
+
+- 100% of bulk zero-score execute operations fail for this employee (and likely all employees)
+- The scan phase works fine; only the execute/upsert phase is broken
+- No data corruption — writes are rejected, not silently mangled
+
+### 3. Corrective Action
+
+| File | Change |
+|------|--------|
+| `supabase/functions/bulk-zero-score-non-submitters/index.ts` | Replace all `*_rating = 0` assignments with `*_rating = 'red'` (the lowest rating in the enum, appropriate for a zero-score) |
+| `DOCUMENTATION.md` | Log RCA v2.33.1 — enum type mismatch in bulk zero-score |
+| `POLICY.md` | Sync version |
+
+**Specific fix** — change all 7 rating assignments:
 ```typescript
-const { user, role } = useAuth();
-const isAdmin = role === 'admin';
+// Before:
+submissionData.self_rating = 0;
+// After:
+submissionData.self_rating = 'red';
 ```
 
-### Risk Assessment
-- **Data impact**: None — reuses existing edge function with additive filter
-- **Regression risk**: Low — new optional parameter, existing behavior unchanged when not provided
-- **Security**: Admin-only — edge function already validates admin via `requireAdminUser()`
-- **UI/UX**: Button only visible to admins; does not affect non-admin views
+Apply the same change for: `manager_rating`, `skip_level_rating`, `hr_pms_rating`, `auditor_rating`, `management_rating`, `final_rating`.
+
+### 4. Preventive Action
+
+- Add to the Edge Function Checklist: "Verify enum column types before assigning literal values — never use numeric literals for enum fields"
+- The scoring engine elsewhere in the codebase correctly maps scores to rating levels; the bulk zero-score function bypassed this mapping
+
+### 5. Risk Assessment
+
+- **Data impact**: None — fix changes rejected writes to valid writes
+- **Regression risk**: Zero — `'red'` is the correct semantic value for a zero score
+- **Security**: No change
 
