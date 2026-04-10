@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +17,7 @@ import { AlertCircle, AlertTriangle, Ban, CheckCircle2, Download, RefreshCw, Sea
 import { toast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
 import { invokeAdminEdgeFunction } from '@/lib/adminEdgeFunction';
+import { supabase } from '@/integrations/supabase/client';
 
 const ALL_MONTHS = [
   'January','February','March','April','May','June',
@@ -83,6 +85,64 @@ export function BulkZeroScoreSection() {
   const [includeOrgKpis, setIncludeOrgKpis] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
+
+  // Org filters
+  const [divisionId, setDivisionId] = useState<string | null>(null);
+  const [businessUnitId, setBusinessUnitId] = useState<string | null>(null);
+  const [departmentId, setDepartmentId] = useState<string | null>(null);
+
+  // Fetch divisions
+  const { data: divisions } = useQuery({
+    queryKey: ['bulk-zero-divisions'],
+    queryFn: async () => {
+      const { data } = await supabase.from('divisions').select('id, name').order('name');
+      return data ?? [];
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+
+  // Fetch BUs filtered by division
+  const { data: businessUnits } = useQuery({
+    queryKey: ['bulk-zero-bus', divisionId],
+    queryFn: async () => {
+      let q = supabase.from('business_units').select('id, name, division_id').order('name');
+      if (divisionId) q = q.eq('division_id', divisionId);
+      const { data } = await q;
+      return data ?? [];
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+
+  // Fetch departments filtered by BU
+  const { data: departments } = useQuery({
+    queryKey: ['bulk-zero-depts', businessUnitId, divisionId],
+    queryFn: async () => {
+      let q = supabase.from('departments').select('id, name, business_unit_id').order('name');
+      if (businessUnitId) {
+        q = q.eq('business_unit_id', businessUnitId);
+      } else if (divisionId && businessUnits?.length) {
+        const buIds = businessUnits.map(b => b.id);
+        if (buIds.length > 0) q = q.in('business_unit_id', buIds);
+      }
+      const { data } = await q;
+      return data ?? [];
+    },
+    staleTime: 10 * 60 * 1000,
+    enabled: !businessUnitId || !!businessUnits,
+  });
+
+  const handleDivisionChange = (val: string) => {
+    setDivisionId(val === 'all' ? null : val);
+    setBusinessUnitId(null);
+    setDepartmentId(null);
+  };
+  const handleBuChange = (val: string) => {
+    setBusinessUnitId(val === 'all' ? null : val);
+    setDepartmentId(null);
+  };
+  const handleDeptChange = (val: string) => {
+    setDepartmentId(val === 'all' ? null : val);
+  };
 
   const [scanDetails, setScanDetails] = useState<ScanDetailRow[] | null>(null);
   const [orgDetails, setOrgDetails] = useState<OrgDetailRow[]>([]);
