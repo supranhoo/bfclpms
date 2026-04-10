@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 1.83.2 — Fix Binary/Tiered KPI Target & Achieved display to show qualitative labels
+> **Version:** 1.84.0 — Fix org KPI propagation gap: default status 'entered', phantom score guard
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1441,3 +1441,19 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
 4. **Granting Access**: Admins use **System Settings → Menu Access → User Overrides** to grant `admin-incentive` or `reports-incentive` to any user. Either override authorizes edge function execution. No code change or redeployment is required.
 
 5. **Security**: The shared helper validates the JWT, checks roles, and checks overrides in a deterministic order. It never exposes internal error details to the client.
+
+---
+
+## §74 — Org KPI Propagation Lifecycle Policy
+
+1. **Data Entry vs. Propagation**: Saving org KPI data via the "Save" button creates `org_kpi_values` records with `status = 'entered'`. These records are NOT automatically pushed to employee KPIs. The data owner must explicitly use "Save & Propagate" to trigger the `propagate_org_kpi_value` RPC.
+
+2. **Propagation Effect**: When propagation runs, it:
+   - Creates/updates `review_submission` records for matching employee KPIs
+   - Advances `kpi.status` from `kra_set` → `self_review`
+   - Creates `ORG_KPI_PROPAGATED` audit log entries for timeline visibility
+   - Updates `org_kpi_values.status` to `'propagated'`
+
+3. **Display Guard**: The Review Journey "Self" stage MUST NOT display a computed rating from `org_kpi_values` when no `review_submission` record exists. The `orgAchievedValue` fallback is only used when a submission record is present (i.e., propagation has already occurred).
+
+4. **Repair Mechanism**: The `repair-orphaned-propagations` edge function identifies org-level KPIs stuck at `kra_set` with no `review_submission` and creates the missing records. This is an admin-only operation.

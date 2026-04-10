@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.23.2 — Fix Binary/Tiered KPI Target & Achieved display to show qualitative labels
+> **Version:** 2.24.0 — Fix org KPI propagation gap: default status 'entered', phantom score guard
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4868,7 +4868,13 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Solution**: Added `Admins can update menu user overrides` RLS policy for UPDATE with `has_role(auth.uid(), 'admin')` guard — same pattern as existing INSERT/DELETE policies.
 - **Affected table**: `menu_access_user_overrides`
 
-### v2.22.1 — Incentive RBAC Accepts Multiple Menu Keys (§73)
+### v2.24.0 — Fix Org KPI Propagation Gap (§74)
+- **Root Cause**: `org_kpi_values.status` defaulted to `'approved'`, causing "Save" (without propagate) to mark records as approved. The `propagate_org_kpi_value` RPC was never invoked, leaving employee KPIs stuck at `kra_set` with no `review_submission` records.
+- **Fix 1 — DB Default**: Changed `org_kpi_values.status` default from `'approved'` to `'entered'`. New records now start as "entered" and only advance through explicit propagation actions.
+- **Fix 2 — Phantom Score Guard**: `KpiJourneySection.tsx` no longer uses `orgAchievedValue` as a fallback for the "Self" stage when no `review_submission` record exists. This prevents misleading phantom scores for unpropagated org KPIs.
+- **Impact**: ~40+ employee KPIs across LTI and other org-level categories were affected. Use the `repair-orphaned-propagations` edge function to fix existing orphaned data.
+- **Affected files**: `KpiJourneySection.tsx`, DB migration (org_kpi_values default)
+
 - **Problem**: Users with `reports-incentive` menu override could see the Incentive Report page but got 403 on Compute/Detect edge functions, which only checked `admin-incentive`.
 - **Solution**: Updated `checkIncentiveAccess()` to accept `string | string[]` for menu keys and use `.in()` filter. Both edge functions now pass `['admin-incentive', 'reports-incentive']`, so either override authorizes execution.
 - **Affected files**: `incentive-auth.ts`, `compute-monthly-incentives/index.ts`, `detect-retroactive-incentive-changes/index.ts`

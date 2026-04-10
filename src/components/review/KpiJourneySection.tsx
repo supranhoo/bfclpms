@@ -340,7 +340,9 @@ export function KpiJourneySection({
       submission?.self_score ?? null, submission?.self_rating ?? null,
       submission?.self_remarks ?? null,
       buildEvidenceUrls(submission?.self_evidence_urls, submission?.self_evidence_url),
-      submission?.achieved_value ?? orgAchievedValue ?? null
+      // Only use orgAchievedValue fallback when a submission record exists (propagation occurred)
+      // Otherwise we'd show a phantom score for unpropagated org KPIs still at kra_set
+      submission ? (submission.achieved_value ?? orgAchievedValue ?? null) : null
     ),
     manager: buildStage(
       Briefcase, 'amber', 'Manager',
