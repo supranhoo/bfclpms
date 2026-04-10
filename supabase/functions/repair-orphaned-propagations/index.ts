@@ -39,18 +39,22 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Parse optional batch limit and mode
+    // Parse request body
     let batchLimit = 100;
     let fixNullValues = true;
+    let mode: "scan" | "repair" = "repair";
+    let kpiIds: string[] = [];
     try {
       const body = await req.json();
       if (body?.limit) batchLimit = Math.min(body.limit, 500);
       if (body?.fix_null_values === false) fixNullValues = false;
+      if (body?.mode === "scan") mode = "scan";
+      if (Array.isArray(body?.kpi_ids)) kpiIds = body.kpi_ids;
     } catch { /* no body is fine */ }
 
-    // === PHASE 1: Fix NULL-value org_kpi_values marked as propagated (RC1) ===
+    // === PHASE 1: Fix NULL-value org_kpi_values marked as propagated ===
     let nullFixedCount = 0;
-    if (fixNullValues) {
+    if (mode === "repair" && fixNullValues) {
       const { data: nullRows, error: nullErr } = await supabase
         .from("org_kpi_values")
         .select("id")
@@ -69,7 +73,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // === PHASE 2: Find orphaned KPIs (org_level + kra_set + no review_submission) ===
+    // === PHASE 2: Find orphaned KPIs ===
     const { data: orphanedKpis, error: kpiError } = await supabase
       .from("kpis")
       .select("id, category_id, kra_name, kpi_name, review_period, review_year, employee_id, target_value, weightage, r5, r4, r3, r2, r1, r0, criteria, uom, uom_type, qualitative_options, threshold_mode")
@@ -80,34 +84,65 @@ Deno.serve(async (req) => {
     if (kpiError) throw kpiError;
     if (!orphanedKpis || orphanedKpis.length === 0) {
       return new Response(JSON.stringify({
-        repaired: 0, null_values_fixed: nullFixedCount, skipped: 0, total_checked: 0, errors: [],
+        repaired: 0, null_values_fixed: nullFixedCount, skipped: 0, total_checked: 0, errors: [], details: [],
         message: nullFixedCount > 0 ? `Fixed ${nullFixedCount} NULL-value entries` : "No orphaned records found"
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Pre-fetch employee department mappings
-    const empIds = [...new Set(orphanedKpis.map(k => k.employee_id))];
+    // Filter to selected IDs if provided
+    let targetKpis = orphanedKpis;
+    if (kpiIds.length > 0) {
+      targetKpis = orphanedKpis.filter(k => kpiIds.includes(k.id));
+    }
+
+    // Pre-fetch employee profiles (with full_name)
+    const empIds = [...new Set(targetKpis.map(k => k.employee_id))];
     const { data: empProfiles } = await supabase
       .from("profiles")
-      .select("id, department_id")
+      .select("id, department_id, full_name")
       .in("id", empIds);
     const empDeptMap = new Map<string, string | null>();
-    empProfiles?.forEach(p => empDeptMap.set(p.id, p.department_id));
+    const empNameMap = new Map<string, string>();
+    empProfiles?.forEach(p => {
+      empDeptMap.set(p.id, p.department_id);
+      empNameMap.set(p.id, p.full_name || "Unknown");
+    });
 
+    // Pre-fetch category names
+    const catIds = [...new Set(targetKpis.map(k => k.category_id))];
+    const { data: categories } = await supabase
+      .from("kpi_categories")
+      .select("id, name")
+      .in("id", catIds);
+    const catNameMap = new Map<string, string>();
+    categories?.forEach(c => catNameMap.set(c.id, c.name));
+
+    const details: any[] = [];
     let repairedCount = 0;
     let skippedCount = 0;
     const errors: string[] = [];
 
-    for (const kpi of orphanedKpis) {
+    for (const kpi of targetKpis) {
       try {
+        const empName = empNameMap.get(kpi.employee_id) || "Unknown";
+        const catName = catNameMap.get(kpi.category_id) || "";
+
         // Check if review_submission already exists
         const { data: existingSub } = await supabase
           .from("review_submissions").select("id").eq("kpi_id", kpi.id).maybeSingle();
-        if (existingSub) { skippedCount++; continue; }
+        if (existingSub) {
+          skippedCount++;
+          details.push({
+            kpi_id: kpi.id, kpi_name: kpi.kpi_name, kra_name: kpi.kra_name,
+            employee_id: kpi.employee_id, employee_name: empName, category: catName,
+            review_period: kpi.review_period, review_year: kpi.review_year,
+            achieved_value: null, self_score: null, self_rating: null,
+            action: "skippable", reason: "submission_exists",
+          });
+          continue;
+        }
 
-        // Find matching org_kpi_value — exact match first, then fallback to category+kra (RC4)
+        // Find matching org_kpi_value
         let orgValues: any[] | null = null;
         const { data: exactMatch } = await supabase
           .from("org_kpi_values")
@@ -118,10 +153,8 @@ Deno.serve(async (req) => {
           .eq("review_period", kpi.review_period)
           .eq("review_year", kpi.review_year)
           .in("status", ["propagated", "approved", "entered"]);
-
         orgValues = exactMatch;
 
-        // RC4 CAPA: Fallback to category+kra if no exact kpi_name match
         if (!orgValues || orgValues.length === 0) {
           const { data: fallbackMatch } = await supabase
             .from("org_kpi_values")
@@ -134,27 +167,55 @@ Deno.serve(async (req) => {
           orgValues = fallbackMatch;
         }
 
-        if (!orgValues || orgValues.length === 0) { skippedCount++; continue; }
+        if (!orgValues || orgValues.length === 0) {
+          skippedCount++;
+          details.push({
+            kpi_id: kpi.id, kpi_name: kpi.kpi_name, kra_name: kpi.kra_name,
+            employee_id: kpi.employee_id, employee_name: empName, category: catName,
+            review_period: kpi.review_period, review_year: kpi.review_year,
+            achieved_value: null, self_score: null, self_rating: null,
+            action: "skippable", reason: "no_org_value",
+          });
+          continue;
+        }
 
-        // Match priority: exact employee > department > org-wide > any
+        // Match priority
         const empDeptId = empDeptMap.get(kpi.employee_id);
         const matchingValue =
           orgValues.find(v => v.employee_id === kpi.employee_id) ||
           (empDeptId ? orgValues.find(v => v.department_id === empDeptId && !v.employee_id) : null) ||
           orgValues.find(v => v.employee_id === null && v.department_id === null) ||
           orgValues[0];
-        if (!matchingValue) { skippedCount++; continue; }
-        if (matchingValue.achieved_value === null && !matchingValue.is_na) { skippedCount++; continue; }
+        if (!matchingValue) {
+          skippedCount++;
+          details.push({
+            kpi_id: kpi.id, kpi_name: kpi.kpi_name, kra_name: kpi.kra_name,
+            employee_id: kpi.employee_id, employee_name: empName, category: catName,
+            review_period: kpi.review_period, review_year: kpi.review_year,
+            achieved_value: null, self_score: null, self_rating: null,
+            action: "skippable", reason: "no_matching_value",
+          });
+          continue;
+        }
+        if (matchingValue.achieved_value === null && !matchingValue.is_na) {
+          skippedCount++;
+          details.push({
+            kpi_id: kpi.id, kpi_name: kpi.kpi_name, kra_name: kpi.kra_name,
+            employee_id: kpi.employee_id, employee_name: empName, category: catName,
+            review_period: kpi.review_period, review_year: kpi.review_year,
+            achieved_value: null, self_score: null, self_rating: null,
+            action: "skippable", reason: "null_achieved_value",
+          });
+          continue;
+        }
 
         // Calculate score
         let selfScore: number | null = null;
         let selfRating: string | null = null;
-
         if (!matchingValue.is_na) {
           const uomType = kpi.uom_type || "numeric";
           const isBinaryOrTiered = uomType === "binary" ||
             (uomType === "tiered" && Array.isArray(kpi.qualitative_options) && (kpi.qualitative_options as any[]).length > 0);
-
           if (isBinaryOrTiered) {
             selfScore = matchingValue.achieved_value ?? 0;
           } else {
@@ -167,7 +228,21 @@ Deno.serve(async (req) => {
           selfRating = scoreToRating(selfScore);
         }
 
-        // Insert review_submission
+        // In SCAN mode: just report, don't modify
+        if (mode === "scan") {
+          details.push({
+            kpi_id: kpi.id, kpi_name: kpi.kpi_name, kra_name: kpi.kra_name,
+            employee_id: kpi.employee_id, employee_name: empName, category: catName,
+            review_period: kpi.review_period, review_year: kpi.review_year,
+            achieved_value: matchingValue.achieved_value,
+            self_score: selfScore, self_rating: selfRating,
+            action: "repairable", reason: "missing_submission",
+          });
+          repairedCount++;
+          continue;
+        }
+
+        // REPAIR mode: insert and update
         const { error: insertError } = await supabase
           .from("review_submissions")
           .upsert({
@@ -179,9 +254,19 @@ Deno.serve(async (req) => {
             self_remarks: matchingValue.remarks,
           }, { onConflict: "kpi_id" });
 
-        if (insertError) { errors.push(`${kpi.id}: ${insertError.message}`); continue; }
+        if (insertError) {
+          errors.push(`${kpi.id}: ${insertError.message}`);
+          details.push({
+            kpi_id: kpi.id, kpi_name: kpi.kpi_name, kra_name: kpi.kra_name,
+            employee_id: kpi.employee_id, employee_name: empName, category: catName,
+            review_period: kpi.review_period, review_year: kpi.review_year,
+            achieved_value: matchingValue.achieved_value,
+            self_score: selfScore, self_rating: selfRating,
+            action: "error", reason: insertError.message,
+          });
+          continue;
+        }
 
-        // Update kpi status to self_review
         await supabase
           .from("kpis")
           .update({ status: "self_review", updated_at: new Date().toISOString() })
@@ -189,18 +274,37 @@ Deno.serve(async (req) => {
           .eq("status", "kra_set");
 
         repairedCount++;
+        details.push({
+          kpi_id: kpi.id, kpi_name: kpi.kpi_name, kra_name: kpi.kra_name,
+          employee_id: kpi.employee_id, employee_name: empName, category: catName,
+          review_period: kpi.review_period, review_year: kpi.review_year,
+          achieved_value: matchingValue.achieved_value,
+          self_score: selfScore, self_rating: selfRating,
+          action: "repaired", reason: "submission_created",
+        });
       } catch (e) {
         errors.push(`${kpi.id}: ${e.message}`);
+        details.push({
+          kpi_id: kpi.id, kpi_name: kpi.kpi_name, kra_name: kpi.kra_name,
+          employee_id: kpi.employee_id, employee_name: empNameMap.get(kpi.employee_id) || "Unknown",
+          category: catNameMap.get(kpi.category_id) || "",
+          review_period: kpi.review_period, review_year: kpi.review_year,
+          achieved_value: null, self_score: null, self_rating: null,
+          action: "error", reason: e.message,
+        });
       }
     }
 
     return new Response(
       JSON.stringify({
+        mode,
         repaired: repairedCount,
         null_values_fixed: nullFixedCount,
         skipped: skippedCount,
-        total_checked: orphanedKpis.length,
-        errors: errors.slice(0, 20)
+        total_checked: targetKpis.length,
+        errors: errors.slice(0, 20),
+        details: details.slice(0, 500),
+        ran_at: new Date().toISOString(),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
