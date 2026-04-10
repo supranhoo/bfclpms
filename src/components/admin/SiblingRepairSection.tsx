@@ -24,7 +24,7 @@ interface SiblingDetailRow {
   terminal_year: number | null;
   terminal_score: number | null;
   terminal_rating: string | null;
-  recovery_type: 'same_year' | 'cross_year' | null;
+  recovery_type: 'same_year' | 'cross_year' | 'audit_log' | null;
   action: 'repairable' | 'skippable' | 'repaired' | 'error';
   reason: string;
 }
@@ -46,13 +46,16 @@ interface SiblingRepairResult {
 
 const REASON_LABELS: Record<string, string> = {
   no_cycle_match: 'No cycle match found',
-  is_terminal_month: 'Is terminal month (not a sibling)',
+  is_terminal_month: 'Is terminal month (genuinely pending)',
   terminal_not_approved: 'Terminal month not yet approved',
   terminal_no_final_score: 'Terminal has no final score',
   same_year_terminal_recoverable: 'Recoverable — same-year terminal approved',
   cross_year_terminal_recoverable: 'Recoverable — cross-year terminal approved',
+  audit_log_recoverable: 'Recoverable — prior approved journey in audit log',
+  audit_data_insufficient: 'Audit log has insufficient data to reconstruct',
   sibling_recoverable: 'Recoverable — terminal sibling approved',
   sibling_re_percolated: 'Score re-percolated from terminal',
+  audit_log_restored: 'Restored from audit log data',
 };
 
 export function SiblingRepairSection() {
