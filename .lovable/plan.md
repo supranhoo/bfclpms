@@ -1,39 +1,41 @@
 
 
-## RCA + CAPA: Persistent "kpiErr is not defined" — Stale Deployment
+## Plan: Add "Remember Me" Checkbox to Login
 
-### 1. Root Cause
+### How It Works
 
-The code fix (removing the orphaned `kpiErr` reference) was applied to the codebase in the previous iteration, but the **edge function was never redeployed**. The Supabase runtime is still executing the old compiled version with `kpiErr` on line 154.
+Supabase Auth uses JWT refresh tokens. By default, `signInWithPassword` persists the session in localStorage (long-lived). The "Remember Me" feature will:
 
-**Evidence:**
-- `index.ts` line 169 in the repo is now blank — fix is present in source
-- Edge function logs show errors at **compiled line 154** referencing the old code
-- All 5 recent error entries (timestamps 13:40–13:44 today) show the identical stale `ReferenceError`
+- **Checked (default)**: Keep current behavior — session persists across browser restarts via localStorage
+- **Unchecked**: Store a flag so that on `beforeunload` (tab/browser close), the app calls `supabase.auth.signOut()` to clear the session, forcing re-login next visit
 
-### 2. Impact
+### Changes
 
-- 100% of scan attempts continue to fail with 500
-- The previous code fix is invisible to users because the deployed artifact is stale
+#### 1. `src/pages/Auth.tsx`
+- Add `rememberMe` state (default `true`)
+- Add a styled Checkbox between the password field and Sign In button: `☐ Remember me`
+- Pass `rememberMe` to `signIn(email, password, rememberMe)`
 
-### 3. Corrective Action
+#### 2. `src/contexts/AuthContext.tsx`
+- Update `signIn` signature to accept `rememberMe: boolean`
+- After successful login, store `localStorage.setItem('pms_remember_me', rememberMe ? 'true' : 'false')`
+- Add a `useEffect` that registers a `beforeunload` listener: if `pms_remember_me === 'false'` and a session exists, call `supabase.auth.signOut()` to clear the session on browser/tab close
+- On sign-out, clean up the `pms_remember_me` flag
 
-**Force-redeploy** the edge function by adding a deployment timestamp comment to the file. This triggers the Lovable deployment pipeline to push the updated code to the Supabase runtime.
+#### 3. `DOCUMENTATION.md` / `POLICY.md`
+- Document the Remember Me feature and version bump
 
-| File | Change |
-|------|--------|
-| `supabase/functions/bulk-zero-score-non-submitters/index.ts` | Add/update deployment sync comment (e.g., `// deploy-sync: 2026-04-10T19:15`) to force fresh deployment |
-| `DOCUMENTATION.md` | Log RCA v2.31.6 — stale deployment after code fix |
-| `POLICY.md` | Sync version |
+### UI Placement
 
-### 4. Preventive Action
+```text
+Password [__________] Forgot?
+☐ Remember me
+[      Sign In  →      ]
+Secure & Encrypted
+```
 
-- After every edge function code fix, **verify deployment** by checking edge function logs for the new code path — never assume saving the file triggers a deploy
-- Add to the Edge Function Checklist: "Confirm deployment via log inspection after every fix"
-
-### 5. Risk Assessment
-
-- **Data impact**: None — no logic change, just triggering deployment of already-fixed code
-- **Regression risk**: Zero
-- **Security**: No change
+### Risk Assessment
+- **Data impact**: None — no schema changes
+- **Regression risk**: Low — only adds an optional client-side session cleanup behavior
+- **Security**: Improved — users on shared machines can opt out of persistent sessions
 
