@@ -122,7 +122,7 @@ export function EmployeeBulkZeroScoreDialog({ employeeId, employeeName, reviewPe
   };
 
   const handleExecute = async () => {
-    if (confirmText !== 'ZERO') return;
+    if (!['ZERO', 'zero', '0'].includes(confirmText.trim())) return;
     setStep('executing');
     try {
       const result = await invokeAdminEdgeFunction<any>('bulk-zero-score-non-submitters', {
