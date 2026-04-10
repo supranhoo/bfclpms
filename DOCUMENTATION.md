@@ -4876,6 +4876,14 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Edge function**: Added `mode` ("scan"/"repair"), `kpi_ids` filtering, and `details` array to response.
 - **Affected files**: `repair-orphaned-propagations/index.ts`, `DataRepairTab.tsx`
 
+### v2.29.0 — Sibling Re-percolation Repair Tool (§75)
+- **Root Cause**: "Admin Bulk Step Back" on April 5, 2026 correctly reverted prematurely reviewed multi-month KPIs but also stepped back non-terminal sibling months whose terminal siblings were already legitimately approved. The percolation trigger only fires on terminal → approved transitions, leaving these siblings permanently stuck at `kra_set`.
+- **New Edge Function**: `repair-stepped-back-siblings` — Two-phase (scan/repair) tool that finds multi-month KPIs at `kra_set` where the terminal sibling in the same cycle is already `approved` with a `final_score`. Repair copies the terminal's full submission data and advances the stuck KPI to `approved`.
+- **New UI Section**: "Repair Stepped-Back Siblings" collapsible section in Data Repair tab with scan → select → repair workflow, Excel export, and post-repair verification.
+- **Policy §75**: Step-back operations must preserve non-terminal siblings when the terminal month is independently approved.
+- **New files**: `supabase/functions/repair-stepped-back-siblings/index.ts`, `src/components/admin/SiblingRepairSection.tsx`
+- **Modified files**: `DataRepairTab.tsx`, `supabase/config.toml`, `DOCUMENTATION.md`, `POLICY.md`
+
 ### v2.25.0 — Admin Data Repair UI (§74)
 - **Added**: "Data Repair" section in System Settings with a "Repair Orphaned Propagations" button.
 - **UI**: `DataRepairTab.tsx` — invokes the `repair-orphaned-propagations` edge function with limit 200, displays results (repaired, NULL fixed, skipped, checked, errors).
