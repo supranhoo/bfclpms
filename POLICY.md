@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 1.89.0 — §75: Cross-year cycle recovery for sibling re-percolation
+> **Version:** 1.90.0 — §76: Bulk Zero-Score Non-Submitters policy
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1483,3 +1483,45 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
 5. **Scope Restriction**: This repair tool only targets KPIs with `review_year >= 2026` to preserve historical data integrity (per Migration Governance §69). Cross-year lookups extend to `review_year >= 2025` for terminal siblings only.
 
 6. **Access**: Admin-only. Accessible via **System Settings → Data Repair → Repair Stepped-Back Siblings**.
+
+---
+
+## §76 — Admin Bulk Zero-Score for Non-Submitters
+
+### Purpose
+When employees fail to submit their monthly KPI data by the deadline, admins may administratively assign a score of 0 across all review levels for all unsubmitted KPIs. This penalizes non-compliance and ensures the review cycle can close on time.
+
+### Scope
+1. **Employee KPIs**: Any KPI still at `kra_set` or `self_review` status for the selected period/year is eligible for zero-scoring.
+2. **Org KPIs** (optional): Org-level KPI values where the data owner has not entered data (`achieved_value IS NULL`) may also be zero-scored.
+3. **Exclusions**:
+   - Sent-back KPIs with open queries are excluded (employee is awaiting resolution).
+   - N/A-marked KPIs are excluded.
+   - Non-terminal months of multi-month KPIs (Bi-Monthly, Quarterly, Half-Yearly, Yearly) are excluded — only the terminal month is actionable.
+
+### Scoring Rules
+1. When a KPI is zero-scored, the system writes `score = 0` and `rating = 0` to **every review stage** in the employee's assigned workflow pipeline (Self, Manager, Skip-Level, HR PMS, Auditor, Management).
+2. `final_score` and `final_rating` are set to 0.
+3. `kpi_status` is set to `locked` in `review_submissions`; `kpis.status` advances to `approved`.
+4. `auto_advance_reason` contains the admin's remarks and batch identifier, visible in all review panels.
+5. Zero scores are treated as real scores (not N/A) and flow into weighted average calculations and incentive computations.
+
+### Workflow Resolution
+The system resolves each employee's workflow template using the standard hierarchy:
+- Period-specific workflow config → Global workflow config → System default template
+This ensures the correct stages are zeroed per employee.
+
+### Audit Trail
+1. Each KPI receives a `kpi_audit_logs` entry with `action = 'ADMIN_BULK_ZERO_SCORE'`, recording `performed_by`, `batch_id`, old/new values, and metadata (period, year, reason).
+2. Org KPIs receive an `org_kpi_data_entry_logs` entry with `action = 'admin_zero_scored'`.
+3. All entries in a single operation share a common `batch_id` (UUID) for traceability and reporting.
+
+### Safety Controls
+1. **Scan-before-execute**: Admins must first scan to preview affected KPIs before any zero-scoring occurs.
+2. **Elevated confirmation**: The execution dialog requires typing "ZERO" to confirm — standard button-click is insufficient.
+3. **Prior batch detection**: If a bulk zero-score batch was already executed for the same period/year, a warning is displayed.
+4. **Post-execution verification**: The system confirms KPIs advanced to `approved` and submissions contain `final_score = 0`.
+5. **Excel reporting**: Both scan results and execution results can be exported as multi-sheet Excel files.
+
+### Access
+Admin-only. Accessible via **System Settings → Data Repair → Bulk Zero-Score Non-Submitters**.
