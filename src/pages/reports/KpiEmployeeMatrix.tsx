@@ -240,7 +240,7 @@ export default function KpiEmployeeMatrix() {
         </Card>
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
-            <Users className="h-8 w-8 text-blue-500" />
+            <Users className="h-8 w-8 text-primary/70" />
             <div>
               <p className="text-2xl font-bold">{summary.totalEmployees}</p>
               <p className="text-xs text-muted-foreground">Employees</p>
@@ -249,7 +249,7 @@ export default function KpiEmployeeMatrix() {
         </Card>
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
-            <BarChart3 className="h-8 w-8 text-green-500" />
+            <BarChart3 className="h-8 w-8 text-accent-foreground" />
             <div>
               <p className="text-2xl font-bold">{summary.avgKpisPerEmployee}</p>
               <p className="text-xs text-muted-foreground">Avg KPIs / Employee</p>
