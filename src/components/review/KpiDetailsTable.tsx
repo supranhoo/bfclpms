@@ -15,6 +15,7 @@ import { DailyBadge } from '@/components/review/DailyKpiExpandButton';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { getKpiSummaryText } from '@/lib/textFormatting';
+import { getQualitativeTargetLabel, getQualitativeAchievedLabel } from '@/lib/qualitativeUom';
 import { canReviewKpi as workflowCanReview, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { 
   Info, Lock, CheckCircle2, Calendar, ChevronDown, ChevronUp, Undo2, Eye, 
@@ -535,9 +536,15 @@ export function KpiDetailsTable({
                 
                 {/* Target */}
                 <TableCell>
-                  <span className="font-mono text-sm">{kpi.target_value ?? '-'}</span>
-                  {kpi.uom && (
-                    <span className="text-xs text-muted-foreground ml-1">{kpi.uom}</span>
+                  {(kpi.uom_type === 'binary' || kpi.uom_type === 'tiered') ? (
+                    <span className="text-sm">{getQualitativeTargetLabel(kpi.uom_type, kpi.qualitative_options as any) ?? '—'}</span>
+                  ) : (
+                    <>
+                      <span className="font-mono text-sm">{kpi.target_value ?? '-'}</span>
+                      {kpi.uom && (
+                        <span className="text-xs text-muted-foreground ml-1">{kpi.uom}</span>
+                      )}
+                    </>
                   )}
                 </TableCell>
                 
@@ -551,6 +558,10 @@ export function KpiDetailsTable({
                     const achievedVal = orgValue?.achieved_value ?? submission?.achieved_value ?? null;
                     if (achievedVal === null || achievedVal === undefined) {
                       return <span className="text-muted-foreground">—</span>;
+                    }
+                    if (kpi.uom_type === 'binary' || kpi.uom_type === 'tiered') {
+                      const label = getQualitativeAchievedLabel(achievedVal, kpi.uom_type, kpi.qualitative_options as any);
+                      return <span className="text-sm">{label ?? String(achievedVal)}</span>;
                     }
                     return (
                       <span className="font-mono text-sm">

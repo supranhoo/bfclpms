@@ -130,6 +130,47 @@ export function calculateQualitativeRating(
   return { rating, ratingLevel, weightedScore };
 }
 
+// Get the "target" display label for binary/tiered KPIs (the Rating-5 option label)
+export function getQualitativeTargetLabel(
+  uomType: UomType | null,
+  qualitativeOptions: QualitativeOption[] | null | undefined
+): string | null {
+  if (uomType !== 'binary' && uomType !== 'tiered') return null;
+  const options = qualitativeOptions?.length
+    ? qualitativeOptions
+    : (uomType === 'binary' ? BINARY_OPTIONS : []);
+  if (options.length === 0) return null;
+  // Find the option with the highest rating (target = best outcome)
+  const best = options.reduce((a, b) => (b.rating > a.rating ? b : a), options[0]);
+  return best.label;
+}
+
+// Resolve a numeric achieved_value back to the qualitative label
+export function getQualitativeAchievedLabel(
+  achievedValue: number | string | null | undefined,
+  uomType: UomType | null,
+  qualitativeOptions: QualitativeOption[] | null | undefined
+): string | null {
+  if (achievedValue === null || achievedValue === undefined) return null;
+  if (uomType !== 'binary' && uomType !== 'tiered') return null;
+  const options = qualitativeOptions?.length
+    ? qualitativeOptions
+    : (uomType === 'binary' ? BINARY_OPTIONS : []);
+  if (options.length === 0) return null;
+
+  // If achievedValue is already a label string, return it directly
+  if (typeof achievedValue === 'string') {
+    const byLabel = options.find(o => o.label === achievedValue);
+    if (byLabel) return byLabel.label;
+  }
+
+  // Numeric — match by rating
+  const numVal = typeof achievedValue === 'string' ? parseFloat(achievedValue) : achievedValue;
+  if (isNaN(numVal)) return String(achievedValue);
+  const match = options.find(o => o.rating === numVal);
+  return match ? match.label : String(achievedValue);
+}
+
 // Validate qualitative options
 export function validateQualitativeOptions(options: QualitativeOption[]): string | null {
   if (options.length < 2) {

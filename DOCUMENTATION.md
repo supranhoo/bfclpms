@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.23.1 — Register KPI-Employee Score Matrix in report_access_config for visibility
+> **Version:** 2.23.2 — Fix Binary/Tiered KPI Target & Achieved display to show qualitative labels
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

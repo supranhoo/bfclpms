@@ -6,6 +6,7 @@ import { KPI } from '@/hooks/useKpis';
 import { getScoreBadgeClass } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { getKpiSummaryText } from '@/lib/textFormatting';
+import { getQualitativeTargetLabel } from '@/lib/qualitativeUom';
 import { AuditKpiAssignPopover } from '@/components/review/AuditKpiAssignPopover';
 import type { AuditKpiAssignment } from '@/hooks/useAuditKpiAssignments';
 
@@ -138,7 +139,11 @@ export function MobileKpiCard({
         <div className="flex gap-4 text-xs">
           <div>
             <span className="text-muted-foreground block">Target</span>
-            <p className="font-mono font-medium">{kpi.target_value ?? '-'}</p>
+            <p className="font-mono font-medium">
+              {(kpi.uom_type === 'binary' || kpi.uom_type === 'tiered')
+                ? (getQualitativeTargetLabel(kpi.uom_type, kpi.qualitative_options as any) ?? '—')
+                : (kpi.target_value ?? '-')}
+            </p>
           </div>
           <div>
             <span className="text-muted-foreground block">Weight</span>
