@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-04-09  
-> **Version:** 2.17.8 — Cycle-aware multi-month KPI resolution across DB, triggers, and edge functions
+> **Last Updated:** 2026-04-10  
+> **Version:** 2.17.9 — Incentive Data Entry RLS fix for admin-incentive-data menu override users
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4830,3 +4830,9 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix 4 (Edge Functions)**: Updated `auto-rollover-kpis` and `detect-retroactive-incentive-changes` edge functions with cycle-start-aware helpers that accept `cycleStart` parameter.
 - **Policy**: Added §71 (Cycle-Aware Multi-Month KPI Resolution) mandating per-KPI cycle start resolution across all layers.
 - **Affected files:** Database migration (`get_cycle_months`, `percolate_multimonth_score`, `enforce_frequency_lock_on_submission`), `supabase/functions/auto-rollover-kpis/index.ts`, `supabase/functions/detect-retroactive-incentive-changes/index.ts`, `POLICY.md` (§71), `DOCUMENTATION.md`
+
+### v2.17.9 — Incentive Data Entry RLS Fix for Menu Override Users
+- **RCA**: User 201091 (Upendra Singh, role: `manager`) was granted `admin-incentive-data` menu access override but could not see any employees on the Incentive Data Entry page. Two root causes: (1) The `profiles` table had no SELECT policy for users with `admin-incentive-data` override — managers can only see their own reports, so the employee table appeared empty. (2) The `employee_incentive_eligibility`, `incentive_vessel_rates`, and `incentive_production_rates` tables had INSERT/UPDATE/DELETE policies checking for `admin-incentive` menu key, but the user's override was for `admin-incentive-data` — a different key.
+- **Fix**: Added 14 new RLS policies across 5 tables (`profiles`, `employee_incentive_eligibility`, `incentive_vessel_rates`, `incentive_eligibility_fields`, `incentive_production_rates`) gated by `has_menu_access_override(auth.uid(), 'admin-incentive-data')`. Profile access is scoped to `is_active = true` only.
+- **Policy**: Added §72 (Incentive Data Entry Access for Menu Override Users) documenting the distinction between `admin-incentive` (program config) and `admin-incentive-data` (data entry) keys.
+- **Affected files:** Database migration (14 RLS policies), `POLICY.md` (§72), `DOCUMENTATION.md`

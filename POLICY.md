@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
-> **Last Updated:** 2026-04-09  
-> **Version:** 1.78.0 — Cycle-aware multi-month KPI resolution (§71)
+> **Last Updated:** 2026-04-10  
+> **Version:** 1.79.0 — Incentive Data Entry RLS for menu override users (§72)
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1395,3 +1395,25 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
 5. **Edge Function Alignment**: All edge functions that compute cycle months (`auto-rollover-kpis`, `detect-retroactive-incentive-changes`) must pass `frequency_cycle_start` from the source KPI when resolving cycle boundaries.
 
 6. **Incident Reference**: 132 Bi-Monthly KPIs with `frequency_cycle_start = 'Feb-Mar'` were subject to cross-cycle contamination: January (terminal of Dec-Jan) incorrectly percolated scores to February (start of Feb-Mar cycle). Fixed in v2.17.8 by parameterizing `get_cycle_months()` with `p_cycle_start`.
+
+---
+
+### §72 — Incentive Data Entry Access for Menu Override Users
+
+**Effective:** v1.79.0
+
+1. **Scope**: Users granted the `admin-incentive-data` menu access override can perform data entry on incentive tables without requiring the full `admin` role.
+
+2. **Profile Visibility**: Users with `admin-incentive-data` override can view ALL active employee profiles (`is_active = true`). This is required because incentive program mappings resolve employees across all departments — the standard manager-only profile visibility is insufficient.
+
+3. **Table Access**: The `admin-incentive-data` override grants the following database-level permissions:
+   - `employee_incentive_eligibility`: View, Create, Edit
+   - `incentive_vessel_rates`: View, Create, Edit, Remove
+   - `incentive_production_rates`: View, Create, Edit, Remove
+   - `incentive_eligibility_fields`: View (configuration read-only)
+
+4. **Distinction from `admin-incentive`**: The `admin-incentive` menu key grants full incentive program configuration access (programs, slabs, rules). The `admin-incentive-data` key grants only data entry capabilities. Both keys are independently checked in RLS — a user may have one or both.
+
+5. **Security**: All access is gated by the `has_menu_access_override()` SECURITY DEFINER function, which checks the `menu_access_user_overrides` table. Only admins can grant overrides via the Menu Access Rights UI.
+
+6. **Incident Reference**: User 201091 (Upendra Singh, role: manager) was granted `admin-incentive-data` override but could not see any employees on Incentive Data Entry. Root cause: (a) `profiles` RLS had no policy for this menu key, and (b) eligibility/production tables checked for `admin-incentive` instead of `admin-incentive-data`. Fixed in v1.79.0 by adding dedicated RLS policies.
