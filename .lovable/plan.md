@@ -1,58 +1,48 @@
 
 
-## Make Incentive Edge Function RBAC Configurable — Revised Plan
+## Fix: Allow `reports-incentive` Menu Override to Authorize Edge Functions
 
 ### Problem
-Both incentive edge functions (`compute-monthly-incentives`, `detect-retroactive-incentive-changes`) hardcode `['admin', 'hr_pms']` as allowed roles. Users with `employee` or `manager` roles who have been granted `admin-incentive` or `reports-incentive` menu overrides are blocked with 403. The `compute` function got a partial fix (checks `admin-incentive` override), but `detect-retroactive` has no override fallback at all.
-
-### Key Insight
-Access to incentive functions will be granted alongside report access to users who may hold **any** role (including `employee` or `manager`). The authorization gate should not care about the user's base role — only whether they have the correct menu override OR a privileged role.
+A Manager/Employee with `reports-incentive` menu override can **see** the Incentive Report page but gets a 403 when clicking **Compute** or **Retroactive Detection**. The edge functions only check for `admin-incentive` override — a separate admin-section key that isn't visible or intuitive for report-level users.
 
 ### Solution
+Update the shared auth helper to accept **multiple menu keys** instead of a single key. The edge functions will pass both `admin-incentive` and `reports-incentive`, so a user with **either** override can execute the function.
 
-**1. Shared auth helper: `supabase/functions/_shared/incentive-auth.ts`**
+### Changes
 
-A reusable function `checkIncentiveAccess(supabase, authHeader, menuKey)` that:
-1. Validates JWT and extracts user
-2. Checks `user_roles` for `admin` or `hr_pms` → allow immediately
-3. If no privileged role, checks `menu_access_user_overrides` for the specified `menuKey` (e.g. `admin-incentive`) → allow if found
-4. This works for **any** base role — `employee`, `manager`, etc. — as long as the override exists
+**File: `supabase/functions/_shared/incentive-auth.ts`**
+- Change `menuKey: string` parameter to `menuKeys: string | string[]`
+- Normalize to array internally
+- Update the Tier 2 query to use `.in('menu_key', menuKeysArray)` instead of `.eq('menu_key', menuKey)`
 
-Returns `{ authorized: boolean, user, error?, status? }`.
+**File: `supabase/functions/compute-monthly-incentives/index.ts`**
+- Change line 19 from:
+  `checkIncentiveAccess(supabase, ..., 'admin-incentive')`
+  to:
+  `checkIncentiveAccess(supabase, ..., ['admin-incentive', 'reports-incentive'])`
 
-**2. `compute-monthly-incentives/index.ts`** (lines 17–44)
-- Replace the inline RBAC block with `checkIncentiveAccess(supabase, authHeader, 'admin-incentive')`
+**File: `supabase/functions/detect-retroactive-incentive-changes/index.ts`**
+- Same change — pass both keys
 
-**3. `detect-retroactive-incentive-changes/index.ts`** (lines 17–36)
-- Replace the inline RBAC block with `checkIncentiveAccess(supabase, authHeader, 'admin-incentive')`
-- This fixes the missing override fallback (same bug that compute had before)
+**File: `POLICY.md`**
+- Update §73 to document that edge functions accept multiple menu keys
 
-**4. Admin UI — granting access**
-No code changes needed. Admins already use **System Settings → Menu Access → User Overrides** to grant `admin-incentive` to any user regardless of their base role. An employee or manager with this override will pass the edge function auth check.
+**File: `DOCUMENTATION.md`**
+- Record the fix
 
 ### Access Matrix After Fix
 
-| User Role | Has `admin-incentive` override? | Can Compute? | Can Detect? |
+| User Role | Override | Compute? | Detect? |
 |---|---|---|---|
 | admin | N/A | YES (role) | YES (role) |
 | hr_pms | N/A | YES (role) | YES (role) |
-| manager | YES | YES (override) | YES (override) |
-| manager | NO | NO | NO |
-| employee | YES | YES (override) | YES (override) |
-| employee | NO | NO | NO |
-
-### Files to Change
-
-| File | Change |
-|---|---|
-| `supabase/functions/_shared/incentive-auth.ts` | New — shared auth helper checking roles + menu overrides |
-| `supabase/functions/compute-monthly-incentives/index.ts` | Replace inline RBAC with shared helper call |
-| `supabase/functions/detect-retroactive-incentive-changes/index.ts` | Replace inline RBAC with shared helper call (fixes missing override) |
-| `POLICY.md` | Add §73 — incentive RBAC via shared helper; any role eligible via override |
-| `DOCUMENTATION.md` | Record the refactor and role-agnostic override support |
+| manager | `reports-incentive` | YES | YES |
+| manager | `admin-incentive` | YES | YES |
+| employee | `reports-incentive` | YES | YES |
+| employee | none | NO | NO |
 
 ### Risk Assessment
 - **Data Impact**: None — no schema changes
-- **Security**: Improved — consistent checks; access explicitly gated by menu override key, not role assumptions
-- **Regression**: None — admin/hr_pms users unaffected; additive for employee/manager with overrides
+- **Security**: Maintained — access still requires explicit menu override grant by admin
+- **Regression**: None — existing `admin-incentive` overrides continue to work; additive only
 
