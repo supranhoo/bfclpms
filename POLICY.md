@@ -599,6 +599,7 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.81.0 | 2026-04-10 | `admin-incentive` menu override now grants compute access to `compute-monthly-incentives` edge function (§72 updated) |
 | 1.74.0 | 2026-04-08 | SSOT alignment: §3.6 clarified that Daily KPI governance bypass does NOT override period hard-locks. Edge function `fix-corrupted-binary-scores` performer attribution fixed per §55. |
 | 1.9.0 | 2026-03-07 | Daily-Frequency KPI Governance Bypass (§3.6): Daily KPIs at `kra_set` status bypass governance read-only locks to allow continuous data entry. Blue info banner shown when bypass is active. |
 | 2.0.0 | 2026-03-23 | Auto-Advance Zero Sent-Back Exclusion: edge function now checks both kpi_queries AND kpi_audit_logs for sent-back KPIs before auto-scoring zero. Rolled back 16 incorrectly penalized KPIs across 8 employees. |
