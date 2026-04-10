@@ -1456,4 +1456,4 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
 
 3. **Display Guard**: The Review Journey "Self" stage MUST NOT display a computed rating from `org_kpi_values` when no `review_submission` record exists. The `orgAchievedValue` fallback is only used when a submission record is present (i.e., propagation has already occurred).
 
-4. **Repair Mechanism**: The `repair-orphaned-propagations` edge function identifies org-level KPIs stuck at `kra_set` with no `review_submission` and creates the missing records. This is an admin-only operation.
+4. **Repair Mechanism**: The `repair-orphaned-propagations` edge function identifies org-level KPIs stuck at `kra_set` with no `review_submission` and creates the missing records. This is an admin-only operation, accessible via **System Settings → Data Repair → Repair Orphaned Propagations**. Each run processes up to 200 records.
