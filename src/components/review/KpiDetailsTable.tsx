@@ -535,9 +535,15 @@ export function KpiDetailsTable({
                 
                 {/* Target */}
                 <TableCell>
-                  <span className="font-mono text-sm">{kpi.target_value ?? '-'}</span>
-                  {kpi.uom && (
-                    <span className="text-xs text-muted-foreground ml-1">{kpi.uom}</span>
+                  {(kpi.uom_type === 'binary' || kpi.uom_type === 'tiered') ? (
+                    <span className="text-sm">{getQualitativeTargetLabel(kpi.uom_type, kpi.qualitative_options as any) ?? '—'}</span>
+                  ) : (
+                    <>
+                      <span className="font-mono text-sm">{kpi.target_value ?? '-'}</span>
+                      {kpi.uom && (
+                        <span className="text-xs text-muted-foreground ml-1">{kpi.uom}</span>
+                      )}
+                    </>
                   )}
                 </TableCell>
                 
@@ -551,6 +557,10 @@ export function KpiDetailsTable({
                     const achievedVal = orgValue?.achieved_value ?? submission?.achieved_value ?? null;
                     if (achievedVal === null || achievedVal === undefined) {
                       return <span className="text-muted-foreground">—</span>;
+                    }
+                    if (kpi.uom_type === 'binary' || kpi.uom_type === 'tiered') {
+                      const label = getQualitativeAchievedLabel(achievedVal, kpi.uom_type, kpi.qualitative_options as any);
+                      return <span className="text-sm">{label ?? String(achievedVal)}</span>;
                     }
                     return (
                       <span className="font-mono text-sm">
