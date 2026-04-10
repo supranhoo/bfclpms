@@ -1,6 +1,7 @@
 /**
  * Unified KPI Details Table Component
  * Displays KPIs with dynamic score columns based on status progression
+ * v2.23.2 — qualitative target/achieved label display
  * Used across My KPIs, Team Review, Audit, and Management views
  */
 
