@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.31.2 — Admin edge auth forwarding hardening
+> **Version:** 2.31.3 — Fix kpis.is_na column reference error
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4949,6 +4949,11 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Root Cause**: The admin tools were receiving a valid bearer token from the browser, but shared admin auth used session-based identity resolution that could still fail with `Auth session missing!` in backend execution paths.
 - **Fix**: Hardened `requireAdminUser()` to validate the explicit bearer token via claims, added a deployment-sync marker to `bulk-zero-score-non-submitters`, and switched the Bulk Zero-Score UI to explicit authenticated `fetch()` via a shared helper.
 - **Regression Protection**: Added `adminEdgeFunction.test.ts` to verify bearer token forwarding and unauthenticated failure handling.
+
+### v2.31.3 — Fix kpis.is_na column reference error
+- **Root Cause**: The `bulk-zero-score-non-submitters` function referenced `kpis.is_na` in both SELECT and WHERE clauses, but `is_na` lives on `review_submissions`, not on `kpis`. This caused a Postgres 500 error (`column kpis.is_na does not exist`).
+- **Fix**: Removed `is_na` from the `kpis` query. Added a secondary lookup on `review_submissions` to exclude N/A-marked KPIs. Also removed the invalid `is_na` filter from the `org_kpi_values` query (that table does have the column, but the filter was applied without selecting it in the column list, causing ambiguity).
+- **Affected files**: `supabase/functions/bulk-zero-score-non-submitters/index.ts`
 
 ---
 

@@ -96,12 +96,11 @@ Deno.serve(async (req) => {
       const { data: stuckKpis, error: kpiErr } = await supabase
         .from("kpis")
         .select(
-          "id, employee_id, kpi_name, kra_name, category_id, review_period, review_year, status, frequency, frequency_cycle_start, is_na",
+          "id, employee_id, kpi_name, kra_name, category_id, review_period, review_year, status, frequency, frequency_cycle_start",
         )
         .eq("review_period", reviewPeriod)
         .eq("review_year", reviewYear)
         .in("status", ["kra_set", "self_review"])
-        .eq("is_na", false)
         .limit(1500);
 
       if (kpiErr) throw kpiErr;
@@ -117,6 +116,19 @@ Deno.serve(async (req) => {
           .eq("status", "open");
         if (openQueries) {
           sentBackIds = new Set(openQueries.map((q: any) => q.kpi_id));
+        }
+      }
+
+      // 2b. Exclude N/A KPIs (is_na lives on review_submissions, not kpis)
+      let naKpiIds = new Set<string>();
+      if (stuckIds.length > 0) {
+        const { data: naSubmissions } = await supabase
+          .from("review_submissions")
+          .select("kpi_id")
+          .in("kpi_id", stuckIds)
+          .eq("is_na", true);
+        if (naSubmissions) {
+          naKpiIds = new Set(naSubmissions.map((s: any) => s.kpi_id));
         }
       }
 
@@ -191,6 +203,24 @@ Deno.serve(async (req) => {
           continue;
         }
 
+        // Skip N/A KPIs
+        if (naKpiIds.has(kpi.id)) {
+          details.push({
+            kpi_id: kpi.id,
+            employee_id: kpi.employee_id,
+            employee_name: empNameMap.get(kpi.employee_id) || "Unknown",
+            kpi_name: kpi.kpi_name,
+            kra_name: kpi.kra_name,
+            category: catNameMap.get(kpi.category_id) || "",
+            review_period: kpi.review_period,
+            review_year: kpi.review_year,
+            current_status: kpi.status,
+            action: "skippable",
+            reason: "na_marked",
+          });
+          continue;
+        }
+
         // Skip multi-month KPIs that aren't at terminal month
         if (
           kpi.frequency &&
@@ -237,7 +267,6 @@ Deno.serve(async (req) => {
           .eq("review_period", reviewPeriod)
           .eq("review_year", reviewYear)
           .or("achieved_value.is.null,status.is.null,status.eq.entered")
-          .eq("is_na", false)
           .limit(500);
 
         for (const org of orgValues ?? []) {
