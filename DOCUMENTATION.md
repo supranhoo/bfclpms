@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.22.1 — Incentive RBAC accepts multiple menu keys; `reports-incentive` override now authorizes edge functions (§73)
+> **Version:** 2.22.2 — Add missing UPDATE RLS policy for `menu_access_user_overrides` to fix admin upsert failures
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4862,6 +4862,11 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 ### v2.21.0 — Company Filter Added to Incentive Employee Mapping
 - **Feature**: Added a Company filter dropdown and Company column to the ProgramEmployeeMapping component.
 - **Affected files**: `ProgramEmployeeMapping.tsx`, `DOCUMENTATION.md`
+
+### v2.22.2 — Fix Menu Override Upsert RLS Violation
+- **Problem**: Granting an employee-level menu override that already existed failed with "Failed to grant access" because the `menu_access_user_overrides` table had no UPDATE RLS policy, and `.upsert()` requires UPDATE when a matching row exists.
+- **Solution**: Added `Admins can update menu user overrides` RLS policy for UPDATE with `has_role(auth.uid(), 'admin')` guard — same pattern as existing INSERT/DELETE policies.
+- **Affected table**: `menu_access_user_overrides`
 
 ### v2.22.1 — Incentive RBAC Accepts Multiple Menu Keys (§73)
 - **Problem**: Users with `reports-incentive` menu override could see the Incentive Report page but got 403 on Compute/Detect edge functions, which only checked `admin-incentive`.

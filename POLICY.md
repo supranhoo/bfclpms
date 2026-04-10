@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 1.82.1 — Incentive RBAC accepts multiple menu keys; `reports-incentive` override now authorizes edge functions (§73)
+> **Version:** 1.82.2 — Add missing UPDATE RLS policy for `menu_access_user_overrides` to fix admin upsert failures
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -599,6 +599,7 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.82.2 | 2026-04-10 | Add missing UPDATE RLS policy for `menu_access_user_overrides` — fixes "Failed to grant access" error when re-granting an existing override |
 | 1.81.0 | 2026-04-10 | `admin-incentive` menu override now grants compute access to `compute-monthly-incentives` edge function (§72 updated) |
 | 1.74.0 | 2026-04-08 | SSOT alignment: §3.6 clarified that Daily KPI governance bypass does NOT override period hard-locks. Edge function `fix-corrupted-binary-scores` performer attribution fixed per §55. |
 | 1.9.0 | 2026-03-07 | Daily-Frequency KPI Governance Bypass (§3.6): Daily KPIs at `kra_set` status bypass governance read-only locks to allow continuous data entry. Blue info banner shown when bypass is active. |
