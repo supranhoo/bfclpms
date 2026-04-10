@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 1.79.0 — Incentive Data Entry RLS for menu override users (§72)
+> **Version:** 1.80.0 — Add production_daily_entries RLS for admin-incentive-data (§72)
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1410,6 +1410,7 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
    - `employee_incentive_eligibility`: View, Create, Edit
    - `incentive_vessel_rates`: View, Create, Edit, Remove
    - `incentive_production_rates`: View, Create, Edit, Remove
+   - `production_daily_entries`: View, Create, Edit, Remove
    - `incentive_eligibility_fields`: View (configuration read-only)
 
 4. **Distinction from `admin-incentive`**: The `admin-incentive` menu key grants full incentive program configuration access (programs, slabs, rules). The `admin-incentive-data` key grants only data entry capabilities. Both keys are independently checked in RLS — a user may have one or both.

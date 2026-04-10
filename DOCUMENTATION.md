@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.17.9 — Incentive Data Entry RLS fix for admin-incentive-data menu override users
+> **Version:** 2.18.0 — production_daily_entries RLS fix for admin-incentive-data
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4836,3 +4836,9 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix**: Added 14 new RLS policies across 5 tables (`profiles`, `employee_incentive_eligibility`, `incentive_vessel_rates`, `incentive_eligibility_fields`, `incentive_production_rates`) gated by `has_menu_access_override(auth.uid(), 'admin-incentive-data')`. Profile access is scoped to `is_active = true` only.
 - **Policy**: Added §72 (Incentive Data Entry Access for Menu Override Users) documenting the distinction between `admin-incentive` (program config) and `admin-incentive-data` (data entry) keys.
 - **Affected files:** Database migration (14 RLS policies), `POLICY.md` (§72), `DOCUMENTATION.md`
+
+### v2.18.0 — production_daily_entries RLS Fix for Menu Override Users
+- **RCA**: User 201091 (Jitendra Bharti) encountered "new row violates row-level security policy" when saving daily production entries. The `production_daily_entries` table's write policy only checked for `admin` role or `incentive-config` override — the `admin-incentive-data` key was missed in the v2.17.9 fix.
+- **Fix**: Added a `FOR ALL` RLS policy on `production_daily_entries` gated by `has_menu_access_override(auth.uid(), 'admin-incentive-data')`.
+- **Policy**: Updated §72 table access list to include `production_daily_entries`.
+- **Affected files:** Database migration (1 RLS policy), `POLICY.md` (§72), `DOCUMENTATION.md`
