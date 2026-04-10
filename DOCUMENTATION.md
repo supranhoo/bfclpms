@@ -4939,3 +4939,23 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Key benefit**: Any role (employee, manager, etc.) can access incentive functions if granted the `admin-incentive` menu override via System Settings → Menu Access → User Overrides. No code changes needed to grant/revoke access.
 - **New file**: `supabase/functions/_shared/incentive-auth.ts`
 - **Modified files**: `compute-monthly-incentives/index.ts`, `detect-retroactive-incentive-changes/index.ts`, `POLICY.md` (§73), `DOCUMENTATION.md`
+
+### v2.31.1 — Fix 401 on bulk-zero-score-non-submitters (config.toml)
+- **Root Cause**: The `bulk-zero-score-non-submitters` edge function was missing from `supabase/config.toml`. Without an explicit entry, it defaulted to `verify_jwt = true`, causing the Supabase gateway to reject requests at the infrastructure level before the function's internal `requireAdminUser()` auth could run.
+- **Fix**: Added `[functions.bulk-zero-score-non-submitters]` with `verify_jwt = false` to `config.toml`, consistent with all other admin edge functions.
+- **Preventive**: This is the third instance of a config.toml omission causing a 401. Added mandatory checklist below.
+
+---
+
+## New Edge Function Checklist (Mandatory)
+
+Every new edge function **must** complete all of these steps before deployment:
+
+1. **Create `supabase/functions/<name>/index.ts`** — the function code
+2. **Add `[functions.<name>]` to `supabase/config.toml`** — with `verify_jwt = false` (for functions using in-code auth via `requireAdminUser()` or `checkIncentiveAccess()`)
+3. **Use shared auth helpers** — `requireAdminUser(req)` for admin tools, `checkIncentiveAccess()` for incentive functions
+4. **Include CORS headers** in all responses (success, error, OPTIONS)
+5. **Update `DOCUMENTATION.md`** — add a version entry describing the function
+6. **Update `POLICY.md`** — if the function implements or affects a business policy
+
+⚠️ **Omitting step 2 causes a 401 Unauthorized at the gateway level.** The function boots but never receives the request. Logs show `Auth session missing!` even though the client sends a valid token.
