@@ -1,41 +1,28 @@
 
 
-## Add Excel Download to Incentive Data Entry
+## Add Company Filter to Employee Mapping
 
 ### What
-Add a "Download Excel" button next to the program selector in the `UnifiedProductionDataTab`. The export will download the currently visible grid data as an `.xlsx` file, adapting columns based on the program type (Vessel, Production Daily, or Production Target).
+Add a "Company" filter dropdown to the `ProgramEmployeeMapping` component, consistent with the existing company filter pattern used across reports. This lets users scope the employee list by company before mapping.
 
-### How
+### Changes
 
-**File: `src/components/incentive/UnifiedProductionDataTab.tsx`**
-- Add a `Download` button next to the program `Select` dropdown (visible only when a program is selected and data is loaded)
-- Pass `selectedProgramId`, `selectedProgram.name`, and the detected program type (`vessel` / `daily` / `target`) to a new export utility
+**File: `src/components/incentive/ProgramEmployeeMapping.tsx`**
 
-**New File: `src/components/incentive/IncentiveDataExport.tsx`**
-- A button component that accepts `programId`, `programName`, and `programType`
-- On click, fetches the relevant data from the database and exports via `xlsx`:
+1. Import `useCompanyFilter` hook and `CompanyFilter` component
+2. Add `company_name` to employee data by resolving via `useCompanyFilter.getCompanyName(emp.id)` or by joining `company_id` from profiles
+3. Add a Company filter `<Select>` as the first filter in the grid (before Division)
+4. Add a "Company" column to the table between the checkbox and Employee columns
+5. Apply company filtering in the `filtered` useMemo — use `filterByCompany(emp.id)` from the hook
+6. Add `company_name` to the `filterOptions` set for the dropdown
+7. Update `SortKey` type to include `'company_name'`
+8. Update `clearFilters` to reset company selection
 
-| Program Type | Data Source | Export Columns |
-|---|---|---|
-| **Vessel** | `incentive_vessel_rates` + `vessel_monthly_entries` | Employee, Code, Rate/Vessel, Vessels Handled, Total, Remarks |
-| **Production Daily** | `incentive_production_rates` + `production_daily_entries` | Employee, Code, Designation, Department, Rate/Ton, Day 1..31, Total, Amount |
-| **Production Target** | `incentive_production_targets` | Sub-Unit, Category, Target, Achieved, Incentive %, Remarks |
-
-- Uses month/year filters matching the currently selected period
-- File name: `{ProgramName}_{Month}_{Year}.xlsx`
+**File: `DOCUMENTATION.md`**
+- Record the addition of Company filter to Employee Mapping
 
 ### Technical Details
-- Reuses existing `xlsx` library (already in the project via `OrgKpiBulkExport`)
-- The export component will accept the grid's current state data as props (no extra DB fetch needed) OR re-fetch from DB to ensure completeness
-- For Production Daily, all 31 day columns will be included regardless of the date-range toggle (full month export)
-
-### Files to Change
-| File | Change |
-|---|---|
-| `src/components/incentive/IncentiveDataExport.tsx` | New — export button component with xlsx generation logic |
-| `src/components/incentive/UnifiedProductionDataTab.tsx` | Add export button next to program selector |
-| `src/components/incentive/VesselDataEntryGrid.tsx` | Pass export-ready data up or add download button inline |
-| `src/components/incentive/ProductionDailyGrid.tsx` | Add download button inline |
-| `src/components/incentive/ProductionTargetGrid.tsx` | Add download button inline |
-| `DOCUMENTATION.md` | Document export feature |
+- Reuses existing `useCompanyFilter` hook (resolves employee→company via dept→BU→division→company chain)
+- Reuses existing `CompanyFilter` component for consistent UI
+- No database changes needed
 
