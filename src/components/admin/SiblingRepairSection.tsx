@@ -155,7 +155,7 @@ export function SiblingRepairSection() {
       'Terminal Year': r.terminal_year ?? '',
       'Terminal Score': r.terminal_score ?? '',
       'Terminal Rating': r.terminal_rating ?? '',
-      'Recovery Type': r.recovery_type === 'cross_year' ? 'Cross-Year' : r.recovery_type === 'same_year' ? 'Same-Year' : '',
+      'Recovery Type': r.recovery_type === 'cross_year' ? 'Cross-Year' : r.recovery_type === 'same_year' ? 'Same-Year' : r.recovery_type === 'audit_log' ? 'Audit Log' : '',
       'Status': r.action,
       'Reason': REASON_LABELS[r.reason] || r.reason,
     }));
@@ -315,6 +315,8 @@ export function SiblingRepairSection() {
                           <TableCell>
                             {row.recovery_type === 'cross_year' ? (
                               <Badge variant="outline" className="text-xs border-amber-400 text-amber-700 dark:text-amber-400">Cross-Year</Badge>
+                            ) : row.recovery_type === 'audit_log' ? (
+                              <Badge variant="outline" className="text-xs border-purple-400 text-purple-700 dark:text-purple-400">Audit Log</Badge>
                             ) : row.recovery_type === 'same_year' ? (
                               <Badge variant="outline" className="text-xs">Same-Year</Badge>
                             ) : (
@@ -404,6 +406,8 @@ export function SiblingRepairSection() {
                             <TableCell>
                               {row.recovery_type === 'cross_year' ? (
                                 <Badge variant="outline" className="text-xs border-amber-400 text-amber-700 dark:text-amber-400">Cross-Year</Badge>
+                              ) : row.recovery_type === 'audit_log' ? (
+                                <Badge variant="outline" className="text-xs border-purple-400 text-purple-700 dark:text-purple-400">Audit Log</Badge>
                               ) : row.recovery_type === 'same_year' ? (
                                 <Badge variant="outline" className="text-xs">Same-Year</Badge>
                               ) : (
