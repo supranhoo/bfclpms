@@ -6,6 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { AlertCircle, CheckCircle2, Download, RefreshCw, Search, Wrench } from 'lucide-react';
+import { SiblingRepairSection } from './SiblingRepairSection';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
@@ -417,6 +418,8 @@ export function DataRepairTab() {
           )}
         </CardContent>
       </Card>
+
+      <SiblingRepairSection />
 
       <ConfirmDestructiveDialog
         open={showConfirm}

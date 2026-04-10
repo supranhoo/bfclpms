@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 1.87.0 — Batch pre-fetch optimization for repair function (fixes 504 timeout)
+> **Version:** 1.88.0 — §75: Step-back sibling preservation and re-percolation repair tool
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -1462,3 +1462,20 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
     - Downloadable Excel reports are available after both scan (scan report) and repair (multi-sheet repair report with summary, details, and errors).
     - **Post-Repair Verification**: After repair, three automated checks validate results: (1) KPIs confirmed in `self_review`, (2) `review_submissions` confirmed created, (3) remaining orphan count. Results are displayed in the UI and included in reports.
     - Accessible via **System Settings → Data Repair → Repair Orphaned Propagations**. Each run processes up to 1,500 records.
+
+---
+
+### §75 — Step-Back Sibling Preservation & Re-percolation
+
+1. **Guard Rule**: Bulk step-back operations targeting multi-month KPIs (Bi-Monthly, Quarterly, Half-Yearly, Yearly) **must preserve non-terminal sibling months** when the terminal month of that cycle is already independently `approved` with a `final_score`. Only genuinely prematurely reviewed KPIs should be stepped back.
+
+2. **Recovery Tool**: The `repair-stepped-back-siblings` edge function provides a managed two-phase recovery for siblings incorrectly stepped back:
+   - **Scan Phase** (`mode: "scan"`): Identifies multi-month KPIs at `kra_set` (2026+) where the terminal sibling in the same cycle is `approved` with a `final_score`. Returns per-KPI detail rows.
+   - **Repair Phase** (`mode: "repair"`, `kpi_ids: [...]`): Copies the terminal sibling's full submission data (all reviewer scores, ratings, remarks, evidence) to the stuck KPI. Advances status to `approved`. Logs `SIBLING_RE_PERCOLATION` audit entry.
+   - **Post-Repair Verification**: Confirms KPIs advanced to `approved`, submissions exist, and reports remaining stuck count.
+
+3. **Cycle Resolution**: The function uses `frequency_cycle_start` to correctly identify cycle boundaries and terminal months. Non-terminal months within a cycle are candidates; terminal months themselves are skipped.
+
+4. **Scope Restriction**: This repair tool only targets KPIs with `review_year >= 2026` to preserve historical data integrity (per Migration Governance §69).
+
+5. **Access**: Admin-only. Accessible via **System Settings → Data Repair → Repair Stepped-Back Siblings**.
