@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 1.90.4 — §76 fix stale kpiErr reference in bulk zero-score scan
+> **Version:** 1.91.0 — §77 Remember Me login option for session persistence control
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

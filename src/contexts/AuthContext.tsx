@@ -38,7 +38,7 @@ interface AuthContextType {
   loading: boolean;
   /** True when auth bootstrap finished but profile could not be loaded */
   profileError: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signIn: (email: string, password: string, rememberMe?: boolean) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   /** Refresh the in-memory profile from DB (e.g. after avatar/mobile update) */
@@ -240,7 +240,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (email: string, password: string, rememberMe: boolean = true) => {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
@@ -249,6 +249,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           description: error.message,
           variant: "destructive",
         });
+      } else {
+        // Store remember-me preference
+        localStorage.setItem('pms_remember_me', rememberMe ? 'true' : 'false');
       }
       return { error };
     } catch (networkError) {
@@ -293,6 +296,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    localStorage.removeItem('pms_remember_me');
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
@@ -300,6 +304,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setRole(null);
     setNaturalRole(null);
   };
+
+  // beforeunload: clear session when "Remember Me" is off
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (localStorage.getItem('pms_remember_me') === 'false' && session) {
+        supabase.auth.signOut();
+        localStorage.removeItem('pms_remember_me');
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [session]);
 
   return (
     <AuthContext.Provider value={{

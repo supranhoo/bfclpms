@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.31.5 — Fix kpiErr ReferenceError in bulk-zero-score scan (stale variable after batch refactor)
+> **Version:** 2.32.0 — Add "Remember Me" checkbox to login page
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

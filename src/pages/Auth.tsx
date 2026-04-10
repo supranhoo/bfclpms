@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAppSettings } from '@/hooks/useAppSettings';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -20,6 +21,7 @@ export default function Auth() {
   const { data: appSettings, isLoading: isLoadingSettings } = useAppSettings();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   
   // Login form state
   const [loginEmail, setLoginEmail] = useState('');
@@ -79,7 +81,7 @@ export default function Auth() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    await signIn(loginEmail, loginPassword);
+    await signIn(loginEmail, loginPassword, rememberMe);
     setIsSubmitting(false);
   };
 
@@ -281,6 +283,18 @@ export default function Auth() {
                       {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
+                </div>
+
+                {/* Remember Me */}
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="remember-me"
+                    checked={rememberMe}
+                    onCheckedChange={(checked) => setRememberMe(checked === true)}
+                  />
+                  <Label htmlFor="remember-me" className="text-sm font-normal cursor-pointer text-muted-foreground">
+                    Remember me
+                  </Label>
                 </div>
               </CardContent>
               <CardFooter className="flex flex-col gap-4">
