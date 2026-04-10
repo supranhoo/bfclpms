@@ -68,3 +68,6 @@ verify_jwt = false
 
 [functions.send-scheduled-emails]
 verify_jwt = false
+
+[functions.bulk-zero-score-non-submitters]
+verify_jwt = false
