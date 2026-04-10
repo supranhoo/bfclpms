@@ -127,15 +127,9 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters) {
 
         const empId = kpi.employee_id;
         const deptId = profile.department_id;
-        const desigId = profile.designation_id;
-        const gradeId = profile.pms_grade_id;
 
         // Department filter
         if (filters.departmentId && deptId !== filters.departmentId) continue;
-        // Grade filter
-        if (filters.gradeId && gradeId !== filters.gradeId) continue;
-        // Designation filter
-        if (filters.designationId && desigId !== filters.designationId) continue;
 
         // Search filter
         if (filters.search) {
