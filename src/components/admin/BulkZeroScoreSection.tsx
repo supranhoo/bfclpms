@@ -6,7 +6,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { buttonVariants } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { AlertCircle, AlertTriangle, Ban, CheckCircle2, Download, RefreshCw, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
@@ -291,9 +296,9 @@ export function BulkZeroScoreSection() {
 
         {/* Prior batch warning */}
         {priorBatchWarning && (
-          <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-950/30 text-sm">
-            <AlertTriangle className="h-4 w-4 mt-0.5 text-amber-600 shrink-0" />
-            <span className="text-amber-800 dark:text-amber-300">{priorBatchWarning}</span>
+          <div className="flex items-start gap-2 p-3 rounded-lg border border-destructive/30 bg-destructive/5 text-sm">
+            <AlertTriangle className="h-4 w-4 mt-0.5 text-destructive shrink-0" />
+            <span className="text-destructive">{priorBatchWarning}</span>
           </div>
         )}
 
@@ -542,33 +547,42 @@ export function BulkZeroScoreSection() {
         )}
 
         {/* Elevated Confirmation Dialog */}
-        <ConfirmDestructiveDialog
-          open={showConfirm}
-          onConfirm={() => {
-            if (confirmText === 'ZERO') {
-              handleExecute();
-            }
-          }}
-          onCancel={() => {
-            setShowConfirm(false);
-            setConfirmText('');
-          }}
-          title={`Zero-Score ${totalSelected} item(s)?`}
-          description={`This will set score 0 across ALL review levels for ${selectedKpiIds.size} KPI(s)${selectedOrgIds.size > 0 ? ` and ${selectedOrgIds.size} Org KPI(s)` : ''} in ${reviewPeriod} ${reviewYear}. Status will advance to "Approved". This action is IRREVERSIBLE.`}
-          confirmLabel={confirmText === 'ZERO' ? 'Apply Zero Score' : 'Type ZERO to confirm'}
-          isLoading={isExecuting}
-        >
-          <div className="mt-3 space-y-2">
-            <label className="text-sm font-medium">Type <span className="font-mono font-bold text-destructive">ZERO</span> to confirm:</label>
-            <Input
-              value={confirmText}
-              onChange={e => setConfirmText(e.target.value.toUpperCase())}
-              placeholder="ZERO"
-              className="max-w-[200px]"
-              autoFocus
-            />
-          </div>
-        </ConfirmDestructiveDialog>
+        <AlertDialog open={showConfirm} onOpenChange={(v) => { if (!v) { setShowConfirm(false); setConfirmText(''); } }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Zero-Score {totalSelected} item(s)?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will set score 0 across ALL review levels for {selectedKpiIds.size} KPI(s)
+                {selectedOrgIds.size > 0 ? ` and ${selectedOrgIds.size} Org KPI(s)` : ''} in {reviewPeriod} {reviewYear}.
+                Status will advance to "Approved". This action is IRREVERSIBLE.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="space-y-2 py-2">
+              <label className="text-sm font-medium">
+                Type <span className="font-mono font-bold text-destructive">ZERO</span> to confirm:
+              </label>
+              <Input
+                value={confirmText}
+                onChange={e => setConfirmText(e.target.value.toUpperCase())}
+                placeholder="ZERO"
+                className="max-w-[200px]"
+                autoFocus
+              />
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isExecuting} onClick={() => { setShowConfirm(false); setConfirmText(''); }}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleExecute}
+                disabled={confirmText !== 'ZERO' || isExecuting}
+                className={cn(buttonVariants({ variant: 'destructive' }))}
+              >
+                {isExecuting ? 'Processing…' : 'Apply Zero Score'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );
