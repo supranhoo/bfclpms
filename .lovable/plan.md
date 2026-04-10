@@ -1,35 +1,66 @@
 
 
-## RCA + CAPA: "invalid input value for enum kpi_status: 'approved'"
+## RCA + CAPA: "user is not defined" in repair-stepped-back-siblings
 
 ### 1. Root Cause
 
-The `review_submissions.kpi_status` column uses the `kpi_status` enum, which has these valid values:
-- `open`, `submitted`, `approved_by_manager`, `locked`
+After the auth refactor to use the shared `requireAdminUser(req)` helper, the function destructures only `adminClient` from the result:
 
-The repair function writes `kpi_status: "approved"` when upserting into `review_submissions` (lines ~362 and ~455). But `"approved"` is **not** a valid value in this enum — it belongs to the separate `review_status` enum used by `kpis.status`.
+```typescript
+const auth = await requireAdminUser(req);
+const supabase = auth.adminClient;
+```
 
-This is a simple enum mismatch: the code confused `kpis.status` (review_status enum, which has `approved`) with `review_submissions.kpi_status` (kpi_status enum, which does not).
+But on **line 381** and **line 474**, the audit log inserts reference a bare `user` variable that no longer exists:
+
+```typescript
+performed_by: user.id   // ← ReferenceError: user is not defined
+```
+
+The correct reference is `auth.user.id`. This is a simple variable-scope regression introduced when the inline auth code was replaced with the shared helper — the old code had `const user = ...` in scope, but the refactored code stores it under `auth.user`.
 
 ### 2. Impact
 
-All 6 repair attempts failed. Zero KPIs were actually repaired — the database rejected every upsert.
+- All 6 repair attempts failed at the audit-log insert step (after the submission upsert and KPI status update succeeded or were attempted)
+- The `try/catch` per-KPI catches the ReferenceError and reports it as `"user is not defined"`
+- Zero repairs completed successfully despite the core repair logic being correct
 
 ### 3. Corrective Action
 
-**Fix the enum value in `repair-stepped-back-siblings/index.ts`:**
+**In `supabase/functions/repair-stepped-back-siblings/index.ts`:**
 
-Replace every instance of `kpi_status: "approved"` with `kpi_status: "locked"` in the `review_submissions` upsert calls (two locations: Path A ~line 362, Path B ~line 455).
+Add a `user` alias after auth validation (line ~161):
 
-`locked` is the correct terminal state for submissions — existing approved KPIs in the database all use `locked` or `submitted` for their submission records.
+```typescript
+const supabase = auth.adminClient;
+const user = auth.user;  // ← add this line
+```
 
-### 4. Preventive Action
+This fixes both line 381 (`performed_by: user.id`) and line 474 (`performed_by: user.id`).
 
-- Add a comment in the edge function documenting that `kpi_status` enum values differ from `review_status` enum values.
-- Update `DOCUMENTATION.md` with an enum reference table.
+### 4. Same bug check in repair-orphaned-propagations
 
-### 5. Files to update
+Verify whether `repair-orphaned-propagations/index.ts` has the same pattern — if it references `user.id` after the shared-auth refactor, apply the same fix.
 
-- `supabase/functions/repair-stepped-back-siblings/index.ts` — change `"approved"` → `"locked"` in two upsert blocks
-- `DOCUMENTATION.md` — add enum reference note
+### 5. Preventive Action
+
+- Add a TypeScript-level destructuring pattern to the shared auth helper usage so `user` is always in scope:
+  ```typescript
+  const { adminClient: supabase, user } = await requireAdminUser(req);
+  ```
+- Update `DOCUMENTATION.md` with the standard auth destructuring pattern for all admin edge functions.
+
+### 6. Files to update
+
+| File | Change |
+|------|--------|
+| `supabase/functions/repair-stepped-back-siblings/index.ts` | Add `const user = auth.user;` after line 161 |
+| `supabase/functions/repair-orphaned-propagations/index.ts` | Same fix if applicable |
+| `DOCUMENTATION.md` | Add standard destructuring pattern note |
+
+### 7. Risk Assessment
+
+- **Data impact**: None — the fix only affects variable scoping, no schema or data changes
+- **Regression risk**: Zero — adding an alias cannot break existing code
+- **Workflow impact**: None — restores intended functionality
 
