@@ -23,6 +23,7 @@ import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { SmartAssignmentDialog } from '@/components/admin/SmartAssignmentDialog';
 import { EmployeeWorkingDaysDialog } from '@/components/admin/EmployeeWorkingDaysDialog';
+import { ManagerCombobox, formatManagerLabel } from '@/components/admin/ManagerCombobox';
 
 import { ALL_APP_ROLES, type AppRole } from '@/lib/roles';
 
@@ -755,7 +756,7 @@ export default function UserManagement() {
                       <span>Code: {profile.employee_code || '-'}</span>
                       <span>Dept: {(profile.departments as any)?.name || '-'}</span>
                       <span>Grade: {profile.pms_grade || '-'}</span>
-                      <span>Manager: {manager?.full_name || '-'}</span>
+                      <span>Manager: {manager ? formatManagerLabel(manager.full_name, manager.employee_code) : '-'}</span>
                     </div>
                     <div className="flex items-center gap-1 pt-1 border-t">
                       <Button size="sm" variant="ghost" onClick={() => openEditDialog(profile)} className="min-h-[44px]">
@@ -866,7 +867,7 @@ export default function UserManagement() {
                           <Badge variant="secondary" className="text-xs ml-1">No Portal</Badge>
                         )}
                       </TableCell>
-                      <TableCell>{manager?.full_name || '-'}</TableCell>
+                      <TableCell>{manager ? formatManagerLabel(manager.full_name, manager.employee_code) : '-'}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Button size="sm" variant="ghost" onClick={() => openEditDialog(profile)} title="Edit">
@@ -1094,17 +1095,13 @@ export default function UserManagement() {
                   </div>
                   <div className="space-y-2">
                     <Label>Reporting Manager</Label>
-                    <Select value={editManagerId} onValueChange={setEditManagerId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select manager" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        {profiles?.filter(p => p.id !== selectedUser?.id && (p as any).is_active !== false).map(p => (
-                          <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <ManagerCombobox
+                      value={editManagerId}
+                      onValueChange={setEditManagerId}
+                      profiles={profiles?.filter(p => (p as any).is_active !== false) || []}
+                      excludeId={selectedUser?.id}
+                      placeholder="Search by name or code..."
+                    />
                   </div>
                 </div>
               </div>
@@ -1293,16 +1290,13 @@ export default function UserManagement() {
                   </div>
                   <div className="space-y-2">
                     <Label>Reporting Manager</Label>
-                    <Select value={newManagerId} onValueChange={setNewManagerId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select manager" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {profiles?.filter(p => (p as any).is_active !== false).map(p => (
-                          <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <ManagerCombobox
+                      value={newManagerId}
+                      onValueChange={setNewManagerId}
+                      profiles={profiles?.filter(p => (p as any).is_active !== false) || []}
+                      placeholder="Search by name or code..."
+                      showNone={false}
+                    />
                   </div>
                 </div>
               </div>
@@ -1379,17 +1373,13 @@ export default function UserManagement() {
 
             <div className="space-y-2">
               <Label>Change Reporting Manager (optional)</Label>
-              <Select value={bulkManagerId} onValueChange={setBulkManagerId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Keep existing managers" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Remove Manager</SelectItem>
-                  {profiles?.filter(p => (p as any).is_active !== false).map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <ManagerCombobox
+                value={bulkManagerId}
+                onValueChange={setBulkManagerId}
+                profiles={profiles?.filter(p => (p as any).is_active !== false) || []}
+                placeholder="Search by name or code..."
+                noneLabel="Remove Manager"
+              />
             </div>
           </div>
 
