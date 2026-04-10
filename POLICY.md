@@ -599,6 +599,8 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.90.4 | 2026-04-10 | Technical sync: §76 bulk zero-score edge function force-redeployed after stale kpiErr fix; added mandatory deployment verification to Edge Function Checklist. |
+| 1.90.3 | 2026-04-10 | Technical sync: §76 orphaned `kpiErr` variable reference removed from scan-mode block in `bulk-zero-score-non-submitters`. |
 | 1.90.2 | 2026-04-10 | Technical sync: §76 bulk zero-score scan query fixed — `is_na` exclusion now correctly queries `review_submissions` instead of non-existent `kpis.is_na` column. |
 | 1.90.1 | 2026-04-10 | Technical sync: admin backend auth for §76 now validates explicit bearer-token claims and the Bulk Zero-Score UI forwards auth headers explicitly; no business rule change. |
 | 1.82.2 | 2026-04-10 | Add missing UPDATE RLS policy for `menu_access_user_overrides` — fixes "Failed to grant access" error when re-granting an existing override |

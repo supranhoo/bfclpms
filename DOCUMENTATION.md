@@ -4950,6 +4950,17 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix**: Hardened `requireAdminUser()` to validate the explicit bearer token via claims, added a deployment-sync marker to `bulk-zero-score-non-submitters`, and switched the Bulk Zero-Score UI to explicit authenticated `fetch()` via a shared helper.
 - **Regression Protection**: Added `adminEdgeFunction.test.ts` to verify bearer token forwarding and unauthenticated failure handling.
 
+### v2.31.6 — Force redeploy after stale kpiErr fix
+- **Root Cause**: The v2.31.5 code fix (removing orphaned `kpiErr` reference) was applied to the repo but the edge function was never redeployed. The Supabase runtime continued executing the old compiled version, causing persistent 500 errors on every scan attempt.
+- **Fix**: Added deployment sync comment to force fresh deployment. Verified via edge function logs that the new code is active.
+- **Preventive**: Added to Edge Function Checklist: "Confirm deployment via log inspection after every fix" and "After refactoring queries, search for all prior variable references to ensure none are orphaned."
+- **Affected files**: `supabase/functions/bulk-zero-score-non-submitters/index.ts`
+
+### v2.31.5 — Remove orphaned kpiErr reference
+- **Root Cause**: Line 169 of `bulk-zero-score-non-submitters/index.ts` contained `if (kpiErr) throw kpiErr;` — a stale reference left behind after the query was refactored from a single fetch to batched fetching (using `bErr`). Since `kpiErr` was never declared in the scan-mode scope, every scan attempt threw a `ReferenceError` and returned 500.
+- **Fix**: Deleted the orphaned line. Error handling is already covered by `if (bErr) throw bErr` inside the fetch loop.
+- **Affected files**: `supabase/functions/bulk-zero-score-non-submitters/index.ts`
+
 ### v2.31.3 — Fix kpis.is_na column reference error
 - **Root Cause**: The `bulk-zero-score-non-submitters` function referenced `kpis.is_na` in both SELECT and WHERE clauses, but `is_na` lives on `review_submissions`, not on `kpis`. This caused a Postgres 500 error (`column kpis.is_na does not exist`).
 - **Fix**: Removed `is_na` from the `kpis` query. Added a secondary lookup on `review_submissions` to exclude N/A-marked KPIs. Also removed the invalid `is_na` filter from the `org_kpi_values` query (that table does have the column, but the filter was applied without selecting it in the column list, causing ambiguity).
@@ -4968,5 +4979,7 @@ Every new edge function **must** complete all of these steps before deployment:
 5. **Update `DOCUMENTATION.md`** — add a version entry describing the function
 6. **Update `POLICY.md`** — if the function implements or affects a business policy
 7. **Force redeploy after auth/config changes** — shared auth helpers and `config.toml` changes are only effective after the affected function is redeployed
+8. **Confirm deployment via log inspection** — after every fix, check edge function logs to verify the new code path is active; never assume saving the file triggers a deploy
+9. **Search for orphaned variable references** — after refactoring queries, search for all prior variable references to ensure none are left behind
 
 ⚠️ **Omitting step 2 causes a 401 Unauthorized at the gateway level.** The function boots but never receives the request. Logs show `Auth session missing!` even though the client sends a valid token.
