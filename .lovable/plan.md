@@ -1,50 +1,39 @@
 
 
-## RCA + CAPA: "kpiErr is not defined" — Propagation Failure
+## RCA + CAPA: Persistent "kpiErr is not defined" — Stale Deployment
 
 ### 1. Root Cause
 
-**Line 169** of `supabase/functions/bulk-zero-score-non-submitters/index.ts` contains a stale reference:
+The code fix (removing the orphaned `kpiErr` reference) was applied to the codebase in the previous iteration, but the **edge function was never redeployed**. The Supabase runtime is still executing the old compiled version with `kpiErr` on line 154.
 
-```typescript
-if (kpiErr) throw kpiErr;  // ← kpiErr does NOT exist in this scope
-```
+**Evidence:**
+- `index.ts` line 169 in the repo is now blank — fix is present in source
+- Edge function logs show errors at **compiled line 154** referencing the old code
+- All 5 recent error entries (timestamps 13:40–13:44 today) show the identical stale `ReferenceError`
 
-When the code was refactored from a single query to batched fetching (using `bErr` inside the while loop), this old error-check line was left behind. Since `kpiErr` is undefined, JavaScript throws a `ReferenceError` at runtime, returning a 500 to the client.
+### 2. Impact
 
-Note: `kpiErr` IS correctly defined later in the file (line 573, execute mode) — but line 169 is in the scan mode block where it was never declared.
+- 100% of scan attempts continue to fail with 500
+- The previous code fix is invisible to users because the deployed artifact is stale
 
-**This is NOT a propagation logic bug** — the scan phase crashes before it can return results, so the admin never reaches the execute/propagate step.
+### 3. Corrective Action
 
-### 2. Evidence
-
-- Runtime error: `{"error":"kpiErr is not defined"}` — classic ReferenceError
-- Line 169 sits after the batched fetch loop (lines 147-162) which uses `bErr`, not `kpiErr`
-- The error check is redundant anyway — each batch already throws on `bErr` (line 157)
-
-### 3. Impact
-
-- 100% of scan attempts fail with 500
-- Admin cannot scan for non-submitters, blocking the entire bulk zero-score workflow
-- The screenshot from Biswajit shows data stuck at "Entered" / not propagated — consistent with the tool being unusable
-
-### 4. Corrective Action
-
-**Delete line 169** — it is a dead reference. Error handling is already covered by `if (bErr) throw bErr` on line 157 inside the fetch loop.
+**Force-redeploy** the edge function by adding a deployment timestamp comment to the file. This triggers the Lovable deployment pipeline to push the updated code to the Supabase runtime.
 
 | File | Change |
 |------|--------|
-| `supabase/functions/bulk-zero-score-non-submitters/index.ts` | Remove line 169 (`if (kpiErr) throw kpiErr;`) |
-| `DOCUMENTATION.md` | Log RCA v2.31.5 — stale variable reference after batch refactor |
+| `supabase/functions/bulk-zero-score-non-submitters/index.ts` | Add/update deployment sync comment (e.g., `// deploy-sync: 2026-04-10T19:15`) to force fresh deployment |
+| `DOCUMENTATION.md` | Log RCA v2.31.6 — stale deployment after code fix |
 | `POLICY.md` | Sync version |
 
-### 5. Preventive Action
+### 4. Preventive Action
 
-- Add to the Edge Function Checklist in DOCUMENTATION.md: "After refactoring queries, search for all prior variable references to ensure none are orphaned"
+- After every edge function code fix, **verify deployment** by checking edge function logs for the new code path — never assume saving the file triggers a deploy
+- Add to the Edge Function Checklist: "Confirm deployment via log inspection after every fix"
 
-### 6. Risk Assessment
+### 5. Risk Assessment
 
-- **Data impact**: None — removing a dead line
-- **Regression risk**: Zero — the line only ever crashes; removing it restores correct flow
+- **Data impact**: None — no logic change, just triggering deployment of already-fixed code
+- **Regression risk**: Zero
 - **Security**: No change
 
