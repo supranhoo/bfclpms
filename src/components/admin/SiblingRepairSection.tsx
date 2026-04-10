@@ -77,6 +77,11 @@ export function SiblingRepairSection() {
     [repairableRows]
   );
 
+  const auditLogCount = useMemo(
+    () => repairableRows.filter(r => r.recovery_type === 'audit_log').length,
+    [repairableRows]
+  );
+
   const handleScan = async () => {
     setIsScanning(true);
     setScanResults(null);
