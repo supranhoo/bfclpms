@@ -81,7 +81,7 @@ export default function Auth() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    await signIn(loginEmail, loginPassword);
+    await signIn(loginEmail, loginPassword, rememberMe);
     setIsSubmitting(false);
   };
 
