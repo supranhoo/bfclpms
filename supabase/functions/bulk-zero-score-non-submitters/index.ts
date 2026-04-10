@@ -198,28 +198,26 @@ Deno.serve(async (req) => {
         }
       }
 
-      // 3. Check for prior zero-score batches on this period
+      // 3. Check for prior zero-score batches on this period (scoped to employee if provided)
       let priorBatchWarning: string | null = null;
-      const { data: priorLogs } = await supabase
-        .from("kpi_audit_logs")
-        .select("id")
-        .eq("action", "ADMIN_BULK_ZERO_SCORE")
-        .limit(1);
-      // Filter in-memory for metadata match since JSONB filter may vary
-      // Simple existence check is sufficient for warning
-      if (priorLogs && priorLogs.length > 0) {
-        // Check more precisely
-        const { data: exactMatch } = await supabase
+      {
+        let priorQuery = supabase
           .from("kpi_audit_logs")
           .select("id, metadata")
           .eq("action", "ADMIN_BULK_ZERO_SCORE")
-          .limit(5);
-        const hasMatch = (exactMatch ?? []).some((l: any) => {
+          .limit(10);
+        // When scanning a specific employee, only warn if THAT employee was already zero-scored
+        if (employeeId) {
+          priorQuery = priorQuery.eq("on_behalf_of", employeeId);
+        }
+        const { data: priorLogs } = await priorQuery;
+        const hasMatch = (priorLogs ?? []).some((l: any) => {
           const meta = typeof l.metadata === "string" ? JSON.parse(l.metadata) : l.metadata;
           return meta?.period === reviewPeriod && meta?.year === reviewYear;
         });
         if (hasMatch) {
-          priorBatchWarning = `A bulk zero-score batch was already executed for ${reviewPeriod} ${reviewYear}. Proceeding will create additional zero-score entries.`;
+          const scope = employeeId ? "this employee" : `${reviewPeriod} ${reviewYear}`;
+          priorBatchWarning = `A bulk zero-score batch was already executed for ${scope}. Proceeding will create additional zero-score entries.`;
         }
       }
 
