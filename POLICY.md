@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 1.83.0 — Add KPI-Employee Weighted Score Matrix report for role planning and KPI flow analysis
+> **Version:** 1.83.1 — Register KPI-Employee Score Matrix in report_access_config for visibility
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

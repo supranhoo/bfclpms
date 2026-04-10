@@ -43,6 +43,7 @@ const DEFAULT_CONFIGS: Record<string, { view_roles: AppRole[]; download_roles: A
   'manager-team-kpi': { view_roles: ['admin', 'manager', 'management', 'hr_pms'], download_roles: ['admin'] },
   'team-vs-manager-score': { view_roles: ['admin', 'manager', 'management', 'hr_pms'], download_roles: ['admin'] },
   'kpi-scorecard-detail': { view_roles: ['admin', 'manager', 'management', 'hr_pms', 'auditor'], download_roles: ['admin'] },
+  'kpi-employee-matrix': { view_roles: ['admin', 'manager', 'management', 'hr_pms', 'auditor'], download_roles: ['admin'] },
 };
 
 export function useReportAccess() {
