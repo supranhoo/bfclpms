@@ -91,9 +91,9 @@ export default function KpiEmployeeMatrix() {
       ...filteredEmployees.map(e => `${e.fullName} (${e.employeeCode})`)
     ];
 
-    const wsData = [headers];
+    const wsData: any[][] = [headers];
     filteredRows.forEach((row, idx) => {
-      const rowData: (string | number)[] = [
+      const rowData: any[] = [
         idx + 1,
         row.categoryName,
         row.kraName,
@@ -109,7 +109,7 @@ export default function KpiEmployeeMatrix() {
     });
 
     // Totals row
-    const totalsRow: (string | number)[] = ['', '', '', 'TOTAL', '', ''];
+    const totalsRow: any[] = ['', '', '', 'TOTAL', '', ''];
     filteredEmployees.forEach(emp => {
       let total = 0;
       let hasScore = false;

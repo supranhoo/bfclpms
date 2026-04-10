@@ -70,7 +70,7 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters) {
       let hasMore = true;
 
       while (hasMore) {
-        let q = supabase
+        const baseQuery = supabase
           .from('kpis')
           .select(`
             id,
@@ -94,7 +94,7 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters) {
           .order('kpi_name')
           .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
-        if (filters.categoryId) q = q.eq('category_id', filters.categoryId);
+        const q = filters.categoryId ? baseQuery.eq('category_id', filters.categoryId) : baseQuery;
 
         const { data, error } = await q;
         if (error) throw error;
