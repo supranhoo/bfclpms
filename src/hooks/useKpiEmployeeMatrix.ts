@@ -70,9 +70,7 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters) {
       let hasMore = true;
 
       while (hasMore) {
-        const q: any = supabase
-          .from('kpis')
-          .select(`
+        const selectStr = `
             id,
             employee_id,
             kra_name,
@@ -87,12 +85,14 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters) {
               designations(name),
               pms_grades(name)
             )
-          `)
+          `;
+
+        let q = (supabase.from('kpis') as any).select(selectStr)
           .eq('review_period', filters.reviewPeriod)
           .eq('review_year', filters.reviewYear);
 
         if (filters.categoryId) {
-          q.eq('category_id', filters.categoryId);
+          q = q.eq('category_id', filters.categoryId);
         }
 
         const { data: kpiData, error: kpiError } = await q
