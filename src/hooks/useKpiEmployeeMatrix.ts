@@ -79,11 +79,9 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters) {
             category_id,
             kra_categories(name),
             profiles!kpis_employee_id_fkey(
-              full_name, employee_code, department_id, designation_id,
-              pms_grade_id, is_active,
-              departments(name),
-              designations(name),
-              pms_grades(name)
+              full_name, employee_code, department_id, designation,
+              pms_grade, is_active,
+              departments(name)
             )
           `;
 
@@ -129,15 +127,9 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters) {
 
         const empId = kpi.employee_id;
         const deptId = profile.department_id;
-        const desigId = profile.designation_id;
-        const gradeId = profile.pms_grade_id;
 
         // Department filter
         if (filters.departmentId && deptId !== filters.departmentId) continue;
-        // Grade filter
-        if (filters.gradeId && gradeId !== filters.gradeId) continue;
-        // Designation filter
-        if (filters.designationId && desigId !== filters.designationId) continue;
 
         // Search filter
         if (filters.search) {
@@ -157,10 +149,10 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters) {
             employeeCode: profile.employee_code || '',
             departmentId: deptId,
             departmentName: profile.departments?.name || '',
-            designationId: desigId,
-            designationName: profile.designations?.name || '',
-            gradeId,
-            gradeName: profile.pms_grades?.name || '',
+            designationId: null,
+            designationName: profile.designation || '',
+            gradeId: null,
+            gradeName: profile.pms_grade || '',
             isActive: profile.is_active !== false,
           });
         }
