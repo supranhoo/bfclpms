@@ -70,7 +70,7 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters) {
       let hasMore = true;
 
       while (hasMore) {
-        const baseQuery = supabase
+        let q = supabase
           .from('kpis')
           .select(`
             id,
@@ -89,12 +89,16 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters) {
             )
           `)
           .eq('review_period', filters.reviewPeriod)
-          .eq('review_year', filters.reviewYear)
+          .eq('review_year', filters.reviewYear);
+
+        if (filters.categoryId) {
+          q = q.eq('category_id', filters.categoryId) as any;
+        }
+
+        const { data, error } = await (q as any)
           .order('kra_name')
           .order('kpi_name')
           .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-
-        const q = filters.categoryId ? baseQuery.eq('category_id', filters.categoryId) : baseQuery;
 
         const { data, error } = await q;
         if (error) throw error;
