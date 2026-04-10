@@ -1,41 +1,37 @@
 
 
-## Fix Repair Orphaned Propagations — Validation Findings
+## Fix: Repair Function Timing Out (504)
 
-### Issues Found
+### Root Cause
 
-1. **Category name bug**: Edge function queries `kpi_categories` table but the actual table is `kra_categories`. All category names return empty.
+The analytics logs show the edge function returning **504 Gateway Timeout** after **150+ seconds** when scanning 1500 KPIs. The function makes **2-3 individual DB queries per KPI** inside a `for` loop (checking `review_submissions`, then `org_kpi_values` exact match, then fallback match). With 1500 KPIs, that's 3000-4500 sequential database round-trips.
 
-2. **Limit too low**: There are **1,125 org KPIs** stuck at `kra_set`, but the scan is capped at 200 (default) or 500 (max). Only 5 out of 200 checked were repairable — the remaining 925+ KPIs are never even scanned.
+### Fix Strategy: Batch pre-fetch instead of per-KPI queries
 
-3. **No pagination**: The UI does a single scan call. With 1,125 records, multiple passes are needed.
+Replace the per-KPI loop queries with **bulk pre-fetches** before the loop:
 
-### Plan
+**1. Pre-fetch all review_submissions in one query**
+- Before the loop: `SELECT kpi_id FROM review_submissions WHERE kpi_id IN (all target KPI IDs)`
+- Build a `Set<string>` of KPI IDs that already have submissions
+- In the loop: check the Set instead of querying per-KPI
 
-**1. Fix category table name in edge function**
-- File: `supabase/functions/repair-orphaned-propagations/index.ts`
-- Change `.from("kpi_categories")` to `.from("kra_categories")` (line 114)
+**2. Pre-fetch all org_kpi_values in one query**
+- Before the loop: `SELECT * FROM org_kpi_values WHERE category_id IN (...) AND review_period IN (...) AND review_year IN (...) AND status IN ('propagated','approved','entered')`
+- Build a lookup Map keyed by `category_id + kra_name + kpi_name + period + year`
+- In the loop: look up from the Map instead of querying per-KPI
 
-**2. Increase limits and add multi-pass scanning**
-- Increase max limit from 500 to 1500 in the edge function (`Math.min(body.limit, 1500)`)
-- Update the UI to send `limit: 1500` for scan mode to capture all records in one pass
-- If total exceeds limit, show a warning "X records checked out of Y total — run scan again for remaining"
+**3. Keep the loop logic intact** — just replace DB calls with Map/Set lookups
 
-**3. Add post-repair verification query**
-- After repair completes, the edge function runs 2-3 verification checks (each `.limit(200)`):
-  - **Check 1**: Query `kpis` where `id IN (repaired_ids)` and verify `status = 'self_review'`
-  - **Check 2**: Query `review_submissions` where `kpi_id IN (repaired_ids)` and verify records exist
-  - **Check 3**: Query remaining orphans (kpis with `is_org_level = true`, `status = 'kra_set'`, no review_submission) to report how many still need repair
-- Add a `verification` object to the response: `{ kpis_verified: N, submissions_verified: N, remaining_orphans: N }`
-- Display verification results in the UI after repair
-
-**4. Update DOCUMENTATION.md and POLICY.md**
-- Document the verification checks
-- Version bump
+This reduces ~4500 DB queries down to **~5 total queries**, bringing execution time from 150s to under 5s.
 
 ### Files Changed
-- `supabase/functions/repair-orphaned-propagations/index.ts` — fix table name, increase limits, add verification
-- `src/components/admin/DataRepairTab.tsx` — display verification results, update limit
+
+- `supabase/functions/repair-orphaned-propagations/index.ts` — replace per-KPI queries with batch pre-fetches
 - `DOCUMENTATION.md` — version bump
-- `POLICY.md` — update §74
+- `POLICY.md` — note performance fix
+
+### Risk Assessment
+- **Data Impact**: None — same logic, same results, just batched queries
+- **Backward Compatible**: Response shape unchanged
+- **Regression Risk**: Low — matching logic stays identical, only data fetching changes
 
