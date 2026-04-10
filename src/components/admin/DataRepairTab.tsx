@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { AlertCircle, CheckCircle2, Download, RefreshCw, Search, Wrench } from 'lucide-react';
 import { SiblingRepairSection } from './SiblingRepairSection';
+import { BulkZeroScoreSection } from './BulkZeroScoreSection';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
@@ -420,6 +421,8 @@ export function DataRepairTab() {
       </Card>
 
       <SiblingRepairSection />
+
+      <BulkZeroScoreSection />
 
       <ConfirmDestructiveDialog
         open={showConfirm}
