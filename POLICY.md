@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 1.90.0 — §76: Bulk Zero-Score Non-Submitters policy
+> **Version:** 1.90.1 — §76 backend auth hardening sync
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -599,6 +599,7 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.90.1 | 2026-04-10 | Technical sync: admin backend auth for §76 now validates explicit bearer-token claims and the Bulk Zero-Score UI forwards auth headers explicitly; no business rule change. |
 | 1.82.2 | 2026-04-10 | Add missing UPDATE RLS policy for `menu_access_user_overrides` — fixes "Failed to grant access" error when re-granting an existing override |
 | 1.81.0 | 2026-04-10 | `admin-incentive` menu override now grants compute access to `compute-monthly-incentives` edge function (§72 updated) |
 | 1.74.0 | 2026-04-08 | SSOT alignment: §3.6 clarified that Daily KPI governance bypass does NOT override period hard-locks. Edge function `fix-corrupted-binary-scores` performer attribution fixed per §55. |

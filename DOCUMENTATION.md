@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.31.0 — Bulk Zero-Score Non-Submitters admin tool (§76)
+> **Version:** 2.31.2 — Admin edge auth forwarding hardening
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -4945,6 +4945,11 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Fix**: Added `[functions.bulk-zero-score-non-submitters]` with `verify_jwt = false` to `config.toml`, consistent with all other admin edge functions.
 - **Preventive**: This is the third instance of a config.toml omission causing a 401. Added mandatory checklist below.
 
+### v2.31.2 — Admin edge auth forwarding hardening
+- **Root Cause**: The admin tools were receiving a valid bearer token from the browser, but shared admin auth used session-based identity resolution that could still fail with `Auth session missing!` in backend execution paths.
+- **Fix**: Hardened `requireAdminUser()` to validate the explicit bearer token via claims, added a deployment-sync marker to `bulk-zero-score-non-submitters`, and switched the Bulk Zero-Score UI to explicit authenticated `fetch()` via a shared helper.
+- **Regression Protection**: Added `adminEdgeFunction.test.ts` to verify bearer token forwarding and unauthenticated failure handling.
+
 ---
 
 ## New Edge Function Checklist (Mandatory)
@@ -4957,5 +4962,6 @@ Every new edge function **must** complete all of these steps before deployment:
 4. **Include CORS headers** in all responses (success, error, OPTIONS)
 5. **Update `DOCUMENTATION.md`** — add a version entry describing the function
 6. **Update `POLICY.md`** — if the function implements or affects a business policy
+7. **Force redeploy after auth/config changes** — shared auth helpers and `config.toml` changes are only effective after the affected function is redeployed
 
 ⚠️ **Omitting step 2 causes a 401 Unauthorized at the gateway level.** The function boots but never receives the request. Logs show `Auth session missing!` even though the client sends a valid token.
