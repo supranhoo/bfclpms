@@ -1,33 +1,33 @@
 
 
-## Fix: KPI-Employee Score Matrix not visible on Reports Hub
+## Show Assigned Weightage % per Employee in KPI-Employee Matrix
 
-### Root Cause
-The report card uses `reportKey: 'kpi-employee-matrix'` which is checked against `menu_access_config` via `useReportAccess`. Since no row exists in `menu_access_config` for this key, `canView()` returns `false` and the card is hidden.
+### Problem
+Currently, each KPI row shows a single "Wt%" column (from the first occurrence) and employee cells show weighted scores. But each employee can have a **different weightage** assigned for the same KRA/KPI. The user wants to see the **assigned weightage %** per employee in the employee columns.
 
 ### Solution
+Store per-employee weightage in the matrix data and display it in the employee cells — either replacing the weighted score or showing both (weightage with score below).
 
-**Database Migration** — Insert the missing menu access config row:
+### Changes
 
-```sql
-INSERT INTO public.menu_access_config (menu_key, menu_name, section, default_roles)
-VALUES (
-  'reports-kpi-employee-matrix',
-  'KPI-Employee Score Matrix',
-  'Reports',
-  ARRAY['admin', 'hr_manager']::app_role[]
-)
-ON CONFLICT (menu_key) DO NOTHING;
+**1. `src/hooks/useKpiEmployeeMatrix.ts`**
+- Add `employeeWeightages: Record<string, number>` to `MatrixKpiRow` interface
+- Populate it during the pivot loop: `row.employeeWeightages[empId] = Number(kpi.weightage) || 0`
+- Keep `employeeScores` as-is for the Excel export and totals
+
+**2. `src/pages/reports/KpiEmployeeMatrix.tsx`**
+- Update employee cells to display the assigned weightage % as the primary value
+- Show format like `10%` (the weightage) with the weighted score as secondary text below if a score exists
+- Update the company-filter logic in `filteredRows` to also carry `employeeWeightages`
+- Update Excel export to include a weightage row or column
+
+**3. `DOCUMENTATION.md` / `POLICY.md`** — version bump
+
+### Cell Display Format
+```text
+  10%        ← assigned weightage (bold)
+  3.50       ← weighted score (smaller, muted) — only if score exists
 ```
 
-Also verify/fix the `reportKey` convention — existing reports use `reports-${key}` prefix in `menu_access_config` but the `ReportsHub` card uses just the key. Need to check how `useReportAccess.canView()` maps the key to the menu config to ensure consistency.
-
-### Files to Update
-- **Database**: Insert `menu_access_config` row (migration)
-- **Possibly** `ReportsHub.tsx`: Align `reportKey` if the convention requires `reports-` prefix
-- `DOCUMENTATION.md` / `POLICY.md`: Version bump
-
-### Risk Assessment
-- **Data Impact**: Additive INSERT only
-- **Regression**: None — only enables visibility for a new report
+Unmapped cells remain blank. Mapped but unscored cells show only the weightage.
 
