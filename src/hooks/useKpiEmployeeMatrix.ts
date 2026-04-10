@@ -149,10 +149,10 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters) {
             employeeCode: profile.employee_code || '',
             departmentId: deptId,
             departmentName: profile.departments?.name || '',
-            designationId: desigId,
-            designationName: profile.designations?.name || '',
-            gradeId,
-            gradeName: profile.pms_grades?.name || '',
+            designationId: null,
+            designationName: profile.designation || '',
+            gradeId: null,
+            gradeName: profile.pms_grade || '',
             isActive: profile.is_active !== false,
           });
         }
