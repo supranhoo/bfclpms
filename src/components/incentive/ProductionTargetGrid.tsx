@@ -58,6 +58,10 @@ export function ProductionTargetGrid({ controlledProgramId, onMonthYearChange }:
 
   const upsert = useUpsertProductionTargets();
 
+  useEffect(() => {
+    onMonthYearChange?.(selectedMonth, selectedYear);
+  }, [selectedMonth, selectedYear, onMonthYearChange]);
+
   // Sync DB data into local state
   useEffect(() => {
     if (targets.length > 0) {

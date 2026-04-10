@@ -36,6 +36,10 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange 
   const { data: entries = [], isLoading: entriesLoading } = useProductionDailyEntries(programId, month, year);
   const bulkUpsert = useBulkUpsertDailyEntries();
 
+  useEffect(() => {
+    onMonthYearChange?.(month, year);
+  }, [month, year, onMonthYearChange]);
+
   // Fetch mapped employees for this program (from mappings)
   const { data: mappedEmployees = [], isLoading: mappedLoading } = useQuery({
     queryKey: ['mapped-employees-for-grid', programId],

@@ -49,6 +49,10 @@ export function VesselDataEntryGrid({ programs, onMonthYearChange }: VesselDataE
     setLocalData(init);
   }, [vesselRates, existingEntries]);
 
+  useEffect(() => {
+    onMonthYearChange?.(month, year);
+  }, [month, year, onMonthYearChange]);
+
   const handleSave = () => {
     const entries = Object.entries(localData).map(([employeeId, val]) => ({
       program_id: selectedProgram,
