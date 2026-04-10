@@ -151,7 +151,7 @@ async function exportDailyData(programId: string, month: string, year: number): 
 
 async function exportTargetData(programId: string, month: string, year: number): Promise<XLSX.WorkSheet> {
   const { data: targets } = await supabase
-    .from('incentive_production_targets')
+    .from('production_targets')
     .select('*')
     .eq('program_id', programId)
     .eq('month', month)
