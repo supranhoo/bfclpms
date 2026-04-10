@@ -23,7 +23,7 @@ const corsHeaders = {
  *   admin_remarks: string      (execute only)
  */
 
-// Deploy sync marker: 2026-04-10 auth-forwarding hardening.
+// Deploy sync marker: 2026-04-10T2 org-filter support.
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -82,6 +82,9 @@ Deno.serve(async (req) => {
     const kpiIds: string[] = body?.kpi_ids ?? [];
     const orgKpiIds: string[] = body?.org_kpi_ids ?? [];
     const adminRemarks: string = body?.admin_remarks ?? "Data not submitted by deadline";
+    const divisionId: string | null = body?.division_id ?? null;
+    const businessUnitId: string | null = body?.business_unit_id ?? null;
+    const departmentId: string | null = body?.department_id ?? null;
 
     if (!reviewPeriod || !reviewYear) {
       return new Response(
@@ -90,18 +93,78 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ── Resolve org-filter employee allowlist ──────────────────────────
+    let orgEmployeeAllowlist: Set<string> | null = null;
+    if (departmentId || businessUnitId || divisionId) {
+      // Resolve department IDs from hierarchy
+      let deptIds: string[] = [];
+      if (departmentId) {
+        deptIds = [departmentId];
+      } else if (businessUnitId) {
+        const { data: depts } = await supabase
+          .from("departments")
+          .select("id")
+          .eq("business_unit_id", businessUnitId);
+        deptIds = (depts ?? []).map((d: any) => d.id);
+      } else if (divisionId) {
+        const { data: bus } = await supabase
+          .from("business_units")
+          .select("id")
+          .eq("division_id", divisionId);
+        const buIds = (bus ?? []).map((b: any) => b.id);
+        if (buIds.length > 0) {
+          const { data: depts } = await supabase
+            .from("departments")
+            .select("id")
+            .in("business_unit_id", buIds);
+          deptIds = (depts ?? []).map((d: any) => d.id);
+        }
+      }
+
+      if (deptIds.length > 0) {
+        orgEmployeeAllowlist = new Set<string>();
+        for (let i = 0; i < deptIds.length; i += 200) {
+          const batch = deptIds.slice(i, i + 200);
+          const { data: profiles } = await supabase
+            .from("profiles")
+            .select("id")
+            .in("department_id", batch);
+          (profiles ?? []).forEach((p: any) => orgEmployeeAllowlist!.add(p.id));
+        }
+      } else {
+        // Filter was set but resolved to zero departments → empty allowlist
+        orgEmployeeAllowlist = new Set<string>();
+      }
+    }
+
     // ── SCAN MODE ──────────────────────────────────────────────────────
     if (mode === "scan") {
-      // 1. Fetch KPIs stuck at kra_set or self_review
-      const { data: stuckKpis, error: kpiErr } = await supabase
-        .from("kpis")
-        .select(
-          "id, employee_id, kpi_name, kra_name, category_id, review_period, review_year, status, frequency, frequency_cycle_start",
-        )
-        .eq("review_period", reviewPeriod)
-        .eq("review_year", reviewYear)
-        .in("status", ["kra_set", "self_review"])
-        .limit(1500);
+      // 1. Fetch KPIs stuck at kra_set or self_review (batched to bypass 1000-row limit)
+      let allStuckKpis: any[] = [];
+      const BATCH_SIZE = 500;
+      let offset = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const { data: batch, error: bErr } = await supabase
+          .from("kpis")
+          .select(
+            "id, employee_id, kpi_name, kra_name, category_id, review_period, review_year, status, frequency, frequency_cycle_start",
+          )
+          .eq("review_period", reviewPeriod)
+          .eq("review_year", reviewYear)
+          .in("status", ["kra_set", "self_review"])
+          .range(offset, offset + BATCH_SIZE - 1);
+        if (bErr) throw bErr;
+        const rows = batch ?? [];
+        allStuckKpis = allStuckKpis.concat(rows);
+        hasMore = rows.length === BATCH_SIZE;
+        offset += BATCH_SIZE;
+      }
+
+      // Apply org filter if set
+      const stuckKpis = orgEmployeeAllowlist
+        ? allStuckKpis.filter((k: any) => orgEmployeeAllowlist!.has(k.employee_id))
+        : allStuckKpis;
 
       if (kpiErr) throw kpiErr;
 

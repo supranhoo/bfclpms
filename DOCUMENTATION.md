@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.31.3 — Fix kpis.is_na column reference error
+> **Version:** 2.31.4 — Add Division/BU/Department org filters to Bulk Zero-Score + batched fetch
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
