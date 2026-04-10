@@ -1,54 +1,41 @@
 
 
-## Revised Plan: Two-Phase Repair With Preview, Selection & Downloadable Report
+## Fix Repair Orphaned Propagations — Validation Findings
 
-### Current behavior
-The "Run Repair" button immediately repairs all orphaned KPIs — no preview, no selection, no report.
+### Issues Found
 
-### New behavior — Two-phase workflow
+1. **Category name bug**: Edge function queries `kpi_categories` table but the actual table is `kra_categories`. All category names return empty.
 
-**Phase 1: Scan (read-only)**
-- Admin clicks "Scan for Orphaned KPIs" — calls the edge function in `mode: "scan"` (new parameter)
-- Edge function returns a `details` array without modifying any data
-- Each detail entry includes: `kpi_id`, `kpi_name`, `kra_name`, `employee_name`, `employee_id`, `category`, `review_period`, `review_year`, `achieved_value`, `action` ("repairable" | "skippable"), `reason`
-- UI renders a data table with checkboxes so admin can select which KPIs to repair
-- "Select All" / "Deselect All" toggles
-- "Download Scan Report" button exports the full scan results as an Excel file (using `xlsx`)
+2. **Limit too low**: There are **1,125 org KPIs** stuck at `kra_set`, but the scan is capped at 200 (default) or 500 (max). Only 5 out of 200 checked were repairable — the remaining 925+ KPIs are never even scanned.
 
-**Phase 2: Repair (selected only)**
-- Admin reviews the table, selects specific KPIs, clicks "Repair Selected"
-- `ConfirmDestructiveDialog` asks for confirmation before proceeding
-- Calls the edge function with `mode: "repair"` and `kpi_ids: [...]` (array of selected IDs)
-- Edge function only processes the provided KPI IDs
-- Returns detailed results per KPI
-- UI shows results summary + "Download Repair Report" button with a multi-sheet Excel:
-  - **Summary sheet**: timestamp, totals (repaired, skipped, errors, null fixed)
-  - **Details sheet**: per-KPI row with employee name, KPI name, action taken, achieved value, score, rating
-  - **Errors sheet**: KPI ID + error message
+3. **No pagination**: The UI does a single scan call. With 1,125 records, multiple passes are needed.
 
-### Technical changes
+### Plan
 
-**1. Update edge function** (`supabase/functions/repair-orphaned-propagations/index.ts`)
-- Accept `mode: "scan" | "repair"` in request body (default: `"repair"` for backward compat)
-- Accept optional `kpi_ids: string[]` to limit repair to selected KPIs
-- In scan mode: run the same queries but return details without any INSERT/UPDATE
-- In repair mode with `kpi_ids`: filter `orphanedKpis` to only matching IDs
-- Add `full_name` to the profiles select; build a `details` array with per-KPI info
-- Return `details` array in response alongside existing summary counts
+**1. Fix category table name in edge function**
+- File: `supabase/functions/repair-orphaned-propagations/index.ts`
+- Change `.from("kpi_categories")` to `.from("kra_categories")` (line 114)
 
-**2. Update `DataRepairTab.tsx`**
-- Two-step UI: Scan → Select → Repair
-- State: `scanResults` (detail rows), `selectedIds` (Set), `repairResults`
-- Data table with columns: checkbox, Employee, KRA, KPI, Period/Year, Achieved, Status, Reason
-- "Download Scan Report" and "Download Repair Report" buttons using `xlsx`
-- Confirmation dialog before repair via `ConfirmDestructiveDialog`
+**2. Increase limits and add multi-pass scanning**
+- Increase max limit from 500 to 1500 in the edge function (`Math.min(body.limit, 1500)`)
+- Update the UI to send `limit: 1500` for scan mode to capture all records in one pass
+- If total exceeds limit, show a warning "X records checked out of Y total — run scan again for remaining"
 
-**3. Update `DOCUMENTATION.md` and `POLICY.md`**
-- Document the two-phase scan-then-repair workflow
+**3. Add post-repair verification query**
+- After repair completes, the edge function runs 2-3 verification checks (each `.limit(200)`):
+  - **Check 1**: Query `kpis` where `id IN (repaired_ids)` and verify `status = 'self_review'`
+  - **Check 2**: Query `review_submissions` where `kpi_id IN (repaired_ids)` and verify records exist
+  - **Check 3**: Query remaining orphans (kpis with `is_org_level = true`, `status = 'kra_set'`, no review_submission) to report how many still need repair
+- Add a `verification` object to the response: `{ kpis_verified: N, submissions_verified: N, remaining_orphans: N }`
+- Display verification results in the UI after repair
+
+**4. Update DOCUMENTATION.md and POLICY.md**
+- Document the verification checks
 - Version bump
 
-### Risk Assessment
-- **Backward compatible**: `mode` defaults to `"repair"`, so existing behavior unchanged if called without it
-- **Security**: Same admin-only check; no new access surfaces
-- **Data safety**: Scan mode is read-only; repair requires explicit selection + confirmation dialog
+### Files Changed
+- `supabase/functions/repair-orphaned-propagations/index.ts` — fix table name, increase limits, add verification
+- `src/components/admin/DataRepairTab.tsx` — display verification results, update limit
+- `DOCUMENTATION.md` — version bump
+- `POLICY.md` — update §74
 
