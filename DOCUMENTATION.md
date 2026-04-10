@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.28.0 — Batch pre-fetch optimization for repair function (fixes 504 timeout)
+> **Version:** 2.29.0 — Sibling re-percolation repair tool for stepped-back multi-month KPIs (§75)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
