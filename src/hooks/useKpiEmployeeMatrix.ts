@@ -66,6 +66,15 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters) {
     queryFn: async () => {
       const PAGE_SIZE = 1000;
 
+      // ── 0. Fetch dept→BU mapping if BU filter is active ───
+      let deptBuMap: Map<string, string> | null = null;
+      if (filters.businessUnitId) {
+        const { data: depts } = await supabase
+          .from('departments')
+          .select('id, business_unit_id');
+        deptBuMap = new Map((depts ?? []).map(d => [d.id, d.business_unit_id ?? '']));
+      }
+
       // ── 1. Fetch KPIs for the period ──────────────────────
       let allKpis: any[] = [];
       let page = 0;
@@ -129,6 +138,12 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters) {
 
         const empId = kpi.employee_id;
         const deptId = profile.department_id;
+
+        // Business Unit filter
+        if (filters.businessUnitId && deptBuMap) {
+          const buId = deptId ? deptBuMap.get(deptId) : undefined;
+          if (buId !== filters.businessUnitId) continue;
+        }
 
         // Department filter
         if (filters.departmentId && deptId !== filters.departmentId) continue;
