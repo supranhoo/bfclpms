@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 2.27.0 — Post-repair verification checks, category name fix, increased scan limit to 1500
+> **Version:** 2.28.0 — Batch pre-fetch optimization for repair function (fixes 504 timeout)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

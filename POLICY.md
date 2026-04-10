@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-10  
-> **Version:** 1.86.0 — Post-repair verification, category table fix, limit raised to 1500
+> **Version:** 1.87.0 — Batch pre-fetch optimization for repair function (fixes 504 timeout)
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
