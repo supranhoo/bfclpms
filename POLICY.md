@@ -1532,4 +1532,4 @@ This ensures the correct stages are zeroed per employee.
 The scan query uses batched fetching (500 rows per batch) to bypass the default 1000-row limit, ensuring all non-submitters are visible.
 
 ### Access
-Admin-only. Accessible via **System Settings → Data Repair → Bulk Zero-Score Non-Submitters**.
+Admin-only. Accessible via **System Settings → Data Repair → Bulk Zero-Score Non-Submitters** or via the **Zero-Score button** on an individual employee's KPI Details header in the dashboard.
