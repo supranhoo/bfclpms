@@ -5,10 +5,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-/**
- * Bi-Monthly cycle definitions keyed by cycle_start.
- * Each entry maps a period to its terminal sibling period.
- */
 const BIMONTHLY_CYCLES: Record<string, string[][]> = {
   "Jan-Feb": [["January","February"],["March","April"],["May","June"],["July","August"],["September","October"],["November","December"]],
   "Feb-Mar": [["February","March"],["April","May"],["June","July"],["August","September"],["October","November"],["December","January"]],
@@ -19,74 +15,132 @@ const QUARTERLY_CYCLES: Record<string, string[][]> = {
   "Apr-Jun": [["April","May","June"],["July","August","September"],["October","November","December"],["January","February","March"]],
 };
 
+const MONTH_ORDER = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
 interface CycleMatch {
   cycle: string[];
   terminalMonth: string;
-  /** The year the terminal month falls in relative to the KPI's review_year */
   terminalYear: number;
-  /** Whether this is a cross-year recovery (terminal in previous year) */
   isCrossYear: boolean;
+  isTerminal: boolean; // whether the current KPI IS the terminal month
 }
 
-/**
- * Resolve cycle siblings and compute the terminal month + year.
- * Handles cross-year cycles like Dec-Jan where terminal (December) is in the previous year.
- */
 function resolveCycle(frequency: string, period: string, reviewYear: number, cycleStart: string | null): CycleMatch | null {
-  let cycles: string[][] | null = null;
+  let allCycles: string[][] | null = null;
 
   if (frequency === "Bi-Monthly") {
     const key = cycleStart || "Jan-Feb";
-    cycles = (BIMONTHLY_CYCLES[key] || BIMONTHLY_CYCLES["Jan-Feb"]) as string[][];
+    allCycles = BIMONTHLY_CYCLES[key] || BIMONTHLY_CYCLES["Jan-Feb"];
   } else if (frequency === "Quarterly") {
     const key = cycleStart || "Jan-Mar";
-    cycles = (QUARTERLY_CYCLES[key] || QUARTERLY_CYCLES["Jan-Mar"]) as string[][];
+    allCycles = QUARTERLY_CYCLES[key] || QUARTERLY_CYCLES["Jan-Mar"];
   }
 
-  if (!cycles) return null;
+  if (!allCycles) return null;
 
-  for (const cycle of cycles) {
+  for (const cycle of allCycles) {
     if (!cycle.includes(period)) continue;
     const terminalMonth = cycle[cycle.length - 1];
+    const isTerminal = period === terminalMonth;
 
-    // Determine terminal year: for cross-year cycles (e.g. Dec-Jan with cycle_start "Feb-Mar"),
-    // the terminal month (December) is in the previous year relative to January's review_year.
-    const MONTH_ORDER = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    const firstMonthIdx = MONTH_ORDER.indexOf(cycle[0]);
+    const lastMonthIdx = MONTH_ORDER.indexOf(terminalMonth);
+    const cycleWraps = lastMonthIdx < firstMonthIdx;
     const periodIdx = MONTH_ORDER.indexOf(period);
-    const terminalIdx = MONTH_ORDER.indexOf(terminalMonth);
 
-    // Cross-year detection: if the terminal month's calendar index is GREATER than
-    // the current period's index within a wrap-around cycle, the terminal is in the previous year.
-    // Example: period=January(0), terminal=December(11) in a Dec-Jan cycle → terminal is previous year.
-    // But period=March(2), terminal=April(3) → same year.
-    // Key insight: if the cycle wraps (terminal index > period index by a large gap AND
-    // the cycle spans across December→January), terminal is in previous year.
     let isCrossYear = false;
     let terminalYear = reviewYear;
 
-    // A cycle wraps when the first month in the cycle has a higher index than the last month
-    const firstMonthIdx = MONTH_ORDER.indexOf(cycle[0]);
-    const lastMonthIdx = MONTH_ORDER.indexOf(cycle[cycle.length - 1]);
-    const cycleWraps = lastMonthIdx < firstMonthIdx;
-
-    if (cycleWraps) {
-      // In a wrapping cycle, months before the wrap point are in the later year,
-      // months after/at the wrap point are in the earlier year.
-      // e.g. cycle ["December","January"]: Dec is in year Y-1, Jan is in year Y
-      // The terminal is December, and if our period is January (year Y), terminal is year Y-1
-      if (periodIdx < firstMonthIdx) {
-        // Period is in the "later" year portion (e.g., January in Dec-Jan)
-        // Terminal (December) is in the previous year
-        terminalYear = reviewYear - 1;
-        isCrossYear = true;
-      }
-      // If period is in the "earlier" portion (e.g., December), terminal is same year
+    if (cycleWraps && !isTerminal && periodIdx < firstMonthIdx) {
+      // Period is in the "later" year portion (e.g., January in Dec-Jan)
+      terminalYear = reviewYear - 1;
+      isCrossYear = true;
     }
 
-    return { cycle, terminalMonth, terminalYear, isCrossYear };
+    return { cycle, terminalMonth, terminalYear, isCrossYear, isTerminal };
   }
 
   return null;
+}
+
+/**
+ * Reconstruct submission data from audit log entries for a KPI that was previously approved.
+ * Merges data from ORG_KPI_PROPAGATED, MANAGER_FORWARDED, SKIP_LEVEL_FORWARDED,
+ * HR_PMS_FORWARDED, ADMIN_DATA_ENTRY_HR_PMS audit entries.
+ */
+function reconstructSubmissionFromAudit(auditEntries: any[]): Record<string, any> | null {
+  const sub: Record<string, any> = {};
+  let hasData = false;
+
+  for (const entry of auditEntries) {
+    const nv = entry.new_value;
+    if (!nv || typeof nv !== 'object') continue;
+
+    switch (entry.action) {
+      case 'ORG_KPI_PROPAGATED':
+        if (nv.achieved_value !== undefined) sub.achieved_value = nv.achieved_value;
+        if (nv.self_score !== undefined) sub.self_score = nv.self_score;
+        if (nv.self_rating !== undefined) sub.self_rating = nv.self_rating;
+        if (nv.is_na !== undefined) sub.is_na = nv.is_na;
+        hasData = true;
+        break;
+      case 'ADMIN_DATA_ENTRY_HR_PMS':
+        // This contains the full submission snapshot — use it as base
+        if (nv.self_score !== undefined) sub.self_score = nv.self_score;
+        if (nv.self_rating !== undefined) sub.self_rating = nv.self_rating;
+        if (nv.self_remarks !== undefined) sub.self_remarks = nv.self_remarks;
+        if (nv.achieved_value !== undefined) sub.achieved_value = nv.achieved_value;
+        if (nv.hr_pms_score !== undefined) sub.hr_pms_score = nv.hr_pms_score;
+        if (nv.hr_pms_rating !== undefined) sub.hr_pms_rating = nv.hr_pms_rating;
+        if (nv.hr_pms_remarks !== undefined) sub.hr_pms_remarks = nv.hr_pms_remarks;
+        if (nv.is_na !== undefined) sub.is_na = nv.is_na;
+        hasData = true;
+        break;
+      case 'MANAGER_FORWARDED':
+        if (nv.manager_score !== undefined) sub.manager_score = nv.manager_score;
+        if (nv.manager_rating !== undefined) sub.manager_rating = nv.manager_rating;
+        if (nv.manager_remarks !== undefined) sub.manager_remarks = nv.manager_remarks;
+        hasData = true;
+        break;
+      case 'SKIP_LEVEL_FORWARDED':
+        if (nv.skip_level_score !== undefined) sub.skip_level_score = nv.skip_level_score;
+        if (nv.skip_level_rating !== undefined) sub.skip_level_rating = nv.skip_level_rating;
+        if (nv.skip_level_remarks !== undefined) sub.skip_level_remarks = nv.skip_level_remarks;
+        hasData = true;
+        break;
+      case 'HR_PMS_FORWARDED':
+        if (nv.hr_pms_score !== undefined) sub.hr_pms_score = nv.hr_pms_score;
+        if (nv.hr_pms_rating !== undefined) sub.hr_pms_rating = nv.hr_pms_rating;
+        if (nv.hr_pms_remarks !== undefined) sub.hr_pms_remarks = nv.hr_pms_remarks;
+        hasData = true;
+        break;
+      case 'AUDITOR_FORWARDED':
+        if (nv.auditor_score !== undefined) sub.auditor_score = nv.auditor_score;
+        if (nv.auditor_rating !== undefined) sub.auditor_rating = nv.auditor_rating;
+        if (nv.auditor_remarks !== undefined) sub.auditor_remarks = nv.auditor_remarks;
+        hasData = true;
+        break;
+      case 'MANAGEMENT_FORWARDED':
+        if (nv.management_score !== undefined) sub.management_score = nv.management_score;
+        if (nv.management_rating !== undefined) sub.management_rating = nv.management_rating;
+        if (nv.management_remarks !== undefined) sub.management_remarks = nv.management_remarks;
+        hasData = true;
+        break;
+    }
+  }
+
+  if (!hasData) return null;
+
+  // Compute final score from the highest-priority reviewer
+  const finalScore = sub.hr_pms_score ?? sub.management_score ?? sub.auditor_score ?? sub.skip_level_score ?? sub.manager_score ?? sub.self_score ?? null;
+  const finalRating = sub.hr_pms_rating ?? sub.management_rating ?? sub.auditor_rating ?? sub.skip_level_rating ?? sub.manager_rating ?? sub.self_rating ?? null;
+
+  if (finalScore === null) return null;
+
+  sub.final_score = finalScore;
+  sub.final_rating = finalRating;
+
+  return sub;
 }
 
 Deno.serve(async (req) => {
@@ -152,12 +206,10 @@ Deno.serve(async (req) => {
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Filter to selected IDs if provided
     let targetKpis = kpiIds.length > 0
       ? stuckKpis.filter(k => kpiIds.includes(k.id))
       : stuckKpis;
 
-    // Gather all employee IDs
     const empIds = [...new Set(targetKpis.map(k => k.employee_id))];
 
     // Pre-fetch employee profiles
@@ -179,8 +231,7 @@ Deno.serve(async (req) => {
       cats?.forEach(c => catNameMap.set(c.id, c.name));
     }
 
-    // Pre-fetch ALL approved siblings for same employees (batch)
-    // Include BOTH current year AND previous year to handle cross-year cycles
+    // Pre-fetch ALL approved siblings (include 2025 for cross-year)
     const approvedSiblings: any[] = [];
     for (let i = 0; i < empIds.length; i += 200) {
       const batch = empIds.slice(i, i + 200);
@@ -190,7 +241,7 @@ Deno.serve(async (req) => {
         .in("employee_id", batch)
         .eq("status", "approved")
         .in("frequency", ["Bi-Monthly", "Quarterly"])
-        .gte("review_year", 2025) // Include 2025 for cross-year Dec→Jan recovery
+        .gte("review_year", 2025)
         .limit(5000);
       if (approved) approvedSiblings.push(...approved);
     }
@@ -214,6 +265,31 @@ Deno.serve(async (req) => {
       subs?.forEach(s => sibSubmissionMap.set(s.kpi_id, s));
     }
 
+    // Pre-fetch audit logs for terminal KPIs (for self-recovery path)
+    // Only fetch for KPIs that had ADMIN_BULK_STEP_BACK
+    const targetKpiIds = targetKpis.map(k => k.id);
+    const auditMap = new Map<string, any[]>();
+    for (let i = 0; i < targetKpiIds.length; i += 500) {
+      const batch = targetKpiIds.slice(i, i + 500);
+      const { data: audits } = await supabase
+        .from("kpi_audit_logs")
+        .select("kpi_id, action, new_value, old_value")
+        .in("kpi_id", batch)
+        .in("action", [
+          "ADMIN_BULK_STEP_BACK", "ORG_KPI_PROPAGATED", "ADMIN_DATA_ENTRY_HR_PMS",
+          "MANAGER_FORWARDED", "SKIP_LEVEL_FORWARDED", "HR_PMS_FORWARDED",
+          "AUDITOR_FORWARDED", "MANAGEMENT_FORWARDED",
+        ])
+        .order("created_at", { ascending: true })
+        .limit(5000);
+      if (audits) {
+        for (const a of audits) {
+          if (!auditMap.has(a.kpi_id)) auditMap.set(a.kpi_id, []);
+          auditMap.get(a.kpi_id)!.push(a);
+        }
+      }
+    }
+
     const details: any[] = [];
     let repairedCount = 0;
     let skippedCount = 0;
@@ -224,7 +300,6 @@ Deno.serve(async (req) => {
         const empName = empNameMap.get(kpi.employee_id) || "Unknown";
         const catName = catNameMap.get(kpi.category_id) || "";
 
-        // Resolve cycle with cross-year awareness
         const match = resolveCycle(kpi.frequency, kpi.review_period, kpi.review_year, kpi.frequency_cycle_start);
         if (!match) {
           skippedCount++;
@@ -238,103 +313,164 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        const { terminalMonth, terminalYear, isCrossYear } = match;
+        const { terminalMonth, terminalYear, isCrossYear, isTerminal } = match;
 
-        // Skip if this IS the terminal month
-        if (kpi.review_period === terminalMonth && kpi.review_year === terminalYear) {
-          skippedCount++;
-          details.push({
-            kpi_id: kpi.id, kpi_name: kpi.kpi_name, kra_name: kpi.kra_name,
-            employee_id: kpi.employee_id, employee_name: empName, category: catName,
-            review_period: kpi.review_period, review_year: kpi.review_year,
-            terminal_period: terminalMonth, terminal_year: terminalYear,
-            terminal_score: null, terminal_rating: null,
-            recovery_type: null, action: "skippable", reason: "is_terminal_month",
+        // === PATH A: Non-terminal month → recover from terminal sibling ===
+        if (!isTerminal) {
+          const lookupKey = `${kpi.employee_id}|${kpi.kpi_name}|${terminalMonth}|${terminalYear}`;
+          const terminalSibling = approvedMap.get(lookupKey);
+
+          if (!terminalSibling) {
+            skippedCount++;
+            details.push({
+              kpi_id: kpi.id, kpi_name: kpi.kpi_name, kra_name: kpi.kra_name,
+              employee_id: kpi.employee_id, employee_name: empName, category: catName,
+              review_period: kpi.review_period, review_year: kpi.review_year,
+              terminal_period: terminalMonth, terminal_year: terminalYear,
+              terminal_score: null, terminal_rating: null,
+              recovery_type: isCrossYear ? "cross_year" : "same_year",
+              action: "skippable", reason: "terminal_not_approved",
+            });
+            continue;
+          }
+
+          const termSub = sibSubmissionMap.get(terminalSibling.id);
+          if (!termSub || termSub.final_score === null) {
+            skippedCount++;
+            details.push({
+              kpi_id: kpi.id, kpi_name: kpi.kpi_name, kra_name: kpi.kra_name,
+              employee_id: kpi.employee_id, employee_name: empName, category: catName,
+              review_period: kpi.review_period, review_year: kpi.review_year,
+              terminal_period: terminalMonth, terminal_year: terminalYear,
+              terminal_score: null, terminal_rating: null,
+              recovery_type: isCrossYear ? "cross_year" : "same_year",
+              action: "skippable", reason: "terminal_no_final_score",
+            });
+            continue;
+          }
+
+          const recoveryType = isCrossYear ? "cross_year" : "same_year";
+          const reasonLabel = isCrossYear ? "cross_year_terminal_recoverable" : "same_year_terminal_recoverable";
+
+          if (mode === "scan") {
+            details.push({
+              kpi_id: kpi.id, kpi_name: kpi.kpi_name, kra_name: kpi.kra_name,
+              employee_id: kpi.employee_id, employee_name: empName, category: catName,
+              review_period: kpi.review_period, review_year: kpi.review_year,
+              terminal_period: terminalMonth, terminal_year: terminalYear,
+              terminal_score: termSub.final_score, terminal_rating: termSub.final_rating,
+              recovery_type: recoveryType, action: "repairable", reason: reasonLabel,
+            });
+            repairedCount++;
+            continue;
+          }
+
+          // REPAIR: copy terminal sibling submission
+          const { error: upsertErr } = await supabase.from("review_submissions").upsert({
+            kpi_id: kpi.id, achieved_value: termSub.achieved_value,
+            self_score: termSub.self_score, self_rating: termSub.self_rating, self_remarks: termSub.self_remarks,
+            is_na: termSub.is_na,
+            manager_score: termSub.manager_score, manager_rating: termSub.manager_rating, manager_remarks: termSub.manager_remarks,
+            auditor_score: termSub.auditor_score, auditor_rating: termSub.auditor_rating, auditor_remarks: termSub.auditor_remarks,
+            management_score: termSub.management_score, management_rating: termSub.management_rating, management_remarks: termSub.management_remarks,
+            skip_level_score: termSub.skip_level_score, skip_level_rating: termSub.skip_level_rating, skip_level_remarks: termSub.skip_level_remarks,
+            hr_pms_score: termSub.hr_pms_score, hr_pms_rating: termSub.hr_pms_rating, hr_pms_remarks: termSub.hr_pms_remarks,
+            final_score: termSub.final_score, final_rating: termSub.final_rating,
+            kpi_status: "approved",
+          }, { onConflict: "kpi_id" });
+
+          if (upsertErr) {
+            errors.push(`${kpi.id}: ${upsertErr.message}`);
+            details.push({
+              kpi_id: kpi.id, kpi_name: kpi.kpi_name, kra_name: kpi.kra_name,
+              employee_id: kpi.employee_id, employee_name: empName, category: catName,
+              review_period: kpi.review_period, review_year: kpi.review_year,
+              terminal_period: terminalMonth, terminal_year: terminalYear,
+              terminal_score: termSub.final_score, terminal_rating: termSub.final_rating,
+              recovery_type: recoveryType, action: "error", reason: upsertErr.message,
+            });
+            continue;
+          }
+
+          await supabase.from("kpis").update({ status: "approved", updated_at: new Date().toISOString() }).eq("id", kpi.id);
+          await supabase.from("kpi_audit_logs").insert({
+            kpi_id: kpi.id, action: "SIBLING_RE_PERCOLATION", performed_by: user.id,
+            old_value: { status: "kra_set" },
+            new_value: { status: "approved", final_score: termSub.final_score, final_rating: termSub.final_rating },
+            metadata: { terminal_kpi_id: terminalSibling.id, terminal_period: terminalMonth, terminal_year: terminalYear, recovery_type: recoveryType, repair_tool: "repair-stepped-back-siblings" },
           });
-          continue;
-        }
 
-        // Find approved terminal sibling using cross-year-aware key
-        const lookupKey = `${kpi.employee_id}|${kpi.kpi_name}|${terminalMonth}|${terminalYear}`;
-        const terminalSibling = approvedMap.get(lookupKey);
-
-        if (!terminalSibling) {
-          skippedCount++;
-          details.push({
-            kpi_id: kpi.id, kpi_name: kpi.kpi_name, kra_name: kpi.kra_name,
-            employee_id: kpi.employee_id, employee_name: empName, category: catName,
-            review_period: kpi.review_period, review_year: kpi.review_year,
-            terminal_period: terminalMonth, terminal_year: terminalYear,
-            terminal_score: null, terminal_rating: null,
-            recovery_type: isCrossYear ? "cross_year" : "same_year",
-            action: "skippable", reason: "terminal_not_approved",
-          });
-          continue;
-        }
-
-        // Get terminal's submission
-        const termSub = sibSubmissionMap.get(terminalSibling.id);
-        if (!termSub || termSub.final_score === null) {
-          skippedCount++;
-          details.push({
-            kpi_id: kpi.id, kpi_name: kpi.kpi_name, kra_name: kpi.kra_name,
-            employee_id: kpi.employee_id, employee_name: empName, category: catName,
-            review_period: kpi.review_period, review_year: kpi.review_year,
-            terminal_period: terminalMonth, terminal_year: terminalYear,
-            terminal_score: null, terminal_rating: null,
-            recovery_type: isCrossYear ? "cross_year" : "same_year",
-            action: "skippable", reason: "terminal_no_final_score",
-          });
-          continue;
-        }
-
-        const recoveryType = isCrossYear ? "cross_year" : "same_year";
-        const reasonLabel = isCrossYear ? "cross_year_terminal_recoverable" : "same_year_terminal_recoverable";
-
-        // This KPI is repairable
-        if (mode === "scan") {
+          repairedCount++;
           details.push({
             kpi_id: kpi.id, kpi_name: kpi.kpi_name, kra_name: kpi.kra_name,
             employee_id: kpi.employee_id, employee_name: empName, category: catName,
             review_period: kpi.review_period, review_year: kpi.review_year,
             terminal_period: terminalMonth, terminal_year: terminalYear,
             terminal_score: termSub.final_score, terminal_rating: termSub.final_rating,
-            recovery_type: recoveryType, action: "repairable", reason: reasonLabel,
+            recovery_type: recoveryType, action: "repaired", reason: "sibling_re_percolated",
+          });
+          continue;
+        }
+
+        // === PATH B: Terminal month itself was stepped back → audit-log self-recovery ===
+        const kpiAudits = auditMap.get(kpi.id) || [];
+        const wasSteppedBack = kpiAudits.some(a => a.action === "ADMIN_BULK_STEP_BACK" && a.old_value?.status === "approved");
+
+        if (!wasSteppedBack) {
+          skippedCount++;
+          details.push({
+            kpi_id: kpi.id, kpi_name: kpi.kpi_name, kra_name: kpi.kra_name,
+            employee_id: kpi.employee_id, employee_name: empName, category: catName,
+            review_period: kpi.review_period, review_year: kpi.review_year,
+            terminal_period: kpi.review_period, terminal_year: kpi.review_year,
+            terminal_score: null, terminal_rating: null,
+            recovery_type: null, action: "skippable", reason: "is_terminal_month",
+          });
+          continue;
+        }
+
+        // Reconstruct submission from audit entries
+        const reconstructed = reconstructSubmissionFromAudit(kpiAudits);
+        if (!reconstructed) {
+          skippedCount++;
+          details.push({
+            kpi_id: kpi.id, kpi_name: kpi.kpi_name, kra_name: kpi.kra_name,
+            employee_id: kpi.employee_id, employee_name: empName, category: catName,
+            review_period: kpi.review_period, review_year: kpi.review_year,
+            terminal_period: kpi.review_period, terminal_year: kpi.review_year,
+            terminal_score: null, terminal_rating: null,
+            recovery_type: "audit_log", action: "skippable", reason: "audit_data_insufficient",
+          });
+          continue;
+        }
+
+        if (mode === "scan") {
+          details.push({
+            kpi_id: kpi.id, kpi_name: kpi.kpi_name, kra_name: kpi.kra_name,
+            employee_id: kpi.employee_id, employee_name: empName, category: catName,
+            review_period: kpi.review_period, review_year: kpi.review_year,
+            terminal_period: kpi.review_period, terminal_year: kpi.review_year,
+            terminal_score: reconstructed.final_score, terminal_rating: reconstructed.final_rating,
+            recovery_type: "audit_log", action: "repairable", reason: "audit_log_recoverable",
           });
           repairedCount++;
           continue;
         }
 
-        // === REPAIR MODE ===
-        // 1. Copy terminal submission data to this KPI
-        const { error: upsertErr } = await supabase
-          .from("review_submissions")
-          .upsert({
-            kpi_id: kpi.id,
-            achieved_value: termSub.achieved_value,
-            self_score: termSub.self_score,
-            self_rating: termSub.self_rating,
-            self_remarks: termSub.self_remarks,
-            is_na: termSub.is_na,
-            manager_score: termSub.manager_score,
-            manager_rating: termSub.manager_rating,
-            manager_remarks: termSub.manager_remarks,
-            auditor_score: termSub.auditor_score,
-            auditor_rating: termSub.auditor_rating,
-            auditor_remarks: termSub.auditor_remarks,
-            management_score: termSub.management_score,
-            management_rating: termSub.management_rating,
-            management_remarks: termSub.management_remarks,
-            skip_level_score: termSub.skip_level_score,
-            skip_level_rating: termSub.skip_level_rating,
-            skip_level_remarks: termSub.skip_level_remarks,
-            hr_pms_score: termSub.hr_pms_score,
-            hr_pms_rating: termSub.hr_pms_rating,
-            hr_pms_remarks: termSub.hr_pms_remarks,
-            final_score: termSub.final_score,
-            final_rating: termSub.final_rating,
-            kpi_status: "approved",
-          }, { onConflict: "kpi_id" });
+        // REPAIR: create submission from reconstructed audit data
+        const { error: upsertErr } = await supabase.from("review_submissions").upsert({
+          kpi_id: kpi.id,
+          achieved_value: reconstructed.achieved_value ?? null,
+          self_score: reconstructed.self_score ?? null, self_rating: reconstructed.self_rating ?? null, self_remarks: reconstructed.self_remarks ?? null,
+          is_na: reconstructed.is_na ?? false,
+          manager_score: reconstructed.manager_score ?? null, manager_rating: reconstructed.manager_rating ?? null, manager_remarks: reconstructed.manager_remarks ?? null,
+          auditor_score: reconstructed.auditor_score ?? null, auditor_rating: reconstructed.auditor_rating ?? null, auditor_remarks: reconstructed.auditor_remarks ?? null,
+          management_score: reconstructed.management_score ?? null, management_rating: reconstructed.management_rating ?? null, management_remarks: reconstructed.management_remarks ?? null,
+          skip_level_score: reconstructed.skip_level_score ?? null, skip_level_rating: reconstructed.skip_level_rating ?? null, skip_level_remarks: reconstructed.skip_level_remarks ?? null,
+          hr_pms_score: reconstructed.hr_pms_score ?? null, hr_pms_rating: reconstructed.hr_pms_rating ?? null, hr_pms_remarks: reconstructed.hr_pms_remarks ?? null,
+          final_score: reconstructed.final_score, final_rating: reconstructed.final_rating,
+          kpi_status: "approved",
+        }, { onConflict: "kpi_id" });
 
         if (upsertErr) {
           errors.push(`${kpi.id}: ${upsertErr.message}`);
@@ -342,37 +478,19 @@ Deno.serve(async (req) => {
             kpi_id: kpi.id, kpi_name: kpi.kpi_name, kra_name: kpi.kra_name,
             employee_id: kpi.employee_id, employee_name: empName, category: catName,
             review_period: kpi.review_period, review_year: kpi.review_year,
-            terminal_period: terminalMonth, terminal_year: terminalYear,
-            terminal_score: termSub.final_score, terminal_rating: termSub.final_rating,
-            recovery_type: recoveryType, action: "error", reason: upsertErr.message,
+            terminal_period: kpi.review_period, terminal_year: kpi.review_year,
+            terminal_score: reconstructed.final_score, terminal_rating: reconstructed.final_rating,
+            recovery_type: "audit_log", action: "error", reason: upsertErr.message,
           });
           continue;
         }
 
-        // 2. Advance KPI status to approved
-        const { error: statusErr } = await supabase
-          .from("kpis")
-          .update({ status: "approved", updated_at: new Date().toISOString() })
-          .eq("id", kpi.id);
-
-        if (statusErr) {
-          errors.push(`${kpi.id}: status update failed: ${statusErr.message}`);
-        }
-
-        // 3. Audit log
+        await supabase.from("kpis").update({ status: "approved", updated_at: new Date().toISOString() }).eq("id", kpi.id);
         await supabase.from("kpi_audit_logs").insert({
-          kpi_id: kpi.id,
-          action: "SIBLING_RE_PERCOLATION",
-          performed_by: user.id,
+          kpi_id: kpi.id, action: "SIBLING_RE_PERCOLATION", performed_by: user.id,
           old_value: { status: "kra_set" },
-          new_value: { status: "approved", final_score: termSub.final_score, final_rating: termSub.final_rating },
-          metadata: {
-            terminal_kpi_id: terminalSibling.id,
-            terminal_period: terminalMonth,
-            terminal_year: terminalYear,
-            recovery_type: recoveryType,
-            repair_tool: "repair-stepped-back-siblings",
-          },
+          new_value: { status: "approved", final_score: reconstructed.final_score, final_rating: reconstructed.final_rating },
+          metadata: { recovery_type: "audit_log", repair_tool: "repair-stepped-back-siblings", note: "Terminal month self-recovery from audit log data" },
         });
 
         repairedCount++;
@@ -380,9 +498,9 @@ Deno.serve(async (req) => {
           kpi_id: kpi.id, kpi_name: kpi.kpi_name, kra_name: kpi.kra_name,
           employee_id: kpi.employee_id, employee_name: empName, category: catName,
           review_period: kpi.review_period, review_year: kpi.review_year,
-          terminal_period: terminalMonth, terminal_year: terminalYear,
-          terminal_score: termSub.final_score, terminal_rating: termSub.final_rating,
-          recovery_type: recoveryType, action: "repaired", reason: "sibling_re_percolated",
+          terminal_period: kpi.review_period, terminal_year: kpi.review_year,
+          terminal_score: reconstructed.final_score, terminal_rating: reconstructed.final_rating,
+          recovery_type: "audit_log", action: "repaired", reason: "audit_log_restored",
         });
       } catch (e) {
         errors.push(`${kpi.id}: ${e.message}`);
@@ -423,23 +541,15 @@ Deno.serve(async (req) => {
         .in("frequency", ["Bi-Monthly", "Quarterly"])
         .gte("review_year", 2026);
 
-      verification = {
-        kpis_verified: kpisVerified,
-        submissions_verified: subsVerified,
-        remaining_stuck: remainingStuck ?? 0,
-      };
+      verification = { kpis_verified: kpisVerified, submissions_verified: subsVerified, remaining_stuck: remainingStuck ?? 0 };
     }
 
     return new Response(
       JSON.stringify({
-        mode,
-        repaired: repairedCount,
-        skipped: skippedCount,
+        mode, repaired: repairedCount, skipped: skippedCount,
         total_checked: targetKpis.length,
-        errors: errors.slice(0, 20),
-        details: details.slice(0, 1500),
-        verification,
-        ran_at: new Date().toISOString(),
+        errors: errors.slice(0, 20), details: details.slice(0, 1500),
+        verification, ran_at: new Date().toISOString(),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
