@@ -284,6 +284,18 @@ export default function Auth() {
                     </button>
                   </div>
                 </div>
+
+                {/* Remember Me */}
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="remember-me"
+                    checked={rememberMe}
+                    onCheckedChange={(checked) => setRememberMe(checked === true)}
+                  />
+                  <Label htmlFor="remember-me" className="text-sm font-normal cursor-pointer text-muted-foreground">
+                    Remember me
+                  </Label>
+                </div>
               </CardContent>
               <CardFooter className="flex flex-col gap-4">
                 <Button
