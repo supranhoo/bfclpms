@@ -21,6 +21,7 @@ export default function Auth() {
   const { data: appSettings, isLoading: isLoadingSettings } = useAppSettings();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   
   // Login form state
   const [loginEmail, setLoginEmail] = useState('');
