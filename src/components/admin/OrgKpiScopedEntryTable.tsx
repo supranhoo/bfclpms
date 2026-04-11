@@ -570,7 +570,7 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
                 <Select
                   value={row.subFactors?.policy_compliance === true ? 'yes' : row.subFactors?.policy_compliance === false ? 'no' : ''}
                   onValueChange={(val) => {
-                    const sf = { ...(row.subFactors || { policy_compliance: null, submission_date: null, submission_complete: false, submission_pending_count: 0, policy_training: null, other_observation: null }) };
+                    const sf = { ...(row.subFactors || { policy_compliance: null, submission_date: submissionDateInfo?.date ?? null, submission_complete: submissionDateInfo?.complete ?? false, submission_pending_count: submissionDateInfo?.pendingCount ?? 0, policy_training: null, other_observation: null }) };
                     sf.policy_compliance = val === 'yes' ? true : val === 'no' ? false : null;
                     onValueChange(row.scopeId, 'subFactors', JSON.stringify(sf));
                   }}
@@ -607,7 +607,7 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
                 <Select
                   value={row.subFactors?.policy_training === true ? 'yes' : row.subFactors?.policy_training === false ? 'no' : ''}
                   onValueChange={(val) => {
-                    const sf = { ...(row.subFactors || { policy_compliance: null, submission_date: null, submission_complete: false, submission_pending_count: 0, policy_training: null, other_observation: null }) };
+                    const sf = { ...(row.subFactors || { policy_compliance: null, submission_date: submissionDateInfo?.date ?? null, submission_complete: submissionDateInfo?.complete ?? false, submission_pending_count: submissionDateInfo?.pendingCount ?? 0, policy_training: null, other_observation: null }) };
                     sf.policy_training = val === 'yes' ? true : val === 'no' ? false : null;
                     onValueChange(row.scopeId, 'subFactors', JSON.stringify(sf));
                   }}
@@ -627,7 +627,7 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
                   type="number"
                   value={row.subFactors?.other_observation ?? ''}
                   onChange={(e) => {
-                    const sf = { ...(row.subFactors || { policy_compliance: null, submission_date: null, submission_complete: false, submission_pending_count: 0, policy_training: null, other_observation: null }) };
+                    const sf = { ...(row.subFactors || { policy_compliance: null, submission_date: submissionDateInfo?.date ?? null, submission_complete: submissionDateInfo?.complete ?? false, submission_pending_count: submissionDateInfo?.pendingCount ?? 0, policy_training: null, other_observation: null }) };
                     sf.other_observation = e.target.value === '' ? null : parseFloat(e.target.value);
                     onValueChange(row.scopeId, 'subFactors', JSON.stringify(sf));
                   }}

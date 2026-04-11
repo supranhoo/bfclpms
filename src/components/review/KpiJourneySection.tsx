@@ -562,9 +562,11 @@ export function KpiJourneySection({
               <div>
                 <span className="text-muted-foreground">Submission: </span>
                 <span className="font-medium">
-                  {complianceData.subFactors.submission_complete
-                    ? (complianceData.subFactors.submission_date ? format(new Date(complianceData.subFactors.submission_date), 'dd MMM yyyy') : 'Complete')
-                    : `${complianceData.subFactors.submission_pending_count} pending`}
+                  {complianceData.subFactors.submission_date
+                    ? format(new Date(complianceData.subFactors.submission_date), 'dd MMM yyyy')
+                    : complianceData.subFactors.submission_complete
+                      ? 'Complete'
+                      : `${complianceData.subFactors.submission_pending_count} pending`}
                 </span>
               </div>
               <div>
