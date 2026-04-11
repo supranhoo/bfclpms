@@ -46,7 +46,7 @@ export interface ObservationCounts {
 
 interface OrgKpiScopedEntryTableProps {
   rows: ScopedRow[];
-  onValueChange: (scopeId: string, field: 'achievedValue' | 'remarks' | 'evidenceUrl' | 'isNa', value: string | null) => void;
+  onValueChange: (scopeId: string, field: 'achievedValue' | 'remarks' | 'evidenceUrl' | 'isNa' | 'subFactors', value: string | null) => void;
   scopeLabel: string;
   ratingThresholds?: RatingThresholds;
   targetValue?: number | null;
@@ -66,6 +66,10 @@ interface OrgKpiScopedEntryTableProps {
   onPropagateRow?: (scopeId: string) => void;
   /** Whether propagation is in progress */
   isPropagating?: boolean;
+  /** Whether this is the compliance KPI (shows sub-factor columns) */
+  isComplianceKpi?: boolean;
+  /** Bulk submission date data per employee */
+  submissionDates?: Map<string, { complete: boolean; date: string | null; pendingCount: number }>;
 }
 
 export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds = [], onSelectionChange, onPropagateRow, isPropagating }: OrgKpiScopedEntryTableProps) {
