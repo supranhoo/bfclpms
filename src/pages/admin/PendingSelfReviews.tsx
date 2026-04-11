@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Settings, AlertTriangle, Users, Undo2, Mail, RotateCcw, UserCheck, FastForward, Download, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Loader2, Settings, AlertTriangle, Users, Undo2, Mail, RotateCcw, UserCheck, FastForward, Download, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { EffectiveMonthSelector } from '@/components/admin/EffectiveMonthSelector';
 import { useAuth } from '@/contexts/AuthContext';
@@ -34,6 +34,7 @@ import {
   AutoScoredKpi,
   PenalizedManagerKpi,
 } from '@/hooks/usePendingSelfReviews';
+import { CompliancePenaltyTab } from '@/components/admin/CompliancePenaltyTab';
 import { useToast } from '@/hooks/use-toast';
 
 const MONTHS = [
@@ -466,6 +467,10 @@ export default function PendingSelfReviews() {
           <TabsTrigger value="rollback" className="gap-1.5">
             <RotateCcw className="h-3.5 w-3.5" />
             Rollback ({autoScoredKpis.length + penalizedKpis.length})
+          </TabsTrigger>
+          <TabsTrigger value="compliance-penalty" className="gap-1.5">
+            <ShieldAlert className="h-3.5 w-3.5" />
+            Compliance Penalty
           </TabsTrigger>
         </TabsList>
 
@@ -1010,6 +1015,10 @@ export default function PendingSelfReviews() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+        {/* Tab: Compliance Penalty */}
+        <TabsContent value="compliance-penalty">
+          <CompliancePenaltyTab selectedMonth={selectedMonth} selectedYear={selectedYear} />
         </TabsContent>
       </Tabs>
     </div>
