@@ -16,7 +16,6 @@ export interface OrgKpiValue {
   remarks: string | null;
   created_at: string;
   updated_at: string;
-  // Threshold fields for uniform scoring mode
   target_value: number | null;
   r5: string | null;
   r4: string | null;
@@ -25,19 +24,16 @@ export interface OrgKpiValue {
   r1: string | null;
   r0: string | null;
   criteria: string | null;
-  // Scoped values
   department_id: string | null;
   employee_id: string | null;
-  // Status and send-back workflow fields
   status: string | null;
   sent_back_by: string | null;
   sent_back_at: string | null;
   sent_back_reason: string | null;
   submission_count: number | null;
-  // Evidence/supporting file
   evidence_url: string | null;
-  // N/A marking
   is_na: boolean;
+  sub_factors: any | null;
 }
 
 export function useOrgKpiValues(categoryId?: string, reviewPeriod?: string, reviewYear?: number) {
@@ -109,6 +105,7 @@ export function useUpsertOrgKpiValue() {
       entered_by?: string;
       department_id?: string;
       employee_id?: string;
+      sub_factors?: any;
     }) => {
       // Build match criteria including scoped columns
       let findQuery = supabase
@@ -141,6 +138,7 @@ export function useUpsertOrgKpiValue() {
             data_source: value.data_source,
             remarks: value.remarks,
             entered_by: value.entered_by,
+            ...(value.sub_factors !== undefined ? { sub_factors: value.sub_factors } : {}),
           })
           .eq('id', existing.id)
           .select()
