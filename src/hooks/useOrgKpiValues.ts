@@ -159,11 +159,12 @@ export function useUpsertOrgKpiValue() {
           // Retry as update
           let retryQuery = supabase
             .from('org_kpi_values')
-            .update({
+          .update({
               achieved_value: value.achieved_value,
               data_source: value.data_source,
               remarks: value.remarks,
               entered_by: value.entered_by,
+              ...(value.sub_factors !== undefined ? { sub_factors: value.sub_factors } : {}),
             })
             .eq('category_id', value.category_id)
             .eq('kra_name', value.kra_name)
