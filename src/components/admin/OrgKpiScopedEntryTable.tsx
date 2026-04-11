@@ -141,7 +141,8 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
     }
   };
 
-  const totalColSpan = 7 + (hasSelectionFeature ? 1 : 0) + (hasRowPropagation ? 1 : 0);
+  const complianceCols = isComplianceKpi ? 4 : 0;
+  const totalColSpan = 7 + (hasSelectionFeature ? 1 : 0) + (hasRowPropagation ? 1 : 0) + complianceCols;
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -205,6 +206,14 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
                 <TableHead className="text-xs min-w-[200px]">{scopeLabel}</TableHead>
                 <TableHead className="text-xs w-24 text-center">Target</TableHead>
                 <TableHead className="text-xs w-16 text-center">N/A</TableHead>
+                {isComplianceKpi && (
+                  <>
+                    <TableHead className="text-xs w-24 text-center">Policy Compliance</TableHead>
+                    <TableHead className="text-xs w-36 text-center">Submission Date</TableHead>
+                    <TableHead className="text-xs w-24 text-center">Policy Training</TableHead>
+                    <TableHead className="text-xs w-24 text-center">Other Obs.</TableHead>
+                  </>
+                )}
                 <TableHead className="text-xs w-28 text-center">Achieved</TableHead>
                 <TableHead className="text-xs w-24 text-center">Rating</TableHead>
                 <TableHead className="text-xs min-w-[220px]">Remark</TableHead>
