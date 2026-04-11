@@ -5011,11 +5011,28 @@ Every new edge function **must** complete all of these steps before deployment:
 
 ---
 
+### v2.33.8 — Multi-Factor Compliance KPI Data Entry + All-Level Visibility (2026-04-11)
+
+- **Feature**: Added 4 compliance sub-factor reference fields for the "Implementation of common" compliance KPI in Org KPI Entry
+- **Sub-factors**: Policy Compliance (Yes/No), Submission Date (auto-fetched), Policy Training (Yes/No), Other Observation (numeric)
+- **Admin entry**: Sub-factor columns appear inline in `OrgKpiScopedEntryTable` when viewing the compliance KPI. HR enters values per employee; Achieved remains manual
+- **All-level visibility**: Read-only "Compliance Factors" banner in `KpiJourneySection` visible to all roles (Employee, Manager, Auditor, HR PMS, Management, Skip-Level, Admin)
+- **Database**: Added `sub_factors jsonb DEFAULT NULL` to `org_kpi_values`
+- **Submission date auto-fetch**: System queries employee KPIs (excl. org-level, sent-back, not-due frequency) and returns latest submission date or pending count
+- **Backward compatible**: Banner hidden when `sub_factors` is null
+- **New files**: `src/hooks/useComplianceSubFactors.ts`
+- **Modified files**: `src/components/admin/OrgKpiScopedEntryTable.tsx`, `src/components/admin/OrgKpiEntryCard.tsx`, `src/hooks/useOrgKpiValues.ts`, `src/components/review/KpiJourneySection.tsx`
+
 ### v2.33.7 — Employee Self-Review Compliance Penalty (2026-04-11)
 
 - **Feature**: Added Employee Self-Review Compliance Penalty system
 - **What it does**: When employees fail to complete all self-reviews by a configurable deadline, the system zero-scores ALL their pending KPIs and additionally zeros their "Implementation of common - policies / systems / processes" compliance KPI
 - **Configurable exclusions**: Admin can toggle on/off exclusions for Org-level KPIs, Sent-back KPIs, and frequency-based KPIs (Quarterly, Bi-Monthly, Half-Yearly, Yearly) not currently due
+- **Settings**: Configurable deadline day, system remark, and enable/disable toggle stored in `system_settings`
+- **Rollback**: Full batch rollback support with audit trail
+- **Audit**: All actions logged with `EMPLOYEE_COMPLIANCE_PENALTY` and `COMPLIANCE_PENALTY_ROLLBACK` actions in `kpi_audit_logs`
+- **New files**: `src/hooks/useCompliancePenalty.ts`, `src/components/admin/CompliancePenaltyTab.tsx`
+- **Modified files**: `src/pages/admin/PendingSelfReviews.tsx` (new tab), `POLICY.md` (§82)
 - **Settings**: Configurable deadline day, system remark, and enable/disable toggle stored in `system_settings`
 - **Rollback**: Full batch rollback support with audit trail
 - **Audit**: All actions logged with `EMPLOYEE_COMPLIANCE_PENALTY` and `COMPLIANCE_PENALTY_ROLLBACK` actions in `kpi_audit_logs`
