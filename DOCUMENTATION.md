@@ -5008,3 +5008,16 @@ Every new edge function **must** complete all of these steps before deployment:
 9. **Search for orphaned variable references** — after refactoring queries, search for all prior variable references to ensure none are left behind
 
 ⚠️ **Omitting step 2 causes a 401 Unauthorized at the gateway level.** The function boots but never receives the request. Logs show `Auth session missing!` even though the client sends a valid token.
+
+---
+
+### v2.33.7 — Employee Self-Review Compliance Penalty (2026-04-11)
+
+- **Feature**: Added Employee Self-Review Compliance Penalty system
+- **What it does**: When employees fail to complete all self-reviews by a configurable deadline, the system zero-scores ALL their pending KPIs and additionally zeros their "Implementation of common - policies / systems / processes" compliance KPI
+- **Configurable exclusions**: Admin can toggle on/off exclusions for Org-level KPIs, Sent-back KPIs, and frequency-based KPIs (Quarterly, Bi-Monthly, Half-Yearly, Yearly) not currently due
+- **Settings**: Configurable deadline day, system remark, and enable/disable toggle stored in `system_settings`
+- **Rollback**: Full batch rollback support with audit trail
+- **Audit**: All actions logged with `EMPLOYEE_COMPLIANCE_PENALTY` and `COMPLIANCE_PENALTY_ROLLBACK` actions in `kpi_audit_logs`
+- **New files**: `src/hooks/useCompliancePenalty.ts`, `src/components/admin/CompliancePenaltyTab.tsx`
+- **Modified files**: `src/pages/admin/PendingSelfReviews.tsx` (new tab), `POLICY.md` (§82)
