@@ -134,12 +134,18 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
   const effectiveSentBackMap = sentBackMap ?? internalSentBackMap;
 
   // Compliance KPI detection + submission dates
+  // N-1 logic: for compliance KPI, show when previous month's KPIs were self-reviewed
   const isCompliance = isComplianceKpi(data.kraName);
+  const MONTHS_LIST = ['January','February','March','April','May','June',
+    'July','August','September','October','November','December'];
+  const prevMonthIdx = MONTHS_LIST.indexOf(reviewPeriod) - 1;
+  const complianceMonth = prevMonthIdx < 0 ? 'December' : MONTHS_LIST[prevMonthIdx];
+  const complianceYear = prevMonthIdx < 0 ? reviewYear - 1 : reviewYear;
   const employeeIdsForCompliance = isCompliance && isEmployeeScope ? (data.scopedRows || []).map(r => r.scopeId) : [];
   const { data: submissionDates } = useBulkEmployeeSubmissionDates(
     employeeIdsForCompliance,
-    reviewPeriod,
-    reviewYear,
+    isCompliance ? complianceMonth : reviewPeriod,
+    isCompliance ? complianceYear : reviewYear,
     isCompliance && isEmployeeScope
   );
 

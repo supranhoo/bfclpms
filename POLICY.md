@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-11  
-> **Version:** 1.92.11 — §84 Compliance sub-factors: secondary merge effect ensures DB sub_factors load into UI after async query completes
+> **Version:** 1.92.12 — §85 Compliance KPI submission date uses N-1 month logic on Org KPI page; other KPIs and review journey unchanged
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
