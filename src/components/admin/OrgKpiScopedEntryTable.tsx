@@ -407,7 +407,7 @@ function PerRowPropagateCell({ canPropagate, isPropagating, employeeName, onConf
 // ---- Employee row (with expandable observation sub-row) ----
 interface EmployeeRowProps {
   row: ScopedRow;
-  onValueChange: (scopeId: string, field: 'achievedValue' | 'remarks' | 'evidenceUrl' | 'isNa', value: string | null) => void;
+  onValueChange: (scopeId: string, field: 'achievedValue' | 'remarks' | 'evidenceUrl' | 'isNa' | 'subFactors', value: string | null) => void;
   ratingThresholds?: RatingThresholds;
   targetValue?: number | null;
   uom?: string | null;
@@ -422,6 +422,8 @@ interface EmployeeRowProps {
   totalColSpan: number;
   hasSelectionFeature: boolean;
   hasRowPropagation: boolean;
+  isComplianceKpi?: boolean;
+  submissionDateInfo?: { complete: boolean; date: string | null; pendingCount: number };
 }
 
 function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, observations, observationCounts: legacyCounts, sentBackInfo, isSelected, onToggleRow, onPropagateRow, isPropagating, totalColSpan, hasSelectionFeature, hasRowPropagation }: EmployeeRowProps) {
