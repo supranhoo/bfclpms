@@ -1,33 +1,35 @@
 
 
-## Bug Fix: Compliance Sub-Factors Not Being Saved to Database
+## Bug Fix: Compliance Sub-Factors Not Loading from Database
 
 ### Root Cause
-The `handleCardSave` function in `OrgKpiDataEntry.tsx` does **not** include `sub_factors` in the save payload. The `OrgKpiEntryCard` correctly collects sub-factor data and passes it via `scopedValues[].subFactors`, but the save handler ignores it entirely — the `toSave` object (lines 498-511) never maps `sv.subFactors` to `sub_factors`.
+The `scopedRows` builder in `OrgKpiDataEntry.tsx` (lines 396-409) never maps `val?.sub_factors` to the `subFactors` field when constructing employee rows. This means:
+- Existing sub-factor values from the DB are never shown in the admin UI
+- Since the UI starts with `subFactors: undefined`, saving overwrites any previously stored values with nothing
+- The review journey banner also shows nothing because the DB column remains null after re-saves
 
-Additionally, the `values` type on line 452 doesn't include `subFactors` in the `scopedValues` type definition.
-
-### Fix Plan
+### Fix
 
 | # | File | Change |
 |---|------|--------|
-| 1 | `src/pages/admin/OrgKpiDataEntry.tsx` | In `handleCardSave`: (a) Update the `values` parameter type to include `subFactors` in `scopedValues`, (b) Add `sub_factors: sv.subFactors` to the `toSave` object at line ~510 |
-| 2 | `DOCUMENTATION.md` | Add bug fix note to version history |
+| 1 | `src/pages/admin/OrgKpiDataEntry.tsx` | Add `subFactors: val?.sub_factors ?? undefined` to the employee-scoped row builder (line ~409) and department-scoped row builder (line ~379) |
+| 2 | `DOCUMENTATION.md` | Bug fix note |
 | 3 | `POLICY.md` | Sync version |
 
 ### Technical Detail
-
-In `handleCardSave`, the scoped values loop (line 487) builds a `toSave` object but omits `sub_factors`. The fix adds one line:
-
+In the `scopedRows` construction at line 396, after `qualitativeOptions`, add:
 ```typescript
-// Inside the scopedValues.forEach block, add to the toSave object:
-sub_factors: (sv as any).subFactors || undefined,
+subFactors: val?.sub_factors ?? undefined,
 ```
 
-This ensures that when HR enters compliance sub-factor values (Policy Compliance, Policy Training, Other Observation), they are persisted to the `org_kpi_values.sub_factors` JSONB column. The submission date auto-fetch and the review journey banner will then display correctly since the data will exist in the database.
+Same for department rows at line 367.
+
+This ensures:
+- Previously saved sub-factors load into the UI on page open
+- Sub-factor changes are preserved across saves
+- The review journey compliance banner displays correctly
 
 ### Risk Assessment
-- **Data impact**: None — additive change, only writes `sub_factors` when provided
-- **Regression risk**: Minimal — existing save flow unchanged for non-compliance KPIs
-- **Fix scope**: Single file change + docs sync
+- **Regression risk**: None — additive property on row data
+- **Data impact**: None — only affects UI state initialization
 
