@@ -35,7 +35,7 @@ export function useOrgLevelKpis(reviewPeriod?: string, reviewYear?: number) {
       // Return unique KPI definitions (dedupe by category_id + kra_name + kpi_name)
       const uniqueMap = new Map<string, typeof data[0]>();
       data?.forEach(kpi => {
-        const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+        const key = mkKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
         if (!uniqueMap.has(key)) {
           uniqueMap.set(key, kpi);
         }
@@ -76,7 +76,7 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
       // Dedupe
       const uniqueMap = new Map<string, typeof allOrgKpis[0]>();
       allOrgKpis?.forEach(kpi => {
-        const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+        const key = mkKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
         if (!uniqueMap.has(key)) uniqueMap.set(key, kpi);
       });
 
@@ -85,7 +85,7 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
       const employeeKpiIdsMap = new Map<string, string[]>();
       const countMap = new Map<string, Set<string>>();
       allOrgKpis?.forEach(k => {
-        const key = `${k.category_id}||${k.kra_name}||${k.kpi_name}`;
+        const key = mkKey(k.category_id, k.kra_name, k.kpi_name);
         const s = countMap.get(key) || new Set<string>();
         s.add(k.employee_id);
         countMap.set(key, s);
