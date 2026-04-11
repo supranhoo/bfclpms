@@ -547,6 +547,42 @@ export function KpiJourneySection({
           </Alert>
         )}
 
+        {/* Compliance Factors Banner */}
+        {isCompliance && complianceData?.subFactors && (
+          <div className="border rounded-lg p-3 bg-muted/30 space-y-1">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <FileCheck className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold text-muted-foreground">Compliance Factors</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-4 gap-y-1 text-xs">
+              <div>
+                <span className="text-muted-foreground">Policy Compliance: </span>
+                <span className="font-medium">{complianceData.subFactors.policy_compliance === true ? 'Yes' : complianceData.subFactors.policy_compliance === false ? 'No' : '—'}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Submission: </span>
+                <span className="font-medium">
+                  {complianceData.subFactors.submission_complete
+                    ? (complianceData.subFactors.submission_date ? format(new Date(complianceData.subFactors.submission_date), 'dd MMM yyyy') : 'Complete')
+                    : `${complianceData.subFactors.submission_pending_count} pending`}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Policy Training: </span>
+                <span className="font-medium">{complianceData.subFactors.policy_training === true ? 'Yes' : complianceData.subFactors.policy_training === false ? 'No' : '—'}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Other Obs.: </span>
+                <span className="font-medium">{complianceData.subFactors.other_observation ?? '—'}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Achieved: </span>
+                <span className="font-medium">{complianceData.achievedValue ?? '—'}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Review Stages Grid */}
         <div className={`grid ${gridCols} gap-2 lg:gap-3`}>
         {visibleStages.map(stage => {
