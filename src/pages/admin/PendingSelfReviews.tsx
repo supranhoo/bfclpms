@@ -468,6 +468,10 @@ export default function PendingSelfReviews() {
             <RotateCcw className="h-3.5 w-3.5" />
             Rollback ({autoScoredKpis.length + penalizedKpis.length})
           </TabsTrigger>
+          <TabsTrigger value="compliance-penalty" className="gap-1.5">
+            <ShieldAlert className="h-3.5 w-3.5" />
+            Compliance Penalty
+          </TabsTrigger>
         </TabsList>
 
         {/* Tab 1: Pending Self-Review */}
