@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-11  
-> **Version:** 1.92.9 — §83 Multi-Factor Compliance KPI Sub-Factors (bug fix: load from DB)
+> **Version:** 1.92.10 — §83 Compliance sub-factors: save guard bypass + strict undefined check prevents data loss
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

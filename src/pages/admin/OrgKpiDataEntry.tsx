@@ -495,7 +495,8 @@ export default function OrgKpiDataEntry() {
 
         // Guard: skip if this would destructively overwrite a non-null DB value with null
         // (race condition protection — user never touched this row's achieved value)
-        if (sv.achievedValue === null && !sv.isNa && oldVal !== null) return;
+        // BUT: always allow save if sub_factors are present (HR may have entered factors without achieved value)
+        if (sv.achievedValue === null && !sv.isNa && oldVal !== null && !sv.subFactors) return;
 
         toSave.push({
           category_id: kpi.category_id,
@@ -510,7 +511,7 @@ export default function OrgKpiDataEntry() {
           department_id: isDept ? sv.scopeId : undefined,
           employee_id: !isDept ? sv.scopeId : undefined,
           is_na: sv.isNa ?? false,
-          ...(sv.subFactors ? { sub_factors: sv.subFactors } : {}),
+          ...(sv.subFactors !== undefined ? { sub_factors: sv.subFactors } : {}),
         });
         if (sv.achievedValue !== oldVal) {
           auditEntries.push({

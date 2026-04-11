@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-11  
-> **Version:** 2.33.10 — Bug Fix: Compliance sub-factors now loaded from DB into OrgKpiDataEntry UI
+> **Version:** 2.33.11 — Bug Fix: Compliance sub-factors save guard now allows sub_factors-only saves; uses strict undefined check
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
