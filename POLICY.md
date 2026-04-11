@@ -1534,3 +1534,42 @@ The scan query uses batched fetching (500 rows per batch) to bypass the default 
 
 ### Access
 Admin-only. Accessible via **System Settings → Data Repair → Bulk Zero-Score Non-Submitters** or via the **Zero-Score button** on an individual employee's KPI Details header in the dashboard.
+
+---
+
+## §82 — Employee Self-Review Compliance Penalty
+
+### Purpose
+Employees who fail to complete all self-reviews by a configurable deadline have their pending KPIs zero-scored and their "Implementation of common - policies / systems / processes" compliance KPI penalized.
+
+### Trigger
+Deadline-based: the penalty applies after the `compliance_penalty_deadline_day` of the month following the review period. Admin-triggered via the Pending Reviews > Compliance Penalty tab.
+
+### Scope
+All employees with rolled-out KRAs for the selected period whose non-excluded KPIs remain at `kra_set` or `self_review` status past the deadline.
+
+### Configurable Exclusions (all independently toggleable)
+1. **Org-level KPIs** (`compliance_exclude_org_kpi`) — default ON
+2. **Sent-back KPIs** (`compliance_exclude_sent_back`) — default ON
+3. **Quarterly KPIs not due** (`compliance_exclude_quarterly_not_due`) — default ON
+4. **Bi-Monthly KPIs not due** (`compliance_exclude_bimonthly_not_due`) — default ON
+5. **Half-Yearly KPIs not due** (`compliance_exclude_halfyearly_not_due`) — default ON
+6. **Yearly KPIs not due** (`compliance_exclude_yearly_not_due`) — default ON
+
+### Penalty Actions
+1. **Zero-score ALL remaining pending KPIs** at `kra_set`/`self_review` (after exclusions) — `final_score=0`, `final_rating=red`, `status=approved`
+2. **Additionally zero the compliance KPI** ("Implementation of common - policies / systems / processes") regardless of its current status
+
+### Audit Trail
+Each penalized KPI receives a `kpi_audit_logs` entry with `action = 'EMPLOYEE_COMPLIANCE_PENALTY'`, recording `batch_id`, `penalty_type` (pending_kpi_zero or compliance_kpi_zero), `review_period`, `review_year`, and the system remark.
+
+### Rollback
+Full batch rollback available via the Compliance Penalty Rollback section. Reverts KPI status to pre-penalty state and clears submission scores. Logged as `COMPLIANCE_PENALTY_ROLLBACK`.
+
+### Admin Settings
+- `compliance_penalty_enabled` — feature toggle (default OFF)
+- `compliance_penalty_deadline_day` — deadline day of following month (default 10)
+- `compliance_penalty_auto_remark` — system remark applied to zeroed KPIs
+
+### Access
+Admin-only. Managed via **Pending Reviews → Compliance Penalty** tab.
