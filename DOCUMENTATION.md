@@ -5033,7 +5033,6 @@ Every new edge function **must** complete all of these steps before deployment:
 - **Audit**: All actions logged with `EMPLOYEE_COMPLIANCE_PENALTY` and `COMPLIANCE_PENALTY_ROLLBACK` actions in `kpi_audit_logs`
 - **New files**: `src/hooks/useCompliancePenalty.ts`, `src/components/admin/CompliancePenaltyTab.tsx`
 - **Modified files**: `src/pages/admin/PendingSelfReviews.tsx` (new tab), `POLICY.md` (§82)
-- **Configurable exclusions**: Admin can toggle on/off exclusions for Org-level KPIs, Sent-back KPIs, and frequency-based KPIs (Quarterly, Bi-Monthly, Half-Yearly, Yearly) not currently due
 - **Settings**: Configurable deadline day, system remark, and enable/disable toggle stored in `system_settings`
 - **Rollback**: Full batch rollback support with audit trail
 - **Audit**: All actions logged with `EMPLOYEE_COMPLIANCE_PENALTY` and `COMPLIANCE_PENALTY_ROLLBACK` actions in `kpi_audit_logs`
