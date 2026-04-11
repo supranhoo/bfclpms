@@ -264,6 +264,30 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
 
   const getValues = useCallback(() => {
     const parsed = achievedValueRef.current === '' ? null : parseFloat(achievedValueRef.current);
+
+    // Merge live submission dates into sub_factors for compliance KPI before save
+    let finalScopedValues = scopedValuesRef.current;
+    if (isCompliance && submissionDates && data.scope !== 'organization') {
+      finalScopedValues = finalScopedValues.map(sv => {
+        const subInfo = submissionDates.get(sv.scopeId);
+        if (!subInfo) return sv;
+        const sf = sv.subFactors || {
+          policy_compliance: null, submission_date: null,
+          submission_complete: false, submission_pending_count: 0,
+          policy_training: null, other_observation: null,
+        };
+        return {
+          ...sv,
+          subFactors: {
+            ...sf,
+            submission_complete: subInfo.complete,
+            submission_date: subInfo.date,
+            submission_pending_count: subInfo.pendingCount,
+          },
+        };
+      });
+    }
+
     return {
       achievedValue: isNa ? null : (isNaN(parsed as number) ? null : parsed),
       remarks: isNa ? '' : remarksRef.current,
@@ -271,7 +295,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
       isNa,
       naRemarks: isNa ? naRemarks : undefined,
       scopedValues: data.scope !== 'organization'
-        ? scopedValuesRef.current.map(s => ({
+        ? finalScopedValues.map(s => ({
             scopeId: s.scopeId,
             achievedValue: s.isNa ? null : s.achievedValue,
             remarks: s.isNa ? '' : s.remarks,
@@ -281,7 +305,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
           }))
         : undefined,
     };
-  }, [data.scope, isNa, naRemarks]);
+  }, [data.scope, isNa, naRemarks, isCompliance, submissionDates]);
 
   // Auto-save with debounce
   const triggerAutoSave = useCallback(() => {

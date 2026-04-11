@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-11  
-> **Version:** 2.33.13 — Compliance KPI submission date now uses N-1 month logic (e.g. March filter shows February self-review completion); scoped to compliance KPI on Org KPI page only
+> **Version:** 2.33.14 — Compliance sub_factors now persist live submission dates at save time; review journey prioritizes date display over pending count
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
