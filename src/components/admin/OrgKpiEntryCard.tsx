@@ -475,6 +475,8 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               onSelectionChange={setSelectedScopeIds}
               onPropagateRow={(scopeId) => handleSaveAndPropagate([scopeId])}
               isPropagating={isPropagating}
+              isComplianceKpi={isCompliance}
+              submissionDates={submissionDates}
             />
           )}
 
