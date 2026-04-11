@@ -4974,7 +4974,14 @@ KPIs matching either source are excluded from auto-scoring, preventing false zer
 - **Preventive**: Added to Edge Function Checklist: "Confirm deployment via log inspection after every fix" and "After refactoring queries, search for all prior variable references to ensure none are orphaned."
 - **Affected files**: `supabase/functions/bulk-zero-score-non-submitters/index.ts`
 
-### v2.31.5 — Remove orphaned kpiErr reference
+### v2.33.6 — Normalized KPI key matching + owner-scoped progress bar
+- **Root Cause (Bug 1)**: Org KPI Data Entry used exact string matching (`category_id||kra_name||kpi_name`) to join ownership, template, and value data. Slight whitespace/casing differences between tables (e.g., double spaces, "0" vs "NO") caused `getKpiStatus()` to return `'pending'` for KPIs that actually had entered data, resulting in incorrect progress counts (e.g., 27 propagated instead of 33).
+- **Root Cause (Bug 2)**: `progressData` was computed from global `frequencyFilteredKpis` instead of being scoped to the selected data owner, so the progress bar and status filter chips showed global counts even when a specific owner tab was selected.
+- **Fix (Bug 1)**: Introduced `nk()` (normalize-key) utility that lowercases, collapses whitespace, and trims strings. Applied across all key construction in `OrgKpiDataEntry.tsx`, `useOrgLevelKpis.ts`, and `useOrgKpiDataOwner.ts` for consistent matching.
+- **Fix (Bug 2)**: Added `progressScopedKpis` memo that respects `selectedOwnerId` filter, and changed `progressData` to compute from it instead of the global list.
+- **Affected files**: `src/pages/admin/OrgKpiDataEntry.tsx`, `src/hooks/useOrgLevelKpis.ts`, `src/hooks/useOrgKpiDataOwner.ts`
+
+
 - **Root Cause**: Line 169 of `bulk-zero-score-non-submitters/index.ts` contained `if (kpiErr) throw kpiErr;` — a stale reference left behind after the query was refactored from a single fetch to batched fetching (using `bErr`). Since `kpiErr` was never declared in the scan-mode scope, every scan attempt threw a `ReferenceError` and returned 500.
 - **Fix**: Deleted the orphaned line. Error handling is already covered by `if (bErr) throw bErr` inside the fetch loop.
 - **Affected files**: `supabase/functions/bulk-zero-score-non-submitters/index.ts`
