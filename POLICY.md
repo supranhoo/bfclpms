@@ -1573,3 +1573,33 @@ Full batch rollback available via the Compliance Penalty Rollback section. Rever
 
 ### Access
 Admin-only. Managed via **Pending Reviews → Compliance Penalty** tab.
+
+---
+
+## §83 — Multi-Factor Compliance KPI Sub-Factors (v2.33.8)
+
+### Purpose
+When HR enters values for the "Implementation of common" compliance KPI via Org KPI Entry, four reference sub-factors are captured per employee to support the manual Achieved score decision.
+
+### Sub-Factors
+| # | Factor | Input | Source |
+|---|--------|-------|--------|
+| 1 | Policy Compliance | Yes/No dropdown | Manual by HR |
+| 2 | Self Review & Team KPI Submission Date | Auto-fetched date | System (excl. org, sent-back, not-due KPIs) |
+| 3 | Policy Training | Yes/No dropdown | Manual by HR |
+| 4 | Other Observation | Numeric | Manual by HR |
+
+### Scoring
+The Achieved value is **entirely manual** — HR reviews the 4 sub-factors and enters a final numeric value. There is no auto-calculation.
+
+### Visibility
+Sub-factor values and the Achieved value are visible as a read-only "Compliance Factors" banner in the Review Journey section for **all roles**: Employee, Manager, Skip-Level, Auditor, HR PMS, Management, Admin.
+
+### Data Storage
+Stored in `org_kpi_values.sub_factors` as JSONB:
+```json
+{ "policy_compliance": true, "submission_date": "2026-03-15", "submission_complete": true, "submission_pending_count": 0, "policy_training": true, "other_observation": 0 }
+```
+
+### Backward Compatibility
+If `sub_factors` is null, the compliance factors banner is hidden. Existing KPIs are unaffected.
