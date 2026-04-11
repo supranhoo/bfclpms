@@ -5,6 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -14,9 +15,10 @@ import { isValueOutOfRange, RatingThresholds, calculateRating } from '@/lib/rati
 import { RatingBadge } from '@/components/ui/RatingBadge';
 import { QualitativeSelect } from '@/components/review/QualitativeSelect';
 import { BINARY_OPTIONS, type QualitativeOption } from '@/lib/qualitativeUom';
-import { ChevronDown, ChevronRight, Building2, AlertTriangle, Ban, TrendingUp, TrendingDown, MessageSquare, ArrowUpRight, Undo2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Building2, AlertTriangle, Ban, TrendingUp, TrendingDown, MessageSquare, ArrowUpRight, Undo2, CheckCircle2, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import type { KpiObservation } from '@/hooks/useKpiObservations';
+import type { ComplianceSubFactors } from '@/hooks/useComplianceSubFactors';
 import type { SentBackInfo } from '@/hooks/useSentBackOrgKpiEmployees';
 
 export interface ScopedRow {
@@ -33,6 +35,7 @@ export interface ScopedRow {
   uom?: string | null;
   uomType?: 'numeric' | 'binary' | 'tiered' | null;
   qualitativeOptions?: Array<{ label: string; rating: number; definition: string }> | null;
+  subFactors?: ComplianceSubFactors | null;
 }
 
 export interface ObservationCounts {
