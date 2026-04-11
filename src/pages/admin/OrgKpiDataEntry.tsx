@@ -508,6 +508,7 @@ export default function OrgKpiDataEntry() {
           department_id: isDept ? sv.scopeId : undefined,
           employee_id: !isDept ? sv.scopeId : undefined,
           is_na: sv.isNa ?? false,
+          ...(sv.subFactors ? { sub_factors: sv.subFactors } : {}),
         });
         if (sv.achievedValue !== oldVal) {
           auditEntries.push({
