@@ -35,6 +35,19 @@ import { useToast } from '@/hooks/use-toast';
 import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { GovernanceLockBanner } from '@/components/review/GovernanceLockBanner';
 
+/**
+ * Normalize a string for KPI key matching:
+ * lowercase, collapse whitespace, trim.
+ */
+function nk(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/** Build a normalized key for KPI lookups */
+function kpiKey(categoryId: string, kraName: string, kpiName: string): string {
+  return `${categoryId}||${nk(kraName)}||${nk(kpiName)}`;
+}
+
 // Helper to get previous period
 function getPreviousPeriod(period: string, year: number): { period: string; year: number } {
   const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
