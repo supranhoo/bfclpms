@@ -72,7 +72,7 @@ interface OrgKpiScopedEntryTableProps {
   submissionDates?: Map<string, { complete: boolean; date: string | null; pendingCount: number }>;
 }
 
-export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds = [], onSelectionChange, onPropagateRow, isPropagating }: OrgKpiScopedEntryTableProps) {
+export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds = [], onSelectionChange, onPropagateRow, isPropagating, isComplianceKpi = false, submissionDates }: OrgKpiScopedEntryTableProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [bulkFillValue, setBulkFillValue] = useState('');
 
