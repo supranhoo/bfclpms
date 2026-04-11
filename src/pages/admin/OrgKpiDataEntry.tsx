@@ -449,7 +449,7 @@ export default function OrgKpiDataEntry() {
   // Save handler for a single card
   const handleCardSave = useCallback(async (
     kpi: typeof filteredKpis[0],
-    values: { achievedValue: number | null; remarks: string; evidenceUrl: string | null; isNa?: boolean; naRemarks?: string; scopedValues?: Array<{ scopeId: string; achievedValue: number | null; remarks: string; evidenceUrl: string | null; isNa?: boolean }> }
+    values: { achievedValue: number | null; remarks: string; evidenceUrl: string | null; isNa?: boolean; naRemarks?: string; scopedValues?: Array<{ scopeId: string; achievedValue: number | null; remarks: string; evidenceUrl: string | null; isNa?: boolean; subFactors?: any }> }
   ) => {
     const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'employee';
     const toSave: Array<any> = [];
@@ -508,6 +508,7 @@ export default function OrgKpiDataEntry() {
           department_id: isDept ? sv.scopeId : undefined,
           employee_id: !isDept ? sv.scopeId : undefined,
           is_na: sv.isNa ?? false,
+          ...(sv.subFactors ? { sub_factors: sv.subFactors } : {}),
         });
         if (sv.achievedValue !== oldVal) {
           auditEntries.push({
