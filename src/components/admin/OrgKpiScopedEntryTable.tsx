@@ -279,7 +279,7 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
 // ---- Employee group (department header + employee rows) ----
 interface EmployeeGroupProps {
   group: { dept: string | null; rows: ScopedRow[] };
-  onValueChange: (scopeId: string, field: 'achievedValue' | 'remarks' | 'evidenceUrl' | 'isNa', value: string | null) => void;
+  onValueChange: (scopeId: string, field: 'achievedValue' | 'remarks' | 'evidenceUrl' | 'isNa' | 'subFactors', value: string | null) => void;
   ratingThresholds?: RatingThresholds;
   targetValue?: number | null;
   uom?: string | null;
@@ -294,9 +294,11 @@ interface EmployeeGroupProps {
   totalColSpan: number;
   hasSelectionFeature: boolean;
   hasRowPropagation: boolean;
+  isComplianceKpi?: boolean;
+  submissionDates?: Map<string, { complete: boolean; date: string | null; pendingCount: number }>;
 }
 
-function EmployeeGroup({ group, onValueChange, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds, onToggleRow, onPropagateRow, isPropagating, totalColSpan, hasSelectionFeature, hasRowPropagation }: EmployeeGroupProps) {
+function EmployeeGroup({ group, onValueChange, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds, onToggleRow, onPropagateRow, isPropagating, totalColSpan, hasSelectionFeature, hasRowPropagation, isComplianceKpi, submissionDates }: EmployeeGroupProps) {
   return (
     <>
       <TableRow key={`group-${group.dept ?? 'none'}`} className="bg-muted/50 hover:bg-muted/50">
@@ -331,6 +333,8 @@ function EmployeeGroup({ group, onValueChange, ratingThresholds, targetValue, uo
           totalColSpan={totalColSpan}
           hasSelectionFeature={hasSelectionFeature}
           hasRowPropagation={hasRowPropagation}
+          isComplianceKpi={isComplianceKpi}
+          submissionDateInfo={submissionDates?.get(row.scopeId)}
         />
       ))}
     </>
