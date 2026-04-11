@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-04-10  
-> **Version:** 2.33.5 — Fix: Prior batch warning scoped to employee_id in single-employee zero-score mode
+> **Last Updated:** 2026-04-11  
+> **Version:** 2.33.6 — Fix: Normalized KPI key matching + owner-scoped progress bar in Org KPI Data Entry
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
