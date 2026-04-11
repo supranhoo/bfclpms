@@ -182,14 +182,14 @@ export default function OrgKpiDataEntry() {
   const getKpiStatus = useCallback((kpi: typeof frequencyFilteredKpis[0]): 'pending' | 'entered' | 'propagated' => {
     const scope = (kpi as any).org_level_scope || 'employee';
     if (scope === 'organization') {
-      const key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
+      const key = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||null||null`;
       const val = existingValuesMap.get(key);
       if ((val?.achieved_value !== null && val?.achieved_value !== undefined) || val?.is_na) {
         return (val?.status === 'propagated' || val?.status === 'approved') ? 'propagated' : 'entered';
       }
       return 'pending';
     }
-    const prefix = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||`;
+     const prefix = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||`;
     const matching = Array.from(existingValuesMap.entries()).filter(([k, v]) =>
       k.startsWith(prefix) && ((v.achieved_value !== null && v.achieved_value !== undefined) || v.is_na)
     );
@@ -227,13 +227,13 @@ export default function OrgKpiDataEntry() {
     ownershipMap.forEach((val, kpiKey) => {
       // Check if this KPI is in the current filtered set (frequencyFilteredKpis)
       const isInScope = frequencyFilteredKpis.some(k =>
-        `${k.category_id}||${k.kra_name}||${k.kpi_name}` === kpiKey
+        kpiKey(k.category_id, k.kra_name, k.kpi_name) === ownerKpiKey
       );
       if (!isInScope) return;
 
       const kpiStatus = (() => {
         const kpi = frequencyFilteredKpis.find(k =>
-          `${k.category_id}||${k.kra_name}||${k.kpi_name}` === kpiKey
+          kpiKey(k.category_id, k.kra_name, k.kpi_name) === ownerKpiKey
         );
         return kpi ? getKpiStatus(kpi) : 'pending';
       })();
@@ -259,8 +259,8 @@ export default function OrgKpiDataEntry() {
   const ownerFilteredKpis = useMemo(() => {
     if (!selectedOwnerId) return filteredKpis;
     return filteredKpis.filter(kpi => {
-      const kpiKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
-      const entry = ownershipMap.get(kpiKey);
+      const k = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
+      const entry = ownershipMap.get(k);
       return entry?.owners.some(o => o.owner_id === selectedOwnerId);
     });
   }, [filteredKpis, selectedOwnerId, ownershipMap]);
