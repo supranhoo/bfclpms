@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-11  
-> **Version:** 2.33.6 — Fix: Normalized KPI key matching + owner-scoped progress bar in Org KPI Data Entry
+> **Version:** 2.33.7 — Feature: Employee Self-Review Compliance Penalty with configurable exclusions and rollback
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

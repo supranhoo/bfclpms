@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-11  
-> **Version:** 1.92.6 — §81 Normalized KPI key matching across Org KPI data entry; progress bar scoped to selected data owner
+> **Version:** 1.92.7 — §82 Employee Self-Review Compliance Penalty Policy
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
