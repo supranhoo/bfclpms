@@ -2733,6 +2733,7 @@ export type Database = {
           sent_back_by: string | null
           sent_back_reason: string | null
           status: string | null
+          sub_factors: Json | null
           submission_count: number | null
           target_value: number | null
           uom_type: string | null
@@ -2767,6 +2768,7 @@ export type Database = {
           sent_back_by?: string | null
           sent_back_reason?: string | null
           status?: string | null
+          sub_factors?: Json | null
           submission_count?: number | null
           target_value?: number | null
           uom_type?: string | null
@@ -2801,6 +2803,7 @@ export type Database = {
           sent_back_by?: string | null
           sent_back_reason?: string | null
           status?: string | null
+          sub_factors?: Json | null
           submission_count?: number | null
           target_value?: number | null
           uom_type?: string | null
