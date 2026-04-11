@@ -376,6 +376,7 @@ export default function OrgKpiDataEntry() {
             uom: kpi.uom ?? null,
             uomType: (kpi as any).uom_type || 'numeric',
             qualitativeOptions: (kpi as any).qualitative_options || null,
+            subFactors: val?.sub_factors ?? undefined,
           };
       });
     } else if (scope === 'employee' && allProfiles) {
@@ -406,6 +407,7 @@ export default function OrgKpiDataEntry() {
             uom: empTarget?.uom ?? null,
             uomType: (kpi as any).uom_type || 'numeric',
             qualitativeOptions: (kpi as any).qualitative_options || null,
+            subFactors: val?.sub_factors ?? undefined,
           };
         })
         .sort((a, b) => {
