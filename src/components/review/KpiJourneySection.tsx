@@ -144,6 +144,17 @@ export function KpiJourneySection({
   const globalIsNA = submission?.is_na || false;
   const [prevMonthsOpen, setPrevMonthsOpen] = useState(false);
 
+  // Compliance sub-factors
+  const isCompliance = isComplianceKpi(kpi.kra_name);
+  const { data: complianceData } = useComplianceSubFactors(
+    isCompliance ? kpi.employee_id : undefined,
+    isCompliance ? kpi.category_id : undefined,
+    isCompliance ? kpi.kra_name : undefined,
+    isCompliance ? kpi.kpi_name : undefined,
+    isCompliance ? kpi.review_period : undefined,
+    isCompliance ? kpi.review_year : undefined,
+  );
+
   // Compute previous 2 periods
   const prevPeriods = useMemo(
     () => getPreviousPeriods(kpi.review_period || '', kpi.review_year || new Date().getFullYear(), 2),
