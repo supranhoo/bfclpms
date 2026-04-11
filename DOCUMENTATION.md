@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-11  
-> **Version:** 2.33.12 — Bug Fix: OrgKpiEntryCard secondary useEffect merges sub_factors from DB after async query load; prevents stale state from hiding persisted compliance factors
+> **Version:** 2.33.13 — Compliance KPI submission date now uses N-1 month logic (e.g. March filter shows February self-review completion); scoped to compliance KPI on Org KPI page only
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
