@@ -426,7 +426,7 @@ interface EmployeeRowProps {
   submissionDateInfo?: { complete: boolean; date: string | null; pendingCount: number };
 }
 
-function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, observations, observationCounts: legacyCounts, sentBackInfo, isSelected, onToggleRow, onPropagateRow, isPropagating, totalColSpan, hasSelectionFeature, hasRowPropagation }: EmployeeRowProps) {
+function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, observations, observationCounts: legacyCounts, sentBackInfo, isSelected, onToggleRow, onPropagateRow, isPropagating, totalColSpan, hasSelectionFeature, hasRowPropagation, isComplianceKpi, submissionDateInfo }: EmployeeRowProps) {
   const [expanded, setExpanded] = useState(false);
 
   const effectiveTarget = row.targetValue != null ? row.targetValue : targetValue;
