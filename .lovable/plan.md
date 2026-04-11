@@ -1,94 +1,92 @@
 
-## RCA: Compliance KPI 4-factor values missing from Org KPI Data Entry
 
-### What I verified
-- The earlier fixes are already present in code:
-  - `OrgKpiDataEntry.tsx` now saves `sub_factors`
-  - `OrgKpiDataEntry.tsx` now loads `sub_factors` into `subFactors`
-  - `useOrgKpiValues.ts` reads/writes `sub_factors`
-  - `KpiJourneySection.tsx` reads `sub_factors` for display
-- So this is not just the old “field not mapped” bug anymore.
+## RCA: Compliance Sub-Factors Missing for Most Employees
 
-### Current likely root-cause candidates
-1. **Data is actually gone/null in the database**
-   - Most likely if HR can no longer see previously entered factors even after the load/save mapping fix.
-   - This would explain both:
-     - missing values in Org KPI data entry
-     - missing values in review journey
+### Database Evidence
 
-2. **The affected employee rows are no longer part of the KPI’s mapped employee set**
-   - `OrgKpiDataEntry` only shows employees returned by `useOrgLevelKpisWithEmployees`.
-   - That hook derives visible employee rows from current `kpis` records for the selected month/year.
-   - If employee mapping changed, KPI assignment changed, or period/year differs, old `org_kpi_values` rows can still exist in DB but not appear in the UI.
+| Metric | Value |
+|--------|-------|
+| Total March compliance rows (employee-scoped) | 78 |
+| Rows WITH `sub_factors` | 11 |
+| Rows WITHOUT `sub_factors` | 67 |
+| Rows created before today (Apr 9) | 65 (10 with SF, 55 without) |
+| Rows created today | 13 (1 with SF, 12 without) |
 
-3. **An overwrite path is still nulling `sub_factors`**
-   - There is still a risk path in autosave/update flows if a row is re-saved without intended factor state in some edge case.
-   - This needs DB verification against actual affected rows before changing code again.
+The 10 older rows with sub_factors were **updated today at ~15:46** (after the save fix deployed). The 55 without sub_factors were last updated at ~16:10 — achieved values saved but sub_factors not included.
 
-### Important code findings
-- `OrgKpiDataEntry.tsx`
-  - builds visible rows from `mappedEmployeesMap` / `mappedDepartmentsMap`
-  - loads `subFactors: val?.sub_factors ?? undefined`
-  - saves `...(sv.subFactors ? { sub_factors: sv.subFactors } : {})`
-- `useOrgLevelKpisWithEmployees.ts`
-  - limits visible Org KPI rows to employees who currently have matching `kpis` records for selected period/year
-- `useComplianceSubFactors.ts`
-  - review journey reads only employee-scoped `org_kpi_values` row matching:
-    - category
-    - KRA
-    - KPI
-    - period
-    - year
-    - employee_id
+### Root Cause: `useEffect` Dependency Bug in `OrgKpiEntryCard.tsx`
 
-### Risk & Impact Report
-- **Data impact**: High likelihood this involves persisted data state, not only UI state
-- **Workflow impact**: Medium; missing compliance metadata affects HR visibility and all downstream review viewers
-- **UI/UX consistency**: Low risk if fixed carefully; likely no layout changes needed
-- **Regression risk**: Medium; repeated patching without DB confirmation may reintroduce overwrite bugs
-- **Mitigation**:
-  - inspect exact DB rows for employee codes `100231` and `100624`
-  - compare `kpis` assignment rows vs `org_kpi_values` rows for March
-  - add regression tests for load/save + visibility + mapping edge case
-  - add mock fixtures covering “row exists but employee mapping changed”
+**File:** `src/components/admin/OrgKpiEntryCard.tsx`, lines 179–224
 
-### Plan
-1. **Inspect actual database rows for the affected cases**
-   - Check employee IDs for `100231` and `100624`
-   - Query March compliance KPI rows in `org_kpi_values`
-   - Verify whether `sub_factors` is:
-     - present
-     - null
-     - missing due to no row
-   - Cross-check matching `kpis` rows for the same employees/period
+The `useEffect` that initializes `scopedValues` state has this dependency array (line 224):
 
-2. **Classify the real failure mode**
-   - If rows exist but `sub_factors` is null: trace overwrite path and patch the mutation flow
-   - If rows exist with data but UI still hides them: patch row visibility/loading logic
-   - If rows no longer exist in visible KPI mapping: patch admin view to surface persisted scoped rows even when current mapping changed
+```text
+[data.achievedValue, data.remarks, data.evidenceUrl, 
+ data.categoryId, data.kraName, data.kpiName, reviewPeriod, reviewYear]
+```
 
-3. **Implement the fix**
-   - Most likely candidate if DB rows still exist:
-     - merge visible scoped rows from both:
-       - current mapped employees
-       - persisted `org_kpi_values` scoped rows
-   - This prevents old HR-entered compliance data from disappearing from the Org KPI screen when employee mapping changes later
-   - If overwrite is confirmed, add defensive merge/update logic so missing `subFactors` never clears existing JSON unintentionally
+**Missing dependency: `data.scopedRows`** — specifically the sub_factors within it.
 
-4. **Add regression protection**
-   - Unit tests for:
-     - loading persisted `sub_factors`
-     - saving without clearing existing `sub_factors`
-     - showing persisted employee rows even if current employee mapping differs
-   - Mock data for affected compliance KPI scenarios
+**Failure sequence:**
 
-5. **Sync documentation**
-   - Update `DOCUMENTATION.md`
-   - Update `POLICY.md`
-   - include RCA note and regression coverage note
+1. Card mounts → query still loading → `existingValuesMap` is empty
+2. `data.scopedRows` computed with `subFactors: undefined` for all employees
+3. `useEffect` fires (identity changed) → `setScopedValues(data.scopedRows)` → all subFactors = undefined
+4. Query completes → `data.scopedRows` now includes subFactors from DB
+5. But for employee-scoped KPIs, `data.achievedValue` stays `null` (no org-level value)
+6. **useEffect does NOT re-fire** because none of its dependencies changed
+7. `scopedValues` remains stale — UI shows blank sub-factor fields
+8. HR sees empty fields, re-enters data for some employees, but doesn't notice the others are also blank
+9. Auto-save fires with `subFactors: undefined` for untouched employees → DB preserved (undefined guard works), but the UI never shows the correct values
 
-### What needs approval
-Because I’m in read-only mode, the next step must be a runtime/data inspection plus code/test changes. After approval, I will:
-- inspect the exact database state for `100231` and `100624`
-- identify whether this is deletion, filtering, or overwrite
-- implement the targeted fix with tests and doc/policy sync
+**Result:** The DB data is actually intact for the 11 rows that were manually entered. The other 67 rows never had sub_factors saved because:
+- 55 were created before the save-fix was deployed
+- 12 were created today but sub_factors weren't entered because the UI showed blank (stale state)
+
+### Fix Plan
+
+| # | File | Change |
+|---|------|--------|
+| 1 | `OrgKpiEntryCard.tsx` | Add a secondary `useEffect` that merges `data.scopedRows` sub_factors + achievedValue into `scopedValues` state when they become available, without resetting user-dirty fields |
+| 2 | `OrgKpiDataEntry.tsx` | Add a one-time data repair: for employees with existing `org_kpi_values` rows but null `sub_factors`, pre-populate default sub_factors from the card UI |
+| 3 | `DOCUMENTATION.md` | RCA note + fix description |
+| 4 | `POLICY.md` | Version sync |
+
+### Technical Detail
+
+**Fix 1 — Merge effect** (primary fix):
+```typescript
+// New useEffect in OrgKpiEntryCard.tsx after the existing one
+useEffect(() => {
+  if (!data.scopedRows?.length || isDirtyRef.current) return;
+  setScopedValues(prev => {
+    if (prev.length !== data.scopedRows!.length) return data.scopedRows!;
+    let changed = false;
+    const merged = prev.map(row => {
+      const dbRow = data.scopedRows!.find(r => r.scopeId === row.scopeId);
+      if (!dbRow) return row;
+      // Merge subFactors and achievedValue from DB if local is stale
+      const needsMerge = 
+        (row.subFactors === undefined && dbRow.subFactors !== undefined) ||
+        (row.achievedValue === null && dbRow.achievedValue !== null);
+      if (needsMerge) {
+        changed = true;
+        return { ...row, 
+          subFactors: row.subFactors ?? dbRow.subFactors,
+          achievedValue: row.achievedValue ?? dbRow.achievedValue,
+        };
+      }
+      return row;
+    });
+    return changed ? merged : prev;
+  });
+}, [data.scopedRows]);
+```
+
+This ensures that when the query completes and `data.scopedRows` gains subFactors from DB, they are merged into the card's local state without resetting any user edits.
+
+### Risk Assessment
+- **Data impact**: None — additive merge; never overwrites user-entered values
+- **Regression risk**: Low — guarded by `isDirtyRef` check to avoid merge during active editing
+- **UI/UX**: Sub-factors will now correctly display after initial query load
+
