@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
-> **Last Updated:** 2026-04-10  
-> **Version:** 1.92.5 — §80 Prior batch warning scoped to employee in single-employee zero-score mode
+> **Last Updated:** 2026-04-11  
+> **Version:** 1.92.6 — §81 Normalized KPI key matching across Org KPI data entry; progress bar scoped to selected data owner
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

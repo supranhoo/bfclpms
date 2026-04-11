@@ -143,7 +143,8 @@ export function useOrgKpiOwnershipMap() {
   
   if (owners) {
     owners.forEach(owner => {
-      const key = `${owner.category_id}||${owner.kra_name}||${owner.kpi_name}`;
+      const nk = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+      const key = `${owner.category_id}||${nk(owner.kra_name)}||${nk(owner.kpi_name)}`;
       const existing = ownershipMap.get(key) || { owners: [], canEdit: effectiveRole === 'admin' };
       existing.owners.push(owner);
       if (owner.owner_id === user?.id) {

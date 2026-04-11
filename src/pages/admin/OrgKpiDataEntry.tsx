@@ -35,6 +35,19 @@ import { useToast } from '@/hooks/use-toast';
 import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { GovernanceLockBanner } from '@/components/review/GovernanceLockBanner';
 
+/**
+ * Normalize a string for KPI key matching:
+ * lowercase, collapse whitespace, trim.
+ */
+function nk(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/** Build a normalized key for KPI lookups */
+function kpiKey(categoryId: string, kraName: string, kpiName: string): string {
+  return `${categoryId}||${nk(kraName)}||${nk(kpiName)}`;
+}
+
 // Helper to get previous period
 function getPreviousPeriod(period: string, year: number): { period: string; year: number } {
   const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -70,7 +83,7 @@ export default function OrgKpiDataEntry() {
   const employeeCountMap = useMemo(() => {
     const map = new Map<string, number>();
     orgLevelData?.kpis?.forEach(k => {
-      const key = `${k.kpi.category_id}||${k.kpi.kra_name}||${k.kpi.kpi_name}`;
+      const key = kpiKey(k.kpi.category_id, k.kpi.kra_name, k.kpi.kpi_name);
       map.set(key, k.employeeCount);
     });
     return map;
@@ -78,7 +91,7 @@ export default function OrgKpiDataEntry() {
   const mappedDepartmentsMap = useMemo(() => {
     const map = new Map<string, Set<string>>();
     orgLevelData?.kpis?.forEach(k => {
-      const key = `${k.kpi.category_id}||${k.kpi.kra_name}||${k.kpi.kpi_name}`;
+      const key = kpiKey(k.kpi.category_id, k.kpi.kra_name, k.kpi.kpi_name);
       map.set(key, new Set(k.departmentIds));
     });
     return map;
@@ -86,7 +99,7 @@ export default function OrgKpiDataEntry() {
   const mappedEmployeesMap = useMemo(() => {
     const map = new Map<string, Set<string>>();
     orgLevelData?.kpis?.forEach(k => {
-      const key = `${k.kpi.category_id}||${k.kpi.kra_name}||${k.kpi.kpi_name}`;
+      const key = kpiKey(k.kpi.category_id, k.kpi.kra_name, k.kpi.kpi_name);
       map.set(key, new Set(k.employeeIds));
     });
     return map;
@@ -121,7 +134,7 @@ export default function OrgKpiDataEntry() {
   const prevValuesMap = useMemo(() => {
     const map = new Map<string, number | null>();
     previousValues?.forEach(v => {
-      const key = `${v.category_id}||${v.kra_name.toLowerCase()}||${v.kpi_name.toLowerCase()}`;
+      const key = kpiKey(v.category_id, v.kra_name, v.kpi_name);
       map.set(key, v.achieved_value);
     });
     return map;
@@ -133,7 +146,7 @@ export default function OrgKpiDataEntry() {
     existingOrgValues?.forEach(v => {
       const deptPart = v.department_id || 'null';
       const empPart = v.employee_id || 'null';
-      const key = `${v.category_id}||${v.kra_name.toLowerCase()}||${v.kpi_name.toLowerCase()}||${deptPart}||${empPart}`;
+      const key = `${kpiKey(v.category_id, v.kra_name, v.kpi_name)}||${deptPart}||${empPart}`;
       map.set(key, v);
     });
     return map;
@@ -144,7 +157,7 @@ export default function OrgKpiDataEntry() {
     if (!orgLevelKpis) return [];
     if (isAdmin) return orgLevelKpis;
     return orgLevelKpis.filter(kpi => {
-      const ownerKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+      const ownerKey = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
       return ownershipMap.get(ownerKey)?.canEdit === true;
     });
   }, [orgLevelKpis, isAdmin, ownershipMap]);
@@ -169,14 +182,14 @@ export default function OrgKpiDataEntry() {
   const getKpiStatus = useCallback((kpi: typeof frequencyFilteredKpis[0]): 'pending' | 'entered' | 'propagated' => {
     const scope = (kpi as any).org_level_scope || 'employee';
     if (scope === 'organization') {
-      const key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
+      const key = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||null||null`;
       const val = existingValuesMap.get(key);
       if ((val?.achieved_value !== null && val?.achieved_value !== undefined) || val?.is_na) {
         return (val?.status === 'propagated' || val?.status === 'approved') ? 'propagated' : 'entered';
       }
       return 'pending';
     }
-    const prefix = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||`;
+     const prefix = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||`;
     const matching = Array.from(existingValuesMap.entries()).filter(([k, v]) =>
       k.startsWith(prefix) && ((v.achieved_value !== null && v.achieved_value !== undefined) || v.is_na)
     );
@@ -211,16 +224,16 @@ export default function OrgKpiDataEntry() {
     if (!isAdmin) return [];
     const ownerMap = new Map<string, { ownerId: string; ownerName: string; totalKpis: number; enteredKpis: number }>();
 
-    ownershipMap.forEach((val, kpiKey) => {
+    ownershipMap.forEach((val, ownerMapKey) => {
       // Check if this KPI is in the current filtered set (frequencyFilteredKpis)
       const isInScope = frequencyFilteredKpis.some(k =>
-        `${k.category_id}||${k.kra_name}||${k.kpi_name}` === kpiKey
+        kpiKey(k.category_id, k.kra_name, k.kpi_name) === ownerMapKey
       );
       if (!isInScope) return;
 
       const kpiStatus = (() => {
         const kpi = frequencyFilteredKpis.find(k =>
-          `${k.category_id}||${k.kra_name}||${k.kpi_name}` === kpiKey
+          kpiKey(k.category_id, k.kra_name, k.kpi_name) === ownerMapKey
         );
         return kpi ? getKpiStatus(kpi) : 'pending';
       })();
@@ -246,8 +259,8 @@ export default function OrgKpiDataEntry() {
   const ownerFilteredKpis = useMemo(() => {
     if (!selectedOwnerId) return filteredKpis;
     return filteredKpis.filter(kpi => {
-      const kpiKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
-      const entry = ownershipMap.get(kpiKey);
+      const k = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
+      const entry = ownershipMap.get(k);
       return entry?.owners.some(o => o.owner_id === selectedOwnerId);
     });
   }, [filteredKpis, selectedOwnerId, ownershipMap]);
@@ -266,37 +279,29 @@ export default function OrgKpiDataEntry() {
     return Array.from(map.entries());
   }, [ownerFilteredKpis]);
 
-  // Progress calculation with 3-state tracking
+  // Scope KPIs for progress: respect owner filter
+  const progressScopedKpis = useMemo(() => {
+    if (!selectedOwnerId) return frequencyFilteredKpis;
+    return frequencyFilteredKpis.filter(kpi => {
+      const k = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
+      const entry = ownershipMap.get(k);
+      return entry?.owners.some(o => o.owner_id === selectedOwnerId);
+    });
+  }, [frequencyFilteredKpis, selectedOwnerId, ownershipMap]);
+
+  // Progress calculation with 3-state tracking (scoped to selected owner)
   const progressData = useMemo(() => {
-    const totalKpis = frequencyFilteredKpis.length;
+    const totalKpis = progressScopedKpis.length;
     let enteredKpis = 0;
     let propagatedKpis = 0;
     const categoryMap = new Map<string, { total: number; entered: number; propagated: number }>();
 
-    frequencyFilteredKpis.forEach(kpi => {
+    progressScopedKpis.forEach(kpi => {
       const catId = kpi.category_id;
       const cat = categoryMap.get(catId) || { total: 0, entered: 0, propagated: 0 };
       cat.total++;
 
-      const scope = (kpi as any).org_level_scope || 'employee';
-      let status: 'pending' | 'entered' | 'propagated' = 'pending';
-
-      if (scope === 'organization') {
-        const key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
-        const val = existingValuesMap.get(key);
-        if ((val?.achieved_value !== null && val?.achieved_value !== undefined) || val?.is_na) {
-          status = (val?.status === 'propagated' || val?.status === 'approved') ? 'propagated' : 'entered';
-        }
-      } else {
-        const prefix = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||`;
-        const matching = Array.from(existingValuesMap.entries()).filter(([k, v]) =>
-          k.startsWith(prefix) && ((v.achieved_value !== null && v.achieved_value !== undefined) || v.is_na)
-        );
-        if (matching.length > 0) {
-          const allPropagated = matching.every(([, v]) => v.status === 'propagated' || v.status === 'approved');
-          status = allPropagated ? 'propagated' : 'entered';
-        }
-      }
+      const status = getKpiStatus(kpi);
 
       if (status === 'propagated') {
         propagatedKpis++;
@@ -318,18 +323,18 @@ export default function OrgKpiDataEntry() {
     }));
 
     return { totalKpis, enteredKpis, propagatedKpis, categoryProgress };
-  }, [frequencyFilteredKpis, existingValuesMap, orgLevelCategories]);
+  }, [progressScopedKpis, getKpiStatus, orgLevelCategories]);
 
   // Build card data for a KPI
   const buildCardData = useCallback((kpi: typeof filteredKpis[0]): OrgKpiCardData => {
     const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'employee';
     const catName = kpi.kra_categories?.name || '';
     const catColor = kpi.kra_categories?.color || '#6B7280';
-    const key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
+    const key = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||null||null`;
     const existing = existingValuesMap.get(key);
-    const prevKey = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}`;
-    const previousValue = prevValuesMap.get(prevKey) ?? null;
-    const empCountKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+    const prevK = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
+    const previousValue = prevValuesMap.get(prevK) ?? null;
+    const empCountKey = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
     const empCount = employeeCountMap.get(empCountKey) ?? 0;
 
     // Determine status using the shared helper (handles all scopes correctly)
@@ -341,14 +346,14 @@ export default function OrgKpiDataEntry() {
 
     if (scope === 'department' && departments) {
       scopeLabel = 'Department';
-      const kpiKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
-      const mappedDeptIds = mappedDepartmentsMap.get(kpiKey);
+      const kk = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
+      const mappedDeptIds = mappedDepartmentsMap.get(kk);
       const filteredDepts = mappedDeptIds
         ? departments.filter(dept => mappedDeptIds.has(dept.id))
         : departments;
-      const kpiMappedEmpIds = mappedEmployeesMap.get(kpiKey);
+      const kpiMappedEmpIds = mappedEmployeesMap.get(kk);
       scopedRows = filteredDepts.map(dept => {
-        const scopeKey = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||${dept.id}||null`;
+        const scopeKey = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||${dept.id}||null`;
         const val = existingValuesMap.get(scopeKey);
         // Build employee names sub-text for this department
         let scopeSubText: string | undefined;
@@ -375,18 +380,18 @@ export default function OrgKpiDataEntry() {
       });
     } else if (scope === 'employee' && allProfiles) {
       scopeLabel = 'Employee';
-      const kpiKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
-      const mappedEmpIds = mappedEmployeesMap.get(kpiKey);
+      const kk2 = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
+      const mappedEmpIds = mappedEmployeesMap.get(kk2);
       const filteredEmps = mappedEmpIds
         ? allProfiles.filter(emp => mappedEmpIds.has(emp.id))
         : allProfiles;
       scopedRows = filteredEmps
         .map(emp => {
           const dept = departments?.find(d => d.id === emp.department_id);
-          const scopeKey = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||${emp.id}`;
+          const scopeKey = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||null||${emp.id}`;
           const val = existingValuesMap.get(scopeKey);
           // Per-employee target from their individual KPI record
-          const empTargetKey = `${kpiKey}||${emp.id}`;
+          const empTargetKey = `${kk2}||${emp.id}`;
           const empTarget = employeeTargetMap?.[empTargetKey];
           return {
             scopeId: emp.id,
@@ -542,8 +547,8 @@ export default function OrgKpiDataEntry() {
     
     // Track propagation results for completeness validation
     let totalPropagated = 0;
-    const kpiKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
-    const expectedCount = employeeCountMap.get(kpiKey) ?? 0;
+    const kk = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
+    const expectedCount = employeeCountMap.get(kk) ?? 0;
     
     // Block propagation of blank data — scope-aware (v2.13.9)
     const isMissingData = scope === 'organization'
@@ -784,7 +789,7 @@ export default function OrgKpiDataEntry() {
   // Export data
   const exportData = useMemo(() => {
     return ownershipFilteredKpis.map(kpi => {
-      const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
+      const key = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||null||null`;
       const existing = existingValuesMap.get(key);
       const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'employee';
       return {
@@ -809,12 +814,12 @@ export default function OrgKpiDataEntry() {
 
     frequencyFilteredKpis.forEach(kpi => {
       const scope = ((kpi as any).org_level_scope as string) || 'employee';
-      const kpiKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
-      const ownerEntry = ownershipMap.get(kpiKey);
+      const kk = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
+      const ownerEntry = ownershipMap.get(kk);
       const ownerNames = ownerEntry?.owners?.map(o => o.owner?.full_name || 'Unknown').join(', ') || '';
       const ownerEmails = ownerEntry?.owners?.map(o => o.owner?.email || '').filter(Boolean).join(', ') || '';
-      const prevValue = prevValuesMap.get(kpiKey) ?? null;
-      const empCount = employeeCountMap.get(kpiKey) ?? null;
+      const prevValue = prevValuesMap.get(kk) ?? null;
+      const empCount = employeeCountMap.get(kk) ?? null;
       const freq = (kpi as any).frequency || '';
 
       const baseRow = {
@@ -837,7 +842,7 @@ export default function OrgKpiDataEntry() {
       };
 
       if (scope === 'organization') {
-        const valKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
+        const valKey = `${kk}||null||null`;
         const val = existingValuesMap.get(valKey);
         const hasValue = val?.achieved_value !== null && val?.achieved_value !== undefined;
         const status = hasValue ? ((val?.status === 'propagated' || val?.status === 'approved') ? 'Propagated' : 'Entered') : 'Pending';
@@ -853,12 +858,12 @@ export default function OrgKpiDataEntry() {
           daysSinceLastUpdate: (status !== 'Pending' && val?.updated_at) ? differenceInDays(today, new Date(val.updated_at)) : null,
         });
       } else if (scope === 'department' && departments) {
-        const mappedDeptIds = mappedDepartmentsMap.get(kpiKey);
+        const mappedDeptIds = mappedDepartmentsMap.get(kk);
         const filteredDepts = mappedDeptIds
           ? departments.filter(d => mappedDeptIds.has(d.id))
           : departments;
         filteredDepts.forEach(dept => {
-          const valKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${dept.id}||null`;
+          const valKey = `${kk}||${dept.id}||null`;
           const val = existingValuesMap.get(valKey);
           const hasValue = val?.achieved_value !== null && val?.achieved_value !== undefined;
           const status = hasValue ? ((val?.status === 'propagated' || val?.status === 'approved') ? 'Propagated' : 'Entered') : 'Pending';
@@ -875,13 +880,13 @@ export default function OrgKpiDataEntry() {
           });
         });
       } else if (scope === 'employee' && allProfiles) {
-        const mappedEmpIds = mappedEmployeesMap.get(kpiKey);
+        const mappedEmpIds = mappedEmployeesMap.get(kk);
         const filteredEmps = mappedEmpIds
           ? allProfiles.filter(emp => mappedEmpIds.has(emp.id))
           : allProfiles;
         filteredEmps.forEach(emp => {
           const dept = departments?.find(d => d.id === emp.department_id);
-          const valKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||${emp.id}`;
+          const valKey = `${kk}||null||${emp.id}`;
           const val = existingValuesMap.get(valKey);
           const hasValue = val?.achieved_value !== null && val?.achieved_value !== undefined;
           const status = hasValue ? ((val?.status === 'propagated' || val?.status === 'approved') ? 'Propagated' : 'Entered') : 'Pending';
@@ -1169,8 +1174,8 @@ export default function OrgKpiDataEntry() {
                 {group.kpis.map(kpi => {
                   const cardData = buildCardData(kpi);
                   const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'employee';
-                  const empKpiKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
-                  const empKpiIds = scope === 'employee' ? employeeKpiIdsMap?.[empKpiKey] : undefined;
+                  const empKpiK = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
+                  const empKpiIds = scope === 'employee' ? employeeKpiIdsMap?.[empKpiK] : undefined;
                   return (
                     <OrgKpiEntryCard
                       key={`${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${selectedPeriod}||${selectedYear}`}
@@ -1206,7 +1211,7 @@ export default function OrgKpiDataEntry() {
                         toast({ title: 'Entry unlocked for editing' });
                       }}
                       onOpenImpact={() => {
-                        const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
+                        const key = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||null||null`;
                         const val = existingValuesMap.get(key);
                         setImpactTarget({
                           categoryId: kpi.category_id,
