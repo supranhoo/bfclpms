@@ -2,6 +2,10 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { KPI } from '@/hooks/useKpis';
 
+/** Normalize a string for consistent key matching: lowercase, collapse whitespace, trim */
+const nk = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+const mkKey = (catId: string, kra: string, kpi: string) => `${catId}||${nk(kra)}||${nk(kpi)}`;
+
 // Hook to get unique org-level KPIs (where is_org_level = true) for a period
 export function useOrgLevelKpis(reviewPeriod?: string, reviewYear?: number) {
   return useQuery({
