@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-11  
-> **Version:** 1.92.8 — §83 Multi-Factor Compliance KPI Sub-Factors (bug fix: save handler)
+> **Version:** 1.92.9 — §83 Multi-Factor Compliance KPI Sub-Factors (bug fix: load from DB)
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
