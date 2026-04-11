@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-11  
-> **Version:** 2.33.7 — Feature: Employee Self-Review Compliance Penalty with configurable exclusions and rollback
+> **Version:** 2.33.9 — Bug Fix: Compliance sub-factors now persisted in OrgKpiDataEntry save handler
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -5038,3 +5038,8 @@ Every new edge function **must** complete all of these steps before deployment:
 - **Audit**: All actions logged with `EMPLOYEE_COMPLIANCE_PENALTY` and `COMPLIANCE_PENALTY_ROLLBACK` actions in `kpi_audit_logs`
 - **New files**: `src/hooks/useCompliancePenalty.ts`, `src/components/admin/CompliancePenaltyTab.tsx`
 - **Modified files**: `src/pages/admin/PendingSelfReviews.tsx` (new tab), `POLICY.md` (§82)
+
+### v2.33.9 — Bug Fix: Compliance Sub-Factors Save Handler
+- **Bug**: `handleCardSave` in `OrgKpiDataEntry.tsx` did not include `sub_factors` in the save payload, so HR-entered compliance sub-factor values were lost on save
+- **Fix**: Added `sub_factors` mapping from `sv.subFactors` to the `toSave` object in the scoped values loop, and updated the type definition to include `subFactors`
+- **Modified files**: `src/pages/admin/OrgKpiDataEntry.tsx`
