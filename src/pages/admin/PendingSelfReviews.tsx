@@ -1016,6 +1016,10 @@ export default function PendingSelfReviews() {
             </CardContent>
           </Card>
         </TabsContent>
+        {/* Tab: Compliance Penalty */}
+        <TabsContent value="compliance-penalty">
+          <CompliancePenaltyTab selectedMonth={selectedMonth} selectedYear={selectedYear} />
+        </TabsContent>
       </Tabs>
     </div>
   );
