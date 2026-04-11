@@ -83,7 +83,7 @@ export default function OrgKpiDataEntry() {
   const employeeCountMap = useMemo(() => {
     const map = new Map<string, number>();
     orgLevelData?.kpis?.forEach(k => {
-      const key = `${k.kpi.category_id}||${k.kpi.kra_name}||${k.kpi.kpi_name}`;
+      const key = kpiKey(k.kpi.category_id, k.kpi.kra_name, k.kpi.kpi_name);
       map.set(key, k.employeeCount);
     });
     return map;
@@ -91,7 +91,7 @@ export default function OrgKpiDataEntry() {
   const mappedDepartmentsMap = useMemo(() => {
     const map = new Map<string, Set<string>>();
     orgLevelData?.kpis?.forEach(k => {
-      const key = `${k.kpi.category_id}||${k.kpi.kra_name}||${k.kpi.kpi_name}`;
+      const key = kpiKey(k.kpi.category_id, k.kpi.kra_name, k.kpi.kpi_name);
       map.set(key, new Set(k.departmentIds));
     });
     return map;
@@ -99,7 +99,7 @@ export default function OrgKpiDataEntry() {
   const mappedEmployeesMap = useMemo(() => {
     const map = new Map<string, Set<string>>();
     orgLevelData?.kpis?.forEach(k => {
-      const key = `${k.kpi.category_id}||${k.kpi.kra_name}||${k.kpi.kpi_name}`;
+      const key = kpiKey(k.kpi.category_id, k.kpi.kra_name, k.kpi.kpi_name);
       map.set(key, new Set(k.employeeIds));
     });
     return map;
@@ -134,7 +134,7 @@ export default function OrgKpiDataEntry() {
   const prevValuesMap = useMemo(() => {
     const map = new Map<string, number | null>();
     previousValues?.forEach(v => {
-      const key = `${v.category_id}||${v.kra_name.toLowerCase()}||${v.kpi_name.toLowerCase()}`;
+      const key = kpiKey(v.category_id, v.kra_name, v.kpi_name);
       map.set(key, v.achieved_value);
     });
     return map;
@@ -146,7 +146,7 @@ export default function OrgKpiDataEntry() {
     existingOrgValues?.forEach(v => {
       const deptPart = v.department_id || 'null';
       const empPart = v.employee_id || 'null';
-      const key = `${v.category_id}||${v.kra_name.toLowerCase()}||${v.kpi_name.toLowerCase()}||${deptPart}||${empPart}`;
+      const key = `${kpiKey(v.category_id, v.kra_name, v.kpi_name)}||${deptPart}||${empPart}`;
       map.set(key, v);
     });
     return map;
@@ -157,7 +157,7 @@ export default function OrgKpiDataEntry() {
     if (!orgLevelKpis) return [];
     if (isAdmin) return orgLevelKpis;
     return orgLevelKpis.filter(kpi => {
-      const ownerKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+      const ownerKey = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
       return ownershipMap.get(ownerKey)?.canEdit === true;
     });
   }, [orgLevelKpis, isAdmin, ownershipMap]);
