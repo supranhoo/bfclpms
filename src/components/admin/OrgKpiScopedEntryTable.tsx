@@ -561,6 +561,84 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
           />
         </TableCell>
 
+        {/* Compliance sub-factor columns */}
+        {isComplianceKpi && (
+          <>
+            {/* Policy Compliance */}
+            <TableCell className="py-1.5 w-24 text-center">
+              {rowIsNa ? <span className="text-xs text-muted-foreground">—</span> : (
+                <Select
+                  value={row.subFactors?.policy_compliance === true ? 'yes' : row.subFactors?.policy_compliance === false ? 'no' : ''}
+                  onValueChange={(val) => {
+                    const sf = { ...(row.subFactors || { policy_compliance: null, submission_date: null, submission_complete: false, submission_pending_count: 0, policy_training: null, other_observation: null }) };
+                    sf.policy_compliance = val === 'yes' ? true : val === 'no' ? false : null;
+                    onValueChange(row.scopeId, 'subFactors', JSON.stringify(sf));
+                  }}
+                >
+                  <SelectTrigger className="h-7 text-xs w-full"><SelectValue placeholder="—" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="yes">Yes</SelectItem>
+                    <SelectItem value="no">No</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </TableCell>
+            {/* Submission Date (auto) */}
+            <TableCell className="py-1.5 w-36 text-center">
+              {submissionDateInfo ? (
+                submissionDateInfo.complete ? (
+                  <span className="text-xs text-foreground flex items-center justify-center gap-1">
+                    <CheckCircle2 className="h-3 w-3 text-green-600" />
+                    {submissionDateInfo.date ? format(new Date(submissionDateInfo.date), 'dd MMM yyyy') : 'Complete'}
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground flex items-center justify-center gap-1">
+                    <Clock className="h-3 w-3 text-amber-500" />
+                    {submissionDateInfo.pendingCount} KPIs pending
+                  </span>
+                )
+              ) : (
+                <span className="text-xs text-muted-foreground">—</span>
+              )}
+            </TableCell>
+            {/* Policy Training */}
+            <TableCell className="py-1.5 w-24 text-center">
+              {rowIsNa ? <span className="text-xs text-muted-foreground">—</span> : (
+                <Select
+                  value={row.subFactors?.policy_training === true ? 'yes' : row.subFactors?.policy_training === false ? 'no' : ''}
+                  onValueChange={(val) => {
+                    const sf = { ...(row.subFactors || { policy_compliance: null, submission_date: null, submission_complete: false, submission_pending_count: 0, policy_training: null, other_observation: null }) };
+                    sf.policy_training = val === 'yes' ? true : val === 'no' ? false : null;
+                    onValueChange(row.scopeId, 'subFactors', JSON.stringify(sf));
+                  }}
+                >
+                  <SelectTrigger className="h-7 text-xs w-full"><SelectValue placeholder="—" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="yes">Yes</SelectItem>
+                    <SelectItem value="no">No</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </TableCell>
+            {/* Other Observation */}
+            <TableCell className="py-1.5 w-24 text-center">
+              {rowIsNa ? <span className="text-xs text-muted-foreground">—</span> : (
+                <Input
+                  type="number"
+                  value={row.subFactors?.other_observation ?? ''}
+                  onChange={(e) => {
+                    const sf = { ...(row.subFactors || { policy_compliance: null, submission_date: null, submission_complete: false, submission_pending_count: 0, policy_training: null, other_observation: null }) };
+                    sf.other_observation = e.target.value === '' ? null : parseFloat(e.target.value);
+                    onValueChange(row.scopeId, 'subFactors', JSON.stringify(sf));
+                  }}
+                  placeholder="—"
+                  className="h-7 text-center text-xs"
+                />
+              )}
+            </TableCell>
+          </>
+        )}
+
         {/* Achieved value */}
         <TableCell className="py-1.5 w-28">
           {rowIsNa ? (
