@@ -346,14 +346,14 @@ export default function OrgKpiDataEntry() {
 
     if (scope === 'department' && departments) {
       scopeLabel = 'Department';
-      const kpiKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
-      const mappedDeptIds = mappedDepartmentsMap.get(kpiKey);
+      const kk = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
+      const mappedDeptIds = mappedDepartmentsMap.get(kk);
       const filteredDepts = mappedDeptIds
         ? departments.filter(dept => mappedDeptIds.has(dept.id))
         : departments;
-      const kpiMappedEmpIds = mappedEmployeesMap.get(kpiKey);
+      const kpiMappedEmpIds = mappedEmployeesMap.get(kk);
       scopedRows = filteredDepts.map(dept => {
-        const scopeKey = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||${dept.id}||null`;
+        const scopeKey = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||${dept.id}||null`;
         const val = existingValuesMap.get(scopeKey);
         // Build employee names sub-text for this department
         let scopeSubText: string | undefined;
@@ -380,18 +380,18 @@ export default function OrgKpiDataEntry() {
       });
     } else if (scope === 'employee' && allProfiles) {
       scopeLabel = 'Employee';
-      const kpiKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
-      const mappedEmpIds = mappedEmployeesMap.get(kpiKey);
+      const kk2 = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
+      const mappedEmpIds = mappedEmployeesMap.get(kk2);
       const filteredEmps = mappedEmpIds
         ? allProfiles.filter(emp => mappedEmpIds.has(emp.id))
         : allProfiles;
       scopedRows = filteredEmps
         .map(emp => {
           const dept = departments?.find(d => d.id === emp.department_id);
-          const scopeKey = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||${emp.id}`;
+          const scopeKey = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||null||${emp.id}`;
           const val = existingValuesMap.get(scopeKey);
           // Per-employee target from their individual KPI record
-          const empTargetKey = `${kpiKey}||${emp.id}`;
+          const empTargetKey = `${kk2}||${emp.id}`;
           const empTarget = employeeTargetMap?.[empTargetKey];
           return {
             scopeId: emp.id,
