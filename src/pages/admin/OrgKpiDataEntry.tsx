@@ -224,16 +224,16 @@ export default function OrgKpiDataEntry() {
     if (!isAdmin) return [];
     const ownerMap = new Map<string, { ownerId: string; ownerName: string; totalKpis: number; enteredKpis: number }>();
 
-    ownershipMap.forEach((val, kpiKey) => {
+    ownershipMap.forEach((val, ownerMapKey) => {
       // Check if this KPI is in the current filtered set (frequencyFilteredKpis)
       const isInScope = frequencyFilteredKpis.some(k =>
-        kpiKey(k.category_id, k.kra_name, k.kpi_name) === ownerKpiKey
+        kpiKey(k.category_id, k.kra_name, k.kpi_name) === ownerMapKey
       );
       if (!isInScope) return;
 
       const kpiStatus = (() => {
         const kpi = frequencyFilteredKpis.find(k =>
-          kpiKey(k.category_id, k.kra_name, k.kpi_name) === ownerKpiKey
+          kpiKey(k.category_id, k.kra_name, k.kpi_name) === ownerMapKey
         );
         return kpi ? getKpiStatus(kpi) : 'pending';
       })();
