@@ -274,9 +274,13 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
     }
   };
 
-  const handleScopedChange = (scopeId: string, field: 'achievedValue' | 'remarks' | 'evidenceUrl' | 'isNa', value: string | null) => {
+  const handleScopedChange = (scopeId: string, field: 'achievedValue' | 'remarks' | 'evidenceUrl' | 'isNa' | 'subFactors', value: string | null) => {
     setScopedValues(prev => prev.map(r => {
       if (r.scopeId !== scopeId) return r;
+      if (field === 'subFactors') {
+        const sf = value ? JSON.parse(value) : null;
+        return { ...r, subFactors: sf };
+      }
       if (field === 'isNa') {
         const na = value === 'true';
         return { ...r, isNa: na, ...(na ? { achievedValue: null, remarks: '', evidenceUrl: null } : {}) };
