@@ -8,13 +8,14 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ReviewStageCard, StageStatus } from './ReviewStageCard';
 import { KPI, ReviewSubmission, KpiQuery } from '@/hooks/useKpis';
-import { User, Briefcase, Shield, MessageSquare, History, UserCheck, ClipboardCheck, AlertTriangle, Download, ChevronDown, CalendarClock } from 'lucide-react';
+import { User, Briefcase, Shield, MessageSquare, History, UserCheck, ClipboardCheck, AlertTriangle, Download, ChevronDown, CalendarClock, FileCheck } from 'lucide-react';
 import { getVisibleJourneyStages, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { UomType } from '@/lib/qualitativeUom';
 import { exportReviewTimelinePdf, ReviewTimelinePdfData } from '@/lib/pdfExport';
 import { statusLabels } from '@/lib/reviewConstants';
 import { format } from 'date-fns';
+import { isComplianceKpi, useComplianceSubFactors } from '@/hooks/useComplianceSubFactors';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -142,6 +143,17 @@ export function KpiJourneySection({
   const visibleStages = getVisibleStagesForLevel(viewLevel, effectiveStages);
   const globalIsNA = submission?.is_na || false;
   const [prevMonthsOpen, setPrevMonthsOpen] = useState(false);
+
+  // Compliance sub-factors
+  const isCompliance = isComplianceKpi(kpi.kra_name);
+  const { data: complianceData } = useComplianceSubFactors(
+    isCompliance ? kpi.employee_id : undefined,
+    isCompliance ? kpi.category_id : undefined,
+    isCompliance ? kpi.kra_name : undefined,
+    isCompliance ? kpi.kpi_name : undefined,
+    isCompliance ? kpi.review_period : undefined,
+    isCompliance ? kpi.review_year : undefined,
+  );
 
   // Compute previous 2 periods
   const prevPeriods = useMemo(
@@ -533,6 +545,42 @@ export function KpiJourneySection({
               <strong>System Auto-Advanced:</strong> {(submission as any).auto_advance_reason}
             </AlertDescription>
           </Alert>
+        )}
+
+        {/* Compliance Factors Banner */}
+        {isCompliance && complianceData?.subFactors && (
+          <div className="border rounded-lg p-3 bg-muted/30 space-y-1">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <FileCheck className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold text-muted-foreground">Compliance Factors</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-4 gap-y-1 text-xs">
+              <div>
+                <span className="text-muted-foreground">Policy Compliance: </span>
+                <span className="font-medium">{complianceData.subFactors.policy_compliance === true ? 'Yes' : complianceData.subFactors.policy_compliance === false ? 'No' : '—'}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Submission: </span>
+                <span className="font-medium">
+                  {complianceData.subFactors.submission_complete
+                    ? (complianceData.subFactors.submission_date ? format(new Date(complianceData.subFactors.submission_date), 'dd MMM yyyy') : 'Complete')
+                    : `${complianceData.subFactors.submission_pending_count} pending`}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Policy Training: </span>
+                <span className="font-medium">{complianceData.subFactors.policy_training === true ? 'Yes' : complianceData.subFactors.policy_training === false ? 'No' : '—'}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Other Obs.: </span>
+                <span className="font-medium">{complianceData.subFactors.other_observation ?? '—'}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Achieved: </span>
+                <span className="font-medium">{complianceData.achievedValue ?? '—'}</span>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Review Stages Grid */}

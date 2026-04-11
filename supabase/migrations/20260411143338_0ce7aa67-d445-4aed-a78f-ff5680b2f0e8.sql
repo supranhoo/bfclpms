@@ -1,0 +1,1 @@
+ALTER TABLE public.org_kpi_values ADD COLUMN sub_factors jsonb DEFAULT NULL;

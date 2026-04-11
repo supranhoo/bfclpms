@@ -19,6 +19,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle, RotateCcw, Trash2, Ban, Undo2 } from 'lucide-react';
 import { useSentBackOrgKpiEmployees, type SentBackInfo } from '@/hooks/useSentBackOrgKpiEmployees';
+import { isComplianceKpi, useBulkEmployeeSubmissionDates } from '@/hooks/useComplianceSubFactors';
 
 export interface OrgKpiCardData {
   categoryId: string;
@@ -132,6 +133,16 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
   );
   const effectiveSentBackMap = sentBackMap ?? internalSentBackMap;
 
+  // Compliance KPI detection + submission dates
+  const isCompliance = isComplianceKpi(data.kraName);
+  const employeeIdsForCompliance = isCompliance && isEmployeeScope ? (data.scopedRows || []).map(r => r.scopeId) : [];
+  const { data: submissionDates } = useBulkEmployeeSubmissionDates(
+    employeeIdsForCompliance,
+    reviewPeriod,
+    reviewYear,
+    isCompliance && isEmployeeScope
+  );
+
   const employeeObservations = useMemo(() => {
     if (!observationMap || observationMap.size === 0) return undefined;
     const grouped = new Map<string, KpiObservation[]>();
@@ -227,6 +238,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
             remarks: s.isNa ? '' : s.remarks,
             evidenceUrl: s.isNa ? null : s.evidenceUrl,
             isNa: s.isNa,
+            subFactors: s.subFactors,
           }))
         : undefined,
     };
@@ -263,9 +275,13 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
     }
   };
 
-  const handleScopedChange = (scopeId: string, field: 'achievedValue' | 'remarks' | 'evidenceUrl' | 'isNa', value: string | null) => {
+  const handleScopedChange = (scopeId: string, field: 'achievedValue' | 'remarks' | 'evidenceUrl' | 'isNa' | 'subFactors', value: string | null) => {
     setScopedValues(prev => prev.map(r => {
       if (r.scopeId !== scopeId) return r;
+      if (field === 'subFactors') {
+        const sf = value ? JSON.parse(value) : null;
+        return { ...r, subFactors: sf };
+      }
       if (field === 'isNa') {
         const na = value === 'true';
         return { ...r, isNa: na, ...(na ? { achievedValue: null, remarks: '', evidenceUrl: null } : {}) };
@@ -460,6 +476,8 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               onSelectionChange={setSelectedScopeIds}
               onPropagateRow={(scopeId) => handleSaveAndPropagate([scopeId])}
               isPropagating={isPropagating}
+              isComplianceKpi={isCompliance}
+              submissionDates={submissionDates}
             />
           )}
 
