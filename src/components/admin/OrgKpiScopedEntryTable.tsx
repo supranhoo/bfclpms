@@ -244,6 +244,8 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
                     totalColSpan={totalColSpan}
                     hasSelectionFeature={hasSelectionFeature}
                     hasRowPropagation={hasRowPropagation}
+                    isComplianceKpi={isComplianceKpi}
+                    submissionDates={submissionDates}
                   />
                 ))
               ) : (
