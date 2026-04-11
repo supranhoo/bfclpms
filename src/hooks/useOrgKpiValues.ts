@@ -229,6 +229,7 @@ export function useBulkUpsertOrgKpiValues() {
       criteria?: string;
       evidence_url?: string | null;
       is_na?: boolean;
+      sub_factors?: any;
     }>) => {
       // For scoped values, we need to handle the unique constraint properly
       // Insert/update each value individually to handle the complex unique index
@@ -277,6 +278,7 @@ export function useBulkUpsertOrgKpiValues() {
               criteria: value.criteria,
               evidence_url: value.evidence_url,
               is_na: value.is_na,
+              ...(value.sub_factors !== undefined ? { sub_factors: value.sub_factors } : {}),
             })
             .eq('id', existing.id)
             .select()
@@ -310,6 +312,7 @@ export function useBulkUpsertOrgKpiValues() {
                   criteria: value.criteria,
                   evidence_url: value.evidence_url,
                   is_na: value.is_na,
+                  ...(value.sub_factors !== undefined ? { sub_factors: value.sub_factors } : {}),
                 })
                 .eq('category_id', value.category_id)
                 .eq('kra_name', value.kra_name)
