@@ -238,6 +238,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
             remarks: s.isNa ? '' : s.remarks,
             evidenceUrl: s.isNa ? null : s.evidenceUrl,
             isNa: s.isNa,
+            subFactors: s.subFactors,
           }))
         : undefined,
     };
