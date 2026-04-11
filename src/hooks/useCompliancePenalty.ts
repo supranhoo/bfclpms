@@ -305,7 +305,7 @@ export function useBulkCompliancePenalty() {
               management_rating: 'red' as const,
               final_score: 0,
               final_rating: 'red' as const,
-              kpi_status: 'submitted',
+              kpi_status: 'submitted' as const,
               auto_advance_reason: 'Compliance penalty: self-review not completed by deadline',
             };
 
@@ -352,7 +352,7 @@ export function useBulkCompliancePenalty() {
                 : remark,
               final_score: 0,
               final_rating: 'red' as const,
-              kpi_status: 'submitted',
+              kpi_status: 'submitted' as const,
               auto_advance_reason: 'Compliance penalty: employee did not complete all self-reviews by deadline',
             };
 
