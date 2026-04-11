@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-11  
-> **Version:** 2.33.11 — Bug Fix: Compliance sub-factors save guard now allows sub_factors-only saves; uses strict undefined check
+> **Version:** 2.33.12 — Bug Fix: OrgKpiEntryCard secondary useEffect merges sub_factors from DB after async query load; prevents stale state from hiding persisted compliance factors
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

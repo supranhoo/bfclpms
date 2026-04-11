@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-11  
-> **Version:** 1.92.10 — §83 Compliance sub-factors: save guard bypass + strict undefined check prevents data loss
+> **Version:** 1.92.11 — §84 Compliance sub-factors: secondary merge effect ensures DB sub_factors load into UI after async query completes
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

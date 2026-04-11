@@ -223,6 +223,39 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.achievedValue, data.remarks, data.evidenceUrl, data.categoryId, data.kraName, data.kpiName, reviewPeriod, reviewYear]);
 
+  // Secondary effect: merge subFactors (and achievedValue) from DB when scopedRows update after initial load
+  useEffect(() => {
+    if (!data.scopedRows?.length) return;
+    // Don't overwrite active user edits
+    if (isDirtyRef.current) return;
+    setScopedValues(prev => {
+      if (!prev.length) return data.scopedRows!;
+      let changed = false;
+      const merged = prev.map(row => {
+        const dbRow = data.scopedRows!.find(r => r.scopeId === row.scopeId);
+        if (!dbRow) return row;
+        const needsMerge =
+          (row.subFactors === undefined && dbRow.subFactors !== undefined) ||
+          (row.achievedValue === null && dbRow.achievedValue !== null) ||
+          (row.remarks === '' && dbRow.remarks) ||
+          (row.evidenceUrl === null && dbRow.evidenceUrl !== null);
+        if (needsMerge) {
+          changed = true;
+          return {
+            ...row,
+            subFactors: row.subFactors ?? dbRow.subFactors,
+            achievedValue: row.achievedValue ?? dbRow.achievedValue,
+            remarks: row.remarks || dbRow.remarks,
+            evidenceUrl: row.evidenceUrl ?? dbRow.evidenceUrl,
+          };
+        }
+        return row;
+      });
+      return changed ? merged : prev;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.scopedRows]);
+
   const getValues = useCallback(() => {
     const parsed = achievedValueRef.current === '' ? null : parseFloat(achievedValueRef.current);
     return {
