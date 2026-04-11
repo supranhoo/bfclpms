@@ -133,6 +133,16 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
   );
   const effectiveSentBackMap = sentBackMap ?? internalSentBackMap;
 
+  // Compliance KPI detection + submission dates
+  const isCompliance = isComplianceKpi(data.kraName);
+  const employeeIdsForCompliance = isCompliance && isEmployeeScope ? (data.scopedRows || []).map(r => r.scopeId) : [];
+  const { data: submissionDates } = useBulkEmployeeSubmissionDates(
+    employeeIdsForCompliance,
+    reviewPeriod,
+    reviewYear,
+    isCompliance && isEmployeeScope
+  );
+
   const employeeObservations = useMemo(() => {
     if (!observationMap || observationMap.size === 0) return undefined;
     const grouped = new Map<string, KpiObservation[]>();
