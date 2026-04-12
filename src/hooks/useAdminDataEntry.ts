@@ -621,27 +621,28 @@ function buildCascadeClearFields(target_status: Database['public']['Enums']['rev
 
   if (targetIdx < FULL_STATUS_ORDER.indexOf('self_review')) {
     clearFields.self_rating = null; clearFields.self_score = null; clearFields.self_remarks = null;
-    clearFields.self_evidence_url = null; clearFields.achieved_value = null;
+    clearFields.self_evidence_url = null; clearFields.self_evidence_urls = null; clearFields.achieved_value = null;
+    clearFields.auto_advance_reason = null;
   }
   if (targetIdx <= FULL_STATUS_ORDER.indexOf('manager_check')) {
     clearFields.manager_rating = null; clearFields.manager_score = null; clearFields.manager_remarks = null;
-    clearFields.manager_evidence_url = null; clearFields.manager_achieved_value = null;
+    clearFields.manager_evidence_url = null; clearFields.manager_evidence_urls = null; clearFields.manager_achieved_value = null;
   }
   if (targetIdx <= FULL_STATUS_ORDER.indexOf('skip_level_check')) {
     clearFields.skip_level_rating = null; clearFields.skip_level_score = null; clearFields.skip_level_remarks = null;
-    clearFields.skip_level_evidence_url = null; clearFields.skip_level_achieved_value = null;
+    clearFields.skip_level_evidence_url = null; clearFields.skip_level_evidence_urls = null; clearFields.skip_level_achieved_value = null;
   }
   if (targetIdx <= FULL_STATUS_ORDER.indexOf('hr_pms_review')) {
     clearFields.hr_pms_rating = null; clearFields.hr_pms_score = null; clearFields.hr_pms_remarks = null;
-    clearFields.hr_pms_evidence_url = null; clearFields.hr_pms_achieved_value = null;
+    clearFields.hr_pms_evidence_url = null; clearFields.hr_pms_evidence_urls = null; clearFields.hr_pms_achieved_value = null;
   }
   if (targetIdx <= FULL_STATUS_ORDER.indexOf('audit')) {
     clearFields.auditor_rating = null; clearFields.auditor_score = null; clearFields.auditor_remarks = null;
-    clearFields.auditor_evidence_url = null; clearFields.auditor_achieved_value = null;
+    clearFields.auditor_evidence_url = null; clearFields.auditor_evidence_urls = null; clearFields.auditor_achieved_value = null;
   }
   if (targetIdx <= FULL_STATUS_ORDER.indexOf('management_review')) {
     clearFields.management_rating = null; clearFields.management_score = null; clearFields.management_remarks = null;
-    clearFields.management_evidence_url = null; clearFields.management_achieved_value = null;
+    clearFields.management_evidence_url = null; clearFields.management_evidence_urls = null; clearFields.management_achieved_value = null;
   }
   if (target_status !== 'approved') {
     clearFields.final_rating = null; clearFields.final_score = null;
