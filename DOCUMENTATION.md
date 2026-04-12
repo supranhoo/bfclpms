@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-04-11  
-> **Version:** 2.33.14 — Compliance sub_factors now persist live submission dates at save time; review journey prioritizes date display over pending count
+> **Last Updated:** 2026-04-12  
+> **Version:** 2.33.15 — Cascade step-back now clears auto_advance_reason and multi-file evidence_urls arrays
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
