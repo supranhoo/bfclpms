@@ -1,50 +1,63 @@
 
 
-## Updated Plan: Submission Date Display Logic in Review Journey
+## RCA: Admin Data Entry Remarks Not Shown in Review Journey Tiles
 
-### Updated Requirement
-- **Show submission date** when self-review is complete
-- **Show pending count** only if self-review is NOT done by the last day of the month
-- Never show "0 pending" — if complete, always show the date (or "Complete" if date is missing)
+### Database Evidence (Employee 101943, March 2026)
 
-### Changes
+| Time | Action | Effect |
+|------|--------|--------|
+| 08:52:31 | ADMIN_DATA_ENTRY_MANAGER | manager_remarks set, auto_advance_reason = "on behalf of manager", status → manager_check |
+| 08:53:22 | ADMIN_STATUS_OVERRIDE | Status → kra_set. **Cascade clear nullifies all scores/remarks BUT does NOT clear `auto_advance_reason`** |
+| 08:55:40 | ADMIN_DATA_ENTRY_SELF | self_remarks = "as per tracker", auto_advance_reason overwritten to "on behalf of self" |
+| 08:56:21 | STATUS_TRANSITION | Status → manager_check (re-entry of manager data) |
+
+**Current DB state:** status=manager_check, self_remarks='as per tracker', manager_remarks='as per tracker, self review entry was made through admin'. Data IS present.
+
+### Root Cause: Two Issues
+
+**Issue 1: `auto_advance_reason` not cleared during cascade step-back**
+
+In `useAdminDataEntry.ts`, `buildCascadeClearFields()` (line 614-651) clears all scores, ratings, remarks, and evidence fields when stepping back — but **does not** clear `auto_advance_reason`. Only `buildFullResetFields()` (line 607) clears it.
+
+This creates an inconsistent state where the "System Auto-Advanced" banner still displays despite all tile data being nullified. The user sees the banner but all tiles show "Pending" with "No remarks" — making it appear as if entered remarks disappeared.
+
+**Issue 2: `self_evidence_urls` not cleared in cascade step-back**
+
+`buildCascadeClearFields` clears `self_evidence_url` (singular) but does NOT clear `self_evidence_urls` (the multi-file array column). Same issue for other stage evidence_urls arrays (skip_level, hr_pms, etc.).
+
+### Fix Plan
 
 | # | File | Change |
 |---|------|--------|
-| 1 | `src/components/review/KpiJourneySection.tsx` | Update display logic at line 565-567 |
-| 2 | `src/components/admin/OrgKpiEntryCard.tsx` | Merge submission data into sub_factors at save time (from original plan) |
-| 3 | `src/components/admin/OrgKpiScopedEntryTable.tsx` | Use live submission info for sub_factors defaults (from original plan) |
-| 4 | `DOCUMENTATION.md` | Update |
-| 5 | `POLICY.md` | Version sync |
+| 1 | `src/hooks/useAdminDataEntry.ts` | Add `auto_advance_reason: null` to `buildCascadeClearFields` when target is before `self_review` |
+| 2 | `src/hooks/useAdminDataEntry.ts` | Add missing `*_evidence_urls` (array) clear fields alongside existing `*_evidence_url` (singular) fields in `buildCascadeClearFields` |
+| 3 | `DOCUMENTATION.md` | Document fix |
+| 4 | `POLICY.md` | Version sync |
 
 ### Technical Detail
 
-**Display logic change** (KpiJourneySection.tsx line 565-567):
-
-Current:
+**Fix 1 — Clear auto_advance_reason** (in `buildCascadeClearFields`, after line 625):
 ```typescript
-{complianceData.subFactors.submission_complete
-  ? (submission_date ? format(...) : 'Complete')
-  : `${submission_pending_count} pending`}
+if (targetIdx < FULL_STATUS_ORDER.indexOf('self_review')) {
+  clearFields.self_rating = null; clearFields.self_score = null; clearFields.self_remarks = null;
+  clearFields.self_evidence_url = null; clearFields.self_evidence_urls = null; // Fix 2
+  clearFields.achieved_value = null;
+  clearFields.auto_advance_reason = null; // Fix 1
+}
 ```
 
-New:
+**Fix 2 — Clear multi-file evidence arrays** for each stage block:
 ```typescript
-{complianceData.subFactors.submission_date
-  ? format(new Date(complianceData.subFactors.submission_date), 'dd MMM yyyy')
-  : complianceData.subFactors.submission_complete
-    ? 'Complete'
-    : `${complianceData.subFactors.submission_pending_count} pending`}
+// In each cascade stage, add the _urls array alongside the singular _url:
+clearFields.manager_evidence_urls = null;
+clearFields.skip_level_evidence_urls = null;
+clearFields.hr_pms_evidence_urls = null;
+clearFields.auditor_evidence_urls = null;
+clearFields.management_evidence_urls = null;
 ```
-
-Logic:
-1. If `submission_date` exists → show formatted date
-2. Else if `submission_complete` is true → show "Complete"
-3. Else → show pending count (only when self-review genuinely not done)
-
-**Save-time merge** and **default initialization** changes remain identical to the previously approved plan — merging live `submissionDates` hook data into `sub_factors` at save time in `OrgKpiEntryCard.tsx`, and using live info for defaults in `OrgKpiScopedEntryTable.tsx`.
 
 ### Risk Assessment
-- **Data impact**: None — display-only change + additive save merge
-- **Regression risk**: None — submission_date priority is strictly better than current logic
+- **Data impact**: None — only affects null-clearing during step-back operations
+- **Regression risk**: Low — additive null assignments that match existing full-reset behavior
+- **UI/UX**: Auto-advance banner will no longer display misleadingly after a step-back; evidence arrays properly cleaned up
 
