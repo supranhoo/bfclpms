@@ -17,12 +17,14 @@ const ORG_KPI_QUERY_KEYS = [
 
 const DEBOUNCE_MS = 500;
 
-export function useRealtimeKpiSync() {
+export function useRealtimeKpiSync(enabled: boolean = true) {
   const queryClient = useQueryClient();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingKeysRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
+    if (!enabled) return;
+
     function scheduleInvalidation(keys: string[]) {
       keys.forEach((k) => pendingKeysRef.current.add(k));
 
@@ -60,5 +62,5 @@ export function useRealtimeKpiSync() {
       if (timerRef.current) clearTimeout(timerRef.current);
       supabase.removeChannel(channel);
     };
-  }, [queryClient]);
+  }, [queryClient, enabled]);
 }

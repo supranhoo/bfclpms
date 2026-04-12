@@ -56,6 +56,7 @@ export function useNotifications() {
           // Invalidate and refetch when new notification arrives
           queryClient.invalidateQueries({ queryKey: ['notifications', user.id] });
           queryClient.invalidateQueries({ queryKey: ['unread-notification-count', user.id] });
+          queryClient.invalidateQueries({ queryKey: ['paginated-notifications', user.id] });
         }
       )
       .subscribe();
@@ -86,7 +87,8 @@ export function useUnreadNotificationCount() {
       return count || 0;
     },
     enabled: !!user?.id,
-    refetchInterval: 30000, // Refetch every 30 seconds as backup
+    refetchInterval: 120_000, // Refetch every 120 seconds as backup (realtime handles instant updates)
+    refetchOnWindowFocus: true,
   });
 }
 

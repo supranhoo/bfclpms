@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-12  
-> **Version:** 2.33.15 — Cascade step-back now clears auto_advance_reason and multi-file evidence_urls arrays
+> **Version:** 2.33.16 — Cloud billing optimization: polling intervals 30s→120s, merged duplicate notification realtime channels, added enabled guard to useRealtimeKpiSync
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

@@ -21,6 +21,7 @@ export function useOpenQueryCount() {
       return count || 0;
     },
     enabled: !!user?.id,
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: 120_000, // Refresh every 120 seconds (reduced from 30s for cost optimization)
+    refetchOnWindowFocus: true,
   });
 }
