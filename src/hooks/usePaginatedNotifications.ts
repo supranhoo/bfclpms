@@ -142,34 +142,8 @@ export function usePaginatedNotifications(options: UsePaginatedNotificationsOpti
     }
   }, [hasMore, query.isFetching]);
 
-  // Subscribe to realtime notifications
-  useEffect(() => {
-    if (!user?.id) return;
-
-    const channel = supabase
-      .channel('notifications-paginated-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${user.id}`,
-        },
-        () => {
-          // Reset pagination and refetch on new notification
-          setPage(0);
-          setAllItems([]);
-          queryClient.invalidateQueries({ queryKey: ['paginated-notifications', user.id] });
-          queryClient.invalidateQueries({ queryKey: ['unread-notification-count', user.id] });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user?.id, queryClient]);
+  // Realtime notifications are handled by the shared channel in useNotifications.ts
+  // which invalidates 'paginated-notifications' query key — no duplicate channel needed
 
   return {
     notifications: allItems,

@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-12  
-> **Version:** 1.92.14 — §86 Cascade step-back clears auto_advance_reason when target < self_review; clears *_evidence_urls arrays alongside singular fields
+> **Version:** 1.92.15 — §87 Cloud billing optimization: reduced polling intervals, merged duplicate realtime channels
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
