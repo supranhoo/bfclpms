@@ -1,63 +1,49 @@
 
 
-## RCA: Admin Data Entry Remarks Not Shown in Review Journey Tiles
+## Plan: Optimize Cloud Billing — Reduce Polling, Merge Channels, Add Page Guards
 
-### Database Evidence (Employee 101943, March 2026)
+### Problem
+Four concurrent realtime channels per session + aggressive 30s polling across all pages are driving unnecessary Cloud compute and bandwidth costs.
 
-| Time | Action | Effect |
-|------|--------|--------|
-| 08:52:31 | ADMIN_DATA_ENTRY_MANAGER | manager_remarks set, auto_advance_reason = "on behalf of manager", status → manager_check |
-| 08:53:22 | ADMIN_STATUS_OVERRIDE | Status → kra_set. **Cascade clear nullifies all scores/remarks BUT does NOT clear `auto_advance_reason`** |
-| 08:55:40 | ADMIN_DATA_ENTRY_SELF | self_remarks = "as per tracker", auto_advance_reason overwritten to "on behalf of self" |
-| 08:56:21 | STATUS_TRANSITION | Status → manager_check (re-entry of manager data) |
-
-**Current DB state:** status=manager_check, self_remarks='as per tracker', manager_remarks='as per tracker, self review entry was made through admin'. Data IS present.
-
-### Root Cause: Two Issues
-
-**Issue 1: `auto_advance_reason` not cleared during cascade step-back**
-
-In `useAdminDataEntry.ts`, `buildCascadeClearFields()` (line 614-651) clears all scores, ratings, remarks, and evidence fields when stepping back — but **does not** clear `auto_advance_reason`. Only `buildFullResetFields()` (line 607) clears it.
-
-This creates an inconsistent state where the "System Auto-Advanced" banner still displays despite all tile data being nullified. The user sees the banner but all tiles show "Pending" with "No remarks" — making it appear as if entered remarks disappeared.
-
-**Issue 2: `self_evidence_urls` not cleared in cascade step-back**
-
-`buildCascadeClearFields` clears `self_evidence_url` (singular) but does NOT clear `self_evidence_urls` (the multi-file array column). Same issue for other stage evidence_urls arrays (skip_level, hr_pms, etc.).
-
-### Fix Plan
+### Changes
 
 | # | File | Change |
 |---|------|--------|
-| 1 | `src/hooks/useAdminDataEntry.ts` | Add `auto_advance_reason: null` to `buildCascadeClearFields` when target is before `self_review` |
-| 2 | `src/hooks/useAdminDataEntry.ts` | Add missing `*_evidence_urls` (array) clear fields alongside existing `*_evidence_url` (singular) fields in `buildCascadeClearFields` |
-| 3 | `DOCUMENTATION.md` | Document fix |
-| 4 | `POLICY.md` | Version sync |
+| 1 | `src/hooks/useNotifications.ts` | Increase `refetchInterval` from 30s → 120s in `useUnreadNotificationCount` |
+| 2 | `src/hooks/useOpenQueryCount.ts` | Increase `refetchInterval` from 30s → 120s |
+| 3 | `src/hooks/usePaginatedNotifications.ts` | Remove the duplicate `notifications-paginated-realtime` channel subscription entirely — the `useNotifications.ts` channel already handles invalidation of the same query keys |
+| 4 | `src/hooks/useNotifications.ts` | Expand the existing `notifications-realtime` channel handler to also invalidate `paginated-notifications` query key (replacing the removed channel) |
+| 5 | `src/hooks/useRealtimeKpiSync.ts` | Accept an optional `enabled` parameter (default `true`). When `false`, skip channel subscription. |
+| 6 | `src/components/layout/DashboardLayout.tsx` | No change needed — `useRealtimeKpiSync` stays global since KPI data is used across most pages |
+| 7 | `src/hooks/useOpenQueryCount.ts` | Add `refetchOnWindowFocus: true` to compensate for the longer polling interval — users get fresh data when they tab back |
+| 8 | `src/hooks/useNotifications.ts` | Add `refetchOnWindowFocus: true` to `useUnreadNotificationCount` for the same reason |
+| 9 | `DOCUMENTATION.md` | Document optimization changes |
+| 10 | `POLICY.md` | Version sync |
 
 ### Technical Detail
 
-**Fix 1 — Clear auto_advance_reason** (in `buildCascadeClearFields`, after line 625):
+**Polling interval changes** — Simple constant updates:
 ```typescript
-if (targetIdx < FULL_STATUS_ORDER.indexOf('self_review')) {
-  clearFields.self_rating = null; clearFields.self_score = null; clearFields.self_remarks = null;
-  clearFields.self_evidence_url = null; clearFields.self_evidence_urls = null; // Fix 2
-  clearFields.achieved_value = null;
-  clearFields.auto_advance_reason = null; // Fix 1
-}
+// useNotifications.ts & useOpenQueryCount.ts
+refetchInterval: 120_000, // Was 30_000
+refetchOnWindowFocus: true,
 ```
 
-**Fix 2 — Clear multi-file evidence arrays** for each stage block:
+**Channel merge** — Remove the entire `useEffect` block in `usePaginatedNotifications.ts` (lines ~140-165) that creates the `notifications-paginated-realtime` channel. Update the existing channel in `useNotifications.ts` to also invalidate paginated queries:
 ```typescript
-// In each cascade stage, add the _urls array alongside the singular _url:
-clearFields.manager_evidence_urls = null;
-clearFields.skip_level_evidence_urls = null;
-clearFields.hr_pms_evidence_urls = null;
-clearFields.auditor_evidence_urls = null;
-clearFields.management_evidence_urls = null;
+// In useNotifications.ts realtime handler
+queryClient.invalidateQueries({ queryKey: ['notifications', user.id] });
+queryClient.invalidateQueries({ queryKey: ['unread-notification-count', user.id] });
+queryClient.invalidateQueries({ queryKey: ['paginated-notifications', user.id] });
 ```
+
+### Impact Summary
+- **Channels per session**: 4 → 3 (one duplicate removed)
+- **Polling queries**: ~4 queries/min → ~1 query/min per hook (4x reduction)
+- **Data freshness**: Realtime still provides instant notification delivery; polling is backup only. Window focus refetch ensures stale tabs catch up immediately.
 
 ### Risk Assessment
-- **Data impact**: None — only affects null-clearing during step-back operations
-- **Regression risk**: Low — additive null assignments that match existing full-reset behavior
-- **UI/UX**: Auto-advance banner will no longer display misleadingly after a step-back; evidence arrays properly cleaned up
+- **Data impact**: None — read-only polling changes
+- **Regression risk**: Low — realtime still handles instant updates; polling is just a fallback
+- **UX impact**: Negligible — users see new notifications via realtime instantly; the 120s interval only matters if the WebSocket drops
 
