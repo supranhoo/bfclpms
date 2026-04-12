@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
-> **Last Updated:** 2026-04-11  
-> **Version:** 1.92.13 — §85 Compliance sub_factors persist live submission dates; review journey shows date (not pending count) when self-review is complete
+> **Last Updated:** 2026-04-12  
+> **Version:** 1.92.14 — §86 Cascade step-back clears auto_advance_reason when target < self_review; clears *_evidence_urls arrays alongside singular fields
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
