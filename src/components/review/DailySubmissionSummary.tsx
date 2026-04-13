@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Calendar, Check, X, AlertTriangle, Edit2, Paperclip } from 'lucide-react';
-import { openStorageFile } from '@/lib/storageDownload';
+import { openStorageFile, buildEvidenceFileName } from '@/lib/storageDownload';
 import { SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { QualitativeOption, BINARY_OPTIONS } from '@/lib/qualitativeUom';
 import { getMonthNumber } from '@/lib/frequencyUtils';
@@ -13,16 +13,15 @@ import { cn } from '@/lib/utils';
 
 interface DailySubmissionSummaryProps {
   kpiId: string;
+  kpiName?: string | null;
   reviewMonth: string;
   reviewYear: number;
   submissions: SubPeriodSubmission[];
   uom?: string | null;
   uomType?: string | null;
   qualitativeOptions?: QualitativeOption[] | null;
-  compact?: boolean; // Inline display mode with reduced styling
-  // Manager override display props (legacy - for live editing preview)
-  managerOverrides?: Map<string, number>; // date -> new value
-  // KPI status to determine which reviewer columns to show
+  compact?: boolean;
+  managerOverrides?: Map<string, number>;
   kpiStatus?: string | null;
 }
 
@@ -344,7 +343,7 @@ export function DailySubmissionSummary({
                       return (
                         <button
                           type="button"
-                          onClick={() => urls.forEach(url => openStorageFile(url))}
+                          onClick={() => urls.forEach((url, i) => openStorageFile(url, buildEvidenceFileName(url, kpiName, `Day_${submission.sub_period_key}`, i, urls.length)))}
                           className="inline-flex items-center gap-0.5 text-primary hover:underline mx-auto"
                           title={`${urls.length} file(s) attached`}
                         >

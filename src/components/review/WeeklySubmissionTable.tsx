@@ -55,6 +55,7 @@ interface WeekEntry {
 
 export function WeeklySubmissionTable({
   kpiId,
+  kpiName,
   reviewMonth,
   reviewYear,
   submissions,
@@ -326,7 +327,7 @@ export function WeeklySubmissionTable({
                       {entry.evidenceUrls.length > 0 && (
                         <button
                           type="button"
-                          onClick={() => entry.evidenceUrls.forEach(url => openStorageFile(url))}
+                          onClick={() => entry.evidenceUrls.forEach((url, i) => openStorageFile(url, buildEvidenceFileName(url, kpiName, `Week_${entry.weekNum}`, i, entry.evidenceUrls.length)))}
                           className="inline-flex items-center gap-0.5 text-primary hover:underline shrink-0"
                           title={`${entry.evidenceUrls.length} file(s) attached`}
                         >

@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, ChevronRight, Check, CheckCheck, Users, AlertCircle, Target, Building2, FileText, Paperclip, User } from 'lucide-react';
 import { OrgKpiAuditGroup, OrgKpiAuditEmployee } from '@/hooks/useOrgKpiAuditReview';
-import { openStorageFile } from '@/lib/storageDownload';
+import { openStorageFile, buildEvidenceFileName } from '@/lib/storageDownload';
 
 interface OrgKpiAuditCardProps {
   group: OrgKpiAuditGroup;
@@ -201,7 +201,7 @@ export function OrgKpiAuditCard({ group, onSubmitScore, onBulkApprove, isSubmitt
                                 <button
                                   key={i}
                                   className="text-xs text-primary hover:underline flex items-center gap-0.5"
-                                  onClick={(e) => { e.stopPropagation(); openStorageFile(url); }}
+                                  onClick={(e) => { e.stopPropagation(); openStorageFile(url, buildEvidenceFileName(url, group.kpiTitle, 'Org_KPI', i, urls.length)); }}
                                 >
                                   <FileText className="h-3 w-3" />
                                   {filename.length > 25 ? filename.slice(0, 22) + '...' : filename}
