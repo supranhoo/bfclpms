@@ -1615,3 +1615,9 @@ If `sub_factors` is null, the compliance factors banner is hidden. Existing KPIs
 ## §84 — Multi-Period Scorecard Display (v1.95.0)
 
 When users select YTD, QTD, or Custom period modes, the UnifiedScorecard displays KPIs from all months in the selected range. In multi-month mode, the scorecard is **read-only** — all review actions (approve, send-back, submit, raise query) are disabled. Reviewers must switch to single-month mode to perform workflow actions. This prevents cross-period approval errors since workflow stages and submissions are period-specific.
+
+---
+
+## §85 — Admin Edge Function Invocation Standard (v1.96.0)
+
+All admin-only edge functions **must** be invoked via `invokeAdminEdgeFunction()` from `src/lib/adminEdgeFunction.ts`, which uses explicit `fetch` with `Authorization: Bearer <token>` and `apikey` headers. The Supabase SDK's `supabase.functions.invoke()` method **must not** be used for admin functions, as it may strip or fail to forward the Authorization header, resulting in 401 errors. This policy was established after the Password Rollout 401 incident (v2.34.0).
