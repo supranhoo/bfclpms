@@ -16,6 +16,7 @@ interface InboxDetailSheetProps {
   onRespond?: (item: InboxItem) => void;
   onAccept?: (item: InboxItem) => void;
   currentUserId?: string;
+  currentRole?: string;
 }
 
 export function InboxDetailSheet({
@@ -26,6 +27,7 @@ export function InboxDetailSheet({
   onRespond,
   onAccept,
   currentUserId,
+  currentRole,
 }: InboxDetailSheetProps) {
   if (!item) return null;
 
@@ -33,7 +35,7 @@ export function InboxDetailSheet({
   const isRecipient = item.toUser?.id === currentUserId;
   const isRaiser = item.fromUser?.id === currentUserId;
 
-  const navigationPath = getNotificationNavigationPath(item, currentUserId);
+  const navigationPath = getNotificationNavigationPath(item, currentUserId, currentRole);
 
   // Explicit fallback for @mention notifications (no IIFE)
   let effectiveNavigationPath: string | null = navigationPath;

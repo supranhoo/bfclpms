@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-13  
-> **Version:** 2.41.0 — Observation reply notifications now include employee_id in metadata, fixing "Open in App" navigation to correctly deep-link to the employee's KPI view
+> **Version:** 2.42.0 — Observation notification "Open in App" now role-aware: admins/reviewers open the target employee's KPI scorecard (not their own dashboard). Backfilled existing notifications. All observation triggers (raised/reply/resolved) now include employee_id in metadata.
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
