@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-13  
-> **Version:** 2.40.0 — Copy KRAs now preserves org KPI infrastructure: invalidates org KPI caches and creates org_kpi_values placeholder rows for employee-scoped org KPIs
+> **Version:** 2.41.0 — Observation reply notifications now include employee_id in metadata, fixing "Open in App" navigation to correctly deep-link to the employee's KPI view
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
