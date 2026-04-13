@@ -489,6 +489,29 @@ export function UnifiedScorecard({
     }
   }, [isSelfMode, autoOpenKpiId, kpis, allKpis, isLoading]);
 
+  // Auto-open KPI from deep link (reviewer/admin mode)
+  useEffect(() => {
+    if (isSelfMode || !autoOpenKpiId || !allKpis || isLoading) return;
+    const targetKpi = kpis?.find(k => k.id === autoOpenKpiId);
+    if (targetKpi) {
+      setSelectedKpi(targetKpi);
+      setReviewSheetOpen(true);
+      return;
+    }
+    // KPI may belong to a different period — switch period so it appears
+    const match = allKpis.find(k => k.id === autoOpenKpiId);
+    if (match?.review_period && match.review_year != null) {
+      onPeriodSelectionChange({
+        ...periodSelection,
+        mode: 'single' as const,
+        selectedMonth: match.review_period,
+        selectedYear: match.review_year,
+        months: [match.review_period],
+        periodRanges: [{ month: match.review_period, year: match.review_year }],
+      });
+    }
+  }, [isSelfMode, autoOpenKpiId, kpis, allKpis, isLoading]);
+
   const queryMap = useMemo(() => {
     const map = new Map<string, KpiQuery[]>();
     queries?.forEach(q => {
