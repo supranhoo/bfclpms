@@ -1,33 +1,65 @@
 
+## RCA
 
-## RCA: Password Rollout 401 Unauthorized
+- The screenshot is from `/admin/users` → **Reset Password** → **Set New Password**.
+- The earlier fix was for **`password-rollout`**, not this **`reset-password`** flow.
+- Confirmed in code:
+  - `src/pages/admin/UserManagement.tsx` still calls `supabase.functions.invoke('reset-password')` for both:
+    - Generate Reset Link
+    - Set New Password
+  - `supabase/functions/reset-password/index.ts` still uses the older `supabaseAdmin.auth.getUser(token)` auth pattern.
+  - `supabase/config.toml` still has `[functions.reset-password] verify_jwt = true`, which is inconsistent with the project’s admin-edge standard.
 
-### Root Cause
+Do I know what the issue is? Yes.
 
-The `usePasswordRolloutMutation` hook invokes the edge function via `supabase.functions.invoke()` (SDK method), while the project's own security policy documents that **SDK-level invocation can strip or fail to forward the `Authorization` header reliably**.
+The feature is still failing because this is a separate admin auth path that was never migrated to the project-standard pattern. So the previous fix worked for `password-rollout`, but `/admin/users` password reset is still using the old client invocation and old edge-function auth logic.
 
-All other admin edge functions in this project use `invokeAdminEdgeFunction()` from `src/lib/adminEdgeFunction.ts`, which explicitly sets `Authorization: Bearer <token>` and `apikey` headers via raw `fetch`. The password-rollout function is the only admin function still using the SDK invoke pattern.
+## Risk & Impact Report
 
-The edge function logs confirm: the function boots but produces zero application-level logs — meaning the request hits the `!authHeader` check at line 161 and returns 401 immediately, before any business logic runs.
+- **Data impact:** None. No schema or RLS changes needed.
+- **Workflow impact:** Restores admin password reset actions only.
+- **UI/UX impact:** No layout changes; only removes the failing error state.
+- **Regression risk:** Medium, because `/admin/users` contains other admin edge calls with similar patterns.
+- **Mitigation:** Keep request/response contracts unchanged, add targeted tests, and audit sibling admin actions on the same page for the same auth anti-pattern.
 
-### Fix
+## Fix Plan
 
-**File: `src/hooks/usePasswordRollout.ts`** — Replace `supabase.functions.invoke` with `invokeAdminEdgeFunction`:
+1. **Update the client call in `src/pages/admin/UserManagement.tsx`**
+   - Replace both `supabase.functions.invoke('reset-password')` usages with `invokeAdminEdgeFunction()`.
+   - Keep the same payloads:
+     - `{ email, action: 'generate_link' }`
+     - `{ email, newPassword, action: 'set_password' }`
 
-```typescript
-import { invokeAdminEdgeFunction } from '@/lib/adminEdgeFunction';
+2. **Refactor `supabase/functions/reset-password/index.ts`**
+   - Replace the inline token validation with the shared `requireAdminUser(req)` helper.
+   - Use the returned `auth.user` and `auth.adminClient` instead of validating with the service-role client directly.
+   - Preserve existing validation, link generation, and password update behavior.
 
-// In mutationFn:
-const data = await invokeAdminEdgeFunction<{
-  total: number; succeeded: number; failed: number; details: any[];
-}>('password-rollout', { user_ids: userIds, send_email: sendEmail });
-return data;
-```
+3. **Align edge-function config**
+   - Update `supabase/config.toml` so `[functions.reset-password] verify_jwt = false`.
+   - This makes the function consistent with the project’s standard “validate JWT in code” admin model.
 
-**File: `DOCUMENTATION.md` / `POLICY.md`** — Version bump and changelog entry.
+4. **Regression hardening**
+   - Audit the other admin edge calls used from `/admin/users` (especially `update-user-email`) for the same outdated invoke/auth combination.
+   - If they use the same pattern, align them in the same pass to avoid the next identical bug.
 
-### Risk Assessment
-- **Data impact**: None
-- **Regression risk**: None — aligns with the pattern every other admin function already uses
-- **Fix confidence**: High — this is the exact same fix applied to other admin functions previously
+5. **Tests and mock coverage**
+   - Extend client-side tests to verify reset-password admin calls forward `Authorization` and `apikey` explicitly.
+   - Add edge-function auth tests for:
+     - missing/invalid token
+     - non-admin user
+     - valid admin request
+   - Add minimal mock request/response fixtures for:
+     - generate reset link
+     - set new password
 
+6. **Documentation sync**
+   - Update `DOCUMENTATION.md` with the RCA and the reset-password fix.
+   - Update `POLICY.md` so admin password reset is explicitly covered by the admin edge-function invocation standard.
+
+## Expected Result
+
+- **Generate Reset Link** works again.
+- **Set New Password** works again.
+- The 401 / “Invalid token” / non-2xx error disappears for authenticated admins.
+- The admin password reset flow becomes consistent with the already-fixed `password-rollout` pattern and is protected by tests.
