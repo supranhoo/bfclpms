@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-13  
-> **Version:** 2.36.0 — Password Rollout edge function aligned to requireAdminUser shared helper (matches reset-password, update-user-email)
+> **Version:** 2.37.0 — ProfileSettingsTab migrated from supabase.functions.invoke to invokeAdminEdgeFunction for update-user-profile (email, mobile, password)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

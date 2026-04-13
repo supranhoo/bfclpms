@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { invokeAdminEdgeFunction } from '@/lib/adminEdgeFunction';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -97,10 +98,8 @@ export default function ProfileSettingsTab({ user, profile, fetchProfile }: { us
     }
     setSavingEmail(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await supabase.functions.invoke('update-user-profile', { body: { operation: 'update_email', newEmail: editEmail }, headers: { Authorization: `Bearer ${session?.access_token}` } });
-      if (res.error) throw new Error(res.error.message);
-      if (res.data?.error) throw new Error(res.data.error);
+      const res = await invokeAdminEdgeFunction<any>('update-user-profile', { operation: 'update_email', newEmail: editEmail });
+      if (res?.error) throw new Error(res.error);
       toast({ title: 'Email updated' });
       setEditingEmail(false);
       await supabase.auth.refreshSession();
@@ -116,10 +115,8 @@ export default function ProfileSettingsTab({ user, profile, fetchProfile }: { us
     }
     setSavingMobile(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await supabase.functions.invoke('update-user-profile', { body: { operation: 'update_mobile', mobileNumber: editMobile }, headers: { Authorization: `Bearer ${session?.access_token}` } });
-      if (res.error) throw new Error(res.error.message);
-      if (res.data?.error) throw new Error(res.data.error);
+      const res = await invokeAdminEdgeFunction<any>('update-user-profile', { operation: 'update_mobile', mobileNumber: editMobile });
+      if (res?.error) throw new Error(res.error);
       setLocalMobile(editMobile || null);
       setEditingMobile(false);
       toast({ title: 'Mobile updated' });
@@ -137,10 +134,8 @@ export default function ProfileSettingsTab({ user, profile, fetchProfile }: { us
     if (newPwd !== confirmPwd) { toast({ title: 'Passwords mismatch', variant: 'destructive' }); return; }
     setSavingPwd(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await supabase.functions.invoke('update-user-profile', { body: { operation: 'update_password', currentPassword: currentPwd, newPassword: newPwd }, headers: { Authorization: `Bearer ${session?.access_token}` } });
-      if (res.error) throw new Error(res.error.message);
-      if (res.data?.error) throw new Error(res.data.error);
+      const res = await invokeAdminEdgeFunction<any>('update-user-profile', { operation: 'update_password', currentPassword: currentPwd, newPassword: newPwd });
+      if (res?.error) throw new Error(res.error);
       toast({ title: 'Password updated' });
       setCurrentPwd(''); setNewPwd(''); setConfirmPwd('');
     } catch (err: any) {
