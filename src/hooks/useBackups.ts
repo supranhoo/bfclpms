@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useUpdateSystemSetting } from './useSystemSettings';
+import { useState, useCallback } from 'react';
 
 export interface BackupSchedule {
   frequency: 'daily' | 'weekly' | 'monthly';
@@ -16,6 +17,15 @@ const DEFAULT_SCHEDULE: BackupSchedule = {
   hour: 2,
   dayOfMonth: 1,
 };
+
+export interface BackupProgress {
+  phase: 'idle' | 'init' | 'batching' | 'finalizing' | 'done' | 'error';
+  currentBatch: number;
+  totalBatches: number;
+  tablesProcessed: number;
+  totalTables: number;
+  errorMessage?: string;
+}
 
 export function useBackupLogs() {
   return useQuery({
@@ -34,27 +44,161 @@ export function useBackupLogs() {
 
 export function useTriggerBackup() {
   const queryClient = useQueryClient();
+  const [progress, setProgress] = useState<BackupProgress>({
+    phase: 'idle',
+    currentBatch: 0,
+    totalBatches: 0,
+    tablesProcessed: 0,
+    totalTables: 0,
+  });
 
-  return useMutation({
+  const resetProgress = useCallback(() => {
+    setProgress({
+      phase: 'idle',
+      currentBatch: 0,
+      totalBatches: 0,
+      tablesProcessed: 0,
+      totalTables: 0,
+    });
+  }, []);
+
+  const mutation = useMutation({
     mutationFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      const response = await supabase.functions.invoke('create-backup', {
+      // Phase 1: INIT — get backup_id, folder_path, and table batches
+      setProgress(p => ({ ...p, phase: 'init' }));
+
+      const initResponse = await supabase.functions.invoke('create-backup', {
         body: { backup_type: 'manual' },
       });
 
-      if (response.error) throw response.error;
-      return response.data;
+      if (initResponse.error) throw initResponse.error;
+      const { backup_id, folder_path, batches, total_tables } = initResponse.data;
+
+      if (!backup_id || !folder_path || !batches) {
+        throw new Error('Invalid init response from backup function');
+      }
+
+      setProgress({
+        phase: 'batching',
+        currentBatch: 0,
+        totalBatches: batches.length,
+        tablesProcessed: 0,
+        totalTables: total_tables,
+      });
+
+      // Phase 2: Process each batch with retry
+      let totalRows = 0;
+      let totalSizeBytes = 0;
+      let tablesProcessed = 0;
+      const allErrors: string[] = [];
+      const tableManifest: Array<{ table: string; rows: number; file: string }> = [];
+
+      for (let i = 0; i < batches.length; i++) {
+        const batch = batches[i];
+        let retries = 2;
+        let batchSuccess = false;
+
+        while (retries > 0 && !batchSuccess) {
+          try {
+            const batchResponse = await supabase.functions.invoke('create-backup', {
+              body: { backup_id, folder_path, tables: batch, backup_type: 'manual' },
+            });
+
+            if (batchResponse.error) {
+              retries--;
+              if (retries === 0) {
+                allErrors.push(`Batch ${i + 1} failed after retries: ${batchResponse.error.message}`);
+              }
+              continue;
+            }
+
+            const batchData = batchResponse.data;
+            totalRows += batchData.total_rows || 0;
+            totalSizeBytes += batchData.total_size_bytes || 0;
+            tablesProcessed += batchData.tables_processed || 0;
+
+            // Build manifest from processed results
+            if (batchData.processed) {
+              for (const p of batchData.processed) {
+                tableManifest.push({
+                  table: p.table,
+                  rows: p.rows,
+                  file: `${folder_path}/${p.table}.json`,
+                });
+              }
+            }
+
+            if (batchData.errors && batchData.errors.length > 0) {
+              allErrors.push(...batchData.errors);
+            }
+
+            batchSuccess = true;
+          } catch (err) {
+            retries--;
+            if (retries === 0) {
+              allErrors.push(`Batch ${i + 1} exception: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+        }
+
+        setProgress(p => ({
+          ...p,
+          currentBatch: i + 1,
+          tablesProcessed,
+        }));
+      }
+
+      // Phase 3: FINALIZE — generate manifest and update log
+      setProgress(p => ({ ...p, phase: 'finalizing' }));
+
+      const finalizeResponse = await supabase.functions.invoke('create-backup', {
+        body: {
+          backup_id,
+          folder_path,
+          finalize: true,
+          backup_type: 'manual',
+          tables_count: tablesProcessed,
+          total_rows: totalRows,
+          total_size_bytes: totalSizeBytes,
+          table_manifest: tableManifest,
+        },
+      });
+
+      if (finalizeResponse.error) throw finalizeResponse.error;
+
+      setProgress(p => ({ ...p, phase: 'done' }));
+
+      return {
+        tables_count: tablesProcessed,
+        total_rows: totalRows,
+        errors: allErrors,
+      };
     },
     onSuccess: (data) => {
-      toast.success(`Backup completed: ${data.tables_count} tables, ${data.total_rows} rows`);
+      if (data.errors && data.errors.length > 0) {
+        toast.warning(`Backup completed with ${data.errors.length} warnings. ${data.tables_count} tables, ${data.total_rows} rows.`, {
+          description: data.errors.slice(0, 5).join(' | '),
+          duration: 15000,
+        });
+      } else {
+        toast.success(`Backup completed: ${data.tables_count} tables, ${data.total_rows} rows`);
+      }
       queryClient.invalidateQueries({ queryKey: ['backup-logs'] });
     },
     onError: (error: Error) => {
+      setProgress(p => ({ ...p, phase: 'error', errorMessage: error.message }));
       toast.error(`Backup failed: ${error.message}`);
     },
   });
+
+  return {
+    ...mutation,
+    progress,
+    resetProgress,
+  };
 }
 
 export function useTriggerRestore() {
@@ -173,7 +317,6 @@ export function useDownloadBackup() {
       const isChunked = filePath.endsWith('manifest.json');
 
       if (isChunked) {
-        // Download manifest first
         const { data: manifestBlob, error: manifestError } = await supabase.storage
           .from('database-backups')
           .download(filePath);
@@ -182,7 +325,6 @@ export function useDownloadBackup() {
         const manifest = JSON.parse(await manifestBlob.text());
         const tables = manifest.tables as Array<{ table: string; rows: number; file: string }>;
 
-        // Download each table file and combine into single backup JSON
         const combinedData: Record<string, unknown[]> = {};
         for (const entry of tables) {
           try {
@@ -204,7 +346,6 @@ export function useDownloadBackup() {
         const fileName = filePath.replace('/manifest.json', '').split('/').pop() + '-backup.json';
         return { blob, fileName };
       } else {
-        // Legacy single-file download
         const { data, error } = await supabase.storage
           .from('database-backups')
           .download(filePath);
@@ -239,7 +380,6 @@ export function useUploadAndRestore() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      // 1. Read and validate JSON
       const text = await file.text();
       let parsed: Record<string, unknown>;
       try {
@@ -257,7 +397,6 @@ export function useUploadAndRestore() {
         throw new Error('Backup file contains no tables.');
       }
 
-      // 2. Upload to storage
       const filePath = `uploads/restore-${Date.now()}.json`;
       const blob = new Blob([text], { type: 'application/json' });
 
@@ -267,7 +406,6 @@ export function useUploadAndRestore() {
 
       if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
 
-      // 3. Insert backup_logs row
       const { data: logRow, error: logError } = await supabase
         .from('backup_logs')
         .insert({
@@ -284,7 +422,6 @@ export function useUploadAndRestore() {
 
       if (logError) throw new Error(`Failed to log backup: ${logError.message}`);
 
-      // 4. Call restore edge function
       const response = await supabase.functions.invoke('restore-backup', {
         body: { backup_id: logRow.id },
       });

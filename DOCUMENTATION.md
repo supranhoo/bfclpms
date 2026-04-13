@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-04-12  
-> **Version:** 2.33.16 — Cloud billing optimization: polling intervals 30s→120s, merged duplicate notification realtime channels, added enabled guard to useRealtimeKpiSync
+> **Last Updated:** 2026-04-13  
+> **Version:** 2.34.0 — Multi-phase backup engine: client-orchestrated batching with retry, time-guard for scheduled backups, progress UI
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -276,12 +276,26 @@ The system includes a full-database backup and restore feature accessible from *
 
 | Feature | Description |
 |---------|-------------|
-| **Manual Backup** | Admin clicks "Backup Now" to create an immediate full snapshot of all ~40 public tables as JSON |
-| **Scheduled Backup** | Configurable recurring backup via pg_cron. Admins choose frequency (Daily, Weekly, Monthly), day, and hour (UTC) from the UI. Schedule is saved as `backup_schedule` system setting and applied via the `update-backup-schedule` Edge Function |
+| **Manual Backup** | Admin clicks "Backup Now" to create a full snapshot of all 81 public tables as JSON. Uses **client-orchestrated multi-phase batching** for reliability. |
+| **Scheduled Backup** | Configurable recurring backup via pg_cron. Uses a **time-guarded single-invocation** approach — processes tables sequentially and finalizes with partial success if the 100s time guard is reached. |
 | **Download** | Download any completed backup as a JSON file |
 | **Restore** | Restore the entire database from a previous backup (double-confirmation required) |
 | **Upload & Restore** | Upload an external backup JSON file (e.g. downloaded from another instance) and restore the database from it. The file is validated client-side, uploaded to the `database-backups` bucket under `uploads/`, logged with `backup_type = 'uploaded'`, and then restored via the same `restore-backup` Edge Function. Double-confirmation required. |
 | **Auto-Backup Toggle** | Enable/disable the scheduled backup from the UI. When disabled, the cron job is removed entirely. |
+
+**Multi-Phase Backup Architecture (v2.34.0):**
+
+The `create-backup` Edge Function operates in 3 modes:
+
+| Mode | Body Params | Description |
+|------|-------------|-------------|
+| **INIT** | `{ backup_type }` | Creates `backup_logs` entry, returns `backup_id`, `folder_path`, and table batches (9 tables each) |
+| **PROCESS BATCH** | `{ backup_id, folder_path, tables: [...] }` | Processes only the specified tables, returns results + errors |
+| **FINALIZE** | `{ backup_id, folder_path, finalize: true, table_manifest, ... }` | Generates storage + table manifests, updates log as completed |
+
+For **manual backups**, the client (`useTriggerBackup` hook) orchestrates: INIT → loop through batches (with up to 2 retries per batch) → FINALIZE. Progress is exposed via `BackupProgress` state for real-time UI feedback.
+
+For **scheduled backups**, the function runs all phases internally with a 100-second time guard. If time runs out, it finalizes with status `partial` — the manifest reflects only tables that completed. This prevents CPU timeout while keeping cron backups self-contained.
 
 **Schedule Options:**
 

@@ -267,13 +267,23 @@ export function BackupRestoreTab() {
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-3 flex-wrap">
-            <Button
-              onClick={() => triggerBackup.mutate()}
-              disabled={triggerBackup.isPending}
-            >
-              <HardDrive className={`h-4 w-4 mr-2 ${triggerBackup.isPending ? 'animate-pulse' : ''}`} />
-              {triggerBackup.isPending ? 'Creating Backup...' : 'Backup Now'}
-            </Button>
+            <div className="flex flex-col gap-1">
+              <Button
+                onClick={() => { triggerBackup.resetProgress(); triggerBackup.mutate(); }}
+                disabled={triggerBackup.isPending}
+              >
+                <HardDrive className={`h-4 w-4 mr-2 ${triggerBackup.isPending ? 'animate-pulse' : ''}`} />
+                {triggerBackup.isPending ? 'Creating Backup...' : 'Backup Now'}
+              </Button>
+              {triggerBackup.isPending && triggerBackup.progress.phase === 'batching' && (
+                <span className="text-xs text-muted-foreground">
+                  Batch {triggerBackup.progress.currentBatch}/{triggerBackup.progress.totalBatches} — {triggerBackup.progress.tablesProcessed} tables processed
+                </span>
+              )}
+              {triggerBackup.isPending && triggerBackup.progress.phase === 'finalizing' && (
+                <span className="text-xs text-muted-foreground">Finalizing backup...</span>
+              )}
+            </div>
             <input
               ref={uploadInputRef}
               type="file"
