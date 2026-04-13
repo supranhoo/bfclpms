@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-13  
-> **Version:** 1.99.0 — Copy KRAs must preserve org KPI data entry infrastructure: when copying org-level KPIs with employee scope, placeholder org_kpi_values rows must be created for target employees
+> **Version:** 2.00.0 — Observation notification triggers must include employee_id (KPI owner) in metadata to enable correct inbox deep-link navigation
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
