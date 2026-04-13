@@ -607,7 +607,7 @@ export function KpiJourneySection({
                 achievedValue={data.achievedValue}
                 kpiName={kpi.kpi_name}
                 employeeCode={resolvedEmployeeCode !== '-' ? resolvedEmployeeCode : null}
-            );
+              />
           })}
         </div>
 
@@ -671,7 +671,7 @@ export function KpiJourneySection({
                             achievedValue={data.achievedValue}
                             kpiName={prevKpi.kpi_name}
                             employeeCode={resolvedEmployeeCode !== '-' ? resolvedEmployeeCode : null}
-                        );
+                          />);
                       })}
                     </div>
                   </div>
