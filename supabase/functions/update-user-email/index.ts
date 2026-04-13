@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireAdminUser } from "../_shared/admin-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,47 +11,19 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    );
-
-    // 1. Verify authentication
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
+    // 1. Verify admin identity via shared helper
+    const auth = await requireAdminUser(req);
+    if (!auth.authorized) {
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: auth.error }),
+        { status: auth.status ?? 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    const adminClient = auth.adminClient!;
+    const adminUserId = auth.user!.id;
 
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid token' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // 2. Verify admin role
-    const { data: roleData, error: roleError } = await supabaseAdmin
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', user.id)
-      .eq('role', 'admin')
-      .maybeSingle();
-
-    if (roleError || !roleData) {
-      return new Response(
-        JSON.stringify({ error: 'Admin access required' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // 3. Parse and validate request body
+    // 2. Parse and validate request body
     const { userId, newEmail } = await req.json();
 
     if (!userId || !newEmail) {
@@ -69,8 +41,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 4. Update auth email (instant, no confirmation)
-    const { error: updateAuthError } = await supabaseAdmin.auth.admin.updateUserById(
+    // 3. Update auth email (instant, no confirmation)
+    const { error: updateAuthError } = await adminClient.auth.admin.updateUserById(
       userId,
       { email: newEmail, email_confirm: true }
     );
@@ -83,22 +55,21 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 5. Update profiles table to keep in sync
-    const { error: profileError } = await supabaseAdmin
+    // 4. Update profiles table to keep in sync
+    const { error: profileError } = await adminClient
       .from('profiles')
       .update({ email: newEmail })
       .eq('id', userId);
 
     if (profileError) {
       console.error('Error updating profile email:', profileError);
-      // Auth was updated but profile failed - log but still return success with warning
       return new Response(
         JSON.stringify({ success: true, warning: 'Auth email updated but profile sync failed. Please update manually.' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`Admin ${user.id} changed email for user ${userId} to ${newEmail}`);
+    console.log(`Admin ${adminUserId} changed email for user ${userId} to ${newEmail}`);
 
     return new Response(
       JSON.stringify({ success: true, message: 'Email updated successfully' }),
@@ -113,4 +84,3 @@ Deno.serve(async (req) => {
     );
   }
 });
-

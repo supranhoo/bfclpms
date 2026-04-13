@@ -7,7 +7,7 @@ verify_jwt = false
 verify_jwt = true
 
 [functions.reset-password]
-verify_jwt = true
+verify_jwt = false
 
 [functions.auto-rollover-kpis]
 verify_jwt = false

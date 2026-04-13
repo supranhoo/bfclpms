@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { invokeAdminEdgeFunction } from '@/lib/adminEdgeFunction';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -364,11 +365,10 @@ export default function UserManagement() {
   // Password reset mutation (generate link)
   const resetPassword = useMutation({
     mutationFn: async (email: string) => {
-      const response = await supabase.functions.invoke('reset-password', {
-        body: { email, action: 'generate_link' },
-      });
-      if (response.error) throw new Error(response.error.message);
-      return response.data;
+      return invokeAdminEdgeFunction<{ success: boolean; message: string; resetLink?: string | null }>(
+        'reset-password',
+        { email, action: 'generate_link' },
+      );
     },
     onSuccess: (data) => {
       if (data.resetLink) {
@@ -384,12 +384,10 @@ export default function UserManagement() {
   // Set new password mutation (direct update)
   const setNewPassword = useMutation({
     mutationFn: async ({ email, password }: { email: string; password: string }) => {
-      const response = await supabase.functions.invoke('reset-password', {
-        body: { email, newPassword: password, action: 'set_password' },
-      });
-      if (response.error) throw new Error(response.error.message);
-      if (response.data?.error) throw new Error(response.data.error);
-      return response.data;
+      return invokeAdminEdgeFunction<{ success: boolean; message: string }>(
+        'reset-password',
+        { email, newPassword: password, action: 'set_password' },
+      );
     },
     onSuccess: () => {
       toast({ title: 'Password updated successfully' });
@@ -453,17 +451,16 @@ export default function UserManagement() {
     const emailChanged = editEmail.trim().toLowerCase() !== selectedUser.email.trim().toLowerCase();
     if (emailChanged) {
       try {
-        const response = await supabase.functions.invoke('update-user-email', {
-          body: { userId: selectedUser.id, newEmail: editEmail.trim() },
-        });
-        if (response.error) throw new Error(response.error.message);
-        if (response.data?.error) throw new Error(response.data.error);
-        if (response.data?.warning) {
-          toast({ title: 'Email updated with warning', description: response.data.warning, variant: 'destructive' });
+        const result = await invokeAdminEdgeFunction<{ success: boolean; message?: string; warning?: string }>(
+          'update-user-email',
+          { userId: selectedUser.id, newEmail: editEmail.trim() },
+        );
+        if (result?.warning) {
+          toast({ title: 'Email updated with warning', description: result.warning, variant: 'destructive' });
         }
       } catch (err: any) {
         toast({ title: 'Failed to update email', description: err.message, variant: 'destructive' });
-        return; // Don't proceed with other updates if email change failed
+        return;
       }
     }
 

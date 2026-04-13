@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireAdminUser } from "../_shared/admin-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -6,57 +6,24 @@ const corsHeaders = {
 };
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Create Supabase admin client
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    );
-
-    // 1. Verify authentication - require Authorization header
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      console.log('No authorization header provided');
+    // 1. Verify admin identity via shared helper
+    const auth = await requireAdminUser(req);
+    if (!auth.authorized) {
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: auth.error }),
+        { status: auth.status ?? 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    const adminClient = auth.adminClient!;
+    const adminUserId = auth.user!.id;
 
-    if (authError || !user) {
-      console.log('Invalid authentication token:', authError?.message);
-      return new Response(
-        JSON.stringify({ error: 'Invalid token' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // 2. Verify admin role - only admins can reset passwords
-    const { data: roleData, error: roleError } = await supabaseAdmin
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', user.id)
-      .eq('role', 'admin')
-      .maybeSingle();
-
-    if (roleError || !roleData) {
-      console.log(`User ${user.id} attempted password reset without admin role`);
-      return new Response(
-        JSON.stringify({ error: 'Admin access required' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // 3. Parse and validate request body
+    // 2. Parse and validate request body
     const { email, newPassword, action = 'generate_link' } = await req.json();
 
     if (!email || typeof email !== 'string') {
@@ -66,7 +33,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Basic email format validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email) || email.length > 255) {
       return new Response(
@@ -91,15 +57,14 @@ Deno.serve(async (req) => {
         );
       }
 
-      console.log(`Admin ${user.id} setting new password for: ${email}`);
+      console.log(`Admin ${adminUserId} setting new password for: ${email}`);
 
-      // Find user by email via profiles table (listUsers is paginated and may miss users)
-      const { data: profileData, error: profileError } = await supabaseAdmin
+      const { data: profileData, error: profileError } = await adminClient
         .from('profiles')
         .select('id')
         .ilike('email', email.trim())
         .maybeSingle();
-      
+
       if (profileError) {
         console.error('Error fetching user profile:', profileError);
         return new Response(
@@ -115,10 +80,8 @@ Deno.serve(async (req) => {
         );
       }
 
-      const targetUserId = profileData.id;
-
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-        targetUserId,
+      const { error: updateError } = await adminClient.auth.admin.updateUserById(
+        profileData.id,
         { password: newPassword }
       );
 
@@ -130,45 +93,41 @@ Deno.serve(async (req) => {
         );
       }
 
-      console.log(`Password updated successfully by admin ${user.id} for: ${email}`);
+      console.log(`Password updated successfully by admin ${adminUserId} for: ${email}`);
 
       return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: 'Password updated successfully'
-        }),
+        JSON.stringify({ success: true, message: 'Password updated successfully' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // Default: Generate password reset link
-    console.log(`Admin ${user.id} requesting password reset link for: ${email}`);
+    console.log(`Admin ${adminUserId} requesting password reset link for: ${email}`);
 
-    const { data, error } = await supabaseAdmin.auth.admin.generateLink({
+    const { data, error } = await adminClient.auth.admin.generateLink({
       type: 'recovery',
       email: email,
     });
 
     if (error) {
       console.error('Error generating reset link:', error);
-      // Return generic error to prevent email enumeration
       return new Response(
-        JSON.stringify({ 
-          success: true, 
+        JSON.stringify({
+          success: true,
           message: 'If the email exists, a password reset link has been generated',
-          resetLink: null 
+          resetLink: null
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`Password reset link generated successfully by admin ${user.id} for: ${email}`);
+    console.log(`Password reset link generated successfully by admin ${adminUserId} for: ${email}`);
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         message: 'Password reset link generated',
-        resetLink: data.properties?.action_link 
+        resetLink: data.properties?.action_link
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
