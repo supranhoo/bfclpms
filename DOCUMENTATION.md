@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-13  
-> **Version:** 2.35.0 — KPI Scorecard Detail Excel export now includes Target, Self/Manager/Skip-Level/HR PMS/Auditor/Management Actual values
+> **Version:** 2.36.0 — Password Rollout edge function aligned to requireAdminUser shared helper (matches reset-password, update-user-email)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

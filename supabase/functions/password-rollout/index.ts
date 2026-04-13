@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireAdminUser } from "../_shared/admin-auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -153,46 +154,20 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    // 1. Verify admin identity via shared helper
+    const auth = await requireAdminUser(req);
+    if (!auth.authorized || !auth.adminClient) {
+      return new Response(JSON.stringify({ error: auth.error }), {
+        status: auth.status || 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabaseAdmin = auth.adminClient;
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Verify caller is admin
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const supabaseUser = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const { data: { user }, error: userError } = await supabaseUser.auth.getUser();
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
-
-    const { data: roleData } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .eq("role", "admin")
-      .single();
-
-    if (!roleData) {
-      return new Response(JSON.stringify({ error: "Admin access required" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
+    // 2. Parse and validate request body
     const { user_ids, send_email } = await req.json();
 
     if (!Array.isArray(user_ids) || user_ids.length === 0) {
@@ -235,7 +210,7 @@ Deno.serve(async (req: Request) => {
             supabaseUrl,
             serviceRoleKey,
             !!send_email,
-            user.id,
+            auth.user!.id,
             appName,
           )
         )
@@ -245,7 +220,6 @@ Deno.serve(async (req: Request) => {
         if (result.status === "fulfilled") {
           results.push(result.value);
         } else {
-          // Should not happen since processOneUser catches internally, but handle gracefully
           console.error("Unexpected batch rejection:", result.reason);
         }
       }

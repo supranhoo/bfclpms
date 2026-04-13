@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-13  
-> **Version:** 1.94.0 — §17 KPI Scorecard Detail export includes Target and level-wise Actual values
+> **Version:** 1.95.0 — §85 Password Rollout edge function now uses requireAdminUser + invokeAdminEdgeFunction standard
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
