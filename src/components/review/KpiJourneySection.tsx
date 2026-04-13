@@ -608,6 +608,7 @@ export function KpiJourneySection({
                 kpiName={kpi.kpi_name}
                 employeeCode={resolvedEmployeeCode !== '-' ? resolvedEmployeeCode : null}
               />
+            );
           })}
         </div>
 
