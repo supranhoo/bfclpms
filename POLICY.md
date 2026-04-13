@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-13  
-> **Version:** 1.97.0 — §87 Evidence file downloads must use descriptive filenames built from KPI name (first line, max 40 chars) + review stage + index; upload paths must include sanitized original filename
+> **Version:** 1.98.0 — §87 updated: Evidence filenames must prepend employee code when context is available; format: {EmpCode}_{KPI}_{Stage}_Evidence_{N}.{ext}
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
