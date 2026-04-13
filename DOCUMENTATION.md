@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-13  
-> **Version:** 2.39.0 — Evidence download filenames now prepend Employee ID/Code when available (format: {EmpCode}_{KPI}_{Stage}_Evidence_{N}.{ext})
+> **Version:** 2.40.0 — Copy KRAs now preserves org KPI infrastructure: invalidates org KPI caches and creates org_kpi_values placeholder rows for employee-scoped org KPIs
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

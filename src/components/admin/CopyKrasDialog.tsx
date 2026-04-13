@@ -229,11 +229,51 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
 
       const { error } = await supabase.from('kpis').insert(kpisToInsert);
       if (error) throw error;
+
+      // Create org_kpi_values placeholder rows for employee-scoped org KPIs
+      const orgKpiValuesToInsert: any[] = [];
+      kpisToInsert.forEach(kpi => {
+        if (kpi.is_org_level && kpi.org_level_scope === 'employee') {
+          orgKpiValuesToInsert.push({
+            category_id: kpi.category_id,
+            kra_name: kpi.kra_name,
+            kpi_name: kpi.kpi_name,
+            review_period: kpi.review_period,
+            review_year: kpi.review_year,
+            employee_id: kpi.employee_id,
+            target_value: kpi.target_value,
+            uom_type: kpi.uom_type,
+            criteria: kpi.criteria,
+            qualitative_options: kpi.qualitative_options,
+            r0: kpi.r0,
+            r1: kpi.r1,
+            r2: kpi.r2,
+            r3: kpi.r3,
+            r4: kpi.r4,
+            r5: kpi.r5,
+            status: 'entered',
+          });
+        }
+      });
+
+      if (orgKpiValuesToInsert.length > 0) {
+        const { error: orgError } = await supabase
+          .from('org_kpi_values')
+          .upsert(orgKpiValuesToInsert, { onConflict: 'category_id,kra_name,kpi_name,review_period,review_year,employee_id', ignoreDuplicates: true });
+        if (orgError) console.warn('Failed to create org_kpi_values placeholders:', orgError.message);
+      }
+
       return kpisToInsert.length;
     },
     onSuccess: (count) => {
       queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['org-level-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['org-level-kpis-with-employees'] });
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-full-mapping'] });
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-data-owners'] });
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-data-owner-names'] });
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
       toast({ title: `Copied ${count} KRAs to ${targetEmployeeIds.length} employee(s)` });
 
       // Email deferred to "Issue KRAs" confirmation step
