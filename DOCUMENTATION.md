@@ -5084,3 +5084,9 @@ Every new edge function **must** complete all of these steps before deployment:
 - **Root Cause**: `UserManagement.tsx` still used `supabase.functions.invoke()` for `reset-password` and `update-user-email`. The edge functions used inline `supabaseAdmin.auth.getUser(token)` instead of the shared `requireAdminUser()` helper. `config.toml` had `verify_jwt = true` for `reset-password`.
 - **Fix**: (1) Replaced all SDK invocations with `invokeAdminEdgeFunction`. (2) Refactored both edge functions to use `requireAdminUser()`. (3) Set `verify_jwt = false` for `reset-password` in `config.toml`.
 - **Modified files**: `src/pages/admin/UserManagement.tsx`, `supabase/functions/reset-password/index.ts`, `supabase/functions/update-user-email/index.ts`, `supabase/config.toml`
+
+### v2.36.0 — Bug Fix: Observation Notification Deep-Link Opens KPI Details Sheet (2026-04-13)
+- **Bug**: "Open in App" on observation notifications for admins/reviewers navigated to the employee dashboard but did not open the specific KPI details sheet.
+- **Root Cause**: `UnifiedScorecard.tsx` auto-open logic only handled self mode. Reviewer modes (`team`, `audit`, `management`, `hr_pms`) received `autoOpenKpiId` but never set `selectedKpi` or opened `reviewSheetOpen`.
+- **Fix**: Added reviewer-mode auto-open effect in `UnifiedScorecard.tsx` that matches `autoOpenKpiId` against loaded KPIs and opens the review sheet. Handles cross-period KPIs by switching period selection.
+- **Modified files**: `src/components/review/UnifiedScorecard.tsx`
