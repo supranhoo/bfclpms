@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Check, Calendar, Loader2, Lock, AlertTriangle, Paperclip } from 'lucide-react';
 import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
 import { useAuth } from '@/contexts/AuthContext';
-import { openStorageFile } from '@/lib/storageDownload';
+import { openStorageFile, buildEvidenceFileName } from '@/lib/storageDownload';
 import { SubPeriodSubmission, useSubmitSubPeriod } from '@/hooks/useSubPeriodSubmissions';
 import { getDailySubPeriods, getMonthNumber, canSubmitForSubPeriod } from '@/lib/frequencyUtils';
 import { QualitativeOption, BINARY_OPTIONS, scoreToRatingLevel } from '@/lib/qualitativeUom';
@@ -27,6 +27,7 @@ import { Label } from '@/components/ui/label';
 
 interface DailySubmissionGridProps {
   kpiId: string;
+  kpiName?: string | null;
   reviewMonth: string;
   reviewYear: number;
   submissions: SubPeriodSubmission[];
@@ -338,7 +339,7 @@ export function DailySubmissionGrid({
                       {entry.evidenceUrls.length > 0 && (
                         <button
                           type="button"
-                          onClick={() => entry.evidenceUrls.forEach(url => openStorageFile(url))}
+                          onClick={() => entry.evidenceUrls.forEach((url, i) => openStorageFile(url, buildEvidenceFileName(url, kpiName, `Day_${entry.day}`, i, entry.evidenceUrls.length)))}
                           className="inline-flex items-center gap-0.5 text-primary hover:underline shrink-0"
                           title={`${entry.evidenceUrls.length} file(s) attached`}
                         >
