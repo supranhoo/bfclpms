@@ -156,7 +156,7 @@ export function ReviewTrailCard({
                         <button 
                           key={idx}
                           type="button"
-                          onClick={() => openStorageFile(url)}
+                          onClick={() => openStorageFile(url, buildEvidenceFileName(url, kpiName, 'Self', idx, urls.length))}
                           className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline cursor-pointer bg-transparent border-none p-0"
                         >
                           <FileText className="h-3 w-3" />
@@ -216,7 +216,7 @@ export function ReviewTrailCard({
                         <button 
                           key={idx}
                           type="button"
-                          onClick={() => openStorageFile(url)}
+                          onClick={() => openStorageFile(url, buildEvidenceFileName(url, kpiName, 'Manager', idx, urls.length))}
                           className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline cursor-pointer bg-transparent border-none p-0"
                         >
                           <FileText className="h-3 w-3" />
@@ -279,7 +279,7 @@ export function ReviewTrailCard({
                           <button 
                             key={idx}
                             type="button"
-                            onClick={() => openStorageFile(url)}
+                            onClick={() => openStorageFile(url, buildEvidenceFileName(url, kpiName, 'Auditor', idx, urls.length))}
                             className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline cursor-pointer bg-transparent border-none p-0"
                           >
                             <FileText className="h-3 w-3" />
@@ -338,7 +338,7 @@ export function ReviewTrailCard({
                           <button 
                             key={idx}
                             type="button"
-                            onClick={() => openStorageFile(url)}
+                            onClick={() => openStorageFile(url, buildEvidenceFileName(url, kpiName, 'Management', idx, urls.length))}
                             className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline cursor-pointer bg-transparent border-none p-0"
                           >
                             <FileText className="h-3 w-3" />
