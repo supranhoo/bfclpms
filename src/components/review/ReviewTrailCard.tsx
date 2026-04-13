@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { User, Shield, Briefcase, FileText, ExternalLink, MessageSquare, AlertCircle, AlertTriangle } from 'lucide-react';
-import { openStorageFile } from '@/lib/storageDownload';
+import { openStorageFile, buildEvidenceFileName } from '@/lib/storageDownload';
 import { RatingLevel, ReviewSubmission, KpiQuery } from '@/hooks/useKpis';
 import { format } from 'date-fns';
 
@@ -26,6 +26,7 @@ interface ReviewTrailCardProps {
   showAuditor?: boolean;
   showManagement?: boolean;
   queries?: KpiQuery[];
+  kpiName?: string | null;
 }
 
 export function ReviewTrailCard({ 
@@ -35,7 +36,8 @@ export function ReviewTrailCard({
   showManager = true, 
   showAuditor = false,
   showManagement = false,
-  queries = []
+  queries = [],
+  kpiName,
 }: ReviewTrailCardProps) {
   if (!submission) return null;
 
