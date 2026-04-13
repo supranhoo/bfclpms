@@ -1,72 +1,55 @@
 
-Revised Plan: Fix “Open in App” for observation notifications so admins/reviewers open the target employee KPI, not their own dashboard
+Fix the remaining deep-link bug so observation notifications open the specific KPI details sheet, not just the employee dashboard.
 
-What I found:
-- The earlier database fix added `metadata.employee_id` to new observation-reply notifications, but the frontend routing is still too broad.
-- In `src/lib/inboxUtils.ts`, these 4 notification types are grouped together:
-  - `observation_raised`
-  - `observation_reply`
-  - `observation_resolved`
-  - `observation_mention`
-- For any non-self case, they currently route to `mentioned_kpi`, which is the read-only mention flow.
-- That flow is correct for `observation_mention`, but not for admin/manager/auditor/management observation notifications. Those users should open the employee scorecard context, not the self dashboard shell.
+What I found
+- Inbox routing is now mostly correct: observation workflow notifications already build `/dashboard?view=...&employee=...&kpi=...`.
+- The remaining bug is in dashboard deep-link handling:
+  - `Dashboard.tsx` reads `employee` + `kpi` and selects the employee.
+  - But reviewer/admin flows only pass `autoOpenKpiId` into `UnifiedScorecard`.
+  - In `UnifiedScorecard.tsx`, auto-open currently works only for self mode (`selectedKpiForSelfReview`).
+  - Reviewer modes (`team`, `audit`, `management`, `hr_pms`) do not auto-open `reviewSheetOpen`, so the app lands on the employee scorecard page instead of opening “View KPI Details”.
 
-Implementation plan:
+Implementation plan
 
-1. Split observation routing in `src/lib/inboxUtils.ts`
-- Keep `observation_mention` on:
-  - `/dashboard?mentioned_kpi=...&mentioned_employee=...`
-- Change `observation_raised`, `observation_reply`, and `observation_resolved` to:
-  - self target → `/dashboard?kpi=...`
-  - other employee target → reviewer/admin deep-link with employee context
+1. Add reviewer deep-link auto-open in `UnifiedScorecard.tsx`
+- Extend the existing auto-open logic to support non-self modes.
+- When `autoOpenKpiId` matches a KPI in reviewer mode:
+  - set `selectedKpi`
+  - open the reviewer sheet (`setReviewSheetOpen(true)`)
+- If the KPI belongs to another period, first switch period selection, then auto-open after data reload.
 
-2. Make routing role-aware
-- Extend `getNotificationNavigationPath(...)` to accept current viewer role/effective role
-- Use role-based view mapping for other-employee observation links:
-  - admin / manager → `view=team`
-  - auditor → `view=audit`
-  - management → `view=management`
-  - hr_pms → `view=hr_pms`
-  - safe fallback → `view=team`
-- Update callers:
-  - `src/pages/QueryInbox.tsx`
-  - `src/components/inbox/InboxDetailSheet.tsx`
-  - `src/components/inbox/InboxRowItem.tsx`
-  - `src/components/inbox/MobileInboxList.tsx`
+2. Support panel-aware opening for reviewer mode
+- Preserve and wire `panel` query param from `Dashboard.tsx`.
+- If `panel=queryHistory`, open the KPI details sheet and then auto-open Query History in reviewer mode too.
+- Keep existing self-mode behavior unchanged.
 
-3. Backfill existing observation notifications
-- Add a migration to patch old `notifications` rows for:
-  - `observation_raised`
-  - `observation_reply`
-  - `observation_resolved`
-- Fill `metadata.employee_id` from `kpi_id -> kpis.employee_id`
-- Re-audit observation notification triggers so all future rows consistently include KPI-owner context
+3. Make deep-link processing more reliable in `Dashboard.tsx`
+- Refine the cross-user deep-link effect so it does not stop after only selecting employee.
+- Ensure one-time URL cleanup happens after the KPI sheet/open-panel state has been initialized correctly.
+- Keep `employee` persistence behavior for refresh restoration.
 
-4. Regression protection
-- Expand `src/lib/inboxUtils.test.ts` with explicit cases for:
-  - employee opens own observation reply
-  - admin opens another employee’s observation reply
-  - auditor/management role mapping
-  - `observation_mention` still using mention sheet
-  - fallback behavior when metadata is incomplete
-- Add/update inline mock notification fixtures used by those tests
+4. Add regression tests and mocks
+- Add/expand tests for:
+  - admin opening another employee’s observation reply -> employee selected + KPI details sheet opens
+  - auditor/management role deep-link -> correct view + KPI sheet opens
+  - mention notification still opens read-only mention sheet only
+  - `panel=queryHistory` opens query history from deep link
+  - fallback when KPI is in another period/year
+- Add/update realistic mock notification/deep-link fixtures per policy.
 
-5. SSOT / policy sync
+5. SSOT + policy sync
 - Update `DOCUMENTATION.md`
 - Update `POLICY.md`
-- Record the rule:
-  - mentions use read-only mention routing
-  - observation workflow notifications for reviewers/admins must open the target employee scorecard
+- Record that inbox observation workflow links must deep-link to the target employee KPI detail sheet, not merely the employee dashboard page.
 
-Risk & Impact Report:
-- Data impact: low; only notification metadata backfill, no schema shape change
-- Workflow impact: navigation only, no scoring/review logic changes
-- UI/UX impact: improves consistency; “Open in App” will open the correct employee context
-- Regression risk: medium-low because inbox routing is shared; tests will contain it
-- Mitigation: isolate logic to the routing helper, preserve non-observation routes, add route tests before/with change
+Risk & Impact Report
+- Data impact: none; frontend-only behavior fix.
+- Workflow impact: improves reviewer/admin navigation without changing permissions or scoring.
+- UI/UX consistency: aligns inbox “Open in App” with user expectation by opening “View KPI Details”.
+- Regression risk: medium-low because `UnifiedScorecard` is shared across review modes.
+- Mitigation plan: isolate logic to deep-link handling, preserve mention flow, add explicit regression tests for self vs reviewer modes and panel behavior.
 
-Expected result:
-- If Jaspal (100125) opens an observation-reply notification for another employee, it opens that employee’s KPI in admin/reviewer context
-- If the employee opens their own notification, it still opens their own KPI
-- @mentions continue to open the read-only mention sheet
-- Older observation notifications also start working after metadata backfill
+Expected result
+- If Jaspal clicks “Open in App” on an observation notification for another employee, the app opens that employee context and directly opens the target KPI’s “View KPI Details” sheet.
+- If the notification is a mention, it still opens the separate read-only mention sheet.
+- If the deep-link includes query history, that panel opens automatically inside the KPI details flow.
