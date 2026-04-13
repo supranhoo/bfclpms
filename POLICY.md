@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
-> **Last Updated:** 2026-04-12  
-> **Version:** 1.92.15 — §87 Cloud billing optimization: reduced polling intervals, merged duplicate realtime channels
+> **Last Updated:** 2026-04-13  
+> **Version:** 1.93.0 — §16 Multi-phase backup engine: client-orchestrated batching with time-guard for scheduled backups
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -439,22 +439,28 @@ Draft → Pending HR Approval → Active → [Extended] → Completed / Cancelle
 
 ### 16.1 Backup Coverage
 
-- **All public tables** (~50) must be included in backup/restore functions
+- **All public tables** (81) must be included in backup/restore functions
 - Any new table migration must update backup functions in the same change
 
 ### 16.2 Backup Types
 
-| Type | Trigger | Retention |
-|------|---------|-----------|
-| Manual | Admin clicks "Backup Now" | Indefinite |
-| Scheduled | pg_cron (Daily/Weekly/Monthly) | Indefinite |
-| Uploaded | Admin uploads external backup file | Indefinite |
+| Type | Trigger | Retention | Architecture |
+|------|---------|-----------|--------------|
+| Manual | Admin clicks "Backup Now" | Indefinite | Client-orchestrated multi-phase (INIT → batch loop with retry → FINALIZE) |
+| Scheduled | pg_cron (Daily/Weekly/Monthly) | Indefinite | Self-contained single-invocation with 100s time guard; partial success if time exceeded |
+| Uploaded | Admin uploads external backup file | Indefinite | N/A |
 
 ### 16.3 Restore Policy
 
 - Double-confirmation required for any restore
 - Warnings displayed if FK constraint issues occur
 - `auth.users` excluded (managed by auth system)
+
+### 16.4 Reliability Guarantees
+
+- **Manual backups**: Each batch (9 tables) is independently retryable up to 2 times. Failed batches do not block other batches.
+- **Scheduled backups**: Time guard ensures the function never exceeds CPU limits. Partial backups are logged with status `partial` and include a manifest of completed tables.
+- **No orphaned backups**: Failed finalization marks the log as `failed`. Stuck backups (running > 30 min) are auto-cleaned on next invocation.
 
 ---
 
