@@ -1,51 +1,33 @@
 
 
-## Plan: Wire `periodRanges` Through to UnifiedScorecard for Multi-Month Display
-
-### Problem
-The `UnifiedScorecard` (line 261-264) filters KPIs using only `selectedMonth` and `selectedYear`, so YTD/QTD/Custom modes show identical data to single-month mode despite the UI correctly computing `periodRanges`.
+## RCA: Password Rollout 401 Unauthorized
 
 ### Root Cause
-`useKpisByEmployee` already fetches ALL KPIs for the employee (no period filter). The bottleneck is the client-side filter at line 261:
-```ts
-const kpis = allKpis?.filter(k =>
-  k.review_period === selectedPeriod && k.review_year === selectedYear
-);
-```
-This discards all months outside the selected one, even in multi-month modes.
 
-### Changes
+The `usePasswordRolloutMutation` hook invokes the edge function via `supabase.functions.invoke()` (SDK method), while the project's own security policy documents that **SDK-level invocation can strip or fail to forward the `Authorization` header reliably**.
 
-| # | File | Change |
-|---|------|--------|
-| 1 | `src/components/review/UnifiedScorecard.tsx` (line 260-265) | Replace single-month filter with `periodRanges`-aware filter. Build a `Set` of `"month|year"` keys from `periodSelection.periodRanges`, then filter KPIs by membership in that set. |
-| 2 | `src/components/review/UnifiedScorecard.tsx` (lines 273-278) | Update `useSubPeriodSubmissionsByKpis` and `useOrgKpiValues` calls to pass `periodRanges` instead of a single month/year (or pass the filtered KPI IDs which already cover multiple periods). |
-| 3 | `src/components/review/UnifiedScorecard.tsx` | Add a visual indicator (badge/header text) when viewing cumulative data (e.g., "YTD: Jan–Apr 2026") so users know they're seeing aggregated results. |
-| 4 | `src/pages/Dashboard.tsx` | No change needed — `periodSelection` (including `periodRanges`) is already passed to `UnifiedScorecard` via props. The EmployeeSelectorGrid already uses `periodRanges` correctly. |
-| 5 | `DOCUMENTATION.md` / `POLICY.md` | Version bump and changelog entry for multi-period scorecard support. |
+All other admin edge functions in this project use `invokeAdminEdgeFunction()` from `src/lib/adminEdgeFunction.ts`, which explicitly sets `Authorization: Bearer <token>` and `apikey` headers via raw `fetch`. The password-rollout function is the only admin function still using the SDK invoke pattern.
 
-### Technical Detail
+The edge function logs confirm: the function boots but produces zero application-level logs — meaning the request hits the `!authHeader` check at line 161 and returns 401 immediately, before any business logic runs.
 
-**New filter logic (change 1):**
+### Fix
+
+**File: `src/hooks/usePasswordRollout.ts`** — Replace `supabase.functions.invoke` with `invokeAdminEdgeFunction`:
+
 ```typescript
-const periodSet = useMemo(() => {
-  const s = new Set<string>();
-  periodSelection.periodRanges.forEach(pr =>
-    s.add(`${pr.month.trim().toLowerCase()}|${pr.year}`)
-  );
-  return s;
-}, [periodSelection.periodRanges]);
+import { invokeAdminEdgeFunction } from '@/lib/adminEdgeFunction';
 
-const kpis = useMemo(() => allKpis?.filter(k => {
-  const key = `${k.review_period?.trim().toLowerCase()}|${k.review_year}`;
-  return periodSet.has(key);
-}), [allKpis, periodSet]);
+// In mutationFn:
+const data = await invokeAdminEdgeFunction<{
+  total: number; succeeded: number; failed: number; details: any[];
+}>('password-rollout', { user_ids: userIds, send_email: sendEmail });
+return data;
 ```
 
-**Scope limitation**: In multi-month mode, the scorecard becomes **read-only** for review actions (approve/send-back). Reviewers must switch to single-month mode to take actions, because workflow stages and submissions are period-specific. This prevents cross-period approval errors.
+**File: `DOCUMENTATION.md` / `POLICY.md`** — Version bump and changelog entry.
 
 ### Risk Assessment
-- **Data impact**: None — read-only query change
-- **Regression risk**: Low — single-month mode (`periodRanges` has exactly 1 entry) produces identical behavior to current code
-- **Workflow safety**: Multi-month mode disables write actions to prevent cross-period mutations
+- **Data impact**: None
+- **Regression risk**: None — aligns with the pattern every other admin function already uses
+- **Fix confidence**: High — this is the exact same fix applied to other admin functions previously
 
