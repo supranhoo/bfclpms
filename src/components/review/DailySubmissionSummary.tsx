@@ -39,6 +39,7 @@ const STATUS_ORDER = ['kra_set', 'self_review', 'manager_check', 'skip_level_che
 
 export function DailySubmissionSummary({
   kpiId,
+  kpiName,
   reviewMonth,
   reviewYear,
   submissions,
