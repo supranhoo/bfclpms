@@ -5025,6 +5025,21 @@ Every new edge function **must** complete all of these steps before deployment:
 
 ---
 
+### v2.36.0 — Multi-Period Scorecard Display (YTD/QTD/Custom) (2026-04-13)
+
+- **Feature**: Wired `periodRanges` through to `UnifiedScorecard` so YTD, QTD, and Custom period modes now actually query and display multi-month KPI data
+- **Filter logic**: Replaced single-month filter with `periodSet` lookup built from `periodSelection.periodRanges`, supporting cross-year ranges
+- **Read-only safety**: Multi-month mode disables all review actions (approve, send-back, submit) to prevent cross-period workflow mutations; users must switch to single-month mode to take actions
+- **Visual indicator**: Added amber badge showing mode label and month range (e.g., "YTD: Jan–Apr 2026 (Read-Only)") when viewing cumulative data
+- **Regression safety**: Single-month mode (`periodRanges` with 1 entry) produces identical behavior to previous code
+- **Modified files**: `src/components/review/UnifiedScorecard.tsx`
+
+---
+
+### v2.35.0 — Target & Level-wise Actual Values in KPI Scorecard Detail Export (2026-04-13)
+
+---
+
 ### v2.33.8 — Multi-Factor Compliance KPI Data Entry + All-Level Visibility (2026-04-11)
 
 - **Feature**: Added 4 compliance sub-factor reference fields for the "Implementation of common" compliance KPI in Org KPI Entry

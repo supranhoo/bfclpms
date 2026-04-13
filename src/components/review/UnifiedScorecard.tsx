@@ -257,12 +257,23 @@ export function UnifiedScorecard({
     };
   }, [viewLevel, effectiveStages, staticConfig]);
   
-  // Filter KPIs by period and year, excluding non-issued (draft/template) KPIs (v1.45.94)
+  // Multi-month detection
+  const isMultiMonth = periodSelection.periodRanges.length > 1;
+
+  // Build period set from periodRanges for multi-month filtering
+  const periodSet = useMemo(() => {
+    const s = new Set<string>();
+    periodSelection.periodRanges.forEach(pr =>
+      s.add(`${pr.month.trim().toLowerCase()}|${pr.year}`)
+    );
+    return s;
+  }, [periodSelection.periodRanges]);
+
+  // Filter KPIs by periodRanges (supports single & multi-month modes)
   const kpis = useMemo(() => allKpis?.filter(k => {
-    const periodMatch = k.review_period?.trim().toLowerCase() === selectedPeriod?.trim().toLowerCase();
-    const yearMatch = k.review_year === selectedYear;
-    return periodMatch && yearMatch;
-  }), [allKpis, selectedPeriod, selectedYear]);
+    const key = `${k.review_period?.trim().toLowerCase()}|${k.review_year}`;
+    return periodSet.has(key);
+  }), [allKpis, periodSet]);
 
   // Fetch KPI-level audit assignments (period-filtered to avoid URL length limits)
   const auditKpiIdList = useMemo(() => (kpis || []).map(k => k.id), [kpis]);
@@ -1294,8 +1305,8 @@ export function UnifiedScorecard({
                : viewLevel === 'hr_pms' ? 'hr-pms-review'
                : 'management';
 
-  // Check if KPI is reviewable at current level
-  const isReviewable = (kpi: KPI) => config.reviewableStatuses.includes(kpi.status || '');
+  // Check if KPI is reviewable at current level (disabled in multi-month mode to prevent cross-period mutations)
+  const isReviewable = (kpi: KPI) => !isMultiMonth && config.reviewableStatuses.includes(kpi.status || '');
 
   if (isLoading) {
     return <ReviewPanelSkeleton />;
@@ -1379,6 +1390,13 @@ export function UnifiedScorecard({
             </>
           )}
           
+          {isMultiMonth && (
+            <Badge variant="secondary" className="text-xs h-6 px-2 whitespace-nowrap bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+              <Eye className="h-3 w-3 mr-1" />
+              {periodSelection.mode === 'ytd' ? 'YTD' : periodSelection.mode === 'qtd' ? 'QTD' : 'Custom'}
+              : {periodSelection.periodRanges[0]?.month?.substring(0, 3)}–{periodSelection.periodRanges[periodSelection.periodRanges.length - 1]?.month?.substring(0, 3)} {periodSelection.selectedYear} (Read-Only)
+            </Badge>
+          )}
           <Badge variant="outline" className="text-xs h-6 px-2 ml-auto whitespace-nowrap">
             {sortedKpis.length}/{kpis?.length || 0} KPIs
           </Badge>

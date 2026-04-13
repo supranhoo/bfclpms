@@ -1609,3 +1609,9 @@ Stored in `org_kpi_values.sub_factors` as JSONB:
 
 ### Backward Compatibility
 If `sub_factors` is null, the compliance factors banner is hidden. Existing KPIs are unaffected.
+
+---
+
+## §84 — Multi-Period Scorecard Display (v1.95.0)
+
+When users select YTD, QTD, or Custom period modes, the UnifiedScorecard displays KPIs from all months in the selected range. In multi-month mode, the scorecard is **read-only** — all review actions (approve, send-back, submit, raise query) are disabled. Reviewers must switch to single-month mode to perform workflow actions. This prevents cross-period approval errors since workflow stages and submissions are period-specific.
