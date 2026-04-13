@@ -201,7 +201,7 @@ export function OrgKpiAuditCard({ group, onSubmitScore, onBulkApprove, isSubmitt
                                 <button
                                   key={i}
                                   className="text-xs text-primary hover:underline flex items-center gap-0.5"
-                                  onClick={(e) => { e.stopPropagation(); openStorageFile(url, buildEvidenceFileName(url, group.kpiName, 'Org_KPI', i, urls.length)); }}
+                                  onClick={(e) => { e.stopPropagation(); openStorageFile(url, buildEvidenceFileName(url, null, group.kpiName, 'Org_KPI', i, urls.length)); }}
                                 >
                                   <FileText className="h-3 w-3" />
                                   {filename.length > 25 ? filename.slice(0, 22) + '...' : filename}
