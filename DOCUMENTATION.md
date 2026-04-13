@@ -5078,3 +5078,9 @@ Every new edge function **must** complete all of these steps before deployment:
 - **Root Cause**: `usePasswordRolloutMutation` used `supabase.functions.invoke()` (SDK method) which does not reliably forward the `Authorization` header. All other admin edge functions use `invokeAdminEdgeFunction()` (explicit `fetch` with headers).
 - **Fix**: Replaced SDK invocation with `invokeAdminEdgeFunction` from `src/lib/adminEdgeFunction.ts`, aligning with project security policy
 - **Modified files**: `src/hooks/usePasswordRollout.ts`, `POLICY.md` (§85)
+
+### v2.35.0 — Bug Fix: Reset Password & Update Email 401 Unauthorized (2026-04-13)
+- **Bug**: Admin Reset Password (generate link / set new password) and Update User Email returned 401/Invalid token errors on `/admin/users`
+- **Root Cause**: `UserManagement.tsx` still used `supabase.functions.invoke()` for `reset-password` and `update-user-email`. The edge functions used inline `supabaseAdmin.auth.getUser(token)` instead of the shared `requireAdminUser()` helper. `config.toml` had `verify_jwt = true` for `reset-password`.
+- **Fix**: (1) Replaced all SDK invocations with `invokeAdminEdgeFunction`. (2) Refactored both edge functions to use `requireAdminUser()`. (3) Set `verify_jwt = false` for `reset-password` in `config.toml`.
+- **Modified files**: `src/pages/admin/UserManagement.tsx`, `supabase/functions/reset-password/index.ts`, `supabase/functions/update-user-email/index.ts`, `supabase/config.toml`
