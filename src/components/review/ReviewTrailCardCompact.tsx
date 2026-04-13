@@ -25,6 +25,7 @@ interface ReviewTrailCardCompactProps {
   showManagement?: boolean;
   queries?: KpiQuery[];
   kpiName?: string | null;
+  employeeCode?: string | null;
 }
 
 export function ReviewTrailCardCompact({ 
