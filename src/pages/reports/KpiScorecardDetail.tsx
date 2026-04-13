@@ -37,6 +37,13 @@ interface FlatRow {
   orgKpiScope: string;
   dataOwnerNames: string;
   weightage: number;
+  targetValue: number | null;
+  selfActual: number | null;
+  managerActual: number | null;
+  skipLevelActual: number | null;
+  hrPmsActual: number | null;
+  auditorActual: number | null;
+  managementActual: number | null;
   selfScore: number | null;
   managerScore: number | null;
   skipLevelScore: number | null;
@@ -107,10 +114,10 @@ export default function KpiScorecardDetail() {
         const { data, error } = await supabase
           .from('kpis')
           .select(`
-            id, employee_id, kra_name, kpi_name, weightage, review_period, review_year, status,
+            id, employee_id, kra_name, kpi_name, weightage, target_value, review_period, review_year, status,
             frequency, is_org_level, org_level_scope, category_id,
             kra_categories ( name ),
-            review_submissions ( self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score, is_na )
+            review_submissions ( self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score, is_na, achieved_value, manager_achieved_value, skip_level_achieved_value, hr_pms_achieved_value, auditor_achieved_value, management_achieved_value )
           `)
           .eq('review_period', selectedMonth)
           .eq('review_year', selectedYear)
@@ -170,6 +177,13 @@ export default function KpiScorecardDetail() {
           orgKpiScope: isOrgKpi ? (kpi.org_level_scope ?? 'organization') : '',
           dataOwnerNames: owners.join(', '),
           weightage: kpi.weightage ?? 0,
+          targetValue: kpi.target_value ?? null,
+          selfActual: sub?.achieved_value ?? null,
+          managerActual: sub?.manager_achieved_value ?? null,
+          skipLevelActual: sub?.skip_level_achieved_value ?? null,
+          hrPmsActual: sub?.hr_pms_achieved_value ?? null,
+          auditorActual: sub?.auditor_achieved_value ?? null,
+          managementActual: sub?.management_achieved_value ?? null,
           selfScore: isNa ? null : (sub?.self_score ?? null),
           managerScore: isNa ? null : (sub?.manager_score ?? null),
           skipLevelScore: isNa ? null : (sub?.skip_level_score ?? null),
@@ -275,12 +289,19 @@ export default function KpiScorecardDetail() {
       'Type': getOrgTypeLabel(r),
       'Data Owner': r.dataOwnerNames || '',
       'Weightage': r.weightage,
-      'Self': r.isNa ? 'N/A' : (r.selfScore ?? ''),
-      'Manager': r.isNa ? 'N/A' : (r.managerScore ?? ''),
-      'Skip-Level': r.isNa ? 'N/A' : (r.skipLevelScore ?? ''),
-      'HR PMS': r.isNa ? 'N/A' : (r.hrPmsScore ?? ''),
-      'Auditor': r.isNa ? 'N/A' : (r.auditorScore ?? ''),
-      'Management': r.isNa ? 'N/A' : (r.managementScore ?? ''),
+      'Target': r.targetValue ?? '',
+      'Self Actual': r.isNa ? 'N/A' : (r.selfActual ?? ''),
+      'Manager Actual': r.isNa ? 'N/A' : (r.managerActual ?? ''),
+      'Skip-Level Actual': r.isNa ? 'N/A' : (r.skipLevelActual ?? ''),
+      'HR PMS Actual': r.isNa ? 'N/A' : (r.hrPmsActual ?? ''),
+      'Auditor Actual': r.isNa ? 'N/A' : (r.auditorActual ?? ''),
+      'Management Actual': r.isNa ? 'N/A' : (r.managementActual ?? ''),
+      'Self Score': r.isNa ? 'N/A' : (r.selfScore ?? ''),
+      'Manager Score': r.isNa ? 'N/A' : (r.managerScore ?? ''),
+      'Skip-Level Score': r.isNa ? 'N/A' : (r.skipLevelScore ?? ''),
+      'HR PMS Score': r.isNa ? 'N/A' : (r.hrPmsScore ?? ''),
+      'Auditor Score': r.isNa ? 'N/A' : (r.auditorScore ?? ''),
+      'Management Score': r.isNa ? 'N/A' : (r.managementScore ?? ''),
       'Final Score': r.isNa ? 'N/A' : (r.finalScore ?? ''),
       'Status': statusLabels[r.status] ?? r.status,
     }));

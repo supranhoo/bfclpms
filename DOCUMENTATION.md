@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-13  
-> **Version:** 2.34.0 — Multi-phase backup engine: client-orchestrated batching with retry, time-guard for scheduled backups, progress UI
+> **Version:** 2.35.0 — KPI Scorecard Detail Excel export now includes Target, Self/Manager/Skip-Level/HR PMS/Auditor/Management Actual values
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
