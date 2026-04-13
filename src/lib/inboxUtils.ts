@@ -188,7 +188,7 @@ export function getItemSlaStatus(item: InboxItem): SlaStatus | null {
  * Get the navigation path for a notification or query item.
  * Returns null if no meaningful deep-link exists (fallback to detail sheet).
  */
-export function getNotificationNavigationPath(item: InboxItem, currentUserId?: string): string | null {
+export function getNotificationNavigationPath(item: InboxItem, currentUserId?: string, currentRole?: string): string | null {
   if (item.type === 'query') {
     // Queries open detail sheet — no direct navigation
     return null;
@@ -198,6 +198,23 @@ export function getNotificationNavigationPath(item: InboxItem, currentUserId?: s
   const metaEmployeeId = meta.employee_id || null;
   // Determine if this notification is about the current user's own KPI
   const isSelfTargeted = currentUserId && (!metaEmployeeId || metaEmployeeId === currentUserId);
+
+  // Helper: map viewer role to dashboard view context
+  const roleToView = (role?: string): string => {
+    switch (role) {
+      case 'admin':
+      case 'manager':
+        return 'team';
+      case 'auditor':
+        return 'audit';
+      case 'management':
+        return 'management';
+      case 'hr_pms':
+        return 'team'; // HR PMS uses team view
+      default:
+        return 'team';
+    }
+  };
 
   // Helper to build dashboard URL with employee context for reviewer-targeted notifications
   const buildEmployeeDeepLink = (view: string, empId: string, kpiId?: string | null, extraParams?: string) => {
@@ -244,7 +261,6 @@ export function getNotificationNavigationPath(item: InboxItem, currentUserId?: s
       return selfKpiLink(item.kpiId);
 
     // admin_status_change / admin_data_entry / admin_data_override:
-    // If meta.employee_id is present and differs from current user, it's for a manager viewing another employee's KPI
     case 'admin_status_change':
     case 'admin_data_entry':
     case 'admin_data_override':
@@ -264,9 +280,6 @@ export function getNotificationNavigationPath(item: InboxItem, currentUserId?: s
     case 'query_responded':
     case 'query_response_submitted':
     case 'query_resolved_fyi': {
-      // For query_resolved/query_resolved_fyi, the notification recipient is the query raiser
-      // and fromUser (mapped from related_user_id / raised_to) is the KPI owner.
-      // Use fromUser.id as the employee context for team-view deep-links.
       const queryEmployeeId = metaEmployeeId || item.fromUser?.id || null;
       const isOtherEmployee = queryEmployeeId && currentUserId && queryEmployeeId !== currentUserId;
       if (isOtherEmployee) {
@@ -275,15 +288,8 @@ export function getNotificationNavigationPath(item: InboxItem, currentUserId?: s
       return selfKpiLink(item.kpiId, 'queryHistory');
     }
 
-    // Observations — context-aware: if sent TO the employee about their own KPI, use self view
-    case 'observation_raised':
-    case 'observation_reply':
-    case 'observation_resolved':
+    // @Mentions — read-only mention sheet (unchanged)
     case 'observation_mention': {
-      if (isSelfTargeted) {
-        return selfKpiLink(item.kpiId);
-      }
-      // For mentioned users: use mentioned_kpi param so Dashboard opens the read-only sheet
       const obsKpiId = item.kpiId || (item.metadata as any)?.kpi_id || null;
       const obsEmployeeId = metaEmployeeId || (item.metadata as any)?.employee_id || item.fromUser?.id || null;
       if (obsKpiId && obsEmployeeId) {
@@ -295,8 +301,24 @@ export function getNotificationNavigationPath(item: InboxItem, currentUserId?: s
       if (obsKpiId) {
         return `/dashboard?mentioned_kpi=${obsKpiId}`;
       }
-      // Ultimate fallback — at least land on the dashboard
       return '/dashboard';
+    }
+
+    // Observation workflow (raised/reply/resolved) — role-aware deep-link
+    case 'observation_raised':
+    case 'observation_reply':
+    case 'observation_resolved': {
+      if (isSelfTargeted) {
+        return selfKpiLink(item.kpiId);
+      }
+      // For reviewers/admins: open employee scorecard in role-appropriate view
+      const obsEmployeeId = metaEmployeeId || (item.metadata as any)?.employee_id || item.fromUser?.id || null;
+      if (obsEmployeeId) {
+        const view = roleToView(currentRole);
+        return buildEmployeeDeepLink(view, obsEmployeeId, item.kpiId);
+      }
+      // Fallback: if no employee context, open self KPI
+      return selfKpiLink(item.kpiId);
     }
 
     // Period events
