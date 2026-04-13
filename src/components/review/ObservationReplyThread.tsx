@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { MessageCircle, Send, ChevronDown, ChevronUp, CheckCircle2, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
-import { openStorageFile } from '@/lib/storageDownload';
+import { openStorageFile, buildEvidenceFileName } from '@/lib/storageDownload';
 import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
 import { MentionTextarea } from '@/components/ui/MentionTextarea';
 import { renderMentionText } from '@/lib/mentionUtils';
@@ -151,7 +151,7 @@ export function ObservationReplyThread({
                         <button
                           key={i}
                           type="button"
-                          onClick={() => openStorageFile(url as string)}
+                          onClick={() => openStorageFile(url as string, buildEvidenceFileName(url as string, null, 'Observation_Reply', i, reply.evidence_urls.length))}
                           className="text-[10px] text-primary hover:underline"
                         >
                           Attachment {i + 1}

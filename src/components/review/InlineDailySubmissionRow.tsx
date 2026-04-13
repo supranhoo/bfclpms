@@ -43,6 +43,7 @@ export function InlineDailySubmissionRow({
       <TableCell colSpan={colSpan} className="py-3 px-4">
         <DailySubmissionSummary
           kpiId={kpi.id}
+          kpiName={kpi.kpi_name}
           reviewMonth={selectedPeriod}
           reviewYear={selectedYear}
           submissions={submissions}

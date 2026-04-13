@@ -605,6 +605,7 @@ export function KpiJourneySection({
                 status={status}
                 isNA={stageIsNA}
                 achievedValue={data.achievedValue}
+                kpiName={kpi.kpi_name}
               />
             );
           })}
@@ -668,6 +669,7 @@ export function KpiJourneySection({
                             status={status}
                             isNA={stageIsNA}
                             achievedValue={data.achievedValue}
+                            kpiName={prevKpi.kpi_name}
                           />
                         );
                       })}

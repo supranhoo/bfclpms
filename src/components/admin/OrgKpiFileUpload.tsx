@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, FileText, X, Loader2, ExternalLink } from 'lucide-react';
-import { openStorageFile } from '@/lib/storageDownload';
+import { openStorageFile, buildEvidenceFileName } from '@/lib/storageDownload';
 import { useUploadLimits } from '@/hooks/useUploadLimits';
 
 interface OrgKpiFileUploadProps {
@@ -34,7 +34,8 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
     setIsUploading(true);
     try {
       const fileExt = file.name.split('.').pop();
-      const fileName = `org-kpi-${Date.now()}.${fileExt}`;
+      const sanitizedName = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').substring(0, 40);
+      const fileName = `org-kpi-${Date.now()}_${sanitizedName}.${fileExt}`;
       const filePath = `org-kpi-evidence/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
@@ -86,7 +87,8 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
       }
       setIsUploading(true);
       const fileExt = file.name.split('.').pop() || 'png';
-      const fileName = `org-kpi-${Date.now()}.${fileExt}`;
+      const sanitizedName = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').substring(0, 40);
+      const fileName = `org-kpi-${Date.now()}_${sanitizedName}.${fileExt}`;
       const filePath = `org-kpi-evidence/${fileName}`;
       supabase.storage.from('review-evidence').upload(filePath, file).then(({ error: uploadError }) => {
         if (uploadError) {
@@ -111,7 +113,7 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
           variant="ghost"
           size="sm"
           className="h-7 px-2 text-xs"
-          onClick={() => openStorageFile(existingUrl)}
+          onClick={() => openStorageFile(existingUrl, buildEvidenceFileName(existingUrl, null, 'Org_KPI'))}
           disabled={disabled}
         >
           <FileText className="h-3 w-3 mr-1" />

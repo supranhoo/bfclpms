@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { safeParseFloat } from '@/lib/utils';
-import { openStorageFile } from '@/lib/storageDownload';
+import { openStorageFile, buildEvidenceFileName } from '@/lib/storageDownload';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubmitSelfReview, RatingLevel, KPI, OrgLevelScope, ReviewSubmission, useKpiQueries } from '@/hooks/useKpis';
 import { useRespondToQuery } from '@/hooks/useQueryWorkflow';
@@ -1044,7 +1044,7 @@ export function SelfReviewSheet({
                     <div>
                       <Label className="text-sm mb-2 block">Evidence</Label>
                       {selfEvidenceUrls.map((url, idx) => (
-                        <button key={idx} type="button" onClick={() => openStorageFile(url)}
+                        <button key={idx} type="button" onClick={() => openStorageFile(url, buildEvidenceFileName(url, selectedKpi?.kpi_name, 'Self', idx, selfEvidenceUrls.length))}
                           className="text-sm text-primary underline hover:no-underline block bg-transparent border-none p-0 cursor-pointer text-left">
                           View Evidence {selfEvidenceUrls.length > 1 ? idx + 1 : ''}
                         </button>

@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-13  
-> **Version:** 2.37.0 — ProfileSettingsTab migrated from supabase.functions.invoke to invokeAdminEdgeFunction for update-user-profile (email, mobile, password)
+> **Version:** 2.38.0 — Evidence downloads now use meaningful filenames (KPI name + stage + index); upload paths include original filename; ADR-039 truncation pattern applied (first line, 40 chars max)
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

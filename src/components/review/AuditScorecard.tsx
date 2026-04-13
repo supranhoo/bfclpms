@@ -1243,6 +1243,7 @@ function DailySubmissionWithOverrideWrapper({
       {/* Daily Submission Summary (read-only) */}
       <DailySubmissionSummary
         kpiId={kpi.id}
+        kpiName={kpi.kpi_name}
         reviewMonth={selectedPeriod}
         reviewYear={selectedYear}
         submissions={submissions}
