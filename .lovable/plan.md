@@ -1,45 +1,51 @@
 
 
-## Add Target & Level-wise Actual Values to KPI Scorecard Detail Excel Export
+## Plan: Wire `periodRanges` Through to UnifiedScorecard for Multi-Month Display
 
 ### Problem
-The Excel export currently only includes scores per level but omits the **Target** value and the **Actual Value entered by each review level** (Self, Manager, Skip-Level, HR PMS, Auditor, Management).
+The `UnifiedScorecard` (line 261-264) filters KPIs using only `selectedMonth` and `selectedYear`, so YTD/QTD/Custom modes show identical data to single-month mode despite the UI correctly computing `periodRanges`.
 
-### What Changes
+### Root Cause
+`useKpisByEmployee` already fetches ALL KPIs for the employee (no period filter). The bottleneck is the client-side filter at line 261:
+```ts
+const kpis = allKpis?.filter(k =>
+  k.review_period === selectedPeriod && k.review_year === selectedYear
+);
+```
+This discards all months outside the selected one, even in multi-month modes.
 
-**File: `src/pages/reports/KpiScorecardDetail.tsx`**
+### Changes
 
-1. **Update the data query** (line ~109-113): Add `target_value` from `kpis` table and add `achieved_value, manager_achieved_value, skip_level_achieved_value, hr_pms_achieved_value, auditor_achieved_value, management_achieved_value` to the `review_submissions` select.
+| # | File | Change |
+|---|------|--------|
+| 1 | `src/components/review/UnifiedScorecard.tsx` (line 260-265) | Replace single-month filter with `periodRanges`-aware filter. Build a `Set` of `"month|year"` keys from `periodSelection.periodRanges`, then filter KPIs by membership in that set. |
+| 2 | `src/components/review/UnifiedScorecard.tsx` (lines 273-278) | Update `useSubPeriodSubmissionsByKpis` and `useOrgKpiValues` calls to pass `periodRanges` instead of a single month/year (or pass the filtered KPI IDs which already cover multiple periods). |
+| 3 | `src/components/review/UnifiedScorecard.tsx` | Add a visual indicator (badge/header text) when viewing cumulative data (e.g., "YTD: Jan–Apr 2026") so users know they're seeing aggregated results. |
+| 4 | `src/pages/Dashboard.tsx` | No change needed — `periodSelection` (including `periodRanges`) is already passed to `UnifiedScorecard` via props. The EmployeeSelectorGrid already uses `periodRanges` correctly. |
+| 5 | `DOCUMENTATION.md` / `POLICY.md` | Version bump and changelog entry for multi-period scorecard support. |
 
-2. **Extend the `FlatRow` interface** (line ~25-49): Add new fields:
-   - `targetValue: number | null`
-   - `selfActual: number | null`
-   - `managerActual: number | null`
-   - `skipLevelActual: number | null`
-   - `hrPmsActual: number | null`
-   - `auditorActual: number | null`
-   - `managementActual: number | null`
+### Technical Detail
 
-3. **Map the new fields** in the query result mapper (line ~150-183).
+**New filter logic (change 1):**
+```typescript
+const periodSet = useMemo(() => {
+  const s = new Set<string>();
+  periodSelection.periodRanges.forEach(pr =>
+    s.add(`${pr.month.trim().toLowerCase()}|${pr.year}`)
+  );
+  return s;
+}, [periodSelection.periodRanges]);
 
-4. **Update `handleExport`** (line ~262-291): Insert new columns after "Weightage":
-   - `Target` → from `kpis.target_value`
-   - `Self Actual` → `review_submissions.achieved_value`
-   - `Manager Actual` → `review_submissions.manager_achieved_value`
-   - `Skip-Level Actual` → `review_submissions.skip_level_achieved_value`
-   - `HR PMS Actual` → `review_submissions.hr_pms_achieved_value`
-   - `Auditor Actual` → `review_submissions.auditor_achieved_value`
-   - `Management Actual` → `review_submissions.management_achieved_value`
+const kpis = useMemo(() => allKpis?.filter(k => {
+  const key = `${k.review_period?.trim().toLowerCase()}|${k.review_year}`;
+  return periodSet.has(key);
+}), [allKpis, periodSet]);
+```
 
-   These columns appear between "Weightage" and "Self" (score) in the export, giving a clear separation between actual values and scores.
-
-5. **Update DOCUMENTATION.md and POLICY.md** version history.
-
-### No UI Table Change
-These columns are added **only to the Excel export** — the on-screen table remains unchanged to keep it readable.
+**Scope limitation**: In multi-month mode, the scorecard becomes **read-only** for review actions (approve/send-back). Reviewers must switch to single-month mode to take actions, because workflow stages and submissions are period-specific. This prevents cross-period approval errors.
 
 ### Risk Assessment
-- **Data impact**: None — read-only query additions
-- **Regression risk**: Very low — only the Excel export mapping changes
-- **UX impact**: Positive — more complete data in exports for payroll/audit use
+- **Data impact**: None — read-only query change
+- **Regression risk**: Low — single-month mode (`periodRanges` has exactly 1 entry) produces identical behavior to current code
+- **Workflow safety**: Multi-month mode disables write actions to prevent cross-period mutations
 
