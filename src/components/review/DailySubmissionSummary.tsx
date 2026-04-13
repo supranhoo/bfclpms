@@ -344,7 +344,7 @@ export function DailySubmissionSummary({
                       return (
                         <button
                           type="button"
-                          onClick={() => urls.forEach((url, i) => openStorageFile(url, buildEvidenceFileName(url, kpiName, `Day_${submission.sub_period_value}`, i, urls.length)))}
+                          onClick={() => urls.forEach((url, i) => openStorageFile(url, buildEvidenceFileName(url, null, kpiName, `Day_${submission.sub_period_value}`, i, urls.length)))}
                           className="inline-flex items-center gap-0.5 text-primary hover:underline mx-auto"
                           title={`${urls.length} file(s) attached`}
                         >

@@ -21,6 +21,7 @@ interface ReviewStageCardProps {
   isNA?: boolean;
   achievedValue?: number | null;
   kpiName?: string | null;
+  employeeCode?: string | null;
 }
 
 const iconColorClasses = {
@@ -63,6 +64,7 @@ export function ReviewStageCard({
   isNA = false,
   achievedValue,
   kpiName,
+  employeeCode,
 }: ReviewStageCardProps) {
   const isPending = status === 'pending';
   const isCurrent = status === 'current';
@@ -162,7 +164,7 @@ export function ReviewStageCard({
             <button
               key={idx}
               type="button"
-              onClick={() => openStorageFile(url, buildEvidenceFileName(url, kpiName, title, idx, evidenceUrls.length))}
+              onClick={() => openStorageFile(url, buildEvidenceFileName(url, employeeCode, kpiName, title, idx, evidenceUrls.length))}
               className="inline-flex items-center gap-1 text-xs text-primary hover:underline cursor-pointer bg-transparent border-none p-0"
             >
               <FileText className="h-3 w-3" />

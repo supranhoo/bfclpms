@@ -27,6 +27,7 @@ interface ReviewTrailCardProps {
   showManagement?: boolean;
   queries?: KpiQuery[];
   kpiName?: string | null;
+  employeeCode?: string | null;
 }
 
 export function ReviewTrailCard({ 
@@ -38,6 +39,7 @@ export function ReviewTrailCard({
   showManagement = false,
   queries = [],
   kpiName,
+  employeeCode,
 }: ReviewTrailCardProps) {
   if (!submission) return null;
 
@@ -156,7 +158,7 @@ export function ReviewTrailCard({
                         <button 
                           key={idx}
                           type="button"
-                          onClick={() => openStorageFile(url, buildEvidenceFileName(url, kpiName, 'Self', idx, urls.length))}
+                          onClick={() => openStorageFile(url, buildEvidenceFileName(url, employeeCode, kpiName, 'Self', idx, urls.length))}
                           className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline cursor-pointer bg-transparent border-none p-0"
                         >
                           <FileText className="h-3 w-3" />
@@ -216,7 +218,7 @@ export function ReviewTrailCard({
                         <button 
                           key={idx}
                           type="button"
-                          onClick={() => openStorageFile(url, buildEvidenceFileName(url, kpiName, 'Manager', idx, urls.length))}
+                          onClick={() => openStorageFile(url, buildEvidenceFileName(url, employeeCode, kpiName, 'Manager', idx, urls.length))}
                           className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline cursor-pointer bg-transparent border-none p-0"
                         >
                           <FileText className="h-3 w-3" />
@@ -279,7 +281,7 @@ export function ReviewTrailCard({
                           <button 
                             key={idx}
                             type="button"
-                            onClick={() => openStorageFile(url, buildEvidenceFileName(url, kpiName, 'Auditor', idx, urls.length))}
+                            onClick={() => openStorageFile(url, buildEvidenceFileName(url, employeeCode, kpiName, 'Auditor', idx, urls.length))}
                             className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline cursor-pointer bg-transparent border-none p-0"
                           >
                             <FileText className="h-3 w-3" />
@@ -338,7 +340,7 @@ export function ReviewTrailCard({
                           <button 
                             key={idx}
                             type="button"
-                            onClick={() => openStorageFile(url, buildEvidenceFileName(url, kpiName, 'Management', idx, urls.length))}
+                            onClick={() => openStorageFile(url, buildEvidenceFileName(url, employeeCode, kpiName, 'Management', idx, urls.length))}
                             className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline cursor-pointer bg-transparent border-none p-0"
                           >
                             <FileText className="h-3 w-3" />

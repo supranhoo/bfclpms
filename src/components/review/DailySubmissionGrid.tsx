@@ -340,7 +340,7 @@ export function DailySubmissionGrid({
                       {entry.evidenceUrls.length > 0 && (
                         <button
                           type="button"
-                          onClick={() => entry.evidenceUrls.forEach((url, i) => openStorageFile(url, buildEvidenceFileName(url, kpiName, `Day_${entry.day}`, i, entry.evidenceUrls.length)))}
+                          onClick={() => entry.evidenceUrls.forEach((url, i) => openStorageFile(url, buildEvidenceFileName(url, null, kpiName, `Day_${entry.day}`, i, entry.evidenceUrls.length)))}
                           className="inline-flex items-center gap-0.5 text-primary hover:underline shrink-0"
                           title={`${entry.evidenceUrls.length} file(s) attached`}
                         >

@@ -25,6 +25,7 @@ interface ReviewTrailCardCompactProps {
   showManagement?: boolean;
   queries?: KpiQuery[];
   kpiName?: string | null;
+  employeeCode?: string | null;
 }
 
 export function ReviewTrailCardCompact({ 
@@ -36,6 +37,7 @@ export function ReviewTrailCardCompact({
   showManagement = false,
   queries = [],
   kpiName,
+  employeeCode,
 }: ReviewTrailCardCompactProps) {
   if (!submission) return null;
 
@@ -95,7 +97,7 @@ export function ReviewTrailCardCompact({
               <button 
                 key={idx}
                 type="button"
-                onClick={() => openStorageFile(url, buildEvidenceFileName(url, kpiName, title, idx, urls.length))}
+                onClick={() => openStorageFile(url, buildEvidenceFileName(url, employeeCode, kpiName, title, idx, urls.length))}
                 className="inline-flex items-center gap-1 text-xs text-primary hover:underline cursor-pointer bg-transparent border-none p-0"
               >
                 <FileText className="h-3 w-3" />

@@ -22,6 +22,7 @@ export function sanitizeForFilename(text: string, maxLen = 40): string {
  */
 export function buildEvidenceFileName(
   url: string,
+  employeeCode?: string | null,
   kpiName?: string | null,
   stage?: string | null,
   index?: number,
@@ -34,6 +35,11 @@ export function buildEvidenceFileName(
   const ext = extMatch ? extMatch[1] : 'file';
 
   const parts: string[] = [];
+
+  if (employeeCode) {
+    const sanitizedCode = sanitizeForFilename(employeeCode, 15);
+    if (sanitizedCode) parts.push(sanitizedCode);
+  }
 
   if (kpiName) {
     const sanitized = sanitizeForFilename(kpiName);

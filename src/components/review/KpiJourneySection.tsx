@@ -606,6 +606,7 @@ export function KpiJourneySection({
                 isNA={stageIsNA}
                 achievedValue={data.achievedValue}
                 kpiName={kpi.kpi_name}
+                employeeCode={resolvedEmployeeCode !== '-' ? resolvedEmployeeCode : null}
               />
             );
           })}
@@ -670,8 +671,8 @@ export function KpiJourneySection({
                             isNA={stageIsNA}
                             achievedValue={data.achievedValue}
                             kpiName={prevKpi.kpi_name}
-                          />
-                        );
+                            employeeCode={resolvedEmployeeCode !== '-' ? resolvedEmployeeCode : null}
+                          />);
                       })}
                     </div>
                   </div>

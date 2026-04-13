@@ -151,7 +151,7 @@ export function ObservationReplyThread({
                         <button
                           key={i}
                           type="button"
-                          onClick={() => openStorageFile(url as string, buildEvidenceFileName(url as string, null, 'Observation_Reply', i, reply.evidence_urls.length))}
+                          onClick={() => openStorageFile(url as string, buildEvidenceFileName(url as string, null, null, 'Observation_Reply', i, reply.evidence_urls.length))}
                           className="text-[10px] text-primary hover:underline"
                         >
                           Attachment {i + 1}
