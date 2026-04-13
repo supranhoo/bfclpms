@@ -1,63 +1,41 @@
 
 
-## Revised Plan: Meaningful Evidence Download File Names (Long KPI Name Safe)
+## Plan: Add Employee ID to Evidence Download Filenames
 
-### Problem
-Downloaded evidence files get cryptic names like `1718234567890.pdf`. Users cannot identify them later in their Downloads folder.
+### Change
+Add an optional `employeeCode` parameter to `buildEvidenceFileName`. When provided, it is prepended to the filename.
 
-### Key Challenge: Long KPI Names
-KPI names in this project often contain multi-line text with formulas, descriptions, and scoring criteria appended. Using the full KPI name would produce filenames like:
-```text
-Safety_Audit_Score_-_Formula:_Achieved_÷_Target_×_100_-_Rating:_5_if_>95%,_4_if_>85%..._Evidence.pdf
-```
-This is worse than the numeric name.
+**Before:** `Safety_Audit_Score_Self_Evidence.pdf`
+**After:** `EMP001_Safety_Audit_Score_Self_Evidence.pdf`
 
-### Solution: Reuse ADR-039 Truncation Pattern
-
-ADR-039 already established that KPI names must be truncated to their **first line only, capped at a safe length**. The same pattern applies here — but stricter for filenames:
-
-1. **First line only** — `kpiName.split('\n')[0]`
-2. **Truncate to 40 characters** (shorter than notifications — filenames need to be compact)
-3. **Sanitize** — replace non-alphanumeric chars with underscores, collapse consecutive underscores
-4. **Structured format** — `{KPI}_{Stage}_{Evidence_N}.{ext}` where stage and index are optional
-
-**Example outputs:**
-| KPI Name (raw) | Stage | Result |
-|---|---|---|
-| `Safety Audit Score\n- Formula: ...` | Self | `Safety_Audit_Score_Self_Evidence.pdf` |
-| `Monthly Revenue Target Achievement\n- Rating: 5 if >95%...` | Manager | `Monthly_Revenue_Target_Achievement_Manager_Evidence_1.pdf` |
-| `कार्य गुणवत्ता` (Hindi) | Self | `Evidence_Self_1.pdf` (non-Latin falls back to generic) |
-
-### Changes
+### Files to Modify
 
 **1. `src/lib/storageDownload.ts`**
-- Add `fileName?: string` optional parameter to `openStorageFile`
-- Add `sanitizeForFilename(text: string, maxLen = 40)` helper: first line → strip non-alphanumeric → collapse underscores → truncate
-- Add `buildEvidenceFileName(kpiName?: string, stage?: string, index?: number, total?: number, url?: string)` helper that assembles parts and preserves extension from URL
+- Add `employeeCode?: string | null` as the first optional parameter after `url`
+- If provided, prepend sanitized employee code to the parts array (max 15 chars, already alphanumeric so minimal sanitization needed)
 
-**2. Upload path improvement (`MultiFileUpload.tsx`, `EvidenceUpload.tsx`)**
-- Include sanitized original filename in storage path: `${timestamp}_${sanitized}.${ext}`
-- Only affects new uploads; existing files get nice names via the download-side fix
+**2. Call sites that have employee context in scope** — pass `employeeCode`:
 
-**3. Update call sites (13 components)**
-- Pass KPI name and stage context to `openStorageFile` where available
-- Each component already has KPI name in scope — no new data fetching needed
-- Components: `ReviewTrailCard`, `ReviewTrailCardCompact`, `ReviewStageCard`, `SelfReviewSheet`, `DailySubmissionGrid`, `WeeklySubmissionTable`, `DailySubmissionSummary`, `OrgKpiFileUpload`, `OrgKpiAuditCard`, `ObservationReplyThread`, and others
+| Component | Source of employee_code |
+|---|---|
+| `EmployeeScorecard.tsx` | `employee.employee_code` prop |
+| `UnifiedScorecard.tsx` | `employee.employee_code` prop |
+| `KpiJourneySection.tsx` | `resolvedEmployeeCode` variable |
+| `ReviewTrailCard.tsx` | New optional prop `employeeCode` (passed from parent scorecards) |
+| `ReviewTrailCardCompact.tsx` | New optional prop `employeeCode` |
+| `ReviewStageCard.tsx` | New optional prop `employeeCode` |
+| `DailySubmissionSummary.tsx` | New optional prop or from parent |
+| `DailySubmissionGrid.tsx` | From `useAuth` (self-review) |
+| `WeeklySubmissionTable.tsx` | From `useAuth` (self-review) |
+| `ManagementScorecard.tsx` | employee prop |
+| `AuditScorecard.tsx` | employee prop |
 
-**4. `DOCUMENTATION.md` / `POLICY.md`** — Version bump, changelog, ADR-039 cross-reference
+Components where no employee context exists (self-uploads, org KPIs) will continue to omit it — the parameter is optional.
 
-### Sanitization Rules (the core safety logic)
-```text
-Input:  "Safety Audit Score\n- Formula: Achieved ÷ Target × 100\n- Rating: 5 if >95%"
-Step 1: "Safety Audit Score"          (first line)
-Step 2: "Safety_Audit_Score"          (replace non-alphanum with _)
-Step 3: "Safety_Audit_Score"          (collapse __)
-Step 4: "Safety_Audit_Score"          (truncate at 40 — fits)
-Final:  "Safety_Audit_Score_Self_Evidence.pdf"
-```
+**3. `DOCUMENTATION.md` / `POLICY.md`** — Version bump, changelog entry.
 
 ### Risk Assessment
-- **Data impact**: None — no schema changes
-- **Regression risk**: Low — `fileName` is optional, existing calls unchanged until updated
-- **Edge cases handled**: Multi-line KPI names, special characters, Unicode/Hindi text (graceful fallback), very long names (hard truncate at 40 chars), missing KPI context (falls back to `Evidence.pdf`)
+- **Data impact**: None
+- **Regression risk**: None — new optional parameter, all existing calls work unchanged
+- **Format**: `{EmpCode}_{KPI}_{Stage}_Evidence_{N}.{ext}` — employee code is short (typically 5-8 chars), no truncation risk
 
