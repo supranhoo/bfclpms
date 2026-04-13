@@ -573,6 +573,7 @@ export default function QueryInbox() {
             emptyMessage="No notifications yet"
             emptyDescription="You'll receive notifications when there are updates to your KPIs"
             currentUserId={user?.id}
+            currentRole={effectiveRole || undefined}
             onSnooze={(id, until) => snoozeNotification.mutate({ notificationId: id, snoozedUntil: until })}
             isSnoozing={snoozeNotification.isPending}
           />
@@ -666,6 +667,7 @@ export default function QueryInbox() {
             emptyDescription="Snooze notifications to defer them for later"
             enableGrouping={false}
             currentUserId={user?.id}
+            currentRole={effectiveRole || undefined}
             onUnsnooze={(id) => unsnoozeNotification.mutate(id)}
             isSnoozing={unsnoozeNotification.isPending}
             showSnoozedInfo
@@ -694,6 +696,7 @@ export default function QueryInbox() {
         onRespond={handleRespond}
         onAccept={handleAccept}
         currentUserId={user?.id}
+        currentRole={effectiveRole || undefined}
       />
 
       {/* Response Dialog */}

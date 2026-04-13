@@ -80,6 +80,7 @@ export function InboxTable({
         emptyDescription={emptyDescription}
         enableGrouping={enableGrouping}
         currentUserId={currentUserId}
+        currentRole={currentRole}
         onInlineRespond={onInlineRespond}
         onInlineAccept={onInlineAccept}
         isInlineSubmitting={isInlineSubmitting}
@@ -150,6 +151,7 @@ export function InboxTable({
                       onToggleExpand={currentUserId ? handleToggleExpand : undefined}
                       isExpanded={expandedItemId === item.id}
                       currentUserId={currentUserId}
+                      currentRole={currentRole}
                       onSnooze={onSnooze}
                       onUnsnooze={onUnsnooze}
                       isSnoozing={isSnoozing}
