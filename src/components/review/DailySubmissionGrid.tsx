@@ -54,6 +54,7 @@ interface DayEntry {
 
 export function DailySubmissionGrid({
   kpiId,
+  kpiName,
   reviewMonth,
   reviewYear,
   submissions,

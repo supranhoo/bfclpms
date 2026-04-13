@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Check, Clock, Loader2, Lock, AlertTriangle, Paperclip } from 'lucide-react';
 import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
 import { useAuth } from '@/contexts/AuthContext';
-import { openStorageFile } from '@/lib/storageDownload';
+import { openStorageFile, buildEvidenceFileName } from '@/lib/storageDownload';
 import { SubPeriodSubmission, useSubmitSubPeriod } from '@/hooks/useSubPeriodSubmissions';
 import { getWeeklySubPeriods, WEEKLY_REVIEW_WINDOWS } from '@/lib/frequencyUtils';
 import { QualitativeOption, BINARY_OPTIONS, scoreToRatingLevel } from '@/lib/qualitativeUom';
@@ -27,6 +27,7 @@ import { Label } from '@/components/ui/label';
 
 interface WeeklySubmissionTableProps {
   kpiId: string;
+  kpiName?: string | null;
   reviewMonth: string;
   reviewYear: number;
   submissions: SubPeriodSubmission[];
