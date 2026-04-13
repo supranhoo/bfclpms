@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-13  
-> **Version:** 1.95.0 — §85 Password Rollout edge function now uses requireAdminUser + invokeAdminEdgeFunction standard
+> **Version:** 1.96.0 — §86 User profile settings (email/mobile/password) now use invokeAdminEdgeFunction standard invocation
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
