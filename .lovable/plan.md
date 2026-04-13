@@ -1,58 +1,72 @@
 
+Revised Plan: Fix “Open in App” for observation notifications so admins/reviewers open the target employee KPI, not their own dashboard
 
-## Fix: "Open in App" for Observation Reply Navigates to Own Dashboard
+What I found:
+- The earlier database fix added `metadata.employee_id` to new observation-reply notifications, but the frontend routing is still too broad.
+- In `src/lib/inboxUtils.ts`, these 4 notification types are grouped together:
+  - `observation_raised`
+  - `observation_reply`
+  - `observation_resolved`
+  - `observation_mention`
+- For any non-self case, they currently route to `mentioned_kpi`, which is the read-only mention flow.
+- That flow is correct for `observation_mention`, but not for admin/manager/auditor/management observation notifications. Those users should open the employee scorecard context, not the self dashboard shell.
 
-### Root Cause
+Implementation plan:
 
-The DB trigger `notify_on_observation_reply()` creates notification rows with this metadata:
-```json
-{
-  "observation_id": "...",
-  "reply_id": "...",
-  "observation_title": "...",
-  "reply_content": "...",
-  "observation_type": "...",
-  "observation_description": "..."
-}
-```
+1. Split observation routing in `src/lib/inboxUtils.ts`
+- Keep `observation_mention` on:
+  - `/dashboard?mentioned_kpi=...&mentioned_employee=...`
+- Change `observation_raised`, `observation_reply`, and `observation_resolved` to:
+  - self target → `/dashboard?kpi=...`
+  - other employee target → reviewer/admin deep-link with employee context
 
-**Missing: `employee_id`** (the KPI owner).
+2. Make routing role-aware
+- Extend `getNotificationNavigationPath(...)` to accept current viewer role/effective role
+- Use role-based view mapping for other-employee observation links:
+  - admin / manager → `view=team`
+  - auditor → `view=audit`
+  - management → `view=management`
+  - hr_pms → `view=hr_pms`
+  - safe fallback → `view=team`
+- Update callers:
+  - `src/pages/QueryInbox.tsx`
+  - `src/components/inbox/InboxDetailSheet.tsx`
+  - `src/components/inbox/InboxRowItem.tsx`
+  - `src/components/inbox/MobileInboxList.tsx`
 
-The navigation function `getNotificationNavigationPath` (inboxUtils.ts:200) checks:
-```typescript
-const metaEmployeeId = meta.employee_id || null;
-const isSelfTargeted = currentUserId && (!metaEmployeeId || metaEmployeeId === currentUserId);
-```
+3. Backfill existing observation notifications
+- Add a migration to patch old `notifications` rows for:
+  - `observation_raised`
+  - `observation_reply`
+  - `observation_resolved`
+- Fill `metadata.employee_id` from `kpi_id -> kpis.employee_id`
+- Re-audit observation notification triggers so all future rows consistently include KPI-owner context
 
-Since `employee_id` is null, `isSelfTargeted` is always `true`, so the link resolves to `/dashboard?kpi=xxx` — the user's own KPI view, which either shows nothing or the wrong KPI.
+4. Regression protection
+- Expand `src/lib/inboxUtils.test.ts` with explicit cases for:
+  - employee opens own observation reply
+  - admin opens another employee’s observation reply
+  - auditor/management role mapping
+  - `observation_mention` still using mention sheet
+  - fallback behavior when metadata is incomplete
+- Add/update inline mock notification fixtures used by those tests
 
-### Fix
+5. SSOT / policy sync
+- Update `DOCUMENTATION.md`
+- Update `POLICY.md`
+- Record the rule:
+  - mentions use read-only mention routing
+  - observation workflow notifications for reviewers/admins must open the target employee scorecard
 
-**1. Database migration** — Update `notify_on_observation_reply()` to include `employee_id` (the KPI owner `v_kpi_owner`) in the metadata `jsonb_build_object` call for both notification inserts.
+Risk & Impact Report:
+- Data impact: low; only notification metadata backfill, no schema shape change
+- Workflow impact: navigation only, no scoring/review logic changes
+- UI/UX impact: improves consistency; “Open in App” will open the correct employee context
+- Regression risk: medium-low because inbox routing is shared; tests will contain it
+- Mitigation: isolate logic to the routing helper, preserve non-observation routes, add route tests before/with change
 
-```sql
-jsonb_build_object(
-  'observation_id', NEW.observation_id,
-  'reply_id', NEW.id,
-  'observation_title', v_obs_title,
-  'reply_content', v_reply_content,
-  'observation_type', v_obs_type,
-  'observation_description', v_obs_description,
-  'employee_id', v_kpi_owner          -- NEW
-)
-```
-
-This applies to both the "notify observation creator" insert (line 40) and the "notify KPI owner" insert (line 56).
-
-**2. Same fix for `observation_raised` and `observation_resolved`** — Audit the other observation notification triggers (`notify_on_observation_raised`, `notify_on_observation_resolved`) to ensure they also include `employee_id` in metadata. If missing, add it in the same migration.
-
-**3. `DOCUMENTATION.md` / `POLICY.md`** — Version bump, changelog.
-
-### No frontend changes needed
-The navigation logic in `inboxUtils.ts` already handles `employee_id` correctly — it just wasn't receiving it.
-
-### Risk Assessment
-- **Data impact**: Only affects new notifications (existing ones without `employee_id` will continue to fall back to dashboard)
-- **Regression risk**: None — adding a new key to metadata JSON
-- **Fix confidence**: High
-
+Expected result:
+- If Jaspal (100125) opens an observation-reply notification for another employee, it opens that employee’s KPI in admin/reviewer context
+- If the employee opens their own notification, it still opens their own KPI
+- @mentions continue to open the read-only mention sheet
+- Older observation notifications also start working after metadata backfill
