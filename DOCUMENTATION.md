@@ -5072,3 +5072,9 @@ Every new edge function **must** complete all of these steps before deployment:
 - **Bug**: `handleCardSave` in `OrgKpiDataEntry.tsx` did not include `sub_factors` in the save payload, so HR-entered compliance sub-factor values were lost on save
 - **Fix**: Added `sub_factors` mapping from `sv.subFactors` to the `toSave` object in the scoped values loop, and updated the type definition to include `subFactors`
 - **Modified files**: `src/pages/admin/OrgKpiDataEntry.tsx`
+
+### v2.34.0 — Bug Fix: Password Rollout 401 Unauthorized (2026-04-13)
+- **Bug**: Password Rollout edge function returned 401 Unauthorized despite the user being authenticated and having admin role
+- **Root Cause**: `usePasswordRolloutMutation` used `supabase.functions.invoke()` (SDK method) which does not reliably forward the `Authorization` header. All other admin edge functions use `invokeAdminEdgeFunction()` (explicit `fetch` with headers).
+- **Fix**: Replaced SDK invocation with `invokeAdminEdgeFunction` from `src/lib/adminEdgeFunction.ts`, aligning with project security policy
+- **Modified files**: `src/hooks/usePasswordRollout.ts`, `POLICY.md` (§85)
