@@ -68,7 +68,8 @@ export function EvidenceUpload({ userId, kpiId, onUploadComplete, existingUrl }:
 
     try {
       const fileExt = ACCEPTED_TYPES[file.type as keyof typeof ACCEPTED_TYPES]?.ext || 'file';
-      const filePath = `${userId}/${kpiId}/${Date.now()}.${fileExt}`;
+      const sanitizedName = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').substring(0, 40);
+      const filePath = `${userId}/${kpiId}/${Date.now()}_${sanitizedName}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from('review-evidence')
@@ -131,7 +132,8 @@ export function EvidenceUpload({ userId, kpiId, onUploadComplete, existingUrl }:
       setUploading(true);
       setFileName(file.name);
       const fileExt = ACCEPTED_TYPES[file.type as keyof typeof ACCEPTED_TYPES]?.ext || 'file';
-      const filePath = `${userId}/${kpiId}/${Date.now()}.${fileExt}`;
+      const sanitizedName = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').substring(0, 40);
+      const filePath = `${userId}/${kpiId}/${Date.now()}_${sanitizedName}.${fileExt}`;
       supabase.storage.from('review-evidence').upload(filePath, file, { upsert: true }).then(({ error: uploadError }) => {
         if (uploadError) {
           toast({ title: 'Upload failed', description: uploadError.message, variant: 'destructive' });

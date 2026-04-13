@@ -103,7 +103,8 @@ export function MultiFileUpload({
     try {
       const fileExt = ACCEPTED_TYPES[file.type as keyof typeof ACCEPTED_TYPES]?.ext || 'file';
       const timestamp = Date.now();
-      const filePath = `${userId}/${contextId}/${folder}/${timestamp}.${fileExt}`;
+      const sanitizedName = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').substring(0, 40);
+      const filePath = `${userId}/${contextId}/${folder}/${timestamp}_${sanitizedName}.${fileExt}`;
 
       // Simulate progress (Supabase doesn't provide upload progress)
       const progressInterval = setInterval(() => {
