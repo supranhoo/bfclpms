@@ -1622,3 +1622,9 @@ When users select YTD, QTD, or Custom period modes, the UnifiedScorecard display
 ## §85 — Admin Edge Function Invocation Standard (v1.96.0)
 
 All admin-only edge functions **must** be invoked via `invokeAdminEdgeFunction()` from `src/lib/adminEdgeFunction.ts`, which uses explicit `fetch` with `Authorization: Bearer <token>` and `apikey` headers. The Supabase SDK's `supabase.functions.invoke()` method **must not** be used for admin functions, as it may strip or fail to forward the Authorization header, resulting in 401 errors. This policy was established after the Password Rollout 401 incident (v2.34.0) and extended after the Reset Password / Update Email 401 incident (v2.35.0). All admin edge functions must also use the shared `requireAdminUser()` helper for authentication instead of inline token validation.
+
+---
+
+## §86 — Inbox Observation Deep-Link Routing (v2.01.0)
+
+Observation workflow notifications (`observation_raised`, `observation_reply`, `observation_resolved`) must deep-link to the target employee's KPI detail sheet — not merely the employee dashboard. The `getNotificationNavigationPath` function builds role-aware URLs (`view=team|audit|management`) with `employee` and `kpi` params. `UnifiedScorecard` auto-opens the reviewer sheet when `autoOpenKpiId` matches a loaded KPI in non-self modes. `@mention` notifications (`observation_mention`) continue to use the read-only `MentionedKpiSheet` via `mentioned_kpi` / `mentioned_employee` params.
