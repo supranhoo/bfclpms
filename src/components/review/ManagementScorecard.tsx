@@ -1428,6 +1428,7 @@ function DailySubmissionWithOverrideWrapper({
     <div className="space-y-4">
       <DailySubmissionSummary
         kpiId={kpi.id}
+        kpiName={kpi.kpi_name}
         reviewMonth={selectedPeriod}
         reviewYear={selectedYear}
         submissions={submissions}
