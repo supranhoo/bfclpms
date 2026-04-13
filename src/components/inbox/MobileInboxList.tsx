@@ -25,6 +25,7 @@ interface MobileInboxListProps {
   emptyDescription?: string;
   enableGrouping?: boolean;
   currentUserId?: string;
+  currentRole?: string;
   onInlineRespond?: (itemId: string, notes: string, evidenceUrl?: string) => void;
   onInlineAccept?: (item: InboxItem) => void;
   isInlineSubmitting?: boolean;
@@ -42,6 +43,7 @@ export function MobileInboxList({
   emptyDescription = 'Nothing to show here',
   enableGrouping = true,
   currentUserId,
+  currentRole,
   onInlineRespond,
   onInlineAccept,
   isInlineSubmitting,
@@ -130,7 +132,7 @@ export function MobileInboxList({
                     )}
                     onClick={() => {
                       if (item.type === 'notification' && onNavigate) {
-                        const path = getNotificationNavigationPath(item, currentUserId);
+                        const path = getNotificationNavigationPath(item, currentUserId, currentRole);
                         if (path) {
                           onNavigate(path);
                           return;

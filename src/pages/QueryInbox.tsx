@@ -52,7 +52,7 @@ interface QueryWithDetails {
 }
 
 export default function QueryInbox() {
-  const { user } = useAuth();
+  const { user, effectiveRole } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();

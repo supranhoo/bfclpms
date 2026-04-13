@@ -15,13 +15,14 @@ interface InboxRowItemProps {
   onToggleExpand?: (itemId: string) => void;
   isExpanded?: boolean;
   currentUserId?: string;
+  currentRole?: string;
   onSnooze?: (notificationId: string, until: Date) => void;
   onUnsnooze?: (notificationId: string) => void;
   isSnoozing?: boolean;
   showSnoozedInfo?: boolean;
 }
 
-export function InboxRowItem({ item, onView, onMarkRead, onNavigate, onToggleExpand, isExpanded, currentUserId, onSnooze, onUnsnooze, isSnoozing, showSnoozedInfo }: InboxRowItemProps) {
+export function InboxRowItem({ item, onView, onMarkRead, onNavigate, onToggleExpand, isExpanded, currentUserId, currentRole, onSnooze, onUnsnooze, isSnoozing, showSnoozedInfo }: InboxRowItemProps) {
   const getTypeIcon = () => {
     if (item.type === 'query') {
       switch (item.queryStatus) {
@@ -201,7 +202,7 @@ export function InboxRowItem({ item, onView, onMarkRead, onNavigate, onToggleExp
             title="Open in App"
             onClick={(e) => {
               e.stopPropagation();
-              const path = getNotificationNavigationPath(item, currentUserId);
+              const path = getNotificationNavigationPath(item, currentUserId, currentRole);
               if (path && onNavigate) {
                 if (!item.isRead && onMarkRead) onMarkRead(item);
                 onNavigate(path);
