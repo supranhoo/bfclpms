@@ -64,12 +64,10 @@ export function usePasswordRolloutMutation() {
 
   return useMutation({
     mutationFn: async ({ userIds, sendEmail }: { userIds: string[]; sendEmail: boolean }) => {
-      const { data, error } = await supabase.functions.invoke('password-rollout', {
-        body: { user_ids: userIds, send_email: sendEmail },
-      });
-
-      if (error) throw error;
-      return data as { total: number; succeeded: number; failed: number; details: any[] };
+      const data = await invokeAdminEdgeFunction<{
+        total: number; succeeded: number; failed: number; details: any[];
+      }>('password-rollout', { user_ids: userIds, send_email: sendEmail });
+      return data;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['password-rollout-logs'] });
