@@ -365,11 +365,10 @@ export default function UserManagement() {
   // Password reset mutation (generate link)
   const resetPassword = useMutation({
     mutationFn: async (email: string) => {
-      const response = await supabase.functions.invoke('reset-password', {
-        body: { email, action: 'generate_link' },
-      });
-      if (response.error) throw new Error(response.error.message);
-      return response.data;
+      return invokeAdminEdgeFunction<{ success: boolean; message: string; resetLink?: string | null }>(
+        'reset-password',
+        { email, action: 'generate_link' },
+      );
     },
     onSuccess: (data) => {
       if (data.resetLink) {
@@ -385,12 +384,10 @@ export default function UserManagement() {
   // Set new password mutation (direct update)
   const setNewPassword = useMutation({
     mutationFn: async ({ email, password }: { email: string; password: string }) => {
-      const response = await supabase.functions.invoke('reset-password', {
-        body: { email, newPassword: password, action: 'set_password' },
-      });
-      if (response.error) throw new Error(response.error.message);
-      if (response.data?.error) throw new Error(response.data.error);
-      return response.data;
+      return invokeAdminEdgeFunction<{ success: boolean; message: string }>(
+        'reset-password',
+        { email, newPassword: password, action: 'set_password' },
+      );
     },
     onSuccess: () => {
       toast({ title: 'Password updated successfully' });
