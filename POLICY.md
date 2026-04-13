@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-13  
-> **Version:** 1.93.0 — §16 Multi-phase backup engine: client-orchestrated batching with time-guard for scheduled backups
+> **Version:** 1.94.0 — §17 KPI Scorecard Detail export includes Target and level-wise Actual values
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
