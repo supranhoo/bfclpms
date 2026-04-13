@@ -1,40 +1,58 @@
 
 
-## Fix: Copied Org KPIs Not Shown as Org KPIs + Data Owner Not Applied
+## Fix: "Open in App" for Observation Reply Navigates to Own Dashboard
 
-### Root Cause Analysis
+### Root Cause
 
-**Issue 1: Org KPI not appearing in Org KPI Data Entry page**
-The `CopyKrasDialog` correctly copies `is_org_level: true` and `org_level_scope` to the new KPI record. However, after copy it only invalidates `['all-kpis']` and `['kpis']` query caches — it does NOT invalidate `['org-level-kpis']`, `['org-level-kpis-with-employees']`, or `['org-kpi-full-mapping']`. This means the Org KPI Data Entry page still shows stale data and the new employee doesn't appear in the org KPI employee list.
+The DB trigger `notify_on_observation_reply()` creates notification rows with this metadata:
+```json
+{
+  "observation_id": "...",
+  "reply_id": "...",
+  "observation_title": "...",
+  "reply_content": "...",
+  "observation_type": "...",
+  "observation_description": "..."
+}
+```
 
-**Issue 2: Data owner not visible for new employee**
-The `org_kpi_data_owners` table is keyed by `category_id + kra_name + kpi_name` (not employee-specific), so data owners technically still apply. However, the `['org-kpi-data-owners']` and `['org-kpi-data-owner-names']` query caches are also not invalidated, so the UI may not re-fetch and display the data owner badges for the newly copied KPIs.
+**Missing: `employee_id`** (the KPI owner).
 
-**Issue 3: Missing `org_kpi_values` row for employee-scoped KPIs**
-When an org KPI has `org_level_scope = 'employee'`, the data entry page expects an `org_kpi_values` row per employee. The copy dialog doesn't create these rows, so the data owner has no entry row to fill for the new employee.
+The navigation function `getNotificationNavigationPath` (inboxUtils.ts:200) checks:
+```typescript
+const metaEmployeeId = meta.employee_id || null;
+const isSelfTargeted = currentUserId && (!metaEmployeeId || metaEmployeeId === currentUserId);
+```
+
+Since `employee_id` is null, `isSelfTargeted` is always `true`, so the link resolves to `/dashboard?kpi=xxx` — the user's own KPI view, which either shows nothing or the wrong KPI.
 
 ### Fix
 
-**File: `src/components/admin/CopyKrasDialog.tsx`**
+**1. Database migration** — Update `notify_on_observation_reply()` to include `employee_id` (the KPI owner `v_kpi_owner`) in the metadata `jsonb_build_object` call for both notification inserts.
 
-1. **Invalidate org KPI query caches** in the `onSuccess` handler (lines 234-237):
-   - Add `['org-level-kpis']`
-   - Add `['org-level-kpis-with-employees']`
-   - Add `['org-kpi-full-mapping']`
-   - Add `['org-kpi-data-owners']`
-   - Add `['org-kpi-data-owner-names']`
-   - Add `['org-kpi-values']`
+```sql
+jsonb_build_object(
+  'observation_id', NEW.observation_id,
+  'reply_id', NEW.id,
+  'observation_title', v_obs_title,
+  'reply_content', v_reply_content,
+  'observation_type', v_obs_type,
+  'observation_description', v_obs_description,
+  'employee_id', v_kpi_owner          -- NEW
+)
+```
 
-2. **Create `org_kpi_values` placeholder rows** for employee-scoped org KPIs after insert (in the mutation function, after the bulk insert succeeds):
-   - For each copied KPI where `is_org_level = true` and `org_level_scope = 'employee'`, insert a placeholder row into `org_kpi_values` with `employee_id` set to the target employee, matching `category_id`, `kra_name`, `kpi_name`, `review_period`, `review_year`, and status `'entered'`.
-   - Copy `target_value`, `criteria`, `uom_type`, `qualitative_options`, and rating thresholds (`r0`–`r5`) from the source KPI so the data entry card renders correctly.
+This applies to both the "notify observation creator" insert (line 40) and the "notify KPI owner" insert (line 56).
 
-**File: `DOCUMENTATION.md`** — Version bump, changelog.
+**2. Same fix for `observation_raised` and `observation_resolved`** — Audit the other observation notification triggers (`notify_on_observation_raised`, `notify_on_observation_resolved`) to ensure they also include `employee_id` in metadata. If missing, add it in the same migration.
 
-**File: `POLICY.md`** — Note: Copy KRA must preserve org KPI data entry infrastructure.
+**3. `DOCUMENTATION.md` / `POLICY.md`** — Version bump, changelog.
+
+### No frontend changes needed
+The navigation logic in `inboxUtils.ts` already handles `employee_id` correctly — it just wasn't receiving it.
 
 ### Risk Assessment
-- **Data impact**: New rows in `org_kpi_values` (placeholder only, no achieved values) — safe
-- **Regression risk**: Low — only adds cache invalidation and optional inserts for org KPIs
-- **Fix confidence**: High — matches existing patterns in `useAddEmployeesToOrgKpi`
+- **Data impact**: Only affects new notifications (existing ones without `employee_id` will continue to fall back to dashboard)
+- **Regression risk**: None — adding a new key to metadata JSON
+- **Fix confidence**: High
 
