@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-13  
-> **Version:** 2.00.0 — Observation notification triggers must include employee_id (KPI owner) in metadata to enable correct inbox deep-link navigation
+> **Version:** 2.01.0 — Observation inbox routing split: @mentions use read-only mention sheet; observation_raised/reply/resolved use role-aware employee scorecard deep-links for reviewers/admins
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -605,6 +605,7 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 | Version | Date | Change |
 |---------|------|--------|
+| 2.01.0 | 2026-04-13 | Observation inbox "Open in App" routing split: @mentions → read-only mention sheet; observation_raised/reply/resolved → role-aware employee scorecard deep-link (admin→team, auditor→audit, management→management). Backfilled existing notifications. |
 | 1.92.4 | 2026-04-10 | UX fix: bulk zero-score confirmation now accepts `ZERO`, `zero`, or `0` — previously only exact `ZERO` was accepted, blocking users who typed `0`. |
 | 1.90.4 | 2026-04-10 | Technical sync: §76 bulk zero-score edge function force-redeployed after stale kpiErr fix; added mandatory deployment verification to Edge Function Checklist. |
 | 1.90.3 | 2026-04-10 | Technical sync: §76 orphaned `kpiErr` variable reference removed from scan-mode block in `bulk-zero-score-non-submitters`. |
