@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { LucideIcon, FileText, ExternalLink } from 'lucide-react';
-import { openStorageFile } from '@/lib/storageDownload';
+import { openStorageFile, buildEvidenceFileName } from '@/lib/storageDownload';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -20,6 +20,7 @@ interface ReviewStageCardProps {
   status: StageStatus;
   isNA?: boolean;
   achievedValue?: number | null;
+  kpiName?: string | null;
 }
 
 const iconColorClasses = {
@@ -61,6 +62,7 @@ export function ReviewStageCard({
   status,
   isNA = false,
   achievedValue,
+  kpiName,
 }: ReviewStageCardProps) {
   const isPending = status === 'pending';
   const isCurrent = status === 'current';
@@ -160,7 +162,7 @@ export function ReviewStageCard({
             <button
               key={idx}
               type="button"
-              onClick={() => openStorageFile(url)}
+              onClick={() => openStorageFile(url, buildEvidenceFileName(url, kpiName, title, idx, evidenceUrls.length))}
               className="inline-flex items-center gap-1 text-xs text-primary hover:underline cursor-pointer bg-transparent border-none p-0"
             >
               <FileText className="h-3 w-3" />
