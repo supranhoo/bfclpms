@@ -68,9 +68,9 @@ export default function QueryInbox() {
     notificationType: 'all',
   });
 
-  const [activeTab, setActiveTab] = useState<'notifications' | 'received' | 'sent' | 'team' | 'snoozed' | 'insights'>(() => {
+  const [activeTab, setActiveTab] = useState<'notifications' | 'read' | 'received' | 'sent' | 'team' | 'snoozed' | 'insights'>(() => {
     const tabParam = searchParams.get('tab');
-    const validTabs = ['notifications', 'received', 'sent', 'team', 'snoozed', 'insights'];
+    const validTabs = ['notifications', 'read', 'received', 'sent', 'team', 'snoozed', 'insights'];
     return validTabs.includes(tabParam || '') ? tabParam as any : 'notifications';
   });
   const [selectedItem, setSelectedItem] = useState<InboxItem | null>(null);
@@ -90,12 +90,20 @@ export default function QueryInbox() {
   const unsnoozeNotification = useUnsnoozeNotification();
 
   // Paginated notifications
+  // Force unread for notifications tab, read for read tab
   const notificationFilters: NotificationFilters = useMemo(() => ({
     search: filters.search,
-    readStatus: filters.readStatus,
+    readStatus: 'unread',
     dateRange: filters.dateRange,
     type: filters.notificationType,
-  }), [filters]);
+  }), [filters.search, filters.dateRange, filters.notificationType]);
+
+  const readNotificationFilters: NotificationFilters = useMemo(() => ({
+    search: filters.search,
+    readStatus: 'read',
+    dateRange: filters.dateRange,
+    type: filters.notificationType,
+  }), [filters.search, filters.dateRange, filters.notificationType]);
 
   const {
     notifications,
@@ -105,6 +113,16 @@ export default function QueryInbox() {
     hasMore: hasMoreNotifications,
     loadMore: loadMoreNotifications,
   } = usePaginatedNotifications({ pageSize: 20, filters: notificationFilters });
+
+  // Read notifications
+  const {
+    notifications: readNotifications,
+    isLoading: loadingReadNotifications,
+    isFetching: fetchingReadNotifications,
+    totalCount: readNotificationsTotalCount,
+    hasMore: hasMoreReadNotifications,
+    loadMore: loadMoreReadNotifications,
+  } = usePaginatedNotifications({ pageSize: 20, filters: readNotificationFilters });
 
   // Snoozed notifications
   const {
@@ -187,11 +205,14 @@ export default function QueryInbox() {
     notifications.forEach(n => {
       if (n.related_user_id) ids.add(n.related_user_id);
     });
+    readNotifications.forEach(n => {
+      if (n.related_user_id) ids.add(n.related_user_id);
+    });
     snoozedNotifications.forEach(n => {
       if (n.related_user_id) ids.add(n.related_user_id);
     });
     return Array.from(ids);
-  }, [notifications, snoozedNotifications]);
+  }, [notifications, readNotifications, snoozedNotifications]);
 
   const { data: relatedProfiles } = useQuery({
     queryKey: ['related-profiles', relatedUserIds],
@@ -245,7 +266,41 @@ export default function QueryInbox() {
     [notifications, relatedProfileMap]
   );
 
-  // Convert snoozed notifications to InboxItems (with same enrichment as regular notifications)
+  // Convert read notifications to InboxItems
+  const readNotificationItems: InboxItem[] = useMemo(() =>
+    readNotifications.map(n => {
+      const meta = (n.metadata && typeof n.metadata === 'object') ? n.metadata as Record<string, any> : {};
+      const relatedProfile = n.related_user_id ? relatedProfileMap.get(n.related_user_id) : null;
+
+      return {
+        id: n.id,
+        type: 'notification' as const,
+        title: n.title,
+        message: n.message,
+        isRead: n.is_read,
+        createdAt: n.created_at,
+        notificationType: n.type,
+        kpiId: n.kpi_id,
+        kpiName: meta.kpi_name || null,
+        kraName: meta.kra_name || null,
+        fromUser: relatedProfile ? {
+          id: relatedProfile.id,
+          fullName: relatedProfile.full_name,
+          email: relatedProfile.email,
+        } : (meta.employee_name ? {
+          id: n.related_user_id || '',
+          fullName: meta.employee_name,
+          email: '',
+        } : null),
+        metadata: meta,
+        snoozedUntil: n.snoozed_until,
+        snoozeCount: n.snooze_count,
+      };
+    }),
+    [readNotifications, relatedProfileMap]
+  );
+
+
   const snoozedItems: InboxItem[] = useMemo(() =>
     snoozedNotifications.map(n => {
       const meta = (n.metadata && typeof n.metadata === 'object') ? n.metadata as Record<string, any> : {};
@@ -510,6 +565,15 @@ export default function QueryInbox() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="read" className="flex items-center gap-1.5 flex-shrink-0 text-xs sm:text-sm">
+            <CheckCheck className="h-4 w-4" />
+            Read
+            {readNotificationsTotalCount > 0 && (
+              <Badge variant="outline" className="ml-0.5 h-4 sm:h-5 min-w-4 sm:min-w-5 px-1 flex items-center justify-center text-[10px] sm:text-xs">
+                {readNotificationsTotalCount}
+              </Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="received" className="flex items-center gap-1.5 flex-shrink-0 text-xs sm:text-sm">
             <MessageSquare className="h-4 w-4" />
             Queries
@@ -570,12 +634,39 @@ export default function QueryInbox() {
             onViewItem={handleViewItem}
             onMarkRead={handleMarkRead}
             onNavigate={handleNavigate}
-            emptyMessage="No notifications yet"
-            emptyDescription="You'll receive notifications when there are updates to your KPIs"
+            emptyMessage="No unread notifications"
+            emptyDescription="All caught up! Check the Read tab for previous notifications"
             currentUserId={user?.id}
             currentRole={effectiveRole || undefined}
             onSnooze={(id, until) => snoozeNotification.mutate({ notificationId: id, snoozedUntil: until })}
             isSnoozing={snoozeNotification.isPending}
+          />
+        </TabsContent>
+
+
+
+        {/* Read Notifications Tab */}
+        <TabsContent value="read" className="mt-6 space-y-4">
+          <InboxFilters
+            filters={filters}
+            onFiltersChange={setFilters}
+            totalCount={readNotificationsTotalCount}
+            showingCount={readNotifications.length}
+            activeTab="read"
+          />
+          <InboxTable
+            items={readNotificationItems}
+            isLoading={loadingReadNotifications}
+            isFetching={fetchingReadNotifications}
+            hasMore={hasMoreReadNotifications}
+            onLoadMore={loadMoreReadNotifications}
+            onViewItem={handleViewItem}
+            onMarkRead={handleMarkRead}
+            onNavigate={handleNavigate}
+            emptyMessage="No read notifications"
+            emptyDescription="Notifications you've read will appear here"
+            currentUserId={user?.id}
+            currentRole={effectiveRole || undefined}
           />
         </TabsContent>
 

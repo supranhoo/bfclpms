@@ -33,7 +33,7 @@ interface InboxFiltersProps {
   totalCount?: number;
   showingCount?: number;
   /** Which tab is active — controls which dropdowns to show */
-  activeTab?: 'notifications' | 'received' | 'sent' | 'team' | 'insights';
+  activeTab?: 'notifications' | 'read' | 'received' | 'sent' | 'team' | 'insights';
 }
 
 const NOTIFICATION_TYPES = [
@@ -70,7 +70,7 @@ export function InboxFilters({ filters, onFiltersChange, totalCount, showingCoun
   };
 
   const isQueryTab = activeTab === 'received' || activeTab === 'sent' || activeTab === 'team';
-  const isNotificationTab = activeTab === 'notifications';
+  const isNotificationTab = activeTab === 'notifications' || activeTab === 'read';
   const showAdvancedHint = useMemo(() => hasAdvancedSyntax(searchValue), [searchValue]);
 
   const activeFilterCount = [
@@ -88,22 +88,7 @@ export function InboxFilters({ filters, onFiltersChange, totalCount, showingCoun
     <>
       {/* Row 1: Status/Query filters + Date */}
       <div className="flex flex-col sm:flex-row gap-3">
-        {/* Status Filter (Read/Unread) — notifications only */}
-        {isNotificationTab && (
-          <Select
-            value={filters.readStatus}
-            onValueChange={(value) => onFiltersChange({ ...filters, readStatus: value as InboxFiltersState['readStatus'] })}
-          >
-            <SelectTrigger className="w-full sm:w-[140px]">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="unread">Unread</SelectItem>
-              <SelectItem value="read">Read</SelectItem>
-            </SelectContent>
-          </Select>
-        )}
+        {/* Read Status dropdown hidden — tab already implies read/unread */}
 
         {/* Query Status — query tabs only */}
         {isQueryTab && (
