@@ -26,6 +26,14 @@ export function useIdleTimeout() {
 
   const doLogout = useCallback(async () => {
     clearTimers();
+    // Persist email for prefill on re-login if remember-me was on
+    try {
+      const { data } = await supabase.auth.getSession();
+      const email = data?.session?.user?.email;
+      if (email && localStorage.getItem('pms_remember_me') !== 'false') {
+        localStorage.setItem('pms_remembered_email', email);
+      }
+    } catch { /* best-effort */ }
     toast.error('You have been signed out due to inactivity.');
     await supabase.auth.signOut();
     navigate('/auth', { replace: true });

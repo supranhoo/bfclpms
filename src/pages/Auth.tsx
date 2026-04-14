@@ -21,10 +21,10 @@ export default function Auth() {
   const { data: appSettings, isLoading: isLoadingSettings } = useAppSettings();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
+  const [rememberMe, setRememberMe] = useState(() => localStorage.getItem('pms_remember_me') !== 'false');
   
   // Login form state
-  const [loginEmail, setLoginEmail] = useState('');
+  const [loginEmail, setLoginEmail] = useState(() => localStorage.getItem('pms_remembered_email') || '');
   const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   
@@ -231,7 +231,9 @@ export default function Auth() {
                     </div>
                     <Input
                       id="login-email"
+                      name="email"
                       type="email"
+                      autoComplete="email"
                       placeholder="name@company.com"
                       value={loginEmail}
                       onChange={(e) => setLoginEmail(e.target.value)}
@@ -266,7 +268,9 @@ export default function Auth() {
                     </div>
                     <Input
                       id="login-password"
+                      name="password"
                       type={showLoginPassword ? 'text' : 'password'}
+                      autoComplete="current-password"
                       placeholder="••••••••"
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}

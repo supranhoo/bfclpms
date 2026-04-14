@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-14  
-> **Version:** 2.02.0 — §Remember Me: session persistence uses synchronous localStorage token removal on beforeunload instead of async signOut; Remember Me OFF clears Supabase auth token reliably when browser closes.
+> **Version:** 2.03.0 — §Remember Me: email is now persisted to localStorage on login and before idle-timeout logout, prefilling the login form on return. Login inputs include name/autoComplete attributes to enable browser credential managers.
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
