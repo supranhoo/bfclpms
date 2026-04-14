@@ -205,11 +205,14 @@ export default function QueryInbox() {
     notifications.forEach(n => {
       if (n.related_user_id) ids.add(n.related_user_id);
     });
+    readNotifications.forEach(n => {
+      if (n.related_user_id) ids.add(n.related_user_id);
+    });
     snoozedNotifications.forEach(n => {
       if (n.related_user_id) ids.add(n.related_user_id);
     });
     return Array.from(ids);
-  }, [notifications, snoozedNotifications]);
+  }, [notifications, readNotifications, snoozedNotifications]);
 
   const { data: relatedProfiles } = useQuery({
     queryKey: ['related-profiles', relatedUserIds],
