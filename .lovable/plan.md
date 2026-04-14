@@ -1,36 +1,34 @@
 
 
-## Fix: "Remember Me" Should Prefill Email and Enable Password Autofill After Inactivity Logout
+## Add "Read" Tab to Inbox — Show Only Unread in Notifications Tab
 
-### Root Cause
+### What changes
 
-Two issues prevent the expected behavior:
-
-1. **No email persistence**: When the idle timeout triggers `signOut()`, the user's email is lost. The Auth page initializes `loginEmail` as an empty string with no attempt to restore a saved value.
-
-2. **Missing HTML attributes for browser autofill**: The login form inputs lack `name` and `autoComplete` attributes. Without these, browsers and password managers cannot identify the fields to offer saved credential suggestions.
+The Notifications tab currently shows all notifications (read + unread). The user wants:
+- **Notifications tab**: Show only **unread** notifications by default
+- **New "Read" tab**: Shows previously-read notifications
 
 ### Implementation
 
-**1. `src/pages/Auth.tsx`**
-- Add `name="email"` and `autoComplete="email"` to the email input
-- Add `name="password"` and `autoComplete="current-password"` to the password input
-- On mount, read `pms_remembered_email` from `localStorage` and prefill the email field
-- Initialize `rememberMe` from `localStorage` based on existing `pms_remember_me` flag
+**1. `src/pages/QueryInbox.tsx`**
+- Update `activeTab` type to include `'read'`
+- Change the default `notificationFilters` to force `readStatus: 'unread'` when on the Notifications tab
+- Add a second `usePaginatedNotifications` call with `readStatus: 'read'` for the Read tab
+- Add a new `TabsTrigger` for "Read" (with a `CheckCheck` icon) between Notifications and Queries
+- Add a new `TabsContent` for the Read tab rendering an `InboxTable` with read items
+- Update the Notifications tab badge to show unread count (already does this)
+- Add a count badge on the Read tab showing total read notifications
 
-**2. `src/hooks/useIdleTimeout.ts`**
-- Before calling `signOut()`, save the current user's email to `localStorage` as `pms_remembered_email` (read from the Supabase session)
+**2. `src/pages/QueryInbox.tsx` — filter wiring**
+- The existing `notificationFilters` memo builds from `filters.readStatus`. Override this so the Notifications tab always queries `readStatus: 'unread'` and the Read tab always queries `readStatus: 'read'`, regardless of the dropdown filter
+- Keep the read-status dropdown filter hidden/removed from the Notifications and Read tabs since it's now implicit
 
-**3. `src/contexts/AuthContext.tsx`**
-- In the `signIn` method, when `rememberMe` is true, also save the email to `pms_remembered_email`
-- In the `signOut` method, do NOT clear `pms_remembered_email` (so it survives manual logout too)
-- In `beforeunload`, when remember-me is false, also clear `pms_remembered_email`
+**3. `src/components/inbox/InboxFilters.tsx`**
+- When `activeTab` is `'notifications'` or `'read'`, hide the "Read Status" dropdown since it's redundant
 
-**4. `DOCUMENTATION.md` / `POLICY.md`** — Version bump, changelog entry.
-
-### Risk Assessment
-- **Data impact**: None — only localStorage keys, no DB changes
-- **Regression risk**: Low — adds HTML attributes and reads a localStorage key
-- **Security**: Email stored in localStorage (not password). Browser autofill handles password securely via its own credential store
-- **UI/UX**: No visual changes; email field will be pre-populated when returning after logout
+### Risk & Impact
+- **Data impact**: None — read-only filter change
+- **Regression risk**: Low — only affects tab filtering, no data mutations
+- **UI/UX**: Cleaner inbox; users see actionable unread items first
+- **Mitigation**: Read tab preserves access to all historical notifications
 
