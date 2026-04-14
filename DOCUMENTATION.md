@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-04-13  
-> **Version:** 2.42.0 — Observation notification "Open in App" now role-aware: admins/reviewers open the target employee's KPI scorecard (not their own dashboard). Backfilled existing notifications. All observation triggers (raised/reply/resolved) now include employee_id in metadata.
+> **Last Updated:** 2026-04-14  
+> **Version:** 2.43.0 — Fixed "Remember Me" on login: replaced unreliable async signOut in beforeunload with synchronous localStorage.removeItem of the Supabase auth token. Session now reliably clears when browser closes with Remember Me unchecked.
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

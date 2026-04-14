@@ -305,17 +305,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setNaturalRole(null);
   };
 
-  // beforeunload: clear session when "Remember Me" is off
+  // beforeunload: clear Supabase session token synchronously when "Remember Me" is off.
+  // localStorage.removeItem is synchronous and guaranteed to execute before the tab closes,
+  // unlike the previous async supabase.auth.signOut() which was unreliable in beforeunload.
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (localStorage.getItem('pms_remember_me') === 'false' && session) {
-        supabase.auth.signOut();
+      if (localStorage.getItem('pms_remember_me') === 'false') {
+        // Synchronous removal — reliable in beforeunload
+        localStorage.removeItem('sb-jdvsvqiyptijplyhmqqn-auth-token');
         localStorage.removeItem('pms_remember_me');
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [session]);
+  }, []);
 
   return (
     <AuthContext.Provider value={{
