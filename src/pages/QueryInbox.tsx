@@ -68,9 +68,9 @@ export default function QueryInbox() {
     notificationType: 'all',
   });
 
-  const [activeTab, setActiveTab] = useState<'notifications' | 'received' | 'sent' | 'team' | 'snoozed' | 'insights'>(() => {
+  const [activeTab, setActiveTab] = useState<'notifications' | 'read' | 'received' | 'sent' | 'team' | 'snoozed' | 'insights'>(() => {
     const tabParam = searchParams.get('tab');
-    const validTabs = ['notifications', 'received', 'sent', 'team', 'snoozed', 'insights'];
+    const validTabs = ['notifications', 'read', 'received', 'sent', 'team', 'snoozed', 'insights'];
     return validTabs.includes(tabParam || '') ? tabParam as any : 'notifications';
   });
   const [selectedItem, setSelectedItem] = useState<InboxItem | null>(null);
@@ -90,12 +90,20 @@ export default function QueryInbox() {
   const unsnoozeNotification = useUnsnoozeNotification();
 
   // Paginated notifications
+  // Force unread for notifications tab, read for read tab
   const notificationFilters: NotificationFilters = useMemo(() => ({
     search: filters.search,
-    readStatus: filters.readStatus,
+    readStatus: 'unread',
     dateRange: filters.dateRange,
     type: filters.notificationType,
-  }), [filters]);
+  }), [filters.search, filters.dateRange, filters.notificationType]);
+
+  const readNotificationFilters: NotificationFilters = useMemo(() => ({
+    search: filters.search,
+    readStatus: 'read',
+    dateRange: filters.dateRange,
+    type: filters.notificationType,
+  }), [filters.search, filters.dateRange, filters.notificationType]);
 
   const {
     notifications,
@@ -105,6 +113,16 @@ export default function QueryInbox() {
     hasMore: hasMoreNotifications,
     loadMore: loadMoreNotifications,
   } = usePaginatedNotifications({ pageSize: 20, filters: notificationFilters });
+
+  // Read notifications
+  const {
+    notifications: readNotifications,
+    isLoading: loadingReadNotifications,
+    isFetching: fetchingReadNotifications,
+    totalCount: readNotificationsTotalCount,
+    hasMore: hasMoreReadNotifications,
+    loadMore: loadMoreReadNotifications,
+  } = usePaginatedNotifications({ pageSize: 20, filters: readNotificationFilters });
 
   // Snoozed notifications
   const {
