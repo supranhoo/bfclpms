@@ -1,65 +1,36 @@
 
 
-## Fix: "Remember Me" Not Working
+## Fix: "Remember Me" Should Prefill Email and Enable Password Autofill After Inactivity Logout
 
 ### Root Cause
-The current implementation uses `beforeunload` to call `supabase.auth.signOut()`, which is unreliable because:
-- `beforeunload` does not wait for async operations
-- Supabase's session token in `localStorage` persists regardless
-- `beforeunload` doesn't fire in all scenarios (mobile, crashes, force-quit)
 
-### Solution
-Instead of trying to sign out on close, control **where Supabase stores the session**:
-- **Remember Me ON** (default): Use `localStorage` — session survives browser restart
-- **Remember Me OFF**: Use `sessionStorage` — session auto-clears when all tabs close
+Two issues prevent the expected behavior:
+
+1. **No email persistence**: When the idle timeout triggers `signOut()`, the user's email is lost. The Auth page initializes `loginEmail` as an empty string with no attempt to restore a saved value.
+
+2. **Missing HTML attributes for browser autofill**: The login form inputs lack `name` and `autoComplete` attributes. Without these, browsers and password managers cannot identify the fields to offer saved credential suggestions.
 
 ### Implementation
 
-**1. `src/integrations/supabase/client.ts`** — Cannot edit (auto-generated). Instead, create a wrapper that re-initializes the client with the correct storage.
+**1. `src/pages/Auth.tsx`**
+- Add `name="email"` and `autoComplete="email"` to the email input
+- Add `name="password"` and `autoComplete="current-password"` to the password input
+- On mount, read `pms_remembered_email` from `localStorage` and prefill the email field
+- Initialize `rememberMe` from `localStorage` based on existing `pms_remember_me` flag
 
-**2. New file: `src/lib/authStorage.ts`**
-- Export a helper that reads `pms_remember_me` from `localStorage`
-- Provide a function to create/recreate the Supabase client with the appropriate `auth.storage` option (`localStorage` vs `sessionStorage`)
-- On login with "Remember Me" unchecked, migrate the session from `localStorage` to `sessionStorage`
+**2. `src/hooks/useIdleTimeout.ts`**
+- Before calling `signOut()`, save the current user's email to `localStorage` as `pms_remembered_email` (read from the Supabase session)
 
 **3. `src/contexts/AuthContext.tsx`**
-- After successful `signIn`, if `rememberMe === false`:
-  - Save the preference flag in `localStorage` (this flag itself must survive)
-  - Get the current session, store it in `sessionStorage`
-  - Clear the Supabase auth keys from `localStorage`
-- On app init (`getSession` / `onAuthStateChange`):
-  - Check the `pms_remember_me` flag
-  - If `false`, ensure Supabase reads from `sessionStorage`
-- Remove the `beforeunload` listener entirely (no longer needed)
+- In the `signIn` method, when `rememberMe` is true, also save the email to `pms_remembered_email`
+- In the `signOut` method, do NOT clear `pms_remembered_email` (so it survives manual logout too)
+- In `beforeunload`, when remember-me is false, also clear `pms_remembered_email`
 
-**4. `DOCUMENTATION.md` / `POLICY.md`** — Version bump, changelog.
-
-### Technical Detail
-Since we cannot edit `client.ts`, the approach is:
-- Create a second Supabase client instance with `sessionStorage` as auth storage
-- Export a `getActiveSupabaseClient()` function that returns the correct client based on the remember-me flag
-- Update `AuthContext` to use this function for auth operations
-- All other app code continues using the default client (which uses `localStorage`)
-
-Alternatively (simpler): after login with remember-me off, manually move the Supabase session tokens from `localStorage` to `sessionStorage` and delete them from `localStorage`. On next page load, copy them back from `sessionStorage` to `localStorage` before Supabase initializes, and clear `localStorage` copies again via a `beforeunload` that only needs to do synchronous `localStorage.removeItem()` calls (no async signOut).
-
-### Recommended Approach (Simplest)
-Use synchronous `localStorage` manipulation in `beforeunload` instead of async `signOut`:
-
-```typescript
-const handleBeforeUnload = () => {
-  if (localStorage.getItem('pms_remember_me') === 'false') {
-    // Synchronous — guaranteed to execute before browser closes
-    const storageKey = `sb-${projectRef}-auth-token`;
-    localStorage.removeItem(storageKey);
-  }
-};
-```
-
-This is reliable because `localStorage.removeItem()` is synchronous. When the user returns, Supabase finds no token and requires re-login.
+**4. `DOCUMENTATION.md` / `POLICY.md`** — Version bump, changelog entry.
 
 ### Risk Assessment
-- **Data impact**: None
-- **Regression risk**: Low — only affects auth session storage, not app data
-- **Edge case**: If user has multiple tabs open with "Remember Me" off, closing one tab clears the session for all tabs. This is acceptable behavior (matches user expectation of "don't remember me").
+- **Data impact**: None — only localStorage keys, no DB changes
+- **Regression risk**: Low — adds HTML attributes and reads a localStorage key
+- **Security**: Email stored in localStorage (not password). Browser autofill handles password securely via its own credential store
+- **UI/UX**: No visual changes; email field will be pre-populated when returning after logout
 
