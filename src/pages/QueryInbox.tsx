@@ -266,7 +266,41 @@ export default function QueryInbox() {
     [notifications, relatedProfileMap]
   );
 
-  // Convert snoozed notifications to InboxItems (with same enrichment as regular notifications)
+  // Convert read notifications to InboxItems
+  const readNotificationItems: InboxItem[] = useMemo(() =>
+    readNotifications.map(n => {
+      const meta = (n.metadata && typeof n.metadata === 'object') ? n.metadata as Record<string, any> : {};
+      const relatedProfile = n.related_user_id ? relatedProfileMap.get(n.related_user_id) : null;
+
+      return {
+        id: n.id,
+        type: 'notification' as const,
+        title: n.title,
+        message: n.message,
+        isRead: n.is_read,
+        createdAt: n.created_at,
+        notificationType: n.type,
+        kpiId: n.kpi_id,
+        kpiName: meta.kpi_name || null,
+        kraName: meta.kra_name || null,
+        fromUser: relatedProfile ? {
+          id: relatedProfile.id,
+          fullName: relatedProfile.full_name,
+          email: relatedProfile.email,
+        } : (meta.employee_name ? {
+          id: n.related_user_id || '',
+          fullName: meta.employee_name,
+          email: '',
+        } : null),
+        metadata: meta,
+        snoozedUntil: n.snoozed_until,
+        snoozeCount: n.snooze_count,
+      };
+    }),
+    [readNotifications, relatedProfileMap]
+  );
+
+
   const snoozedItems: InboxItem[] = useMemo(() =>
     snoozedNotifications.map(n => {
       const meta = (n.metadata && typeof n.metadata === 'object') ? n.metadata as Record<string, any> : {};
