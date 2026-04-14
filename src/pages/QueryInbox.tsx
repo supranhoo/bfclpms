@@ -565,6 +565,14 @@ export default function QueryInbox() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="read" className="flex items-center gap-1.5 flex-shrink-0 text-xs sm:text-sm">
+            <CheckCheck className="h-4 w-4" />
+            Read
+            {readNotificationsTotalCount > 0 && (
+              <Badge variant="outline" className="ml-0.5 h-4 sm:h-5 min-w-4 sm:min-w-5 px-1 flex items-center justify-center text-[10px] sm:text-xs">
+                {readNotificationsTotalCount}
+              </Badge>
+            )}
           <TabsTrigger value="received" className="flex items-center gap-1.5 flex-shrink-0 text-xs sm:text-sm">
             <MessageSquare className="h-4 w-4" />
             Queries
@@ -625,12 +633,39 @@ export default function QueryInbox() {
             onViewItem={handleViewItem}
             onMarkRead={handleMarkRead}
             onNavigate={handleNavigate}
-            emptyMessage="No notifications yet"
-            emptyDescription="You'll receive notifications when there are updates to your KPIs"
+            emptyMessage="No unread notifications"
+            emptyDescription="All caught up! Check the Read tab for previous notifications"
             currentUserId={user?.id}
             currentRole={effectiveRole || undefined}
             onSnooze={(id, until) => snoozeNotification.mutate({ notificationId: id, snoozedUntil: until })}
             isSnoozing={snoozeNotification.isPending}
+          />
+        </TabsContent>
+
+        </TabsContent>
+
+        {/* Read Notifications Tab */}
+        <TabsContent value="read" className="mt-6 space-y-4">
+          <InboxFilters
+            filters={filters}
+            onFiltersChange={setFilters}
+            totalCount={readNotificationsTotalCount}
+            showingCount={readNotifications.length}
+            activeTab="read"
+          />
+          <InboxTable
+            items={readNotificationItems}
+            isLoading={loadingReadNotifications}
+            isFetching={fetchingReadNotifications}
+            hasMore={hasMoreReadNotifications}
+            onLoadMore={loadMoreReadNotifications}
+            onViewItem={handleViewItem}
+            onMarkRead={handleMarkRead}
+            onNavigate={handleNavigate}
+            emptyMessage="No read notifications"
+            emptyDescription="Notifications you've read will appear here"
+            currentUserId={user?.id}
+            currentRole={effectiveRole || undefined}
           />
         </TabsContent>
 
