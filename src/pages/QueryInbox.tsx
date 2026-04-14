@@ -643,7 +643,7 @@ export default function QueryInbox() {
           />
         </TabsContent>
 
-        </TabsContent>
+
 
         {/* Read Notifications Tab */}
         <TabsContent value="read" className="mt-6 space-y-4">
