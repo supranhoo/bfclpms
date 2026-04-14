@@ -1,55 +1,65 @@
 
-Fix the remaining deep-link bug so observation notifications open the specific KPI details sheet, not just the employee dashboard.
 
-What I found
-- Inbox routing is now mostly correct: observation workflow notifications already build `/dashboard?view=...&employee=...&kpi=...`.
-- The remaining bug is in dashboard deep-link handling:
-  - `Dashboard.tsx` reads `employee` + `kpi` and selects the employee.
-  - But reviewer/admin flows only pass `autoOpenKpiId` into `UnifiedScorecard`.
-  - In `UnifiedScorecard.tsx`, auto-open currently works only for self mode (`selectedKpiForSelfReview`).
-  - Reviewer modes (`team`, `audit`, `management`, `hr_pms`) do not auto-open `reviewSheetOpen`, so the app lands on the employee scorecard page instead of opening “View KPI Details”.
+## Fix: "Remember Me" Not Working
 
-Implementation plan
+### Root Cause
+The current implementation uses `beforeunload` to call `supabase.auth.signOut()`, which is unreliable because:
+- `beforeunload` does not wait for async operations
+- Supabase's session token in `localStorage` persists regardless
+- `beforeunload` doesn't fire in all scenarios (mobile, crashes, force-quit)
 
-1. Add reviewer deep-link auto-open in `UnifiedScorecard.tsx`
-- Extend the existing auto-open logic to support non-self modes.
-- When `autoOpenKpiId` matches a KPI in reviewer mode:
-  - set `selectedKpi`
-  - open the reviewer sheet (`setReviewSheetOpen(true)`)
-- If the KPI belongs to another period, first switch period selection, then auto-open after data reload.
+### Solution
+Instead of trying to sign out on close, control **where Supabase stores the session**:
+- **Remember Me ON** (default): Use `localStorage` — session survives browser restart
+- **Remember Me OFF**: Use `sessionStorage` — session auto-clears when all tabs close
 
-2. Support panel-aware opening for reviewer mode
-- Preserve and wire `panel` query param from `Dashboard.tsx`.
-- If `panel=queryHistory`, open the KPI details sheet and then auto-open Query History in reviewer mode too.
-- Keep existing self-mode behavior unchanged.
+### Implementation
 
-3. Make deep-link processing more reliable in `Dashboard.tsx`
-- Refine the cross-user deep-link effect so it does not stop after only selecting employee.
-- Ensure one-time URL cleanup happens after the KPI sheet/open-panel state has been initialized correctly.
-- Keep `employee` persistence behavior for refresh restoration.
+**1. `src/integrations/supabase/client.ts`** — Cannot edit (auto-generated). Instead, create a wrapper that re-initializes the client with the correct storage.
 
-4. Add regression tests and mocks
-- Add/expand tests for:
-  - admin opening another employee’s observation reply -> employee selected + KPI details sheet opens
-  - auditor/management role deep-link -> correct view + KPI sheet opens
-  - mention notification still opens read-only mention sheet only
-  - `panel=queryHistory` opens query history from deep link
-  - fallback when KPI is in another period/year
-- Add/update realistic mock notification/deep-link fixtures per policy.
+**2. New file: `src/lib/authStorage.ts`**
+- Export a helper that reads `pms_remember_me` from `localStorage`
+- Provide a function to create/recreate the Supabase client with the appropriate `auth.storage` option (`localStorage` vs `sessionStorage`)
+- On login with "Remember Me" unchecked, migrate the session from `localStorage` to `sessionStorage`
 
-5. SSOT + policy sync
-- Update `DOCUMENTATION.md`
-- Update `POLICY.md`
-- Record that inbox observation workflow links must deep-link to the target employee KPI detail sheet, not merely the employee dashboard page.
+**3. `src/contexts/AuthContext.tsx`**
+- After successful `signIn`, if `rememberMe === false`:
+  - Save the preference flag in `localStorage` (this flag itself must survive)
+  - Get the current session, store it in `sessionStorage`
+  - Clear the Supabase auth keys from `localStorage`
+- On app init (`getSession` / `onAuthStateChange`):
+  - Check the `pms_remember_me` flag
+  - If `false`, ensure Supabase reads from `sessionStorage`
+- Remove the `beforeunload` listener entirely (no longer needed)
 
-Risk & Impact Report
-- Data impact: none; frontend-only behavior fix.
-- Workflow impact: improves reviewer/admin navigation without changing permissions or scoring.
-- UI/UX consistency: aligns inbox “Open in App” with user expectation by opening “View KPI Details”.
-- Regression risk: medium-low because `UnifiedScorecard` is shared across review modes.
-- Mitigation plan: isolate logic to deep-link handling, preserve mention flow, add explicit regression tests for self vs reviewer modes and panel behavior.
+**4. `DOCUMENTATION.md` / `POLICY.md`** — Version bump, changelog.
 
-Expected result
-- If Jaspal clicks “Open in App” on an observation notification for another employee, the app opens that employee context and directly opens the target KPI’s “View KPI Details” sheet.
-- If the notification is a mention, it still opens the separate read-only mention sheet.
-- If the deep-link includes query history, that panel opens automatically inside the KPI details flow.
+### Technical Detail
+Since we cannot edit `client.ts`, the approach is:
+- Create a second Supabase client instance with `sessionStorage` as auth storage
+- Export a `getActiveSupabaseClient()` function that returns the correct client based on the remember-me flag
+- Update `AuthContext` to use this function for auth operations
+- All other app code continues using the default client (which uses `localStorage`)
+
+Alternatively (simpler): after login with remember-me off, manually move the Supabase session tokens from `localStorage` to `sessionStorage` and delete them from `localStorage`. On next page load, copy them back from `sessionStorage` to `localStorage` before Supabase initializes, and clear `localStorage` copies again via a `beforeunload` that only needs to do synchronous `localStorage.removeItem()` calls (no async signOut).
+
+### Recommended Approach (Simplest)
+Use synchronous `localStorage` manipulation in `beforeunload` instead of async `signOut`:
+
+```typescript
+const handleBeforeUnload = () => {
+  if (localStorage.getItem('pms_remember_me') === 'false') {
+    // Synchronous — guaranteed to execute before browser closes
+    const storageKey = `sb-${projectRef}-auth-token`;
+    localStorage.removeItem(storageKey);
+  }
+};
+```
+
+This is reliable because `localStorage.removeItem()` is synchronous. When the user returns, Supabase finds no token and requires re-login.
+
+### Risk Assessment
+- **Data impact**: None
+- **Regression risk**: Low — only affects auth session storage, not app data
+- **Edge case**: If user has multiple tabs open with "Remember Me" off, closing one tab clears the session for all tabs. This is acceptable behavior (matches user expectation of "don't remember me").
+
