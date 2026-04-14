@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-14  
-> **Version:** 2.03.0 — §Remember Me: email is now persisted to localStorage on login and before idle-timeout logout, prefilling the login form on return. Login inputs include name/autoComplete attributes to enable browser credential managers.
+> **Version:** 2.04.0 — §Inbox: Notifications tab restricted to unread items only; read notifications moved to dedicated "Read" tab.
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-14  
-> **Version:** 2.44.0 — Remember Me now prefills email after idle-timeout or manual logout and enables browser password autofill via proper name/autoComplete attributes on login inputs.
+> **Version:** 2.45.0 — Inbox: Notifications tab now shows only unread items; new "Read" tab displays previously-read notifications separately.
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
