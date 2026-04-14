@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
-> **Last Updated:** 2026-04-13  
-> **Version:** 2.01.0 — Observation inbox routing split: @mentions use read-only mention sheet; observation_raised/reply/resolved use role-aware employee scorecard deep-links for reviewers/admins
+> **Last Updated:** 2026-04-14  
+> **Version:** 2.02.0 — §Remember Me: session persistence uses synchronous localStorage token removal on beforeunload instead of async signOut; Remember Me OFF clears Supabase auth token reliably when browser closes.
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
