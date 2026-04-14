@@ -573,6 +573,7 @@ export default function QueryInbox() {
                 {readNotificationsTotalCount}
               </Badge>
             )}
+          </TabsTrigger>
           <TabsTrigger value="received" className="flex items-center gap-1.5 flex-shrink-0 text-xs sm:text-sm">
             <MessageSquare className="h-4 w-4" />
             Queries

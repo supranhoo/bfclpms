@@ -88,8 +88,7 @@ export function InboxFilters({ filters, onFiltersChange, totalCount, showingCoun
     <>
       {/* Row 1: Status/Query filters + Date */}
       <div className="flex flex-col sm:flex-row gap-3">
-        {/* Status Filter (Read/Unread) — notifications only, hidden when tab already implies status */}
-        {isNotificationTab && activeTab !== 'notifications' && activeTab !== 'read' && (
+        {/* Read Status dropdown hidden — tab already implies read/unread */}
 
         {/* Query Status — query tabs only */}
         {isQueryTab && (
