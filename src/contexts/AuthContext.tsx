@@ -252,6 +252,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         // Store remember-me preference
         localStorage.setItem('pms_remember_me', rememberMe ? 'true' : 'false');
+        // Persist email for prefill on next login (e.g. after idle timeout)
+        if (rememberMe) {
+          localStorage.setItem('pms_remembered_email', email);
+        } else {
+          localStorage.removeItem('pms_remembered_email');
+        }
       }
       return { error };
     } catch (networkError) {
@@ -296,6 +302,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    // Keep pms_remembered_email so email is prefilled on next visit
     localStorage.removeItem('pms_remember_me');
     await supabase.auth.signOut();
     setUser(null);
@@ -314,6 +321,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Synchronous removal — reliable in beforeunload
         localStorage.removeItem('sb-jdvsvqiyptijplyhmqqn-auth-token');
         localStorage.removeItem('pms_remember_me');
+        localStorage.removeItem('pms_remembered_email');
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);

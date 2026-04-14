@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-14  
-> **Version:** 2.43.0 — Fixed "Remember Me" on login: replaced unreliable async signOut in beforeunload with synchronous localStorage.removeItem of the Supabase auth token. Session now reliably clears when browser closes with Remember Me unchecked.
+> **Version:** 2.44.0 — Remember Me now prefills email after idle-timeout or manual logout and enables browser password autofill via proper name/autoComplete attributes on login inputs.
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
