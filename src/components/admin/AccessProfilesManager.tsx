@@ -183,7 +183,7 @@ function ProfilesTab({ profiles, assignments, createProfile, updateProfile, dele
 
       <ConfirmDestructiveDialog
         open={!!deleteTarget}
-        onOpenChange={() => setDeleteTarget(null)}
+        onCancel={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
         title="Delete Access Profile"
         description="This will permanently delete the profile, all its org scopes, menu rights, and user assignments. This action cannot be undone."
