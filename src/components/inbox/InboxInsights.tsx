@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import { Activity, Clock, CheckCircle2, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
 import { PersonalProductivityInsights } from './PersonalProductivityInsights';
+import { useSlaTargetDays } from '@/hooks/useWorkflowSettings';
 
 export interface QueryData {
   id: string;
@@ -32,9 +33,7 @@ interface InboxInsightsProps {
   isLoading?: boolean;
 }
 
-const SLA_TARGET_DAYS = 2;
-
-function computeMetrics(queries: QueryData[]) {
+function computeMetrics(queries: QueryData[], slaTargetDays: number) {
   const resolved = queries.filter(q => q.status === 'resolved' && q.resolved_at);
   const open = queries.filter(q => q.status === 'open');
   const responded = queries.filter(q => q.status === 'responded');
@@ -55,9 +54,9 @@ function computeMetrics(queries: QueryData[]) {
   // SLA compliance (resolved within target days)
   const withinSla = resolved.filter(q => {
     const hours = differenceInHours(new Date(q.resolved_at!), new Date(q.created_at));
-    return hours <= SLA_TARGET_DAYS * 24;
+    return hours <= slaTargetDays * 24;
   }).length;
-  const slaPercent = resolved.length > 0 ? Math.round((withinSla / resolved.length) * 100) : 100;
+  const slaPercent = resolved.length > 0 ? Math.round((withinSla / resolved.length) * 100) : null;
 
   // Volume by day (last 14 days)
   const last14Days = Array.from({ length: 14 }, (_, i) => {
@@ -91,9 +90,9 @@ function computeMetrics(queries: QueryData[]) {
     : 0;
 
   // Health score (0-100)
-  const slaScore = slaPercent; // up to 100
-  const backlogPenalty = Math.min(open.length * 5, 40); // penalize open queries
-  const responsePenalty = avgResponseHours > SLA_TARGET_DAYS * 24 ? 20 : 0;
+  const slaScore = slaPercent ?? 80; // neutral when no data
+  const backlogPenalty = Math.min(open.length * 5, 40);
+  const responsePenalty = avgResponseHours > slaTargetDays * 24 ? 20 : 0;
   const healthScore = Math.max(0, Math.min(100, slaScore - backlogPenalty - responsePenalty));
 
   return {
@@ -115,7 +114,8 @@ function formatHours(hours: number): string {
 }
 
 export function InboxInsights({ allQueries, teamQueries = [], currentUserId, notificationsCount, unreadCount, isLoading }: InboxInsightsProps) {
-  const metrics = useMemo(() => computeMetrics(allQueries), [allQueries]);
+  const slaTargetDays = useSlaTargetDays();
+  const metrics = useMemo(() => computeMetrics(allQueries, slaTargetDays), [allQueries, slaTargetDays]);
 
   if (isLoading) {
     return (
@@ -128,7 +128,7 @@ export function InboxInsights({ allQueries, teamQueries = [], currentUserId, not
   }
 
   const healthColor = metrics.healthScore >= 80 ? 'text-green-600' : metrics.healthScore >= 50 ? 'text-amber-600' : 'text-destructive';
-  const slaColor = metrics.slaPercent >= 90 ? 'text-green-600' : metrics.slaPercent >= 70 ? 'text-amber-600' : 'text-destructive';
+  const slaColor = metrics.slaPercent === null ? 'text-muted-foreground' : metrics.slaPercent >= 90 ? 'text-green-600' : metrics.slaPercent >= 70 ? 'text-amber-600' : 'text-destructive';
 
   return (
     <div className="space-y-6">
@@ -149,10 +149,10 @@ export function InboxInsights({ allQueries, teamQueries = [], currentUserId, not
             <div className="grid grid-cols-3 gap-4 sm:gap-6 text-center sm:text-right">
               <div>
                 <div className="flex items-center justify-center sm:justify-end gap-1">
-                  {metrics.slaPercent >= 90 ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600" /> : <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />}
+                  {metrics.slaPercent !== null && metrics.slaPercent >= 90 ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600" /> : <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />}
                   <p className="text-xs text-muted-foreground">SLA Compliance</p>
                 </div>
-                <p className={cn('text-lg font-bold', slaColor)}>{metrics.slaPercent}%</p>
+                <p className={cn('text-lg font-bold', slaColor)}>{metrics.slaPercent !== null ? `${metrics.slaPercent}%` : 'N/A'}</p>
                 <p className="text-[10px] text-muted-foreground">Target: 90%</p>
               </div>
               <div>
@@ -161,7 +161,7 @@ export function InboxInsights({ allQueries, teamQueries = [], currentUserId, not
                   <p className="text-xs text-muted-foreground">Avg Response</p>
                 </div>
                 <p className="text-lg font-bold text-foreground">{formatHours(metrics.avgResponseHours)}</p>
-                <p className="text-[10px] text-muted-foreground">Target: {SLA_TARGET_DAYS}d</p>
+                <p className="text-[10px] text-muted-foreground">Target: {slaTargetDays}d</p>
               </div>
               <div>
                 <div className="flex items-center justify-center sm:justify-end gap-1">
@@ -253,12 +253,12 @@ export function InboxInsights({ allQueries, teamQueries = [], currentUserId, not
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Resolved within {SLA_TARGET_DAYS} days</span>
+              <span className="text-muted-foreground">Resolved within {slaTargetDays} days</span>
               <span className={cn('font-semibold', slaColor)}>{metrics.withinSla}/{metrics.totalResolved}</span>
             </div>
-            <Progress value={metrics.slaPercent} className="h-2" />
+            <Progress value={metrics.slaPercent ?? 0} className="h-2" />
             <p className="text-xs text-muted-foreground">
-              {metrics.slaPercent >= 90 ? '✅ Meeting SLA target of 90%' : `⚠️ Below SLA target of 90% (currently ${metrics.slaPercent}%)`}
+              {metrics.slaPercent === null ? '— No resolved queries to measure' : metrics.slaPercent >= 90 ? '✅ Meeting SLA target of 90%' : `⚠️ Below SLA target of 90% (currently ${metrics.slaPercent}%)`}
             </p>
           </CardContent>
         </Card>
