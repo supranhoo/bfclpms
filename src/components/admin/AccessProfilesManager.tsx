@@ -274,39 +274,42 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
   const handleAddScope = async () => {
     if (!selectedProfileId || !hasScopeFilter) return;
     try {
-      // Build arrays for each dimension (empty = [null] to represent "any")
-      const dims = {
-        company_id: scopeForm.company_id.length > 0 ? scopeForm.company_id : [null],
-        division_id: scopeForm.division_id.length > 0 ? scopeForm.division_id : [null],
-        business_unit_id: scopeForm.business_unit_id.length > 0 ? scopeForm.business_unit_id : [null],
-        department_id: scopeForm.department_id.length > 0 ? scopeForm.department_id : [null],
-        location: scopeForm.location.length > 0 ? scopeForm.location : [null],
-        designation: scopeForm.designation.length > 0 ? scopeForm.designation : [null],
-        pms_grade: scopeForm.pms_grade.length > 0 ? scopeForm.pms_grade : [null],
-        level: scopeForm.level.length > 0 ? scopeForm.level : [null],
-      };
-
-      // Generate cartesian product rows
+      // Build independent dimension rows (NOT cartesian product)
+      // Each selected value becomes its own row with only that column populated
       const rows: any[] = [];
-      for (const cid of dims.company_id)
-        for (const did of dims.division_id)
-          for (const bid of dims.business_unit_id)
-            for (const deptId of dims.department_id)
-              for (const loc of dims.location)
-                for (const desig of dims.designation)
-                  for (const grade of dims.pms_grade)
-                    for (const lvl of dims.level) {
-                      rows.push({
-                        company_id: cid, division_id: did, business_unit_id: bid,
-                        department_id: deptId, location: loc, designation: desig,
-                        pms_grade: grade, level: lvl,
-                      });
-                    }
+      const dimensionMap: { key: string; values: string[] }[] = [
+        { key: 'company_id', values: scopeForm.company_id },
+        { key: 'division_id', values: scopeForm.division_id },
+        { key: 'business_unit_id', values: scopeForm.business_unit_id },
+        { key: 'department_id', values: scopeForm.department_id },
+        { key: 'location', values: scopeForm.location },
+        { key: 'designation', values: scopeForm.designation },
+        { key: 'pms_grade', values: scopeForm.pms_grade },
+        { key: 'level', values: scopeForm.level },
+      ];
 
-      // Insert all rows
-      for (const scope of rows) {
-        await saveOrgScope.mutateAsync({ profileId: selectedProfileId, scope });
+      for (const dim of dimensionMap) {
+        for (const val of dim.values) {
+          const row: any = {
+            company_id: null, division_id: null, business_unit_id: null,
+            department_id: null, location: null, designation: null,
+            pms_grade: null, level: null,
+          };
+          row[dim.key] = val;
+          rows.push(row);
+        }
       }
+
+      // Safety cap
+      if (rows.length > 500) {
+        toast({ title: 'Too many scope entries', description: `Selection would create ${rows.length} rows. Please reduce selections.`, variant: 'destructive' });
+        return;
+      }
+
+      if (rows.length === 0) return;
+
+      // Batch insert all rows at once
+      await saveOrgScope.mutateAsync({ profileId: selectedProfileId, scopes: rows });
 
       toast({ title: `${rows.length} Org Scope${rows.length > 1 ? 's' : ''} Added` });
       setScopeForm({ company_id: [], division_id: [], business_unit_id: [], department_id: [], location: [], designation: [], pms_grade: [], level: [] });

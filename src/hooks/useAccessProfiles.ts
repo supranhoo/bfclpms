@@ -136,13 +136,14 @@ export function useAccessProfiles() {
   });
 
   const saveOrgScope = useMutation({
-    mutationFn: async ({ profileId, scope }: {
+    mutationFn: async ({ profileId, scopes }: {
       profileId: string;
-      scope: Omit<AccessProfileOrgScope, 'id' | 'profile_id'>;
+      scopes: Omit<AccessProfileOrgScope, 'id' | 'profile_id'>[];
     }) => {
+      const toInsert = scopes.map(scope => ({ profile_id: profileId, ...scope }));
       const { error } = await supabase
         .from('access_profile_org_scope')
-        .insert({ profile_id: profileId, ...scope });
+        .insert(toInsert);
       if (error) throw error;
     },
     onSuccess: () => invalidateAll(),
