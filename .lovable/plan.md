@@ -1,34 +1,39 @@
 
 
-## Add "Read" Tab to Inbox — Show Only Unread in Notifications Tab
+## Fix: SLA Compliance Inconsistency + Make SLA Target Configurable
 
-### What changes
-
-The Notifications tab currently shows all notifications (read + unread). The user wants:
-- **Notifications tab**: Show only **unread** notifications by default
-- **New "Read" tab**: Shows previously-read notifications
+### Problem
+1. **SLA 0% vs 100% mismatch**: Health Score shows 0% SLA (1 resolved query exceeded 2-day target), while My Productivity shows 100% (no queries received by user, defaults to 100%).
+2. **Hardcoded SLA target**: `SLA_TARGET_DAYS = 2` in `InboxInsights.tsx` and `SLA_HOURS = 48` in `PersonalProductivityInsights.tsx` are hardcoded, not configurable.
 
 ### Implementation
 
-**1. `src/pages/QueryInbox.tsx`**
-- Update `activeTab` type to include `'read'`
-- Change the default `notificationFilters` to force `readStatus: 'unread'` when on the Notifications tab
-- Add a second `usePaginatedNotifications` call with `readStatus: 'read'` for the Read tab
-- Add a new `TabsTrigger` for "Read" (with a `CheckCheck` icon) between Notifications and Queries
-- Add a new `TabsContent` for the Read tab rendering an `InboxTable` with read items
-- Update the Notifications tab badge to show unread count (already does this)
-- Add a count badge on the Read tab showing total read notifications
+**1. Add `query_sla_target_days` to `workflow_settings` table**
+- Insert a new row: category `sla`, key `query_sla_target_days`, label "Query SLA Target (Days)", default value `2`, min 1, max 30, unit "days"
+- This makes the SLA target admin-configurable alongside existing SLA warning/critical thresholds
 
-**2. `src/pages/QueryInbox.tsx` — filter wiring**
-- The existing `notificationFilters` memo builds from `filters.readStatus`. Override this so the Notifications tab always queries `readStatus: 'unread'` and the Read tab always queries `readStatus: 'read'`, regardless of the dropdown filter
-- Keep the read-status dropdown filter hidden/removed from the Notifications and Read tabs since it's now implicit
+**2. `src/hooks/useWorkflowSettings.ts`**
+- Add a convenience hook `useSlaTargetDays()` that reads `query_sla_target_days` from workflow settings, defaulting to 2
+- Add the default to `DEFAULT_VALUES`
 
-**3. `src/components/inbox/InboxFilters.tsx`**
-- When `activeTab` is `'notifications'` or `'read'`, hide the "Read Status" dropdown since it's redundant
+**3. `src/components/inbox/InboxInsights.tsx`**
+- Remove hardcoded `SLA_TARGET_DAYS = 2`
+- Accept `slaTargetDays` as a prop or read it via the new hook
+- When `resolved.length === 0`, display SLA as "N/A" instead of defaulting to 100%
+- When no resolved queries exist, use a neutral health score (don't penalize with 0% SLA)
 
-### Risk & Impact
-- **Data impact**: None — read-only filter change
-- **Regression risk**: Low — only affects tab filtering, no data mutations
-- **UI/UX**: Cleaner inbox; users see actionable unread items first
-- **Mitigation**: Read tab preserves access to all historical notifications
+**4. `src/components/inbox/PersonalProductivityInsights.tsx`**
+- Remove hardcoded `SLA_HOURS = 48`
+- Use the same configurable target via prop or hook
+- When `resolvedReceived.length === 0`, display SLA as "N/A" instead of 100%
+
+**5. `src/pages/QueryInbox.tsx`**
+- Read `useSlaTargetDays()` and pass it down to both insight components
+
+**6. Documentation** — Update `DOCUMENTATION.md` and `POLICY.md` with version bump and changelog entry.
+
+### Risk Assessment
+- **Data impact**: One new row inserted into `workflow_settings` — no schema change needed (table already exists)
+- **Regression risk**: Low — replaces hardcoded constant with configurable value, same default
+- **UI/UX**: Admins can now tune SLA target in Workflow Configuration; N/A display prevents misleading 0%/100% when no data exists
 
