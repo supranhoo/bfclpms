@@ -1,52 +1,42 @@
 
 
-## Restore Menu Access Rights Grid on Profile Mapping Tab
+## Fix: Sticky Headers Not Working on Menu Access Rights Table
 
-### Problem
-The Menu Access Rights grid was removed from the Profile Mapping tab, leaving no way to configure per-profile menu permissions. It needs to be restored below the Org Scope section.
+### Root Cause
+The `Table` component (`src/components/ui/table.tsx`) wraps every `<table>` in a `<div className="relative w-full overflow-auto">`. This creates a **nested scroll container** inside the outer `max-h-[60vh] overflow-auto` div. CSS `position: sticky` only works relative to its nearest scrolling ancestor — the inner wrapper captures the scroll, so the header never sticks against the outer container.
 
-### UI After Fix
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│ Profile: [Auditor ▾]                                        │
-│                                                             │
-│ Org-Level Scope                                             │
-│ [Company ▾] [Division ▾] [BU ▾] [Dept ▾]                   │
-│ [Location ▾] [Designation ▾] [Grade ▾] [Level ▾]           │
-│ [+ Add Scope]     ✓ 225 scope entries configured  [🗑]      │
-│                                                             │
-│ ── Menu Access Rights ──────────────────────────────────────│
-│ ┌──────────┬────────────┬──────┬─────┬────────┬────────┐   │
-│ │ Section  │ Menu Item  │ View │ Add │ Update │ Delete │   │
-│ ├──────────┼────────────┼──────┼─────┼────────┼────────┤   │
-│ │ Main     │ Dashboard  │  ☑   │  ☐  │   ☐    │   ☐   │   │
-│ │ Main     │ Scorecard  │  ☑   │  ☑  │   ☑    │   ☐   │   │
-│ │ ...      │ ...        │ ...  │ ... │  ...   │  ...   │   │
-│ └──────────┴────────────┴──────┴─────┴────────┴────────┘   │
-│                                        [💾 Save Rights]     │
-└─────────────────────────────────────────────────────────────┘
-```
+### Solution
+Override the inner wrapper's overflow on the specific tables where sticky headers are needed. The outer `div` with `max-h-[60vh] overflow-auto` should be the sole scroll container.
 
 ### Implementation
 
 **File: `src/components/admin/AccessProfilesManager.tsx`**
 
-Add back the Menu Access Rights table JSX inside the `selectedProfileId` block (after the scope summary, before closing `</>`). The logic (`sections`, `getRights`, `toggleRight`, `handleSaveRights`) already exists — only the rendering was removed. Specifically:
+On the Menu Access Rights `<Table>`, pass a className that neutralizes the inner wrapper's overflow:
 
-1. After the scope summary `div` (line ~416), add:
-   - An `<h4>` heading "Menu Access Rights"
-   - A scrollable table container with sticky headers (`max-h-[60vh] overflow-auto`)
-   - Table with columns: Section, Menu Item, View, Add, Update, Delete
-   - Rows iterating `SECTION_ORDER` → `sections[section]` → checkboxes calling `toggleRight`
-   - A "Save Rights" button calling `handleSaveRights`
+```tsx
+<Table className="[&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10 [&_thead]:bg-background"
+```
 
-2. Apply sticky header pattern (`sticky top-0 z-10 bg-background`) consistent with the other tabs.
+But more directly — add `overflow-visible` to the Table's wrapper by passing it through, or wrap a raw `<table>` instead. The cleanest fix:
 
-**Files: `DOCUMENTATION.md`, `POLICY.md`** — Version bump
+Change the outer container to target the Table's inner wrapper div:
+
+```tsx
+<div className="rounded-md border max-h-[60vh] overflow-auto [&>div]:overflow-visible">
+```
+
+This sets the Table component's inner `overflow-auto` div to `overflow-visible`, making the outer div the sole scroll container so `sticky` works.
+
+Apply the same `[&>div]:overflow-visible` pattern to **all** tables in this file and in `MenuAccessTab.tsx` that use sticky headers.
+
+**Files affected:**
+- `src/components/admin/AccessProfilesManager.tsx` — Menu Access Rights table, Profiles table, Assignment table
+- `src/components/admin/MenuAccessTab.tsx` — Role Access table, Employee Overrides table
+- `DOCUMENTATION.md`, `POLICY.md` — Version bump
 
 ### Risk Assessment
-- **Data impact**: None — restoring UI only; all data hooks/handlers already exist
-- **Regression risk**: None — re-adding previously working grid
-- **UX improvement**: Admins can configure menu rights per profile again
+- **Data impact**: None — CSS-only
+- **Regression risk**: None — only affects tables already wrapped in a height-constrained scroll container
+- **UX improvement**: Headers stay visible while scrolling, matching Excel freeze-pane behavior
 
