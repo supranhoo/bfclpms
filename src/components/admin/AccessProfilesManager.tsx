@@ -346,6 +346,7 @@ function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgScope, de
     if (scope.division_id) parts.push(divisions.find((d: any) => d.id === scope.division_id)?.name || scope.division_id);
     if (scope.business_unit_id) parts.push(businessUnits.find((b: any) => b.id === scope.business_unit_id)?.name || scope.business_unit_id);
     if (scope.department_id) parts.push(departments.find((d: any) => d.id === scope.department_id)?.name || scope.department_id);
+    if (scope.location) parts.push(`Loc: ${subBranches.find((s: any) => s.id === scope.location)?.name || scope.location}`);
     if (scope.designation) parts.push(scope.designation);
     if (scope.pms_grade) parts.push(`Grade: ${scope.pms_grade}`);
     if (scope.level) parts.push(`Level: ${scope.level}`);
@@ -370,13 +371,14 @@ function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgScope, de
           <div className="space-y-3">
             <h4 className="text-sm font-semibold">Org-Level Scope</h4>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <OrgFilterCombobox value={scopeForm.company_id} onValueChange={v => setScopeForm(p => ({ ...p, company_id: v, division_id: '', business_unit_id: '', department_id: '' }))} options={companyOptions} placeholder="Company..." label="Company" />
-              <OrgFilterCombobox value={scopeForm.division_id} onValueChange={v => setScopeForm(p => ({ ...p, division_id: v, business_unit_id: '', department_id: '' }))} options={divisionOptions} placeholder="Division..." label="Division" />
-              <OrgFilterCombobox value={scopeForm.business_unit_id} onValueChange={v => setScopeForm(p => ({ ...p, business_unit_id: v, department_id: '' }))} options={buOptions} placeholder="Business Unit..." label="Business Unit" />
-              <OrgFilterCombobox value={scopeForm.department_id} onValueChange={v => setScopeForm(p => ({ ...p, department_id: v }))} options={deptOptions} placeholder="Department..." label="Department" />
-              <OrgFilterCombobox value={scopeForm.designation} onValueChange={v => setScopeForm(p => ({ ...p, designation: v }))} options={designationOptions} placeholder="Designation..." label="Designation" />
-              <OrgFilterCombobox value={scopeForm.pms_grade} onValueChange={v => setScopeForm(p => ({ ...p, pms_grade: v }))} options={gradeOptions} placeholder="Grade..." label="Grade" />
-              <OrgFilterCombobox value={scopeForm.level} onValueChange={v => setScopeForm(p => ({ ...p, level: v }))} options={levelOptions} placeholder="Level..." label="Level" />
+              <OrgFilterCombobox multiSelect values={scopeForm.company_id} onValuesChange={v => setScopeForm(p => ({ ...p, company_id: v, division_id: [], business_unit_id: [], department_id: [], location: [] }))} options={companyOptions} placeholder="Company..." label="Company" />
+              <OrgFilterCombobox multiSelect values={scopeForm.division_id} onValuesChange={v => setScopeForm(p => ({ ...p, division_id: v, business_unit_id: [], department_id: [], location: [] }))} options={divisionOptions} placeholder="Division..." label="Division" />
+              <OrgFilterCombobox multiSelect values={scopeForm.business_unit_id} onValuesChange={v => setScopeForm(p => ({ ...p, business_unit_id: v, department_id: [], location: [] }))} options={buOptions} placeholder="Business Unit..." label="Business Unit" />
+              <OrgFilterCombobox multiSelect values={scopeForm.department_id} onValuesChange={v => setScopeForm(p => ({ ...p, department_id: v, location: [] }))} options={deptOptions} placeholder="Department..." label="Department" />
+              <OrgFilterCombobox multiSelect values={scopeForm.location} onValuesChange={v => setScopeForm(p => ({ ...p, location: v }))} options={locationOptions} placeholder="Location..." label="Location" />
+              <OrgFilterCombobox multiSelect values={scopeForm.designation} onValuesChange={v => setScopeForm(p => ({ ...p, designation: v }))} options={designationOptions} placeholder="Designation..." label="Designation" />
+              <OrgFilterCombobox multiSelect values={scopeForm.pms_grade} onValuesChange={v => setScopeForm(p => ({ ...p, pms_grade: v }))} options={gradeOptions} placeholder="Grade..." label="Grade" />
+              <OrgFilterCombobox multiSelect values={scopeForm.level} onValuesChange={v => setScopeForm(p => ({ ...p, level: v }))} options={levelOptions} placeholder="Level..." label="Level" />
               <div className="flex items-end">
                 <Button onClick={handleAddScope} disabled={!hasScopeFilter || saveOrgScope.isPending} className="w-full">
                   <Plus className="h-4 w-4 mr-1" />Add Scope
