@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ReviewStageCard, StageStatus } from './ReviewStageCard';
 import { KPI, ReviewSubmission, KpiQuery } from '@/hooks/useKpis';
-import { User, Briefcase, Shield, MessageSquare, History, UserCheck, ClipboardCheck, AlertTriangle, Download, ChevronDown, CalendarClock, FileCheck } from 'lucide-react';
+import { User, Briefcase, Shield, MessageSquare, History, UserCheck, ClipboardCheck, AlertTriangle, Download, ChevronDown, CalendarClock, FileCheck, Info } from 'lucide-react';
 import { getVisibleJourneyStages, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { UomType } from '@/lib/qualitativeUom';
@@ -16,6 +16,8 @@ import { exportReviewTimelinePdf, ReviewTimelinePdfData } from '@/lib/pdfExport'
 import { statusLabels } from '@/lib/reviewConstants';
 import { format } from 'date-fns';
 import { isComplianceKpi, useComplianceSubFactors } from '@/hooks/useComplianceSubFactors';
+import { isKpiLockedForPeriod, getActiveMonthForCycle } from '@/lib/frequencyUtils';
+import { useFrequencyConfig } from '@/hooks/useFrequencyConfig';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
