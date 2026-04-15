@@ -153,11 +153,11 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange 
   };
 
   const grandTotal = useMemo(() => {
-    return gridEmployees.reduce((sum, emp) => {
+    return Math.round(gridEmployees.reduce((sum, emp) => {
       const rateInfo = employeeRates.get(emp.id);
       const rate = rateInfo?.rate || 0;
       return sum + getTotal(emp.id) * rate;
-    }, 0);
+    }, 0));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localData, gridEmployees, employeeRates]);
 
@@ -239,7 +239,7 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange 
                     const rateSource = rateInfo?.source || 'none';
                     const empVals = localData[emp.id] || {};
                     const total = getTotal(emp.id);
-                    const amount = total * effectiveRate;
+                    const amount = Math.round(total * effectiveRate);
                     const deptName = (emp as any).departments?.name || '—';
                     return (
                       <TableRow key={emp.id}>

@@ -142,7 +142,7 @@ async function exportDailyData(programId: string, month: string, year: number): 
       total += val;
     }
     row['Total'] = total;
-    row['Amount (₹)'] = total * rate;
+    row['Amount (₹)'] = Math.round(total * rate);
     return row;
   });
 
