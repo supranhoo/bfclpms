@@ -1675,9 +1675,9 @@ Full JSON format for maximum control:
 - Tests: `src/lib/inboxSearchParser.test.ts`
 
 **Inbox Insights Tab:**
-- **Health Score** (0–100): Composite metric factoring SLA compliance, open query backlog, and average response time
+- **Health Score** (0–100): Composite metric factoring SLA compliance, open query backlog, and average response time. When no resolved queries exist, SLA defaults to a neutral score (80) instead of penalizing with 0%.
 - **Response Time Metrics**: Average, fastest, and slowest resolution times computed from `created_at` → `resolved_at`
-- **SLA Compliance**: Percentage of queries resolved within the 2-day target, with progress bar
+- **SLA Compliance**: Percentage of queries resolved within the configurable SLA target (default 2 days, admin-configurable via `query_sla_target_days` in Workflow Settings). Displays "N/A" when no resolved queries exist.
 - **Volume Trends**: Bar chart showing query volume over the last 14 days
 - **Status Distribution**: Donut chart of open/responded/resolved queries
 - **Resolution Rate**: Percentage of total queries that are resolved, with breakdown
