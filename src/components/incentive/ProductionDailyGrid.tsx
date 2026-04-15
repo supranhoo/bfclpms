@@ -239,7 +239,7 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange 
                     const rateSource = rateInfo?.source || 'none';
                     const empVals = localData[emp.id] || {};
                     const total = getTotal(emp.id);
-                    const amount = total * effectiveRate;
+                    const amount = Math.round(total * effectiveRate);
                     const deptName = (emp as any).departments?.name || '—';
                     return (
                       <TableRow key={emp.id}>
