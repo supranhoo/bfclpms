@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-15  
-> **Version:** 2.13.3 — §UI: Non-terminal months of multi-month KPIs display a contextual banner showing terminal month review status and percolation info.
+> **Version:** 2.13.4 — §UI: Terminal month sibling lookup relaxed to KRA+category+frequency match with prefix tiebreaker for name mismatches.
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
