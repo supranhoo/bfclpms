@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-04-14  
-> **Version:** 2.46.0 — Admin: Profile-Based Menu Access Rights system with org-scoped permissions (Company/Division/BU/Dept/Grade/Level), granular CRUD rights (View/Add/Update/Delete), and implicit default access hierarchy.
+> **Last Updated:** 2026-04-15  
+> **Version:** 2.47.0 — Incentive: Round all incentive amount displays to whole numbers; pagination and select-all enhancements for Monthly Incentive Table.
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
