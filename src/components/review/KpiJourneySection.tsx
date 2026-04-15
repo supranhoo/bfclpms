@@ -627,6 +627,31 @@ export function KpiJourneySection({
           </div>
         )}
 
+        {/* Terminal Month Status Banner for non-terminal multi-month KPIs */}
+        {isLockedSibling && terminalMonth && terminalKpiData && terminalKpiData.status !== 'approved' && (
+          <Alert className={terminalKpiData.hasSubmission 
+            ? "border-blue-500/30 bg-blue-500/5" 
+            : "border-muted bg-muted/30"
+          }>
+            <CalendarClock className={`h-4 w-4 ${terminalKpiData.hasSubmission ? 'text-blue-600' : 'text-muted-foreground'}`} />
+            <AlertDescription className="text-sm">
+              {terminalKpiData.hasSubmission ? (
+                <>
+                  <strong>Data entered in {terminalMonth} {kpi.review_year}</strong> — currently at{' '}
+                  <Badge variant="secondary" className="text-xs mx-1">
+                    {statusLabels[terminalKpiData.status] || terminalKpiData.status}
+                  </Badge>.
+                  Scores will appear here once the terminal month is approved.
+                </>
+              ) : (
+                <>
+                  This is a <strong>{kpi.frequency}</strong> KPI. Data entry happens in the terminal month ({terminalMonth} {kpi.review_year}). No data entered yet.
+                </>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Review Stages Grid */}
         <div className={`grid ${gridCols} gap-2 lg:gap-3`}>
         {visibleStages.map(stage => {
