@@ -169,21 +169,26 @@ export function KpiJourneySection({
   );
 
   const { data: terminalKpiData } = useQuery({
-    queryKey: ['terminal-month-kpi', kpi.employee_id, kpi.kra_name, kpi.kpi_name, kpi.category_id, terminalMonth, kpi.review_year],
+    queryKey: ['terminal-month-kpi', kpi.employee_id, kpi.kra_name, kpi.frequency, kpi.category_id, terminalMonth, kpi.review_year],
     queryFn: async () => {
       const { data: kpis, error } = await supabase
         .from('kpis')
-        .select('id, status, review_period')
+        .select('id, status, review_period, kpi_name')
         .eq('employee_id', kpi.employee_id)
         .eq('kra_name', kpi.kra_name)
-        .eq('kpi_name', kpi.kpi_name)
+        .eq('frequency', kpi.frequency)
         .eq('category_id', kpi.category_id)
         .eq('review_period', terminalMonth!)
-        .eq('review_year', kpi.review_year)
-        .limit(1);
+        .eq('review_year', kpi.review_year);
       if (error) throw error;
       if (!kpis || kpis.length === 0) return null;
-      const termKpi = kpis[0];
+      // If multiple matches, prefer the one with matching kpi_name prefix
+      let termKpi = kpis[0];
+      if (kpis.length > 1) {
+        const prefix = (kpi.kpi_name || '').substring(0, 30).toLowerCase();
+        const prefixMatch = kpis.find(k => (k.kpi_name || '').substring(0, 30).toLowerCase() === prefix);
+        if (prefixMatch) termKpi = prefixMatch;
+      }
       // Check if submission exists
       const { data: sub } = await supabase
         .from('review_submissions')
