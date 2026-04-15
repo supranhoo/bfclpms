@@ -14,6 +14,175 @@ export type Database = {
   }
   public: {
     Tables: {
+      access_profile_assignments: {
+        Row: {
+          assigned_by: string | null
+          created_at: string
+          id: string
+          profile_id: string
+          user_id: string
+        }
+        Insert: {
+          assigned_by?: string | null
+          created_at?: string
+          id?: string
+          profile_id: string
+          user_id: string
+        }
+        Update: {
+          assigned_by?: string | null
+          created_at?: string
+          id?: string
+          profile_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "access_profile_assignments_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "access_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      access_profile_menu_rights: {
+        Row: {
+          can_add: boolean
+          can_delete: boolean
+          can_update: boolean
+          can_view: boolean
+          id: string
+          menu_key: string
+          profile_id: string
+        }
+        Insert: {
+          can_add?: boolean
+          can_delete?: boolean
+          can_update?: boolean
+          can_view?: boolean
+          id?: string
+          menu_key: string
+          profile_id: string
+        }
+        Update: {
+          can_add?: boolean
+          can_delete?: boolean
+          can_update?: boolean
+          can_view?: boolean
+          id?: string
+          menu_key?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "access_profile_menu_rights_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "access_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      access_profile_org_scope: {
+        Row: {
+          business_unit_id: string | null
+          company_id: string | null
+          department_id: string | null
+          designation: string | null
+          division_id: string | null
+          id: string
+          level: string | null
+          pms_grade: string | null
+          profile_id: string
+        }
+        Insert: {
+          business_unit_id?: string | null
+          company_id?: string | null
+          department_id?: string | null
+          designation?: string | null
+          division_id?: string | null
+          id?: string
+          level?: string | null
+          pms_grade?: string | null
+          profile_id: string
+        }
+        Update: {
+          business_unit_id?: string | null
+          company_id?: string | null
+          department_id?: string | null
+          designation?: string | null
+          division_id?: string | null
+          id?: string
+          level?: string | null
+          pms_grade?: string | null
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "access_profile_org_scope_business_unit_id_fkey"
+            columns: ["business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "access_profile_org_scope_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "access_profile_org_scope_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "access_profile_org_scope_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "access_profile_org_scope_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "access_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      access_profiles: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           app_name: string
@@ -4794,6 +4963,16 @@ export type Database = {
         Returns: {
           linked_count: number
           template_id: string
+        }[]
+      }
+      get_user_access_profile_rights: {
+        Args: { p_user_id: string }
+        Returns: {
+          can_add: boolean
+          can_delete: boolean
+          can_update: boolean
+          can_view: boolean
+          menu_key: string
         }[]
       }
       get_user_role: {
