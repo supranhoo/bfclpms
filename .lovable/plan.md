@@ -1,27 +1,58 @@
 
 
-## Add Missing Audit Sub-Menu to Menu Access Config
+## Convert Filter Dropdowns to Searchable Comboboxes
 
 ### Problem
-The "Org KPI Audit Review" menu item (key: `admin-org-kpi-audit`) exists in the sidebar under the Audit section but was never inserted into the `menu_access_config` database table. Since the Menu Access Rights grid renders rows from that table, this item is invisible in the profile mapping UI.
+The Department, Designation, Grade, Manager, and Status filter dropdowns in the review tabs use plain `Select` components with no type-ahead/search. With hundreds of departments and managers, users must scroll through long lists to find what they need.
+
+### Current vs Target UI
+
+```text
+CURRENT (plain Select — no search):
+┌──────────────────┐  ┌──────────────────┐  ┌──────────────┐  ┌──────────────────┐
+│ All Departments ▾│  │ All Designations▾│  │ All Grades  ▾│  │ All Managers    ▾│
+└──────────────────┘  └──────────────────┘  └──────────────┘  └──────────────────┘
+     ┌──────────────────┐
+     │ ✓ All Departments│   ← No search box, must scroll
+     │  1050 TPD-E And I│
+     │  1050 TPD-Mech   │
+     │  ...200 more...  │
+     └──────────────────┘
+
+AFTER (searchable Combobox):
+┌──────────────────┐  ┌──────────────────┐  ┌──────────────┐  ┌──────────────────┐
+│ All Departments ▾│  │ All Designations▾│  │ All Grades  ▾│  │ All Managers    ▾│
+└──────────────────┘  └──────────────────┘  └──────────────┘  └──────────────────┘
+     ┌──────────────────┐
+     │ 🔍 Search...     │   ← Type to filter
+     │ ✓ — None —       │
+     │  1050 TPD-Mech   │   ← Only matching items shown
+     └──────────────────┘
+```
 
 ### Solution
-Run a database migration to insert the missing row into `menu_access_config`.
+Replace all 5 `Select` dropdowns in **`EmployeeFilters.tsx`** with the existing `OrgFilterCombobox` component (single-select mode). This component already supports search, keyboard navigation, and a "None" clear option.
 
 ### Changes
 
-**Database Migration**
-```sql
-INSERT INTO menu_access_config (menu_key, menu_name, section, allowed_roles, display_order)
-SELECT 'admin-org-kpi-audit', 'Org KPI Audit Review', 'audit', ARRAY['auditor','admin']::text[], 41
-WHERE NOT EXISTS (SELECT 1 FROM menu_access_config WHERE menu_key = 'admin-org-kpi-audit');
-```
+**File: `src/components/review/EmployeeFilters.tsx`**
+1. Replace `Select` import with `OrgFilterCombobox` import
+2. Convert each filter dropdown:
+   - **Department**: `options` from `departments.map(d => ({ value: d.id, label: d.name }))`, value/onChange mapped to existing props
+   - **Designation**: `options` from `designations.map(d => ({ value: d, label: d }))`
+   - **Grade**: `options` from `grades.map(g => ({ value: g, label: g }))`
+   - **Manager**: `options` from `managers.map(m => ({ value: m.id, label: m.name }))`
+   - **Status**: `options` from `statusOptions.map(s => ({ value: s.value, label: s.label }))`
+3. Map `onValueChange` to emit `null` when empty string selected (the combobox "None" option returns `''`)
+4. Keep the same responsive grid layout (`grid-cols-2 sm:flex`)
 
-**`DOCUMENTATION.md`** — Version bump  
+**No other files need changes** — `EmployeeFilters` is the shared component used by `EmployeeSelectorGrid`, which powers all tabs (Team Reviews, Self Review, Manager Review, Skip Mgr, HR PMS, Audit, Management).
+
+**`DOCUMENTATION.md`** — Version bump
 **`POLICY.md`** — Version bump
 
 ### Risk Assessment
-- **Data impact**: Single INSERT, no existing data affected
-- **Regression risk**: None — additive change only
-- **UX improvement**: Both audit sub-menus (Audit Panel + Org KPI Audit Review) will appear in the Menu Access Rights grid for profile mapping
+- **Data impact**: None — UI-only change
+- **Regression risk**: None — `OrgFilterCombobox` is already used elsewhere in the app (AccessProfilesManager)
+- **UX improvement**: All filter dropdowns across all review tabs become searchable
 
