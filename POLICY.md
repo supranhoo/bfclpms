@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-15  
-> **Version:** 2.09.0 — §Access: Org scope stores independent dimension rows (not cartesian product); 500-row safety cap prevents browser crashes.
+> **Version:** 2.10.0 — §Access: Profile Mapping tab shows compact scope count badge instead of full scope/menu rights listings.
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
