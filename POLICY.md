@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-15  
-> **Version:** 2.06.0 — §Incentive: All incentive amount values displayed as rounded whole numbers (₹). No decimal amounts in tables, exports, or dialogs.
+> **Version:** 2.07.0 — §Access: Org-Level Scope supports multi-select with Select All and Location (sub-branch) filtering.
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
