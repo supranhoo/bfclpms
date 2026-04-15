@@ -149,10 +149,10 @@ export function InboxInsights({ allQueries, teamQueries = [], currentUserId, not
             <div className="grid grid-cols-3 gap-4 sm:gap-6 text-center sm:text-right">
               <div>
                 <div className="flex items-center justify-center sm:justify-end gap-1">
-                  {metrics.slaPercent >= 90 ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600" /> : <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />}
+                  {metrics.slaPercent !== null && metrics.slaPercent >= 90 ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600" /> : <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />}
                   <p className="text-xs text-muted-foreground">SLA Compliance</p>
                 </div>
-                <p className={cn('text-lg font-bold', slaColor)}>{metrics.slaPercent}%</p>
+                <p className={cn('text-lg font-bold', slaColor)}>{metrics.slaPercent !== null ? `${metrics.slaPercent}%` : 'N/A'}</p>
                 <p className="text-[10px] text-muted-foreground">Target: 90%</p>
               </div>
               <div>
@@ -161,7 +161,7 @@ export function InboxInsights({ allQueries, teamQueries = [], currentUserId, not
                   <p className="text-xs text-muted-foreground">Avg Response</p>
                 </div>
                 <p className="text-lg font-bold text-foreground">{formatHours(metrics.avgResponseHours)}</p>
-                <p className="text-[10px] text-muted-foreground">Target: {SLA_TARGET_DAYS}d</p>
+                <p className="text-[10px] text-muted-foreground">Target: {slaTargetDays}d</p>
               </div>
               <div>
                 <div className="flex items-center justify-center sm:justify-end gap-1">
@@ -253,12 +253,12 @@ export function InboxInsights({ allQueries, teamQueries = [], currentUserId, not
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Resolved within {SLA_TARGET_DAYS} days</span>
+              <span className="text-muted-foreground">Resolved within {slaTargetDays} days</span>
               <span className={cn('font-semibold', slaColor)}>{metrics.withinSla}/{metrics.totalResolved}</span>
             </div>
-            <Progress value={metrics.slaPercent} className="h-2" />
+            <Progress value={metrics.slaPercent ?? 0} className="h-2" />
             <p className="text-xs text-muted-foreground">
-              {metrics.slaPercent >= 90 ? '✅ Meeting SLA target of 90%' : `⚠️ Below SLA target of 90% (currently ${metrics.slaPercent}%)`}
+              {metrics.slaPercent === null ? '— No resolved queries to measure' : metrics.slaPercent >= 90 ? '✅ Meeting SLA target of 90%' : `⚠️ Below SLA target of 90% (currently ${metrics.slaPercent}%)`}
             </p>
           </CardContent>
         </Card>
