@@ -18,7 +18,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { OrgFilterCombobox, type ComboboxOption } from './OrgFilterCombobox';
-import { ConfirmDestructiveDialog } from '@/components/ui/confirm-destructive-dialog';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 const SECTION_LABELS: Record<string, string> = {
   main: 'Main', manager: 'Manager', hr_pms: 'HR PMS', management: 'Management',
