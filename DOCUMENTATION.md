@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-15  
-> **Version:** 2.55.0 — UI: Replaced plain Select dropdowns with searchable OrgFilterCombobox in EmployeeFilters across all review tabs.
+> **Version:** 2.56.0 — Feature: Terminal month status banner in Review Journey for non-terminal multi-month KPIs (Quarterly, Bi-Monthly, Half-Yearly, Yearly).
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-15  
-> **Version:** 2.13.2 — §UI: Employee filter dropdowns now use searchable comboboxes for improved usability.
+> **Version:** 2.13.3 — §UI: Non-terminal months of multi-month KPIs display a contextual banner showing terminal month review status and percolation info.
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
