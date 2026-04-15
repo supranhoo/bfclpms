@@ -5090,3 +5090,9 @@ Every new edge function **must** complete all of these steps before deployment:
 - **Root Cause**: `UnifiedScorecard.tsx` auto-open logic only handled self mode. Reviewer modes (`team`, `audit`, `management`, `hr_pms`) received `autoOpenKpiId` but never set `selectedKpi` or opened `reviewSheetOpen`.
 - **Fix**: Added reviewer-mode auto-open effect in `UnifiedScorecard.tsx` that matches `autoOpenKpiId` against loaded KPIs and opens the review sheet. Handles cross-period KPIs by switching period selection.
 - **Modified files**: `src/components/review/UnifiedScorecard.tsx`
+
+### v2.37.0 — Configurable SLA Target + Fix SLA 0% vs 100% Inconsistency (2026-04-15)
+- **Bug**: Inbox Health Score showed SLA 0% while My Productivity showed 100% — inconsistent defaults when no resolved queries exist.
+- **Root Cause**: Health Score counted all resolved queries (hardcoded 2-day target), My Productivity only counted queries received by user and defaulted to 100% when none existed.
+- **Fix**: Made SLA target configurable via `query_sla_target_days` workflow setting (default 2 days, range 1–30). Both components now show "N/A" when no resolved queries exist. Health score uses neutral base (80) instead of penalizing with 0% SLA when no data.
+- **Modified files**: `src/hooks/useWorkflowSettings.ts`, `src/components/inbox/InboxInsights.tsx`, `src/components/inbox/PersonalProductivityInsights.tsx`
