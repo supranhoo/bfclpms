@@ -199,6 +199,7 @@ function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgScope, de
   const { data: divisions = [] } = useDivisions();
   const { data: businessUnits = [] } = useBusinessUnits();
   const { data: departments = [] } = useDepartments();
+  const { data: subBranches = [] } = useSubBranches();
   const { designations, grades } = useEmployeeFilterOptions();
 
   // Levels from profiles
@@ -211,10 +212,13 @@ function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgScope, de
     staleTime: 5 * 60 * 1000,
   });
 
-  // Org scope form state
-  const [scopeForm, setScopeForm] = useState({
-    company_id: '', division_id: '', business_unit_id: '',
-    department_id: '', designation: '', pms_grade: '', level: '',
+  // Org scope form state — arrays for multi-select
+  const [scopeForm, setScopeForm] = useState<{
+    company_id: string[]; division_id: string[]; business_unit_id: string[];
+    department_id: string[]; location: string[]; designation: string[]; pms_grade: string[]; level: string[];
+  }>({
+    company_id: [], division_id: [], business_unit_id: [],
+    department_id: [], location: [], designation: [], pms_grade: [], level: [],
   });
 
   // Menu rights editing
@@ -231,7 +235,7 @@ function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgScope, de
   const handleProfileChange = (id: string) => {
     setSelectedProfileId(id);
     setEditedRights({});
-    setScopeForm({ company_id: '', division_id: '', business_unit_id: '', department_id: '', designation: '', pms_grade: '', level: '' });
+    setScopeForm({ company_id: [], division_id: [], business_unit_id: [], department_id: [], location: [], designation: [], pms_grade: [], level: [] });
   };
 
   const getRights = (menuKey: string) => {
@@ -247,39 +251,65 @@ function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgScope, de
 
   const profileScopes = useMemo(() => orgScopes.filter((s: any) => s.profile_id === selectedProfileId), [orgScopes, selectedProfileId]);
 
+  // Cascading filter options
   const companyOptions: ComboboxOption[] = companies.map((c: any) => ({ value: c.id, label: c.name }));
   const divisionOptions: ComboboxOption[] = divisions
-    .filter((d: any) => !scopeForm.company_id || d.company_id === scopeForm.company_id)
+    .filter((d: any) => scopeForm.company_id.length === 0 || scopeForm.company_id.includes(d.company_id))
     .map((d: any) => ({ value: d.id, label: d.name }));
   const buOptions: ComboboxOption[] = businessUnits
-    .filter((b: any) => !scopeForm.division_id || b.division_id === scopeForm.division_id)
+    .filter((b: any) => scopeForm.division_id.length === 0 || scopeForm.division_id.includes(b.division_id))
     .map((b: any) => ({ value: b.id, label: b.name }));
   const deptOptions: ComboboxOption[] = departments
-    .filter((d: any) => !scopeForm.business_unit_id || d.business_unit_id === scopeForm.business_unit_id)
+    .filter((d: any) => scopeForm.business_unit_id.length === 0 || scopeForm.business_unit_id.includes(d.business_unit_id))
     .map((d: any) => ({ value: d.id, label: d.name }));
+  const locationOptions: ComboboxOption[] = subBranches
+    .filter((s: any) => scopeForm.department_id.length === 0 || scopeForm.department_id.includes(s.department_id))
+    .map((s: any) => ({ value: s.id, label: s.name }));
   const designationOptions: ComboboxOption[] = designations.map((d: string) => ({ value: d, label: d }));
   const gradeOptions: ComboboxOption[] = grades.map((g: string) => ({ value: g, label: g }));
   const levelOptions: ComboboxOption[] = levels.map((l: string) => ({ value: l, label: l }));
 
-  const hasScopeFilter = Object.values(scopeForm).some(v => !!v);
+  const hasScopeFilter = Object.values(scopeForm).some(arr => arr.length > 0);
 
   const handleAddScope = async () => {
     if (!selectedProfileId || !hasScopeFilter) return;
     try {
-      await saveOrgScope.mutateAsync({
-        profileId: selectedProfileId,
-        scope: {
-          company_id: scopeForm.company_id || null,
-          division_id: scopeForm.division_id || null,
-          business_unit_id: scopeForm.business_unit_id || null,
-          department_id: scopeForm.department_id || null,
-          designation: scopeForm.designation || null,
-          pms_grade: scopeForm.pms_grade || null,
-          level: scopeForm.level || null,
-        },
-      });
-      toast({ title: 'Org Scope Added' });
-      setScopeForm({ company_id: '', division_id: '', business_unit_id: '', department_id: '', designation: '', pms_grade: '', level: '' });
+      // Build arrays for each dimension (empty = [null] to represent "any")
+      const dims = {
+        company_id: scopeForm.company_id.length > 0 ? scopeForm.company_id : [null],
+        division_id: scopeForm.division_id.length > 0 ? scopeForm.division_id : [null],
+        business_unit_id: scopeForm.business_unit_id.length > 0 ? scopeForm.business_unit_id : [null],
+        department_id: scopeForm.department_id.length > 0 ? scopeForm.department_id : [null],
+        location: scopeForm.location.length > 0 ? scopeForm.location : [null],
+        designation: scopeForm.designation.length > 0 ? scopeForm.designation : [null],
+        pms_grade: scopeForm.pms_grade.length > 0 ? scopeForm.pms_grade : [null],
+        level: scopeForm.level.length > 0 ? scopeForm.level : [null],
+      };
+
+      // Generate cartesian product rows
+      const rows: any[] = [];
+      for (const cid of dims.company_id)
+        for (const did of dims.division_id)
+          for (const bid of dims.business_unit_id)
+            for (const deptId of dims.department_id)
+              for (const loc of dims.location)
+                for (const desig of dims.designation)
+                  for (const grade of dims.pms_grade)
+                    for (const lvl of dims.level) {
+                      rows.push({
+                        company_id: cid, division_id: did, business_unit_id: bid,
+                        department_id: deptId, location: loc, designation: desig,
+                        pms_grade: grade, level: lvl,
+                      });
+                    }
+
+      // Insert all rows
+      for (const scope of rows) {
+        await saveOrgScope.mutateAsync({ profileId: selectedProfileId, scope });
+      }
+
+      toast({ title: `${rows.length} Org Scope${rows.length > 1 ? 's' : ''} Added` });
+      setScopeForm({ company_id: [], division_id: [], business_unit_id: [], department_id: [], location: [], designation: [], pms_grade: [], level: [] });
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     }
