@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-14  
-> **Version:** 2.45.1 — Incentive: Amount column in Production Daily Grid now displays rounded whole numbers (Math.round) for cleaner currency display.
+> **Version:** 2.46.0 — Admin: Profile-Based Menu Access Rights system with org-scoped permissions (Company/Division/BU/Dept/Grade/Level), granular CRUD rights (View/Add/Update/Delete), and implicit default access hierarchy.
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
