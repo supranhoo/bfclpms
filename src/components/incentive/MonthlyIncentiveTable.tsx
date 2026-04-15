@@ -98,7 +98,7 @@ export function MonthlyIncentiveTable() {
     const eligible = filteredRecords.filter((r: any) => !r.is_disqualified).length;
     const disqualified = filteredRecords.filter((r: any) => r.is_disqualified).length;
     const prorata = filteredRecords.filter((r: any) => !r.is_disqualified && r.pro_rata_factor < 1).length;
-    const totalAmount = filteredRecords.reduce((s: number, r: any) => s + (r.incentive_amount || 0), 0);
+    const totalAmount = filteredRecords.reduce((s: number, r: any) => s + Math.round(r.incentive_amount || 0), 0);
     return { total, eligible, disqualified, prorata, totalAmount };
   }, [filteredRecords]);
 
@@ -201,7 +201,7 @@ export function MonthlyIncentiveTable() {
         'Original Score': r.original_score ?? '',
         'Adjusted Score': r.adjusted_score ?? '',
         'Final Incentive %': r.final_incentive_percent,
-        'Incentive Amount': r.incentive_amount || 0,
+        'Incentive Amount': Math.round(r.incentive_amount || 0),
         'Incentive Status': r.incentive_status,
         'Record Status': r.status,
         'Incentive Base': prog?.incentive_base ?? '',
@@ -519,7 +519,7 @@ export function MonthlyIncentiveTable() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          {(r.incentive_amount || 0) > 0 ? `₹${Number(r.incentive_amount).toLocaleString('en-IN')}` : '—'}
+                          {(r.incentive_amount || 0) > 0 ? `₹${Math.round(Number(r.incentive_amount)).toLocaleString('en-IN')}` : '—'}
                         </TableCell>
                         <TableCell>
                           {r.is_disqualified ? (
@@ -608,7 +608,7 @@ export function MonthlyIncentiveTable() {
                   </div>
                   <div className="bg-muted rounded-md p-2 text-center">
                     <p className="text-xs text-muted-foreground">Total Amount</p>
-                    <p className="text-lg font-semibold">₹{markPaidImpact.totalAmount.toLocaleString('en-IN')}</p>
+                    <p className="text-lg font-semibold">₹{Math.round(markPaidImpact.totalAmount).toLocaleString('en-IN')}</p>
                   </div>
                 </div>
                 <div className="max-h-48 overflow-auto border rounded-md">
@@ -626,7 +626,7 @@ export function MonthlyIncentiveTable() {
                             <span className="font-medium">{emp.name}</span>
                             {emp.code && <span className="text-muted-foreground ml-1">({emp.code})</span>}
                           </TableCell>
-                          <TableCell className="text-xs py-1 text-right">₹{emp.amount.toLocaleString('en-IN')}</TableCell>
+                          <TableCell className="text-xs py-1 text-right">₹{Math.round(emp.amount).toLocaleString('en-IN')}</TableCell>
                         </TableRow>
                       ))}
                       {markPaidImpact.employees.length > 20 && (
