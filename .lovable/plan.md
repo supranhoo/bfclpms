@@ -1,27 +1,65 @@
 
 
-## Round Amount Values in Incentive Report Table
+## Multi-Select with "Select All" + Location Field for Org Scope Dropdowns
 
 ### Problem
-The Amount (₹) column displays decimal values (e.g., ₹2,152.575, ₹1,435.05) instead of whole numbers.
+1. Org-Level Scope comboboxes allow only single selection — admins need multi-select with "Select All"
+2. "Location" (sub_branches table) is missing from org scope filters
 
-### Fix
+### UI Design
 
-**File: `src/components/incentive/MonthlyIncentiveTable.tsx`** — Apply `Math.round()` at all display and export points:
+```text
+┌─────────────────────────────────────────────────────────────────────┐
+│ Org-Level Scope                                                     │
+│                                                                     │
+│ Company: [3 selected ▾]    Division: [All (5) ▾]                    │
+│ Bus Unit: [▾ Search...]    Dept: [▾ Search...]                      │
+│ Location: [▾ Search...]    Designation: [▾ Search...]               │
+│ Grade: [▾ Search...]       Level: [▾ Search...]                     │
+│                                              [+ Add Scope]         │
+│                                                                     │
+│  Dropdown expanded:                                                 │
+│  ┌───────────────────────┐                                          │
+│  │ 🔍 Search...          │                                          │
+│  ├───────────────────────┤                                          │
+│  │ ☑ Select All (3)      │  ← toggles all visible/filtered items   │
+│  ├───────────────────────┤                                          │
+│  │ ☑ Bihar Foundry       │                                          │
+│  │ ☑ Saibal Kunar        │                                          │
+│  │ ☐ ABC Corp            │                                          │
+│  └───────────────────────┘                                          │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
-1. **Line 522** (table cell): Change `Number(r.incentive_amount).toLocaleString('en-IN')` to `Math.round(Number(r.incentive_amount)).toLocaleString('en-IN')`
+### Implementation
 
-2. **Line 101** (summary total): Change `s + (r.incentive_amount || 0)` to `s + Math.round(r.incentive_amount || 0)`
+**1. Database migration** — Add `location` text column to `access_profile_org_scope`:
+```sql
+ALTER TABLE access_profile_org_scope ADD COLUMN location text;
+-- Update CHECK constraint to include location
+```
 
-3. **Line 204** (export): Change `r.incentive_amount || 0` to `Math.round(r.incentive_amount || 0)`
+**2. `OrgFilterCombobox.tsx`** — Add multi-select mode:
+- New props: `multiSelect`, `values`, `onValuesChange`
+- "Select All (N)" checkbox at top — toggles all search-filtered items
+- Trigger shows "N selected" or single name
+- Popover stays open on item click
+- Backward compatible (existing single-select unchanged)
 
-4. **Line 629** (mark-paid dialog): Change `emp.amount.toLocaleString('en-IN')` to `Math.round(emp.amount).toLocaleString('en-IN')`
+**3. `AccessProfilesManager.tsx`** — Update Mapping tab:
+- Add `useSubBranches()` import and Location combobox
+- Change `scopeForm` state to arrays: `company_id: string[]`, etc.
+- Switch all comboboxes to `multiSelect` mode
+- Cascading: Division filters by any selected company, BU by any selected division, Dept by any selected BU, Location by any selected dept
+- On "Add Scope": generate cartesian product rows (one `access_profile_org_scope` row per combination)
+- Update `getScopeLabel` to show location
 
-5. **Line 611** (mark-paid total): Change `markPaidImpact.totalAmount.toLocaleString('en-IN')` to `Math.round(markPaidImpact.totalAmount).toLocaleString('en-IN')`
+**4. `useAccessProfiles.ts`** — Add `location` to `AccessProfileOrgScope` type
 
-6. **Documentation** — Version bump in `DOCUMENTATION.md` and `POLICY.md`
+**5. Documentation** — Version bump in `DOCUMENTATION.md` and `POLICY.md`
 
 ### Risk Assessment
-- **Data impact**: None — display-only rounding, no DB changes
-- **Regression risk**: Minimal — `Math.round` on computed display values
+- **Data impact**: One new nullable column; no existing data affected
+- **Regression risk**: Low — OrgFilterCombobox backward compatible; existing single-select callers unaffected
+- **Performance**: Cartesian product insertion capped by practical org hierarchy sizes
 
