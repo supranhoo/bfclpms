@@ -12,7 +12,7 @@ import { Shield, Plus, Trash2, Save, Users, Settings2, Search } from 'lucide-rea
 import { useAccessProfiles, type AccessProfileMenuRight } from '@/hooks/useAccessProfiles';
 import { useMenuAccess, type MenuAccessConfig } from '@/hooks/useMenuAccess';
 import { useCompanies } from '@/hooks/useCompanies';
-import { useDivisions, useBusinessUnits, useDepartments } from '@/hooks/useOrganization';
+import { useDivisions, useBusinessUnits, useDepartments, useSubBranches } from '@/hooks/useOrganization';
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
