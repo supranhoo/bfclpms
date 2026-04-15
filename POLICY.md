@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-15  
-> **Version:** 2.12.0 — §Access: Restored Menu Access Rights grid on Profile Mapping tab for per-profile CRUD permission management.
+> **Version:** 2.13.0 — §Access: Removed legacy Role Access and Employee Overrides UI; profile-based access control (Profiles → Mapping → Assignment) is the sole admin interface.
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
