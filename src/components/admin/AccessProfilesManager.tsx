@@ -139,7 +139,7 @@ export function ProfilesTab({ profiles, assignments, createProfile, updateProfil
       </div>
 
       {profiles.length > 0 ? (
-        <div className="rounded-md border max-h-[60vh] overflow-auto">
+        <div className="rounded-md border max-h-[60vh] overflow-auto [&>div]:overflow-visible">
           <Table>
             <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow>
@@ -418,7 +418,7 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
           {/* Menu Access Rights */}
           <div className="space-y-3">
             <h4 className="text-sm font-semibold">Menu Access Rights</h4>
-            <div className="rounded-md border max-h-[60vh] overflow-auto">
+            <div className="rounded-md border max-h-[60vh] overflow-auto [&>div]:overflow-visible">
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
@@ -573,7 +573,7 @@ export function AssignmentTab({ profiles, assignments, assignUser, removeAssignm
       </div>
 
       {enrichedAssignments.length > 0 ? (
-        <div className="rounded-md border max-h-[60vh] overflow-auto">
+        <div className="rounded-md border max-h-[60vh] overflow-auto [&>div]:overflow-visible">
           <Table>
             <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow>
