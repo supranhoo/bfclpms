@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-15  
-> **Version:** 2.13.1 — §Access: Added Org KPI Audit Review menu item to access config for profile mapping visibility.
+> **Version:** 2.13.2 — §UI: Employee filter dropdowns now use searchable comboboxes for improved usability.
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

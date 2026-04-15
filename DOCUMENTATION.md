@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-15  
-> **Version:** 2.54.0 — Data: Added Org KPI Audit Review to menu access config for profile-based access mapping.
+> **Version:** 2.55.0 — UI: Replaced plain Select dropdowns with searchable OrgFilterCombobox in EmployeeFilters across all review tabs.
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
