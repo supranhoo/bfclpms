@@ -57,7 +57,7 @@ export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, i
             { label: 'Eligible', value: summary.eligible },
             { label: 'Disqualified', value: summary.disqualified },
             { label: 'Avg Incentive %', value: summary.avg_incentive_percent.toFixed(1) + '%' },
-            { label: 'Total Amount', value: '₹' + (summary.total_amount?.toLocaleString('en-IN') || '0') },
+            { label: 'Total Amount', value: '₹' + (Math.round(summary.total_amount || 0).toLocaleString('en-IN')) },
           ].map(s => (
             <Card key={s.label}>
               <CardContent className="pt-3 pb-3">
@@ -106,7 +106,7 @@ export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, i
                       </Badge>
                     </TableCell>
                     <TableCell className="font-medium">
-                      {(r.incentive_amount || 0) > 0 ? `₹${r.incentive_amount?.toLocaleString('en-IN')}` : '—'}
+                      {(r.incentive_amount || 0) > 0 ? `₹${Math.round(r.incentive_amount!).toLocaleString('en-IN')}` : '—'}
                     </TableCell>
                   </TableRow>
                 );
