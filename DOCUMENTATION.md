@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-15  
-> **Version:** 2.56.0 — Feature: Terminal month status banner in Review Journey for non-terminal multi-month KPIs (Quarterly, Bi-Monthly, Half-Yearly, Yearly).
+> **Version:** 2.56.1 — Feature: Terminal month status banner in Review Journey for non-terminal multi-month KPIs (Quarterly, Bi-Monthly, Half-Yearly, Yearly).
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
