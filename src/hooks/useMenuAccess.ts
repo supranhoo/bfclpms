@@ -22,6 +22,14 @@ export interface MenuAccessUserOverride {
   created_at: string;
 }
 
+export interface ProfileMenuRight {
+  menu_key: string;
+  can_view: boolean;
+  can_add: boolean;
+  can_update: boolean;
+  can_delete: boolean;
+}
+
 // Hardcoded fallback matching AppSidebar defaults
 const DEFAULT_MENU_ROLES: Record<string, AppRole[]> = {
   'dashboard': ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms', 'skip_level'],
@@ -35,8 +43,14 @@ const DEFAULT_MENU_ROLES: Record<string, AppRole[]> = {
   'admin-settings': ['admin'],
 };
 
+// Layer 1: Implicit default menus every employee can always view
+const EMPLOYEE_DEFAULT_MENUS = ['dashboard', 'inbox', 'pms-policy'];
+
+// Layer 1: Implicit default menus for reporting managers
+const MANAGER_DEFAULT_MENUS = ['team-reviews'];
+
 export function useMenuAccess() {
-  const { user, effectiveRole } = useAuth();
+  const { user, effectiveRole, profile } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: configs = [], isLoading } = useQuery({
@@ -64,30 +78,100 @@ export function useMenuAccess() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Fetch profile-based menu rights for the current user
+  const { data: profileRights = [], isLoading: profileRightsLoading } = useQuery({
+    queryKey: ['user-profile-menu-rights', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .rpc('get_user_access_profile_rights', { p_user_id: user.id });
+      if (error) {
+        console.warn('Failed to fetch profile rights:', error);
+        return [];
+      }
+      return (data || []) as ProfileMenuRight[];
+    },
+    enabled: !!user?.id,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Check if current user has direct reports (for manager default menus)
+  const { data: hasDirectReports = false } = useQuery({
+    queryKey: ['has-direct-reports', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return false;
+      const { count, error } = await supabase
+        .from('profiles')
+        .select('id', { count: 'exact', head: true })
+        .eq('reporting_manager_id', user.id)
+        .eq('is_active', true)
+        .limit(1);
+      if (error) return false;
+      return (count || 0) > 0;
+    },
+    enabled: !!user?.id,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const configMap = new Map(configs.map(c => [c.menu_key, c]));
+  const profileRightsMap = new Map(profileRights.map(r => [r.menu_key, r]));
 
   const canAccess = (menuKey: string): boolean => {
     if (!effectiveRole && !user) return false;
-    // Safety: admin always has System Settings access
+
+    // Priority 1: Admin always has System Settings access
     if (menuKey === 'admin-settings' && effectiveRole === 'admin') return true;
 
-    // Check user-level override first
+    // Priority 2: Employee implicit defaults (Layer 1)
+    if (user && EMPLOYEE_DEFAULT_MENUS.includes(menuKey)) return true;
+
+    // Priority 3: Manager implicit defaults (Layer 1)
+    if (user && MANAGER_DEFAULT_MENUS.includes(menuKey) && hasDirectReports) return true;
+
+    // Priority 4: Profile-based access (Layer 2)
+    const profileRight = profileRightsMap.get(menuKey);
+    if (profileRight?.can_view) return true;
+
+    // Priority 5: User-level override
     if (user) {
       const hasOverride = userOverrides.some(o => o.menu_key === menuKey && o.user_id === user.id);
       if (hasOverride) return true;
     }
 
-    // Fall back to role-based config
+    // Priority 6: Role-based config
     if (!effectiveRole) return false;
     const config = configMap.get(menuKey);
     if (config) {
       return config.allowed_roles.includes(effectiveRole);
     }
-    // Fallback to hardcoded defaults
+
+    // Priority 7: Hardcoded fallback
     const fallback = DEFAULT_MENU_ROLES[menuKey];
     if (fallback) return fallback.includes(effectiveRole);
-    // If no config and no fallback, only admin
+
     return effectiveRole === 'admin';
+  };
+
+  /** Granular CRUD check: does the user have a specific action right via profile? */
+  const canPerform = (menuKey: string, action: 'view' | 'add' | 'update' | 'delete'): boolean => {
+    // Admin can do everything
+    if (effectiveRole === 'admin') return true;
+
+    // Check profile-based rights
+    const right = profileRightsMap.get(menuKey);
+    if (right) {
+      switch (action) {
+        case 'view': return right.can_view;
+        case 'add': return right.can_add;
+        case 'update': return right.can_update;
+        case 'delete': return right.can_delete;
+      }
+    }
+
+    // Fallback: if user has role-based or override access, they can view
+    if (action === 'view') return canAccess(menuKey);
+
+    return false;
   };
 
   const getMenuRoles = (menuKey: string): AppRole[] => {
@@ -141,8 +225,9 @@ export function useMenuAccess() {
   return {
     configs,
     userOverrides,
-    isLoading: isLoading || overridesLoading,
+    isLoading: isLoading || overridesLoading || profileRightsLoading,
     canAccess,
+    canPerform,
     getMenuRoles,
     updateMenuAccess,
     grantUserMenuAccess,
