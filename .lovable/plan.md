@@ -1,71 +1,43 @@
 
 
-## Add Terminal Month Status Banner for Non-Terminal Sibling KPIs
+## Fix Terminal Month Banner Matching for Existing Multi-Month KPIs
 
-### Problem
-When viewing a non-terminal month of a multi-month KPI (Quarterly, Bi-Monthly, Half-Yearly, Yearly), there is no indication that data has been entered in the terminal month and is progressing through the review workflow. Users see an empty Review Journey with no context. Per ADR-047, scores only percolate to siblings once the terminal month reaches `approved` status.
-
-### Target UI
-
-```text
-┌─────────────────────────────────────────────────────────────────────┐
-│ ⏳ Review Journey                                            ↓ PDF │
-│                                                                     │
-│ ┌─────────────────────────────────────────────────────────────────┐ │
-│ │ 📅  This is a Quarterly KPI. Data was entered in the terminal  │ │
-│ │     month (March 2026) and is currently at Manager Review.     │ │
-│ │     Scores will appear here once the terminal month is         │ │
-│ │     approved.                                                  │ │
-│ └─────────────────────────────────────────────────────────────────┘ │
-│                                                                     │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐                            │
-│  │  Self   │  │ Manager │  │ Auditor │  ... (stages as usual)      │
-│  │ Pending │  │ Pending │  │ Pending │                             │
-│  └─────────┘  └─────────┘  └─────────┘                            │
-└─────────────────────────────────────────────────────────────────────┘
-
-States:
-─────────────────────────────────────────────────────────────────────
-1. Terminal month has submission but NOT approved:
-   "Data entered in March 2026 — currently at [Manager Review].
-    Scores will appear here once approved."
-   (Blue info banner with CalendarClock icon)
-
-2. Terminal month is at kra_set (no data yet):
-   "This is a Quarterly KPI. Data entry happens in the terminal
-    month (March 2026). No data entered yet."
-   (Muted/gray info banner)
-
-3. Terminal month is approved (scores already percolated):
-   No banner needed — scores are visible in the stage cards.
+### Root Cause
+The terminal month lookup query (line 179 in `KpiJourneySection.tsx`) uses **exact `kpi_name` matching**:
+```
+.eq('kpi_name', kpi.kpi_name)
 ```
 
+But the KPI names differ across the quarterly cycle:
+- **Jan/Feb**: `"Introduction of new vendor."` (short)
+- **March**: `"Introduction of new vendor. New vendor should have not been registered/empanelled..."` (long)
+
+Since the exact name match fails, the query returns no terminal KPI, and the banner never renders for January/February.
+
 ### Solution
-Add a banner inside `KpiJourneySection.tsx` that:
-1. Checks if the current KPI's period is a **non-terminal** (locked) month using `isKpiLockedForPeriod()`
-2. If locked, resolves the **terminal month** using `getActiveMonthForCycle()`
-3. Fetches the terminal month's KPI record (same employee, KRA, KPI name, category) to get its `status` and check if a submission exists
-4. Renders an informational `Alert` banner between the header and the stage cards
+Relax the terminal month matching to use `kra_name + category_id + employee_id + frequency` instead of requiring exact `kpi_name`. Within the same KRA category for the same employee in the same quarter with the same frequency, there is a reliable 1:1 correspondence.
 
 ### Changes
 
 **File: `src/components/review/KpiJourneySection.tsx`**
-1. Import `isKpiLockedForPeriod` and `getActiveMonthForCycle` from `frequencyUtils`
-2. Add a `useQuery` hook to fetch the terminal month's KPI when the current month is locked:
-   - Query: `kpis` table filtered by `employee_id`, `kra_name`, `kpi_name`, `category_id`, terminal month, same year
-   - Also fetch its `review_submissions` row to check if data exists
-3. Render a contextual `Alert` banner:
-   - **Data entered, pending review**: Blue banner with terminal month status label (from `statusLabels`)
-   - **No data yet**: Gray/muted banner stating data entry happens in terminal month
-   - **Already approved**: No banner (scores are percolated)
+1. In the `terminalKpiData` query (lines 174-198), replace:
+   ```
+   .eq('kpi_name', kpi.kpi_name)
+   ```
+   with:
+   ```
+   .eq('frequency', kpi.frequency)
+   ```
+   Keep the existing `employee_id`, `kra_name`, `category_id`, `review_period`, `review_year` filters. This matches by KRA + category + frequency + terminal month — which uniquely identifies the sibling.
 
-**File: `src/lib/frequencyUtils.ts`**
-- No changes needed — existing `isKpiLockedForPeriod` and `getActiveMonthForCycle` provide all required logic
+2. If the query returns **multiple** matches (edge case: multiple KPIs under same KRA), prefer the one whose `kpi_name` starts with the same prefix (first 30 chars) as the current KPI, falling back to the first result.
+
+3. Update the `queryKey` to remove `kpi.kpi_name` and add `kpi.frequency` for correct cache keying.
 
 **Files: `DOCUMENTATION.md`, `POLICY.md`** — Version bump
 
 ### Risk Assessment
-- **Data impact**: None — read-only query for the terminal month's KPI
-- **Regression risk**: None — additive UI banner, no existing logic modified
-- **Performance**: Single lightweight query only for non-terminal multi-month KPIs; cached via React Query
+- **Data impact**: None — read-only query change
+- **Regression risk**: Low — the relaxed match could theoretically pick a wrong sibling if multiple KPIs share the same KRA + category + frequency, but the prefix tiebreaker handles this. The current exact match returns **nothing** for mismatched names, so this is strictly better.
+- **Scope**: Fixes all existing multi-month KPIs where names were edited after rollover
 
