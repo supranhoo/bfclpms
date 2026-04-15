@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-15  
-> **Version:** 2.13.0 — §Access: Removed legacy Role Access and Employee Overrides UI; profile-based access control (Profiles → Mapping → Assignment) is the sole admin interface.
+> **Version:** 2.13.1 — §Access: Added Org KPI Audit Review menu item to access config for profile mapping visibility.
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
