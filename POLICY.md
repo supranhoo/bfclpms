@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
-> **Last Updated:** 2026-04-14  
-> **Version:** 2.05.0 — §Menu Access: Profile-based access rights with org-scoped filtering, CRUD-level permissions, and implicit employee/manager default menus.
+> **Last Updated:** 2026-04-15  
+> **Version:** 2.06.0 — §Incentive: All incentive amount values displayed as rounded whole numbers (₹). No decimal amounts in tables, exports, or dialogs.
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
