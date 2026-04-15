@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ReviewStageCard, StageStatus } from './ReviewStageCard';
 import { KPI, ReviewSubmission, KpiQuery } from '@/hooks/useKpis';
-import { User, Briefcase, Shield, MessageSquare, History, UserCheck, ClipboardCheck, AlertTriangle, Download, ChevronDown, CalendarClock, FileCheck } from 'lucide-react';
+import { User, Briefcase, Shield, MessageSquare, History, UserCheck, ClipboardCheck, AlertTriangle, Download, ChevronDown, CalendarClock, FileCheck, Info } from 'lucide-react';
 import { getVisibleJourneyStages, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { UomType } from '@/lib/qualitativeUom';
@@ -16,6 +16,8 @@ import { exportReviewTimelinePdf, ReviewTimelinePdfData } from '@/lib/pdfExport'
 import { statusLabels } from '@/lib/reviewConstants';
 import { format } from 'date-fns';
 import { isComplianceKpi, useComplianceSubFactors } from '@/hooks/useComplianceSubFactors';
+import { isKpiLockedForPeriod, getActiveMonthForCycle } from '@/lib/frequencyUtils';
+import { useFrequencyConfig } from '@/hooks/useFrequencyConfig';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -154,6 +156,46 @@ export function KpiJourneySection({
     isCompliance ? kpi.review_period : undefined,
     isCompliance ? kpi.review_year : undefined,
   );
+
+  // Terminal month status banner for non-terminal multi-month KPIs
+  const { config: freqConfig } = useFrequencyConfig(kpi.frequency);
+  const isLockedSibling = useMemo(
+    () => isKpiLockedForPeriod(kpi.frequency, kpi.review_period || '', kpi.review_year || new Date().getFullYear(), kpi.frequency_cycle_start, freqConfig),
+    [kpi.frequency, kpi.review_period, kpi.review_year, kpi.frequency_cycle_start, freqConfig]
+  );
+  const terminalMonth = useMemo(
+    () => isLockedSibling ? getActiveMonthForCycle(kpi.frequency, kpi.review_period || '', kpi.review_year || new Date().getFullYear(), kpi.frequency_cycle_start, freqConfig) : null,
+    [isLockedSibling, kpi.frequency, kpi.review_period, kpi.review_year, kpi.frequency_cycle_start, freqConfig]
+  );
+
+  const { data: terminalKpiData } = useQuery({
+    queryKey: ['terminal-month-kpi', kpi.employee_id, kpi.kra_name, kpi.kpi_name, kpi.category_id, terminalMonth, kpi.review_year],
+    queryFn: async () => {
+      const { data: kpis, error } = await supabase
+        .from('kpis')
+        .select('id, status, review_period')
+        .eq('employee_id', kpi.employee_id)
+        .eq('kra_name', kpi.kra_name)
+        .eq('kpi_name', kpi.kpi_name)
+        .eq('category_id', kpi.category_id)
+        .eq('review_period', terminalMonth!)
+        .eq('review_year', kpi.review_year)
+        .limit(1);
+      if (error) throw error;
+      if (!kpis || kpis.length === 0) return null;
+      const termKpi = kpis[0];
+      // Check if submission exists
+      const { data: sub } = await supabase
+        .from('review_submissions')
+        .select('id, achieved_value, self_score')
+        .eq('kpi_id', termKpi.id)
+        .limit(1);
+      const hasSubmission = sub && sub.length > 0 && (sub[0].achieved_value !== null || sub[0].self_score !== null);
+      return { status: termKpi.status as string, hasSubmission: !!hasSubmission };
+    },
+    enabled: isLockedSibling && !!terminalMonth,
+    staleTime: 2 * 60 * 1000,
+  });
 
   // Compute previous 2 periods
   const prevPeriods = useMemo(
@@ -583,6 +625,31 @@ export function KpiJourneySection({
               </div>
             </div>
           </div>
+        )}
+
+        {/* Terminal Month Status Banner for non-terminal multi-month KPIs */}
+        {isLockedSibling && terminalMonth && terminalKpiData && terminalKpiData.status !== 'approved' && (
+          <Alert className={terminalKpiData.hasSubmission 
+            ? "border-blue-500/30 bg-blue-500/5" 
+            : "border-muted bg-muted/30"
+          }>
+            <CalendarClock className={`h-4 w-4 ${terminalKpiData.hasSubmission ? 'text-blue-600' : 'text-muted-foreground'}`} />
+            <AlertDescription className="text-sm">
+              {terminalKpiData.hasSubmission ? (
+                <>
+                  <strong>Data entered in {terminalMonth} {kpi.review_year}</strong> — currently at{' '}
+                  <Badge variant="secondary" className="text-xs mx-1">
+                    {statusLabels[terminalKpiData.status] || terminalKpiData.status}
+                  </Badge>.
+                  Scores will appear here once the terminal month is approved.
+                </>
+              ) : (
+                <>
+                  This is a <strong>{kpi.frequency}</strong> KPI. Data entry happens in the terminal month ({terminalMonth} {kpi.review_year}). No data entered yet.
+                </>
+              )}
+            </AlertDescription>
+          </Alert>
         )}
 
         {/* Review Stages Grid */}
