@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-15  
-> **Version:** 2.48.0 — Access Profiles: Multi-select with Select All for Org Scope dropdowns; Location field added to org scope.
+> **Version:** 2.49.0 — Menu Access: Unified 5-tab layout (Profiles, Profile Mapping, Assignment, Role Access, Employee Overrides) to eliminate tab content bleed.
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

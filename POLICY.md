@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-15  
-> **Version:** 2.07.0 — §Access: Org-Level Scope supports multi-select with Select All and Location (sub-branch) filtering.
+> **Version:** 2.08.0 — §Access: Menu Access restructured into unified 5-tab layout; each tab shows only its own content.
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
