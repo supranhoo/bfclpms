@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-14  
-> **Version:** 2.45.0 — Inbox: Notifications tab now shows only unread items; new "Read" tab displays previously-read notifications separately.
+> **Version:** 2.45.1 — Incentive: Amount column in Production Daily Grid now displays rounded whole numbers (Math.round) for cleaner currency display.
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
