@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-15  
-> **Version:** 2.10.0 — §Access: Profile Mapping tab shows compact scope count badge instead of full scope/menu rights listings.
+> **Version:** 2.11.0 — §Access: Sticky table headers on all Menu Access & Profile tables for scroll visibility.
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

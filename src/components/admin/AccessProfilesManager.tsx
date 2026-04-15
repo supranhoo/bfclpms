@@ -139,9 +139,9 @@ export function ProfilesTab({ profiles, assignments, createProfile, updateProfil
       </div>
 
       {profiles.length > 0 ? (
-        <div className="rounded-md border overflow-x-auto">
+        <div className="rounded-md border max-h-[60vh] overflow-auto">
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Description</TableHead>
@@ -527,9 +527,9 @@ export function AssignmentTab({ profiles, assignments, assignUser, removeAssignm
       </div>
 
       {enrichedAssignments.length > 0 ? (
-        <div className="rounded-md border overflow-x-auto">
+        <div className="rounded-md border max-h-[60vh] overflow-auto">
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow>
                 <TableHead>Profile</TableHead>
                 <TableHead>Employee</TableHead>

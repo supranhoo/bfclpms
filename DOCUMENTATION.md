@@ -5101,3 +5101,8 @@ Every new edge function **must** complete all of these steps before deployment:
 - **Problem**: Incentive report hardcoded `slice(0, 50)` — records beyond 50 were invisible with no navigation. Select-all only covered visible 50 rows.
 - **Fix**: Added full pagination (page size selector: 25/50/100/All), Prev/Next navigation, Gmail-style "Select all X records" banner when all page rows are selected.
 - **Modified files**: `src/components/incentive/MonthlyIncentiveTable.tsx`
+
+### v2.39.0 — Sticky Table Headers for Menu Access & Profile Tables (2026-04-15)
+- **Problem**: Table headers scrolled out of view on long tables (Role Access, Employee Overrides, Profiles, Assignments).
+- **Fix**: Applied `sticky top-0 z-10 bg-background` to `TableHeader` with `max-h-[60vh] overflow-auto` container — headers stay pinned like Excel freeze panes.
+- **Modified files**: `src/components/admin/MenuAccessTab.tsx`, `src/components/admin/AccessProfilesManager.tsx`
