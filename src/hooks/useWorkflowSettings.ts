@@ -40,6 +40,7 @@ const DEFAULT_VALUES: Record<string, string | number | boolean> = {
   working_days_per_month: 22,
   
   // SLA Thresholds
+  query_sla_target_days: 2,
   query_sla_warning_days: 5,
   query_sla_critical_days: 10,
   stalled_kpi_warning_days: 14,
@@ -354,4 +355,20 @@ export function useOrgKpiSelfEntryAllowed(): boolean {
   if (typeof data.setting_value === 'boolean') return data.setting_value;
   if (data.setting_value === 'true') return true;
   return false;
+}
+
+/**
+ * Get the SLA target in days for query resolution compliance.
+ * Default: 2 days.
+ */
+export function useSlaTargetDays(): number {
+  const { data, isLoading } = useWorkflowSetting('query_sla_target_days');
+
+  if (isLoading || !data) {
+    return DEFAULT_VALUES.query_sla_target_days as number;
+  }
+
+  return typeof data.setting_value === 'number'
+    ? data.setting_value
+    : parseInt(String(data.setting_value), 10) || 2;
 }

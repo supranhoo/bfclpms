@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import { Activity, Clock, CheckCircle2, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
 import { PersonalProductivityInsights } from './PersonalProductivityInsights';
+import { useSlaTargetDays } from '@/hooks/useWorkflowSettings';
 
 export interface QueryData {
   id: string;
@@ -31,8 +32,6 @@ interface InboxInsightsProps {
   unreadCount: number;
   isLoading?: boolean;
 }
-
-const SLA_TARGET_DAYS = 2;
 
 function computeMetrics(queries: QueryData[]) {
   const resolved = queries.filter(q => q.status === 'resolved' && q.resolved_at);
