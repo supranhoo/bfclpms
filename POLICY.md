@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-15  
-> **Version:** 2.11.0 — §Access: Sticky table headers on all Menu Access & Profile tables for scroll visibility.
+> **Version:** 2.12.0 — §Access: Restored Menu Access Rights grid on Profile Mapping tab for per-profile CRUD permission management.
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

@@ -414,6 +414,52 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
               </div>
             )}
           </div>
+
+          {/* Menu Access Rights */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-semibold">Menu Access Rights</h4>
+            <div className="rounded-md border max-h-[60vh] overflow-auto">
+              <Table>
+                <TableHeader className="sticky top-0 z-10 bg-background">
+                  <TableRow>
+                    <TableHead className="w-[120px]">Section</TableHead>
+                    <TableHead>Menu Item</TableHead>
+                    <TableHead className="w-[60px] text-center">View</TableHead>
+                    <TableHead className="w-[60px] text-center">Add</TableHead>
+                    <TableHead className="w-[60px] text-center">Update</TableHead>
+                    <TableHead className="w-[60px] text-center">Delete</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {SECTION_ORDER.filter(s => sections[s]?.length).map(section =>
+                    sections[section].map((cfg: MenuAccessConfig, idx: number) => {
+                      const r = getRights(cfg.menu_key);
+                      return (
+                        <TableRow key={cfg.menu_key}>
+                          {idx === 0 && (
+                            <TableCell rowSpan={sections[section].length} className="font-medium text-xs align-top">
+                              {SECTION_LABELS[section] || section}
+                            </TableCell>
+                          )}
+                          <TableCell className="text-sm">{cfg.menu_name}</TableCell>
+                          {(['can_view', 'can_add', 'can_update', 'can_delete'] as const).map(field => (
+                            <TableCell key={field} className="text-center">
+                              <Checkbox checked={r[field]} onCheckedChange={() => toggleRight(cfg.menu_key, field)} />
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={handleSaveRights} disabled={saveMenuRights.isPending}>
+                <Save className="h-4 w-4 mr-1" />Save Rights
+              </Button>
+            </div>
+          </div>
         </>
       )}
     </div>
