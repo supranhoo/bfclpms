@@ -158,7 +158,7 @@ export function PersonalProductivityInsights({ allQueries, teamQueries, currentU
       icon: <Shield className="h-5 w-5" />,
       label: 'SLA Champion',
       description: '100% SLA compliance',
-      earned: personal.mySlaPercent === 100 && personal.totalResolved >= 3,
+      earned: personal.mySlaPercent !== null && personal.mySlaPercent === 100 && personal.totalResolved >= 3,
       color: 'text-blue-500',
     },
     {
@@ -212,11 +212,11 @@ export function PersonalProductivityInsights({ allQueries, teamQueries, currentU
               <Target className="h-3.5 w-3.5 text-muted-foreground" />
               <p className="text-xs text-muted-foreground">My SLA Compliance</p>
             </div>
-            <p className={cn('text-xl font-bold', personal.mySlaPercent >= 90 ? 'text-green-600' : personal.mySlaPercent >= 70 ? 'text-amber-600' : 'text-destructive')}>
-              {personal.mySlaPercent}%
+            <p className={cn('text-xl font-bold', personal.mySlaPercent === null ? 'text-muted-foreground' : personal.mySlaPercent >= 90 ? 'text-green-600' : personal.mySlaPercent >= 70 ? 'text-amber-600' : 'text-destructive')}>
+              {personal.mySlaPercent !== null ? `${personal.mySlaPercent}%` : 'N/A'}
             </p>
             <p className="text-[10px] text-muted-foreground">
-              Team avg: {team.slaPercent}%
+              Team avg: {team.slaPercent !== null ? `${team.slaPercent}%` : 'N/A'}
             </p>
           </CardContent>
         </Card>
