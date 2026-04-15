@@ -1,26 +1,27 @@
 
 
-## Remove Role Access and Employee Overrides Tabs
+## Add Missing Audit Sub-Menu to Menu Access Config
 
-### Rationale
-The profile-based system (Profiles → Profile Mapping → Assignment) fully replaces the legacy role-based and individual override approaches. Keeping them creates confusion with two competing access control systems.
+### Problem
+The "Org KPI Audit Review" menu item (key: `admin-org-kpi-audit`) exists in the sidebar under the Audit section but was never inserted into the `menu_access_config` database table. Since the Menu Access Rights grid renders rows from that table, this item is invisible in the profile mapping UI.
+
+### Solution
+Run a database migration to insert the missing row into `menu_access_config`.
 
 ### Changes
 
-**File: `src/components/admin/MenuAccessTab.tsx`**
-1. Remove the "Role Access" tab trigger and content (lines 182, 247-327)
-2. Remove the "Employee Overrides" tab trigger and content (lines 183, 329-444)
-3. Remove unused state variables and handlers related to role-access editing (`editedConfigs`, `savingKey`, `toggleRole`, `handleSave`, `getEditedRoles`, `hasChanges`) and overrides UI (`overrideSearch`, `selectedUserId`, `selectedMenuKey`, `handleGrantAccess`, `handleRevokeAccess`, `filteredProfiles`, `enrichedOverrides`)
-4. Remove unused imports (`UserPlus`, `Search`, `Input`, `Select*`, `Menu` if no longer used)
+**Database Migration**
+```sql
+INSERT INTO menu_access_config (menu_key, menu_name, section, allowed_roles, display_order)
+SELECT 'admin-org-kpi-audit', 'Org KPI Audit Review', 'audit', ARRAY['auditor','admin']::text[], 41
+WHERE NOT EXISTS (SELECT 1 FROM menu_access_config WHERE menu_key = 'admin-org-kpi-audit');
+```
 
-**File: `src/hooks/useMenuAccess.ts`**
-- Keep the `canAccess()` priority chain intact (layers 5-7 remain as silent fallbacks for any existing data), but no UI changes needed here — the hooks still work for backward compatibility
-
-**File: `DOCUMENTATION.md`** — Version bump  
-**File: `POLICY.md`** — Version bump, note that Role Access and Employee Overrides UI removed; profile-based system is the sole admin interface
+**`DOCUMENTATION.md`** — Version bump  
+**`POLICY.md`** — Version bump
 
 ### Risk Assessment
-- **Data impact**: None — existing `menu_access_config` and `menu_access_user_overrides` tables remain; data is preserved as fallback layers
-- **Regression risk**: Low — any existing role-based or override entries continue to function via `canAccess()` logic; only the UI to manage them is removed
-- **UX improvement**: Cleaner 3-tab interface (Profiles, Profile Mapping, Assignment) eliminates admin confusion
+- **Data impact**: Single INSERT, no existing data affected
+- **Regression risk**: None — additive change only
+- **UX improvement**: Both audit sub-menus (Audit Panel + Org KPI Audit Review) will appear in the Menu Access Rights grid for profile mapping
 
