@@ -1,42 +1,26 @@
 
 
-## Fix: Sticky Headers Not Working on Menu Access Rights Table
+## Remove Role Access and Employee Overrides Tabs
 
-### Root Cause
-The `Table` component (`src/components/ui/table.tsx`) wraps every `<table>` in a `<div className="relative w-full overflow-auto">`. This creates a **nested scroll container** inside the outer `max-h-[60vh] overflow-auto` div. CSS `position: sticky` only works relative to its nearest scrolling ancestor — the inner wrapper captures the scroll, so the header never sticks against the outer container.
+### Rationale
+The profile-based system (Profiles → Profile Mapping → Assignment) fully replaces the legacy role-based and individual override approaches. Keeping them creates confusion with two competing access control systems.
 
-### Solution
-Override the inner wrapper's overflow on the specific tables where sticky headers are needed. The outer `div` with `max-h-[60vh] overflow-auto` should be the sole scroll container.
+### Changes
 
-### Implementation
+**File: `src/components/admin/MenuAccessTab.tsx`**
+1. Remove the "Role Access" tab trigger and content (lines 182, 247-327)
+2. Remove the "Employee Overrides" tab trigger and content (lines 183, 329-444)
+3. Remove unused state variables and handlers related to role-access editing (`editedConfigs`, `savingKey`, `toggleRole`, `handleSave`, `getEditedRoles`, `hasChanges`) and overrides UI (`overrideSearch`, `selectedUserId`, `selectedMenuKey`, `handleGrantAccess`, `handleRevokeAccess`, `filteredProfiles`, `enrichedOverrides`)
+4. Remove unused imports (`UserPlus`, `Search`, `Input`, `Select*`, `Menu` if no longer used)
 
-**File: `src/components/admin/AccessProfilesManager.tsx`**
+**File: `src/hooks/useMenuAccess.ts`**
+- Keep the `canAccess()` priority chain intact (layers 5-7 remain as silent fallbacks for any existing data), but no UI changes needed here — the hooks still work for backward compatibility
 
-On the Menu Access Rights `<Table>`, pass a className that neutralizes the inner wrapper's overflow:
-
-```tsx
-<Table className="[&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10 [&_thead]:bg-background"
-```
-
-But more directly — add `overflow-visible` to the Table's wrapper by passing it through, or wrap a raw `<table>` instead. The cleanest fix:
-
-Change the outer container to target the Table's inner wrapper div:
-
-```tsx
-<div className="rounded-md border max-h-[60vh] overflow-auto [&>div]:overflow-visible">
-```
-
-This sets the Table component's inner `overflow-auto` div to `overflow-visible`, making the outer div the sole scroll container so `sticky` works.
-
-Apply the same `[&>div]:overflow-visible` pattern to **all** tables in this file and in `MenuAccessTab.tsx` that use sticky headers.
-
-**Files affected:**
-- `src/components/admin/AccessProfilesManager.tsx` — Menu Access Rights table, Profiles table, Assignment table
-- `src/components/admin/MenuAccessTab.tsx` — Role Access table, Employee Overrides table
-- `DOCUMENTATION.md`, `POLICY.md` — Version bump
+**File: `DOCUMENTATION.md`** — Version bump  
+**File: `POLICY.md`** — Version bump, note that Role Access and Employee Overrides UI removed; profile-based system is the sole admin interface
 
 ### Risk Assessment
-- **Data impact**: None — CSS-only
-- **Regression risk**: None — only affects tables already wrapped in a height-constrained scroll container
-- **UX improvement**: Headers stay visible while scrolling, matching Excel freeze-pane behavior
+- **Data impact**: None — existing `menu_access_config` and `menu_access_user_overrides` tables remain; data is preserved as fallback layers
+- **Regression risk**: Low — any existing role-based or override entries continue to function via `canAccess()` logic; only the UI to manage them is removed
+- **UX improvement**: Cleaner 3-tab interface (Profiles, Profile Mapping, Assignment) eliminates admin confusion
 
