@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-15  
-> **Version:** 2.53.0 — UI: Removed legacy Role Access and Employee Overrides tabs; profile-based system is now the sole menu access admin interface.
+> **Version:** 2.54.0 — Data: Added Org KPI Audit Review to menu access config for profile-based access mapping.
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
