@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-15  
-> **Version:** 2.51.0 — UI: Removed lengthy org scope table and redundant menu rights grid from Profile Mapping tab; replaced with compact scope count badge.
+> **Version:** 2.52.0 — UI: Restored Menu Access Rights grid on Profile Mapping tab with sticky headers for per-profile CRUD permission configuration.
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
