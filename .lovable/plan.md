@@ -1,65 +1,48 @@
 
 
-## Multi-Select with "Select All" + Location Field for Org Scope Dropdowns
+## Fix Tab Content Bleed: Separate Profiles, Assignment from Menu Access Rights
 
 ### Problem
-1. Org-Level Scope comboboxes allow only single selection — admins need multi-select with "Select All"
-2. "Location" (sub_branches table) is missing from org scope filters
+Currently, `MenuAccessTab.tsx` renders `AccessProfilesManager` (with its 3 inner tabs: Profiles, Mapping, Assignment) and then **always** renders the "Menu Access Rights" role grid and "Employee-Level Overrides" below it — regardless of which inner tab is active. This means the Profiles tab and Assignment tab both show the unrelated role-based grid beneath them.
 
-### UI Design
+### UI Design (After Fix)
 
 ```text
-┌─────────────────────────────────────────────────────────────────────┐
-│ Org-Level Scope                                                     │
-│                                                                     │
-│ Company: [3 selected ▾]    Division: [All (5) ▾]                    │
-│ Bus Unit: [▾ Search...]    Dept: [▾ Search...]                      │
-│ Location: [▾ Search...]    Designation: [▾ Search...]               │
-│ Grade: [▾ Search...]       Level: [▾ Search...]                     │
-│                                              [+ Add Scope]         │
-│                                                                     │
-│  Dropdown expanded:                                                 │
-│  ┌───────────────────────┐                                          │
-│  │ 🔍 Search...          │                                          │
-│  ├───────────────────────┤                                          │
-│  │ ☑ Select All (3)      │  ← toggles all visible/filtered items   │
-│  ├───────────────────────┤                                          │
-│  │ ☑ Bihar Foundry       │                                          │
-│  │ ☑ Saibal Kunar        │                                          │
-│  │ ☐ ABC Corp            │                                          │
-│  └───────────────────────┘                                          │
-└─────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│ [Profiles] [Profile Mapping] [Assignment] [Role Access] [Employee Overrides] │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  (Only the selected tab's content is visible)           │
+│                                                         │
+│  Profiles tab    → Profile CRUD only                    │
+│  Profile Mapping → Org scope + menu rights per profile  │
+│  Assignment      → Employee ↔ profile assignments only  │
+│  Role Access     → Role-based checkbox grid (current    │
+│                    "Menu Access Rights" card)            │
+│  Employee Overrides → Individual employee overrides     │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ### Implementation
 
-**1. Database migration** — Add `location` text column to `access_profile_org_scope`:
-```sql
-ALTER TABLE access_profile_org_scope ADD COLUMN location text;
--- Update CHECK constraint to include location
-```
+**File: `src/components/admin/MenuAccessTab.tsx`**
+1. Remove `<AccessProfilesManager />` as a standalone component call
+2. Create a unified 5-tab layout at the top level:
+   - **Profiles** — reuse `ProfilesTab` content from `AccessProfilesManager`
+   - **Profile Mapping** — reuse `MappingTab` content from `AccessProfilesManager`
+   - **Assignment** — reuse `AssignmentTab` content from `AccessProfilesManager`
+   - **Role Access** — the existing role-based checkbox grid (currently the "Menu Access Rights" card)
+   - **Employee Overrides** — the existing employee-level overrides card
 
-**2. `OrgFilterCombobox.tsx`** — Add multi-select mode:
-- New props: `multiSelect`, `values`, `onValuesChange`
-- "Select All (N)" checkbox at top — toggles all search-filtered items
-- Trigger shows "N selected" or single name
-- Popover stays open on item click
-- Backward compatible (existing single-select unchanged)
+**File: `src/components/admin/AccessProfilesManager.tsx`**
+1. Export `ProfilesTab`, `MappingTab`, and `AssignmentTab` as named exports so `MenuAccessTab` can import them directly
+2. Keep `AccessProfilesManager` as a wrapper but it will no longer be used inside `MenuAccessTab` (it can remain for backward compatibility or be removed)
 
-**3. `AccessProfilesManager.tsx`** — Update Mapping tab:
-- Add `useSubBranches()` import and Location combobox
-- Change `scopeForm` state to arrays: `company_id: string[]`, etc.
-- Switch all comboboxes to `multiSelect` mode
-- Cascading: Division filters by any selected company, BU by any selected division, Dept by any selected BU, Location by any selected dept
-- On "Add Scope": generate cartesian product rows (one `access_profile_org_scope` row per combination)
-- Update `getScopeLabel` to show location
-
-**4. `useAccessProfiles.ts`** — Add `location` to `AccessProfileOrgScope` type
-
-**5. Documentation** — Version bump in `DOCUMENTATION.md` and `POLICY.md`
+**Files: `DOCUMENTATION.md`, `POLICY.md`** — Version bump
 
 ### Risk Assessment
-- **Data impact**: One new nullable column; no existing data affected
-- **Regression risk**: Low — OrgFilterCombobox backward compatible; existing single-select callers unaffected
-- **Performance**: Cartesian product insertion capped by practical org hierarchy sizes
+- **Data impact**: None — purely UI restructuring
+- **Regression risk**: Low — same components, just reorganized into a single tab container
+- **UX improvement**: Each tab now shows only its own content, no unrelated grids bleeding through
 
