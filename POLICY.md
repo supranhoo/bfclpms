@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-14  
-> **Version:** 2.04.0 — §Inbox: Notifications tab restricted to unread items only; read notifications moved to dedicated "Read" tab.
+> **Version:** 2.05.0 — §Menu Access: Profile-based access rights with org-scoped filtering, CRUD-level permissions, and implicit employee/manager default menus.
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

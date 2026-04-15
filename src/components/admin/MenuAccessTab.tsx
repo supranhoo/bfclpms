@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { AccessProfilesManager } from './AccessProfilesManager';
 
 const ROLE_LABELS: Record<AppRole, string> = {
   admin: 'Admin',
@@ -165,6 +166,9 @@ export function MenuAccessTab() {
 
   return (
     <div className="space-y-6">
+      {/* Profile-based access system */}
+      <AccessProfilesManager />
+
       {/* Role-based access grid */}
       <Card>
         <CardHeader>
