@@ -5096,3 +5096,8 @@ Every new edge function **must** complete all of these steps before deployment:
 - **Root Cause**: Health Score counted all resolved queries (hardcoded 2-day target), My Productivity only counted queries received by user and defaulted to 100% when none existed.
 - **Fix**: Made SLA target configurable via `query_sla_target_days` workflow setting (default 2 days, range 1–30). Both components now show "N/A" when no resolved queries exist. Health score uses neutral base (80) instead of penalizing with 0% SLA when no data.
 - **Modified files**: `src/hooks/useWorkflowSettings.ts`, `src/components/inbox/InboxInsights.tsx`, `src/components/inbox/PersonalProductivityInsights.tsx`
+
+### v2.38.0 — Incentive Report: Pagination & Select-All Enhancement (2026-04-15)
+- **Problem**: Incentive report hardcoded `slice(0, 50)` — records beyond 50 were invisible with no navigation. Select-all only covered visible 50 rows.
+- **Fix**: Added full pagination (page size selector: 25/50/100/All), Prev/Next navigation, Gmail-style "Select all X records" banner when all page rows are selected.
+- **Modified files**: `src/components/incentive/MonthlyIncentiveTable.tsx`

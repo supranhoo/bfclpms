@@ -1628,3 +1628,7 @@ All admin-only edge functions **must** be invoked via `invokeAdminEdgeFunction()
 ## §86 — Inbox Observation Deep-Link Routing (v2.01.0)
 
 Observation workflow notifications (`observation_raised`, `observation_reply`, `observation_resolved`) must deep-link to the target employee's KPI detail sheet — not merely the employee dashboard. The `getNotificationNavigationPath` function builds role-aware URLs (`view=team|audit|management`) with `employee` and `kpi` params. `UnifiedScorecard` auto-opens the reviewer sheet when `autoOpenKpiId` matches a loaded KPI in non-self modes. `@mention` notifications (`observation_mention`) continue to use the read-only `MentionedKpiSheet` via `mentioned_kpi` / `mentioned_employee` params.
+
+## §87 — Incentive Report Pagination & Bulk Selection (v2.38.0)
+
+The Monthly Incentive Report table must support paginated navigation with configurable page sizes (25, 50, 100, All). When all rows on the current page are selected, a banner must appear offering to select all filtered records across all pages. Filter changes must reset pagination to page 1 and clear selection state.
