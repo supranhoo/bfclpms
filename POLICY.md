@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-15  
-> **Version:** 2.08.0 — §Access: Menu Access restructured into unified 5-tab layout; each tab shows only its own content.
+> **Version:** 2.09.0 — §Access: Org scope stores independent dimension rows (not cartesian product); 500-row safety cap prevents browser crashes.
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
