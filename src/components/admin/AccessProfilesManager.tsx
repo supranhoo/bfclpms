@@ -94,7 +94,7 @@ export function AccessProfilesManager() {
 }
 
 /* ─── Tab 1: Profiles ─── */
-function ProfilesTab({ profiles, assignments, createProfile, updateProfile, deleteProfile, toast }: any) {
+export function ProfilesTab({ profiles, assignments, createProfile, updateProfile, deleteProfile, toast }: any) {
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
@@ -193,7 +193,7 @@ function ProfilesTab({ profiles, assignments, createProfile, updateProfile, dele
 }
 
 /* ─── Tab 2: Profile Mapping ─── */
-function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgScope, deleteOrgScope, saveMenuRights, toast }: any) {
+export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgScope, deleteOrgScope, saveMenuRights, toast }: any) {
   const [selectedProfileId, setSelectedProfileId] = useState('');
   const { data: companies = [] } = useCompanies();
   const { data: divisions = [] } = useDivisions();
@@ -471,7 +471,7 @@ function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgScope, de
 }
 
 /* ─── Tab 3: Assignment ─── */
-function AssignmentTab({ profiles, assignments, assignUser, removeAssignment, toast }: any) {
+export function AssignmentTab({ profiles, assignments, assignUser, removeAssignment, toast }: any) {
   const [selectedProfileId, setSelectedProfileId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUserId, setSelectedUserId] = useState('');
