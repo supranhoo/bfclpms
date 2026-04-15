@@ -35,7 +35,10 @@ export function MonthlyIncentiveTable() {
   const [showPreview, setShowPreview] = useState(false);
   const [employeeNameMap, setEmployeeNameMap] = useState<Map<string, { name: string; code: string }>>(new Map());
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectAllRecords, setSelectAllRecords] = useState(false);
   const [showMarkPaidDialog, setShowMarkPaidDialog] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
 
   const { data: programs = [] } = useIncentivePrograms();
   const activePrograms = (programs as any[]).filter((p: any) => p.is_active);
@@ -63,9 +66,11 @@ export function MonthlyIncentiveTable() {
   const markPaid = useMarkIncentivePaid();
   const computeIncentives = useComputeIncentives();
 
-  // Reset selection when filters change
+  // Reset selection and page when filters change
   useEffect(() => {
     setSelectedIds(new Set());
+    setSelectAllRecords(false);
+    setCurrentPage(1);
   }, [selectedMonth, selectedYear, selectedProgram, statusFilter, incentiveStatusFilter, eligibilityFilter, periodFilter, searchTerm]);
 
   const filteredRecords = useMemo(() => {
@@ -97,8 +102,17 @@ export function MonthlyIncentiveTable() {
     return { total, eligible, disqualified, prorata, totalAmount };
   }, [filteredRecords]);
 
+  // Pagination
+  const totalPages = pageSize === 0 ? 1 : Math.max(1, Math.ceil(filteredRecords.length / pageSize));
+  const paginatedRecords = pageSize === 0
+    ? filteredRecords
+    : filteredRecords.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const showStart = filteredRecords.length === 0 ? 0 : (pageSize === 0 ? 1 : (currentPage - 1) * pageSize + 1);
+  const showEnd = pageSize === 0 ? filteredRecords.length : Math.min(currentPage * pageSize, filteredRecords.length);
+
   // Selection helpers
   const toggleSelect = (id: string) => {
+    setSelectAllRecords(false);
     setSelectedIds(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
@@ -107,18 +121,34 @@ export function MonthlyIncentiveTable() {
   };
 
   const toggleSelectAll = () => {
-    const visibleIds = filteredRecords.slice(0, 50).map((r: any) => r.id);
-    const allSelected = visibleIds.length > 0 && visibleIds.every((id: string) => selectedIds.has(id));
-    if (allSelected) {
-      setSelectedIds(new Set());
+    const pageIds = paginatedRecords.map((r: any) => r.id);
+    const allPageSelected = pageIds.length > 0 && pageIds.every((id: string) => selectedIds.has(id));
+    if (allPageSelected) {
+      // Deselect page
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        pageIds.forEach((id: string) => next.delete(id));
+        return next;
+      });
+      setSelectAllRecords(false);
     } else {
-      setSelectedIds(new Set(visibleIds));
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        pageIds.forEach((id: string) => next.add(id));
+        return next;
+      });
     }
   };
 
+  const handleSelectAllRecords = () => {
+    setSelectAllRecords(true);
+    setSelectedIds(new Set(filteredRecords.map((r: any) => r.id)));
+  };
+
   const selectedCount = selectedIds.size;
-  const allVisibleSelected = filteredRecords.slice(0, 50).length > 0 &&
-    filteredRecords.slice(0, 50).every((r: any) => selectedIds.has(r.id));
+  const allPageSelected = paginatedRecords.length > 0 &&
+    paginatedRecords.every((r: any) => selectedIds.has(r.id));
+  const showSelectAllBanner = allPageSelected && filteredRecords.length > paginatedRecords.length && !selectAllRecords;
 
   // Mark Paid impact data
   const markPaidTargets = useMemo(() => {
@@ -383,9 +413,7 @@ export function MonthlyIncentiveTable() {
       <Card>
         <CardHeader className="py-3 px-4">
           <CardTitle className="text-sm font-medium">
-            {filteredRecords.length > 50
-              ? `Showing 50 of ${filteredRecords.length} records`
-              : `${filteredRecords.length} records`}
+            Showing {showStart}–{showEnd} of {filteredRecords.length} records
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -395,9 +423,9 @@ export function MonthlyIncentiveTable() {
                 <TableRow>
                   <TableHead className="w-10">
                     <Checkbox
-                      checked={allVisibleSelected}
+                      checked={allPageSelected}
                       onCheckedChange={toggleSelectAll}
-                      aria-label="Select all"
+                      aria-label="Select all on page"
                     />
                   </TableHead>
                   <TableHead>Employee</TableHead>
@@ -425,85 +453,135 @@ export function MonthlyIncentiveTable() {
                 ) : filteredRecords.length === 0 ? (
                   <TableRow><TableCell colSpan={16} className="text-center py-8 text-muted-foreground">No records found. Adjust filters or compute incentives first.</TableCell></TableRow>
                 ) : (
-                  filteredRecords.slice(0, 50).map((r: any) => (
-                    <TableRow key={r.id} className={r.is_disqualified ? 'bg-destructive/5' : ''}>
-                      <TableCell>
-                        <Checkbox
-                          checked={selectedIds.has(r.id)}
-                          onCheckedChange={() => toggleSelect(r.id)}
-                          aria-label={`Select ${r.profiles?.full_name}`}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm font-medium">{r.profiles?.full_name}</div>
-                        <div className="text-xs text-muted-foreground">{r.profiles?.employee_code}</div>
-                      </TableCell>
-                      <TableCell className="text-sm">{r.profiles?.departments?.name || '—'}</TableCell>
-                      <TableCell className="text-xs">{r.review_period}</TableCell>
-                      <TableCell className="text-xs">{r.payment_period || 'Full Month'}</TableCell>
-                      <TableCell>{r.pms_score?.toFixed(2) || '—'}</TableCell>
-                      <TableCell>
-                        {r.incentive_slabs ? (
-                          <span className="text-xs">{r.incentive_slabs.min_value}–{r.incentive_slabs.max_value}</span>
-                        ) : '—'}
-                      </TableCell>
-                      <TableCell>{r.base_incentive_percent}%</TableCell>
-                      <TableCell>
-                        {r.is_disqualified ? (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger>
-                                <Badge variant="destructive" className="text-xs">{r.disqualification_reasons?.[0] || 'DQ'}</Badge>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="text-xs max-w-[200px]">{(r.disqualification_reasons || []).join(', ') || 'Disqualified'}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        ) : '—'}
-                      </TableCell>
-                      <TableCell>{r.lti_penalty_percent > 0 ? `${r.lti_penalty_percent}%` : '—'}</TableCell>
-                      <TableCell>{r.pro_rata_factor < 1 ? r.pro_rata_factor.toFixed(2) : '—'}</TableCell>
-                      <TableCell>
-                        <Badge variant={r.final_incentive_percent > 0 ? 'default' : 'secondary'}>
-                          {r.final_incentive_percent}%
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {(r.incentive_amount || 0) > 0 ? `₹${Number(r.incentive_amount).toLocaleString('en-IN')}` : '—'}
-                      </TableCell>
-                      <TableCell>
-                        {r.is_disqualified ? (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger>
-                                <Badge variant="destructive" className="text-xs">Disqualified</Badge>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="text-xs max-w-[200px]">{(r.disqualification_reasons || []).join(', ') || 'Disqualified'}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        ) : (
-                          <Badge variant={r.incentive_status === 'finalised' ? 'default' : 'outline'} className="text-xs capitalize">
-                            {r.incentive_status || 'hold'}
+                  <>
+                    {showSelectAllBanner && (
+                      <TableRow>
+                        <TableCell colSpan={16} className="text-center py-2 bg-muted/50">
+                          <span className="text-sm">All {paginatedRecords.length} on this page are selected. </span>
+                          <Button variant="link" size="sm" className="p-0 h-auto text-sm font-semibold" onClick={handleSelectAllRecords}>
+                            Select all {filteredRecords.length} records
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {selectAllRecords && (
+                      <TableRow>
+                        <TableCell colSpan={16} className="text-center py-2 bg-primary/10">
+                          <span className="text-sm font-medium">All {filteredRecords.length} records are selected. </span>
+                          <Button variant="link" size="sm" className="p-0 h-auto text-sm" onClick={() => { setSelectAllRecords(false); setSelectedIds(new Set()); }}>
+                            Clear selection
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {paginatedRecords.map((r: any) => (
+                      <TableRow key={r.id} className={r.is_disqualified ? 'bg-destructive/5' : ''}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedIds.has(r.id)}
+                            onCheckedChange={() => toggleSelect(r.id)}
+                            aria-label={`Select ${r.profiles?.full_name}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm font-medium">{r.profiles?.full_name}</div>
+                          <div className="text-xs text-muted-foreground">{r.profiles?.employee_code}</div>
+                        </TableCell>
+                        <TableCell className="text-sm">{r.profiles?.departments?.name || '—'}</TableCell>
+                        <TableCell className="text-xs">{r.review_period}</TableCell>
+                        <TableCell className="text-xs">{r.payment_period || 'Full Month'}</TableCell>
+                        <TableCell>{r.pms_score?.toFixed(2) || '—'}</TableCell>
+                        <TableCell>
+                          {r.incentive_slabs ? (
+                            <span className="text-xs">{r.incentive_slabs.min_value}–{r.incentive_slabs.max_value}</span>
+                          ) : '—'}
+                        </TableCell>
+                        <TableCell>{r.base_incentive_percent}%</TableCell>
+                        <TableCell>
+                          {r.is_disqualified ? (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <Badge variant="destructive" className="text-xs">{r.disqualification_reasons?.[0] || 'DQ'}</Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="text-xs max-w-[200px]">{(r.disqualification_reasons || []).join(', ') || 'Disqualified'}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          ) : '—'}
+                        </TableCell>
+                        <TableCell>{r.lti_penalty_percent > 0 ? `${r.lti_penalty_percent}%` : '—'}</TableCell>
+                        <TableCell>{r.pro_rata_factor < 1 ? r.pro_rata_factor.toFixed(2) : '—'}</TableCell>
+                        <TableCell>
+                          <Badge variant={r.final_incentive_percent > 0 ? 'default' : 'secondary'}>
+                            {r.final_incentive_percent}%
                           </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={r.status === 'paid' ? 'default' : r.status === 'confirmed' ? 'secondary' : 'outline'} className="text-xs">
-                          {r.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <IncentiveStatusOverride recordId={r.id} currentStatus={r.incentive_status || 'hold'} />
-                      </TableCell>
-                    </TableRow>
-                  ))
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {(r.incentive_amount || 0) > 0 ? `₹${Number(r.incentive_amount).toLocaleString('en-IN')}` : '—'}
+                        </TableCell>
+                        <TableCell>
+                          {r.is_disqualified ? (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <Badge variant="destructive" className="text-xs">Disqualified</Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="text-xs max-w-[200px]">{(r.disqualification_reasons || []).join(', ') || 'Disqualified'}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          ) : (
+                            <Badge variant={r.incentive_status === 'finalised' ? 'default' : 'outline'} className="text-xs capitalize">
+                              {r.incentive_status || 'hold'}
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={r.status === 'paid' ? 'default' : r.status === 'confirmed' ? 'secondary' : 'outline'} className="text-xs">
+                            {r.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <IncentiveStatusOverride recordId={r.id} currentStatus={r.incentive_status || 'hold'} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </>
                 )}
               </TableBody>
             </Table>
           </div>
+          {/* Pagination Controls */}
+          {filteredRecords.length > 0 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Show:</span>
+                <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-20 h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                    <SelectItem value="0">All</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {pageSize > 0 && (
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)}>
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-sm text-muted-foreground px-2">Page {currentPage} of {totalPages}</span>
+                  <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
