@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-15  
-> **Version:** 2.49.0 — Menu Access: Unified 5-tab layout (Profiles, Profile Mapping, Assignment, Role Access, Employee Overrides) to eliminate tab content bleed.
+> **Version:** 2.50.0 — Fix: Replaced cartesian product explosion in org scope with independent dimension rows; batch insert with 500-row safety cap.
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
