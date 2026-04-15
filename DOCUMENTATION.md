@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-15  
-> **Version:** 2.52.0 — UI: Restored Menu Access Rights grid on Profile Mapping tab with sticky headers for per-profile CRUD permission configuration.
+> **Version:** 2.53.0 — UI: Removed legacy Role Access and Employee Overrides tabs; profile-based system is now the sole menu access admin interface.
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
