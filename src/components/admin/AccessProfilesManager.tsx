@@ -390,82 +390,29 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
             </div>
 
             {profileScopes.length > 0 && (
-              <div className="rounded-md border overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Org Scope</TableHead>
-                      <TableHead className="w-[60px] text-center">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {profileScopes.map((s: any) => (
-                      <TableRow key={s.id}>
-                        <TableCell className="text-sm">{getScopeLabel(s)}</TableCell>
-                        <TableCell className="text-center">
-                          <Button size="sm" variant="ghost" className="h-7 px-2 text-destructive" onClick={() => deleteOrgScope.mutateAsync(s.id)}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+              <div className="flex items-center gap-3 mt-2">
+                <Badge variant="secondary" className="text-xs px-3 py-1">
+                  ✓ {profileScopes.length} scope {profileScopes.length === 1 ? 'entry' : 'entries'} configured
+                </Badge>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-destructive hover:text-destructive"
+                  onClick={async () => {
+                    try {
+                      for (const s of profileScopes) {
+                        await deleteOrgScope.mutateAsync(s.id);
+                      }
+                      toast({ title: 'Cleared', description: 'All scope entries removed' });
+                    } catch {
+                      toast({ title: 'Error', description: 'Failed to clear scopes', variant: 'destructive' });
+                    }
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1" />Clear All
+                </Button>
               </div>
             )}
-          </div>
-
-          {/* Menu Rights Grid */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-semibold">Menu Access Rights</h4>
-              <Button onClick={handleSaveRights} disabled={Object.keys(editedRights).length === 0 || saveMenuRights.isPending} size="sm">
-                <Save className="h-4 w-4 mr-1" />Save Rights
-              </Button>
-            </div>
-            <div className="rounded-md border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[120px]">Section</TableHead>
-                    <TableHead>Menu Item</TableHead>
-                    <TableHead className="text-center w-[70px]">View</TableHead>
-                    <TableHead className="text-center w-[70px]">Add</TableHead>
-                    <TableHead className="text-center w-[70px]">Update</TableHead>
-                    <TableHead className="text-center w-[70px]">Delete</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {SECTION_ORDER.map(sectionKey => {
-                    const items = sections[sectionKey];
-                    if (!items?.length) return null;
-                    return items.map((config, idx) => {
-                      const rights = getRights(config.menu_key);
-                      return (
-                        <TableRow key={config.menu_key}>
-                          <TableCell className="text-xs text-muted-foreground">
-                            {idx === 0 && (
-                              <Badge variant="outline" className="text-[10px]">
-                                {SECTION_LABELS[sectionKey] || sectionKey}
-                              </Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="font-medium text-sm">{config.menu_name}</TableCell>
-                          {(['can_view', 'can_add', 'can_update', 'can_delete'] as const).map(field => (
-                            <TableCell key={field} className="text-center">
-                              <Checkbox
-                                checked={rights[field]}
-                                onCheckedChange={() => toggleRight(config.menu_key, field)}
-                              />
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      );
-                    });
-                  })}
-                </TableBody>
-              </Table>
-            </div>
           </div>
         </>
       )}

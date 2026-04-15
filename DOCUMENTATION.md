@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-15  
-> **Version:** 2.50.0 — Fix: Replaced cartesian product explosion in org scope with independent dimension rows; batch insert with 500-row safety cap.
+> **Version:** 2.51.0 — UI: Removed lengthy org scope table and redundant menu rights grid from Profile Mapping tab; replaced with compact scope count badge.
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
