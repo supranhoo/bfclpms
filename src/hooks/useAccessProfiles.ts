@@ -18,6 +18,7 @@ export interface AccessProfileOrgScope {
   division_id: string | null;
   business_unit_id: string | null;
   department_id: string | null;
+  location: string | null;
   designation: string | null;
   pms_grade: string | null;
   level: string | null;

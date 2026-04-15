@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-15  
-> **Version:** 2.47.0 — Incentive: Round all incentive amount displays to whole numbers; pagination and select-all enhancements for Monthly Incentive Table.
+> **Version:** 2.48.0 — Access Profiles: Multi-select with Select All for Org Scope dropdowns; Location field added to org scope.
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

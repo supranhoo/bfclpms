@@ -12,7 +12,7 @@ import { Shield, Plus, Trash2, Save, Users, Settings2, Search } from 'lucide-rea
 import { useAccessProfiles, type AccessProfileMenuRight } from '@/hooks/useAccessProfiles';
 import { useMenuAccess, type MenuAccessConfig } from '@/hooks/useMenuAccess';
 import { useCompanies } from '@/hooks/useCompanies';
-import { useDivisions, useBusinessUnits, useDepartments } from '@/hooks/useOrganization';
+import { useDivisions, useBusinessUnits, useDepartments, useSubBranches } from '@/hooks/useOrganization';
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -199,6 +199,7 @@ function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgScope, de
   const { data: divisions = [] } = useDivisions();
   const { data: businessUnits = [] } = useBusinessUnits();
   const { data: departments = [] } = useDepartments();
+  const { data: subBranches = [] } = useSubBranches();
   const { designations, grades } = useEmployeeFilterOptions();
 
   // Levels from profiles
@@ -211,10 +212,13 @@ function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgScope, de
     staleTime: 5 * 60 * 1000,
   });
 
-  // Org scope form state
-  const [scopeForm, setScopeForm] = useState({
-    company_id: '', division_id: '', business_unit_id: '',
-    department_id: '', designation: '', pms_grade: '', level: '',
+  // Org scope form state — arrays for multi-select
+  const [scopeForm, setScopeForm] = useState<{
+    company_id: string[]; division_id: string[]; business_unit_id: string[];
+    department_id: string[]; location: string[]; designation: string[]; pms_grade: string[]; level: string[];
+  }>({
+    company_id: [], division_id: [], business_unit_id: [],
+    department_id: [], location: [], designation: [], pms_grade: [], level: [],
   });
 
   // Menu rights editing
@@ -231,7 +235,7 @@ function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgScope, de
   const handleProfileChange = (id: string) => {
     setSelectedProfileId(id);
     setEditedRights({});
-    setScopeForm({ company_id: '', division_id: '', business_unit_id: '', department_id: '', designation: '', pms_grade: '', level: '' });
+    setScopeForm({ company_id: [], division_id: [], business_unit_id: [], department_id: [], location: [], designation: [], pms_grade: [], level: [] });
   };
 
   const getRights = (menuKey: string) => {
@@ -247,39 +251,65 @@ function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgScope, de
 
   const profileScopes = useMemo(() => orgScopes.filter((s: any) => s.profile_id === selectedProfileId), [orgScopes, selectedProfileId]);
 
+  // Cascading filter options
   const companyOptions: ComboboxOption[] = companies.map((c: any) => ({ value: c.id, label: c.name }));
   const divisionOptions: ComboboxOption[] = divisions
-    .filter((d: any) => !scopeForm.company_id || d.company_id === scopeForm.company_id)
+    .filter((d: any) => scopeForm.company_id.length === 0 || scopeForm.company_id.includes(d.company_id))
     .map((d: any) => ({ value: d.id, label: d.name }));
   const buOptions: ComboboxOption[] = businessUnits
-    .filter((b: any) => !scopeForm.division_id || b.division_id === scopeForm.division_id)
+    .filter((b: any) => scopeForm.division_id.length === 0 || scopeForm.division_id.includes(b.division_id))
     .map((b: any) => ({ value: b.id, label: b.name }));
   const deptOptions: ComboboxOption[] = departments
-    .filter((d: any) => !scopeForm.business_unit_id || d.business_unit_id === scopeForm.business_unit_id)
+    .filter((d: any) => scopeForm.business_unit_id.length === 0 || scopeForm.business_unit_id.includes(d.business_unit_id))
     .map((d: any) => ({ value: d.id, label: d.name }));
+  const locationOptions: ComboboxOption[] = subBranches
+    .filter((s: any) => scopeForm.department_id.length === 0 || scopeForm.department_id.includes(s.department_id))
+    .map((s: any) => ({ value: s.id, label: s.name }));
   const designationOptions: ComboboxOption[] = designations.map((d: string) => ({ value: d, label: d }));
   const gradeOptions: ComboboxOption[] = grades.map((g: string) => ({ value: g, label: g }));
   const levelOptions: ComboboxOption[] = levels.map((l: string) => ({ value: l, label: l }));
 
-  const hasScopeFilter = Object.values(scopeForm).some(v => !!v);
+  const hasScopeFilter = Object.values(scopeForm).some(arr => arr.length > 0);
 
   const handleAddScope = async () => {
     if (!selectedProfileId || !hasScopeFilter) return;
     try {
-      await saveOrgScope.mutateAsync({
-        profileId: selectedProfileId,
-        scope: {
-          company_id: scopeForm.company_id || null,
-          division_id: scopeForm.division_id || null,
-          business_unit_id: scopeForm.business_unit_id || null,
-          department_id: scopeForm.department_id || null,
-          designation: scopeForm.designation || null,
-          pms_grade: scopeForm.pms_grade || null,
-          level: scopeForm.level || null,
-        },
-      });
-      toast({ title: 'Org Scope Added' });
-      setScopeForm({ company_id: '', division_id: '', business_unit_id: '', department_id: '', designation: '', pms_grade: '', level: '' });
+      // Build arrays for each dimension (empty = [null] to represent "any")
+      const dims = {
+        company_id: scopeForm.company_id.length > 0 ? scopeForm.company_id : [null],
+        division_id: scopeForm.division_id.length > 0 ? scopeForm.division_id : [null],
+        business_unit_id: scopeForm.business_unit_id.length > 0 ? scopeForm.business_unit_id : [null],
+        department_id: scopeForm.department_id.length > 0 ? scopeForm.department_id : [null],
+        location: scopeForm.location.length > 0 ? scopeForm.location : [null],
+        designation: scopeForm.designation.length > 0 ? scopeForm.designation : [null],
+        pms_grade: scopeForm.pms_grade.length > 0 ? scopeForm.pms_grade : [null],
+        level: scopeForm.level.length > 0 ? scopeForm.level : [null],
+      };
+
+      // Generate cartesian product rows
+      const rows: any[] = [];
+      for (const cid of dims.company_id)
+        for (const did of dims.division_id)
+          for (const bid of dims.business_unit_id)
+            for (const deptId of dims.department_id)
+              for (const loc of dims.location)
+                for (const desig of dims.designation)
+                  for (const grade of dims.pms_grade)
+                    for (const lvl of dims.level) {
+                      rows.push({
+                        company_id: cid, division_id: did, business_unit_id: bid,
+                        department_id: deptId, location: loc, designation: desig,
+                        pms_grade: grade, level: lvl,
+                      });
+                    }
+
+      // Insert all rows
+      for (const scope of rows) {
+        await saveOrgScope.mutateAsync({ profileId: selectedProfileId, scope });
+      }
+
+      toast({ title: `${rows.length} Org Scope${rows.length > 1 ? 's' : ''} Added` });
+      setScopeForm({ company_id: [], division_id: [], business_unit_id: [], department_id: [], location: [], designation: [], pms_grade: [], level: [] });
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     }
@@ -316,6 +346,7 @@ function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgScope, de
     if (scope.division_id) parts.push(divisions.find((d: any) => d.id === scope.division_id)?.name || scope.division_id);
     if (scope.business_unit_id) parts.push(businessUnits.find((b: any) => b.id === scope.business_unit_id)?.name || scope.business_unit_id);
     if (scope.department_id) parts.push(departments.find((d: any) => d.id === scope.department_id)?.name || scope.department_id);
+    if (scope.location) parts.push(`Loc: ${subBranches.find((s: any) => s.id === scope.location)?.name || scope.location}`);
     if (scope.designation) parts.push(scope.designation);
     if (scope.pms_grade) parts.push(`Grade: ${scope.pms_grade}`);
     if (scope.level) parts.push(`Level: ${scope.level}`);
@@ -340,13 +371,14 @@ function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgScope, de
           <div className="space-y-3">
             <h4 className="text-sm font-semibold">Org-Level Scope</h4>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <OrgFilterCombobox value={scopeForm.company_id} onValueChange={v => setScopeForm(p => ({ ...p, company_id: v, division_id: '', business_unit_id: '', department_id: '' }))} options={companyOptions} placeholder="Company..." label="Company" />
-              <OrgFilterCombobox value={scopeForm.division_id} onValueChange={v => setScopeForm(p => ({ ...p, division_id: v, business_unit_id: '', department_id: '' }))} options={divisionOptions} placeholder="Division..." label="Division" />
-              <OrgFilterCombobox value={scopeForm.business_unit_id} onValueChange={v => setScopeForm(p => ({ ...p, business_unit_id: v, department_id: '' }))} options={buOptions} placeholder="Business Unit..." label="Business Unit" />
-              <OrgFilterCombobox value={scopeForm.department_id} onValueChange={v => setScopeForm(p => ({ ...p, department_id: v }))} options={deptOptions} placeholder="Department..." label="Department" />
-              <OrgFilterCombobox value={scopeForm.designation} onValueChange={v => setScopeForm(p => ({ ...p, designation: v }))} options={designationOptions} placeholder="Designation..." label="Designation" />
-              <OrgFilterCombobox value={scopeForm.pms_grade} onValueChange={v => setScopeForm(p => ({ ...p, pms_grade: v }))} options={gradeOptions} placeholder="Grade..." label="Grade" />
-              <OrgFilterCombobox value={scopeForm.level} onValueChange={v => setScopeForm(p => ({ ...p, level: v }))} options={levelOptions} placeholder="Level..." label="Level" />
+              <OrgFilterCombobox multiSelect values={scopeForm.company_id} onValuesChange={v => setScopeForm(p => ({ ...p, company_id: v, division_id: [], business_unit_id: [], department_id: [], location: [] }))} options={companyOptions} placeholder="Company..." label="Company" />
+              <OrgFilterCombobox multiSelect values={scopeForm.division_id} onValuesChange={v => setScopeForm(p => ({ ...p, division_id: v, business_unit_id: [], department_id: [], location: [] }))} options={divisionOptions} placeholder="Division..." label="Division" />
+              <OrgFilterCombobox multiSelect values={scopeForm.business_unit_id} onValuesChange={v => setScopeForm(p => ({ ...p, business_unit_id: v, department_id: [], location: [] }))} options={buOptions} placeholder="Business Unit..." label="Business Unit" />
+              <OrgFilterCombobox multiSelect values={scopeForm.department_id} onValuesChange={v => setScopeForm(p => ({ ...p, department_id: v, location: [] }))} options={deptOptions} placeholder="Department..." label="Department" />
+              <OrgFilterCombobox multiSelect values={scopeForm.location} onValuesChange={v => setScopeForm(p => ({ ...p, location: v }))} options={locationOptions} placeholder="Location..." label="Location" />
+              <OrgFilterCombobox multiSelect values={scopeForm.designation} onValuesChange={v => setScopeForm(p => ({ ...p, designation: v }))} options={designationOptions} placeholder="Designation..." label="Designation" />
+              <OrgFilterCombobox multiSelect values={scopeForm.pms_grade} onValuesChange={v => setScopeForm(p => ({ ...p, pms_grade: v }))} options={gradeOptions} placeholder="Grade..." label="Grade" />
+              <OrgFilterCombobox multiSelect values={scopeForm.level} onValuesChange={v => setScopeForm(p => ({ ...p, level: v }))} options={levelOptions} placeholder="Level..." label="Level" />
               <div className="flex items-end">
                 <Button onClick={handleAddScope} disabled={!hasScopeFilter || saveOrgScope.isPending} className="w-full">
                   <Plus className="h-4 w-4 mr-1" />Add Scope
