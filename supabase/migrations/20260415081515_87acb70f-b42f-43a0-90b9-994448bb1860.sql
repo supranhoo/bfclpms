@@ -1,0 +1,1 @@
+ALTER TABLE public.access_profile_org_scope ADD COLUMN location text;

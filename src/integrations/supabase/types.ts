@@ -93,6 +93,7 @@ export type Database = {
           division_id: string | null
           id: string
           level: string | null
+          location: string | null
           pms_grade: string | null
           profile_id: string
         }
@@ -104,6 +105,7 @@ export type Database = {
           division_id?: string | null
           id?: string
           level?: string | null
+          location?: string | null
           pms_grade?: string | null
           profile_id: string
         }
@@ -115,6 +117,7 @@ export type Database = {
           division_id?: string | null
           id?: string
           level?: string | null
+          location?: string | null
           pms_grade?: string | null
           profile_id?: string
         }
