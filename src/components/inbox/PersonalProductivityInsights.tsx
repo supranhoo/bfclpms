@@ -5,7 +5,7 @@ import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { differenceInHours, differenceInDays, subDays } from 'date-fns';
 import { Trophy, Zap, Target, Clock, TrendingUp, TrendingDown, Minus, AlertTriangle, Award, Shield, Flame } from 'lucide-react';
-
+import { useSlaTargetDays } from '@/hooks/useWorkflowSettings';
 interface QueryData {
   id: string;
   status: string;
@@ -25,7 +25,7 @@ interface PersonalProductivityInsightsProps {
   isLoading?: boolean;
 }
 
-const SLA_HOURS = 48; // 2 days
+// SLA_HOURS removed — now configurable via useSlaTargetDays()
 
 interface BadgeInfo {
   icon: React.ReactNode;
@@ -35,7 +35,7 @@ interface BadgeInfo {
   color: string;
 }
 
-function computePersonalMetrics(queries: QueryData[], currentUserId: string) {
+function computePersonalMetrics(queries: QueryData[], currentUserId: string, slaHours: number) {
   const received = queries.filter(q => q.raised_to === currentUserId);
   const sent = queries.filter(q => q.raised_by === currentUserId);
 
@@ -65,9 +65,9 @@ function computePersonalMetrics(queries: QueryData[], currentUserId: string) {
 
   // SLA compliance (my resolved within SLA)
   const myWithinSla = resolvedReceived.filter(q => {
-    return differenceInHours(new Date(q.resolved_at!), new Date(q.created_at)) <= SLA_HOURS;
+    return differenceInHours(new Date(q.resolved_at!), new Date(q.created_at)) <= slaHours;
   }).length;
-  const mySlaPercent = resolvedReceived.length > 0 ? Math.round((myWithinSla / resolvedReceived.length) * 100) : 100;
+  const mySlaPercent = resolvedReceived.length > 0 ? Math.round((myWithinSla / resolvedReceived.length) * 100) : null;
 
   // All within 24h check (for badge)
   const allWithin24h = myResponseTimes.length > 0 && myResponseTimes.every(h => h <= 24);
@@ -108,12 +108,12 @@ function computePersonalMetrics(queries: QueryData[], currentUserId: string) {
   };
 }
 
-function computeTeamAvg(teamQueries: QueryData[]) {
+function computeTeamAvg(teamQueries: QueryData[], slaHours: number) {
   const resolved = teamQueries.filter(q => q.status === 'resolved' && q.resolved_at);
   const times = resolved.map(q => differenceInHours(new Date(q.resolved_at!), new Date(q.created_at))).filter(h => h >= 0);
   const avgHours = times.length > 0 ? times.reduce((a, b) => a + b, 0) / times.length : 0;
-  const slaCount = resolved.filter(q => differenceInHours(new Date(q.resolved_at!), new Date(q.created_at)) <= SLA_HOURS).length;
-  const slaPercent = resolved.length > 0 ? Math.round((slaCount / resolved.length) * 100) : 100;
+  const slaCount = resolved.filter(q => differenceInHours(new Date(q.resolved_at!), new Date(q.created_at)) <= slaHours).length;
+  const slaPercent = resolved.length > 0 ? Math.round((slaCount / resolved.length) * 100) : null;
   return { avgHours, slaPercent, totalResolved: resolved.length };
 }
 
@@ -125,8 +125,10 @@ function formatHours(hours: number): string {
 }
 
 export function PersonalProductivityInsights({ allQueries, teamQueries, currentUserId, isLoading }: PersonalProductivityInsightsProps) {
-  const personal = useMemo(() => computePersonalMetrics(allQueries, currentUserId), [allQueries, currentUserId]);
-  const team = useMemo(() => computeTeamAvg(teamQueries), [teamQueries]);
+  const slaTargetDays = useSlaTargetDays();
+  const slaHours = slaTargetDays * 24;
+  const personal = useMemo(() => computePersonalMetrics(allQueries, currentUserId, slaHours), [allQueries, currentUserId, slaHours]);
+  const team = useMemo(() => computeTeamAvg(teamQueries, slaHours), [teamQueries, slaHours]);
 
   if (isLoading) {
     return (
