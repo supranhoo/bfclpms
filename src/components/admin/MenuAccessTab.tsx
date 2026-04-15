@@ -257,7 +257,7 @@ export function MenuAccessTab() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="rounded-md border max-h-[60vh] overflow-auto">
+            <div className="rounded-md border max-h-[60vh] overflow-auto [&>div]:overflow-visible">
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
@@ -398,7 +398,7 @@ export function MenuAccessTab() {
             </div>
 
             {enrichedOverrides.length > 0 ? (
-              <div className="rounded-md border max-h-[60vh] overflow-auto">
+              <div className="rounded-md border max-h-[60vh] overflow-auto [&>div]:overflow-visible">
                 <Table>
                   <TableHeader className="sticky top-0 z-10 bg-background">
                     <TableRow>
