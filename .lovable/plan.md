@@ -1,39 +1,70 @@
 
 
-## Fix: Null Email Crashes Across the Application
+## Custom Report Builder + Report Customization Engine
 
-### Root Cause
-The previous migration made `profiles.email` nullable (`DROP NOT NULL`), but multiple components still call `p.email.toLowerCase()` or `p.email.trim()` without null-checking. When a profile with `null` email is encountered during search filtering, the app crashes with a `TypeError: Cannot read properties of null`.
+### What This Is
+A **"Report Builder"** section in System Settings that lets admins:
+1. **Create new custom reports** by selecting fields from system data sources
+2. **Reorder ALL reports** (pre-built + custom) on the Reports Hub via drag-and-drop
+3. **Customize pre-built report columns** — add/remove fields from existing reports like Employee Summary, Performance Report, etc.
 
-### Affected Files (6 files, ~10 call sites)
+### Features
 
-1. **`src/pages/admin/UserManagement.tsx`** (3 sites)
-   - Line 146: `p.email.toLowerCase()` in search filter → `p.email?.toLowerCase()`
-   - Line 451: `selectedUser.email.trim().toLowerCase()` in edit save → add null guard
-   - Lines 528-529, 778, 832, 880, 905, 917: various `user.email` references → add `|| ''` fallbacks
+**A. Report Sequencing (Pre-built + Custom)**
+- Drag-and-drop reorder of ALL report cards in Reports Hub
+- Persisted as `report_display_order` in `system_settings` (JSON array of report keys)
+- Pre-built reports retain their `reportKey`; custom reports use `custom_{id}`
+- Reports not in the order array appear at the end in default order
 
-2. **`src/components/admin/AssignTabContent.tsx`** (1 site)
-   - Line 38: `p.email.toLowerCase()` → `p.email?.toLowerCase()`
+**B. Pre-built Report Field Customization**
+- Each pre-built report gets a "Customize Columns" action in the Report Builder tab
+- Admins see the full list of available columns for that report (checked = visible)
+- Drag-and-drop to reorder visible columns
+- Column aliases (rename headers)
+- Saved per-report as `report_columns_{reportKey}` in `system_settings`
+- Reports read column config from settings; fall back to hardcoded defaults if no override exists
 
-3. **`src/components/admin/BulkTemplateAssignDialog.tsx`** (1 site)
-   - Line 112: `p.email.toLowerCase()` → `p.email?.toLowerCase()`
+**C. Custom Report Creation** (as previously proposed)
+- Report name, description, icon, color, category
+- Field picker from data sources (Employee, Org, KPI, Scores, Workflow, etc.)
+- Drag-and-drop column ordering with aliases
+- Filter configuration (hardcoded vs user-selectable at runtime)
+- Default sort & grouping
+- Role-based access control
+- Export options (Excel/PDF)
 
-4. **`src/components/admin/OrgKpiOwnerDialog.tsx`** (1 site)
-   - Line 43: `p.email.toLowerCase()` → `p.email?.toLowerCase()`
+### Database Changes
 
-5. **`src/components/review/EmployeeSelectorGrid.tsx`** (1 site)
-   - Line 464: `p.email.toLowerCase()` → `p.email?.toLowerCase()`
+**New table: `custom_reports`**
+- id, name, description, icon, color, category
+- columns (JSONB — ordered array of `{source, field, alias, width}`)
+- filters (JSONB — `{field, operator, value, user_selectable}`)
+- default_sort, group_by, export_excel, export_pdf, filename_template
+- view_roles (text[]), is_active, created_by, timestamps
 
-6. **`src/pages/admin/ImportData.tsx`** (already safe — has `p.email &&` guards)
+**New `system_settings` rows:**
+- `report_display_order` — JSON array of report keys controlling hub card sequence
+- `report_columns_{reportKey}` — per-report column override for each pre-built report
 
-### Changes
-- Add optional chaining (`?.`) to all `.email.toLowerCase()` / `.email.includes()` calls
-- Add `|| ''` fallbacks where email is used as display text (e.g., `profile.full_name || profile.email || 'Unknown'`)
-- Guard the email-changed check in UserManagement edit flow with `if (!selectedUser.email && !editEmail.trim()) skip; else compare`
-- Version bump `DOCUMENTATION.md` and `POLICY.md`
+### New/Modified Files
+
+| File | Change |
+|------|--------|
+| `src/components/admin/ReportBuilderTab.tsx` | New — main settings UI with 3 sections: Sequence, Pre-built Customization, Custom Reports CRUD |
+| `src/components/admin/ReportSequenceConfig.tsx` | New — drag-and-drop list of all reports for ordering |
+| `src/components/admin/ReportFieldPicker.tsx` | New — grouped checkbox + drag reorder for field selection |
+| `src/components/admin/ReportFilterConfig.tsx` | New — filter rule builder for custom reports |
+| `src/hooks/useCustomReports.ts` | New — CRUD hook for `custom_reports` table |
+| `src/hooks/useReportColumnOverrides.ts` | New — reads per-report column config from settings |
+| `src/lib/reportFieldRegistry.ts` | New — field definitions registry (source, key, label, type) |
+| `src/pages/reports/CustomReport.tsx` | New — dynamic renderer for custom reports |
+| `src/pages/reports/ReportsHub.tsx` | Modified — fetch display order + append custom reports |
+| `src/pages/admin/SystemSettings.tsx` | Modified — add Report Builder section |
+| Pre-built report pages (6-8 files) | Modified — read column overrides via hook, conditionally show/hide/reorder columns |
+| `DOCUMENTATION.md`, `POLICY.md` | Version bump |
 
 ### Risk Assessment
-- **Data impact**: None — read-only display fixes
-- **Regression risk**: None — adds null safety without changing behavior for existing non-null emails
-- **UX improvement**: User Management and all search filters stop crashing when profiles have null emails
+- **Data impact**: Additive — new table + new settings rows; no schema changes to existing tables
+- **Regression risk**: Low — pre-built reports default to current behavior when no override exists
+- **Security**: RLS on `custom_reports` (admin write, role-filtered read); existing RLS on source tables protects query results
 
