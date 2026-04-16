@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-16  
-> **Version:** 2.14.0 — §Access: Report visibility governed per-report via `menu_access_config` entries (reports-{key}) and access profile menu rights.
+> **Version:** 2.15.0 — §Access: Org scope dropdowns pre-populate saved selections; edit-in-place replaces additive-only scope management.
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-16  
-> **Version:** 2.57.0 — Feature: Individual report-level access control in Menu Access Rights; all 19 reports configurable via access profiles.
+> **Version:** 2.58.0 — Feature: Org scope dropdowns pre-populate with saved selections on profile change; Save Scope replaces Add Scope for edit-in-place workflow.
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

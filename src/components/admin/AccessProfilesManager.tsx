@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -231,12 +231,34 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
 
   const [editedRights, setEditedRights] = useState<Record<string, { can_view: boolean; can_add: boolean; can_update: boolean; can_delete: boolean }>>({});
 
-  // Reset edited rights when profile changes
+  // Helper to extract scope form values from saved scopes
+  const extractScopeForm = useCallback((profileId: string) => {
+    const saved = orgScopes.filter((s: any) => s.profile_id === profileId);
+    return {
+      company_id: saved.filter((s: any) => s.company_id).map((s: any) => s.company_id),
+      division_id: saved.filter((s: any) => s.division_id).map((s: any) => s.division_id),
+      business_unit_id: saved.filter((s: any) => s.business_unit_id).map((s: any) => s.business_unit_id),
+      department_id: saved.filter((s: any) => s.department_id).map((s: any) => s.department_id),
+      location: saved.filter((s: any) => s.location).map((s: any) => s.location),
+      designation: saved.filter((s: any) => s.designation).map((s: any) => s.designation),
+      pms_grade: saved.filter((s: any) => s.pms_grade).map((s: any) => s.pms_grade),
+      level: saved.filter((s: any) => s.level).map((s: any) => s.level),
+    };
+  }, [orgScopes]);
+
+  // Pre-populate scopeForm when profile changes
   const handleProfileChange = (id: string) => {
     setSelectedProfileId(id);
     setEditedRights({});
-    setScopeForm({ company_id: [], division_id: [], business_unit_id: [], department_id: [], location: [], designation: [], pms_grade: [], level: [] });
+    setScopeForm(id ? extractScopeForm(id) : { company_id: [], division_id: [], business_unit_id: [], department_id: [], location: [], designation: [], pms_grade: [], level: [] });
   };
+
+  // Re-sync scopeForm when orgScopes data refreshes (e.g., after save)
+  useEffect(() => {
+    if (selectedProfileId) {
+      setScopeForm(extractScopeForm(selectedProfileId));
+    }
+  }, [orgScopes, selectedProfileId, extractScopeForm]);
 
   const getRights = (menuKey: string) => {
     if (editedRights[menuKey]) return editedRights[menuKey];
@@ -271,11 +293,22 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
 
   const hasScopeFilter = Object.values(scopeForm).some(arr => arr.length > 0);
 
-  const handleAddScope = async () => {
-    if (!selectedProfileId || !hasScopeFilter) return;
+  // Compare current scopeForm with saved scopes to detect changes
+  const isScopeDirty = useMemo(() => {
+    if (!selectedProfileId) return false;
+    const saved = extractScopeForm(selectedProfileId);
+    const keys = Object.keys(scopeForm) as (keyof typeof scopeForm)[];
+    return keys.some(k => {
+      const a = [...scopeForm[k]].sort();
+      const b = [...saved[k]].sort();
+      return a.length !== b.length || a.some((v, i) => v !== b[i]);
+    });
+  }, [scopeForm, selectedProfileId, extractScopeForm]);
+
+  const handleSaveScope = async () => {
+    if (!selectedProfileId) return;
     try {
-      // Build independent dimension rows (NOT cartesian product)
-      // Each selected value becomes its own row with only that column populated
+      // Build independent dimension rows
       const rows: any[] = [];
       const dimensionMap: { key: string; values: string[] }[] = [
         { key: 'company_id', values: scopeForm.company_id },
@@ -300,19 +333,22 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
         }
       }
 
-      // Safety cap
       if (rows.length > 500) {
         toast({ title: 'Too many scope entries', description: `Selection would create ${rows.length} rows. Please reduce selections.`, variant: 'destructive' });
         return;
       }
 
-      if (rows.length === 0) return;
+      // Delete all existing scopes for this profile first
+      for (const s of profileScopes) {
+        await deleteOrgScope.mutateAsync(s.id);
+      }
 
-      // Batch insert all rows at once
-      await saveOrgScope.mutateAsync({ profileId: selectedProfileId, scopes: rows });
+      // Insert new scopes if any
+      if (rows.length > 0) {
+        await saveOrgScope.mutateAsync({ profileId: selectedProfileId, scopes: rows });
+      }
 
-      toast({ title: `${rows.length} Org Scope${rows.length > 1 ? 's' : ''} Added` });
-      setScopeForm({ company_id: [], division_id: [], business_unit_id: [], department_id: [], location: [], designation: [], pms_grade: [], level: [] });
+      toast({ title: 'Org Scope Saved', description: rows.length > 0 ? `${rows.length} scope ${rows.length === 1 ? 'entry' : 'entries'} configured` : 'All scopes cleared' });
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     }
@@ -383,8 +419,8 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
               <OrgFilterCombobox multiSelect values={scopeForm.pms_grade} onValuesChange={v => setScopeForm(p => ({ ...p, pms_grade: v }))} options={gradeOptions} placeholder="Grade..." label="Grade" />
               <OrgFilterCombobox multiSelect values={scopeForm.level} onValuesChange={v => setScopeForm(p => ({ ...p, level: v }))} options={levelOptions} placeholder="Level..." label="Level" />
               <div className="flex items-end">
-                <Button onClick={handleAddScope} disabled={!hasScopeFilter || saveOrgScope.isPending} className="w-full">
-                  <Plus className="h-4 w-4 mr-1" />Add Scope
+                <Button onClick={handleSaveScope} disabled={!isScopeDirty || saveOrgScope.isPending || deleteOrgScope.isPending} className="w-full">
+                  <Save className="h-4 w-4 mr-1" />Save Scope
                 </Button>
               </div>
             </div>
