@@ -51,7 +51,7 @@ export default function CustomReport() {
 
         kpiSelect += ', category:category_id(name)';
 
-        let query = supabase.from('kpis').select(kpiSelect);
+        let query = (supabase.from('kpis') as any).select(kpiSelect);
 
         // Apply filters
         for (const filter of report.filters || []) {
