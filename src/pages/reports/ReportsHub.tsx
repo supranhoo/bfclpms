@@ -2,6 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useReportAccess } from '@/hooks/useReportAccess';
+import { useMenuAccess } from '@/hooks/useMenuAccess';
 import { 
   BarChart3, 
   FileText, 
@@ -192,8 +193,9 @@ const reports: ReportCard[] = [
 export default function ReportsHub() {
   const navigate = useNavigate();
   const { canView, isLoading } = useReportAccess();
+  const { canAccess } = useMenuAccess();
 
-  const visibleReports = reports.filter(r => canView(r.reportKey));
+  const visibleReports = reports.filter(r => canView(r.reportKey) || canAccess(`reports-${r.reportKey}`));
 
   return (
     <div className="space-y-6">

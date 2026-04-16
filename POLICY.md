@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
-> **Last Updated:** 2026-04-15  
-> **Version:** 2.13.4 — §UI: Terminal month sibling lookup relaxed to KRA+category+frequency match with prefix tiebreaker for name mismatches.
+> **Last Updated:** 2026-04-16  
+> **Version:** 2.14.0 — §Access: Report visibility governed per-report via `menu_access_config` entries (reports-{key}) and access profile menu rights.
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
