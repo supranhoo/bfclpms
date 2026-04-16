@@ -75,6 +75,7 @@ const ManagerTeamKpiReport = lazy(() => import("./pages/reports/ManagerTeamKpiRe
 const TeamVsManagerScoreReport = lazy(() => import("./pages/reports/TeamVsManagerScoreReport"));
 const KpiScorecardDetail = lazy(() => import("./pages/reports/KpiScorecardDetail"));
 const KpiEmployeeMatrix = lazy(() => import("./pages/reports/KpiEmployeeMatrix"));
+const CustomReport = lazy(() => import("./pages/reports/CustomReport"));
 
 // Layout components
 import { ReportRoute } from "./components/layout/ReportRoute";
@@ -388,6 +389,11 @@ const App = () => (
                   <ReportRoute reportKey="kpi-employee-matrix">
                     <Suspense fallback={<PageFallback />}><KpiEmployeeMatrix /></Suspense>
                   </ReportRoute>
+                } />
+                <Route path="/reports/custom/:id" element={
+                  <ProtectedRoute allowedRoles={['admin','manager','employee','auditor','management','hr_pms','skip_level']}>
+                    <Suspense fallback={<PageFallback />}><CustomReport /></Suspense>
+                  </ProtectedRoute>
                 } />
               </Route>
               <Route path="*" element={<Suspense fallback={<PageFallback />}><NotFound /></Suspense>} />
