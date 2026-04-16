@@ -1,84 +1,171 @@
 
 
-## Pre-Populate Org Scope Dropdowns with Saved Profile Selections
+## New "Upload Settings" Section in System Settings
 
-### Problem
-When an admin selects a profile in the Profile Mapping tab, the Org-Level Scope dropdowns always appear empty — even if that profile already has saved scope entries. The admin has no visual indication of what's currently configured and must mentally track existing scopes from the badge/list below. This makes editing (adding/removing individual scope values) error-prone.
+### Context
+Currently, upload-related settings are scattered: the file size limit lives under "General > File Upload Limit", import validation rules are hardcoded in `importValidation.ts`, and accepted file types are hardcoded per component. This plan consolidates everything into a dedicated **Upload Settings** tab.
 
-### Target UI
+### Proposed UI
 
 ```text
-Profile: [Payroll HASP ▼]
-
-Org-Level Scope
-┌────────────────┐  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐
-│ Company...   ▼ │  │ Division...  ▼ │  │ Business U.. ▼ │  │ Department.. ▼ │
-└────────────────┘  └────────────────┘  └────────────────┘  └────────────────┘
-
-  When dropdown opens:
-  ┌──────────────────────┐
-  │ 🔍 Company...        │
-  │ ─────────────────── │
-  │ — None —             │
-  │ ☑ Select All (2)     │
-  │ ✅ Bihar Foundry &   │   ← pre-ticked (already saved)
-  │    Casting Limited   │
-  │ ☐ Saibal Kunar      │
-  └──────────────────────┘
-
-  ✓ 3 scope entries configured          🗑 Clear All
-     ┌──────────────────────────────────────────────┐
-     │ Bihar Foundry & Casting Limited         [x]  │  ← individual remove
-     │ Division: Manufacturing                 [x]  │
-     │ Grade: A1                               [x]  │
-     └──────────────────────────────────────────────┘
-
-  [Save Scope]  ← replaces "Add Scope"; saves the full state
+System Settings Sidebar
+┌──────────────────┐
+│ Branding         │
+│ General          │
+│ Scoring          │
+│ Cycles           │
+│ Controls         │
+│ ★ Uploads ★      │  ← NEW section (Upload icon)
+│ Report Access    │
+│ Menu Access      │
+│ Email            │
+│ Templates        │
+│ Passwords        │
+│ Backups          │
+│ Data Repair      │
+└──────────────────┘
 ```
 
-### Solution
-In `handleProfileChange`, after setting `selectedProfileId`, extract the saved `profileScopes` and pre-populate `scopeForm` arrays so the multi-select dropdowns reflect the current state. This way:
-- Existing selections appear **ticked** in the dropdowns
-- Admin can **untick** to remove or **tick** to add new values
-- The "Add Scope" button becomes "Save Scope" and performs a **replace** operation (delete old scopes, insert new ones)
+### Suggested Settings (Brainstorm)
 
-### Changes
+#### 1. File Size Limits (move from General)
+- **Evidence Upload Max Size** — 1–50 MB (currently exists, relocate here)
+- **Import File Max Size** — 1–50 MB (currently hardcoded at 10 MB in `IMPORT_LIMITS`)
+- **Branding Asset Max Size** — separate limit for logos/wallpapers
 
-**File: `src/components/admin/AccessProfilesManager.tsx`**
+#### 2. Allowed File Types
+- **Evidence Upload Types** — admin-configurable checklist: PDF, DOC/DOCX, XLS/XLSX, PNG, JPG, JPEG, PPT/PPTX
+- **Import File Types** — XLSX, XLS, CSV (toggle CSV support on/off)
+- Stored as JSON array in `system_settings`, consumed by upload components
 
-1. **`handleProfileChange`** — Instead of resetting `scopeForm` to empty, derive initial values from `profileScopes`:
-   ```tsx
-   const handleProfileChange = (id: string) => {
-     setSelectedProfileId(id);
-     setEditedRights({});
-     // Pre-populate scopeForm from saved scopes
-     const saved = orgScopes.filter((s: any) => s.profile_id === id);
-     setScopeForm({
-       company_id: saved.filter((s: any) => s.company_id).map((s: any) => s.company_id),
-       division_id: saved.filter((s: any) => s.division_id).map((s: any) => s.division_id),
-       business_unit_id: saved.filter((s: any) => s.business_unit_id).map((s: any) => s.business_unit_id),
-       department_id: saved.filter((s: any) => s.department_id).map((s: any) => s.department_id),
-       location: saved.filter((s: any) => s.location).map((s: any) => s.location),
-       designation: saved.filter((s: any) => s.designation).map((s: any) => s.designation),
-       pms_grade: saved.filter((s: any) => s.pms_grade).map((s: any) => s.pms_grade),
-       level: saved.filter((s: any) => s.level).map((s: any) => s.level),
-     });
-   };
-   ```
+#### 3. Import Column Mapping & Sequence
+- **KPI Import Column Order** — drag-and-drop or numbered list to define expected column sequence in upload templates
+- **Employee Import Column Order** — same for employee master imports
+- **Download Template** button that generates a template matching the configured sequence
+- Stored as JSON in `system_settings` (e.g., `kpi_import_column_order`)
 
-2. **"Add Scope" → "Save Scope"** — Change the button label and logic:
-   - Compare current `scopeForm` with existing `profileScopes`
-   - Delete removed scopes, insert new ones (or do a full replace: delete all existing, insert all current)
-   - This makes the dropdowns a true **edit** interface, not just an "add" interface
+#### 4. Mandatory Field Configuration
+- **KPI Import Mandatory Fields** — toggle each field as required/optional:
+  - Always required (non-configurable): Employee Code, Full Name, Category, KRA, KPI
+  - Configurable: Target, UOM, Frequency, Weightage, Criteria, R5-R0 thresholds, Source of Data, Division, Department
+- **Employee Import Mandatory Fields** — toggle:
+  - Always required: Employee Code, Full Name
+  - Configurable: Email, Designation, Division, Department, Manager Code, Role, PMS Grade, Level
+- Stored as JSON arrays (`kpi_import_mandatory_fields`, `employee_import_mandatory_fields`)
 
-3. **Track dirty state** — Add a `useMemo` that compares `scopeForm` values vs saved scopes to enable/disable the Save button and show a "modified" indicator.
+#### 5. Import Validation Rules
+- **Max Rows Per Import** — configurable (currently hardcoded at 10,000)
+- **Max String Length** — configurable (currently hardcoded at 1,000)
+- **Duplicate Handling** — radio: Skip / Update Existing / Reject File
+- **Background Import Threshold** — row count above which import auto-switches to background mode
 
-4. **Also re-populate on orgScopes refetch** — Add a `useEffect` that syncs `scopeForm` when `orgScopes` data changes (e.g., after a save), so the UI stays in sync.
+#### 6. Evidence Upload Rules
+- **Max Files Per KPI** — configurable (currently hardcoded at 5 in `MultiFileUpload`)
+- **Allow Paste Upload** — toggle Ctrl+V paste functionality on/off
+- **Auto-compress Images** — toggle to auto-resize images above a threshold before upload
 
-**Files: `DOCUMENTATION.md`, `POLICY.md`** — Version bump
+#### 7. Branding Upload Rules
+- **Max Logo Dimensions** — width × height constraints
+- **Max Wallpaper Count** — limit number of login wallpapers (currently unlimited)
+- **Allowed Image Formats** — PNG, JPG, SVG, WEBP toggles
+
+### Target UI Layout
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│ Upload Settings                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│ ┌─ File Size Limits ──────────────────────────────────────────┐ │
+│ │ Evidence Upload Max Size    [  5 ] MB    (1–50)             │ │
+│ │ Import File Max Size        [ 10 ] MB    (1–50)             │ │
+│ │ Branding Asset Max Size     [  5 ] MB    (1–20)             │ │
+│ │                                          [Save Changes]     │ │
+│ └─────────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│ ┌─ Allowed File Types ────────────────────────────────────────┐ │
+│ │ Evidence Uploads:                                           │ │
+│ │ ☑ PDF  ☑ DOC/DOCX  ☑ XLS/XLSX  ☑ PNG  ☑ JPG  ☐ PPT/PPTX  │ │
+│ │                                                             │ │
+│ │ Import Files:                                               │ │
+│ │ ☑ XLSX  ☑ XLS  ☐ CSV                                       │ │
+│ │                                          [Save Changes]     │ │
+│ └─────────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│ ┌─ Import Validation ─────────────────────────────────────────┐ │
+│ │ Max Rows Per Import         [ 10000 ]                       │ │
+│ │ Duplicate Handling          ( ) Skip  (•) Update  ( ) Reject│ │
+│ │ Background Import Threshold [ 100 ] rows                    │ │
+│ │                                          [Save Changes]     │ │
+│ └─────────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│ ┌─ Mandatory Fields ──────────────────────────────────────────┐ │
+│ │ ┌─ KPI Import ───────────────────────────────────────────┐  │ │
+│ │ │ 🔒 Employee Code  🔒 Full Name  🔒 Category           │  │ │
+│ │ │ 🔒 KRA            🔒 KPI                              │  │ │
+│ │ │ ☑ Target    ☑ UOM    ☐ Frequency    ☑ Weightage       │  │ │
+│ │ │ ☐ Criteria  ☐ R5-R0  ☐ Source of Data                 │  │ │
+│ │ │ ☐ Division  ☐ Department  ☐ Business Unit              │  │ │
+│ │ └────────────────────────────────────────────────────────┘  │ │
+│ │ ┌─ Employee Import ──────────────────────────────────────┐  │ │
+│ │ │ 🔒 Employee Code  🔒 Full Name                        │  │ │
+│ │ │ ☐ Email     ☑ Designation  ☐ Division                 │  │ │
+│ │ │ ☐ Department  ☐ Manager Code  ☐ Role  ☐ PMS Grade     │  │ │
+│ │ └────────────────────────────────────────────────────────┘  │ │
+│ │                                          [Save Changes]     │ │
+│ └─────────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│ ┌─ Evidence Upload Rules ─────────────────────────────────────┐ │
+│ │ Max Files Per KPI           [  5 ]                          │ │
+│ │ Allow Paste Upload (Ctrl+V) [ON ]                           │ │
+│ │                                          [Save Changes]     │ │
+│ └─────────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│ ┌─ Import Column Sequence ────────────────────────────────────┐ │
+│ │ KPI Import Template:                                        │ │
+│ │  1. Employee Code  2. Full Name  3. Category  4. KRA       │ │
+│ │  5. KPI  6. Target  7. UOM  8. Frequency  ...              │ │
+│ │  [Reorder Columns]              [Download Template]         │ │
+│ │                                                             │ │
+│ │ Employee Import Template:                                   │ │
+│ │  1. Employee Code  2. Full Name  3. Email  4. Designation  │ │
+│ │  [Reorder Columns]              [Download Template]         │ │
+│ └─────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Technical Changes
+
+**Database** — Insert new `system_settings` keys via migration:
+- `evidence_max_size_mb` (default: 5)
+- `import_max_size_mb` (default: 10)
+- `branding_max_size_mb` (default: 5)
+- `evidence_allowed_types` (default: `["pdf","doc","docx","xls","xlsx","png","jpg","jpeg"]`)
+- `import_allowed_types` (default: `["xlsx","xls"]`)
+- `import_max_rows` (default: 10000)
+- `import_duplicate_handling` (default: `"skip"`)
+- `import_background_threshold` (default: 100)
+- `kpi_import_mandatory_fields` (default: `["target","uom","weightage"]`)
+- `employee_import_mandatory_fields` (default: `["designation"]`)
+- `evidence_max_files_per_kpi` (default: 5)
+- `evidence_allow_paste` (default: true)
+- `kpi_import_column_order` (default: current hardcoded order as JSON array)
+- `employee_import_column_order` (default: current hardcoded order as JSON array)
+
+**New file: `src/components/admin/UploadSettingsTab.tsx`** — New settings tab component with all cards above.
+
+**File: `src/pages/admin/SystemSettings.tsx`** — Add `{ key: 'uploads', label: 'Uploads', icon: Upload }` to sidebar, move existing upload limit card to new tab, render `<UploadSettingsTab />`.
+
+**File: `src/hooks/useUploadLimits.ts`** — Expand to expose all upload-related settings (types, paste toggle, max files) via a comprehensive hook.
+
+**File: `src/lib/importValidation.ts`** — Replace hardcoded `IMPORT_LIMITS` with values from `useUploadLimits` (pass as params to validation functions).
+
+**Consumer files** — Update `EvidenceUpload.tsx`, `MultiFileUpload.tsx`, `OrgKpiFileUpload.tsx`, `ImportData.tsx`, `OrgStructureImport.tsx`, `GlobalBrandingSettings.tsx` to read settings from the hook instead of hardcoded values.
+
+**Files: `DOCUMENTATION.md`, `POLICY.md`** — Version bump.
 
 ### Risk Assessment
-- **Data impact**: The save operation replaces scope rows (delete + insert), but the net result is the same as the admin's dropdown selections — no data loss risk
-- **Regression risk**: Low — the `OrgFilterCombobox` already supports multi-select with pre-populated `values`; we're just feeding it saved data instead of empty arrays
-- **UX improvement**: Admins can now see and modify existing scope configurations directly from the dropdowns without guessing what's already saved
+- **Data impact**: Additive INSERT of new `system_settings` rows only; existing `max_upload_size_mb` row remains (aliased to `evidence_max_size_mb`)
+- **Regression risk**: Low — all hardcoded defaults match current behavior; settings are opt-in overrides
+- **UX improvement**: Centralized upload governance; admins no longer need developer changes for file type or limit adjustments
 
