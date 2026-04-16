@@ -2,6 +2,7 @@ import { LucideIcon } from 'lucide-react';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { prefetchRoute } from '@/hooks/usePrefetchRoute';
 import {
   Collapsible,
   CollapsibleContent,
@@ -80,6 +81,8 @@ export function CollapsibleSidebarGroup({
                   <SidebarMenuButton
                     isActive={currentPath === item.path}
                     onClick={() => onNavigate(item.path)}
+                    onMouseEnter={() => prefetchRoute(item.path)}
+                    onFocus={() => prefetchRoute(item.path)}
                   >
                     <item.icon className="h-4 w-4" />
                     <span>{item.title}</span>
