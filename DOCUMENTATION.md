@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-16  
-> **Version:** 2.59.0 — Feature: Dedicated Upload Settings tab in System Settings with configurable file limits, allowed types, import validation, mandatory fields, evidence rules, and column sequence.
+> **Version:** 2.60.0 — Feature: Drag-and-drop column reordering for KPI and Employee import templates in Upload Settings.
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 

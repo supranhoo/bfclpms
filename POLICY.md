@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-16  
-> **Version:** 2.16.0 — §Uploads: Centralized upload governance with admin-configurable file size limits, allowed types, mandatory import fields, and evidence upload rules.
+> **Version:** 2.17.0 — §Uploads: Admin-configurable import column sequence via drag-and-drop reordering.
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
