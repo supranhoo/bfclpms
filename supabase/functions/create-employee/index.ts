@@ -121,7 +121,12 @@ Deno.serve(async (req) => {
 
       if (insertError) {
         console.error('Failed to insert profile-only user:', insertError)
-        return new Response(JSON.stringify({ error: `Failed to create profile: ${insertError.message}` }), {
+        const friendly = insertError.message?.includes('not-null')
+          ? 'A required field is missing. Please check the data.'
+          : insertError.message?.includes('duplicate key')
+            ? 'This employee already exists in the system.'
+            : `Failed to create profile: ${insertError.message}`;
+        return new Response(JSON.stringify({ error: friendly }), {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
       }
@@ -200,7 +205,12 @@ Deno.serve(async (req) => {
 
     if (upsertError) {
       console.error('Failed to upsert profile:', upsertError)
-      return new Response(JSON.stringify({ error: `Failed to create profile: ${upsertError.message}` }), {
+      const friendly = upsertError.message?.includes('not-null')
+        ? 'A required field is missing. Please check the data.'
+        : upsertError.message?.includes('duplicate key')
+          ? 'This employee already exists in the system.'
+          : `Failed to create profile: ${upsertError.message}`;
+      return new Response(JSON.stringify({ error: friendly }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }

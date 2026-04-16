@@ -1363,8 +1363,10 @@ export default function ImportData() {
           successCount++;
           rowResults.push({ row: globalIdx + 2, employeeCode: row.employeeCode || '', employeeName: row.fullName || '', status: 'success', message: 'Imported successfully' });
         } else {
-          importErrors.push(`Failed to import ${row.fullName || row.employeeCode}: ${result.reason?.message || 'Unknown error'}`);
-          rowResults.push({ row: globalIdx + 2, employeeCode: row.employeeCode || '', employeeName: row.fullName || '', status: 'failed', message: result.reason?.message || 'Unknown error' });
+          const rawMsg = result.reason?.message || 'Unknown error';
+          const friendly = friendlyImportError(rawMsg);
+          importErrors.push(`Failed to import ${row.fullName || row.employeeCode}: ${friendly}`);
+          rowResults.push({ row: globalIdx + 2, employeeCode: row.employeeCode || '', employeeName: row.fullName || '', status: 'failed', message: friendly });
         }
       });
 
