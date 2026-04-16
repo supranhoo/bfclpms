@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-16  
-> **Version:** 2.19.0 — Custom Report Builder: admin-driven dynamic report creation with field selection and report sequencing.
+> **Version:** 2.20.0 — Performance Optimization Pass (no policy change; build & runtime tuning only).
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

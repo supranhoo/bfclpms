@@ -1,8 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-16  
-> **Version:** 2.63.0 — Custom Report Builder: create dynamic reports, reorder Reports Hub, field picker with drag-and-drop.
-> **Maintainer:** Lovable AI
+> **Version:** 2.64.0 — Performance Optimization Pass: Vite manualChunks bundle splitting (entry chunk 628KB → 93KB), 10-min React Query staleTime, route prefetch on sidebar hover, realtime debounce 500ms → 1500ms.
 > **Maintainer:** Lovable AI
 
 ---
