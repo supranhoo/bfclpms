@@ -22,6 +22,7 @@ import { PasswordPolicyTab } from '@/components/admin/PasswordPolicyTab';
 import { ReportAccessTab } from '@/components/admin/ReportAccessTab';
 import { MenuAccessTab } from '@/components/admin/MenuAccessTab';
 import { DataRepairTab } from '@/components/admin/DataRepairTab';
+import { UploadSettingsTab } from '@/components/admin/UploadSettingsTab';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -34,6 +35,7 @@ const SETTINGS_SECTIONS = [
   { key: 'scoring', label: 'Scoring', icon: Calculator },
   { key: 'cycles', label: 'Cycles', icon: CalendarDays },
   { key: 'controls', label: 'Controls', icon: SlidersHorizontal },
+  { key: 'uploads', label: 'Uploads', icon: Upload },
   { key: 'reports', label: 'Report Access', icon: Shield },
   { key: 'menu-access', label: 'Menu Access', icon: Menu },
   { key: 'email', label: 'Email', icon: Mail },
@@ -609,6 +611,8 @@ export default function SystemSettings() {
         return <FrequencyCycleSettings />;
       case 'controls':
         return <WorkflowSettingsTab />;
+      case 'uploads':
+        return <UploadSettingsTab />;
       case 'reports':
         return <ReportAccessTab />;
       case 'menu-access':
