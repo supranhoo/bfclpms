@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-16  
-> **Version:** 2.15.0 — §Access: Org scope dropdowns pre-populate saved selections; edit-in-place replaces additive-only scope management.
+> **Version:** 2.16.0 — §Uploads: Centralized upload governance with admin-configurable file size limits, allowed types, mandatory import fields, and evidence upload rules.
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

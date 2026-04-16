@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-16  
-> **Version:** 2.58.0 — Feature: Org scope dropdowns pre-populate with saved selections on profile change; Save Scope replaces Add Scope for edit-in-place workflow.
+> **Version:** 2.59.0 — Feature: Dedicated Upload Settings tab in System Settings with configurable file limits, allowed types, import validation, mandatory fields, evidence rules, and column sequence.
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
