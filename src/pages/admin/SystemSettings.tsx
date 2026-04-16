@@ -35,6 +35,7 @@ const SETTINGS_SECTIONS = [
   { key: 'scoring', label: 'Scoring', icon: Calculator },
   { key: 'cycles', label: 'Cycles', icon: CalendarDays },
   { key: 'controls', label: 'Controls', icon: SlidersHorizontal },
+  { key: 'uploads', label: 'Uploads', icon: Upload },
   { key: 'reports', label: 'Report Access', icon: Shield },
   { key: 'menu-access', label: 'Menu Access', icon: Menu },
   { key: 'email', label: 'Email', icon: Mail },
@@ -610,6 +611,8 @@ export default function SystemSettings() {
         return <FrequencyCycleSettings />;
       case 'controls':
         return <WorkflowSettingsTab />;
+      case 'uploads':
+        return <UploadSettingsTab />;
       case 'reports':
         return <ReportAccessTab />;
       case 'menu-access':
