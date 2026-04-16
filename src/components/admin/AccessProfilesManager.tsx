@@ -419,8 +419,8 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
               <OrgFilterCombobox multiSelect values={scopeForm.pms_grade} onValuesChange={v => setScopeForm(p => ({ ...p, pms_grade: v }))} options={gradeOptions} placeholder="Grade..." label="Grade" />
               <OrgFilterCombobox multiSelect values={scopeForm.level} onValuesChange={v => setScopeForm(p => ({ ...p, level: v }))} options={levelOptions} placeholder="Level..." label="Level" />
               <div className="flex items-end">
-                <Button onClick={handleAddScope} disabled={!hasScopeFilter || saveOrgScope.isPending} className="w-full">
-                  <Plus className="h-4 w-4 mr-1" />Add Scope
+                <Button onClick={handleSaveScope} disabled={!isScopeDirty || saveOrgScope.isPending || deleteOrgScope.isPending} className="w-full">
+                  <Save className="h-4 w-4 mr-1" />Save Scope
                 </Button>
               </div>
             </div>
