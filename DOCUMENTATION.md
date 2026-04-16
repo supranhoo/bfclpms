@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-16  
-> **Version:** 2.61.0 — Fix: Email made nullable for non-login employees; friendly import error messages.
+> **Version:** 2.62.0 — Fix: Null-email crash guards across User Management, search filters, and assignment dialogs.
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
