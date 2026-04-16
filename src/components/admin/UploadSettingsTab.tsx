@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Save, Upload, FileText, Shield, Lock, GripVertical, Download } from 'lucide-react';
+import { Save, Upload, FileText, Shield, Lock, GripVertical, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useSystemSetting, useUpdateSystemSetting } from '@/hooks/useSystemSettings';
 import { Skeleton } from '@/components/ui/skeleton';
 
