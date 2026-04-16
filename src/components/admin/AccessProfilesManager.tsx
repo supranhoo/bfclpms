@@ -293,11 +293,22 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
 
   const hasScopeFilter = Object.values(scopeForm).some(arr => arr.length > 0);
 
-  const handleAddScope = async () => {
-    if (!selectedProfileId || !hasScopeFilter) return;
+  // Compare current scopeForm with saved scopes to detect changes
+  const isScopeDirty = useMemo(() => {
+    if (!selectedProfileId) return false;
+    const saved = extractScopeForm(selectedProfileId);
+    const keys = Object.keys(scopeForm) as (keyof typeof scopeForm)[];
+    return keys.some(k => {
+      const a = [...scopeForm[k]].sort();
+      const b = [...saved[k]].sort();
+      return a.length !== b.length || a.some((v, i) => v !== b[i]);
+    });
+  }, [scopeForm, selectedProfileId, extractScopeForm]);
+
+  const handleSaveScope = async () => {
+    if (!selectedProfileId) return;
     try {
-      // Build independent dimension rows (NOT cartesian product)
-      // Each selected value becomes its own row with only that column populated
+      // Build independent dimension rows
       const rows: any[] = [];
       const dimensionMap: { key: string; values: string[] }[] = [
         { key: 'company_id', values: scopeForm.company_id },
@@ -322,19 +333,22 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
         }
       }
 
-      // Safety cap
       if (rows.length > 500) {
         toast({ title: 'Too many scope entries', description: `Selection would create ${rows.length} rows. Please reduce selections.`, variant: 'destructive' });
         return;
       }
 
-      if (rows.length === 0) return;
+      // Delete all existing scopes for this profile first
+      for (const s of profileScopes) {
+        await deleteOrgScope.mutateAsync(s.id);
+      }
 
-      // Batch insert all rows at once
-      await saveOrgScope.mutateAsync({ profileId: selectedProfileId, scopes: rows });
+      // Insert new scopes if any
+      if (rows.length > 0) {
+        await saveOrgScope.mutateAsync({ profileId: selectedProfileId, scopes: rows });
+      }
 
-      toast({ title: `${rows.length} Org Scope${rows.length > 1 ? 's' : ''} Added` });
-      setScopeForm({ company_id: [], division_id: [], business_unit_id: [], department_id: [], location: [], designation: [], pms_grade: [], level: [] });
+      toast({ title: 'Org Scope Saved', description: rows.length > 0 ? `${rows.length} scope ${rows.length === 1 ? 'entry' : 'entries'} configured` : 'All scopes cleared' });
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     }
