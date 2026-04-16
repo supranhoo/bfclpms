@@ -23,6 +23,21 @@ import * as XLSX from 'xlsx';
 import { validateFileSize, IMPORT_LIMITS, sanitizeText, normalizeRole, VALID_ROLES } from '@/lib/importValidation';
 import { scoreToRatingLevel } from '@/lib/reviewConstants';
 
+/** Map technical DB/edge-function errors to admin-friendly messages */
+function friendlyImportError(msg: string): string {
+  if (!msg) return 'An unexpected error occurred';
+  const lower = msg.toLowerCase();
+  if (lower.includes('null value in column') || lower.includes('not-null constraint'))
+    return 'A required field is missing. Please check the data.';
+  if (lower.includes('duplicate key') || lower.includes('already exists') || lower.includes('already been registered'))
+    return 'This employee already exists in the system.';
+  if (lower.includes('violates foreign key') || lower.includes('not present in table'))
+    return 'A referenced record (department, manager, etc.) was not found.';
+  if (lower.includes('invalid input syntax'))
+    return 'One of the values has an invalid format. Please check the data.';
+  return msg.replace(/^Failed to create (?:user|profile):\s*/i, '');
+}
+
 interface BackgroundImportProgress {
   id: string;
   status: 'running' | 'completed' | 'failed';
@@ -1321,7 +1336,11 @@ export default function ImportData() {
           },
         });
 
-        if (fnError) throw fnError;
+        // Extract the real error: SDK may swallow the body into fnData
+        if (fnError) {
+          const rawMsg = fnData?.error || fnError.message || 'Unknown error';
+          throw new Error(friendlyImportError(rawMsg));
+        }
 
         const newUserId = fnData?.profile?.id || null;
 
@@ -1359,8 +1378,10 @@ export default function ImportData() {
           successCount++;
           rowResults.push({ row: globalIdx + 2, employeeCode: row.employeeCode || '', employeeName: row.fullName || '', status: 'success', message: 'Imported successfully' });
         } else {
-          importErrors.push(`Failed to import ${row.fullName || row.employeeCode}: ${result.reason?.message || 'Unknown error'}`);
-          rowResults.push({ row: globalIdx + 2, employeeCode: row.employeeCode || '', employeeName: row.fullName || '', status: 'failed', message: result.reason?.message || 'Unknown error' });
+          const rawMsg = result.reason?.message || 'Unknown error';
+          const friendly = friendlyImportError(rawMsg);
+          importErrors.push(`Failed to import ${row.fullName || row.employeeCode}: ${friendly}`);
+          rowResults.push({ row: globalIdx + 2, employeeCode: row.employeeCode || '', employeeName: row.fullName || '', status: 'failed', message: friendly });
         }
       });
 
