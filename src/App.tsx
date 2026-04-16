@@ -83,10 +83,16 @@ import { ReportRoute } from "./components/layout/ReportRoute";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000,
-      gcTime: 10 * 60 * 1000,
+      // Reference data rarely changes within a session — keep it fresh in
+      // memory for 10 minutes so route changes don't trigger refetches.
+      staleTime: 10 * 60 * 1000,
+      gcTime: 30 * 60 * 1000,
       refetchOnWindowFocus: false,
+      refetchOnMount: false,
       retry: 1,
+      // Keep previous data visible while a refetch is in flight to avoid
+      // loader flicker on filter/period changes.
+      placeholderData: (prev: unknown) => prev,
     },
   },
 });

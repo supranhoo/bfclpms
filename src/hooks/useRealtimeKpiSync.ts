@@ -15,7 +15,10 @@ const ORG_KPI_QUERY_KEYS = [
   'org-kpi-values', 'org-kpi-value',
 ];
 
-const DEBOUNCE_MS = 500;
+// Increased from 500ms to 1500ms to coalesce bursts of DB events into a
+// single round of cache invalidations (was causing cascading refetches
+// during periods of heavy review activity).
+const DEBOUNCE_MS = 1500;
 
 export function useRealtimeKpiSync(enabled: boolean = true) {
   const queryClient = useQueryClient();
