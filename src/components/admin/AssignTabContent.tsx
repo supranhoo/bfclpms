@@ -35,7 +35,7 @@ export function AssignTabContent({ selectedAuditor, assignmentsByAuditor, allPro
       .filter(p =>
         !employeeSearch ||
         p.full_name?.toLowerCase().includes(employeeSearch.toLowerCase()) ||
-        p.email.toLowerCase().includes(employeeSearch.toLowerCase()) ||
+        p.email?.toLowerCase().includes(employeeSearch.toLowerCase()) ||
         p.employee_code?.toLowerCase().includes(employeeSearch.toLowerCase())
       );
   }, [allProfiles, selectedAuditor, assignedEmployeeIds, employeeSearch]);

@@ -109,7 +109,7 @@ export function BulkTemplateAssignDialog({ isOpen, onClose }: BulkTemplateAssign
     return profiles?.filter(p => {
       const matchesSearch = !searchQuery ||
         p.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.email.toLowerCase().includes(searchQuery.toLowerCase());
+        p.email?.toLowerCase().includes(searchQuery.toLowerCase());
       const role = (p.user_roles as any)?.[0]?.role || 'employee';
       const matchesRole = roleFilter === 'all' || role === roleFilter;
       const matchesDept = departmentFilter === 'all' || p.department_id === departmentFilter;
