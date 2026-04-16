@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Save, Upload, FileText, Shield, Lock, GripVertical, Download } from 'lucide-react';
+import { Save, Upload, FileText, Shield, Lock, GripVertical, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useSystemSetting, useUpdateSystemSetting } from '@/hooks/useSystemSettings';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -99,6 +99,82 @@ const EMP_COLUMN_LABELS: Record<string, string> = {
 };
 
 // --- Sub-components ---
+
+function DraggableColumnList({ columns, labels, onChange }: {
+  columns: string[];
+  labels: Record<string, string>;
+  onChange: (newOrder: string[]) => void;
+}) {
+  const dragItem = useRef<number | null>(null);
+  const dragOverItem = useRef<number | null>(null);
+
+  const handleDragStart = (index: number) => {
+    dragItem.current = index;
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    dragOverItem.current = index;
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (dragItem.current === null || dragOverItem.current === null) return;
+    const items = [...columns];
+    const [removed] = items.splice(dragItem.current, 1);
+    items.splice(dragOverItem.current, 0, removed);
+    dragItem.current = null;
+    dragOverItem.current = null;
+    onChange(items);
+  };
+
+  const moveItem = (index: number, direction: -1 | 1) => {
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= columns.length) return;
+    const items = [...columns];
+    [items[index], items[newIndex]] = [items[newIndex], items[index]];
+    onChange(items);
+  };
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {columns.map((col, i) => (
+        <div
+          key={col}
+          draggable
+          onDragStart={() => handleDragStart(i)}
+          onDragOver={(e) => handleDragOver(e, i)}
+          onDrop={handleDrop}
+          className="group flex items-center gap-1 border rounded-md px-2 py-1 cursor-grab active:cursor-grabbing bg-background hover:bg-muted transition-colors select-none"
+        >
+          <button
+            type="button"
+            onClick={() => moveItem(i, -1)}
+            disabled={i === 0}
+            className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:text-primary disabled:opacity-30"
+            title="Move left"
+          >
+            <ChevronLeft className="h-3 w-3" />
+          </button>
+          <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-muted-foreground text-xs">{i + 1}.</span>
+          <span className="text-sm">{labels[col] || col}</span>
+          <button
+            type="button"
+            onClick={() => moveItem(i, 1)}
+            disabled={i === columns.length - 1}
+            className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:text-primary disabled:opacity-30"
+            title="Move right"
+          >
+            <ChevronRight className="h-3 w-3" />
+          </button>
+        </div>
+      ))}
+      <p className="w-full text-xs text-muted-foreground mt-1">Drag badges to reorder, or use ◀▶ arrows for fine control.</p>
+    </div>
+  );
+}
+
 
 function SettingCard({ title, description, icon, children, onSave, saving, dirty }: {
   title: string; description: string; icon: React.ReactNode; children: React.ReactNode;
@@ -451,39 +527,36 @@ export function UploadSettingsTab() {
       </SettingCard>
 
       {/* 6. Import Column Sequence */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <GripVertical className="h-5 w-5" />
-            Import Column Sequence
-          </CardTitle>
-          <CardDescription>View the expected column order for import templates.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <SettingCard
+        title="Import Column Sequence"
+        description="Configure the expected column order for import templates. Drag to reorder."
+        icon={<GripVertical className="h-5 w-5" />}
+        onSave={() => {
+          saveSetting('kpi_import_column_order', JSON.stringify(kpiColumns), 'columns');
+          saveSetting('employee_import_column_order', JSON.stringify(empColumns), 'columns');
+        }}
+        saving={updateSetting.isPending}
+        dirty={dirtyKeys.has('columns')}
+      >
+        <div className="space-y-4">
           <div>
             <Label className="text-sm font-semibold mb-2 block">KPI Import Template</Label>
-            <div className="flex flex-wrap gap-2">
-              {kpiColumns.map((col, i) => (
-                <Badge key={col} variant="outline" className="gap-1">
-                  <span className="text-muted-foreground text-xs">{i + 1}.</span>
-                  {KPI_COLUMN_LABELS[col] || col}
-                </Badge>
-              ))}
-            </div>
+            <DraggableColumnList
+              columns={kpiColumns}
+              labels={KPI_COLUMN_LABELS}
+              onChange={(cols) => { setKpiColumns(cols); markDirty('columns'); }}
+            />
           </div>
           <div className="border-t pt-4">
             <Label className="text-sm font-semibold mb-2 block">Employee Import Template</Label>
-            <div className="flex flex-wrap gap-2">
-              {empColumns.map((col, i) => (
-                <Badge key={col} variant="outline" className="gap-1">
-                  <span className="text-muted-foreground text-xs">{i + 1}.</span>
-                  {EMP_COLUMN_LABELS[col] || col}
-                </Badge>
-              ))}
-            </div>
+            <DraggableColumnList
+              columns={empColumns}
+              labels={EMP_COLUMN_LABELS}
+              onChange={(cols) => { setEmpColumns(cols); markDirty('columns'); }}
+            />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </SettingCard>
     </div>
   );
 }
