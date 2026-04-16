@@ -1321,7 +1321,11 @@ export default function ImportData() {
           },
         });
 
-        if (fnError) throw fnError;
+        // Extract the real error: SDK may swallow the body into fnData
+        if (fnError) {
+          const rawMsg = fnData?.error || fnError.message || 'Unknown error';
+          throw new Error(friendlyImportError(rawMsg));
+        }
 
         const newUserId = fnData?.profile?.id || null;
 
