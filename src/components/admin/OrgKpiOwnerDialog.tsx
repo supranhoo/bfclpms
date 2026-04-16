@@ -40,7 +40,7 @@ export function OrgKpiOwnerDialog({
     return profiles.filter(p => 
       !ownerIds.has(p.id) && (
         p.full_name?.toLowerCase().includes(query) ||
-        p.email.toLowerCase().includes(query) ||
+        p.email?.toLowerCase().includes(query) ||
         p.employee_code?.toLowerCase().includes(query)
       )
     );

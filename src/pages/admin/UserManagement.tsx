@@ -143,7 +143,7 @@ export default function UserManagement() {
     return profiles?.filter(p => {
       const matchesSearch = 
         p.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.employee_code?.toLowerCase().includes(searchQuery.toLowerCase());
       
       const role = (p.user_roles as any)?.[0]?.role || 'employee';
@@ -448,7 +448,7 @@ export default function UserManagement() {
     if (!selectedUser) return;
 
     // If email changed, update via edge function first
-    const emailChanged = editEmail.trim().toLowerCase() !== selectedUser.email.trim().toLowerCase();
+    const emailChanged = (editEmail.trim().toLowerCase()) !== (selectedUser.email?.trim().toLowerCase() || '');
     if (emailChanged) {
       try {
         const result = await invokeAdminEdgeFunction<{ success: boolean; message?: string; warning?: string }>(
@@ -525,8 +525,8 @@ export default function UserManagement() {
   };
 
   const openResetDialog = (user: NonNullable<typeof profiles>[number]) => {
-    setResetUserEmail(user.email);
-    setResetUserName(user.full_name || user.email);
+    setResetUserEmail(user.email || '');
+    setResetUserName(user.full_name || user.email || 'Unknown');
     resetPasswordDialog();
     setResetDialogOpen(true);
   };
@@ -775,7 +775,7 @@ export default function UserManagement() {
                       }} className="min-h-[44px]">
                         <Calendar className="h-4 w-4" />
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => confirmDelete(profile.id, profile.full_name || profile.email)} className="min-h-[44px]">
+                      <Button size="sm" variant="ghost" onClick={() => confirmDelete(profile.id, profile.full_name || profile.email || 'Unknown')} className="min-h-[44px]">
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </div>
@@ -829,7 +829,7 @@ export default function UserManagement() {
                           </Avatar>
                           <div>
                             <p className="font-medium">{profile.full_name}</p>
-                            <p className="text-xs text-muted-foreground">{profile.email}</p>
+                            <p className="text-xs text-muted-foreground">{profile.email || '—'}</p>
                           </div>
                         </div>
                       </TableCell>
@@ -877,7 +877,7 @@ export default function UserManagement() {
                               const role = (profile.user_roles as any)?.[0]?.role || 'employee';
                               setAssignTargetUser({
                                 id: profile.id,
-                                name: profile.full_name || profile.email,
+                                name: profile.full_name || profile.email || 'Unknown',
                                 departmentId: profile.department_id,
                                 role,
                               });
@@ -902,7 +902,7 @@ export default function UserManagement() {
                               setWorkingDaysEmployee({
                                 id: profile.id,
                                 full_name: profile.full_name,
-                                email: profile.email,
+                                email: profile.email || '',
                                 employee_code: profile.employee_code,
                               });
                               setWorkingDaysDialogOpen(true);
@@ -914,7 +914,7 @@ export default function UserManagement() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => confirmDelete(profile.id, profile.full_name || profile.email)}
+                            onClick={() => confirmDelete(profile.id, profile.full_name || profile.email || 'Unknown')}
                             title="Remove Employee"
                           >
                             <Trash2 className="h-4 w-4 text-destructive" />

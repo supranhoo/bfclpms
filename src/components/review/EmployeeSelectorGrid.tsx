@@ -461,7 +461,7 @@ export function EmployeeSelectorGrid({
   const demographicFilteredMembers = useMemo(() => {
     let filtered = baseMembers?.filter(p => 
       p.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.employee_code?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
