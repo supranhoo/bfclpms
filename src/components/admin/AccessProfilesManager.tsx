@@ -231,12 +231,34 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
 
   const [editedRights, setEditedRights] = useState<Record<string, { can_view: boolean; can_add: boolean; can_update: boolean; can_delete: boolean }>>({});
 
-  // Reset edited rights when profile changes
+  // Helper to extract scope form values from saved scopes
+  const extractScopeForm = useCallback((profileId: string) => {
+    const saved = orgScopes.filter((s: any) => s.profile_id === profileId);
+    return {
+      company_id: saved.filter((s: any) => s.company_id).map((s: any) => s.company_id),
+      division_id: saved.filter((s: any) => s.division_id).map((s: any) => s.division_id),
+      business_unit_id: saved.filter((s: any) => s.business_unit_id).map((s: any) => s.business_unit_id),
+      department_id: saved.filter((s: any) => s.department_id).map((s: any) => s.department_id),
+      location: saved.filter((s: any) => s.location).map((s: any) => s.location),
+      designation: saved.filter((s: any) => s.designation).map((s: any) => s.designation),
+      pms_grade: saved.filter((s: any) => s.pms_grade).map((s: any) => s.pms_grade),
+      level: saved.filter((s: any) => s.level).map((s: any) => s.level),
+    };
+  }, [orgScopes]);
+
+  // Pre-populate scopeForm when profile changes
   const handleProfileChange = (id: string) => {
     setSelectedProfileId(id);
     setEditedRights({});
-    setScopeForm({ company_id: [], division_id: [], business_unit_id: [], department_id: [], location: [], designation: [], pms_grade: [], level: [] });
+    setScopeForm(id ? extractScopeForm(id) : { company_id: [], division_id: [], business_unit_id: [], department_id: [], location: [], designation: [], pms_grade: [], level: [] });
   };
+
+  // Re-sync scopeForm when orgScopes data refreshes (e.g., after save)
+  useEffect(() => {
+    if (selectedProfileId) {
+      setScopeForm(extractScopeForm(selectedProfileId));
+    }
+  }, [orgScopes, selectedProfileId, extractScopeForm]);
 
   const getRights = (menuKey: string) => {
     if (editedRights[menuKey]) return editedRights[menuKey];
