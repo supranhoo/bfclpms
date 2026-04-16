@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-16  
-> **Version:** 2.18.1 — Null-email safety across all profile search and display paths.
+> **Version:** 2.19.0 — Custom Report Builder: admin-driven dynamic report creation with field selection and report sequencing.
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 

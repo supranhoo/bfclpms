@@ -578,6 +578,87 @@ export type Database = {
         }
         Relationships: []
       }
+      custom_reports: {
+        Row: {
+          category: string | null
+          color: string
+          columns: Json
+          created_at: string
+          created_by: string | null
+          default_sort: Json | null
+          description: string | null
+          export_excel: boolean
+          export_pdf: boolean
+          filename_template: string | null
+          filters: Json
+          group_by: string | null
+          icon: string
+          id: string
+          is_active: boolean
+          name: string
+          sort_order: number
+          updated_at: string
+          view_roles: string[]
+        }
+        Insert: {
+          category?: string | null
+          color?: string
+          columns?: Json
+          created_at?: string
+          created_by?: string | null
+          default_sort?: Json | null
+          description?: string | null
+          export_excel?: boolean
+          export_pdf?: boolean
+          filename_template?: string | null
+          filters?: Json
+          group_by?: string | null
+          icon?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          sort_order?: number
+          updated_at?: string
+          view_roles?: string[]
+        }
+        Update: {
+          category?: string | null
+          color?: string
+          columns?: Json
+          created_at?: string
+          created_by?: string | null
+          default_sort?: Json | null
+          description?: string | null
+          export_excel?: boolean
+          export_pdf?: boolean
+          filename_template?: string | null
+          filters?: Json
+          group_by?: string | null
+          icon?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          sort_order?: number
+          updated_at?: string
+          view_roles?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custom_reports_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custom_reports_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       departments: {
         Row: {
           business_unit_id: string | null

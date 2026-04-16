@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useReportAccess } from '@/hooks/useReportAccess';
 import { useMenuAccess } from '@/hooks/useMenuAccess';
+import { useActiveCustomReports } from '@/hooks/useCustomReports';
+import { useReportDisplayOrder } from '@/hooks/useReportColumnOverrides';
 import { 
   BarChart3, 
   FileText, 
@@ -190,12 +192,42 @@ const reports: ReportCard[] = [
   },
 ];
 
+const ICON_MAP: Record<string, React.ElementType> = {
+  BarChart3, FileText, AlertTriangle, TrendingUp, Building2, Users,
+  ClipboardList, Calendar, GraduationCap, Table2, Grid3X3, Workflow,
+};
+
 export default function ReportsHub() {
   const navigate = useNavigate();
   const { canView, isLoading } = useReportAccess();
   const { canAccess } = useMenuAccess();
+  const { data: customReports = [] } = useActiveCustomReports();
+  const { order: displayOrder } = useReportDisplayOrder();
 
-  const visibleReports = reports.filter(r => canView(r.reportKey) || canAccess(`reports-${r.reportKey}`));
+  // Combine pre-built + custom reports
+  const customCards: ReportCard[] = customReports.map(r => ({
+    title: r.name,
+    description: r.description || '',
+    icon: ICON_MAP[r.icon] || FileText,
+    path: `/reports/custom/${r.id}`,
+    color: r.color,
+    reportKey: `custom_${r.id}`,
+  }));
+
+  const allReports = [...reports, ...customCards];
+  const visibleReports = allReports.filter(r =>
+    r.reportKey.startsWith('custom_') || canView(r.reportKey) || canAccess(`reports-${r.reportKey}`)
+  );
+
+  // Apply display order
+  const orderedReports = displayOrder
+    ? [
+        ...displayOrder
+          .map(key => visibleReports.find(r => r.reportKey === key))
+          .filter(Boolean) as ReportCard[],
+        ...visibleReports.filter(r => !displayOrder.includes(r.reportKey)),
+      ]
+    : visibleReports;
 
   return (
     <div className="space-y-6">
@@ -206,7 +238,7 @@ export default function ReportsHub() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {visibleReports.map((report) => (
+        {orderedReports.map((report) => (
           <Card 
             key={report.path} 
             className="hover:shadow-md transition-shadow cursor-pointer group"
