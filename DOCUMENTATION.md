@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-16  
-> **Version:** 2.62.0 — Fix: Null-email crash guards across User Management, search filters, and assignment dialogs.
+> **Version:** 2.63.0 — Custom Report Builder: create dynamic reports, reorder Reports Hub, field picker with drag-and-drop.
 > **Maintainer:** Lovable AI
 > **Maintainer:** Lovable AI
 
@@ -5106,3 +5106,11 @@ Every new edge function **must** complete all of these steps before deployment:
 - **Problem**: Table headers scrolled out of view on long tables (Role Access, Employee Overrides, Profiles, Assignments).
 - **Fix**: Applied `sticky top-0 z-10 bg-background` to `TableHeader` with `max-h-[60vh] overflow-auto` container — headers stay pinned like Excel freeze panes.
 - **Modified files**: `src/components/admin/MenuAccessTab.tsx`, `src/components/admin/AccessProfilesManager.tsx`
+
+### v2.63.0 — Custom Report Builder (2026-04-16)
+- **Feature**: Full Report Builder in System Settings with three sections: Report Sequence, Customize Columns (pre-built), and Custom Reports CRUD.
+- **Custom Reports**: Admin can create reports by selecting fields from Employee, Organization, KPI, Scores, Achieved Values, and Workflow data sources. Supports field aliases, drag-and-drop ordering, filter rules, role-based access, and Excel export.
+- **Report Sequencing**: Drag-and-drop reorder of all reports (built-in + custom) on Reports Hub. Persisted via `report_display_order` system setting.
+- **Database**: New `custom_reports` table with RLS (admin full CRUD, role-filtered read for active reports).
+- **New files**: `src/lib/reportFieldRegistry.ts`, `src/hooks/useCustomReports.ts`, `src/hooks/useReportColumnOverrides.ts`, `src/components/admin/ReportBuilderTab.tsx`, `src/components/admin/ReportSequenceConfig.tsx`, `src/components/admin/ReportFieldPicker.tsx`, `src/components/admin/ReportFilterConfig.tsx`, `src/pages/reports/CustomReport.tsx`
+- **Modified files**: `src/pages/admin/SystemSettings.tsx`, `src/pages/reports/ReportsHub.tsx`, `src/App.tsx`
