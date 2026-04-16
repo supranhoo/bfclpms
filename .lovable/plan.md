@@ -1,77 +1,84 @@
 
 
-## Add Individual Report-Level Access in Menu Access Rights
+## Pre-Populate Org Scope Dropdowns with Saved Profile Selections
 
 ### Problem
-The Menu Access Rights grid under "Reports" section only shows 6 entries (View Reports, Performance Report, KRA Issuance, TNI Report, Incentive Report, Manager Team KPI). However, the Reports Hub contains 19 individual reports. The remaining 13 reports have no rows in `menu_access_config`, so admins cannot configure profile-based access for them.
+When an admin selects a profile in the Profile Mapping tab, the Org-Level Scope dropdowns always appear empty — even if that profile already has saved scope entries. The admin has no visual indication of what's currently configured and must mentally track existing scopes from the badge/list below. This makes editing (adding/removing individual scope values) error-prone.
 
 ### Target UI
 
 ```text
-Menu Access Rights (Profile Mapping tab)
-┌──────────┬──────────────────────────────────┬──────┬─────┬────────┬────────┐
-│ Section  │ Menu Item                        │ View │ Add │ Update │ Delete │
-├──────────┼──────────────────────────────────┼──────┼─────┼────────┼────────┤
-│ Reports  │ View Reports                     │ [ ]  │ [ ] │  [ ]   │  [ ]   │
-│          │ Employee Performance Summary     │ [ ]  │ [ ] │  [ ]   │  [ ]   │
-│          │ Performance Report               │ [ ]  │ [ ] │  [ ]   │  [ ]   │
-│          │ Monthly Scorecard                │ [ ]  │ [ ] │  [ ]   │  [ ]   │
-│          │ KRA Issuance                     │ [ ]  │ [ ] │  [ ]   │  [ ]   │
-│          │ Query Report                     │ [ ]  │ [ ] │  [ ]   │  [ ]   │
-│          │ Unified Issues Report            │ [ ]  │ [ ] │  [ ]   │  [ ]   │
-│          │ Completion Rate Report           │ [ ]  │ [ ] │  [ ]   │  [ ]   │
-│          │ Department Summary               │ [ ]  │ [ ] │  [ ]   │  [ ]   │
-│          │ Audit Trail Report               │ [ ]  │ [ ] │  [ ]   │  [ ]   │
-│          │ TNI Report                       │ [ ]  │ [ ] │  [ ]   │  [ ]   │
-│          │ KPI Detail Report                │ [ ]  │ [ ] │  [ ]   │  [ ]   │
-│          │ Workflow Bottleneck Report       │ [ ]  │ [ ] │  [ ]   │  [ ]   │
-│          │ KPI Status Tracker               │ [ ]  │ [ ] │  [ ]   │  [ ]   │
-│          │ KPI Journey Timeline             │ [ ]  │ [ ] │  [ ]   │  [ ]   │
-│          │ Variance Report                  │ [ ]  │ [ ] │  [ ]   │  [ ]   │
-│          │ Same KPI — Manager vs Team       │ [ ]  │ [ ] │  [ ]   │  [ ]   │
-│          │ Team Vs Manager Monthly Score    │ [ ]  │ [ ] │  [ ]   │  [ ]   │
-│          │ KPI Scorecard Detail             │ [ ]  │ [ ] │  [ ]   │  [ ]   │
-│          │ KPI-Employee Score Matrix        │ [ ]  │ [ ] │  [ ]   │  [ ]   │
-│          │ Incentive Report                 │ [ ]  │ [ ] │  [ ]   │  [ ]   │
-│          │ Manager Team KPI                 │ [ ]  │ [ ] │  [ ]   │  [ ]   │
-└──────────┴──────────────────────────────────┴──────┴─────┴────────┴────────┘
+Profile: [Payroll HASP ▼]
+
+Org-Level Scope
+┌────────────────┐  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐
+│ Company...   ▼ │  │ Division...  ▼ │  │ Business U.. ▼ │  │ Department.. ▼ │
+└────────────────┘  └────────────────┘  └────────────────┘  └────────────────┘
+
+  When dropdown opens:
+  ┌──────────────────────┐
+  │ 🔍 Company...        │
+  │ ─────────────────── │
+  │ — None —             │
+  │ ☑ Select All (2)     │
+  │ ✅ Bihar Foundry &   │   ← pre-ticked (already saved)
+  │    Casting Limited   │
+  │ ☐ Saibal Kunar      │
+  └──────────────────────┘
+
+  ✓ 3 scope entries configured          🗑 Clear All
+     ┌──────────────────────────────────────────────┐
+     │ Bihar Foundry & Casting Limited         [x]  │  ← individual remove
+     │ Division: Manufacturing                 [x]  │
+     │ Grade: A1                               [x]  │
+     └──────────────────────────────────────────────┘
+
+  [Save Scope]  ← replaces "Add Scope"; saves the full state
 ```
 
 ### Solution
-Insert the 13 missing report entries into `menu_access_config` with section `'reports'` and appropriate `display_order` values. Wire the `ReportRoute` to also check `canAccess()` for the matching `reports-{reportKey}` menu key (already done). No code changes needed — only a DB migration.
+In `handleProfileChange`, after setting `selectedProfileId`, extract the saved `profileScopes` and pre-populate `scopeForm` arrays so the multi-select dropdowns reflect the current state. This way:
+- Existing selections appear **ticked** in the dropdowns
+- Admin can **untick** to remove or **tick** to add new values
+- The "Add Scope" button becomes "Save Scope" and performs a **replace** operation (delete old scopes, insert new ones)
 
 ### Changes
 
-**Database Migration** — Insert 13 missing report rows into `menu_access_config`:
+**File: `src/components/admin/AccessProfilesManager.tsx`**
 
-| menu_key | menu_name | display_order |
-|---|---|---|
-| `reports-employee-summary` | Employee Performance Summary | 101 |
-| `reports-monthly-scorecard` | Monthly Scorecard | 103 |
-| `reports-queries` | Query Report | 106 |
-| `reports-issues` | Unified Issues Report | 107 |
-| `reports-completion` | Completion Rate Report | 108 |
-| `reports-department` | Department Summary | 109 |
-| `reports-audit-trail` | Audit Trail Report | 110 |
-| `reports-kpi-detail` | KPI Detail Report | 111 |
-| `reports-bottleneck` | Workflow Bottleneck Report | 112 |
-| `reports-kpi-status-tracker` | KPI Status Tracker | 113 |
-| `reports-kpi-journey` | KPI Journey Timeline | 114 |
-| `reports-variance` | Variance Report | 115 |
-| `reports-team-vs-manager-score` | Team Vs Manager Monthly Score | 116 |
-| `reports-kpi-scorecard-detail` | KPI Scorecard Detail | 117 |
-| `reports-kpi-employee-matrix` | KPI-Employee Score Matrix | 118 |
+1. **`handleProfileChange`** — Instead of resetting `scopeForm` to empty, derive initial values from `profileScopes`:
+   ```tsx
+   const handleProfileChange = (id: string) => {
+     setSelectedProfileId(id);
+     setEditedRights({});
+     // Pre-populate scopeForm from saved scopes
+     const saved = orgScopes.filter((s: any) => s.profile_id === id);
+     setScopeForm({
+       company_id: saved.filter((s: any) => s.company_id).map((s: any) => s.company_id),
+       division_id: saved.filter((s: any) => s.division_id).map((s: any) => s.division_id),
+       business_unit_id: saved.filter((s: any) => s.business_unit_id).map((s: any) => s.business_unit_id),
+       department_id: saved.filter((s: any) => s.department_id).map((s: any) => s.department_id),
+       location: saved.filter((s: any) => s.location).map((s: any) => s.location),
+       designation: saved.filter((s: any) => s.designation).map((s: any) => s.designation),
+       pms_grade: saved.filter((s: any) => s.pms_grade).map((s: any) => s.pms_grade),
+       level: saved.filter((s: any) => s.level).map((s: any) => s.level),
+     });
+   };
+   ```
 
-All rows use `section = 'reports'` and `allowed_roles = '{admin}'` (default — admins configure profile-based access from there).
+2. **"Add Scope" → "Save Scope"** — Change the button label and logic:
+   - Compare current `scopeForm` with existing `profileScopes`
+   - Delete removed scopes, insert new ones (or do a full replace: delete all existing, insert all current)
+   - This makes the dropdowns a true **edit** interface, not just an "add" interface
 
-**File: `src/components/layout/ReportRoute.tsx`** — Already checks `canAccess('reports-{reportKey}')`, so no changes needed.
+3. **Track dirty state** — Add a `useMemo` that compares `scopeForm` values vs saved scopes to enable/disable the Save button and show a "modified" indicator.
 
-**File: `src/pages/reports/ReportsHub.tsx`** — Update `visibleReports` filter to also check `canAccess('reports-{reportKey}')` via `useMenuAccess`, so profile-based report visibility works on the hub page too.
+4. **Also re-populate on orgScopes refetch** — Add a `useEffect` that syncs `scopeForm` when `orgScopes` data changes (e.g., after a save), so the UI stays in sync.
 
-**Files: `DOCUMENTATION.md`, `POLICY.md`** — Version bump.
+**Files: `DOCUMENTATION.md`, `POLICY.md`** — Version bump
 
 ### Risk Assessment
-- **Data impact**: Additive INSERT only, no existing data affected
-- **Regression risk**: None — existing 6 report entries remain unchanged; new rows use `ON CONFLICT DO NOTHING`
-- **UX improvement**: All 19+ reports individually configurable in Menu Access Rights grid
+- **Data impact**: The save operation replaces scope rows (delete + insert), but the net result is the same as the admin's dropdown selections — no data loss risk
+- **Regression risk**: Low — the `OrgFilterCombobox` already supports multi-select with pre-populated `values`; we're just feeding it saved data instead of empty arrays
+- **UX improvement**: Admins can now see and modify existing scope configurations directly from the dropdowns without guessing what's already saved
 
