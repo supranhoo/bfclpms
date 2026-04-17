@@ -23,6 +23,9 @@ interface DryRunResult {
     employees_with_selected_period_data?: number;
     employees_with_resolved_rate?: number;
     employees_skipped_no_rate?: number;
+    vessel_program_detected?: boolean;
+    employees_with_vessel_rate?: number;
+    employees_with_vessel_entries?: number;
     records_pre_scope?: number;
     records_post_scope?: number;
   };
@@ -99,11 +102,21 @@ export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, i
             {result.message && <p className="font-medium text-foreground">{result.message}</p>}
             {result.diagnostics && (
               <p className="text-muted-foreground">
-                Mode: <span className="font-medium">{result.diagnostics.detected_program_type ?? '—'}</span> ·
+                Mode: <span className="font-medium">{result.diagnostics.detected_program_type ?? '—'}</span>
+                {result.diagnostics.vessel_program_detected && <> · <span className="font-medium text-foreground">Vessel-based</span></>} ·
                 In scope: <span className="font-medium">{result.diagnostics.employees_in_scope ?? '—'}</span> ·
-                With daily data: <span className="font-medium">{result.diagnostics.employees_with_daily_entries ?? '—'}</span> ·
-                With rate: <span className="font-medium">{result.diagnostics.employees_with_resolved_rate ?? '—'}</span> ·
-                Skipped (no rate): <span className="font-medium">{result.diagnostics.employees_skipped_no_rate ?? 0}</span>
+                {result.diagnostics.vessel_program_detected ? (
+                  <>
+                    With vessel rate: <span className="font-medium">{result.diagnostics.employees_with_vessel_rate ?? 0}</span> ·
+                    With vessel entries: <span className="font-medium">{result.diagnostics.employees_with_vessel_entries ?? 0}</span>
+                  </>
+                ) : (
+                  <>
+                    With daily data: <span className="font-medium">{result.diagnostics.employees_with_daily_entries ?? '—'}</span> ·
+                    With rate: <span className="font-medium">{result.diagnostics.employees_with_resolved_rate ?? '—'}</span> ·
+                    Skipped (no rate): <span className="font-medium">{result.diagnostics.employees_skipped_no_rate ?? 0}</span>
+                  </>
+                )}
               </p>
             )}
           </div>
