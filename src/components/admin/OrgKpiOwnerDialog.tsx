@@ -188,6 +188,19 @@ export function OrgKpiOwnerDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <ConfirmDestructiveDialog
+        open={!!removingOwner}
+        onConfirm={() => {
+          if (!removingOwner) return;
+          removeOwner.mutate(removingOwner.id, { onSuccess: () => setRemovingOwner(null) });
+        }}
+        onCancel={() => setRemovingOwner(null)}
+        title="Remove Data Owner?"
+        description={`This will remove ${removingOwner?.name} as a data owner for this KPI. They will lose the ability to enter data for it. This cannot be undone.`}
+        confirmLabel="Remove Owner"
+        isLoading={removeOwner.isPending}
+      />
     </Dialog>
   );
 }

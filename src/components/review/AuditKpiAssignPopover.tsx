@@ -81,7 +81,7 @@ export function AuditKpiAssignPopover({ kpiId, currentAssignment }: AuditKpiAssi
         </div>
         {currentAssignment && (
           <button
-            onClick={handleRemove}
+            onClick={() => { setOpen(false); setConfirmRemove(true); }}
             className="w-full mt-1 text-left px-2 py-1.5 text-sm rounded-md hover:bg-destructive/10 text-destructive flex items-center gap-1.5"
             disabled={removeMutation.isPending}
           >
@@ -90,6 +90,16 @@ export function AuditKpiAssignPopover({ kpiId, currentAssignment }: AuditKpiAssi
           </button>
         )}
       </PopoverContent>
+
+      <ConfirmDestructiveDialog
+        open={confirmRemove}
+        onConfirm={() => { handleRemove(); setConfirmRemove(false); }}
+        onCancel={() => setConfirmRemove(false)}
+        title="Remove KPI Assignment?"
+        description={`This will unassign ${currentAssignment?.auditor_name || 'the auditor'} from this KPI. The KPI will revert to default audit routing. This cannot be undone.`}
+        confirmLabel="Remove Assignment"
+        isLoading={removeMutation.isPending}
+      />
     </Popover>
   );
 }
