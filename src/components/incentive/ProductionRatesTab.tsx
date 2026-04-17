@@ -17,7 +17,7 @@ interface Props {
   programId: string;
 }
 
-type RateType = 'employee' | 'department' | 'bu' | 'common';
+type RateType = 'employee' | 'department' | 'bu' | 'company' | 'common';
 
 export function ProductionRatesTab({ programId }: Props) {
   const { data: rates = [], isLoading } = useProductionRates(programId);
