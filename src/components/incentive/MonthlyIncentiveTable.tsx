@@ -273,7 +273,7 @@ export function MonthlyIncentiveTable() {
   const handleConfirmAll = () => {
     const drafts = filteredRecords.filter((r: any) => r.status === 'draft');
     const targets = selectedCount > 0
-      ? drafts.filter((r: any) => selectedIds.has(r.id))
+      ? (() => { const idSet = new Set(selectedRecordIds); return drafts.filter((r: any) => idSet.has(r.id)); })()
       : drafts;
     const draftIds = targets.map((r: any) => r.id);
     if (draftIds.length > 0 && user?.id) confirmRecords.mutate({ ids: draftIds, confirmedBy: user.id });
