@@ -116,7 +116,13 @@ export function useComputeIncentives() {
   const qc = useQueryClient();
   const { toast } = useToast();
   return useMutation({
-    mutationFn: async (body: { review_period: string; review_year: number; program_id: string; dry_run?: boolean }) => {
+    mutationFn: async (body: {
+      review_period: string;
+      review_year: number;
+      program_id: string;
+      dry_run?: boolean;
+      scope?: { employee_ids?: string[]; payment_period?: string | null };
+    }) => {
       const { data, error } = await supabase.functions.invoke('compute-monthly-incentives', { body });
       if (error) throw error;
       return data;
