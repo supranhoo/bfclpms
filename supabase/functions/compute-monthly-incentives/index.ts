@@ -280,6 +280,7 @@ serve(async (req) => {
     const buToDivision = new Map<string, string | null>();
     const buToCompany = new Map<string, string | null>();
     const divToCompany = new Map<string, string | null>();
+    const empToCompanyDirect = new Map<string, string | null>();
     {
       const { data: allDepts } = await supabase
         .from('departments').select('id, business_unit_id');
@@ -293,6 +294,13 @@ serve(async (req) => {
       allBus?.forEach((b: any) => {
         buToDivision.set(b.id, b.division_id ?? null);
         buToCompany.set(b.id, b.division_id ? (divToCompany.get(b.division_id) ?? null) : null);
+      });
+
+      // Direct profiles.company_id (parity with UI's useCompanyFilter)
+      const { data: profCompanies } = await supabase
+        .from('profiles').select('id, company_id');
+      profCompanies?.forEach((p: any) => {
+        if (p.company_id) empToCompanyDirect.set(p.id, p.company_id);
       });
     }
 
@@ -395,9 +403,10 @@ serve(async (req) => {
         // Resolve employee scope chain (reuse maps built above)
         const empBuId = emp.department_id ? (deptToBu.get(emp.department_id) ?? null) : null;
         const empDivisionId = empBuId ? (buToDivision.get(empBuId) ?? null) : null;
-        const empCompanyId = empDivisionId
-          ? (divToCompany.get(empDivisionId) ?? null)
-          : (empBuId ? (buToCompany.get(empBuId) ?? null) : null);
+        const empCompanyId = empToCompanyDirect.get(emp.id)
+          ?? (empDivisionId
+            ? (divToCompany.get(empDivisionId) ?? null)
+            : (empBuId ? (buToCompany.get(empBuId) ?? null) : null));
 
         const wantCategory = program.program_type === 'support' ? 'pms_score' : 'production';
         const candidates: { slab: any; specificity: number }[] = [];
@@ -707,6 +716,29 @@ serve(async (req) => {
       scopedRecords = records.filter((r: any) => r.payment_period === scopePaymentPeriod);
     }
 
+    // Diagnostic counters — surface why a non-empty in-scope set produced 0 records
+    const employeesProcessed = employees.length;
+    const recordsPreScope = records.length;
+    const recordsPostScope = scopedRecords.length;
+    let diagnosticMessage: string | null = null;
+    if (recordsPostScope === 0) {
+      if (employeesProcessed === 0) {
+        diagnosticMessage = `No employees match the selected filters for ${review_period} ${review_year}.`;
+      } else if (recordsPreScope === 0) {
+        diagnosticMessage = `No production data found for the ${employeesProcessed} selected employee(s) in ${review_period} ${review_year}.`;
+      } else if (scopePaymentPeriod) {
+        // Identify employees with data in OTHER periods
+        const otherPeriodEmpIds = new Set<string>(
+          records
+            .filter((r: any) => r.payment_period !== scopePaymentPeriod)
+            .map((r: any) => r.employee_id)
+        );
+        diagnosticMessage = `No production entries fall in period ${scopePaymentPeriod}. ${otherPeriodEmpIds.size} employee(s) have data in other periods. Switch the Period filter to "All" or another range to view them.`;
+      } else {
+        diagnosticMessage = `No incentive records produced for ${employeesProcessed} employee(s).`;
+      }
+    }
+
     // 6. Compute summary stats
     const eligible = scopedRecords.filter((r: any) => !r.is_disqualified);
     const disqualified = scopedRecords.filter((r: any) => r.is_disqualified);
@@ -728,10 +760,16 @@ serve(async (req) => {
       },
     };
 
+    const diagnostics = {
+      employees_processed: employeesProcessed,
+      records_pre_scope: recordsPreScope,
+      records_post_scope: recordsPostScope,
+    };
+
     // In dry_run mode, return preview without writing
     if (dry_run) {
       return new Response(
-        JSON.stringify({ computed: scopedRecords.length, program: program.name, dry_run: true, summary, records: scopedRecords }),
+        JSON.stringify({ computed: scopedRecords.length, program: program.name, dry_run: true, summary, records: scopedRecords, message: diagnosticMessage, diagnostics }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -770,7 +808,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ computed: scopedRecords.length, program: program.name, summary }),
+      JSON.stringify({ computed: scopedRecords.length, program: program.name, summary, message: diagnosticMessage, diagnostics }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (err) {
