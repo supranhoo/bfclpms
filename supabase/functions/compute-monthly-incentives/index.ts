@@ -131,7 +131,11 @@ serve(async (req) => {
         : scopeEmployeeIds.slice();
       if (employeeFilter.length === 0) {
         return new Response(
-          JSON.stringify({ computed: 0, message: 'No employees match selected filters' }),
+          JSON.stringify({
+            computed: 0,
+            message: 'No employees remain after intersecting programme mappings with the selected Company filter. Adjust the Company filter or update programme mappings.',
+            diagnostics: { employees_in_scope: 0, employees_processed: 0, records_pre_scope: 0, records_post_scope: 0 },
+          }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -146,8 +150,11 @@ serve(async (req) => {
 
     if (employeeFilter !== null) {
       if (employeeFilter.length === 0) {
-        return new Response(JSON.stringify({ computed: 0, message: 'No employees match program mappings' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({
+          computed: 0,
+          message: 'No employees match programme mappings. Configure mappings in the programme settings.',
+          diagnostics: { employees_in_scope: 0, employees_processed: 0, records_pre_scope: 0, records_post_scope: 0 },
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
       // Batch employee filter in groups of 100 to avoid query limits
       const allEmployees: any[] = [];
@@ -167,7 +174,11 @@ serve(async (req) => {
     }
 
     if (!employees?.length) {
-      return new Response(JSON.stringify({ computed: 0 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({
+        computed: 0,
+        message: 'No active employees resolved. They may have been deactivated since the programme mapping was created.',
+        diagnostics: { employees_in_scope: employeeFilter?.length ?? 0, employees_processed: 0, records_pre_scope: 0, records_post_scope: 0 },
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // 3. Fetch eligibility data
@@ -315,6 +326,9 @@ serve(async (req) => {
     // 6. Compute incentive for each employee
     const records: any[] = [];
     let computed = 0;
+    // Per-employee rate diagnostics (production programmes only)
+    let employeesWithResolvedRate = 0;
+    let employeesSkippedNoRate = 0;
 
     for (const emp of employees) {
       const elig = eligMap.get(emp.id);
@@ -369,9 +383,15 @@ serve(async (req) => {
       if (program.program_type === 'production') {
         productionTotalTons = prodEntryMap.get(emp.id) ?? null;
 
-        // Resolve BU and company for this employee
+        // Resolve BU and company for this employee — UNIFIED resolver:
+        // prefer profiles.company_id (parity with UI Company filter & slab matching),
+        // fallback to dept → BU → division → company chain.
         const empBuId = emp.department_id ? (deptToBu.get(emp.department_id) ?? null) : null;
-        const empCompanyId = empBuId ? (buToCompany.get(empBuId) ?? null) : null;
+        const empDivisionIdForRate = empBuId ? (buToDivision.get(empBuId) ?? null) : null;
+        const empCompanyId = empToCompanyDirect.get(emp.id)
+          ?? (empDivisionIdForRate
+            ? (divToCompany.get(empDivisionIdForRate) ?? null)
+            : (empBuId ? (buToCompany.get(empBuId) ?? null) : null));
 
         // Pick latest-effective rate (effective_from <= periodEnd) per scope
         const pickLatest = (filterFn: (r: any) => boolean) => {
@@ -391,6 +411,12 @@ serve(async (req) => {
 
         const rateRecord = empRate || deptRate || buRate || companyRate || commonRate;
         resolvedRate = rateRecord?.rate_per_ton ?? null;
+
+        // Track rate resolution for diagnostics (only when employee actually has daily data)
+        if (prodDailyMap.has(emp.id)) {
+          if (resolvedRate !== null) employeesWithResolvedRate++;
+          else employeesSkippedNoRate++;
+        }
 
         if (productionTotalTons !== null && resolvedRate !== null) {
           incentiveAmount = productionTotalTons * resolvedRate;
@@ -689,23 +715,28 @@ serve(async (req) => {
     const employeesProcessed = employees.length;
     const recordsPreScope = records.length;
     const recordsPostScope = scopedRecords.length;
+    const employeesWithDailyEntries = program.program_type === 'production' ? prodDailyMap.size : employeesProcessed;
     let diagnosticMessage: string | null = null;
     if (recordsPostScope === 0) {
       if (employeesProcessed === 0) {
         diagnosticMessage = `No employees match the selected filters for ${review_period} ${review_year}.`;
+      } else if (program.program_type === 'production' && employeesWithDailyEntries === 0) {
+        diagnosticMessage = `${employeesProcessed} employee(s) match the programme, but none have production daily entries for ${review_period} ${review_year}. Enter daily production values first.`;
+      } else if (program.program_type === 'production' && employeesSkippedNoRate > 0 && employeesWithResolvedRate === 0) {
+        diagnosticMessage = `${employeesSkippedNoRate} employee(s) have production data but no production rate resolves (employee/department/BU/company/common). Configure rates in the programme's Production Rates tab.`;
       } else if (recordsPreScope === 0) {
         diagnosticMessage = `No production data found for the ${employeesProcessed} selected employee(s) in ${review_period} ${review_year}.`;
       } else if (scopePaymentPeriod) {
-        // Identify employees with data in OTHER periods
         const otherPeriodEmpIds = new Set<string>(
-          records
-            .filter((r: any) => r.payment_period !== scopePaymentPeriod)
-            .map((r: any) => r.employee_id)
+          records.filter((r: any) => r.payment_period !== scopePaymentPeriod).map((r: any) => r.employee_id)
         );
         diagnosticMessage = `No production entries fall in period ${scopePaymentPeriod}. ${otherPeriodEmpIds.size} employee(s) have data in other periods. Switch the Period filter to "All" or another range to view them.`;
       } else {
         diagnosticMessage = `No incentive records produced for ${employeesProcessed} employee(s).`;
       }
+    } else if (program.program_type === 'production' && employeesSkippedNoRate > 0) {
+      // Partial success — still warn about skipped employees
+      diagnosticMessage = `Computed ${recordsPostScope} record(s). ${employeesSkippedNoRate} employee(s) were skipped because no production rate resolves for them.`;
     }
 
     // 6. Compute summary stats
@@ -729,15 +760,18 @@ serve(async (req) => {
       },
     };
 
-    const employeesWithDailyEntries = new Set<string>(records.map((r: any) => r.employee_id)).size;
     const employeesWithSelectedPeriodData = scopePaymentPeriod
       ? new Set<string>(records.filter((r: any) => r.payment_period === scopePaymentPeriod).map((r: any) => r.employee_id)).size
       : employeesWithDailyEntries;
 
     const diagnostics: any = {
+      detected_program_type: program.program_type,
+      employees_in_scope: scopeEmployeeIds ? scopeEmployeeIds.length : (employeeFilter?.length ?? employeesProcessed),
       employees_processed: employeesProcessed,
       employees_with_daily_entries: employeesWithDailyEntries,
       employees_with_selected_period_data: employeesWithSelectedPeriodData,
+      employees_with_resolved_rate: employeesWithResolvedRate,
+      employees_skipped_no_rate: employeesSkippedNoRate,
       records_pre_scope: recordsPreScope,
       records_post_scope: recordsPostScope,
       legacy_rows_deleted: 0,

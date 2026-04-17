@@ -131,10 +131,21 @@ export function useComputeIncentives() {
       if (!variables.dry_run) {
         qc.invalidateQueries({ queryKey: ['incentive-records'] });
         const computed = data?.computed ?? 0;
-        if (computed === 0 && data?.message) {
-          toast({ title: 'No records computed', description: data.message, variant: 'destructive' });
+        const diag = data?.diagnostics;
+        const diagLine = diag
+          ? `Scope ${diag.employees_in_scope ?? '—'} · with daily data ${diag.employees_with_daily_entries ?? '—'} · with rate ${diag.employees_with_resolved_rate ?? '—'} · skipped (no rate) ${diag.employees_skipped_no_rate ?? 0}`
+          : null;
+        if (computed === 0) {
+          toast({
+            title: 'No records computed',
+            description: data?.message ? `${data.message}${diagLine ? `\n${diagLine}` : ''}` : (diagLine || 'No records were produced for the selected scope.'),
+            variant: 'destructive',
+          });
         } else {
-          toast({ title: 'Incentives computed', description: `${computed} record(s) processed` });
+          toast({
+            title: 'Incentives computed',
+            description: `${computed} record(s) processed${data?.message ? `\n${data.message}` : ''}${diagLine ? `\n${diagLine}` : ''}`,
+          });
         }
       }
     },
