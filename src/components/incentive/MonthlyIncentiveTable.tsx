@@ -547,9 +547,9 @@ export function MonthlyIncentiveTable() {
                               return <Badge variant="outline" className="text-xs">No KPIs</Badge>;
                             }
                             return ks.allApproved ? (
-                              <Badge className="text-xs bg-green-600 hover:bg-green-600 text-white">Approved</Badge>
+                              <Badge className="text-xs">Approved</Badge>
                             ) : (
-                              <Badge variant="outline" className="text-xs border-amber-500 text-amber-700">
+                              <Badge variant="outline" className="text-xs">
                                 Pending ({ks.approved}/{ks.total})
                               </Badge>
                             );
