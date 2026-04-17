@@ -21,10 +21,12 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: auth.error }), { status: auth.status || 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const { review_period, review_year, program_id, dry_run = false } = await req.json();
+    const { review_period, review_year, program_id, dry_run = false, scope } = await req.json();
     if (!review_period || !review_year) {
       return new Response(JSON.stringify({ error: 'review_period and review_year required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
+    const scopeEmployeeIds: string[] | null = Array.isArray(scope?.employee_ids) && scope.employee_ids.length > 0 ? scope.employee_ids : null;
+    const scopePaymentPeriod: string | null = scope?.payment_period || null;
 
     // 1. Fetch the program and its slabs
     const { data: program } = await supabase
@@ -119,6 +121,20 @@ serve(async (req) => {
       }
 
       employeeFilter = Array.from(eligibleIds);
+    }
+
+    // Intersect with caller-supplied scope (UI Company filter)
+    if (scopeEmployeeIds) {
+      const scopeSet = new Set(scopeEmployeeIds);
+      employeeFilter = employeeFilter
+        ? employeeFilter.filter(id => scopeSet.has(id))
+        : scopeEmployeeIds.slice();
+      if (employeeFilter.length === 0) {
+        return new Response(
+          JSON.stringify({ computed: 0, message: 'No employees match selected filters' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     // Fetch employees (filtered if mappings exist, otherwise all)
