@@ -334,21 +334,20 @@ serve(async (req) => {
       let resolvedRate: number | null = null;
       let incentiveAmount = 0;
 
+      // Period-end date (used by both production rate cascade and slab effective-from gating)
+      const MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+      const monthIdx = MONTHS.indexOf(String(review_period).toLowerCase());
+      const periodEndDate = monthIdx >= 0
+        ? new Date(Date.UTC(review_year, monthIdx + 1, 0))
+        : new Date();
+      const periodEndStr = periodEndDate.toISOString().slice(0, 10);
+
       if (program.program_type === 'production') {
         productionTotalTons = prodEntryMap.get(emp.id) ?? null;
 
         // Resolve BU and company for this employee
         const empBuId = emp.department_id ? (deptToBu.get(emp.department_id) ?? null) : null;
         const empCompanyId = empBuId ? (buToCompany.get(empBuId) ?? null) : null;
-
-        // Compute period-end date for effective-from filtering
-        const MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december'];
-        const monthIdx = MONTHS.indexOf(String(review_period).toLowerCase());
-        // Last day of month: use day 0 of next month
-        const periodEndDate = monthIdx >= 0
-          ? new Date(Date.UTC(review_year, monthIdx + 1, 0))
-          : new Date();
-        const periodEndStr = periodEndDate.toISOString().slice(0, 10);
 
         // Pick latest-effective rate (effective_from <= periodEnd) per scope
         const pickLatest = (filterFn: (r: any) => boolean) => {
