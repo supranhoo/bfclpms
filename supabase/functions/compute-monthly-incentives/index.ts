@@ -131,7 +131,11 @@ serve(async (req) => {
         : scopeEmployeeIds.slice();
       if (employeeFilter.length === 0) {
         return new Response(
-          JSON.stringify({ computed: 0, message: 'No employees match selected filters' }),
+          JSON.stringify({
+            computed: 0,
+            message: 'No employees remain after intersecting programme mappings with the selected Company filter. Adjust the Company filter or update programme mappings.',
+            diagnostics: { employees_in_scope: 0, employees_processed: 0, records_pre_scope: 0, records_post_scope: 0 },
+          }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
