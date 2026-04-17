@@ -67,10 +67,11 @@ export function useIncentiveSlabs(programId?: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('incentive_slabs')
-        .select('*, business_units(name)')
+        .select('*, business_units(name), departments(name), companies(name), divisions(name), pms_grades(name)')
         .eq('program_id', programId!)
         .order('slab_category')
         .order('sub_category')
+        .order('effective_from', { ascending: false })
         .order('sort_order');
       if (error) throw error;
       return data;
@@ -83,11 +84,15 @@ export function useUpsertSlab() {
   const { toast } = useToast();
   return useMutation({
     mutationFn: async (values: {
-      id?: string; program_id: string; business_unit_id?: string | null;
-      department_id?: string | null; applicable_designations?: string[] | null;
+      id?: string; program_id: string;
+      company_id?: string | null; division_id?: string | null;
+      business_unit_id?: string | null; department_id?: string | null;
+      pms_grade_id?: string | null; location?: string | null; pms_level?: string | null;
+      applicable_designations?: string[] | null;
       slab_category: string; sub_category?: string | null;
       min_value: number; max_value: number; incentive_percent: number;
       rating_label?: string | null; sort_order?: number;
+      effective_from?: string | null;
     }) => {
       if (values.id) {
         const { id, ...rest } = values;

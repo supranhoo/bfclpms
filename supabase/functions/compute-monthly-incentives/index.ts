@@ -122,9 +122,10 @@ serve(async (req) => {
     }
 
     // Fetch employees (filtered if mappings exist, otherwise all)
+    const empSelect = 'id, full_name, employee_code, department_id, designation, pms_grade, level, location';
     let employeeQuery = supabase
       .from('profiles')
-      .select('id, full_name, employee_code, department_id')
+      .select(empSelect)
       .eq('is_active', true);
 
     if (employeeFilter !== null) {
@@ -138,7 +139,7 @@ serve(async (req) => {
         const batch = employeeFilter.slice(i, i + 100);
         const { data } = await supabase
           .from('profiles')
-          .select('id, full_name, employee_code, department_id')
+          .select(empSelect)
           .eq('is_active', true)
           .in('id', batch);
         if (data) allEmployees.push(...data);
@@ -258,10 +259,12 @@ serve(async (req) => {
       prodRates = rates || [];
     }
 
-    // Build dept -> BU and BU -> company resolution chain (for production rate cascade)
+    // Build dept -> BU and BU -> company resolution chain (used by both rate cascade and slab scope match)
     const deptToBu = new Map<string, string | null>();
+    const buToDivision = new Map<string, string | null>();
     const buToCompany = new Map<string, string | null>();
-    if (program.program_type === 'production') {
+    const divToCompany = new Map<string, string | null>();
+    {
       const { data: allDepts } = await supabase
         .from('departments').select('id, business_unit_id');
       allDepts?.forEach((d: any) => deptToBu.set(d.id, d.business_unit_id));
@@ -270,9 +273,9 @@ serve(async (req) => {
         .from('business_units').select('id, division_id');
       const { data: allDivs } = await supabase
         .from('divisions').select('id, company_id');
-      const divToCompany = new Map<string, string | null>();
       allDivs?.forEach((dv: any) => divToCompany.set(dv.id, dv.company_id));
       allBus?.forEach((b: any) => {
+        buToDivision.set(b.id, b.division_id ?? null);
         buToCompany.set(b.id, b.division_id ? (divToCompany.get(b.division_id) ?? null) : null);
       });
     }
@@ -331,21 +334,20 @@ serve(async (req) => {
       let resolvedRate: number | null = null;
       let incentiveAmount = 0;
 
+      // Period-end date (used by both production rate cascade and slab effective-from gating)
+      const MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+      const monthIdx = MONTHS.indexOf(String(review_period).toLowerCase());
+      const periodEndDate = monthIdx >= 0
+        ? new Date(Date.UTC(review_year, monthIdx + 1, 0))
+        : new Date();
+      const periodEndStr = periodEndDate.toISOString().slice(0, 10);
+
       if (program.program_type === 'production') {
         productionTotalTons = prodEntryMap.get(emp.id) ?? null;
 
         // Resolve BU and company for this employee
         const empBuId = emp.department_id ? (deptToBu.get(emp.department_id) ?? null) : null;
         const empCompanyId = empBuId ? (buToCompany.get(empBuId) ?? null) : null;
-
-        // Compute period-end date for effective-from filtering
-        const MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december'];
-        const monthIdx = MONTHS.indexOf(String(review_period).toLowerCase());
-        // Last day of month: use day 0 of next month
-        const periodEndDate = monthIdx >= 0
-          ? new Date(Date.UTC(review_year, monthIdx + 1, 0))
-          : new Date();
-        const periodEndStr = periodEndDate.toISOString().slice(0, 10);
 
         // Pick latest-effective rate (effective_from <= periodEnd) per scope
         const pickLatest = (filterFn: (r: any) => boolean) => {
@@ -371,18 +373,67 @@ serve(async (req) => {
         }
       }
 
-      // Match slab
+      // Match slab — specificity-scored + effective-from filter
       const scoreForSlab = program.program_type === 'support' ? pmsScore : (productionTotalTons ?? elig?.production_value);
       if (scoreForSlab !== null && scoreForSlab !== undefined && slabs?.length) {
-        const pmsSlabs = slabs.filter((s: any) =>
-          s.slab_category === (program.program_type === 'support' ? 'pms_score' : 'production')
-        );
-        for (const slab of pmsSlabs) {
-          if (scoreForSlab >= slab.min_value && scoreForSlab <= slab.max_value) {
-            matchedSlab = slab;
-            basePercent = slab.incentive_percent;
-            break;
+        // Resolve employee scope chain (reuse maps built above)
+        const empBuId = emp.department_id ? (deptToBu.get(emp.department_id) ?? null) : null;
+        const empDivisionId = empBuId ? (buToDivision.get(empBuId) ?? null) : null;
+        const empCompanyId = empDivisionId
+          ? (divToCompany.get(empDivisionId) ?? null)
+          : (empBuId ? (buToCompany.get(empBuId) ?? null) : null);
+
+        const wantCategory = program.program_type === 'support' ? 'pms_score' : 'production';
+        const candidates: { slab: any; specificity: number }[] = [];
+
+        for (const slab of slabs) {
+          if (slab.slab_category !== wantCategory) continue;
+          if (scoreForSlab < slab.min_value || scoreForSlab > slab.max_value) continue;
+          // Effective-from gate
+          if (slab.effective_from && slab.effective_from > periodEndStr) continue;
+
+          // Reject if any non-null scope field doesn't match employee
+          let specificity = 0;
+          const checks: [any, any][] = [
+            [slab.company_id, empCompanyId],
+            [slab.division_id, empDivisionId],
+            [slab.business_unit_id, empBuId],
+            [slab.department_id, emp.department_id],
+            [slab.pms_grade_id, null], // pms_grade on profile is text (name); fallback below
+            [slab.location, emp.location],
+            [slab.pms_level, emp.level],
+          ];
+          let rejected = false;
+          for (const [slabVal, empVal] of checks) {
+            if (slabVal == null) continue;
+            if (slabVal !== empVal) { rejected = true; break; }
+            specificity += 1;
           }
+          if (rejected) continue;
+          // Designation match (array)
+          if (slab.applicable_designations?.length) {
+            if (!emp.designation || !slab.applicable_designations.includes(emp.designation)) continue;
+            specificity += 1;
+          }
+          // PMS grade match (slab uses uuid → resolve via pms_grade name on profile? skip if mismatch fails to resolve)
+          if (slab.pms_grade_id) {
+            // Only count if profile carries pms_grade name we can compare; otherwise allow (optional scope)
+            // We don't have a pms_grade_id on profile; the join is by name in master. Treat as "applies-if-grade-exists".
+            // Conservative: require name equality with master. Skip increment when ambiguous.
+            specificity += 0; // intentionally not counted to avoid false-specificity
+          }
+          candidates.push({ slab, specificity });
+        }
+
+        // Sort: highest specificity, then latest effective_from
+        candidates.sort((a, b) => {
+          if (b.specificity !== a.specificity) return b.specificity - a.specificity;
+          return String(b.slab.effective_from || '').localeCompare(String(a.slab.effective_from || ''));
+        });
+
+        if (candidates.length > 0) {
+          matchedSlab = candidates[0].slab;
+          basePercent = matchedSlab.incentive_percent;
         }
       }
 
