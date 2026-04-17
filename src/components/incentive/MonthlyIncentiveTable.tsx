@@ -537,10 +537,24 @@ export function MonthlyIncentiveTable() {
                           <div className="text-sm font-medium">{r.profiles?.full_name}</div>
                           <div className="text-xs text-muted-foreground">{r.profiles?.employee_code}</div>
                         </TableCell>
-                        <TableCell className="text-sm">{r.profiles?.departments?.name || '—'}</TableCell>
-                        <TableCell className="text-xs">{r.review_period}</TableCell>
                         <TableCell className="text-xs">{r.payment_period || 'Full Month'}</TableCell>
                         <TableCell>{r.pms_score?.toFixed(2) || '—'}</TableCell>
+                        <TableCell><RatingBadge score={r.pms_score} short /></TableCell>
+                        <TableCell>
+                          {(() => {
+                            const ks = kpiStatusMap?.get(r.employee_id);
+                            if (!ks || ks.total === 0) {
+                              return <Badge variant="outline" className="text-xs">No KPIs</Badge>;
+                            }
+                            return ks.allApproved ? (
+                              <Badge className="text-xs bg-green-600 hover:bg-green-600 text-white">Approved</Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-xs border-amber-500 text-amber-700">
+                                Pending ({ks.approved}/{ks.total})
+                              </Badge>
+                            );
+                          })()}
+                        </TableCell>
                         <TableCell>
                           {r.incentive_slabs ? (
                             <span className="text-xs">{r.incentive_slabs.min_value}–{r.incentive_slabs.max_value}</span>
