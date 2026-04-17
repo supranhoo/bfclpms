@@ -18,6 +18,7 @@ export function AuditKpiAssignPopover({ kpiId, currentAssignment }: AuditKpiAssi
   const removeMutation = useRemoveKpiAuditAssignment();
   const { toast } = useToast();
   const [open, setOpen] = React.useState(false);
+  const [confirmRemove, setConfirmRemove] = React.useState(false);
 
   const handleAssign = (auditorId: string) => {
     assignMutation.mutate(

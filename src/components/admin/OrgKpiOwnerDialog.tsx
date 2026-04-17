@@ -109,7 +109,7 @@ export function OrgKpiOwnerDialog({
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={() => handleRemove(owner.id)}
+                      onClick={() => handleRemove(owner.id, owner.owner?.full_name || owner.owner?.email || 'this owner')}
                       disabled={removeOwner.isPending}
                     >
                       <X className="h-4 w-4" />
