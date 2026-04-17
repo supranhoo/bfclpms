@@ -135,7 +135,20 @@ export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, i
               <TableHeader>
                 <TableRow>
                   <TableHead>Employee</TableHead>
-                  <TableHead>PMS Score</TableHead>
+                  <TableHead>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center gap-1 cursor-help">
+                            PMS Score <Info className="h-3 w-3 text-muted-foreground" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          Vessel-based records are scored as vessels × rate; PMS metrics don't apply and show N/A.
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </TableHead>
                   <TableHead>Base %</TableHead>
                   <TableHead>DQ Reason</TableHead>
                   <TableHead>LTI Penalty</TableHead>
@@ -147,7 +160,7 @@ export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, i
               <TableBody>
                 {records.map((r, i) => {
                   const emp = employeeNames?.get(r.employee_id);
-                  const pmsScore = r.pms_score != null ? toNum(r.pms_score).toFixed(2) : (r.production_value ?? '—');
+                  const isVessel = !!result.diagnostics?.vessel_program_detected;
                   const lti = toNum(r.lti_penalty_percent);
                   const prorata = toNum(r.pro_rata_factor);
                   const finalPct = toNum(r.final_incentive_percent);
@@ -155,22 +168,33 @@ export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, i
                   return (
                     <TableRow key={i}>
                       <TableCell>
-                        <div className="text-sm font-medium">{emp?.name || r.employee_id.slice(0, 8)}</div>
-                        {emp?.code && <div className="text-xs text-muted-foreground">{emp.code}</div>}
+                        <div className="flex items-center gap-2">
+                          <div>
+                            <div className="text-sm font-medium">{emp?.name || r.employee_id.slice(0, 8)}</div>
+                            {emp?.code && <div className="text-xs text-muted-foreground">{emp.code}</div>}
+                          </div>
+                          {isVessel && <Badge variant="outline" className="text-[10px]">Vessel</Badge>}
+                        </div>
                       </TableCell>
-                      <TableCell>{pmsScore}</TableCell>
-                      <TableCell>{toNum(r.base_incentive_percent)}%</TableCell>
                       <TableCell>
-                        {r.is_disqualified ? (
+                        {isVessel
+                          ? NA
+                          : r.pms_score != null
+                            ? toNum(r.pms_score).toFixed(2)
+                            : (r.production_value ?? '—')}
+                      </TableCell>
+                      <TableCell>{isVessel ? NA : `${toNum(r.base_incentive_percent)}%`}</TableCell>
+                      <TableCell>
+                        {isVessel ? NA : (r.is_disqualified ? (
                           <Badge variant="destructive" className="text-xs">{r.disqualification_reasons?.[0] || 'DQ'}</Badge>
-                        ) : '—'}
+                        ) : '—')}
                       </TableCell>
-                      <TableCell>{lti > 0 ? `${lti}%` : '—'}</TableCell>
-                      <TableCell>{prorata < 1 ? prorata.toFixed(2) : '—'}</TableCell>
+                      <TableCell>{isVessel ? NA : (lti > 0 ? `${lti}%` : '—')}</TableCell>
+                      <TableCell>{isVessel ? NA : (prorata < 1 ? prorata.toFixed(2) : '—')}</TableCell>
                       <TableCell>
-                        <Badge variant={finalPct > 0 ? 'default' : 'secondary'}>
-                          {finalPct}%
-                        </Badge>
+                        {isVessel ? NA : (
+                          <Badge variant={finalPct > 0 ? 'default' : 'secondary'}>{finalPct}%</Badge>
+                        )}
                       </TableCell>
                       <TableCell className="font-medium">
                         {amount > 0 ? `₹${Math.round(amount).toLocaleString('en-IN')}` : '—'}
