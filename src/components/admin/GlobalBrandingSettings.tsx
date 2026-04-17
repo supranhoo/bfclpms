@@ -136,6 +136,7 @@ export function GlobalBrandingSettings() {
       login_hero_headline: loginHeroHeadline || null,
       login_hero_description: loginHeroDescription || null,
       pms_policy_url: pmsPolicyUrl || null,
+      view_mode_strip_color: viewModeStripColor,
       // Keep login_background_url synced with first wallpaper for backward compatibility
       login_background_url: loginWallpapers.length > 0 ? loginWallpapers[0] : null,
     });
