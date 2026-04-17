@@ -334,14 +334,18 @@ serve(async (req) => {
       if (program.program_type === 'production') {
         productionTotalTons = prodEntryMap.get(emp.id) ?? null;
 
-        // Priority cascade: employee > department > business_unit > common
+        // Resolve BU and company for this employee
+        const empBuId = emp.department_id ? (deptToBu.get(emp.department_id) ?? null) : null;
+        const empCompanyId = empBuId ? (buToCompany.get(empBuId) ?? null) : null;
+
+        // Priority cascade: employee > department > BU > company > common
         const empRate = prodRates.find((r: any) => r.rate_type === 'employee' && r.employee_id === emp.id);
         const deptRate = emp.department_id ? prodRates.find((r: any) => r.rate_type === 'department' && r.entity_id === emp.department_id) : null;
-        // For BU rate, we need to resolve dept -> BU
-        const buRate = prodRates.find((r: any) => r.rate_type === 'business_unit');
+        const buRate = empBuId ? prodRates.find((r: any) => r.rate_type === 'bu' && r.entity_id === empBuId) : null;
+        const companyRate = empCompanyId ? prodRates.find((r: any) => r.rate_type === 'company' && r.entity_id === empCompanyId) : null;
         const commonRate = prodRates.find((r: any) => r.rate_type === 'common');
 
-        const rateRecord = empRate || deptRate || buRate || commonRate;
+        const rateRecord = empRate || deptRate || buRate || companyRate || commonRate;
         resolvedRate = rateRecord?.rate_per_ton ?? null;
 
         if (productionTotalTons !== null && resolvedRate !== null) {
