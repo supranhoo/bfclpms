@@ -317,6 +317,21 @@ export default function IncentiveConfig() {
           )}
         </DialogContent>
       </Dialog>
+
+      <ConfirmDestructiveDialog
+        open={!!deletingProgram}
+        onConfirm={() => {
+          if (!deletingProgram) return;
+          deleteProgram.mutate(deletingProgram.id, {
+            onSuccess: () => setDeletingProgram(null),
+          });
+        }}
+        onCancel={() => setDeletingProgram(null)}
+        title="Delete Incentive Program?"
+        description={`This will permanently delete the program "${deletingProgram?.name}" along with all its slabs, disqualification rules, mappings, custom tabs, and configuration. Computed historical incentive records are preserved. This cannot be undone.`}
+        confirmLabel="Delete Program"
+        isLoading={deleteProgram.isPending}
+      />
     </div>
   );
 }
