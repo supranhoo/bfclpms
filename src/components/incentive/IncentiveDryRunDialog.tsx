@@ -144,7 +144,7 @@ export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, i
                           </span>
                         </TooltipTrigger>
                         <TooltipContent className="max-w-xs">
-                          Vessel-based records are scored as vessels × rate; PMS metrics don't apply and show N/A.
+                          Employees without assigned KRAs will show N/A here.
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -160,11 +160,15 @@ export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, i
               <TableBody>
                 {records.map((r, i) => {
                   const emp = employeeNames?.get(r.employee_id);
-                  const isVessel = !!result.diagnostics?.vessel_program_detected;
+                  const isVesselProgram = !!result.diagnostics?.vessel_program_detected;
+                  const hasVesselData = toNum((r as any).vessel_count) > 0 || toNum(r.production_value) > 0;
+                  const showVesselBadge = isVesselProgram && hasVesselData;
+                  const hasPms = r.pms_score != null;
                   const lti = toNum(r.lti_penalty_percent);
                   const prorata = toNum(r.pro_rata_factor);
                   const finalPct = toNum(r.final_incentive_percent);
                   const amount = toNum(r.incentive_amount);
+                  const dqReason = r.disqualification_reasons?.[0];
                   return (
                     <TableRow key={i}>
                       <TableCell>
@@ -173,28 +177,24 @@ export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, i
                             <div className="text-sm font-medium">{emp?.name || r.employee_id.slice(0, 8)}</div>
                             {emp?.code && <div className="text-xs text-muted-foreground">{emp.code}</div>}
                           </div>
-                          {isVessel && <Badge variant="outline" className="text-[10px]">Vessel</Badge>}
+                          {showVesselBadge && <Badge variant="outline" className="text-[10px]">Vessel</Badge>}
                         </div>
                       </TableCell>
                       <TableCell>
-                        {isVessel
-                          ? NA
-                          : r.pms_score != null
-                            ? toNum(r.pms_score).toFixed(2)
-                            : (r.production_value ?? '—')}
+                        {hasPms ? toNum(r.pms_score).toFixed(2) : NA}
                       </TableCell>
-                      <TableCell>{isVessel ? NA : `${toNum(r.base_incentive_percent)}%`}</TableCell>
+                      <TableCell>{hasPms ? `${toNum(r.base_incentive_percent)}%` : NA}</TableCell>
                       <TableCell>
-                        {isVessel ? NA : (r.is_disqualified ? (
-                          <Badge variant="destructive" className="text-xs">{r.disqualification_reasons?.[0] || 'DQ'}</Badge>
-                        ) : '—')}
+                        {r.is_disqualified && dqReason ? (
+                          <Badge variant="destructive" className="text-xs">{dqReason}</Badge>
+                        ) : '—'}
                       </TableCell>
-                      <TableCell>{isVessel ? NA : (lti > 0 ? `${lti}%` : '—')}</TableCell>
-                      <TableCell>{isVessel ? NA : (prorata < 1 ? prorata.toFixed(2) : '—')}</TableCell>
+                      <TableCell>{lti > 0 ? `${lti}%` : '—'}</TableCell>
+                      <TableCell>{prorata > 0 && prorata < 1 ? prorata.toFixed(2) : '—'}</TableCell>
                       <TableCell>
-                        {isVessel ? NA : (
+                        {hasPms ? (
                           <Badge variant={finalPct > 0 ? 'default' : 'secondary'}>{finalPct}%</Badge>
-                        )}
+                        ) : NA}
                       </TableCell>
                       <TableCell className="font-medium">
                         {amount > 0 ? `₹${Math.round(amount).toLocaleString('en-IN')}` : '—'}
