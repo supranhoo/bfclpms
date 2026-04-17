@@ -380,9 +380,15 @@ serve(async (req) => {
       if (program.program_type === 'production') {
         productionTotalTons = prodEntryMap.get(emp.id) ?? null;
 
-        // Resolve BU and company for this employee
+        // Resolve BU and company for this employee — UNIFIED resolver:
+        // prefer profiles.company_id (parity with UI Company filter & slab matching),
+        // fallback to dept → BU → division → company chain.
         const empBuId = emp.department_id ? (deptToBu.get(emp.department_id) ?? null) : null;
-        const empCompanyId = empBuId ? (buToCompany.get(empBuId) ?? null) : null;
+        const empDivisionIdForRate = empBuId ? (buToDivision.get(empBuId) ?? null) : null;
+        const empCompanyId = empToCompanyDirect.get(emp.id)
+          ?? (empDivisionIdForRate
+            ? (divToCompany.get(empDivisionIdForRate) ?? null)
+            : (empBuId ? (buToCompany.get(empBuId) ?? null) : null));
 
         // Pick latest-effective rate (effective_from <= periodEnd) per scope
         const pickLatest = (filterFn: (r: any) => boolean) => {
