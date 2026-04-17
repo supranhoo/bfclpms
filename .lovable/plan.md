@@ -1,71 +1,55 @@
 
 
-## Plan: Fix Empty-State Count + Scope Compute to Filters
+## Plan: Fix "Something went wrong" After Clicking Compute
 
-### RCA — two distinct bugs
+### RCA — Most Likely Causes
+The error in screenshot 701 is the `ErrorBoundary` fallback in `DashboardLayout` triggered by a render-time crash. After clicking **Compute** the only new render paths that activate are:
 
-**Bug 1: "259 employees" is mis-stated.**
-The empty-state text uses `mappedEmployeeCount` from `useIncentiveProgramMappingCount` which counts **all** mappings for the programme — it ignores the active Company filter (Saibal Kunar) and any other toolbar filter. So with one company selected the user still sees the global program total.
+1. **`IncentiveDryRunDialog`** — opens with the dry-run result.
+2. **`MonthlyIncentiveTable`** rows — re-render when records refetch after a non-dry-run compute.
 
-**Bug 2: Compute / Compute Now ignore filters.**
-Both buttons invoke `compute-monthly-incentives` with only `{ review_period, review_year, program_id }`. The edge function then loops over **every** mapped employee for that programme, regardless of the Company multi-select, Period (1-10 / 11-20 / 21-end), or other UI filters. Result: filtered view shows narrow data, but Compute writes wide data.
+Likely defects in `IncentiveDryRunDialog` (`src/components/incentive/IncentiveDryRunDialog.tsx`):
+- **Line 67**: `summary.avg_incentive_percent.toFixed(1)` — crashes if `avg_incentive_percent` is missing/undefined for any reason (e.g., an older cached payload, scope returning 0 records, or shape drift).
+- **Line 102**: `r.pms_score?.toFixed(2) ?? r.production_value ?? '—'` — `r.pms_score` from DB can be a **string** (`numeric` columns are returned as strings from PostgREST in some versions). `"7.00".toFixed` is `undefined.toFixed` → `TypeError`.
+- **Lines 109/110**: `r.lti_penalty_percent`/`r.pro_rata_factor` likewise can be string from PostgREST → `> 0` works on strings but `.toFixed(2)` crashes.
+- **Line 117**: `Math.round(r.incentive_amount!)` — `incentive_amount` can be string too; `Math.round("123.45")` returns `NaN` after coercion in some paths.
+
+Same pattern likely blowing up `MonthlyIncentiveTable.tsx` after refetch:
+- **Line 673**: `r.pms_score?.toFixed(2)` — same string-vs-number issue.
+- **Line 717**: `Math.round(Number(r.incentive_amount))` — already guarded ✓.
 
 ### Fix
 
-#### A. UI — accurate empty-state count (front-end only)
+**File: `src/components/incentive/IncentiveDryRunDialog.tsx`**
+- Wrap all numeric formatting in a `toNum(v)` helper: `Number(v ?? 0)` then format.
+- Guard `summary.avg_incentive_percent` with `(summary.avg_incentive_percent ?? 0)`.
+- Guard `summary.total_amount` already done (`|| 0`) ✓.
+- Render rows with: `toNum(r.pms_score).toFixed(2)`, `toNum(r.pro_rata_factor).toFixed(2)`, `toNum(r.lti_penalty_percent)` for comparisons.
+- Empty-records safe path: when `records.length === 0`, show a friendly "No records to compute (filters returned 0 employees)" message instead of the empty table — avoids any future blank-shape crash.
 
 **File: `src/components/incentive/MonthlyIncentiveTable.tsx`**
-- Replace the raw `mappedEmployeeCount` shown in the empty-state with a derived count that respects the Company filter:
-  - Add `useIncentiveProgramMappedEmployeeIds(programId)` hook (new, returns `string[]` of mapped employee IDs) OR extend existing hook to return ids, not just count.
-  - Compute `filteredMappedCount = mappedIds.filter(id => companyIdSet ? companyIdSet.has(employeeCompanyMap.get(id)) : true).length`.
-  - Render: *"{filteredMappedCount} of {mappedEmployeeCount} employees match current filters. Click below to compute incentives for {scope-text}."*
-  - Scope-text dynamically reflects the selected Company badge(s) and Period chip if any.
+- Apply the same `toNum()` guard to row cells: `pms_score`, `final_incentive_percent`, `pro_rata_factor`, `lti_penalty_percent`, `incentive_amount`, `base_incentive_percent`. Cells that crash silently when one record has bad shape will take down the whole table → wrap each render in `Number(... ?? 0)`.
+- Also guard `slab.min_value`/`slab.max_value` similarly (numeric columns).
 
-#### B. Compute — honour filters
-
-**Front-end (same file, both `handleCompute` dry-run and `handleComputeNow`)**
-Build a `scope` payload and forward it:
-```ts
-const scope = {
-  employee_ids: filteredMappedEmployeeIds,         // [] = no scope (current behaviour)
-  payment_period: periodFilter !== 'all' ? periodFilter : null,
-};
-computeIncentives.mutate({ review_period, review_year, program_id, scope });
-```
-
-**Edge function: `supabase/functions/compute-monthly-incentives/index.ts`**
-- Accept new optional `scope.employee_ids: string[]` and `scope.payment_period: string | null`.
-- After resolving `employeeFilter` from mappings, intersect with `scope.employee_ids` when provided. Empty intersection → return `{ computed: 0, message: 'No employees match selected filters' }`.
-- For production-program range outputs, when `scope.payment_period` is set:
-  - Skip writing the "Full Month" record and skip ranges that don't match.
-  - Only upsert the matching range(s).
-- For non-production programs `payment_period` is always 'Full Month' — ignore the filter (or warn no-op).
-- Add a `dry_run` summary line: *"Scope: {N} employees, period {payment_period or all}"*.
-
-#### C. Confirm-impact UX
-- Update the dry-run preview dialog (`IncentiveDryRunDialog`) header to show the active scope so the user sees exactly which employees/periods will be (re)computed before confirming.
-- Update the "Compute Now" CTA tooltip: *"Computes for {filteredMappedCount} employee(s) matching current Company / Period filters."*
+**Diagnostics**
+- Add a one-time `console.error('Compute payload shape:', { summary, recordSample: result.records?.[0] })` in `handleCompute` so future regressions are easy to diagnose from console logs.
 
 ### Files Touched
 | File | Change |
 |---|---|
-| `src/hooks/useIncentiveProgramMappingCount.ts` | Add sibling hook returning mapped employee IDs |
-| `src/components/incentive/MonthlyIncentiveTable.tsx` | Filter-aware empty-state count, pass `scope` to compute, update CTA copy |
-| `src/components/incentive/IncentiveDryRunDialog.tsx` | Show scope summary in preview header |
-| `src/hooks/useIncentiveRecords.ts` (`useComputeIncentives`) | Forward `scope` field in body |
-| `supabase/functions/compute-monthly-incentives/index.ts` | Accept `scope.employee_ids` + `scope.payment_period`; intersect filters; conditional range writes |
+| `src/components/incentive/IncentiveDryRunDialog.tsx` | Numeric `toNum()` guards + empty-state path |
+| `src/components/incentive/MonthlyIncentiveTable.tsx` | `Number(... ?? 0)` wrap on numeric cells + diagnostic log |
 
 ### Risk & Impact
 | Area | Impact |
 |---|---|
-| Data | Safer — Compute now writes only what user is reviewing; no accidental over-write of unrelated companies |
-| Workflow | Existing callers (no `scope`) keep current full-program behaviour — fully backward compatible |
-| UI/UX | Empty-state count reflects reality; CTA states scope clearly |
-| Regression | Low — `scope` is opt-in; range-skip logic guarded by `payment_period` presence |
-| Mitigation | Edge function returns explicit "0 employees match" message if scope filters everything out, surfaced via toast |
+| Data | None — display-only guards |
+| Workflow | None |
+| UI/UX | Identical when data is valid; resilient when fields are string/null |
+| Regression | Very low — purely defensive numeric coercion |
+| Mitigation | If real cause is elsewhere, console diagnostic surfaces it on next click |
 
 ### Out of Scope
-- Multi-programme batch compute (single programme rule unchanged)
-- Server-side row-count for the empty-state (client-side intersect is sufficient at current scale)
-- Retroactive Adjustments tab (separate compute path; revisit if needed)
+- Edge-function shape changes (already returns numbers)
+- Migrating PostgREST numeric → bigint (broader change)
 
