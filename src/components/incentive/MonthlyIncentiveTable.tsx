@@ -13,6 +13,8 @@ import { Download, CheckCircle2, DollarSign, Calculator, Loader2, Users, ShieldA
 import { useIncentiveRecords, useConfirmIncentiveRecords, useMarkIncentivePaid, useComputeIncentives, useIncentiveReportData, useEmployeeKpiStatusForPeriod } from '@/hooks/useIncentiveRecords';
 import { useIncentivePrograms } from '@/hooks/useIncentivePrograms';
 import { useIncentiveProgramMappingCount } from '@/hooks/useIncentiveProgramMappingCount';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { MultiSelectFilter } from '@/components/ui/multi-select-filter';
 import { useAuth } from '@/contexts/AuthContext';
 import { IncentiveDryRunDialog } from './IncentiveDryRunDialog';
 import { IncentiveStatusOverride } from './IncentiveStatusOverride';
