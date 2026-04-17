@@ -110,7 +110,8 @@ export function MonthlyIncentiveTable() {
 
   const buildScope = () => ({
     employee_ids: selectedCompanyIds.length > 0 ? scopedEmployeeIds : [],
-    payment_period: periodFilter !== 'all' ? periodFilter : null,
+    // 'Full Month' is a derived UI view → compute all sub-periods (null scope)
+    payment_period: periodFilter !== 'all' && periodFilter !== 'Full Month' ? periodFilter : null,
   });
 
   const canComputeNow = selectedProgram !== 'all' && !isAllMode && filteredMappedCount > 0;
