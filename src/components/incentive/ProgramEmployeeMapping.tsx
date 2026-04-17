@@ -4,8 +4,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { MultiSelectFilter } from '@/components/ui/multi-select-filter';
 import { Users, Search, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useProgramMappings, useAddProgramMapping, useRemoveProgramMapping, useBulkAddProgramMappings, useBulkRemoveProgramMappings } from '@/hooks/useIncentivePrograms';
 import { useQuery } from '@tanstack/react-query';
@@ -38,11 +38,11 @@ export function ProgramEmployeeMapping({ programId }: Props) {
   } = useCompanyFilter();
 
   const [search, setSearch] = useState('');
-  const [filterDivision, setFilterDivision] = useState<string>('all');
-  const [filterBU, setFilterBU] = useState<string>('all');
-  const [filterDept, setFilterDept] = useState<string>('all');
-  const [filterDesig, setFilterDesig] = useState<string>('all');
-  const [filterGrade, setFilterGrade] = useState<string>('all');
+  const [filterDivision, setFilterDivision] = useState<string[]>([]);
+  const [filterBU, setFilterBU] = useState<string[]>([]);
+  const [filterDept, setFilterDept] = useState<string[]>([]);
+  const [filterDesig, setFilterDesig] = useState<string[]>([]);
+  const [filterGrade, setFilterGrade] = useState<string[]>([]);
   const [sortKey, setSortKey] = useState<SortKey>('full_name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [page, setPage] = useState(0);
@@ -134,11 +134,11 @@ export function ProgramEmployeeMapping({ programId }: Props) {
         e.full_name.toLowerCase().includes(q) || e.employee_code.toLowerCase().includes(q)
       );
     }
-    if (filterDivision !== 'all') list = list.filter((e: any) => e.division_name === filterDivision);
-    if (filterBU !== 'all') list = list.filter((e: any) => e.bu_name === filterBU);
-    if (filterDept !== 'all') list = list.filter((e: any) => e.department_name === filterDept);
-    if (filterDesig !== 'all') list = list.filter((e: any) => e.designation === filterDesig);
-    if (filterGrade !== 'all') list = list.filter((e: any) => e.pms_grade === filterGrade);
+    if (filterDivision.length > 0) list = list.filter((e: any) => filterDivision.includes(e.division_name));
+    if (filterBU.length > 0) list = list.filter((e: any) => filterBU.includes(e.bu_name));
+    if (filterDept.length > 0) list = list.filter((e: any) => filterDept.includes(e.department_name));
+    if (filterDesig.length > 0) list = list.filter((e: any) => filterDesig.includes(e.designation));
+    if (filterGrade.length > 0) list = list.filter((e: any) => filterGrade.includes(e.pms_grade));
     return list;
   }, [employeesWithCompany, selectedCompanyId, filterByCompany, search, filterDivision, filterBU, filterDept, filterDesig, filterGrade]);
 
@@ -200,15 +200,15 @@ export function ProgramEmployeeMapping({ programId }: Props) {
   const clearFilters = () => {
     setSearch('');
     setSelectedCompanyId('all');
-    setFilterDivision('all');
-    setFilterBU('all');
-    setFilterDept('all');
-    setFilterDesig('all');
-    setFilterGrade('all');
+    setFilterDivision([]);
+    setFilterBU([]);
+    setFilterDept([]);
+    setFilterDesig([]);
+    setFilterGrade([]);
     resetPage();
   };
 
-  const hasFilters = search || selectedCompanyId !== 'all' || filterDivision !== 'all' || filterBU !== 'all' || filterDept !== 'all' || filterDesig !== 'all' || filterGrade !== 'all';
+  const hasFilters = search || selectedCompanyId !== 'all' || filterDivision.length > 0 || filterBU.length > 0 || filterDept.length > 0 || filterDesig.length > 0 || filterGrade.length > 0;
 
   const SortHeader = ({ label, field }: { label: string; field: SortKey }) => (
     <Button variant="ghost" size="sm" className="h-auto p-0 font-medium text-muted-foreground hover:text-foreground" onClick={() => toggleSort(field)}>
@@ -241,41 +241,46 @@ export function ProgramEmployeeMapping({ programId }: Props) {
             onCompanyChange={(v) => { setSelectedCompanyId(v); resetPage(); }}
             className="h-8 text-xs"
           />
-          <Select value={filterDivision} onValueChange={(v) => { setFilterDivision(v); resetPage(); }}>
-            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Division" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Divisions</SelectItem>
-              {filterOptions.divisions.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={filterBU} onValueChange={(v) => { setFilterBU(v); resetPage(); }}>
-            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="BU" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All BUs</SelectItem>
-              {filterOptions.bus.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={filterDept} onValueChange={(v) => { setFilterDept(v); resetPage(); }}>
-            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Department" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Departments</SelectItem>
-              {filterOptions.depts.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={filterDesig} onValueChange={(v) => { setFilterDesig(v); resetPage(); }}>
-            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Designation" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Designations</SelectItem>
-              {filterOptions.desigs.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={filterGrade} onValueChange={(v) => { setFilterGrade(v); resetPage(); }}>
-            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Grade" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Grades</SelectItem>
-              {filterOptions.grades.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <MultiSelectFilter
+            options={filterOptions.divisions}
+            value={filterDivision}
+            onChange={(v) => { setFilterDivision(v); resetPage(); }}
+            placeholder="All Divisions"
+            label="Division"
+            className="h-8 text-xs"
+          />
+          <MultiSelectFilter
+            options={filterOptions.bus}
+            value={filterBU}
+            onChange={(v) => { setFilterBU(v); resetPage(); }}
+            placeholder="All BUs"
+            label="BU"
+            className="h-8 text-xs"
+          />
+          <MultiSelectFilter
+            options={filterOptions.depts}
+            value={filterDept}
+            onChange={(v) => { setFilterDept(v); resetPage(); }}
+            placeholder="All Departments"
+            label="Department"
+            className="h-8 text-xs"
+          />
+          <MultiSelectFilter
+            options={filterOptions.desigs}
+            value={filterDesig}
+            onChange={(v) => { setFilterDesig(v); resetPage(); }}
+            placeholder="All Designations"
+            label="Designation"
+            className="h-8 text-xs"
+          />
+          <MultiSelectFilter
+            options={filterOptions.grades}
+            value={filterGrade}
+            onChange={(v) => { setFilterGrade(v); resetPage(); }}
+            placeholder="All Grades"
+            label="Grade"
+            className="h-8 text-xs"
+          />
         </div>
 
         {/* Search + actions */}
