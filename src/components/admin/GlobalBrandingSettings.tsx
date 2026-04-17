@@ -42,6 +42,7 @@ export function GlobalBrandingSettings() {
       setLoginHeroHeadline(settings.login_hero_headline || '');
       setLoginHeroDescription(settings.login_hero_description || '');
       setPmsPolicyUrl(settings.pms_policy_url || '');
+      setViewModeStripColor(settings.view_mode_strip_color || '#3b82f6');
     }
   }, [settings]);
 
@@ -60,10 +61,11 @@ export function GlobalBrandingSettings() {
         wallpapersChanged ||
         loginHeroHeadline !== (settings.login_hero_headline || '') ||
         loginHeroDescription !== (settings.login_hero_description || '') ||
-        pmsPolicyUrl !== (settings.pms_policy_url || '');
+        pmsPolicyUrl !== (settings.pms_policy_url || '') ||
+        viewModeStripColor !== (settings.view_mode_strip_color || '#3b82f6');
       setHasChanges(changed);
     }
-  }, [organizationName, appName, logoUrl, loginWallpapers, loginHeroHeadline, loginHeroDescription, pmsPolicyUrl, settings]);
+  }, [organizationName, appName, logoUrl, loginWallpapers, loginHeroHeadline, loginHeroDescription, pmsPolicyUrl, viewModeStripColor, settings]);
 
   // Preview slideshow effect
   useEffect(() => {
