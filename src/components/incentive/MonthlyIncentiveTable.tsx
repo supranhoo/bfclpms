@@ -100,9 +100,10 @@ export function MonthlyIncentiveTable() {
     setSelectedIds(new Set());
     setSelectAllRecords(false);
     setCurrentPage(1);
-  }, [selectedMonth, selectedYear, selectedProgram, statusFilter, incentiveStatusFilter, eligibilityFilter, periodFilter, searchTerm]);
+  }, [selectedMonth, selectedYear, selectedProgram, statusFilter, incentiveStatusFilter, eligibilityFilter, periodFilter, searchTerm, selectedCompanyIds]);
 
   const filteredRecords = useMemo(() => {
+    const companyIdSet = selectedCompanyIds.length > 0 ? new Set(selectedCompanyIds) : null;
     return (records as any[]).filter(r => {
       if (statusFilter !== 'all' && r.status !== statusFilter) return false;
       if (incentiveStatusFilter !== 'all' && r.incentive_status !== incentiveStatusFilter) return false;
