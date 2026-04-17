@@ -43,6 +43,15 @@ export function MonthlyIncentiveTable() {
   const [showMarkPaidDialog, setShowMarkPaidDialog] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
+
+  const { companies, employeeCompanyMap } = useCompanyFilter();
+  const companyNameToId = useMemo(() => new Map(companies.map(c => [c.name, c.id])), [companies]);
+  const companyIdToName = useMemo(() => new Map(companies.map(c => [c.id, c.name])), [companies]);
+  const selectedCompanyNames = useMemo(
+    () => selectedCompanyIds.map(id => companyIdToName.get(id)).filter(Boolean) as string[],
+    [selectedCompanyIds, companyIdToName]
+  );
 
   const { data: programs = [] } = useIncentivePrograms();
   const activePrograms = (programs as any[]).filter((p: any) => p.is_active);
