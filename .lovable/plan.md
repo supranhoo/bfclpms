@@ -1,52 +1,72 @@
 
 
-## Plan: Fix Daily Grid — Company Rates & Effective-Dated Rates Not Resolving
+## Plan: System-Wide Delete Reconfirmation Sweep
 
 ### RCA
-The error fires when `gridEmployees` is empty, which happens when `resolveEmployeeRate()` returns `source: 'none'` for every mapped employee. Two root causes:
+The [Destructive Action Governance](mem://design/destructive-action-governance) policy mandates `ConfirmDestructiveDialog` on every delete button, but enforcement has been piecemeal. Need a one-time audit + fix across the entire codebase, plus a guard so future deletes can't ship without it.
 
-1. **Company-scope blind**: `resolveEmployeeRate()` in `src/hooks/useProductionDailyEntries.ts` only checks `employee → department → bu → common`. It never checks `rate_type='company'`. If a user defined only company-wise rates (the most common case after the recent change), every employee resolves to `none`.
+### Approach
 
-2. **No date filtering**: The resolver picks the first matching row via `find()` instead of the latest `effective_from <= period end`. With multiple historical rows the wrong row may be picked or a future-dated row may be chosen.
+**Phase 1 — Audit (grep-driven)**
+Search all `.tsx` for delete patterns missing the dialog:
+- `delete*.mutate(` / `remove*.mutate(` called directly inside `onClick`
+- `Trash2` icon buttons whose `onClick` runs a mutation directly
+- `supabase.from(...).delete()` invoked from a click handler without a dialog wrapper
 
-The compute edge function already does both correctly — only the **UI helper** is stale.
+Cross-reference against files that already import `ConfirmDestructiveDialog` to skip compliant ones.
 
-### Change
+**Phase 2 — Fix (uniform pattern)**
+For every offender apply the standard wrap:
+```tsx
+const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+<Button onClick={() => setConfirmDeleteId(item.id)}><Trash2/></Button>
+<ConfirmDestructiveDialog
+  open={!!confirmDeleteId}
+  title="Delete <Entity>?"
+  description="<entity-specific consequence>. This cannot be undone."
+  confirmLabel="Delete"
+  isLoading={mutation.isPending}
+  onConfirm={() => confirmDeleteId && mutation.mutate(confirmDeleteId, { onSuccess: () => setConfirmDeleteId(null) })}
+  onCancel={() => setConfirmDeleteId(null)}
+/>
+```
+Tailored description per entity (cascading warnings for parent records like programs, KRAs, workflow templates, users).
 
-**File 1: `src/hooks/useProductionDailyEntries.ts`** — extend `resolveEmployeeRate()`:
-- Add `companyId: string | null` parameter (4th arg) and `targetDate: string` (5th arg, defaults to today).
-- Filter rates by `effective_from <= targetDate` first.
-- For each tier, pick the row with the **maximum `effective_from`** (date-aware), not just `find()`.
-- Add `'company'` tier between `bu` and `common`. Final cascade: **employee → department → bu → company → common**.
-- Update `ResolvedRate.source` union to include `'company'`.
+**Likely modules requiring fixes** (final list determined by audit):
+- Incentive: `IncentiveProgramsList`, `IncentiveSlabEditor`, `EligibilityRulesEditor`, `DqRulesTab`, `BUSubUnitsTab`, `AllocationTab`, `FieldsTab`
+- Admin: User management (delete user), KRA Library (delete KRA/KPI), Workflow templates, Menu Access, Access Profiles, Review Periods, Email Templates, Master Data tabs (companies/divisions/BUs/depts/designations/grades/locations), Org KPI master, Production Targets
+- PMS: KPI Observations delete, Query delete, Evidence file remove, Comment delete
+- Notifications: clear/delete notification
+- Misc: any `Trash2` button found in audit
 
-**File 2: `src/components/incentive/ProductionDailyGrid.tsx`**
-- Resolve each employee's `companyId` via the chain: `profiles.company_id` → `divisions.company_id` → `business_units.company_id` (mirroring how the compute engine derives it). Easiest path: extend the `mapped-employees-for-grid` query's `select` to pull `company_id` plus the joins through `departments → business_units → divisions → companies`.
-- Compute `targetDate` = last day of selected `month`/`year` (so historical months pick the correct dated rate).
-- Pass `companyId` and `targetDate` into `resolveEmployeeRate()`.
-- Add `'company'` to the `sourceBadge()` variants map (renders "com" pill).
+**Phase 3 — Future-proofing**
+Add a lightweight ESLint custom rule (or a `scripts/check-delete-guards.ts` CI check) that flags any `Trash2` icon-button or `*delete*.mutate(` call in JSX whose nearest sibling tree doesn't reference `ConfirmDestructiveDialog`. Run in CI to block regressions.
 
-**File 3 (parity check): `src/components/incentive/IncentiveDataExport.tsx`** and any other caller of `resolveEmployeeRate()` — pass the new args so Excel export shows the same rate as the grid.
+Also update `mem://design/destructive-action-governance` with: "Every new delete button MUST use `ConfirmDestructiveDialog`. CI lint enforces this."
 
 ### Files Touched
-
-| File | Change |
+| Area | Count (est.) |
 |---|---|
-| `src/hooks/useProductionDailyEntries.ts` | Extend resolver: add company tier + date filter |
-| `src/components/incentive/ProductionDailyGrid.tsx` | Resolve companyId, pass targetDate, badge for 'company' |
-| `src/components/incentive/IncentiveDataExport.tsx` (if it calls the helper) | Pass new args |
+| Incentive components | ~5–7 |
+| Admin master-data tabs | ~10–15 |
+| PMS review/observation/query | ~3–5 |
+| Notification + misc | ~2–3 |
+| New: `scripts/check-delete-guards.ts` + CI hook | 1 |
+| Updated: `DOCUMENTATION.md`, `POLICY.md`, governance memory | 3 |
+
+Exact file list produced by the Phase-1 audit at start of execution.
 
 ### Risk & Impact
-
 | Area | Impact |
 |---|---|
-| Data | None — read-only resolution change |
-| Workflow | None |
-| Compute | UI now matches edge function — same rate shown and saved |
-| Regression | Low — older callers without `companyId`/`targetDate` still work via defaults (companyId=null skips company tier; targetDate=today preserves current behaviour) |
-| Mitigation | Defaults keep legacy 4-tier behaviour intact when company scope isn't used |
+| Data | Safer — system-wide accidental-delete prevention |
+| Workflow | One extra confirm click per delete (already standard pattern) |
+| UI/UX | Consistent — same dialog component everywhere |
+| Regression | Very low — purely additive UI guard, no logic changes to mutations |
+| Mitigation | Reuse existing `ConfirmDestructiveDialog`; CI lint blocks new violations |
 
 ### Out of Scope
-- Edge-function changes (already correct)
-- Slab resolver UI parity (separate concern)
+- Bulk-delete flows that already have multi-step confirmation (e.g. Bulk Zero-Score) — review only, no rewrite
+- Soft-delete / archive actions (not destructive in same sense)
+- Backend cascade behaviour changes
 
