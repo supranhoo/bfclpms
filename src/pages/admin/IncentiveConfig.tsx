@@ -37,6 +37,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useCustomTabs, useUpsertCustomTab, useDeleteCustomTab } from '@/hooks/useIncentiveCustomTabs';
 import { CustomTabManager } from '@/components/incentive/CustomTabManager';
 import { CustomTabDataGrid } from '@/components/incentive/CustomTabDataGrid';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 /* ── Summary badges for each program card ── */
 function ProgramSummaryBadges({ programId }: { programId: string }) {
