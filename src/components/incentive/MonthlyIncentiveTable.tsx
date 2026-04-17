@@ -610,18 +610,45 @@ export function MonthlyIncentiveTable() {
                               <span className="font-medium text-foreground">{selectedProgramName}</span>. Click below to
                               compute incentives for {scopeText}.
                             </p>
-                          </div>
-                          <Button
-                            size="sm"
-                            onClick={handleComputeNow}
-                            disabled={computeIncentives.isPending}
-                          >
-                            {computeIncentives.isPending ? (
-                              <><Loader2 className="h-4 w-4 animate-spin" /> Computing…</>
-                            ) : (
-                              <><Calculator className="h-4 w-4" /> Compute Now</>
+                            {periodFilter !== 'all' && (
+                              <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                                Period filter is set to <span className="font-medium">{periodFilter}</span>. Compute will only write rows where employees have production data in that range.
+                              </p>
                             )}
-                          </Button>
+                          </div>
+                          <div className="flex flex-wrap gap-2 justify-center">
+                            <Button
+                              size="sm"
+                              onClick={handleComputeNow}
+                              disabled={computeIncentives.isPending}
+                            >
+                              {computeIncentives.isPending ? (
+                                <><Loader2 className="h-4 w-4 animate-spin" /> Computing…</>
+                              ) : (
+                                <><Calculator className="h-4 w-4" /> Compute Now</>
+                              )}
+                            </Button>
+                            {periodFilter !== 'all' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={computeIncentives.isPending}
+                                onClick={() => {
+                                  computeIncentives.mutate({
+                                    review_period: selectedMonth,
+                                    review_year: Number(selectedYear),
+                                    program_id: selectedProgram,
+                                    scope: {
+                                      employee_ids: selectedCompanyIds.length > 0 ? scopedEmployeeIds : [],
+                                      payment_period: null,
+                                    },
+                                  });
+                                }}
+                              >
+                                <Calculator className="h-4 w-4" /> Compute for All Periods
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       ) : selectedProgram !== 'all' && mappedEmployeeCount === 0 ? (
                         <div className="text-center text-sm text-muted-foreground">
