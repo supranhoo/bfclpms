@@ -237,6 +237,18 @@ export function ProductionRatesTab({ programId }: Props) {
                   </Select>
                 </div>
               )}
+              {rateType === 'company' && (
+                <div className="w-[220px]">
+                  <Select value={selectedEntity} onValueChange={setSelectedEntity}>
+                    <SelectTrigger><SelectValue placeholder="Select company" /></SelectTrigger>
+                    <SelectContent>
+                      {availableCompanies.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <Input className="w-[120px]" type="number" placeholder="Rate/Ton" value={newRate} onChange={e => setNewRate(e.target.value)} />
               <Input className="w-[160px]" placeholder="Remarks" value={newRemarks} onChange={e => setNewRemarks(e.target.value)} />
               <Button
