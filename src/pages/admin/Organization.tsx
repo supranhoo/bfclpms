@@ -759,7 +759,7 @@ export default function Organization() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Add {dialogType === 'bu' ? 'Business Unit' : dialogType === 'sub-branch' ? 'Sub-Branch' : dialogType === 'pms-grade' ? 'PMS Grade' : dialogType === 'level' ? 'Level' : dialogType.charAt(0).toUpperCase() + dialogType.slice(1)}
+              Add {dialogType === 'bu' ? 'Business Unit' : dialogType === 'sub-branch' ? 'Sub-Branch' : dialogType === 'pms-grade' ? 'PMS Grade' : dialogType === 'level' ? 'Level' : dialogType === 'location' ? 'Location' : dialogType.charAt(0).toUpperCase() + dialogType.slice(1)}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
