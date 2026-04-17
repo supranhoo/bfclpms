@@ -253,7 +253,7 @@ serve(async (req) => {
 
       const { data: rates } = await supabase
         .from('incentive_production_rates')
-        .select('employee_id, entity_id, rate_per_ton, rate_type')
+        .select('employee_id, entity_id, rate_per_ton, rate_type, effective_from')
         .eq('program_id', program_id);
       prodRates = rates || [];
     }
@@ -338,12 +338,30 @@ serve(async (req) => {
         const empBuId = emp.department_id ? (deptToBu.get(emp.department_id) ?? null) : null;
         const empCompanyId = empBuId ? (buToCompany.get(empBuId) ?? null) : null;
 
+        // Compute period-end date for effective-from filtering
+        const MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+        const monthIdx = MONTHS.indexOf(String(review_period).toLowerCase());
+        // Last day of month: use day 0 of next month
+        const periodEndDate = monthIdx >= 0
+          ? new Date(Date.UTC(review_year, monthIdx + 1, 0))
+          : new Date();
+        const periodEndStr = periodEndDate.toISOString().slice(0, 10);
+
+        // Pick latest-effective rate (effective_from <= periodEnd) per scope
+        const pickLatest = (filterFn: (r: any) => boolean) => {
+          const candidates = prodRates
+            .filter(filterFn)
+            .filter((r: any) => !r.effective_from || r.effective_from <= periodEndStr)
+            .sort((a: any, b: any) => String(b.effective_from || '').localeCompare(String(a.effective_from || '')));
+          return candidates[0] || null;
+        };
+
         // Priority cascade: employee > department > BU > company > common
-        const empRate = prodRates.find((r: any) => r.rate_type === 'employee' && r.employee_id === emp.id);
-        const deptRate = emp.department_id ? prodRates.find((r: any) => r.rate_type === 'department' && r.entity_id === emp.department_id) : null;
-        const buRate = empBuId ? prodRates.find((r: any) => r.rate_type === 'bu' && r.entity_id === empBuId) : null;
-        const companyRate = empCompanyId ? prodRates.find((r: any) => r.rate_type === 'company' && r.entity_id === empCompanyId) : null;
-        const commonRate = prodRates.find((r: any) => r.rate_type === 'common');
+        const empRate = pickLatest((r: any) => r.rate_type === 'employee' && r.employee_id === emp.id);
+        const deptRate = emp.department_id ? pickLatest((r: any) => r.rate_type === 'department' && r.entity_id === emp.department_id) : null;
+        const buRate = empBuId ? pickLatest((r: any) => r.rate_type === 'bu' && r.entity_id === empBuId) : null;
+        const companyRate = empCompanyId ? pickLatest((r: any) => r.rate_type === 'company' && r.entity_id === empCompanyId) : null;
+        const commonRate = pickLatest((r: any) => r.rate_type === 'common');
 
         const rateRecord = empRate || deptRate || buRate || companyRate || commonRate;
         resolvedRate = rateRecord?.rate_per_ton ?? null;

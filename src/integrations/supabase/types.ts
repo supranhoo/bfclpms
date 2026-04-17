@@ -1411,6 +1411,7 @@ export type Database = {
       incentive_production_rates: {
         Row: {
           created_at: string | null
+          effective_from: string
           employee_id: string | null
           entity_id: string | null
           id: string
@@ -1422,6 +1423,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          effective_from?: string
           employee_id?: string | null
           entity_id?: string | null
           id?: string
@@ -1433,6 +1435,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          effective_from?: string
           employee_id?: string | null
           entity_id?: string | null
           id?: string

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { format } from 'date-fns';
 import { useProductionRates, useUpsertProductionRate, useDeleteProductionRate } from '@/hooks/useProductionDailyEntries';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
@@ -9,8 +10,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { Plus, Trash2, Edit, Check, X } from 'lucide-react';
-import { formatEmployeeName } from '@/lib/utils';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { Plus, Trash2, Edit, Check, X, CalendarIcon } from 'lucide-react';
+import { formatEmployeeName, cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 
 interface Props {
@@ -18,6 +21,12 @@ interface Props {
 }
 
 type RateType = 'employee' | 'department' | 'bu' | 'company' | 'common';
+
+const firstOfThisMonth = () => {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+};
+const toDateStr = (d: Date) => format(d, 'yyyy-MM-dd');
 
 export function ProductionRatesTab({ programId }: Props) {
   const { data: rates = [], isLoading } = useProductionRates(programId);
@@ -29,9 +38,11 @@ export function ProductionRatesTab({ programId }: Props) {
   const [selectedEntity, setSelectedEntity] = useState('');
   const [newRate, setNewRate] = useState('0');
   const [newRemarks, setNewRemarks] = useState('');
+  const [newEffective, setNewEffective] = useState<Date>(firstOfThisMonth());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editRate, setEditRate] = useState('');
   const [editRemarks, setEditRemarks] = useState('');
+  const [editEffective, setEditEffective] = useState<Date | undefined>(undefined);
 
   const { data: allProfiles = [] } = useQuery({
     queryKey: ['profiles-for-production-rates'],
@@ -68,29 +79,20 @@ export function ProductionRatesTab({ programId }: Props) {
     },
   });
 
-  const assignedEmployeeIds = new Set(
-    (rates as any[]).filter((r: any) => r.rate_type === 'employee').map((r: any) => r.employee_id)
-  );
-  const availableProfiles = allProfiles.filter(p => !assignedEmployeeIds.has(p.id));
-
-  const assignedDeptIds = new Set(
-    (rates as any[]).filter((r: any) => r.rate_type === 'department').map((r: any) => r.entity_id)
-  );
-  const availableDepts = departments.filter(d => !assignedDeptIds.has(d.id));
-
-  const assignedBUIds = new Set(
-    (rates as any[]).filter((r: any) => r.rate_type === 'bu').map((r: any) => r.entity_id)
-  );
-  const availableBUs = businessUnits.filter(b => !assignedBUIds.has(b.id));
-
-  const assignedCompanyIds = new Set(
-    (rates as any[]).filter((r: any) => r.rate_type === 'company').map((r: any) => r.entity_id)
-  );
-  const availableCompanies = companies.filter(c => !assignedCompanyIds.has(c.id));
-
-  const hasCommon = (rates as any[]).some((r: any) => r.rate_type === 'common');
+  // Build "latest per scope" map so we can mark superseded rows.
+  const scopeKey = (r: any) =>
+    `${r.rate_type}|${r.employee_id || ''}|${r.entity_id || ''}`;
+  const latestPerScope = new Map<string, string>(); // key -> latest effective_from
+  (rates as any[]).forEach((r: any) => {
+    const k = scopeKey(r);
+    const cur = latestPerScope.get(k);
+    if (!cur || String(r.effective_from || '') > cur) {
+      latestPerScope.set(k, r.effective_from || '');
+    }
+  });
 
   const handleAdd = () => {
+    const eff = toDateStr(newEffective);
     if (rateType === 'common') {
       if (!newRate) return;
       upsert.mutate({
@@ -98,6 +100,7 @@ export function ProductionRatesTab({ programId }: Props) {
         rate_type: 'common',
         rate_per_ton: parseFloat(newRate) || 0,
         remarks: newRemarks || undefined,
+        effective_from: eff,
       }, { onSuccess: resetAddForm });
     } else if (rateType === 'employee') {
       if (!selectedEntity || !newRate) return;
@@ -107,6 +110,7 @@ export function ProductionRatesTab({ programId }: Props) {
         rate_type: 'employee',
         rate_per_ton: parseFloat(newRate) || 0,
         remarks: newRemarks || undefined,
+        effective_from: eff,
       }, { onSuccess: resetAddForm });
     } else {
       if (!selectedEntity || !newRate) return;
@@ -116,6 +120,7 @@ export function ProductionRatesTab({ programId }: Props) {
         entity_id: selectedEntity,
         rate_per_ton: parseFloat(newRate) || 0,
         remarks: newRemarks || undefined,
+        effective_from: eff,
       }, { onSuccess: resetAddForm });
     }
   };
@@ -125,6 +130,7 @@ export function ProductionRatesTab({ programId }: Props) {
     setSelectedEntity('');
     setNewRate('0');
     setNewRemarks('');
+    setNewEffective(firstOfThisMonth());
   };
 
   const handleSaveEdit = (r: any) => {
@@ -136,6 +142,7 @@ export function ProductionRatesTab({ programId }: Props) {
       entity_id: r.entity_id || undefined,
       rate_per_ton: parseFloat(editRate) || 0,
       remarks: editRemarks || undefined,
+      effective_from: editEffective ? toDateStr(editEffective) : undefined,
     }, {
       onSuccess: () => setEditingId(null),
     });
@@ -204,7 +211,7 @@ export function ProductionRatesTab({ programId }: Props) {
                   <Select value={selectedEntity} onValueChange={setSelectedEntity}>
                     <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
                     <SelectContent>
-                      {availableProfiles.map(p => (
+                      {allProfiles.map(p => (
                         <SelectItem key={p.id} value={p.id}>
                           {formatEmployeeName(p.full_name, p.email, p.employee_code)}
                         </SelectItem>
@@ -218,7 +225,7 @@ export function ProductionRatesTab({ programId }: Props) {
                   <Select value={selectedEntity} onValueChange={setSelectedEntity}>
                     <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
                     <SelectContent>
-                      {availableDepts.map(d => (
+                      {departments.map(d => (
                         <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -230,7 +237,7 @@ export function ProductionRatesTab({ programId }: Props) {
                   <Select value={selectedEntity} onValueChange={setSelectedEntity}>
                     <SelectTrigger><SelectValue placeholder="Select business unit" /></SelectTrigger>
                     <SelectContent>
-                      {availableBUs.map(b => (
+                      {businessUnits.map(b => (
                         <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -242,7 +249,7 @@ export function ProductionRatesTab({ programId }: Props) {
                   <Select value={selectedEntity} onValueChange={setSelectedEntity}>
                     <SelectTrigger><SelectValue placeholder="Select company" /></SelectTrigger>
                     <SelectContent>
-                      {availableCompanies.map(c => (
+                      {companies.map(c => (
                         <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -250,23 +257,39 @@ export function ProductionRatesTab({ programId }: Props) {
                 </div>
               )}
               <Input className="w-[120px]" type="number" placeholder="Rate/Ton" value={newRate} onChange={e => setNewRate(e.target.value)} />
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className={cn("w-[180px] justify-start text-left font-normal")}>
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {format(newEffective, 'dd MMM yyyy')}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={newEffective}
+                    onSelect={(d) => d && setNewEffective(d)}
+                    initialFocus
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
               <Input className="w-[160px]" placeholder="Remarks" value={newRemarks} onChange={e => setNewRemarks(e.target.value)} />
               <Button
                 size="sm"
                 onClick={handleAdd}
                 disabled={
                   upsert.isPending ||
-                  (rateType !== 'common' && !selectedEntity) ||
-                  (rateType === 'common' && hasCommon)
+                  (rateType !== 'common' && !selectedEntity)
                 }
               >
                 Add
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button>
             </div>
-            {rateType === 'common' && hasCommon && (
-              <p className="text-xs text-muted-foreground">A common rate already exists. Edit or delete it first.</p>
-            )}
+            <p className="text-xs text-muted-foreground">
+              "With Effect From" controls which rate applies to a given month (latest effective date ≤ period end wins). Older rates remain as history.
+            </p>
           </div>
         )}
 
@@ -276,26 +299,57 @@ export function ProductionRatesTab({ programId }: Props) {
               <TableHead className="w-[80px]">Type</TableHead>
               <TableHead>Applies To</TableHead>
               <TableHead>Rate / Ton (₹)</TableHead>
+              <TableHead>With Effect From</TableHead>
               <TableHead>Remarks</TableHead>
               <TableHead className="w-[100px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Loading...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">Loading...</TableCell></TableRow>
             ) : (rates as any[]).length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No production rates configured. Add rates by employee, department, BU, or a common rate.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">No production rates configured. Add rates by employee, department, BU, company, or a common rate.</TableCell></TableRow>
             ) : (rates as any[]).map((r: any) => {
               const isEditing = editingId === r.id;
+              const isSuperseded = latestPerScope.get(scopeKey(r)) !== (r.effective_from || '');
+              const effDateStr = r.effective_from
+                ? format(new Date(r.effective_from), 'dd MMM yyyy')
+                : '—';
               return (
-                <TableRow key={r.id}>
+                <TableRow key={r.id} className={isSuperseded ? 'opacity-60' : ''}>
                   <TableCell>{rateTypeBadge(r.rate_type || 'employee')}</TableCell>
-                  <TableCell>{getAppliesTo(r)}</TableCell>
+                  <TableCell>
+                    {getAppliesTo(r)}
+                    {isSuperseded && <Badge variant="outline" className="ml-2 text-[10px]">superseded</Badge>}
+                  </TableCell>
                   <TableCell>
                     {isEditing ? (
                       <Input className="w-[100px]" type="number" value={editRate} onChange={e => setEditRate(e.target.value)} />
                     ) : (
                       `₹${Number(r.rate_per_ton).toLocaleString('en-IN')}`
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {isEditing ? (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="sm" className="w-[150px] justify-start text-left font-normal">
+                            <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                            {editEffective ? format(editEffective, 'dd MMM yyyy') : 'Pick date'}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={editEffective}
+                            onSelect={(d) => d && setEditEffective(d)}
+                            initialFocus
+                            className={cn("p-3 pointer-events-auto")}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    ) : (
+                      effDateStr
                     )}
                   </TableCell>
                   <TableCell>
@@ -313,7 +367,12 @@ export function ProductionRatesTab({ programId }: Props) {
                       </div>
                     ) : (
                       <div className="flex gap-1">
-                        <Button size="icon" variant="ghost" onClick={() => { setEditingId(r.id); setEditRate(String(r.rate_per_ton)); setEditRemarks(r.remarks || ''); }}><Edit className="h-4 w-4" /></Button>
+                        <Button size="icon" variant="ghost" onClick={() => {
+                          setEditingId(r.id);
+                          setEditRate(String(r.rate_per_ton));
+                          setEditRemarks(r.remarks || '');
+                          setEditEffective(r.effective_from ? new Date(r.effective_from) : new Date());
+                        }}><Edit className="h-4 w-4" /></Button>
                         <Button size="icon" variant="ghost" onClick={() => remove.mutate({ id: r.id, programId })}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                       </div>
                     )}
