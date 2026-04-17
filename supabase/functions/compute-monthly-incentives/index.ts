@@ -259,10 +259,12 @@ serve(async (req) => {
       prodRates = rates || [];
     }
 
-    // Build dept -> BU and BU -> company resolution chain (for production rate cascade)
+    // Build dept -> BU and BU -> company resolution chain (used by both rate cascade and slab scope match)
     const deptToBu = new Map<string, string | null>();
+    const buToDivision = new Map<string, string | null>();
     const buToCompany = new Map<string, string | null>();
-    if (program.program_type === 'production') {
+    const divToCompany = new Map<string, string | null>();
+    {
       const { data: allDepts } = await supabase
         .from('departments').select('id, business_unit_id');
       allDepts?.forEach((d: any) => deptToBu.set(d.id, d.business_unit_id));
@@ -271,9 +273,9 @@ serve(async (req) => {
         .from('business_units').select('id, division_id');
       const { data: allDivs } = await supabase
         .from('divisions').select('id, company_id');
-      const divToCompany = new Map<string, string | null>();
       allDivs?.forEach((dv: any) => divToCompany.set(dv.id, dv.company_id));
       allBus?.forEach((b: any) => {
+        buToDivision.set(b.id, b.division_id ?? null);
         buToCompany.set(b.id, b.division_id ? (divToCompany.get(b.division_id) ?? null) : null);
       });
     }
