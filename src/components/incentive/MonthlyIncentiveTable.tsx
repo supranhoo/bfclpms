@@ -463,7 +463,7 @@ export function MonthlyIncentiveTable() {
       <Card>
         <CardHeader className="py-3 px-4">
           <CardTitle className="text-sm font-medium">
-            Showing {showStart}–{showEnd} of {filteredRecords.length} records
+            Showing {showStart}–{showEnd} of {aggregatedRows.length} employees
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
