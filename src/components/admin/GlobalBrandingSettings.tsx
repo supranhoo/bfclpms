@@ -20,6 +20,7 @@ export function GlobalBrandingSettings() {
   const [loginHeroHeadline, setLoginHeroHeadline] = useState('');
   const [loginHeroDescription, setLoginHeroDescription] = useState('');
   const [pmsPolicyUrl, setPmsPolicyUrl] = useState('');
+  const [viewModeStripColor, setViewModeStripColor] = useState('#3b82f6');
   const [hasChanges, setHasChanges] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadingWallpaper, setUploadingWallpaper] = useState(false);

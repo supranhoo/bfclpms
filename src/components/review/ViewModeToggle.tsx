@@ -1,6 +1,7 @@
 import { Home, Users, Shield, Briefcase, UserCheck, ClipboardCheck, UserCircle, UserCog, UserX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useAppSettings } from '@/hooks/useAppSettings';
 
 export type ViewMode = 'self' | 'team' | 'skip_level' | 'hr_pms' | 'audit' | 'management' | 'pending_self_review' | 'pending_manager_review' | 'pending_skip_review';
 
@@ -23,6 +24,9 @@ const modeConfig: Record<ViewMode, { label: string; icon: React.ElementType; des
 };
 
 export function ViewModeToggle({ currentMode, availableModes, onModeChange }: ViewModeToggleProps) {
+  const { data: settings } = useAppSettings();
+  const stripColor = settings?.view_mode_strip_color || '#3b82f6';
+
   // Only show if user has multiple modes available
   if (availableModes.length <= 1) return null;
 
@@ -30,24 +34,28 @@ export function ViewModeToggle({ currentMode, availableModes, onModeChange }: Vi
   const visibleModes = availableModes.filter(m => m !== 'skip_level');
 
   return (
-    <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/50 border overflow-x-auto scrollbar-none">
+    <div
+      className="flex items-center gap-1 p-1 rounded-lg border overflow-x-auto scrollbar-none"
+      style={{ backgroundColor: stripColor }}
+    >
       {visibleModes.map(mode => {
         const config = modeConfig[mode];
         const Icon = config.icon;
         const isActive = mode === currentMode;
-        
+
         return (
           <Button
             key={mode}
-            variant={isActive ? 'default' : 'ghost'}
+            variant="ghost"
             size="sm"
             onClick={() => onModeChange(mode)}
             className={cn(
-              'gap-2 transition-all',
-              isActive 
-                ? 'shadow-sm' 
-                : 'text-muted-foreground hover:text-foreground'
+              'gap-2 transition-all border-0',
+              isActive
+                ? 'bg-white shadow-sm hover:bg-white'
+                : 'bg-transparent text-white/90 hover:bg-white/15 hover:text-white'
             )}
+            style={isActive ? { color: stripColor } : undefined}
           >
             <Icon className="h-4 w-4" />
             <span className="hidden sm:inline">{config.label}</span>
