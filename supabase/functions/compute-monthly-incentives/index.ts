@@ -241,29 +241,30 @@ serve(async (req) => {
     }
 
     // 5a. Fetch vessel rates and monthly vessel entries for vessel-based programs
+    // Detection: data-driven — a program is vessel-based iff it has rows in incentive_vessel_rates.
+    // Do NOT gate on program.incentive_base string (UI/engine drift, see ADR-044 v4).
     let vesselRateMap = new Map<string, number>();
     let vesselEntryMap = new Map<string, number>();
-    if (program.incentive_base === 'fixed') {
-      const { data: vRates } = await supabase
-        .from('incentive_vessel_rates')
-        .select('employee_id, rate_per_vessel')
-        .eq('program_id', program_id);
-      if (vRates) {
-        for (const vr of vRates) {
-          vesselRateMap.set(vr.employee_id, vr.rate_per_vessel);
-        }
+    const { data: vRates, error: vRatesErr } = await supabase
+      .from('incentive_vessel_rates')
+      .select('employee_id, rate_per_vessel')
+      .eq('program_id', program_id);
+    if (vRatesErr) throw new Error(`Vessel rates fetch failed: ${vRatesErr.message}`);
+    const isVesselProgram = (vRates?.length ?? 0) > 0;
+    if (isVesselProgram) {
+      for (const vr of vRates!) {
+        vesselRateMap.set(vr.employee_id, Number(vr.rate_per_vessel));
       }
 
-      const { data: vEntries } = await supabase
+      const { data: vEntries, error: vEntriesErr } = await supabase
         .from('vessel_monthly_entries')
         .select('employee_id, vessels_handled')
         .eq('program_id', program_id)
         .eq('month', review_period)
         .eq('year', review_year);
-      if (vEntries) {
-        for (const ve of vEntries) {
-          vesselEntryMap.set(ve.employee_id, ve.vessels_handled);
-        }
+      if (vEntriesErr) throw new Error(`Vessel monthly entries fetch failed: ${vEntriesErr.message}`);
+      for (const ve of (vEntries || [])) {
+        vesselEntryMap.set(ve.employee_id, Number(ve.vessels_handled));
       }
     }
 
@@ -600,7 +601,7 @@ serve(async (req) => {
       let vesselAmount: number | null = null;
       const vesselRate = vesselRateMap.get(emp.id);
       const vesselsHandled = vesselEntryMap.get(emp.id);
-      if (program.incentive_base === 'fixed' && vesselRate !== undefined) {
+      if (isVesselProgram && vesselRate !== undefined) {
         // Check KRA score gate
         if (pmsScore !== null && pmsScore < (program.min_kra_score || 3)) {
           isDQ = true;
@@ -618,7 +619,7 @@ serve(async (req) => {
       let incentiveStatus = 'hold';
       if (isDQ) {
         incentiveStatus = 'forfeited';
-      } else if (program.incentive_base === 'fixed' && vesselRate !== undefined) {
+      } else if (isVesselProgram && vesselRate !== undefined) {
         // Vessel-based: finalised if vessel entry exists
         incentiveStatus = vesselsHandled !== undefined && vesselsHandled > 0 ? 'finalised' : 'hold';
       } else {
@@ -786,6 +787,9 @@ serve(async (req) => {
       employees_with_selected_period_data: employeesWithSelectedPeriodData,
       employees_with_resolved_rate: employeesWithResolvedRate,
       employees_skipped_no_rate: employeesSkippedNoRate,
+      vessel_program_detected: isVesselProgram,
+      employees_with_vessel_rate: vesselRateMap.size,
+      employees_with_vessel_entries: vesselEntryMap.size,
       records_pre_scope: recordsPreScope,
       records_post_scope: recordsPostScope,
       legacy_rows_deleted: 0,
