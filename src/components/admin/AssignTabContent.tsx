@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAssignAuditEmployee, useRemoveAuditAssignment, useUpdateAuditAssignment } from '@/hooks/useAuditAssignments';
 import { Search, X, UserPlus, Loader2, ArrowRightLeft } from 'lucide-react';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 interface AssignTabProps {
   selectedAuditor: string;
@@ -22,6 +23,7 @@ export function AssignTabContent({ selectedAuditor, assignmentsByAuditor, allPro
   const removeMutation = useRemoveAuditAssignment();
   const updateMutation = useUpdateAuditAssignment();
   const [reassignPopoverId, setReassignPopoverId] = useState<string | null>(null);
+  const [removingAssignment, setRemovingAssignment] = useState<{ id: string; name: string } | null>(null);
 
   const assignedEmployeeIds = useMemo(() => {
     if (!selectedAuditor) return new Set<string>();
@@ -117,7 +119,7 @@ export function AssignTabContent({ selectedAuditor, assignmentsByAuditor, allPro
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => removeMutation.mutate(a.id)}
+                      onClick={() => setRemovingAssignment({ id: a.id, name: a.employee?.full_name || a.employee?.email || 'this employee' })}
                       disabled={removeMutation.isPending}
                     >
                       <X className="h-4 w-4 text-destructive" />
@@ -175,6 +177,19 @@ export function AssignTabContent({ selectedAuditor, assignmentsByAuditor, allPro
           </div>
         </ScrollArea>
       </div>
+
+      <ConfirmDestructiveDialog
+        open={!!removingAssignment}
+        onConfirm={() => {
+          if (!removingAssignment) return;
+          removeMutation.mutate(removingAssignment.id, { onSuccess: () => setRemovingAssignment(null) });
+        }}
+        onCancel={() => setRemovingAssignment(null)}
+        title="Remove Audit Assignment?"
+        description={`This will remove ${removingAssignment?.name} from the auditor's assigned employees. The auditor will no longer review this employee's KPIs. This cannot be undone.`}
+        confirmLabel="Remove Assignment"
+        isLoading={removeMutation.isPending}
+      />
     </>
   );
 }

@@ -37,6 +37,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useCustomTabs, useUpsertCustomTab, useDeleteCustomTab } from '@/hooks/useIncentiveCustomTabs';
 import { CustomTabManager } from '@/components/incentive/CustomTabManager';
 import { CustomTabDataGrid } from '@/components/incentive/CustomTabDataGrid';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 /* ── Summary badges for each program card ── */
 function ProgramSummaryBadges({ programId }: { programId: string }) {
@@ -69,6 +70,7 @@ function ProgramInnerTabs({ program }: { program: any }) {
   const [activeTab, setActiveTab] = useState('mapping');
   const [showTabManager, setShowTabManager] = useState(false);
   const [editingTab, setEditingTab] = useState<any>(null);
+  const [deletingTab, setDeletingTab] = useState<any>(null);
 
   const handleSaveTab = (tabData: any) => {
     upsertTab.mutate(
@@ -78,9 +80,17 @@ function ProgramInnerTabs({ program }: { program: any }) {
   };
 
   const handleDeleteTab = (tab: any) => {
-    if (!confirm(`Delete tab "${tab.tab_label}"? All data in this tab will be lost.`)) return;
-    deleteTab.mutate({ id: tab.id, programId: p.id });
-    if (activeTab === `custom-${tab.id}`) setActiveTab('mapping');
+    setDeletingTab(tab);
+  };
+
+  const confirmDeleteTab = () => {
+    if (!deletingTab) return;
+    deleteTab.mutate({ id: deletingTab.id, programId: p.id }, {
+      onSuccess: () => {
+        if (activeTab === `custom-${deletingTab.id}`) setActiveTab('mapping');
+        setDeletingTab(null);
+      },
+    });
   };
 
   return (
@@ -156,6 +166,16 @@ function ProgramInnerTabs({ program }: { program: any }) {
         editingTab={editingTab}
         isPending={upsertTab.isPending}
       />
+
+      <ConfirmDestructiveDialog
+        open={!!deletingTab}
+        onConfirm={confirmDeleteTab}
+        onCancel={() => setDeletingTab(null)}
+        title="Delete Custom Tab?"
+        description={`This will permanently delete the tab "${deletingTab?.tab_label}" and all data entered under it. This cannot be undone.`}
+        confirmLabel="Delete Tab"
+        isLoading={deleteTab.isPending}
+      />
     </>
   );
 }
@@ -170,6 +190,7 @@ export default function IncentiveConfig() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newProgram, setNewProgram] = useState({ name: '', program_type: 'support', description: '' });
   const [editProgram, setEditProgram] = useState<any>(null);
+  const [deletingProgram, setDeletingProgram] = useState<any>(null);
 
   const handleCreate = () => {
     createProgram.mutate(newProgram, {
@@ -231,7 +252,7 @@ export default function IncentiveConfig() {
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => deleteProgram.mutate(p.id)}
+                          onClick={() => setDeletingProgram(p)}
                           title="Delete program"
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
@@ -296,6 +317,21 @@ export default function IncentiveConfig() {
           )}
         </DialogContent>
       </Dialog>
+
+      <ConfirmDestructiveDialog
+        open={!!deletingProgram}
+        onConfirm={() => {
+          if (!deletingProgram) return;
+          deleteProgram.mutate(deletingProgram.id, {
+            onSuccess: () => setDeletingProgram(null),
+          });
+        }}
+        onCancel={() => setDeletingProgram(null)}
+        title="Delete Incentive Program?"
+        description={`This will permanently delete the program "${deletingProgram?.name}" along with all its slabs, disqualification rules, mappings, custom tabs, and configuration. Computed historical incentive records are preserved. This cannot be undone.`}
+        confirmLabel="Delete Program"
+        isLoading={deleteProgram.isPending}
+      />
     </div>
   );
 }

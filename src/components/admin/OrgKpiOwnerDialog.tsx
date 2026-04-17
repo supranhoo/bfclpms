@@ -9,6 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useProfiles } from '@/hooks/useOrganization';
 import { useOrgKpiOwners, useAssignOrgKpiOwner, useRemoveOrgKpiOwner } from '@/hooks/useOrgKpiDataOwner';
 import { Loader2, UserPlus, X, Search, Users } from 'lucide-react';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 interface OrgKpiOwnerDialogProps {
   open: boolean;
@@ -26,6 +27,7 @@ export function OrgKpiOwnerDialog({
   kpiName,
 }: OrgKpiOwnerDialogProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [removingOwner, setRemovingOwner] = useState<{ id: string; name: string } | null>(null);
   
   const { data: profiles, isLoading: loadingProfiles } = useProfiles();
   const { data: owners, isLoading: loadingOwners } = useOrgKpiOwners(categoryId, kraName, kpiName);
@@ -55,8 +57,8 @@ export function OrgKpiOwnerDialog({
     });
   };
 
-  const handleRemove = (ownerId: string) => {
-    removeOwner.mutate(ownerId);
+  const handleRemove = (ownerId: string, ownerName: string) => {
+    setRemovingOwner({ id: ownerId, name: ownerName });
   };
 
   const getInitials = (name: string | null) => {
@@ -107,7 +109,7 @@ export function OrgKpiOwnerDialog({
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={() => handleRemove(owner.id)}
+                      onClick={() => handleRemove(owner.id, owner.owner?.full_name || owner.owner?.email || 'this owner')}
                       disabled={removeOwner.isPending}
                     >
                       <X className="h-4 w-4" />
@@ -186,6 +188,19 @@ export function OrgKpiOwnerDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <ConfirmDestructiveDialog
+        open={!!removingOwner}
+        onConfirm={() => {
+          if (!removingOwner) return;
+          removeOwner.mutate(removingOwner.id, { onSuccess: () => setRemovingOwner(null) });
+        }}
+        onCancel={() => setRemovingOwner(null)}
+        title="Remove Data Owner?"
+        description={`This will remove ${removingOwner?.name} as a data owner for this KPI. They will lose the ability to enter data for it. This cannot be undone.`}
+        confirmLabel="Remove Owner"
+        isLoading={removeOwner.isPending}
+      />
     </Dialog>
   );
 }

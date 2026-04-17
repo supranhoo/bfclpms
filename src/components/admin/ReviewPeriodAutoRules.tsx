@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 interface Props {
   periodId: string;
@@ -35,6 +36,7 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
   const [newRuleType, setNewRuleType] = useState('');
   const [newDeadlineDays, setNewDeadlineDays] = useState<number>(14);
   const [newLockDate, setNewLockDate] = useState<Date | undefined>(undefined);
+  const [deletingRuleId, setDeletingRuleId] = useState<string | null>(null);
 
   const { data: rules, isLoading } = useQuery({
     queryKey: ['review-period-auto-rules', periodId],
@@ -249,7 +251,7 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => deleteRule.mutate(rule.id)}
+                        onClick={() => setDeletingRuleId(rule.id)}
                         disabled={deleteRule.isPending}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
@@ -262,6 +264,19 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
           </Table>
         )}
       </CardContent>
+
+      <ConfirmDestructiveDialog
+        open={!!deletingRuleId}
+        onConfirm={() => {
+          if (!deletingRuleId) return;
+          deleteRule.mutate(deletingRuleId, { onSuccess: () => setDeletingRuleId(null) });
+        }}
+        onCancel={() => setDeletingRuleId(null)}
+        title="Delete Auto-Rule?"
+        description="This will permanently delete this automation rule for the review period. Any future scheduled actions tied to it will not run. This cannot be undone."
+        confirmLabel="Delete Rule"
+        isLoading={deleteRule.isPending}
+      />
     </Card>
   );
 }
