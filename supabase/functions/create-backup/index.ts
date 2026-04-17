@@ -307,6 +307,25 @@ async function handleBatch(
   const totalRows = results.reduce((sum, r) => sum + r.rows, 0)
   const totalSize = results.reduce((sum, r) => sum + r.sizeBytes, 0)
 
+  // Incrementally update backup_logs so UI reflects mid-flight progress
+  try {
+    const { data: existing } = await supabase
+      .from('backup_logs')
+      .select('tables_count, total_rows, file_size_bytes')
+      .eq('id', backupId)
+      .maybeSingle()
+
+    if (existing) {
+      await supabase.from('backup_logs').update({
+        tables_count: (existing.tables_count || 0) + results.length,
+        total_rows: (existing.total_rows || 0) + totalRows,
+        file_size_bytes: (existing.file_size_bytes || 0) + totalSize,
+      }).eq('id', backupId)
+    }
+  } catch (e) {
+    console.warn('Failed to update progress on backup_logs:', e)
+  }
+
   return new Response(
     JSON.stringify({
       mode: 'batch',
