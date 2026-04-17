@@ -402,6 +402,22 @@ export function MonthlyIncentiveTable() {
                 </SelectContent>
               </Select>
             </div>
+            {companies.length > 1 && (
+              <div className="w-48">
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Company</label>
+                <MultiSelectFilter
+                  options={companies.map(c => c.name)}
+                  value={selectedCompanyNames}
+                  onChange={(names) => {
+                    const ids = names.map(n => companyNameToId.get(n)).filter(Boolean) as string[];
+                    setSelectedCompanyIds(ids);
+                  }}
+                  placeholder="All Companies"
+                  searchPlaceholder="Search companies..."
+                  className="w-full h-10"
+                />
+              </div>
+            )}
             <div className="w-32">
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Period</label>
               <Select value={periodFilter} onValueChange={setPeriodFilter}>
