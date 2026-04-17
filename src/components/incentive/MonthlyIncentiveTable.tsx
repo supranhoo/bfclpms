@@ -10,11 +10,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Download, CheckCircle2, DollarSign, Calculator, Loader2, Users, ShieldAlert, Clock, IndianRupee, Search, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useIncentiveRecords, useConfirmIncentiveRecords, useMarkIncentivePaid, useComputeIncentives, useIncentiveReportData } from '@/hooks/useIncentiveRecords';
+import { useIncentiveRecords, useConfirmIncentiveRecords, useMarkIncentivePaid, useComputeIncentives, useIncentiveReportData, useEmployeeKpiStatusForPeriod } from '@/hooks/useIncentiveRecords';
 import { useIncentivePrograms } from '@/hooks/useIncentivePrograms';
 import { useAuth } from '@/contexts/AuthContext';
 import { IncentiveDryRunDialog } from './IncentiveDryRunDialog';
 import { IncentiveStatusOverride } from './IncentiveStatusOverride';
+import { RatingBadge } from '@/components/ui/RatingBadge';
 import * as XLSX from 'xlsx';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -93,29 +94,69 @@ export function MonthlyIncentiveTable() {
     });
   }, [records, statusFilter, incentiveStatusFilter, eligibilityFilter, periodFilter, searchTerm]);
 
-  const summaryStats = useMemo(() => {
-    const total = filteredRecords.length;
-    const eligible = filteredRecords.filter((r: any) => !r.is_disqualified).length;
-    const disqualified = filteredRecords.filter((r: any) => r.is_disqualified).length;
-    const prorata = filteredRecords.filter((r: any) => !r.is_disqualified && r.pro_rata_factor < 1).length;
-    const totalAmount = filteredRecords.reduce((s: number, r: any) => s + Math.round(r.incentive_amount || 0), 0);
-    return { total, eligible, disqualified, prorata, totalAmount };
+  // Aggregate to one row per employee for the UI table.
+  // Bulk actions still target the underlying record IDs (recordIds).
+  const aggregatedRows = useMemo(() => {
+    const byEmp = new Map<string, any>();
+    filteredRecords.forEach((r: any) => {
+      const empId = r.employee_id;
+      if (!empId) return;
+      const existing = byEmp.get(empId);
+      if (!existing) {
+        byEmp.set(empId, {
+          ...r,
+          id: empId, // row key = employee id
+          employee_id: empId,
+          recordIds: [r.id],
+          incentive_amount: Number(r.incentive_amount || 0),
+        });
+      } else {
+        existing.recordIds.push(r.id);
+        existing.incentive_amount = Number(existing.incentive_amount || 0) + Number(r.incentive_amount || 0);
+        // Prefer the highest final_incentive_percent for display
+        if ((r.final_incentive_percent || 0) > (existing.final_incentive_percent || 0)) {
+          existing.final_incentive_percent = r.final_incentive_percent;
+          existing.incentive_slabs = r.incentive_slabs;
+        }
+        // If any underlying record is non-final, weaken aggregate workflow status
+        if (existing.status === 'paid' && r.status !== 'paid') existing.status = r.status;
+        if (existing.status === 'confirmed' && r.status === 'draft') existing.status = 'draft';
+      }
+    });
+    return Array.from(byEmp.values());
   }, [filteredRecords]);
 
-  // Pagination
-  const totalPages = pageSize === 0 ? 1 : Math.max(1, Math.ceil(filteredRecords.length / pageSize));
-  const paginatedRecords = pageSize === 0
-    ? filteredRecords
-    : filteredRecords.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  const showStart = filteredRecords.length === 0 ? 0 : (pageSize === 0 ? 1 : (currentPage - 1) * pageSize + 1);
-  const showEnd = pageSize === 0 ? filteredRecords.length : Math.min(currentPage * pageSize, filteredRecords.length);
+  // Per-employee KPI status (Approved if all KPIs in period are status='approved', else Pending)
+  const employeeIds = useMemo(() => aggregatedRows.map((r: any) => r.employee_id).filter(Boolean), [aggregatedRows]);
+  const { data: kpiStatusMap } = useEmployeeKpiStatusForPeriod(
+    employeeIds,
+    isAllMode ? undefined : selectedMonth,
+    isAllMode ? undefined : Number(selectedYear),
+  );
 
-  // Selection helpers
-  const toggleSelect = (id: string) => {
+  const summaryStats = useMemo(() => {
+    const total = aggregatedRows.length;
+    const eligible = aggregatedRows.filter((r: any) => !r.is_disqualified).length;
+    const disqualified = aggregatedRows.filter((r: any) => r.is_disqualified).length;
+    const prorata = aggregatedRows.filter((r: any) => !r.is_disqualified && r.pro_rata_factor < 1).length;
+    const totalAmount = aggregatedRows.reduce((s: number, r: any) => s + Math.round(r.incentive_amount || 0), 0);
+    return { total, eligible, disqualified, prorata, totalAmount };
+  }, [aggregatedRows]);
+
+  // Pagination
+  const totalPages = pageSize === 0 ? 1 : Math.max(1, Math.ceil(aggregatedRows.length / pageSize));
+  const paginatedRecords = pageSize === 0
+    ? aggregatedRows
+    : aggregatedRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const showStart = aggregatedRows.length === 0 ? 0 : (pageSize === 0 ? 1 : (currentPage - 1) * pageSize + 1);
+  const showEnd = pageSize === 0 ? aggregatedRows.length : Math.min(currentPage * pageSize, aggregatedRows.length);
+
+  // Selection toggles operate on aggregated employee rows; we expand to underlying record IDs at action time.
+  const toggleSelect = (rowId: string) => {
     setSelectAllRecords(false);
     setSelectedIds(prev => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.has(rowId)) next.delete(rowId); else next.add(rowId);
       return next;
     });
   };
@@ -124,7 +165,6 @@ export function MonthlyIncentiveTable() {
     const pageIds = paginatedRecords.map((r: any) => r.id);
     const allPageSelected = pageIds.length > 0 && pageIds.every((id: string) => selectedIds.has(id));
     if (allPageSelected) {
-      // Deselect page
       setSelectedIds(prev => {
         const next = new Set(prev);
         pageIds.forEach((id: string) => next.delete(id));
@@ -142,22 +182,32 @@ export function MonthlyIncentiveTable() {
 
   const handleSelectAllRecords = () => {
     setSelectAllRecords(true);
-    setSelectedIds(new Set(filteredRecords.map((r: any) => r.id)));
+    setSelectedIds(new Set(aggregatedRows.map((r: any) => r.id)));
   };
 
   const selectedCount = selectedIds.size;
   const allPageSelected = paginatedRecords.length > 0 &&
     paginatedRecords.every((r: any) => selectedIds.has(r.id));
-  const showSelectAllBanner = allPageSelected && filteredRecords.length > paginatedRecords.length && !selectAllRecords;
+  const showSelectAllBanner = allPageSelected && aggregatedRows.length > paginatedRecords.length && !selectAllRecords;
 
-  // Mark Paid impact data
+  // Expand selected employee rows back to underlying incentive record IDs
+  const selectedRecordIds = useMemo(() => {
+    const ids: string[] = [];
+    aggregatedRows.forEach((row: any) => {
+      if (selectedIds.has(row.id)) ids.push(...(row.recordIds || []));
+    });
+    return ids;
+  }, [aggregatedRows, selectedIds]);
+
+  // Mark Paid impact data — operates on filteredRecords (raw incentive records)
   const markPaidTargets = useMemo(() => {
     const confirmed = filteredRecords.filter((r: any) => r.status === 'confirmed');
     if (selectedCount > 0) {
-      return confirmed.filter((r: any) => selectedIds.has(r.id));
+      const idSet = new Set(selectedRecordIds);
+      return confirmed.filter((r: any) => idSet.has(r.id));
     }
     return confirmed;
-  }, [filteredRecords, selectedIds, selectedCount]);
+  }, [filteredRecords, selectedRecordIds, selectedCount]);
 
   const markPaidImpact = useMemo(() => ({
     count: markPaidTargets.length,
@@ -223,7 +273,7 @@ export function MonthlyIncentiveTable() {
   const handleConfirmAll = () => {
     const drafts = filteredRecords.filter((r: any) => r.status === 'draft');
     const targets = selectedCount > 0
-      ? drafts.filter((r: any) => selectedIds.has(r.id))
+      ? (() => { const idSet = new Set(selectedRecordIds); return drafts.filter((r: any) => idSet.has(r.id)); })()
       : drafts;
     const draftIds = targets.map((r: any) => r.id);
     if (draftIds.length > 0 && user?.id) confirmRecords.mutate({ ids: draftIds, confirmedBy: user.id });
@@ -413,7 +463,7 @@ export function MonthlyIncentiveTable() {
       <Card>
         <CardHeader className="py-3 px-4">
           <CardTitle className="text-sm font-medium">
-            Showing {showStart}–{showEnd} of {filteredRecords.length} records
+            Showing {showStart}–{showEnd} of {aggregatedRows.length} employees
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -429,10 +479,10 @@ export function MonthlyIncentiveTable() {
                     />
                   </TableHead>
                   <TableHead>Employee</TableHead>
-                  <TableHead>Dept</TableHead>
-                  <TableHead>Month</TableHead>
                   <TableHead>Period</TableHead>
                   <TableHead>PMS Score</TableHead>
+                  <TableHead>Final Rating</TableHead>
+                  <TableHead>KPI Status</TableHead>
                   <TableHead>Slab</TableHead>
                   <TableHead>Base %</TableHead>
                   <TableHead>DQ Reason</TableHead>
@@ -459,7 +509,7 @@ export function MonthlyIncentiveTable() {
                         <TableCell colSpan={16} className="text-center py-2 bg-muted/50">
                           <span className="text-sm">All {paginatedRecords.length} on this page are selected. </span>
                           <Button variant="link" size="sm" className="p-0 h-auto text-sm font-semibold" onClick={handleSelectAllRecords}>
-                            Select all {filteredRecords.length} records
+                            Select all {aggregatedRows.length} employees
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -467,7 +517,7 @@ export function MonthlyIncentiveTable() {
                     {selectAllRecords && (
                       <TableRow>
                         <TableCell colSpan={16} className="text-center py-2 bg-primary/10">
-                          <span className="text-sm font-medium">All {filteredRecords.length} records are selected. </span>
+                          <span className="text-sm font-medium">All {aggregatedRows.length} employees are selected. </span>
                           <Button variant="link" size="sm" className="p-0 h-auto text-sm" onClick={() => { setSelectAllRecords(false); setSelectedIds(new Set()); }}>
                             Clear selection
                           </Button>
@@ -487,10 +537,24 @@ export function MonthlyIncentiveTable() {
                           <div className="text-sm font-medium">{r.profiles?.full_name}</div>
                           <div className="text-xs text-muted-foreground">{r.profiles?.employee_code}</div>
                         </TableCell>
-                        <TableCell className="text-sm">{r.profiles?.departments?.name || '—'}</TableCell>
-                        <TableCell className="text-xs">{r.review_period}</TableCell>
                         <TableCell className="text-xs">{r.payment_period || 'Full Month'}</TableCell>
                         <TableCell>{r.pms_score?.toFixed(2) || '—'}</TableCell>
+                        <TableCell><RatingBadge score={r.pms_score} short /></TableCell>
+                        <TableCell>
+                          {(() => {
+                            const ks = kpiStatusMap?.get(r.employee_id);
+                            if (!ks || ks.total === 0) {
+                              return <Badge variant="outline" className="text-xs">No KPIs</Badge>;
+                            }
+                            return ks.allApproved ? (
+                              <Badge className="text-xs">Approved</Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-xs">
+                                Pending ({ks.approved}/{ks.total})
+                              </Badge>
+                            );
+                          })()}
+                        </TableCell>
                         <TableCell>
                           {r.incentive_slabs ? (
                             <span className="text-xs">{r.incentive_slabs.min_value}–{r.incentive_slabs.max_value}</span>
@@ -545,7 +609,7 @@ export function MonthlyIncentiveTable() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <IncentiveStatusOverride recordId={r.id} currentStatus={r.incentive_status || 'hold'} />
+                          <IncentiveStatusOverride recordId={r.recordIds?.[0] || r.id} currentStatus={r.incentive_status || 'hold'} />
                         </TableCell>
                       </TableRow>
                     ))}
