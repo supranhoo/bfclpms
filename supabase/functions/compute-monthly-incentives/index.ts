@@ -412,6 +412,12 @@ serve(async (req) => {
         const rateRecord = empRate || deptRate || buRate || companyRate || commonRate;
         resolvedRate = rateRecord?.rate_per_ton ?? null;
 
+        // Track rate resolution for diagnostics (only when employee actually has daily data)
+        if (prodDailyMap.has(emp.id)) {
+          if (resolvedRate !== null) employeesWithResolvedRate++;
+          else employeesSkippedNoRate++;
+        }
+
         if (productionTotalTons !== null && resolvedRate !== null) {
           incentiveAmount = productionTotalTons * resolvedRate;
         }
