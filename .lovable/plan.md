@@ -1,63 +1,74 @@
 
-## Addendum: One-time Backfill Tool — Recover Missing Employees from Past Imports
+## RCA: Over-aggressive N/A masking in vessel mode
 
-Adds a **one-time recovery utility** to the existing import-RCA plan so the admin does NOT have to re-upload the master file.
+### What's wrong (verified against current code)
+The previous fix gated **all** PMS-related columns on a single program-level flag `result.diagnostics?.vessel_program_detected`. So once any program is detected as vessel-based, **every row** in the dialog shows `N/A` for PMS Score, Base %, DQ Reason, LTI, Pro-rata, Final % — regardless of whether that specific employee actually has KRAs/PMS data.
 
-### Goal
-Reconcile `profiles` against every employee row that ever passed through the system (via prior import attempts, audit logs, or attached source files) and **insert the missing ones automatically** — preserving all their attributes (designation, dept, BU, level, location, manager, etc.).
+That's why:
+- **Swaraj (100327)** — has KRAs, has a real `pms_score` → currently shows `N/A`. Wrong. Should show `4.74`.
+- **Manabendra (100386)** — no KRAs, no `pms_score` → correctly shows `N/A`.
+- **DQ Reason** — masked for everyone in vessel mode. Wrong. DQ is a per-row eligibility outcome and is meaningful regardless of program type.
 
-### Sources of truth to pull from (in priority order)
-1. **`import_audit_logs`** (or equivalent table that captures the raw payload of each import run) — contains the full row data of every attempted import, including rows that were rejected/skipped silently.
-2. **Most recent uploaded master file** retained in storage (if the importer archives uploads) — re-parsed server-side.
-3. **Admin-supplied file fallback** — single drag-drop in the recovery dialog if neither (1) nor (2) yields enough rows.
+The masking decision must be **per-row**, not per-program.
 
-The backfill script reconciles candidates by normalized `employee_code` (`upper(trim(...))`) against current `profiles` and produces three buckets: **already present · safe to insert · conflict (needs review)**.
+### Correct rule (per-row)
+For each record `r` in the preview table:
 
-### New one-time admin tool
+| Column | Rule |
+|---|---|
+| **PMS Score** | If `r.pms_score != null` → show numeric. Else → `N/A` (muted). Never fall back to `production_value`. |
+| **Base %** | If `r.pms_score != null` → show `r.base_incentive_percent`. Else → `N/A`. |
+| **Final %** | Same as Base % (depends on a real PMS score existing). |
+| **Pro-rata** | Show whenever `r.proration_factor` is meaningful (not just 1.0); else `—`. Independent of PMS. |
+| **DQ Reason** | Always show `r.disqualification_reason` if present, else `—`. Never mask. DQ applies to vessel rows too (e.g., not eligible, no rate configured). |
+| **LTI Penalty** | Show whenever `r.lti_penalty_percent` is set; else `—`. Independent of PMS. |
+| **Amount** | Always show `r.incentive_amount`. |
+| **Vessel badge** | Show next to employee name when the row's `production_value` came from vessel entries (i.e., program is vessel-based AND row has vessel data). Cosmetic only. |
 
-**Page:** `Admin → System Settings → Data Repair → Employee Master Backfill`
-**Files:**
-- `src/pages/admin/EmployeeMasterBackfill.tsx` (new) — lists candidates, shows diff, lets admin pick "Insert all safe" or row-by-row.
-- `supabase/functions/backfill-employee-master/index.ts` (new, admin-gated) — does the heavy lifting server-side: pull → normalize → reconcile → batched insert with per-row error capture.
+The `vessel_program_detected` diagnostic is still useful for the **header tooltip** ("PMS Score may be N/A for vessel-based employees without KRAs") and the **Vessel badge**, but it must NOT gate cell rendering.
 
-**Flow:**
-1. Admin opens the page → function runs in **dry-run mode**, returns: *Total candidates: N · Already in DB: X · Will insert: Y · Conflicts: Z*.
-2. Admin reviews the table (employee_code, name, dept, BU, location, source row #, why it was missed).
-3. Admin clicks **"Run Backfill"** → confirmation dialog (per `ConfirmDestructiveDialog` policy) → server inserts in batches of 100 with full per-row try/catch.
-4. Final summary dialog (reuses the new `ImportSummaryDialog` from the prior plan): *Inserted: Y · Failed: F (downloadable error report)*.
-5. Result is logged to `import_audit_logs` with `source = 'one_time_backfill'` and `performed_by = <admin user>`.
+### Fix
 
-### Safety & guardrails
-- **Idempotent**: re-running after success is a no-op (all rows already present).
-- **Read-then-decide**: never overwrites existing profiles — backfill is **insert-only**. Updates to existing rows still go through the normal import path (per the prior auto-update plan).
-- **Master-data soft-resolve**: if a candidate's `department` / `business_unit` / `location` doesn't resolve, insert with that FK = NULL and flag the row in the summary so admin can fix masters later. No row is silently dropped.
-- **Auth**: edge function uses the shared `requireAdminUser` helper (admin-only).
-- **Audit trail**: every inserted profile gets an `import_audit_logs` entry with source = `one_time_backfill` and the originating run-id for traceability.
+**File: `src/components/incentive/IncentiveDryRunDialog.tsx`**
+
+1. Remove the blanket `isVessel ? 'N/A' : ...` ternaries from PMS Score, Base %, DQ, LTI, Pro-rata, Final %.
+2. Replace each with a per-row check:
+   - PMS Score: `r.pms_score != null ? toNum(r.pms_score).toFixed(2) : <muted N/A>` (drop the `production_value` fallback entirely — that was the original bug source).
+   - Base %, Final %: render numeric when `r.pms_score != null`, else `<muted N/A>`.
+   - DQ Reason: `r.disqualification_reason || '—'` always.
+   - LTI, Pro-rata: render their own values when present, else `—`.
+3. Keep the **Vessel badge** but compute it per-row: show only when `isVesselProgram && (r.vessel_count > 0 || r.production_value > 0)`.
+4. Keep the header info-tooltip on "PMS Score" — wording updated to: *"Employees without assigned KRAs will show N/A here."*
+
+No backend / engine / schema changes.
+
+### Regression guard
+Update `src/components/incentive/__tests__/IncentiveDryRunDialog.test.tsx`:
+- **Fixture A** (vessel program, no KRAs): `pms_score=null`, `production_value=4000`, `vessel_count=2` → PMS=N/A, Base=N/A, Final=N/A, DQ=`—`, Amount=`₹4,000`, Vessel badge present.
+- **Fixture B** (vessel program, has KRAs): `pms_score=4.74`, `vessel_count=10` → PMS=`4.74`, Base=numeric, Final=numeric, Amount=numeric, Vessel badge present.
+- **Fixture C** (vessel program, disqualified): `disqualification_reason="No vessel rate configured"`, `pms_score=null` → DQ shown verbatim (not masked), Amount=₹0.
+- **Fixture D** (non-vessel program, normal employee): unchanged behavior.
 
 ### SSOT sync
-- `DOCUMENTATION.md` Version History: *"One-time Employee Master Backfill tool added under Data Repair to recover ~1,100 historically-missed profiles without requiring re-upload."*
-- `POLICY.md` Data Repair section: *"Backfill is insert-only, idempotent, admin-only, and fully audit-logged."*
-- `mem://features/admin/data-repair-engine`: append the backfill workflow.
+- `DOCUMENTATION.md` Version History: *"Dry-run dialog masking moved from per-program to per-row. PMS columns now reflect each employee's actual KRA presence; DQ reasons always shown."*
+- `POLICY.md` Incentive Display Rules: *"Per-row rule — Mask PMS-derived columns iff that employee's `pms_score IS NULL`. DQ reason, LTI, pro-rata, and amount are NEVER masked."*
+- `mem://features/incentive/core-engine-specifications`: append the per-row display contract.
 
 ### Risk & Impact
 | Area | Impact |
 |---|---|
-| Data | Insert-only. ~1,100 new `profiles` rows expected. Zero modification of existing 895. |
-| Workflow | After backfill, dashboards / KPI matrix / incentive enrollment will reflect the full org automatically. |
-| UI/UX | One new admin page + reuses existing summary dialog. |
-| Regression | Very low. Tool is gated behind admin role and a confirmation dialog; idempotent on re-run. |
-| Mitigation | Dry-run preview before any write; per-row error capture; downloadable error report; full audit log. |
+| Data | None. Display-only. |
+| Workflow | None. Compute engine untouched. |
+| UI/UX | Vessel rows with KRAs (Swaraj) regain their real PMS/Base/Final values. DQ reasons reappear universally. No layout change. |
+| Regression | Very low. Each cell now reads its own field. Four Vitest fixtures lock the matrix. |
+| Mitigation | Tests above + the header tooltip clarifies the per-row rule. |
 
-### Files Touched (delta)
-- new: `src/pages/admin/EmployeeMasterBackfill.tsx`
-- new: `supabase/functions/backfill-employee-master/index.ts`
-- `src/pages/admin/SystemSettings.tsx` (or Data Repair index) — add tile/link
-- `DOCUMENTATION.md`, `POLICY.md`, `mem://features/admin/data-repair-engine`
+### Files Touched
+- `src/components/incentive/IncentiveDryRunDialog.tsx`
+- `src/components/incentive/__tests__/IncentiveDryRunDialog.test.tsx` (extend)
+- `DOCUMENTATION.md`, `POLICY.md`, `mem://features/incentive/core-engine-specifications`
 
 ### Out of Scope
-- Auto-running the backfill on a schedule (one-time, manual trigger only).
-- Backfilling KPI / score history (employees only — KPI data still requires its own import run after profiles exist).
-- Touching the existing import pipeline beyond what's already in the prior plan.
-
-### Question before implementation
-To make the dry-run accurate on the first try: does the project currently retain (a) raw payloads in `import_audit_logs`, or (b) the original uploaded XLSX files in storage? If neither, the recovery tool will fall back to a single drag-drop where the admin uploads the master file once and the tool runs the full reconcile + insert flow against it (still no manual re-import needed beyond that one drop).
+- Engine changes (compute is correct).
+- Removing the Vessel badge (it's useful per-row context).
+- Renaming columns.
