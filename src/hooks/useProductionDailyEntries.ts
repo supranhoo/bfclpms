@@ -13,7 +13,8 @@ export function useProductionRates(programId: string) {
         .from('incentive_production_rates')
         .select('*, profiles:employee_id(id, full_name, employee_code, email, designation, departments(name))')
         .eq('program_id', programId)
-        .order('created_at');
+        .order('rate_type')
+        .order('effective_from', { ascending: false });
       if (error) throw error;
       return data || [];
     },
