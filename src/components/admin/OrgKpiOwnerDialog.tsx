@@ -9,6 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useProfiles } from '@/hooks/useOrganization';
 import { useOrgKpiOwners, useAssignOrgKpiOwner, useRemoveOrgKpiOwner } from '@/hooks/useOrgKpiDataOwner';
 import { Loader2, UserPlus, X, Search, Users } from 'lucide-react';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 interface OrgKpiOwnerDialogProps {
   open: boolean;

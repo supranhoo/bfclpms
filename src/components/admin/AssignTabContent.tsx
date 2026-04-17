@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAssignAuditEmployee, useRemoveAuditAssignment, useUpdateAuditAssignment } from '@/hooks/useAuditAssignments';
 import { Search, X, UserPlus, Loader2, ArrowRightLeft } from 'lucide-react';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 interface AssignTabProps {
   selectedAuditor: string;

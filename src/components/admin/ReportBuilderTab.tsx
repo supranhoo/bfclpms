@@ -16,6 +16,7 @@ import { ReportFilterConfig } from './ReportFilterConfig';
 import { ALL_APP_ROLES } from '@/lib/roles';
 import { Plus, Pencil, Trash2, FileText, GripVertical, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 const ICON_OPTIONS = ['FileText', 'BarChart3', 'Users', 'TrendingUp', 'Table2', 'Grid3X3', 'ClipboardList', 'Workflow', 'AlertTriangle', 'GraduationCap'];
 const COLOR_OPTIONS = [
@@ -220,10 +221,17 @@ function CustomReportsCRUD() {
     }
   };
 
+  const [deletingReportId, setDeletingReportId] = useState<string | null>(null);
+
   const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this custom report?')) {
-      deleteReport.mutate(id);
-    }
+    setDeletingReportId(id);
+  };
+
+  const confirmDelete = () => {
+    if (!deletingReportId) return;
+    deleteReport.mutate(deletingReportId, {
+      onSuccess: () => setDeletingReportId(null),
+    });
   };
 
   const toggleActive = (report: CustomReport) => {

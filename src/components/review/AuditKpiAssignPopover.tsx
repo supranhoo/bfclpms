@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { UserPlus, X, Check } from 'lucide-react';
 import { useAuditorsList, useAssignKpiToAuditor, useRemoveKpiAuditAssignment, type AuditKpiAssignment } from '@/hooks/useAuditKpiAssignments';
 import { useToast } from '@/hooks/use-toast';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 interface AuditKpiAssignPopoverProps {
   kpiId: string;
