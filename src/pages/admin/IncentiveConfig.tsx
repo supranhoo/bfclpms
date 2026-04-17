@@ -70,6 +70,7 @@ function ProgramInnerTabs({ program }: { program: any }) {
   const [activeTab, setActiveTab] = useState('mapping');
   const [showTabManager, setShowTabManager] = useState(false);
   const [editingTab, setEditingTab] = useState<any>(null);
+  const [deletingTab, setDeletingTab] = useState<any>(null);
 
   const handleSaveTab = (tabData: any) => {
     upsertTab.mutate(
@@ -79,9 +80,17 @@ function ProgramInnerTabs({ program }: { program: any }) {
   };
 
   const handleDeleteTab = (tab: any) => {
-    if (!confirm(`Delete tab "${tab.tab_label}"? All data in this tab will be lost.`)) return;
-    deleteTab.mutate({ id: tab.id, programId: p.id });
-    if (activeTab === `custom-${tab.id}`) setActiveTab('mapping');
+    setDeletingTab(tab);
+  };
+
+  const confirmDeleteTab = () => {
+    if (!deletingTab) return;
+    deleteTab.mutate({ id: deletingTab.id, programId: p.id }, {
+      onSuccess: () => {
+        if (activeTab === `custom-${deletingTab.id}`) setActiveTab('mapping');
+        setDeletingTab(null);
+      },
+    });
   };
 
   return (
