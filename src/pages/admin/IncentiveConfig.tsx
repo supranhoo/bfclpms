@@ -166,6 +166,16 @@ function ProgramInnerTabs({ program }: { program: any }) {
         editingTab={editingTab}
         isPending={upsertTab.isPending}
       />
+
+      <ConfirmDestructiveDialog
+        open={!!deletingTab}
+        onConfirm={confirmDeleteTab}
+        onCancel={() => setDeletingTab(null)}
+        title="Delete Custom Tab?"
+        description={`This will permanently delete the tab "${deletingTab?.tab_label}" and all data entered under it. This cannot be undone.`}
+        confirmLabel="Delete Tab"
+        isLoading={deleteTab.isPending}
+      />
     </>
   );
 }
