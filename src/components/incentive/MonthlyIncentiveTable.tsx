@@ -611,8 +611,8 @@ export function MonthlyIncentiveTable() {
                               compute incentives for {scopeText}.
                             </p>
                             {periodFilter !== 'all' && (
-                              <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
-                                Period filter is set to <span className="font-medium">{periodFilter}</span>. Compute will only write rows where employees have production data in that range.
+                              <p className="text-xs text-muted-foreground mt-2 italic">
+                                Period filter is set to <span className="font-medium text-foreground">{periodFilter}</span>. Compute will only write rows where employees have production data in that range.
                               </p>
                             )}
                           </div>
