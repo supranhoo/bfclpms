@@ -1165,6 +1165,42 @@ export type Database = {
         }
         Relationships: []
       }
+      import_field_settings: {
+        Row: {
+          field_key: string
+          field_label: string
+          id: string
+          import_type: string
+          is_mandatory: boolean
+          is_visible: boolean
+          sort_order: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          field_key: string
+          field_label: string
+          id?: string
+          import_type: string
+          is_mandatory?: boolean
+          is_visible?: boolean
+          sort_order?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          field_key?: string
+          field_label?: string
+          id?: string
+          import_type?: string
+          is_mandatory?: boolean
+          is_visible?: boolean
+          sort_order?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       import_progress: {
         Row: {
           categories_created: number
@@ -2644,6 +2680,44 @@ export type Database = {
           },
         ]
       }
+      locations: {
+        Row: {
+          code: string | null
+          company_id: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          code?: string | null
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          code?: string | null
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "locations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       menu_access_config: {
         Row: {
           allowed_roles: string[]
@@ -3729,6 +3803,7 @@ export type Database = {
           id: string
           is_active: boolean
           level: string | null
+          location_id: string | null
           mobile_number: string | null
           pms_grade: string | null
           portal_access: boolean
@@ -3748,6 +3823,7 @@ export type Database = {
           id: string
           is_active?: boolean
           level?: string | null
+          location_id?: string | null
           mobile_number?: string | null
           pms_grade?: string | null
           portal_access?: boolean
@@ -3767,6 +3843,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           level?: string | null
+          location_id?: string | null
           mobile_number?: string | null
           pms_grade?: string | null
           portal_access?: boolean
@@ -3786,6 +3863,13 @@ export type Database = {
             columns: ["department_id"]
             isOneToOne: false
             referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
             referencedColumns: ["id"]
           },
           {
