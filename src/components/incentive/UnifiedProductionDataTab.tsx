@@ -8,6 +8,8 @@ import { ProductionTargetGrid } from './ProductionTargetGrid';
 import { VesselDataEntryGrid } from './VesselDataEntryGrid';
 import { ProductionDailyGrid } from './ProductionDailyGrid';
 import { IncentiveDataExport } from './IncentiveDataExport';
+import { CompanyFilter } from '@/components/reports/CompanyFilter';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 
 interface Program {
   id: string;
@@ -25,6 +27,7 @@ export function UnifiedProductionDataTab({ programs }: { programs: Program[] }) 
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
 
   const selectedProgram = activePrograms.find(p => p.id === selectedProgramId);
+  const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany } = useCompanyFilter();
 
   const { data: vesselRateCount, isLoading: vesselCountLoading } = useQuery({
     queryKey: ['vessel-rate-count', selectedProgramId],
@@ -78,6 +81,12 @@ export function UnifiedProductionDataTab({ programs }: { programs: Program[] }) 
                 ))}
               </SelectContent>
             </Select>
+            <CompanyFilter
+              companies={companies}
+              selectedCompanyId={selectedCompanyId}
+              onCompanyChange={setSelectedCompanyId}
+              className="w-[200px]"
+            />
             {selectedProgramId && !countLoading && selectedProgram && (
               <IncentiveDataExport
                 programId={selectedProgramId}
@@ -112,12 +121,14 @@ export function UnifiedProductionDataTab({ programs }: { programs: Program[] }) 
             min_kra_score: selectedProgram!.min_kra_score,
           }]}
           onMonthYearChange={handleMonthYearChange}
+          filterByCompany={filterByCompany}
         />
       ) : isProductionRateProgram ? (
         <ProductionDailyGrid
           programId={selectedProgramId}
           programName={selectedProgram?.name}
           onMonthYearChange={handleMonthYearChange}
+          filterByCompany={filterByCompany}
         />
       ) : (
         <ProductionTargetGrid controlledProgramId={selectedProgramId} onMonthYearChange={handleMonthYearChange} />

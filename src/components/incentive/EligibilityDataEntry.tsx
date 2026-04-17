@@ -11,6 +11,8 @@ import { Download, Upload, Save, Info } from 'lucide-react';
 import { useIncentiveEligibility, useUpsertEligibility, useBulkUpsertEligibility, useResolvedProgramEmployees } from '@/hooks/useIncentiveEligibility';
 import { useAllEligibilityFields, useEligibilityFields, useIncentivePrograms } from '@/hooks/useIncentivePrograms';
 import { useAuth } from '@/contexts/AuthContext';
+import { CompanyFilter } from '@/components/reports/CompanyFilter';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import * as XLSX from 'xlsx';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -29,6 +31,7 @@ export function EligibilityDataEntry() {
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProgram, setSelectedProgram] = useState<string>('all');
+  const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany } = useCompanyFilter();
 
   const { data: eligibilityData = [], isLoading } = useIncentiveEligibility(selectedMonth, selectedYear);
   const { data: programs = [] } = useIncentivePrograms();
@@ -65,6 +68,7 @@ export function EligibilityDataEntry() {
     const employeeList = mappedEmployees.length > 0 ? mappedEmployees : [];
 
     return employeeList
+      .filter((emp: any) => filterByCompany(emp.id))
       .filter((emp: any) => {
         if (!searchTerm) return true;
         const term = searchTerm.toLowerCase();
@@ -224,6 +228,12 @@ export function EligibilityDataEntry() {
               ))}
             </SelectContent>
           </Select>
+          <CompanyFilter
+            companies={companies}
+            selectedCompanyId={selectedCompanyId}
+            onCompanyChange={setSelectedCompanyId}
+            className="w-[200px]"
+          />
           <Input placeholder="Search employee..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-[200px]" />
           <div className="ml-auto flex gap-2">
             <Button variant="outline" size="sm" onClick={handleExportTemplate}><Download className="h-4 w-4 mr-1" /> Template</Button>
