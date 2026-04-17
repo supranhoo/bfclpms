@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -10,6 +10,8 @@ import { Download, Bell, Search, Loader2 } from 'lucide-react';
 import { useIncentiveRevisions, useMarkPayrollNotified } from '@/hooks/useIncentiveRevisions';
 import { useDetectRetroactiveChanges } from '@/hooks/useIncentiveRecords';
 import { useIncentivePrograms } from '@/hooks/useIncentivePrograms';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { MultiSelectFilter } from '@/components/ui/multi-select-filter';
 import * as XLSX from 'xlsx';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -19,13 +21,31 @@ export function RetroactiveAdjustmentTable() {
   const [slabChangeOnly, setSlabChangeOnly] = useState(false);
   const [detectMonth, setDetectMonth] = useState(MONTHS[new Date().getMonth()]);
   const [detectProgram, setDetectProgram] = useState<string>('');
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
+
+  const { companies, employeeCompanyMap } = useCompanyFilter();
+  const companyNameToId = useMemo(() => new Map(companies.map(c => [c.name, c.id])), [companies]);
+  const companyIdToName = useMemo(() => new Map(companies.map(c => [c.id, c.name])), [companies]);
+  const selectedCompanyNames = useMemo(
+    () => selectedCompanyIds.map(id => companyIdToName.get(id)).filter(Boolean) as string[],
+    [selectedCompanyIds, companyIdToName]
+  );
 
   const { data: programs = [] } = useIncentivePrograms();
   const activePrograms = (programs as any[]).filter((p: any) => p.is_active);
 
-  const { data: revisions = [], isLoading } = useIncentiveRevisions({ affectedYear, slabChangeOnly });
+  const { data: rawRevisions = [], isLoading } = useIncentiveRevisions({ affectedYear, slabChangeOnly });
   const markNotified = useMarkPayrollNotified();
   const detectChanges = useDetectRetroactiveChanges();
+
+  const revisions = useMemo(() => {
+    if (selectedCompanyIds.length === 0) return rawRevisions as any[];
+    const set = new Set(selectedCompanyIds);
+    return (rawRevisions as any[]).filter((r: any) => {
+      const cid = employeeCompanyMap.get(r.employee_id);
+      return cid && set.has(cid);
+    });
+  }, [rawRevisions, selectedCompanyIds, employeeCompanyMap]);
 
   const handleDetect = () => {
     detectChanges.mutate({
@@ -76,6 +96,19 @@ export function RetroactiveAdjustmentTable() {
               <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
               <SelectContent>{[2024, 2025, 2026, 2027].map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
             </Select>
+            {companies.length > 1 && (
+              <MultiSelectFilter
+                options={companies.map(c => c.name)}
+                value={selectedCompanyNames}
+                onChange={(names) => {
+                  const ids = names.map(n => companyNameToId.get(n)).filter(Boolean) as string[];
+                  setSelectedCompanyIds(ids);
+                }}
+                placeholder="All Companies"
+                searchPlaceholder="Search companies..."
+                className="w-[180px] h-9"
+              />
+            )}
             <div className="flex items-center gap-2">
               <Switch checked={slabChangeOnly} onCheckedChange={setSlabChangeOnly} id="slab-change-only" />
               <Label htmlFor="slab-change-only" className="text-sm">Slab changes only</Label>

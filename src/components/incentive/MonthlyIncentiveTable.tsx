@@ -13,6 +13,8 @@ import { Download, CheckCircle2, DollarSign, Calculator, Loader2, Users, ShieldA
 import { useIncentiveRecords, useConfirmIncentiveRecords, useMarkIncentivePaid, useComputeIncentives, useIncentiveReportData, useEmployeeKpiStatusForPeriod } from '@/hooks/useIncentiveRecords';
 import { useIncentivePrograms } from '@/hooks/useIncentivePrograms';
 import { useIncentiveProgramMappingCount } from '@/hooks/useIncentiveProgramMappingCount';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { MultiSelectFilter } from '@/components/ui/multi-select-filter';
 import { useAuth } from '@/contexts/AuthContext';
 import { IncentiveDryRunDialog } from './IncentiveDryRunDialog';
 import { IncentiveStatusOverride } from './IncentiveStatusOverride';
@@ -41,6 +43,15 @@ export function MonthlyIncentiveTable() {
   const [showMarkPaidDialog, setShowMarkPaidDialog] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
+
+  const { companies, employeeCompanyMap } = useCompanyFilter();
+  const companyNameToId = useMemo(() => new Map(companies.map(c => [c.name, c.id])), [companies]);
+  const companyIdToName = useMemo(() => new Map(companies.map(c => [c.id, c.name])), [companies]);
+  const selectedCompanyNames = useMemo(
+    () => selectedCompanyIds.map(id => companyIdToName.get(id)).filter(Boolean) as string[],
+    [selectedCompanyIds, companyIdToName]
+  );
 
   const { data: programs = [] } = useIncentivePrograms();
   const activePrograms = (programs as any[]).filter((p: any) => p.is_active);
@@ -89,9 +100,10 @@ export function MonthlyIncentiveTable() {
     setSelectedIds(new Set());
     setSelectAllRecords(false);
     setCurrentPage(1);
-  }, [selectedMonth, selectedYear, selectedProgram, statusFilter, incentiveStatusFilter, eligibilityFilter, periodFilter, searchTerm]);
+  }, [selectedMonth, selectedYear, selectedProgram, statusFilter, incentiveStatusFilter, eligibilityFilter, periodFilter, searchTerm, selectedCompanyIds]);
 
   const filteredRecords = useMemo(() => {
+    const companyIdSet = selectedCompanyIds.length > 0 ? new Set(selectedCompanyIds) : null;
     return (records as any[]).filter(r => {
       if (statusFilter !== 'all' && r.status !== statusFilter) return false;
       if (incentiveStatusFilter !== 'all' && r.incentive_status !== incentiveStatusFilter) return false;
@@ -99,6 +111,10 @@ export function MonthlyIncentiveTable() {
       if (eligibilityFilter === 'disqualified' && !r.is_disqualified) return false;
       if (eligibilityFilter === 'prorata' && r.pro_rata_factor >= 1) return false;
       if (periodFilter !== 'all' && r.payment_period !== periodFilter) return false;
+      if (companyIdSet) {
+        const empCompanyId = employeeCompanyMap.get(r.employee_id);
+        if (!empCompanyId || !companyIdSet.has(empCompanyId)) return false;
+      }
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
         const name = r.profiles?.full_name?.toLowerCase() || '';
@@ -109,7 +125,7 @@ export function MonthlyIncentiveTable() {
       }
       return true;
     });
-  }, [records, statusFilter, incentiveStatusFilter, eligibilityFilter, periodFilter, searchTerm]);
+  }, [records, statusFilter, incentiveStatusFilter, eligibilityFilter, periodFilter, searchTerm, selectedCompanyIds, employeeCompanyMap]);
 
   // Aggregate to one row per employee for the UI table.
   // Bulk actions still target the underlying record IDs (recordIds).
@@ -386,6 +402,22 @@ export function MonthlyIncentiveTable() {
                 </SelectContent>
               </Select>
             </div>
+            {companies.length > 1 && (
+              <div className="w-48">
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Company</label>
+                <MultiSelectFilter
+                  options={companies.map(c => c.name)}
+                  value={selectedCompanyNames}
+                  onChange={(names) => {
+                    const ids = names.map(n => companyNameToId.get(n)).filter(Boolean) as string[];
+                    setSelectedCompanyIds(ids);
+                  }}
+                  placeholder="All Companies"
+                  searchPlaceholder="Search companies..."
+                  className="w-full h-10"
+                />
+              </div>
+            )}
             <div className="w-32">
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Period</label>
               <Select value={periodFilter} onValueChange={setPeriodFilter}>
