@@ -151,12 +151,12 @@ export function MonthlyIncentiveTable() {
   const showStart = aggregatedRows.length === 0 ? 0 : (pageSize === 0 ? 1 : (currentPage - 1) * pageSize + 1);
   const showEnd = pageSize === 0 ? aggregatedRows.length : Math.min(currentPage * pageSize, aggregatedRows.length);
 
-  // Selection helpers
-  const toggleSelect = (id: string) => {
+  // Selection toggles operate on aggregated employee rows; we expand to underlying record IDs at action time.
+  const toggleSelect = (rowId: string) => {
     setSelectAllRecords(false);
     setSelectedIds(prev => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.has(rowId)) next.delete(rowId); else next.add(rowId);
       return next;
     });
   };
@@ -165,7 +165,6 @@ export function MonthlyIncentiveTable() {
     const pageIds = paginatedRecords.map((r: any) => r.id);
     const allPageSelected = pageIds.length > 0 && pageIds.every((id: string) => selectedIds.has(id));
     if (allPageSelected) {
-      // Deselect page
       setSelectedIds(prev => {
         const next = new Set(prev);
         pageIds.forEach((id: string) => next.delete(id));
@@ -183,22 +182,32 @@ export function MonthlyIncentiveTable() {
 
   const handleSelectAllRecords = () => {
     setSelectAllRecords(true);
-    setSelectedIds(new Set(filteredRecords.map((r: any) => r.id)));
+    setSelectedIds(new Set(aggregatedRows.map((r: any) => r.id)));
   };
 
   const selectedCount = selectedIds.size;
   const allPageSelected = paginatedRecords.length > 0 &&
     paginatedRecords.every((r: any) => selectedIds.has(r.id));
-  const showSelectAllBanner = allPageSelected && filteredRecords.length > paginatedRecords.length && !selectAllRecords;
+  const showSelectAllBanner = allPageSelected && aggregatedRows.length > paginatedRecords.length && !selectAllRecords;
 
-  // Mark Paid impact data
+  // Expand selected employee rows back to underlying incentive record IDs
+  const selectedRecordIds = useMemo(() => {
+    const ids: string[] = [];
+    aggregatedRows.forEach((row: any) => {
+      if (selectedIds.has(row.id)) ids.push(...(row.recordIds || []));
+    });
+    return ids;
+  }, [aggregatedRows, selectedIds]);
+
+  // Mark Paid impact data — operates on filteredRecords (raw incentive records)
   const markPaidTargets = useMemo(() => {
     const confirmed = filteredRecords.filter((r: any) => r.status === 'confirmed');
     if (selectedCount > 0) {
-      return confirmed.filter((r: any) => selectedIds.has(r.id));
+      const idSet = new Set(selectedRecordIds);
+      return confirmed.filter((r: any) => idSet.has(r.id));
     }
     return confirmed;
-  }, [filteredRecords, selectedIds, selectedCount]);
+  }, [filteredRecords, selectedRecordIds, selectedCount]);
 
   const markPaidImpact = useMemo(() => ({
     count: markPaidTargets.length,
