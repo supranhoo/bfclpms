@@ -139,7 +139,14 @@ export function MonthlyIncentiveTable() {
       if (eligibilityFilter === 'eligible' && r.is_disqualified) return false;
       if (eligibilityFilter === 'disqualified' && !r.is_disqualified) return false;
       if (eligibilityFilter === 'prorata' && r.pro_rata_factor >= 1) return false;
-      if (periodFilter !== 'all' && r.payment_period !== periodFilter) return false;
+      if (periodFilter !== 'all') {
+        // 'Full Month' is a derived aggregation: include sub-period production rows AND legacy 'Full Month' rows
+        if (periodFilter === 'Full Month') {
+          if (!['1-10', '11-20', '21-31', 'Full Month'].includes(r.payment_period)) return false;
+        } else if (r.payment_period !== periodFilter) {
+          return false;
+        }
+      }
       if (companyIdSet) {
         const empCompanyId = employeeCompanyMap.get(r.employee_id);
         if (!empCompanyId || !companyIdSet.has(empCompanyId)) return false;
