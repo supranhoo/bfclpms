@@ -513,10 +513,23 @@ export function MonthlyIncentiveTable() {
                 {selectedCount} selected
               </Badge>
             )}
-            <Button variant="outline" size="sm" onClick={handleCompute} disabled={!canCompute || computeIncentives.isPending}>
-              {computeIncentives.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Calculator className="h-4 w-4 mr-1" />}
-              Compute
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button variant="outline" size="sm" onClick={handleCompute} disabled={!canCompute || computeIncentives.isPending}>
+                      {computeIncentives.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Calculator className="h-4 w-4 mr-1" />}
+                      Compute
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs max-w-[260px]">
+                    Computes for {filteredMappedCount} employee(s) matching current Company / Period filters.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <Button variant="outline" size="sm" onClick={handleExport} disabled={!filteredRecords.length}>
               <Download className="h-4 w-4 mr-1" /> Export
             </Button>
@@ -590,9 +603,11 @@ export function MonthlyIncentiveTable() {
                           <div className="space-y-1">
                             <h3 className="text-base font-semibold">No incentive records yet</h3>
                             <p className="text-sm text-muted-foreground">
-                              {mappedEmployeeCount} employee{mappedEmployeeCount === 1 ? '' : 's'} mapped to{' '}
+                              <span className="font-medium text-foreground">{filteredMappedCount}</span>
+                              {selectedCompanyIds.length > 0 ? ` of ${mappedEmployeeCount}` : ''} employee
+                              {filteredMappedCount === 1 ? '' : 's'} match current filters for{' '}
                               <span className="font-medium text-foreground">{selectedProgramName}</span>. Click below to
-                              compute incentives for {selectedMonth} {selectedYear}.
+                              compute incentives for {scopeText}.
                             </p>
                           </div>
                           <Button
