@@ -603,12 +603,12 @@ serve(async (req) => {
       // Check if record already has a manual override — if so, don't revert it
       const existingOverride = existingRecords?.find((er: any) => er.employee_id === emp.id && er.status_overridden_by);
 
-      // For production programs, split into period-based records
+      // For production programs, ALWAYS emit canonical sub-period rows (1-10 / 11-20 / 21-31).
+      // "Full Month" is a derived UI aggregation, never a stored production record. (ADR-044 v2)
       if (program.program_type === 'production' && prodDailyMap.has(emp.id)) {
         const dailyVals = prodDailyMap.get(emp.id) || {};
         const days = Object.keys(dailyVals).map(Number).filter(d => !isNaN(d));
 
-        // Compute per-range totals
         const ranges: { label: string; min: number; max: number }[] = [
           { label: '1-10', min: 1, max: 10 },
           { label: '11-20', min: 11, max: 20 },
@@ -627,22 +627,17 @@ serve(async (req) => {
           if (total > 0) rangeTotals.push({ label: range.label, total });
         }
 
-        // If all 3 ranges have data → "Full Month"; otherwise per-range records
-        const populatedRanges = rangeTotals.filter(r => r.total > 0);
-        const isFullMonth = populatedRanges.length === 3;
-
-        if (isFullMonth) {
-          // Single "Full Month" record
-          const totalTons = populatedRanges.reduce((s, r) => s + r.total, 0);
-          const amount = resolvedRate !== null ? totalTons * resolvedRate : 0;
+        // Emit one record per populated sub-period (canonical model)
+        for (const rt of rangeTotals) {
+          const amount = resolvedRate !== null ? rt.total * resolvedRate : 0;
           records.push({
             employee_id: emp.id,
             program_id: program_id,
             review_period,
             review_year,
-            payment_period: 'Full Month',
+            payment_period: rt.label,
             pms_score: null,
-            production_value: totalTons,
+            production_value: rt.total,
             incentive_amount: amount,
             matched_slab_id: matchedSlab?.id || null,
             base_incentive_percent: basePercent,
@@ -656,32 +651,6 @@ serve(async (req) => {
             computed_at: new Date().toISOString(),
           });
           computed++;
-        } else {
-          // Per-range records
-          for (const rt of populatedRanges) {
-            const amount = resolvedRate !== null ? rt.total * resolvedRate : 0;
-            records.push({
-              employee_id: emp.id,
-              program_id: program_id,
-              review_period,
-              review_year,
-              payment_period: rt.label,
-              pms_score: null,
-              production_value: rt.total,
-              incentive_amount: amount,
-              matched_slab_id: matchedSlab?.id || null,
-              base_incentive_percent: basePercent,
-              is_disqualified: isDQ,
-              disqualification_reasons: dqReasons.length > 0 ? dqReasons : null,
-              lti_penalty_percent: ltiPenalty,
-              pro_rata_factor: proRata,
-              final_incentive_percent: Math.round(finalPercent * 100) / 100,
-              status: 'draft',
-              incentive_status: existingOverride ? existingOverride.incentive_status : incentiveStatus,
-              computed_at: new Date().toISOString(),
-            });
-            computed++;
-          }
         }
       } else {
         // Support / vessel / production with no daily data — single record
@@ -760,10 +729,18 @@ serve(async (req) => {
       },
     };
 
-    const diagnostics = {
+    const employeesWithDailyEntries = new Set<string>(records.map((r: any) => r.employee_id)).size;
+    const employeesWithSelectedPeriodData = scopePaymentPeriod
+      ? new Set<string>(records.filter((r: any) => r.payment_period === scopePaymentPeriod).map((r: any) => r.employee_id)).size
+      : employeesWithDailyEntries;
+
+    const diagnostics: any = {
       employees_processed: employeesProcessed,
+      employees_with_daily_entries: employeesWithDailyEntries,
+      employees_with_selected_period_data: employeesWithSelectedPeriodData,
       records_pre_scope: recordsPreScope,
       records_post_scope: recordsPostScope,
+      legacy_rows_deleted: 0,
     };
 
     // In dry_run mode, return preview without writing
@@ -774,14 +751,16 @@ serve(async (req) => {
       );
     }
 
-    // Delete existing records for all affected employees before upserting
-    // This prevents orphaned records when period structure changes (full → split or vice versa).
-    // When a payment_period scope is set, only wipe matching period rows for affected employees.
+    // Delete existing records for affected employees before upserting.
+    // For production programmes (canonical sub-period model), also purge legacy 'Full Month' rows
+    // so they cannot survive beside new 1-10 / 11-20 / 21-31 rows. (ADR-044 v2)
     if (scopedRecords.length > 0) {
       const uniqueEmployeeIds = [...new Set(scopedRecords.map((r: any) => r.employee_id))];
       const empBatchSize = 50;
+      let legacyDeleted = 0;
       for (let i = 0; i < uniqueEmployeeIds.length; i += empBatchSize) {
         const empBatch = uniqueEmployeeIds.slice(i, i + empBatchSize);
+
         let delQuery = supabase
           .from('employee_incentive_records')
           .delete()
@@ -794,7 +773,22 @@ serve(async (req) => {
         }
         const { error: delError } = await delQuery;
         if (delError) console.error('Delete error:', delError);
+
+        // Legacy 'Full Month' production cleanup when scope didn't already cover it
+        if (program.program_type === 'production' && scopePaymentPeriod && scopePaymentPeriod !== 'Full Month') {
+          const { error: legacyErr, count: legacyCount } = await supabase
+            .from('employee_incentive_records')
+            .delete({ count: 'exact' })
+            .eq('program_id', program_id)
+            .eq('review_period', review_period)
+            .eq('review_year', review_year)
+            .eq('payment_period', 'Full Month')
+            .in('employee_id', empBatch);
+          if (legacyErr) console.error('Legacy Full Month cleanup error:', legacyErr);
+          else legacyDeleted += legacyCount || 0;
+        }
       }
+      diagnostics.legacy_rows_deleted = legacyDeleted;
 
       // Upsert fresh records
       const batchSize = 100;
