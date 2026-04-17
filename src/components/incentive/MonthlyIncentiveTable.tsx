@@ -517,7 +517,7 @@ export function MonthlyIncentiveTable() {
                     {selectAllRecords && (
                       <TableRow>
                         <TableCell colSpan={16} className="text-center py-2 bg-primary/10">
-                          <span className="text-sm font-medium">All {filteredRecords.length} records are selected. </span>
+                          <span className="text-sm font-medium">All {aggregatedRows.length} employees are selected. </span>
                           <Button variant="link" size="sm" className="p-0 h-auto text-sm" onClick={() => { setSelectAllRecords(false); setSelectedIds(new Set()); }}>
                             Clear selection
                           </Button>
