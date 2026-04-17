@@ -609,7 +609,7 @@ export function MonthlyIncentiveTable() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <IncentiveStatusOverride recordId={r.id} currentStatus={r.incentive_status || 'hold'} />
+                          <IncentiveStatusOverride recordId={r.recordIds?.[0] || r.id} currentStatus={r.incentive_status || 'hold'} />
                         </TableCell>
                       </TableRow>
                     ))}
