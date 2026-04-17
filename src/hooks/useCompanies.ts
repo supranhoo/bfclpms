@@ -110,6 +110,7 @@ interface CloneOptions {
   cloneDesignations: boolean;
   clonePmsGrades: boolean;
   cloneLevels: boolean;
+  cloneLocations?: boolean;
 }
 
 export function useCloneStructure() {
@@ -250,6 +251,22 @@ export function useCloneStructure() {
         }
       }
 
+      // 8. Clone locations
+      if (options.cloneLocations) {
+        const { data: srcLocations } = await supabase
+          .from('locations' as any)
+          .select('*')
+          .eq('company_id', sourceCompanyId);
+
+        if (srcLocations) {
+          for (const loc of srcLocations as any[]) {
+            await supabase
+              .from('locations' as any)
+              .insert({ name: loc.name, code: loc.code, company_id: targetCompanyId });
+          }
+        }
+      }
+
       return { success: true };
     },
     onSuccess: () => {
@@ -260,6 +277,7 @@ export function useCloneStructure() {
       queryClient.invalidateQueries({ queryKey: ['designations'] });
       queryClient.invalidateQueries({ queryKey: ['pms-grades'] });
       queryClient.invalidateQueries({ queryKey: ['levels'] });
+      queryClient.invalidateQueries({ queryKey: ['locations'] });
       toast({ title: 'Structure cloned successfully' });
     },
     onError: (error: Error) => {

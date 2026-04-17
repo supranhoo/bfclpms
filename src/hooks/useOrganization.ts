@@ -136,6 +136,27 @@ export function useLevels(companyId?: string) {
   });
 }
 
+export function useLocations(companyId?: string) {
+  return useQuery({
+    queryKey: ['locations', companyId],
+    queryFn: async () => {
+      let query = supabase
+        .from('locations' as any)
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+
+      if (companyId) {
+        query = query.eq('company_id', companyId);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return data as any[];
+    },
+  });
+}
+
 export function useKraCategories() {
   return useQuery({
     queryKey: ['kra-categories'],
