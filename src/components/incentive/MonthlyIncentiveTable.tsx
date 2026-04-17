@@ -111,6 +111,10 @@ export function MonthlyIncentiveTable() {
       if (eligibilityFilter === 'disqualified' && !r.is_disqualified) return false;
       if (eligibilityFilter === 'prorata' && r.pro_rata_factor >= 1) return false;
       if (periodFilter !== 'all' && r.payment_period !== periodFilter) return false;
+      if (companyIdSet) {
+        const empCompanyId = employeeCompanyMap.get(r.employee_id);
+        if (!empCompanyId || !companyIdSet.has(empCompanyId)) return false;
+      }
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
         const name = r.profiles?.full_name?.toLowerCase() || '';
@@ -121,7 +125,7 @@ export function MonthlyIncentiveTable() {
       }
       return true;
     });
-  }, [records, statusFilter, incentiveStatusFilter, eligibilityFilter, periodFilter, searchTerm]);
+  }, [records, statusFilter, incentiveStatusFilter, eligibilityFilter, periodFilter, searchTerm, selectedCompanyIds, employeeCompanyMap]);
 
   // Aggregate to one row per employee for the UI table.
   // Bulk actions still target the underlying record IDs (recordIds).
