@@ -1,72 +1,58 @@
 
 
-## Plan: System-Wide Delete Reconfirmation Sweep
+## Plan: Multi-Select Company Filter on Incentive Report
 
-### RCA
-The [Destructive Action Governance](mem://design/destructive-action-governance) policy mandates `ConfirmDestructiveDialog` on every delete button, but enforcement has been piecemeal. Need a one-time audit + fix across the entire codebase, plus a guard so future deletes can't ship without it.
+### Goal
+Add a company filter to the Incentive Report toolbar (next to Programme/Period/Status etc.) that supports multi-select + "All Companies" selection, scoping both the displayed rows and the Export.
 
 ### Approach
 
-**Phase 1 — Audit (grep-driven)**
-Search all `.tsx` for delete patterns missing the dialog:
-- `delete*.mutate(` / `remove*.mutate(` called directly inside `onClick`
-- `Trash2` icon buttons whose `onClick` runs a mutation directly
-- `supabase.from(...).delete()` invoked from a click handler without a dialog wrapper
+**File: `src/components/incentive/MonthlyIncentiveTable.tsx`** (the toolbar shown in the screenshot)
+- Use existing `useCompanyFilter()` hook to get the company list + employee→company map.
+- Add local state `const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([])` (empty = All).
+- Render the existing `MultiSelectFilter` component between **Programme** and **Period** filters:
+  ```tsx
+  <MultiSelectFilter
+    options={companies.map(c => c.name)}
+    value={selectedCompanyNames}
+    onChange={...}
+    placeholder="All Companies"
+    label="Company"
+    className="w-[180px] h-9"
+  />
+  ```
+  (Map name↔id internally so the dropdown stays user-friendly while filtering by id.)
+- Filter the computed/queried rows: keep a row when `selectedCompanyIds.length === 0` OR the row's resolved `company_id` (from `employeeCompanyMap.get(row.employee_id)`) is in the set.
+- Pass the filtered set into the existing Export handler so Excel honors the same scope.
 
-Cross-reference against files that already import `ConfirmDestructiveDialog` to skip compliant ones.
+**File: `src/components/incentive/RetroactiveAdjustmentTable.tsx`** (parity — same toolbar pattern)
+- Same multi-select company filter added to its toolbar so both tabs behave consistently.
 
-**Phase 2 — Fix (uniform pattern)**
-For every offender apply the standard wrap:
-```tsx
-const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-<Button onClick={() => setConfirmDeleteId(item.id)}><Trash2/></Button>
-<ConfirmDestructiveDialog
-  open={!!confirmDeleteId}
-  title="Delete <Entity>?"
-  description="<entity-specific consequence>. This cannot be undone."
-  confirmLabel="Delete"
-  isLoading={mutation.isPending}
-  onConfirm={() => confirmDeleteId && mutation.mutate(confirmDeleteId, { onSuccess: () => setConfirmDeleteId(null) })}
-  onCancel={() => setConfirmDeleteId(null)}
-/>
+### Why Multi-Select (not single)
+The existing `CompanyFilter` is single-select only. Per request we need both "select many" and "select all", which `MultiSelectFilter` already provides (built-in Select All / Deselect All, badge count, search).
+
+### UI Placement
 ```
-Tailored description per entity (cascading warnings for parent records like programs, KRAs, workflow templates, users).
-
-**Likely modules requiring fixes** (final list determined by audit):
-- Incentive: `IncentiveProgramsList`, `IncentiveSlabEditor`, `EligibilityRulesEditor`, `DqRulesTab`, `BUSubUnitsTab`, `AllocationTab`, `FieldsTab`
-- Admin: User management (delete user), KRA Library (delete KRA/KPI), Workflow templates, Menu Access, Access Profiles, Review Periods, Email Templates, Master Data tabs (companies/divisions/BUs/depts/designations/grades/locations), Org KPI master, Production Targets
-- PMS: KPI Observations delete, Query delete, Evidence file remove, Comment delete
-- Notifications: clear/delete notification
-- Misc: any `Trash2` button found in audit
-
-**Phase 3 — Future-proofing**
-Add a lightweight ESLint custom rule (or a `scripts/check-delete-guards.ts` CI check) that flags any `Trash2` icon-button or `*delete*.mutate(` call in JSX whose nearest sibling tree doesn't reference `ConfirmDestructiveDialog`. Run in CI to block regressions.
-
-Also update `mem://design/destructive-action-governance` with: "Every new delete button MUST use `ConfirmDestructiveDialog`. CI lint enforces this."
+[Month] [Year] [Company ▾] [Programme] [Period] [Status] [Eligibility] [Incentive Status] [Search]
+```
+Width matches sibling selects (`w-[180px] h-9`).
 
 ### Files Touched
-| Area | Count (est.) |
+| File | Change |
 |---|---|
-| Incentive components | ~5–7 |
-| Admin master-data tabs | ~10–15 |
-| PMS review/observation/query | ~3–5 |
-| Notification + misc | ~2–3 |
-| New: `scripts/check-delete-guards.ts` + CI hook | 1 |
-| Updated: `DOCUMENTATION.md`, `POLICY.md`, governance memory | 3 |
-
-Exact file list produced by the Phase-1 audit at start of execution.
+| `src/components/incentive/MonthlyIncentiveTable.tsx` | Add multi-select Company filter + row filtering + export scope |
+| `src/components/incentive/RetroactiveAdjustmentTable.tsx` | Same filter for parity |
 
 ### Risk & Impact
 | Area | Impact |
 |---|---|
-| Data | Safer — system-wide accidental-delete prevention |
-| Workflow | One extra confirm click per delete (already standard pattern) |
-| UI/UX | Consistent — same dialog component everywhere |
-| Regression | Very low — purely additive UI guard, no logic changes to mutations |
-| Mitigation | Reuse existing `ConfirmDestructiveDialog`; CI lint blocks new violations |
+| Data | None — client-side filter on already-fetched rows |
+| Workflow | None |
+| UI/UX | Consistent with other reports already using `MultiSelectFilter` |
+| Regression | Very low — purely additive filter; default (empty) = current behaviour |
+| Mitigation | Empty selection preserves "All Companies" default |
 
 ### Out of Scope
-- Bulk-delete flows that already have multi-step confirmation (e.g. Bulk Zero-Score) — review only, no rewrite
-- Soft-delete / archive actions (not destructive in same sense)
-- Backend cascade behaviour changes
+- Server-side company filtering at SQL level (current rowset is small enough for client filter; revisit if perf issues)
+- Persisting selection across sessions
 
