@@ -253,7 +253,7 @@ serve(async (req) => {
 
       const { data: rates } = await supabase
         .from('incentive_production_rates')
-        .select('employee_id, entity_id, rate_per_ton, rate_type')
+        .select('employee_id, entity_id, rate_per_ton, rate_type, effective_from')
         .eq('program_id', program_id);
       prodRates = rates || [];
     }
