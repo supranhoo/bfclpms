@@ -150,8 +150,11 @@ serve(async (req) => {
 
     if (employeeFilter !== null) {
       if (employeeFilter.length === 0) {
-        return new Response(JSON.stringify({ computed: 0, message: 'No employees match program mappings' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({
+          computed: 0,
+          message: 'No employees match programme mappings. Configure mappings in the programme settings.',
+          diagnostics: { employees_in_scope: 0, employees_processed: 0, records_pre_scope: 0, records_post_scope: 0 },
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
       // Batch employee filter in groups of 100 to avoid query limits
       const allEmployees: any[] = [];
@@ -171,7 +174,11 @@ serve(async (req) => {
     }
 
     if (!employees?.length) {
-      return new Response(JSON.stringify({ computed: 0 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({
+        computed: 0,
+        message: 'No active employees resolved. They may have been deactivated since the programme mapping was created.',
+        diagnostics: { employees_in_scope: employeeFilter?.length ?? 0, employees_processed: 0, records_pre_scope: 0, records_post_scope: 0 },
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // 3. Fetch eligibility data
