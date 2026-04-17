@@ -15,6 +15,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Plus, Trash2, Edit, Check, X, CalendarIcon } from 'lucide-react';
 import { formatEmployeeName, cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 interface Props {
   programId: string;
@@ -43,6 +44,7 @@ export function ProductionRatesTab({ programId }: Props) {
   const [editRate, setEditRate] = useState('');
   const [editRemarks, setEditRemarks] = useState('');
   const [editEffective, setEditEffective] = useState<Date | undefined>(undefined);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const { data: allProfiles = [] } = useQuery({
     queryKey: ['profiles-for-production-rates'],
@@ -373,7 +375,7 @@ export function ProductionRatesTab({ programId }: Props) {
                           setEditRemarks(r.remarks || '');
                           setEditEffective(r.effective_from ? new Date(r.effective_from) : new Date());
                         }}><Edit className="h-4 w-4" /></Button>
-                        <Button size="icon" variant="ghost" onClick={() => remove.mutate({ id: r.id, programId })}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                        <Button size="icon" variant="ghost" onClick={() => setConfirmDeleteId(r.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                       </div>
                     )}
                   </TableCell>
@@ -383,6 +385,22 @@ export function ProductionRatesTab({ programId }: Props) {
           </TableBody>
         </Table>
       </CardContent>
+      <ConfirmDestructiveDialog
+        open={!!confirmDeleteId}
+        onConfirm={() => {
+          if (confirmDeleteId) {
+            remove.mutate(
+              { id: confirmDeleteId, programId },
+              { onSuccess: () => setConfirmDeleteId(null) }
+            );
+          }
+        }}
+        onCancel={() => setConfirmDeleteId(null)}
+        title="Delete Production Rate?"
+        description="This will permanently delete this rate entry. Historical compute results that already used this rate are preserved, but future recomputes will fall back to the next available rate. This cannot be undone."
+        confirmLabel="Delete Rate"
+        isLoading={remove.isPending}
+      />
     </Card>
   );
 }
