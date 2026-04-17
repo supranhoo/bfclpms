@@ -787,6 +787,7 @@ export function MonthlyIncentiveTable() {
         onConfirm={handleConfirmCompute}
         isConfirming={computeIncentives.isPending}
         employeeNames={employeeNameMap}
+        scopeText={scopeText}
       />
 
       {/* Mark Paid Impact Dialog */}

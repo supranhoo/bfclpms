@@ -37,9 +37,10 @@ interface Props {
   onConfirm: () => void;
   isConfirming: boolean;
   employeeNames?: Map<string, { name: string; code: string }>;
+  scopeText?: string;
 }
 
-export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, isConfirming, employeeNames }: Props) {
+export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, isConfirming, employeeNames, scopeText }: Props) {
   if (!result) return null;
   const { summary, records } = result;
 
@@ -48,7 +49,14 @@ export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, i
       <DialogContent className="max-w-4xl max-h-[85vh]">
         <DialogHeader>
           <DialogTitle>Incentive Computation Preview</DialogTitle>
-          <DialogDescription>Review the results before committing. Program: {result.program}</DialogDescription>
+          <DialogDescription>
+            Review the results before committing. Program: {result.program}
+            {scopeText && (
+              <span className="block mt-1 text-xs">
+                Scope: <span className="font-medium text-foreground">{scopeText}</span> · {summary.total} record(s)
+              </span>
+            )}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-3 md:grid-cols-5">
