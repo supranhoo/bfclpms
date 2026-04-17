@@ -252,17 +252,17 @@ export function useProfiles() {
   return useQuery({
     queryKey: ['profiles'],
     queryFn: async () => {
-      // Fetch profiles with departments (mobile_number included via *)
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select(`
-          *,
-          departments (id, name, code)
-        `)
-        .eq('is_active', true)
-        .order('full_name');
-
-      if (profilesError) throw profilesError;
+      // Fetch ALL profiles in 1000-row pages to bypass PostgREST's default row cap.
+      // Without paging, the dataset silently truncates at 1000 rows even though the
+      // DB may have many more (e.g. after bulk imports).
+      const profiles = await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('profiles')
+          .select(`*, departments (id, name, code)`)
+          .eq('is_active', true)
+          .order('full_name')
+          .range(from, to)
+      );
 
       // Fetch all user roles separately (no FK relationship)
       const { data: roles, error: rolesError } = await supabase
@@ -318,14 +318,16 @@ export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: 
     queryFn: async () => {
       if (!stage) return null;
 
-      // 1. Fetch all profiles
-      const { data: profiles, error } = await supabase
-        .from('profiles')
-        .select('*, departments(id, name, code)')
-        .eq('is_active', true)
-        .order('full_name');
+      // 1. Fetch all profiles (paged to bypass PostgREST 1000-row cap)
+      const profiles = await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('profiles')
+          .select('*, departments(id, name, code)')
+          .eq('is_active', true)
+          .order('full_name')
+          .range(from, to)
+      );
 
-      if (error) throw error;
       if (!profiles || profiles.length === 0) return [];
 
       // 2. Use get_bulk_employee_workflows RPC which handles the FULL cascade:
