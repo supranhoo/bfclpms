@@ -497,8 +497,7 @@ export function MonthlyIncentiveTable() {
                   </TableHead>
                   <TableHead>Employee</TableHead>
                   <TableHead>Period</TableHead>
-                  <TableHead>PMS Score</TableHead>
-                  <TableHead>Final Rating</TableHead>
+                   <TableHead>PMS Score</TableHead>
                   <TableHead>KPI Status</TableHead>
                   <TableHead>Slab</TableHead>
                   <TableHead>Base %</TableHead>
@@ -593,8 +592,7 @@ export function MonthlyIncentiveTable() {
                           <div className="text-xs text-muted-foreground">{r.profiles?.employee_code}</div>
                         </TableCell>
                         <TableCell className="text-xs">{r.payment_period || 'Full Month'}</TableCell>
-                        <TableCell>{r.pms_score?.toFixed(2) || '—'}</TableCell>
-                        <TableCell><RatingBadge score={r.pms_score} short /></TableCell>
+                         <TableCell>{r.pms_score?.toFixed(2) || '—'}</TableCell>
                         <TableCell>
                           {(() => {
                             const ks = kpiStatusMap?.get(r.employee_id);
