@@ -202,6 +202,7 @@ export type Database = {
           pms_policy_url: string | null
           pms_policy_visible_roles: Json | null
           updated_at: string
+          view_mode_strip_color: string
         }
         Insert: {
           app_name?: string
@@ -218,6 +219,7 @@ export type Database = {
           pms_policy_url?: string | null
           pms_policy_visible_roles?: Json | null
           updated_at?: string
+          view_mode_strip_color?: string
         }
         Update: {
           app_name?: string
@@ -234,6 +236,7 @@ export type Database = {
           pms_policy_url?: string | null
           pms_policy_visible_roles?: Json | null
           updated_at?: string
+          view_mode_strip_color?: string
         }
         Relationships: []
       }

@@ -20,6 +20,7 @@ export function GlobalBrandingSettings() {
   const [loginHeroHeadline, setLoginHeroHeadline] = useState('');
   const [loginHeroDescription, setLoginHeroDescription] = useState('');
   const [pmsPolicyUrl, setPmsPolicyUrl] = useState('');
+  const [viewModeStripColor, setViewModeStripColor] = useState('#3b82f6');
   const [hasChanges, setHasChanges] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadingWallpaper, setUploadingWallpaper] = useState(false);
@@ -41,6 +42,7 @@ export function GlobalBrandingSettings() {
       setLoginHeroHeadline(settings.login_hero_headline || '');
       setLoginHeroDescription(settings.login_hero_description || '');
       setPmsPolicyUrl(settings.pms_policy_url || '');
+      setViewModeStripColor(settings.view_mode_strip_color || '#3b82f6');
     }
   }, [settings]);
 
@@ -59,10 +61,11 @@ export function GlobalBrandingSettings() {
         wallpapersChanged ||
         loginHeroHeadline !== (settings.login_hero_headline || '') ||
         loginHeroDescription !== (settings.login_hero_description || '') ||
-        pmsPolicyUrl !== (settings.pms_policy_url || '');
+        pmsPolicyUrl !== (settings.pms_policy_url || '') ||
+        viewModeStripColor !== (settings.view_mode_strip_color || '#3b82f6');
       setHasChanges(changed);
     }
-  }, [organizationName, appName, logoUrl, loginWallpapers, loginHeroHeadline, loginHeroDescription, pmsPolicyUrl, settings]);
+  }, [organizationName, appName, logoUrl, loginWallpapers, loginHeroHeadline, loginHeroDescription, pmsPolicyUrl, viewModeStripColor, settings]);
 
   // Preview slideshow effect
   useEffect(() => {
@@ -133,6 +136,7 @@ export function GlobalBrandingSettings() {
       login_hero_headline: loginHeroHeadline || null,
       login_hero_description: loginHeroDescription || null,
       pms_policy_url: pmsPolicyUrl || null,
+      view_mode_strip_color: viewModeStripColor,
       // Keep login_background_url synced with first wallpaper for backward compatibility
       login_background_url: loginWallpapers.length > 0 ? loginWallpapers[0] : null,
     });
@@ -233,6 +237,53 @@ export function GlobalBrandingSettings() {
           />
           <p className="text-xs text-muted-foreground">
             URL to the PMS Policy document (PDF, Google Docs, or any web page). Employees can view this from the sidebar.
+          </p>
+        </div>
+
+        {/* View Mode Strip Color */}
+        <div className="space-y-2">
+          <Label htmlFor="strip-color">Dashboard View Mode Strip Color</Label>
+          <div className="flex items-center gap-3">
+            <input
+              id="strip-color"
+              type="color"
+              value={viewModeStripColor}
+              onChange={(e) => setViewModeStripColor(e.target.value)}
+              className="h-10 w-14 rounded border border-input cursor-pointer bg-background"
+            />
+            <Input
+              value={viewModeStripColor}
+              onChange={(e) => setViewModeStripColor(e.target.value)}
+              placeholder="#3b82f6"
+              className="font-mono w-32"
+              maxLength={7}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setViewModeStripColor('#3b82f6')}
+            >
+              Reset
+            </Button>
+            {/* Live preview */}
+            <div
+              className="flex-1 rounded-lg p-1 flex items-center gap-1 border min-w-0"
+              style={{ backgroundColor: viewModeStripColor }}
+            >
+              <div
+                className="px-3 py-1 rounded bg-white text-xs font-medium shadow-sm"
+                style={{ color: viewModeStripColor }}
+              >
+                Active
+              </div>
+              <div className="px-3 py-1 rounded text-xs font-medium text-white/90">
+                Inactive
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Background color of the view-mode toggle strip on dashboards (e.g., My Dashboard / Team Reviews).
           </p>
         </div>
         <div className="space-y-2">
