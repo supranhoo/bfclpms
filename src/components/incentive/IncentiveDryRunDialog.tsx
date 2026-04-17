@@ -14,6 +14,18 @@ const toNum = (v: any): number => {
 interface DryRunResult {
   computed: number;
   program: string;
+  message?: string | null;
+  diagnostics?: {
+    detected_program_type?: string;
+    employees_in_scope?: number;
+    employees_processed?: number;
+    employees_with_daily_entries?: number;
+    employees_with_selected_period_data?: number;
+    employees_with_resolved_rate?: number;
+    employees_skipped_no_rate?: number;
+    records_pre_scope?: number;
+    records_post_scope?: number;
+  };
   summary: {
     total: number;
     eligible: number;
