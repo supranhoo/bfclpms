@@ -715,23 +715,28 @@ serve(async (req) => {
     const employeesProcessed = employees.length;
     const recordsPreScope = records.length;
     const recordsPostScope = scopedRecords.length;
+    const employeesWithDailyEntries = program.program_type === 'production' ? prodDailyMap.size : employeesProcessed;
     let diagnosticMessage: string | null = null;
     if (recordsPostScope === 0) {
       if (employeesProcessed === 0) {
         diagnosticMessage = `No employees match the selected filters for ${review_period} ${review_year}.`;
+      } else if (program.program_type === 'production' && employeesWithDailyEntries === 0) {
+        diagnosticMessage = `${employeesProcessed} employee(s) match the programme, but none have production daily entries for ${review_period} ${review_year}. Enter daily production values first.`;
+      } else if (program.program_type === 'production' && employeesSkippedNoRate > 0 && employeesWithResolvedRate === 0) {
+        diagnosticMessage = `${employeesSkippedNoRate} employee(s) have production data but no production rate resolves (employee/department/BU/company/common). Configure rates in the programme's Production Rates tab.`;
       } else if (recordsPreScope === 0) {
         diagnosticMessage = `No production data found for the ${employeesProcessed} selected employee(s) in ${review_period} ${review_year}.`;
       } else if (scopePaymentPeriod) {
-        // Identify employees with data in OTHER periods
         const otherPeriodEmpIds = new Set<string>(
-          records
-            .filter((r: any) => r.payment_period !== scopePaymentPeriod)
-            .map((r: any) => r.employee_id)
+          records.filter((r: any) => r.payment_period !== scopePaymentPeriod).map((r: any) => r.employee_id)
         );
         diagnosticMessage = `No production entries fall in period ${scopePaymentPeriod}. ${otherPeriodEmpIds.size} employee(s) have data in other periods. Switch the Period filter to "All" or another range to view them.`;
       } else {
         diagnosticMessage = `No incentive records produced for ${employeesProcessed} employee(s).`;
       }
+    } else if (program.program_type === 'production' && employeesSkippedNoRate > 0) {
+      // Partial success — still warn about skipped employees
+      diagnosticMessage = `Computed ${recordsPostScope} record(s). ${employeesSkippedNoRate} employee(s) were skipped because no production rate resolves for them.`;
     }
 
     // 6. Compute summary stats
@@ -755,15 +760,18 @@ serve(async (req) => {
       },
     };
 
-    const employeesWithDailyEntries = new Set<string>(records.map((r: any) => r.employee_id)).size;
     const employeesWithSelectedPeriodData = scopePaymentPeriod
       ? new Set<string>(records.filter((r: any) => r.payment_period === scopePaymentPeriod).map((r: any) => r.employee_id)).size
       : employeesWithDailyEntries;
 
     const diagnostics: any = {
+      detected_program_type: program.program_type,
+      employees_in_scope: scopeEmployeeIds ? scopeEmployeeIds.length : (employeeFilter?.length ?? employeesProcessed),
       employees_processed: employeesProcessed,
       employees_with_daily_entries: employeesWithDailyEntries,
       employees_with_selected_period_data: employeesWithSelectedPeriodData,
+      employees_with_resolved_rate: employeesWithResolvedRate,
+      employees_skipped_no_rate: employeesSkippedNoRate,
       records_pre_scope: recordsPreScope,
       records_post_scope: recordsPostScope,
       legacy_rows_deleted: 0,
