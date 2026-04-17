@@ -1,74 +1,142 @@
 
+## Plan: Detailed RCA + Fix for “Compute Now → 0 records processed”
 
-## Plan: Fix "0 Records Processed" When Filtering by Period (1-10 / 11-20 / 21-31)
+### What the issue actually is
+This is not just a toast/message problem. The current production compute logic and the period filter are structurally mismatched.
 
-### RCA — Two Real Defects (verified against DB)
+### RCA
+1. **Hybrid record model is the main defect**
+   - In `supabase/functions/compute-monthly-incentives/index.ts`, production employees are handled in two modes:
+     - if data exists in only some ranges, records are created for `1-10` / `11-20` / `21-31`
+     - if data exists in all 3 ranges, the function creates **one `Full Month` record**
+   - After that, the new scope filter runs:
+     - `scopedRecords = records.filter(r => r.payment_period === scopePaymentPeriod)`
+   - Result: if an employee has valid data in all three ranges, they become a `Full Month` record and get dropped entirely when the user computes only `1-10`.
+   - So valid production data exists, but the scoped compute can still end at **0 written rows**.
 
-**Verified facts for Saibal Kunar / Metal Sizing / April 2026:**
-- 69 employees match the Company filter ✓
-- All 69 have entries in `production_daily_entries` ✓
-- Of those 69, **only 3 employees have any value in days 1-10**; the other 66 have entries only in days 11-31
+2. **The “69 employees” number is not a compute-ready count**
+   - `useIncentiveProgramMappedEmployeeIds()` counts mapped employees.
+   - It does **not** verify:
+     - daily entries exist for the selected month
+     - data exists in the selected period
+     - a usable production rate resolves
+   - So the empty-state count is currently a **mapping count**, not a “will compute” count.
 
-**Defect A — Period filter wipes out 66 of 69 employees silently**
-The edge function (lines 600-676) splits each employee's daily values into ranges and **skips a range whenever total = 0** (line 618: `if (total > 0) rangeTotals.push(...)`). Then at line 707 it filters records by `payment_period === '1-10'`. Result: 66 employees produce no `1-10` row → discarded → only 3 records should remain.
+3. **Current UI feedback is too shallow**
+   - `Compute Now` goes straight to mutation + toast.
+   - It does not surface enough server diagnostics to explain whether employees were:
+     - mapped but had no production rows
+     - had production rows only outside the selected sub-period
+     - converted to `Full Month` and then filtered out
 
-**Defect B — UI says "0 processed" but DB now has 3 rows orphaned mid-month** (suspected)
-The toast in screenshot 702 says **"0 record(s) processed"**. That is wrong if 3 rows were written. Either:
-- The 3 employees got disqualified before reaching the records loop (DQ rules can short-circuit), OR
-- `prodDailyMap` was filled but the `populatedRanges` filter dropped them due to a numeric-parse edge case (e.g., values stored as objects, not strings).
+### Fix approach
 
-Either way, the **user-facing message is misleading** because it doesn't distinguish between "no employees matched scope" vs "all matched but all filtered out by sub-period".
+#### 1) Canonicalize production compute output
+**File:** `supabase/functions/compute-monthly-incentives/index.ts`
 
-**Defect C — Inconsistent company resolution between UI and edge function** *(latent, surfaced here)*
-- UI's `useCompanyFilter` resolves company via `profiles.company_id` **OR** dept→BU→division→company chain (whichever is set first). Saibal Kunar's 217 employees use direct `profiles.company_id`.
-- Edge function's mapping resolution uses **only the dept→BU→division→company chain** (line 82-107) — never reads `profiles.company_id`. For programmes mapped by company/division this would give different results than the UI.
-- For this specific case it's harmless (mappings are by department/grade, not company), but it's a divergence that will bite later.
+Change production computation so it always builds canonical sub-period rows first:
+- `1-10`
+- `11-20`
+- `21-31`
 
-### Fix
+Then:
+- if `scope.payment_period` is one sub-period, write only that period’s rows
+- if no sub-period scope, write all populated sub-period rows
+- do **not** rely on stored `Full Month` production rows as the authoritative model
 
-#### A. Make the empty-result message diagnostic
-**File: `supabase/functions/compute-monthly-incentives/index.ts`**
-- After scope filter (line 707), compute a diagnostic summary:
-  - `employees_processed` = `employees.length`
-  - `records_pre_scope` = `records.length`
-  - `records_post_scope` = `scopedRecords.length`
-- Return them in the response and a clear message:
-  - If `records_pre_scope === 0`: *"No production data found for selected employees in {month} {year}"*
-  - If `records_pre_scope > 0 && records_post_scope === 0`: *"No production entries fall in period {payment_period}. {employees_with_other_periods} employee(s) have data in other periods (11-20 / 21-31). Switch the Period filter to view them."*
-- Surface this `message` in the existing toast (already wired through `useComputeIncentives`).
+For reporting/UI:
+- `Full Month` should become a **derived aggregation**, not a stored production record
 
-#### B. Frontend — show diagnostic on toast & empty-state
-**File: `src/hooks/useIncentiveRecords.ts` (`useComputeIncentives.onSuccess`)**
-- When `data.computed === 0`, show the server-supplied `data.message` as the toast description instead of generic "0 record(s) processed".
+This removes the core bug where valid employees disappear during scope filtering.
 
-**File: `src/components/incentive/MonthlyIncentiveTable.tsx`**
-- Pre-flight check before invoking compute: if `periodFilter !== 'all'`, show an info chip in the empty-state: *"Period filter is set to {1-10}. Compute will only write rows where employees have production data in that range."*
-- Add a "Compute for All Periods" secondary button when periodFilter ≠ 'all', which calls compute with `payment_period: null` so the user can recover with one click.
+#### 2) Clean up legacy `Full Month` production rows during recompute
+**File:** `supabase/functions/compute-monthly-incentives/index.ts`
 
-#### C. Align company resolution (defensive parity)
-**File: `supabase/functions/compute-monthly-incentives/index.ts`**
-- Extend the dept→BU→company chain block (lines 278-297) to also build an `empToCompanyDirect = Map<emp_id, company_id>` from `profiles.company_id`.
-- In slab-scope match (line 398-400), prefer `empToCompanyDirect.get(emp.id) ?? <chain-resolved>`.
-- This is purely defensive — current bug doesn't depend on it but it removes the UI/edge-function divergence permanently.
+During production recompute for affected employees:
+- delete old production rows for that employee/program/month/year
+- include legacy `payment_period = 'Full Month'` cleanup so old mixed data cannot survive beside new split-period rows
 
-### Files Touched
-| File | Change |
-|---|---|
-| `supabase/functions/compute-monthly-incentives/index.ts` | Diagnostic counters + clear `message` in 0-result response; honour `profiles.company_id` in scope chain |
-| `src/hooks/useIncentiveRecords.ts` | Surface `data.message` in toast when `computed === 0` |
-| `src/components/incentive/MonthlyIncentiveTable.tsx` | Empty-state warning when period filter is active; "Compute for All Periods" recovery CTA |
+This prevents stale/full-month rows from corrupting later filtered computes.
 
-### Risk & Impact
+#### 3) Make the report UI align with the new canonical model
+**File:** `src/components/incentive/MonthlyIncentiveTable.tsx`
+
+Update the report table/filter behavior:
+- `period = 1-10 / 11-20 / 21-31` → show only those rows
+- `period = Full Month` → aggregate all sub-period rows per employee into one derived monthly row in the UI
+- `period = all` → keep current broad view, but make the displayed period label deterministic (`Mixed` or derived summary instead of first row)
+
+Also replace the empty-state copy:
+- keep mapped employee count if useful
+- add a compute-ready count/diagnostic from the server or a pre-check helper
+- avoid implying that all mapped employees will necessarily produce rows in the selected period
+
+#### 4) Improve server diagnostics
+**Files:**  
+- `supabase/functions/compute-monthly-incentives/index.ts`
+- `src/hooks/useIncentiveRecords.ts`
+- `src/components/incentive/IncentiveDryRunDialog.tsx`
+
+Return richer diagnostics such as:
+- employees_in_scope
+- employees_with_daily_entries
+- employees_with_selected_period_data
+- employees_written
+- legacy_rows_deleted
+- message/reason buckets
+
+Use that in:
+- destructive/info toast on `Compute Now`
+- dry-run dialog header
+- empty-state helper text
+
+So the user sees **why** rows were skipped, not just “0 processed”.
+
+#### 5) Regression protection
+Add tests and mocks for the exact failing case.
+
+**Tests to add**
+- employee has data in all 3 ranges, compute scoped to `1-10` → writes `1-10`, not 0
+- mixed employee set (some all-3, some partial) → scoped count is correct
+- unscoped production compute → writes split rows for all populated periods
+- legacy `Full Month` production row exists → recompute removes/replaces it correctly
+- company scope + period scope intersection still works
+
+**Likely files**
+- `supabase/functions/compute-monthly-incentives/*_test.ts`
+- frontend test for derived `Full Month` aggregation in the report table
+- updated mock data fixtures
+
+#### 6) Documentation + policy sync
+Per project rules, implementation must update:
+- `DOCUMENTATION.md`
+- `POLICY.md`
+
+Specifically:
+- production incentive records become canonically **sub-period based**
+- `Full Month` becomes a **derived reporting view**
+- scoped compute semantics are documented clearly
+- version history updated
+
+### Files likely touched
+- `supabase/functions/compute-monthly-incentives/index.ts`
+- `src/components/incentive/MonthlyIncentiveTable.tsx`
+- `src/components/incentive/IncentiveDryRunDialog.tsx`
+- `src/hooks/useIncentiveRecords.ts`
+- `DOCUMENTATION.md`
+- `POLICY.md`
+- edge-function tests + mock fixtures
+
+### Risk & Impact Report
 | Area | Impact |
 |---|---|
-| Data | None — only adds counters & message; computation logic unchanged |
-| Workflow | None — recovery CTA is opt-in |
-| UI/UX | Users immediately see *why* zero rows were processed and how to recover |
-| Regression | Very low — purely additive |
-| Mitigation | Existing scope-filter behaviour preserved verbatim; only the messaging and a diagnostic summary are added |
+| Data impact | No new schema required, but recompute logic will intentionally replace legacy production `Full Month` rows with canonical split rows for affected employees |
+| Workflow impact | Compute becomes consistent with the user’s active period filter |
+| UI/UX consistency | Report stays visually similar, but `Full Month` becomes a derived view instead of a stored row |
+| Regression risk | Medium — touches core production compute + report aggregation |
+| Mitigation | Edge-function tests, derived-row UI tests, legacy-row cleanup, documentation/policy sync |
 
-### Out of Scope
-- Auto-relaxing the period filter on compute (keeps user's intent explicit)
-- Backfilling production data for missing days (data-entry concern, not compute)
-- Migrating existing "Full Month" records into split-period rows retroactively
-
+### Out of scope
+- Reworking non-production programs
+- Changing programme mappings or employee eligibility rules
+- Retroactive adjustments flow unless it is later found to depend on stored `Full Month` production rows
