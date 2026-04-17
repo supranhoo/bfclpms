@@ -731,32 +731,37 @@ serve(async (req) => {
     // In dry_run mode, return preview without writing
     if (dry_run) {
       return new Response(
-        JSON.stringify({ computed, program: program.name, dry_run: true, summary, records }),
+        JSON.stringify({ computed: scopedRecords.length, program: program.name, dry_run: true, summary, records: scopedRecords }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // Delete existing records for all affected employees before upserting
-    // This prevents orphaned records when period structure changes (full → split or vice versa)
-    if (records.length > 0) {
-      const uniqueEmployeeIds = [...new Set(records.map((r: any) => r.employee_id))];
+    // This prevents orphaned records when period structure changes (full → split or vice versa).
+    // When a payment_period scope is set, only wipe matching period rows for affected employees.
+    if (scopedRecords.length > 0) {
+      const uniqueEmployeeIds = [...new Set(scopedRecords.map((r: any) => r.employee_id))];
       const empBatchSize = 50;
       for (let i = 0; i < uniqueEmployeeIds.length; i += empBatchSize) {
         const empBatch = uniqueEmployeeIds.slice(i, i + empBatchSize);
-        const { error: delError } = await supabase
+        let delQuery = supabase
           .from('employee_incentive_records')
           .delete()
           .eq('program_id', program_id)
           .eq('review_period', review_period)
           .eq('review_year', review_year)
           .in('employee_id', empBatch);
+        if (scopePaymentPeriod) {
+          delQuery = delQuery.eq('payment_period', scopePaymentPeriod);
+        }
+        const { error: delError } = await delQuery;
         if (delError) console.error('Delete error:', delError);
       }
 
       // Upsert fresh records
       const batchSize = 100;
-      for (let i = 0; i < records.length; i += batchSize) {
-        const batch = records.slice(i, i + batchSize);
+      for (let i = 0; i < scopedRecords.length; i += batchSize) {
+        const batch = scopedRecords.slice(i, i + batchSize);
         const { error } = await supabase
           .from('employee_incentive_records')
           .upsert(batch, { onConflict: 'employee_id,review_period,review_year,program_id,payment_period' });
@@ -765,7 +770,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ computed, program: program.name, summary }),
+      JSON.stringify({ computed: scopedRecords.length, program: program.name, summary }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (err) {
