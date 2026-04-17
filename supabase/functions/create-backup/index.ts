@@ -428,7 +428,103 @@ async function handleFinalize(
   )
 }
 
-// ─── MODE: SCHEDULED (self-contained with time guard) ───────────────────────
+// ─── MODE: SCHEDULED (chunked dispatcher with EdgeRuntime.waitUntil) ────────
+// Replaces the old self-contained handler that exceeded the 150s wall-clock
+// limit. Now mirrors the proven manual-backup flow: INIT returns immediately
+// after creating the log row, then background tasks invoke each batch +
+// finalize as separate edge calls (each gets its own 150s budget).
+
+declare const EdgeRuntime: { waitUntil: (p: Promise<unknown>) => void } | undefined
+
+async function callSelf(payload: Record<string, unknown>): Promise<{ ok: boolean; data?: any; error?: string }> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+  const internalSecret = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/create-backup`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${internalSecret}`,
+        'X-Backup-Internal': internalSecret,
+      },
+      body: JSON.stringify(payload),
+    })
+    const data = await res.json().catch(() => ({}))
+    return { ok: res.ok, data, error: res.ok ? undefined : (data?.error || `HTTP ${res.status}`) }
+  } catch (err) {
+    return { ok: false, error: String(err) }
+  }
+}
+
+async function runScheduledChunked(
+  supabase: ReturnType<typeof createClient>,
+  backupId: string,
+  folderPath: string
+): Promise<void> {
+  const startTime = Date.now()
+  const BATCH_SIZE = 9
+  const batches = splitIntoBatches(TABLES_TO_BACKUP, BATCH_SIZE)
+  const tableManifest: Array<{ table: string; rows: number; file: string }> = []
+  let totalRows = 0
+  let totalSize = 0
+  let tablesCount = 0
+  const errors: string[] = []
+
+  for (let i = 0; i < batches.length; i++) {
+    const batch = batches[i]
+    const result = await callSelf({
+      backup_type: 'scheduled',
+      backup_id: backupId,
+      folder_path: folderPath,
+      tables: batch,
+    })
+
+    if (!result.ok) {
+      errors.push(`Batch ${i + 1}/${batches.length} failed: ${result.error}`)
+      console.error(`Scheduled backup batch ${i + 1} failed:`, result.error)
+      continue
+    }
+
+    const processed = result.data?.processed || []
+    for (const p of processed) {
+      tableManifest.push({ table: p.table, rows: p.rows, file: `${folderPath}/${p.table}.json` })
+      totalRows += p.rows
+      totalSize += p.sizeBytes || 0
+      tablesCount++
+    }
+    if (result.data?.errors?.length) errors.push(...result.data.errors)
+  }
+
+  const finalizeResult = await callSelf({
+    backup_type: 'scheduled',
+    backup_id: backupId,
+    folder_path: folderPath,
+    finalize: true,
+    table_manifest: tableManifest,
+    tables_count: tablesCount,
+    total_rows: totalRows,
+    total_size_bytes: totalSize,
+  })
+
+  if (!finalizeResult.ok) {
+    await supabase.from('backup_logs').update({
+      status: 'failed',
+      error_message: `Finalize failed: ${finalizeResult.error}. Batch errors: ${errors.slice(0, 5).join('; ')}`,
+      completed_at: new Date().toISOString(),
+    }).eq('id', backupId)
+    console.error('Scheduled backup finalize failed:', finalizeResult.error)
+    return
+  }
+
+  const elapsed = Math.round((Date.now() - startTime) / 1000)
+  console.log(`Scheduled backup ${backupId} completed in ${elapsed}s: ${tablesCount} tables, ${totalRows} rows`)
+
+  if (errors.length > 0) {
+    await supabase.from('backup_logs').update({
+      error_message: `Completed with ${errors.length} warning(s): ${errors.slice(0, 3).join('; ')}`,
+    }).eq('id', backupId)
+  }
+}
 
 async function handleScheduled(
   req: Request,
@@ -437,7 +533,7 @@ async function handleScheduled(
   const authResponse = await authenticateRequest(req, supabase, 'scheduled')
   if (authResponse) return authResponse
 
-  // Clean up stuck backups
+  // Clean up stuck backups (running > 30 min)
   await supabase
     .from('backup_logs')
     .update({
@@ -456,113 +552,28 @@ async function handleScheduled(
 
   if (logError) throw new Error(`Failed to create backup log: ${logError.message}`)
 
-  const startTime = Date.now()
-  const TIME_LIMIT_MS = 100_000 // 100s guard (well under 150s limit)
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
   const folderPath = `chunked/${timestamp}`
 
-  let totalRows = 0
-  let tablesCount = 0
-  let totalSizeBytes = 0
-  const tableManifest: Array<{ table: string; rows: number; file: string }> = []
-  let timedOut = false
-
-  // Process tables in sequential batches of 8, checking time after each batch
-  const BATCH_SIZE = 8
-  for (let i = 0; i < TABLES_TO_BACKUP.length; i += BATCH_SIZE) {
-    // Time guard check
-    if (Date.now() - startTime > TIME_LIMIT_MS) {
-      timedOut = true
-      console.warn(`Time guard triggered at table index ${i}. Finalizing partial backup.`)
-      break
-    }
-
-    const batch = TABLES_TO_BACKUP.slice(i, i + BATCH_SIZE)
-    try {
-      const { results, errors: batchErrors } = await processTableBatch(supabase, batch, folderPath)
-      for (const r of results) {
-        tableManifest.push({ table: r.table, rows: r.rows, file: r.file })
-        totalRows += r.rows
-        totalSizeBytes += r.sizeBytes
-        tablesCount++
-      }
-      if (batchErrors.length > 0) {
-        console.warn(`Batch errors at index ${i}:`, batchErrors.join('; '))
-      }
-    } catch (batchErr) {
-      console.error(`Batch error (tables ${i}-${i + BATCH_SIZE}):`, batchErr)
-    }
+  // Fire-and-forget the chunked orchestration. Each batch + finalize is a
+  // separate edge invocation with its own 150s budget — same model as manual.
+  if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) {
+    EdgeRuntime.waitUntil(runScheduledChunked(supabase, logEntry.id, folderPath))
+  } else {
+    runScheduledChunked(supabase, logEntry.id, folderPath).catch(err =>
+      console.error('Scheduled backup orchestration error:', err)
+    )
   }
-
-  // Finalize — generate manifests
-  const storageManifest: Record<string, Array<{ name: string; size: number; created_at: string }>> = {}
-  let totalStorageFiles = 0
-
-  // Only generate storage manifest if we have time left
-  if (Date.now() - startTime < TIME_LIMIT_MS + 20_000) {
-    for (const bucket of STORAGE_BUCKETS) {
-      const files = await listBucketFiles(supabase, bucket)
-      storageManifest[bucket] = files
-      totalStorageFiles += files.length
-    }
-
-    const storageManifestPath = `${folderPath}/storage-manifest.json`
-    await supabase.storage
-      .from('database-backups')
-      .upload(storageManifestPath, JSON.stringify({
-        generated_at: new Date().toISOString(),
-        buckets: STORAGE_BUCKETS,
-        total_files: totalStorageFiles,
-        files: storageManifest,
-      }), { contentType: 'application/json', upsert: false })
-  }
-
-  const manifest = {
-    version: 3,
-    format: 'chunked',
-    created_at: new Date().toISOString(),
-    backup_type: 'scheduled',
-    tables_count: tablesCount,
-    total_rows: totalRows,
-    total_storage_files: totalStorageFiles,
-    pruned_tables: Object.keys(PRUNE_TABLES),
-    prune_cutoff: NINETY_DAYS_AGO,
-    partial: timedOut,
-    tables: tableManifest,
-    storage_manifest_file: timedOut ? null : `${folderPath}/storage-manifest.json`,
-  }
-
-  const manifestPath = `${folderPath}/manifest.json`
-  const { error: manifestUploadError } = await supabase.storage
-    .from('database-backups')
-    .upload(manifestPath, JSON.stringify(manifest), { contentType: 'application/json', upsert: false })
-
-  const finalStatus = timedOut ? 'partial' : 'completed'
-  const errorMsg = timedOut
-    ? `Time guard: completed ${tablesCount}/${TABLES_TO_BACKUP.length} tables in ${Math.round((Date.now() - startTime) / 1000)}s`
-    : (manifestUploadError ? `Manifest upload failed: ${manifestUploadError.message}` : null)
-
-  await supabase.from('backup_logs').update({
-    status: manifestUploadError ? 'failed' : finalStatus,
-    file_path: manifestUploadError ? null : manifestPath,
-    file_size_bytes: totalSizeBytes,
-    tables_count: tablesCount,
-    total_rows: totalRows,
-    completed_at: new Date().toISOString(),
-    error_message: errorMsg,
-  }).eq('id', logEntry.id)
 
   return new Response(
     JSON.stringify({
-      success: !manifestUploadError,
+      success: true,
+      mode: 'scheduled-dispatched',
       backup_id: logEntry.id,
-      tables_count: tablesCount,
-      total_rows: totalRows,
-      file_size_bytes: totalSizeBytes,
-      partial: timedOut,
-      elapsed_seconds: Math.round((Date.now() - startTime) / 1000),
+      folder_path: folderPath,
+      message: 'Scheduled backup dispatched as chunked workers. Track progress in backup_logs.',
     }),
-    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    { status: 202, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   )
 }
 
