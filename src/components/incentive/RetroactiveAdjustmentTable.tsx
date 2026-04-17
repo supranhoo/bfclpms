@@ -21,13 +21,31 @@ export function RetroactiveAdjustmentTable() {
   const [slabChangeOnly, setSlabChangeOnly] = useState(false);
   const [detectMonth, setDetectMonth] = useState(MONTHS[new Date().getMonth()]);
   const [detectProgram, setDetectProgram] = useState<string>('');
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
+
+  const { companies, employeeCompanyMap } = useCompanyFilter();
+  const companyNameToId = useMemo(() => new Map(companies.map(c => [c.name, c.id])), [companies]);
+  const companyIdToName = useMemo(() => new Map(companies.map(c => [c.id, c.name])), [companies]);
+  const selectedCompanyNames = useMemo(
+    () => selectedCompanyIds.map(id => companyIdToName.get(id)).filter(Boolean) as string[],
+    [selectedCompanyIds, companyIdToName]
+  );
 
   const { data: programs = [] } = useIncentivePrograms();
   const activePrograms = (programs as any[]).filter((p: any) => p.is_active);
 
-  const { data: revisions = [], isLoading } = useIncentiveRevisions({ affectedYear, slabChangeOnly });
+  const { data: rawRevisions = [], isLoading } = useIncentiveRevisions({ affectedYear, slabChangeOnly });
   const markNotified = useMarkPayrollNotified();
   const detectChanges = useDetectRetroactiveChanges();
+
+  const revisions = useMemo(() => {
+    if (selectedCompanyIds.length === 0) return rawRevisions as any[];
+    const set = new Set(selectedCompanyIds);
+    return (rawRevisions as any[]).filter((r: any) => {
+      const cid = employeeCompanyMap.get(r.employee_id);
+      return cid && set.has(cid);
+    });
+  }, [rawRevisions, selectedCompanyIds, employeeCompanyMap]);
 
   const handleDetect = () => {
     detectChanges.mutate({
