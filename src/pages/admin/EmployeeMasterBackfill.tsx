@@ -288,7 +288,7 @@ export default function EmployeeMasterBackfill() {
                           <TableCell className="text-xs">{r.department ?? '—'}</TableCell>
                           <TableCell>
                             {r.status === 'existing' && <Badge variant="secondary" className="text-xs">Existing</Badge>}
-                            {r.status === 'to_insert' && <Badge className="text-xs bg-green-600 hover:bg-green-700">Will insert</Badge>}
+                            {r.status === 'to_insert' && <Badge className="text-xs">Will insert</Badge>}
                             {r.status === 'conflict' && <Badge variant="destructive" className="text-xs">Conflict</Badge>}
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground">
@@ -330,12 +330,12 @@ export default function EmployeeMasterBackfill() {
 
       {/* Result */}
       {commit && (
-        <Card className={`border-2 ${commit.summary.failed > 0 ? 'border-destructive/40' : 'border-green-500/40'}`}>
+        <Card className={`border-2 ${commit.summary.failed > 0 ? 'border-destructive/40' : 'border-primary/40'}`}>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               {commit.summary.failed > 0
                 ? <AlertCircle className="h-5 w-5 text-destructive" />
-                : <CheckCircle2 className="h-5 w-5 text-green-600" />}
+                : <CheckCircle2 className="h-5 w-5 text-primary" />}
               Backfill Result
             </CardTitle>
           </CardHeader>
@@ -372,7 +372,7 @@ export default function EmployeeMasterBackfill() {
 
 function StatCard({ label, value, tone }: { label: string; value: number; tone?: 'success' | 'destructive' | 'muted' }) {
   const toneCls = tone === 'success'
-    ? 'bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400'
+    ? 'bg-primary/10 text-primary'
     : tone === 'destructive'
       ? 'bg-destructive/10 text-destructive'
       : tone === 'muted'
