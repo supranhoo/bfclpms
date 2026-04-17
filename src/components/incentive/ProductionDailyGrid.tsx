@@ -193,7 +193,7 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
 
   const sourceBadge = (source: string) => {
     const variants: Record<string, 'default' | 'secondary' | 'outline'> = {
-      employee: 'default', department: 'secondary', bu: 'outline', common: 'outline',
+      employee: 'default', department: 'secondary', bu: 'outline', company: 'outline', common: 'outline',
     };
     return <Badge variant={variants[source] || 'outline'} className="text-[10px] ml-1">{source.slice(0, 3)}</Badge>;
   };
