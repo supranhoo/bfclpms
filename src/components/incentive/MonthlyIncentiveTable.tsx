@@ -364,6 +364,7 @@ export function MonthlyIncentiveTable() {
         dry_run: true,
         scope: buildScope(),
       });
+      console.error('Compute payload shape:', { summary: (result as any)?.summary, recordSample: (result as any)?.records?.[0] });
       setDryRunResult(result);
       setShowPreview(true);
       const ids = (result as any)?.records?.map((r: any) => r.employee_id) || [];
@@ -670,7 +671,7 @@ export function MonthlyIncentiveTable() {
                           <div className="text-xs text-muted-foreground">{r.profiles?.employee_code}</div>
                         </TableCell>
                         <TableCell className="text-xs">{r.payment_period || 'Full Month'}</TableCell>
-                         <TableCell>{r.pms_score?.toFixed(2) || '—'}</TableCell>
+                         <TableCell>{r.pms_score != null ? Number(r.pms_score ?? 0).toFixed(2) : '—'}</TableCell>
                         <TableCell>
                           {(() => {
                             const ks = kpiStatusMap?.get(r.employee_id);
@@ -688,10 +689,10 @@ export function MonthlyIncentiveTable() {
                         </TableCell>
                         <TableCell>
                           {r.incentive_slabs ? (
-                            <span className="text-xs">{r.incentive_slabs.min_value}–{r.incentive_slabs.max_value}</span>
+                            <span className="text-xs">{Number(r.incentive_slabs.min_value ?? 0)}–{Number(r.incentive_slabs.max_value ?? 0)}</span>
                           ) : '—'}
                         </TableCell>
-                        <TableCell>{r.base_incentive_percent}%</TableCell>
+                        <TableCell>{Number(r.base_incentive_percent ?? 0)}%</TableCell>
                         <TableCell>
                           {r.is_disqualified ? (
                             <TooltipProvider>
@@ -706,15 +707,15 @@ export function MonthlyIncentiveTable() {
                             </TooltipProvider>
                           ) : '—'}
                         </TableCell>
-                        <TableCell>{r.lti_penalty_percent > 0 ? `${r.lti_penalty_percent}%` : '—'}</TableCell>
-                        <TableCell>{r.pro_rata_factor < 1 ? r.pro_rata_factor.toFixed(2) : '—'}</TableCell>
+                        <TableCell>{Number(r.lti_penalty_percent ?? 0) > 0 ? `${Number(r.lti_penalty_percent ?? 0)}%` : '—'}</TableCell>
+                        <TableCell>{Number(r.pro_rata_factor ?? 1) < 1 ? Number(r.pro_rata_factor ?? 0).toFixed(2) : '—'}</TableCell>
                         <TableCell>
-                          <Badge variant={r.final_incentive_percent > 0 ? 'default' : 'secondary'}>
-                            {r.final_incentive_percent}%
+                          <Badge variant={Number(r.final_incentive_percent ?? 0) > 0 ? 'default' : 'secondary'}>
+                            {Number(r.final_incentive_percent ?? 0)}%
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          {(r.incentive_amount || 0) > 0 ? `₹${Math.round(Number(r.incentive_amount)).toLocaleString('en-IN')}` : '—'}
+                          {Number(r.incentive_amount ?? 0) > 0 ? `₹${Math.round(Number(r.incentive_amount ?? 0)).toLocaleString('en-IN')}` : '—'}
                         </TableCell>
                         <TableCell>
                           {r.is_disqualified ? (
