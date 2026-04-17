@@ -187,6 +187,15 @@ export default function UserManagement() {
     return departments.filter(d => d.business_unit_id && buIdsInDivision.has(d.business_unit_id));
   }, [departments, businessUnits, newDivisionId]);
 
+  // Combobox option lists (memoized) — used by Add/Edit User dialogs
+  const companyOptions = useMemo(() => (companiesList || []).map(c => ({ value: c.id, label: c.name })), [companiesList]);
+  const divisionOptions = useMemo(() => (divisions || []).map(d => ({ value: d.id, label: d.name })), [divisions]);
+  const editDepartmentOptions = useMemo(() => editFilteredDepartments.map(d => ({ value: d.id, label: d.name })), [editFilteredDepartments]);
+  const createDepartmentOptions = useMemo(() => createFilteredDepartments.map(d => ({ value: d.id, label: d.name })), [createFilteredDepartments]);
+  const designationOptions = useMemo(() => (designationsList || []).map(d => ({ value: d.name, label: d.name })), [designationsList]);
+  const pmsGradeOptions = useMemo(() => (pmsGradesList || []).map(g => ({ value: g.name, label: g.name })), [pmsGradesList]);
+  const roleOptions = useMemo(() => ALL_APP_ROLES.map(role => ({ value: role, label: ROLE_LABELS[role] })), []);
+
   const totalPages = Math.ceil(filteredProfiles.length / ITEMS_PER_PAGE);
   const paginatedProfiles = filteredProfiles.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
