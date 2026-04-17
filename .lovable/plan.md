@@ -1,142 +1,207 @@
 
-## Plan: Detailed RCA + Fix for “Compute Now → 0 records processed”
+## Plan: Detailed RCA + Structural Fix for “Compute Now still returns 0”
 
-### What the issue actually is
-This is not just a toast/message problem. The current production compute logic and the period filter are structurally mismatched.
+### What I found in the current code
+I reviewed the current frontend scope/filter flow and the deployed `compute-monthly-incentives` function. The earlier “Full Month shadowing” fix is present, but there is still a second structural mismatch.
 
-### RCA
-1. **Hybrid record model is the main defect**
-   - In `supabase/functions/compute-monthly-incentives/index.ts`, production employees are handled in two modes:
-     - if data exists in only some ranges, records are created for `1-10` / `11-20` / `21-31`
-     - if data exists in all 3 ranges, the function creates **one `Full Month` record**
-   - After that, the new scope filter runs:
+### Detailed RCA
+1. **The backend still decides “production vs non-production” from `program.program_type` only**
+   - In `supabase/functions/compute-monthly-incentives/index.ts`, the split-period path runs only when:
+     - `program.program_type === 'production'`
+     - and `prodDailyMap.has(emp.id)`
+   - If a programme uses production daily entries/rates in practice but is not classified exactly as `program_type = 'production'`, the function does **not** go through the canonical sub-period branch.
+
+2. **That means the period filter can still wipe out valid data**
+   - The UI sends `scope.payment_period = '1-10'` for filtered compute.
+   - Non-production branches still emit `payment_period: 'Full Month'`.
+   - Then the backend applies:
      - `scopedRecords = records.filter(r => r.payment_period === scopePaymentPeriod)`
-   - Result: if an employee has valid data in all three ranges, they become a `Full Month` record and get dropped entirely when the user computes only `1-10`.
-   - So valid production data exists, but the scoped compute can still end at **0 written rows**.
+   - Result: valid programme data can still end at **0 records** if the programme is being computed through the wrong branch.
 
-2. **The “69 employees” number is not a compute-ready count**
-   - `useIncentiveProgramMappedEmployeeIds()` counts mapped employees.
-   - It does **not** verify:
-     - daily entries exist for the selected month
-     - data exists in the selected period
-     - a usable production rate resolves
-   - So the empty-state count is currently a **mapping count**, not a “will compute” count.
+3. **This explains why the issue persisted even after the canonical sub-period fix**
+   - That fix only helps programmes that actually enter the `program_type === 'production'` path.
+   - If “Metal Sizing” is configured in a different mode but still relies on daily production inputs, the bug remains.
 
-3. **Current UI feedback is too shallow**
-   - `Compute Now` goes straight to mutation + toast.
-   - It does not surface enough server diagnostics to explain whether employees were:
-     - mapped but had no production rows
-     - had production rows only outside the selected sub-period
-     - converted to `Full Month` and then filtered out
+4. **There is also a backend company/rate mismatch**
+   - Slab scope matching now uses:
+     - direct `profiles.company_id`
+     - or hierarchy fallback
+   - But production rate resolution still uses:
+     - department -> BU -> company chain only
+   - So the same employee can be:
+     - included in UI company scope
+     - eligible for slab matching
+     - but resolved inconsistently for company-based rate lookup
+   - This is not the only cause of “0”, but it is a real logic divergence in the same compute path.
 
-### Fix approach
+5. **The UI still shows a mapping count, not a compute-ready count**
+   - `filteredMappedCount` is based on programme mappings + company filter.
+   - It does not prove:
+     - daily production rows exist
+     - positive values exist in selected sub-period
+     - a rate resolves
+     - the programme is being computed in the correct backend mode
 
-#### 1) Canonicalize production compute output
-**File:** `supabase/functions/compute-monthly-incentives/index.ts`
+6. **Documentation/policy are out of sync with live code**
+   - `POLICY.md` still says all-3-range production data becomes one stored `Full Month` record.
+   - Current edge function already moved to canonical sub-period storage.
+   - This mismatch makes future fixes easier to apply incorrectly.
 
-Change production computation so it always builds canonical sub-period rows first:
-- `1-10`
-- `11-20`
-- `21-31`
+---
 
-Then:
-- if `scope.payment_period` is one sub-period, write only that period’s rows
-- if no sub-period scope, write all populated sub-period rows
-- do **not** rely on stored `Full Month` production rows as the authoritative model
+## Fix approach
 
-For reporting/UI:
-- `Full Month` should become a **derived aggregation**, not a stored production record
+### 1) Make compute mode explicit and authoritative
+**Files likely touched**
+- `supabase/functions/compute-monthly-incentives/index.ts`
+- programme config UI/hooks
+- possibly database migration if no explicit field exists
 
-This removes the core bug where valid employees disappear during scope filtering.
+**Change**
+Replace implicit compute branching from `program_type` alone with an authoritative programme mode.
 
-#### 2) Clean up legacy `Full Month` production rows during recompute
-**File:** `supabase/functions/compute-monthly-incentives/index.ts`
+Preferred durable approach:
+- add a DB-backed mode on programmes, e.g.
+  - `support`
+  - `production_daily`
+  - `production_target`
+  - `vessel_fixed`
 
-During production recompute for affected employees:
-- delete old production rows for that employee/program/month/year
-- include legacy `payment_period = 'Full Month'` cleanup so old mixed data cannot survive beside new split-period rows
+If a suitable field already exists, reuse it instead of adding one.
 
-This prevents stale/full-month rows from corrupting later filtered computes.
+**Why**
+The current bug is caused by configuration meaning one thing in the UI/data-entry layer and another thing in the compute engine.
 
-#### 3) Make the report UI align with the new canonical model
-**File:** `src/components/incentive/MonthlyIncentiveTable.tsx`
+---
 
-Update the report table/filter behavior:
-- `period = 1-10 / 11-20 / 21-31` → show only those rows
-- `period = Full Month` → aggregate all sub-period rows per employee into one derived monthly row in the UI
-- `period = all` → keep current broad view, but make the displayed period label deterministic (`Mixed` or derived summary instead of first row)
+### 2) Refactor the edge function to branch by compute mode, not assumption
+**File**
+- `supabase/functions/compute-monthly-incentives/index.ts`
 
-Also replace the empty-state copy:
-- keep mapped employee count if useful
-- add a compute-ready count/diagnostic from the server or a pre-check helper
-- avoid implying that all mapped employees will necessarily produce rows in the selected period
+**Change**
+- `production_daily` mode:
+  - always emit canonical `1-10`, `11-20`, `21-31` rows
+  - apply sub-period scope only to these rows
+- `support`, `vessel_fixed`, `production_target` modes:
+  - do not pretend sub-period scoping applies unless the mode actually supports it
+  - if the user selected `1-10/11-20/21-31` for a non-split mode, return a clear diagnostic instead of silently producing 0
 
-#### 4) Improve server diagnostics
-**Files:**  
+**Why**
+This removes the remaining path where filtered compute can still zero out valid data.
+
+---
+
+### 3) Unify company resolution across slab matching and production rate lookup
+**File**
+- `supabase/functions/compute-monthly-incentives/index.ts`
+
+**Change**
+Use the same company resolver everywhere:
+- prefer `profiles.company_id`
+- fallback to dept -> BU -> division -> company chain
+
+Apply this in:
+- slab matching
+- company-scoped production rate cascade
+
+**Why**
+Employees currently can match company scope in one part of the compute logic and miss it in another.
+
+---
+
+### 4) Return real diagnostics from the backend
+**Files**
 - `supabase/functions/compute-monthly-incentives/index.ts`
 - `src/hooks/useIncentiveRecords.ts`
 - `src/components/incentive/IncentiveDryRunDialog.tsx`
 
-Return richer diagnostics such as:
-- employees_in_scope
-- employees_with_daily_entries
-- employees_with_selected_period_data
-- employees_written
-- legacy_rows_deleted
-- message/reason buckets
+**Add diagnostics such as**
+- `detected_compute_mode`
+- `employees_in_scope`
+- `employees_with_daily_entries`
+- `employees_with_positive_selected_period_data`
+- `employees_with_resolved_rate`
+- `employees_skipped_no_rate`
+- `employees_skipped_mode_mismatch`
+- `records_pre_scope`
+- `records_post_scope`
 
-Use that in:
-- destructive/info toast on `Compute Now`
-- dry-run dialog header
-- empty-state helper text
+**Why**
+Right now “0 processed” is too shallow to distinguish:
+- wrong compute branch
+- no sub-period data
+- no resolved rate
+- no matching employees
 
-So the user sees **why** rows were skipped, not just “0 processed”.
+---
 
-#### 5) Regression protection
-Add tests and mocks for the exact failing case.
+### 5) Make the report UI mode-aware
+**File**
+- `src/components/incentive/MonthlyIncentiveTable.tsx`
 
+**Change**
+- Only allow / emphasize `1-10`, `11-20`, `21-31` compute scoping for programmes that truly support split-period compute
+- For non-split programmes:
+  - disable sub-period compute
+  - or show helper text that the selected programme computes only as full-period
+- Replace empty-state mapping count with:
+  - mapped employees
+  - compute-ready employees
+  - backend-detected mode
+
+**Why**
+The UI currently implies filtered compute is valid for every programme shape.
+
+---
+
+### 6) Sync SSOT docs and policy
+**Files**
+- `DOCUMENTATION.md`
+- `POLICY.md`
+- `docs/adr/ADR-044.md`
+
+**Update**
+- canonical production storage is sub-period based
+- `Full Month` is a derived reporting view for production-daily mode
+- programme compute behavior is mode-driven
+- sub-period filters only apply to split-period modes
+- version history updated
+
+---
+
+### 7) Regression protection
 **Tests to add**
-- employee has data in all 3 ranges, compute scoped to `1-10` → writes `1-10`, not 0
-- mixed employee set (some all-3, some partial) → scoped count is correct
-- unscoped production compute → writes split rows for all populated periods
-- legacy `Full Month` production row exists → recompute removes/replaces it correctly
-- company scope + period scope intersection still works
+- programme with daily entries but wrong/legacy type classification -> explicit mode resolves correct compute path
+- `production_daily` + `1-10` scope -> writes expected rows
+- non-split mode + `1-10` scope -> returns clear diagnostic, not misleading zero
+- direct `profiles.company_id` company-based rate resolution works
+- derived `Full Month` UI view still aggregates split rows correctly
 
 **Likely files**
 - `supabase/functions/compute-monthly-incentives/*_test.ts`
-- frontend test for derived `Full Month` aggregation in the report table
-- updated mock data fixtures
+- frontend test for mode-aware period filter behavior
+- updated mock programme fixtures
 
-#### 6) Documentation + policy sync
-Per project rules, implementation must update:
-- `DOCUMENTATION.md`
-- `POLICY.md`
+---
 
-Specifically:
-- production incentive records become canonically **sub-period based**
-- `Full Month` becomes a **derived reporting view**
-- scoped compute semantics are documented clearly
-- version history updated
-
-### Files likely touched
-- `supabase/functions/compute-monthly-incentives/index.ts`
-- `src/components/incentive/MonthlyIncentiveTable.tsx`
-- `src/components/incentive/IncentiveDryRunDialog.tsx`
-- `src/hooks/useIncentiveRecords.ts`
-- `DOCUMENTATION.md`
-- `POLICY.md`
-- edge-function tests + mock fixtures
-
-### Risk & Impact Report
+## Risk & Impact Report
 | Area | Impact |
 |---|---|
-| Data impact | No new schema required, but recompute logic will intentionally replace legacy production `Full Month` rows with canonical split rows for affected employees |
-| Workflow impact | Compute becomes consistent with the user’s active period filter |
-| UI/UX consistency | Report stays visually similar, but `Full Month` becomes a derived view instead of a stored row |
-| Regression risk | Medium — touches core production compute + report aggregation |
-| Mitigation | Edge-function tests, derived-row UI tests, legacy-row cleanup, documentation/policy sync |
+| Data impact | Medium if an explicit programme mode field is added; existing programmes may need backfill/mapping |
+| Workflow impact | Medium; compute behavior becomes stricter and clearer per programme mode |
+| UI/UX consistency | Improved; period filters will match what each programme can actually compute |
+| Regression risk | Medium; touches the core compute branch selector |
+| Mitigation plan | Add edge-function tests, fixture coverage for legacy programmes, and documentation/policy sync in the same change |
 
-### Out of scope
-- Reworking non-production programs
-- Changing programme mappings or employee eligibility rules
-- Retroactive adjustments flow unless it is later found to depend on stored `Full Month` production rows
+## Likely deliverables
+- backend compute-mode refactor
+- unified company/rate resolver
+- richer diagnostics surfaced in UI
+- mode-aware compute controls in Incentive Report
+- tests + mock data
+- `DOCUMENTATION.md` + `POLICY.md` + ADR update
+
+## Out of scope
+- Reworking unrelated non-incentive workflows
+- Changing payroll confirmation flow
+- Retroactive adjustment logic unless it depends on the same compute-mode branch
