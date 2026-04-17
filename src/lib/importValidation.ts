@@ -85,6 +85,7 @@ export const EmployeeImportRowSchema = z.object({
   division: z.string().max(100).optional(),
   businessUnit: z.string().max(100).optional(),
   department: z.string().max(100).optional(),
+  location: z.string().max(100).optional(),
   pmsGrade: z.string().max(50).optional(),
   managerEmployeeId: z.string().max(50).optional(),
   managerName: z.string().max(200).optional(),
