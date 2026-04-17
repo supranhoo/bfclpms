@@ -284,21 +284,21 @@ export default function Organization() {
   const renderCodeCell = (type: string, id: string, currentCode: string | null) => {
     if (editingCode?.type === type && editingCode?.id === id) {
       return (
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2 w-full min-w-[260px]">
           <Input
             value={editingCode.code}
             onChange={(e) => setEditingCode({ ...editingCode, code: e.target.value })}
-            className="h-7 w-24"
+            className="h-7 flex-1 min-w-0"
             autoFocus
             onKeyDown={(e) => {
               if (e.key === 'Enter') saveCode();
               if (e.key === 'Escape') cancelEditCode();
             }}
           />
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={saveCode} disabled={updateCode.isPending}>
+          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={saveCode} disabled={updateCode.isPending}>
             <Check className="h-3.5 w-3.5 text-green-600" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={cancelEditCode}>
+          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={cancelEditCode}>
             <X className="h-3.5 w-3.5 text-muted-foreground" />
           </Button>
         </div>
@@ -306,7 +306,7 @@ export default function Organization() {
     }
     return (
       <div className="flex items-center gap-1 group">
-        <span>{currentCode || '-'}</span>
+        <span title={currentCode || ''}>{currentCode || '-'}</span>
         <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => startEditCode(type, id, currentCode)}>
           <Pencil className="h-3 w-3 text-muted-foreground" />
         </Button>
