@@ -60,6 +60,14 @@ export function ProductionRatesTab({ programId }: Props) {
     },
   });
 
+  const { data: companies = [] } = useQuery({
+    queryKey: ['companies-for-rates'],
+    queryFn: async () => {
+      const { data } = await supabase.from('companies').select('id, name').order('name');
+      return data || [];
+    },
+  });
+
   const assignedEmployeeIds = new Set(
     (rates as any[]).filter((r: any) => r.rate_type === 'employee').map((r: any) => r.employee_id)
   );
@@ -74,6 +82,11 @@ export function ProductionRatesTab({ programId }: Props) {
     (rates as any[]).filter((r: any) => r.rate_type === 'bu').map((r: any) => r.entity_id)
   );
   const availableBUs = businessUnits.filter(b => !assignedBUIds.has(b.id));
+
+  const assignedCompanyIds = new Set(
+    (rates as any[]).filter((r: any) => r.rate_type === 'company').map((r: any) => r.entity_id)
+  );
+  const availableCompanies = companies.filter(c => !assignedCompanyIds.has(c.id));
 
   const hasCommon = (rates as any[]).some((r: any) => r.rate_type === 'common');
 
