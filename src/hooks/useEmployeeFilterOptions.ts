@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useDepartments } from '@/hooks/useOrganization';
+import { fetchAllPaged } from '@/lib/fetchAll';
 
 export function useEmployeeFilterOptions() {
   // Fetch departments
@@ -36,11 +37,15 @@ export function useEmployeeFilterOptions() {
   const { data: managers } = useQuery({
     queryKey: ['managers-list'],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, full_name, reporting_manager_id, employee_code')
-        .eq('is_active', true)
-        .order('full_name');
+      // Paged fetch to bypass PostgREST's 1000-row default cap.
+      const data = await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('profiles')
+          .select('id, full_name, reporting_manager_id, employee_code')
+          .eq('is_active', true)
+          .order('full_name')
+          .range(from, to)
+      );
 
       const managerIds = new Set(data?.map(p => p.reporting_manager_id).filter(Boolean));
       return data

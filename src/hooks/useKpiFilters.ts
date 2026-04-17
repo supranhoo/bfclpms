@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { fetchAllPaged } from '@/lib/fetchAll';
 
 export interface FilteredProfile {
   id: string;
@@ -35,33 +36,35 @@ export function useProfilesWithHierarchy() {
   return useQuery({
     queryKey: ['profiles-hierarchy'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select(`
-          id,
-          full_name,
-          email,
-          employee_code,
-          department_id,
-          reporting_manager_id,
-          departments (
-            id, 
-            name, 
-            business_unit_id,
-            business_units (
-              id,
-              name,
-              division_id,
-              divisions (
+      // Paged fetch to bypass PostgREST's 1000-row default cap.
+      const data = await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('profiles')
+          .select(`
+            id,
+            full_name,
+            email,
+            employee_code,
+            department_id,
+            reporting_manager_id,
+            departments (
+              id, 
+              name, 
+              business_unit_id,
+              business_units (
                 id,
-                name
+                name,
+                division_id,
+                divisions (
+                  id,
+                  name
+                )
               )
             )
-          )
-        `)
-        .order('full_name');
-
-      if (error) throw error;
+          `)
+          .order('full_name')
+          .range(from, to)
+      );
 
       // Flatten the hierarchy for easier access
       return data?.map(p => ({
