@@ -127,10 +127,15 @@ export function useComputeIncentives() {
       if (error) throw error;
       return data;
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (data: any, variables) => {
       if (!variables.dry_run) {
         qc.invalidateQueries({ queryKey: ['incentive-records'] });
-        toast({ title: 'Incentives computed', description: `${_data.computed} record(s) processed` });
+        const computed = data?.computed ?? 0;
+        if (computed === 0 && data?.message) {
+          toast({ title: 'No records computed', description: data.message, variant: 'destructive' });
+        } else {
+          toast({ title: 'Incentives computed', description: `${computed} record(s) processed` });
+        }
       }
     },
     onError: (e: Error) => toast({ title: 'Computation failed', description: e.message, variant: 'destructive' }),
