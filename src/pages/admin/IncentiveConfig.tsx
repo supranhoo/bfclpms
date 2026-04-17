@@ -190,6 +190,7 @@ export default function IncentiveConfig() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newProgram, setNewProgram] = useState({ name: '', program_type: 'support', description: '' });
   const [editProgram, setEditProgram] = useState<any>(null);
+  const [deletingProgram, setDeletingProgram] = useState<any>(null);
 
   const handleCreate = () => {
     createProgram.mutate(newProgram, {
