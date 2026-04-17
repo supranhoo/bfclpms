@@ -25,6 +25,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { SmartAssignmentDialog } from '@/components/admin/SmartAssignmentDialog';
 import { EmployeeWorkingDaysDialog } from '@/components/admin/EmployeeWorkingDaysDialog';
 import { ManagerCombobox, formatManagerLabel } from '@/components/admin/ManagerCombobox';
+import { OrgFilterCombobox } from '@/components/admin/OrgFilterCombobox';
 
 import { ALL_APP_ROLES, type AppRole } from '@/lib/roles';
 
