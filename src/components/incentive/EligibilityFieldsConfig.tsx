@@ -66,7 +66,7 @@ export function EligibilityFieldsConfig({ programId }: Props) {
       {showAdd && (
         <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
           {newField.field_key.toLowerCase() === 'kra_score' && (
-            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
+            <div className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
               KRA score is auto-pulled from PMS final score. To gate eligibility on it, add a <strong>KRA Score (PMS)</strong> rule in the <strong>DQ Rules</strong> tab instead of adding it as a custom field.
             </div>
           )}
