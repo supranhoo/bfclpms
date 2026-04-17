@@ -1035,70 +1035,48 @@ export default function UserManagement() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Division</Label>
-                    <Select value={editDivisionId || '__all__'} onValueChange={(val) => {
-                      const newDiv = val === '__all__' ? '' : val;
-                      setEditDivisionId(newDiv);
-                      // Auto-clear department if it doesn't belong to the new division
-                      if (newDiv && editDepartmentId && editDepartmentId !== 'none') {
-                        const buIdsInDiv = new Set(businessUnits?.filter(bu => bu.division_id === newDiv).map(bu => bu.id));
-                        const dept = departments?.find(d => d.id === editDepartmentId);
-                        if (dept && dept.business_unit_id && !buIdsInDiv.has(dept.business_unit_id)) {
-                          setEditDepartmentId('none');
+                    <OrgFilterCombobox
+                      value={editDivisionId}
+                      onValueChange={(val) => {
+                        setEditDivisionId(val);
+                        if (val && editDepartmentId && editDepartmentId !== 'none') {
+                          const buIdsInDiv = new Set(businessUnits?.filter(bu => bu.division_id === val).map(bu => bu.id));
+                          const dept = departments?.find(d => d.id === editDepartmentId);
+                          if (dept && dept.business_unit_id && !buIdsInDiv.has(dept.business_unit_id)) {
+                            setEditDepartmentId('none');
+                          }
                         }
-                      }
-                    }}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All divisions" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__all__">All Divisions</SelectItem>
-                        {divisions?.map(d => (
-                          <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      }}
+                      options={divisionOptions}
+                      placeholder="All divisions"
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Department</Label>
-                    <Select value={editDepartmentId} onValueChange={setEditDepartmentId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select department" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        {editFilteredDepartments.map(d => (
-                          <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <OrgFilterCombobox
+                      value={editDepartmentId === 'none' ? '' : editDepartmentId}
+                      onValueChange={(val) => setEditDepartmentId(val || 'none')}
+                      options={editDepartmentOptions}
+                      placeholder="Select department"
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Designation</Label>
-                    <Select value={editDesignation || '__none__'} onValueChange={(val) => setEditDesignation(val === '__none__' ? '' : val)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select designation" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">None</SelectItem>
-                        {designationsList?.map(d => (
-                          <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <OrgFilterCombobox
+                      value={editDesignation}
+                      onValueChange={setEditDesignation}
+                      options={designationOptions}
+                      placeholder="Select designation"
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>PMS Grade</Label>
-                    <Select value={editPmsGrade || '__none__'} onValueChange={(val) => setEditPmsGrade(val === '__none__' ? '' : val)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select PMS grade" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">None</SelectItem>
-                        {pmsGradesList?.map(g => (
-                          <SelectItem key={g.id} value={g.name}>{g.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <OrgFilterCombobox
+                      value={editPmsGrade}
+                      onValueChange={setEditPmsGrade}
+                      options={pmsGradeOptions}
+                      placeholder="Select PMS grade"
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Reporting Manager</Label>
@@ -1123,16 +1101,12 @@ export default function UserManagement() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Role</Label>
-                    <Select value={editRole} onValueChange={(v) => setEditRole(v as AppRole)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ALL_APP_ROLES.map(role => (
-                          <SelectItem key={role} value={role}>{ROLE_LABELS[role]}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <OrgFilterCombobox
+                      value={editRole}
+                      onValueChange={(v) => v && setEditRole(v as AppRole)}
+                      options={roleOptions}
+                      placeholder="Select role"
+                    />
                   </div>
                   <div className="flex items-center justify-between rounded-lg border p-3 h-fit">
                     <div className="space-y-0.5">
@@ -1218,82 +1192,57 @@ export default function UserManagement() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Company</Label>
-                    <Select value={newCompanyId || '__none__'} onValueChange={(val) => setNewCompanyId(val === '__none__' ? '' : val)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select company" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">None</SelectItem>
-                        {companiesList?.map(c => (
-                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <OrgFilterCombobox
+                      value={newCompanyId}
+                      onValueChange={setNewCompanyId}
+                      options={companyOptions}
+                      placeholder="Select company"
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Division</Label>
-                    <Select value={newDivisionId || '__all__'} onValueChange={(val) => {
-                      const newDiv = val === '__all__' ? '' : val;
-                      setNewDivisionId(newDiv);
-                      if (newDiv && newDepartmentId) {
-                        const buIdsInDiv = new Set(businessUnits?.filter(bu => bu.division_id === newDiv).map(bu => bu.id));
-                        const dept = departments?.find(d => d.id === newDepartmentId);
-                        if (dept && dept.business_unit_id && !buIdsInDiv.has(dept.business_unit_id)) {
-                          setNewDepartmentId('');
+                    <OrgFilterCombobox
+                      value={newDivisionId}
+                      onValueChange={(val) => {
+                        setNewDivisionId(val);
+                        if (val && newDepartmentId) {
+                          const buIdsInDiv = new Set(businessUnits?.filter(bu => bu.division_id === val).map(bu => bu.id));
+                          const dept = departments?.find(d => d.id === newDepartmentId);
+                          if (dept && dept.business_unit_id && !buIdsInDiv.has(dept.business_unit_id)) {
+                            setNewDepartmentId('');
+                          }
                         }
-                      }
-                    }}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All divisions" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__all__">All Divisions</SelectItem>
-                        {divisions?.map(d => (
-                          <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      }}
+                      options={divisionOptions}
+                      placeholder="All divisions"
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Department</Label>
-                    <Select value={newDepartmentId} onValueChange={setNewDepartmentId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select department" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {createFilteredDepartments.map(d => (
-                          <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <OrgFilterCombobox
+                      value={newDepartmentId}
+                      onValueChange={setNewDepartmentId}
+                      options={createDepartmentOptions}
+                      placeholder="Select department"
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Designation</Label>
-                    <Select value={newDesignation || '__none__'} onValueChange={(val) => setNewDesignation(val === '__none__' ? '' : val)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select designation" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">None</SelectItem>
-                        {designationsList?.map(d => (
-                          <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <OrgFilterCombobox
+                      value={newDesignation}
+                      onValueChange={setNewDesignation}
+                      options={designationOptions}
+                      placeholder="Select designation"
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>PMS Grade</Label>
-                    <Select value={newPmsGrade || '__none__'} onValueChange={(val) => setNewPmsGrade(val === '__none__' ? '' : val)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select PMS grade" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">None</SelectItem>
-                        {pmsGradesList?.map(g => (
-                          <SelectItem key={g.id} value={g.name}>{g.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <OrgFilterCombobox
+                      value={newPmsGrade}
+                      onValueChange={setNewPmsGrade}
+                      options={pmsGradeOptions}
+                      placeholder="Select PMS grade"
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Reporting Manager</Label>
@@ -1318,16 +1267,12 @@ export default function UserManagement() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Role</Label>
-                    <Select value={newRole} onValueChange={(v) => setNewRole(v as AppRole)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ALL_APP_ROLES.map(role => (
-                          <SelectItem key={role} value={role}>{ROLE_LABELS[role]}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <OrgFilterCombobox
+                      value={newRole}
+                      onValueChange={(v) => v && setNewRole(v as AppRole)}
+                      options={roleOptions}
+                      placeholder="Select role"
+                    />
                   </div>
                   <div className="flex items-center justify-between rounded-lg border p-3 h-fit">
                     <div className="space-y-0.5">
