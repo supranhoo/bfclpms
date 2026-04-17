@@ -1,72 +1,83 @@
 
+## Plan Update: Make `Location` a First-Class Org Master + Mandatory Toggle
 
-## RCA: Real Cause of "No active employees resolved" Toast
+Extending the prior auto-update + Location import plan with master data management and import-field configurability.
 
-### The actual bug (verified against live DB)
+### What's added
 
-The edge function `compute-monthly-incentives/index.ts` selects a column that **does not exist** on `profiles`:
+**1. New master: `locations`**
+- New table `public.locations` with: `id`, `name` (unique), `code` (optional, unique), `company_id` (nullable FK to `companies` for multi-company scoping), `is_active`, `created_at`, `updated_at`.
+- Standard RLS: admins manage; everyone authenticated can read.
 
-```ts
-// Line 145
-const empSelect = 'id, full_name, employee_code, department_id, designation, pms_grade, level, location';
-```
+**2. Org Structure UI — new "Locations" tab**
+- File: `src/pages/admin/OrganizationStructure.tsx` (or wherever Divisions/BUs/Departments tabs live).
+- Add a `Locations` tab with full CRUD (Create / Edit / Activate-Deactivate / Delete with `ConfirmDestructiveDialog` per project policy).
+- Reuse existing tab patterns (search, sort, company filter).
 
-I verified the live `profiles` schema — it has no `location` column. PostgREST returns an error like *"column profiles.location does not exist"*, but the call is destructured as:
+**3. Import engine — `location` becomes a managed master field**
+- File: `src/pages/admin/ImportData.tsx` + `src/lib/importValidation.ts`.
+- Resolution: `row.location` (free text from import) is matched (case-insensitive, trimmed) against `locations.name`.
+  - Match found → store `profiles.location_id` (FK).
+  - No match → row error: *"Location 'X' not found in master. Please add it under Organization Structure → Locations."* (mirrors existing department/BU validation behavior).
+- Non-destructive update preserved: blank `location` cell → keep existing `profiles.location_id`.
 
-```ts
-const { data } = await supabase.from('profiles').select(empSelect)...
-if (data) allEmployees.push(...data);
-```
+**4. Schema change — Location stored as FK, not free text**
+- Replace earlier proposal of `profiles.location text` with `profiles.location_id uuid` referencing `locations(id)` (nullable, indexed).
+- Reason: matches how `division_id`, `business_unit_id`, `department_id` are modeled. Avoids dirty free-text variants.
+- Compute engine slab predicate continues to use a string at match time (resolved via join to `locations.name`).
 
-`error` is never checked. `data` comes back `null`, `allEmployees` stays `[]`, and execution falls into the "No active employees resolved" branch (line 176-181) — which is the exact toast in screenshot 705.
+**5. Import Settings — per-field mandatory toggle**
+- New admin page section: `Admin → System Settings → Import Field Settings` (or extend existing import config if present).
+- New table `public.import_field_settings`:
+  - `import_type` ('employee' | 'pms' | 'org_structure' | …)
+  - `field_key` ('location', 'designation', 'pms_grade', …)
+  - `is_mandatory` boolean
+  - `is_visible` boolean (controls whether the column appears in template + parser at all)
+  - `updated_at`, `updated_by`
+- Seed defaults for existing fields (mandatory ones stay mandatory).
+- UI: simple table of fields per import type with two toggles. Admin-only.
 
-This explains why **every** previous fix appeared to work in isolation but the user kept seeing zero records: none of the earlier patches touched the SELECT clause, and the silent error prevented any of the new diagnostics, sub-period logic, or company-resolution improvements from ever running.
+**6. Import flow honors the toggles**
+- `ImportData.tsx` reads `import_field_settings` for `import_type='employee'`.
+- For each row:
+  - if `field.is_mandatory && cell is blank` → row error: *"`<field>` is required by current import settings."*
+  - if `field.is_visible === false` → field is ignored even if present in the file.
+- Downloadable template auto-includes only visible fields; mandatory fields are marked with `*` in the header.
 
-### Why earlier RCAs missed it
-Previous rounds focused on:
-- Period filter shadowing (real, but downstream)
-- Full-Month vs sub-period storage (real, but downstream)
-- Company resolution parity (real, but downstream)
+**7. Add/Edit User dialog — use `Location` dropdown**
+- Bound to `locations` master (active rows).
+- Replaces the earlier free-text input from the prior plan.
 
-All of those are *after* the employee fetch. The fetch itself was failing silently, so none of those branches were ever reached.
+**8. Compute engine re-wiring (unchanged from prior plan, adjusted to FK)**
+- `compute-monthly-incentives/index.ts`: select `location_id` on profiles; resolve `location.name` via a single batch fetch; pass that into the slab matching predicate at line ~454.
+- Mandatory `error` check from ADR-044 v3 still applies.
 
-### Fix (single, minimal change)
+**9. SSOT sync**
+- `DOCUMENTATION.md`: Version History — *"Location promoted to org master with FK on `profiles`; per-field mandatory toggles introduced for employee imports."*
+- `POLICY.md`: under Master Data — *"Location is a managed master; free-text values from imports must resolve against `locations.name` or the row is rejected."* Under Import Governance — *"Field mandatoriness is configurable via `import_field_settings`; defaults seed existing required fields."*
+- `mem://architecture/data-import-engine`: add `location` (FK-resolved) and the new field-settings layer.
 
-**File:** `supabase/functions/compute-monthly-incentives/index.ts`
-
-1. **Remove `location` from `empSelect`** (line 145):
-   ```ts
-   const empSelect = 'id, full_name, employee_code, department_id, designation, pms_grade, level';
-   ```
-
-2. **Pass `null` for `emp.location`** in slab matching (line 454):
-   ```ts
-   [slab.location, null],
-   ```
-   (Confirmed: zero slabs in the DB currently use `location`, so this is a no-op for live data. If the column is added later, it can be re-wired through `departments`/`business_units` instead.)
-
-3. **Surface the real error** going forward — change both batched and unbatched profile fetches to check `error` and return a 500 with the PostgREST message instead of silently producing `[]`. This guarantees that any future schema/select mismatch is visible immediately rather than masquerading as "No active employees resolved".
-
-### Documentation/policy sync (per project rules)
-- `DOCUMENTATION.md` — add a Version History entry: *"Compute engine no longer references non-existent `profiles.location`; PostgREST errors now surface as 500 instead of silent zero-result."*
-- `POLICY.md` — add a one-line rule under engine governance: *"Edge functions must check the `error` field on every Supabase query; silent destructuring of `data` is forbidden."*
-- `docs/adr/ADR-044.md` — note the silent-error class as a regression class.
+### Files Touched (delta vs prior plan)
+- migration: `locations` table, `profiles.location_id`, `import_field_settings` table + seeds
+- `src/pages/admin/OrganizationStructure.tsx` — new Locations tab
+- `src/pages/admin/ImportData.tsx` — FK resolution + mandatory/visible enforcement + dynamic template
+- `src/lib/importValidation.ts` (+ test) — dynamic schema based on settings
+- `src/pages/admin/UserManagement.tsx` — Location dropdown
+- new: `src/pages/admin/ImportFieldSettings.tsx` (or section inside System Settings)
+- `supabase/functions/create-employee/index.ts` — accept `location_id`
+- `supabase/functions/compute-monthly-incentives/index.ts` — FK-aware location pass-through
+- `DOCUMENTATION.md`, `POLICY.md`, `mem://architecture/data-import-engine`
 
 ### Risk & Impact
 | Area | Impact |
 |---|---|
-| Data | None. Slab matching's `location` predicate previously evaluated against `undefined`; replacing with explicit `null` is identical for the 4 existing slabs (none use `location`). |
-| Workflow | Compute will now actually return real records for Saibal Kunar / Metal Sizing / 1-10 April 2026 (~69 employees, 3 with positive day-1-10 totals based on prior diagnostics). |
-| UI/UX | Toast will switch from misleading "No active employees resolved" to real diagnostics already wired in earlier rounds. |
-| Regression | Very low — single-column removal in one SELECT, plus added error checks. |
-| Mitigation | Add Deno test that mocks an invalid SELECT and asserts the function returns 500 with the PostgREST message, not a 200/zero-result. |
-
-### Files Touched
-- `supabase/functions/compute-monthly-incentives/index.ts` (remove `location` from SELECT, pass `null` in slab match, add `error` checks on profile fetches)
-- `DOCUMENTATION.md`, `POLICY.md`, `docs/adr/ADR-044.md` (sync)
-- `supabase/functions/compute-monthly-incentives/_test.ts` (silent-error regression guard)
+| Data | New tables + nullable FK; zero backfill required. Existing employees get `location_id = NULL` until imported/edited. |
+| Workflow | Import gains a strict master check for `location` (matches existing pattern for dept/BU). Per-field toggles are additive — defaults preserve current behavior. |
+| UI/UX | One new Org Structure tab, one new Settings page, one new dropdown in Add/Edit User, optional `*` markers on import templates. |
+| Regression | Low. Toggle defaults preserve current required-field set. Compute engine change is guarded by mandatory `error` checks (ADR-044 v3). |
+| Mitigation | Vitest cases: (a) location resolves by name, (b) unknown location rejected, (c) blank location preserved on existing rows, (d) mandatory toggle ON + blank cell → error, (e) visibility OFF → field ignored. Seed migration tested in dry-run. |
 
 ### Out of Scope
-- Adding a real `location` column/relationship (no slab uses it yet)
-- Touching any other compute branch (sub-period, company resolution, diagnostics) — earlier fixes will start working as soon as the employee fetch succeeds
-
+- Bulk-creating `locations` master from existing free-text values (none exist; column is new).
+- Slab editor UI to expose `location` as a configurable scope dimension (matching predicate only).
+- Per-company import templates (single global template per import type for now).
