@@ -590,6 +590,52 @@ export default function Organization() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="locations">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Locations</CardTitle>
+                <CardDescription>Physical sites / offices used in employee master & imports</CardDescription>
+              </div>
+              <Button onClick={() => openCreateDialog('location')}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Location
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Code</TableHead>
+                    <TableHead className="w-[80px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {locations?.map((loc: any) => (
+                    <TableRow key={loc.id}>
+                      <TableCell className="font-medium">{loc.name}</TableCell>
+                      <TableCell>{renderCodeCell('location', loc.id, loc.code)}</TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="icon" onClick={() => confirmDelete('location', loc.id, loc.name)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {(!locations || locations.length === 0) && (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center text-sm text-muted-foreground py-6">
+                        No locations yet. Add one to enable Location lookup in employee imports.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="designations">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
