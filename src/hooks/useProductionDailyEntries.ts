@@ -32,8 +32,8 @@ export function useUpsertProductionRate() {
       entity_id?: string;
       rate_per_ton: number;
       remarks?: string;
+      effective_from?: string; // YYYY-MM-DD
     }) => {
-      // Build the payload, setting nulls explicitly for nullable fields
       const payload: any = {
         program_id: values.program_id,
         rate_per_ton: values.rate_per_ton,
@@ -41,12 +41,25 @@ export function useUpsertProductionRate() {
         remarks: values.remarks || null,
         employee_id: values.employee_id || null,
         entity_id: values.entity_id || null,
+        effective_from: values.effective_from || new Date().toISOString().slice(0, 10),
       };
       if (values.id) payload.id = values.id;
 
+      // When editing an existing row by id, prefer update to avoid unique-index conflicts
+      if (values.id) {
+        const { data, error } = await supabase
+          .from('incentive_production_rates')
+          .update(payload)
+          .eq('id', values.id)
+          .select()
+          .single();
+        if (error) throw error;
+        return data;
+      }
+
       const { data, error } = await supabase
         .from('incentive_production_rates')
-        .upsert(payload, { onConflict: 'program_id,rate_type,employee_id,entity_id' })
+        .insert(payload)
         .select()
         .single();
       if (error) throw error;
