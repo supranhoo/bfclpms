@@ -190,7 +190,7 @@ export function ProductionRatesTab({ programId }: Props) {
               onValueChange={v => { setRateType(v as RateType); setSelectedEntity(''); }}
               className="flex flex-wrap gap-4"
             >
-              {(['employee', 'department', 'bu', 'common'] as RateType[]).map(t => (
+              {(['employee', 'department', 'bu', 'company', 'common'] as RateType[]).map(t => (
                 <div key={t} className="flex items-center space-x-2">
                   <RadioGroupItem value={t} id={`rt-${t}`} />
                   <Label htmlFor={`rt-${t}`} className="text-sm capitalize">{t === 'bu' ? 'Business Unit' : t}</Label>
