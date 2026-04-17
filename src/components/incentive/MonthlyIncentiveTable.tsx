@@ -497,8 +497,7 @@ export function MonthlyIncentiveTable() {
                   </TableHead>
                   <TableHead>Employee</TableHead>
                   <TableHead>Period</TableHead>
-                  <TableHead>PMS Score</TableHead>
-                  <TableHead>Final Rating</TableHead>
+                   <TableHead>PMS Score</TableHead>
                   <TableHead>KPI Status</TableHead>
                   <TableHead>Slab</TableHead>
                   <TableHead>Base %</TableHead>
@@ -514,12 +513,12 @@ export function MonthlyIncentiveTable() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={16} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={15} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
                 ) : isError ? (
-                  <TableRow><TableCell colSpan={16} className="text-center py-8 text-destructive">Error: {(error as Error)?.message || 'Unknown error'}</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={15} className="text-center py-8 text-destructive">Error: {(error as Error)?.message || 'Unknown error'}</TableCell></TableRow>
                 ) : filteredRecords.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={16} className="py-10">
+                    <TableCell colSpan={15} className="py-10">
                       {canComputeNow ? (
                         <div className="mx-auto max-w-md text-center space-y-4">
                           <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
@@ -561,7 +560,7 @@ export function MonthlyIncentiveTable() {
                   <>
                     {showSelectAllBanner && (
                       <TableRow>
-                        <TableCell colSpan={16} className="text-center py-2 bg-muted/50">
+                        <TableCell colSpan={15} className="text-center py-2 bg-muted/50">
                           <span className="text-sm">All {paginatedRecords.length} on this page are selected. </span>
                           <Button variant="link" size="sm" className="p-0 h-auto text-sm font-semibold" onClick={handleSelectAllRecords}>
                             Select all {aggregatedRows.length} employees
@@ -571,7 +570,7 @@ export function MonthlyIncentiveTable() {
                     )}
                     {selectAllRecords && (
                       <TableRow>
-                        <TableCell colSpan={16} className="text-center py-2 bg-primary/10">
+                        <TableCell colSpan={15} className="text-center py-2 bg-primary/10">
                           <span className="text-sm font-medium">All {aggregatedRows.length} employees are selected. </span>
                           <Button variant="link" size="sm" className="p-0 h-auto text-sm" onClick={() => { setSelectAllRecords(false); setSelectedIds(new Set()); }}>
                             Clear selection
@@ -593,8 +592,7 @@ export function MonthlyIncentiveTable() {
                           <div className="text-xs text-muted-foreground">{r.profiles?.employee_code}</div>
                         </TableCell>
                         <TableCell className="text-xs">{r.payment_period || 'Full Month'}</TableCell>
-                        <TableCell>{r.pms_score?.toFixed(2) || '—'}</TableCell>
-                        <TableCell><RatingBadge score={r.pms_score} short /></TableCell>
+                         <TableCell>{r.pms_score?.toFixed(2) || '—'}</TableCell>
                         <TableCell>
                           {(() => {
                             const ks = kpiStatusMap?.get(r.employee_id);
