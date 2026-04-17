@@ -239,6 +239,53 @@ export function GlobalBrandingSettings() {
             URL to the PMS Policy document (PDF, Google Docs, or any web page). Employees can view this from the sidebar.
           </p>
         </div>
+
+        {/* View Mode Strip Color */}
+        <div className="space-y-2">
+          <Label htmlFor="strip-color">Dashboard View Mode Strip Color</Label>
+          <div className="flex items-center gap-3">
+            <input
+              id="strip-color"
+              type="color"
+              value={viewModeStripColor}
+              onChange={(e) => setViewModeStripColor(e.target.value)}
+              className="h-10 w-14 rounded border border-input cursor-pointer bg-background"
+            />
+            <Input
+              value={viewModeStripColor}
+              onChange={(e) => setViewModeStripColor(e.target.value)}
+              placeholder="#3b82f6"
+              className="font-mono w-32"
+              maxLength={7}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setViewModeStripColor('#3b82f6')}
+            >
+              Reset
+            </Button>
+            {/* Live preview */}
+            <div
+              className="flex-1 rounded-lg p-1 flex items-center gap-1 border min-w-0"
+              style={{ backgroundColor: viewModeStripColor }}
+            >
+              <div
+                className="px-3 py-1 rounded bg-white text-xs font-medium shadow-sm"
+                style={{ color: viewModeStripColor }}
+              >
+                Active
+              </div>
+              <div className="px-3 py-1 rounded text-xs font-medium text-white/90">
+                Inactive
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Background color of the view-mode toggle strip on dashboards (e.g., My Dashboard / Team Reviews).
+          </p>
+        </div>
         <div className="space-y-2">
           <Label>App Logo</Label>
           <div className="flex items-start gap-4">
