@@ -55,6 +55,7 @@ export function useAppSettings() {
           ...data,
           login_wallpapers: parsedWallpapers,
           pms_policy_visible_roles: visibleRoles,
+          view_mode_strip_color: (data as any).view_mode_strip_color || '#3b82f6',
         } as AppSettings;
       }
 
