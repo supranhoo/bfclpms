@@ -1,83 +1,103 @@
 
-## Plan Update: Make `Location` a First-Class Org Master + Mandatory Toggle
+## RCA + Fix: Vessel-based "Port Incentive" Computes ₹0 Despite Saved Vessel Data
 
-Extending the prior auto-update + Location import plan with master data management and import-field configurability.
+### What screenshot 706 vs 707 actually shows
+- **Image 707 (data entry):** Swaraj 2 vessels × ₹10,000 = ₹20,000; Manabendra 2 × ₹2,000 = ₹4,000. Saved correctly to `vessel_monthly_entries` (verified: 2 rows for Feb 2026, 4 vessels total).
+- **Image 706 (compute preview):** Both employees marked Eligible, but Base 0%, Final 0%, Amount ₹0.
 
-### What's added
+### Verified root cause
+The compute engine's vessel logic is gated on the wrong field:
 
-**1. New master: `locations`**
-- New table `public.locations` with: `id`, `name` (unique), `code` (optional, unique), `company_id` (nullable FK to `companies` for multi-company scoping), `is_active`, `created_at`, `updated_at`.
-- Standard RLS: admins manage; everyone authenticated can read.
+```ts
+// Line 246 + 603 + 621 in supabase/functions/compute-monthly-incentives/index.ts
+if (program.incentive_base === 'fixed') { /* fetch vessel rates + entries */ }
+...
+if (program.incentive_base === 'fixed' && vesselRate !== undefined) { /* compute vesselAmount */ }
+```
 
-**2. Org Structure UI — new "Locations" tab**
-- File: `src/pages/admin/OrganizationStructure.tsx` (or wherever Divisions/BUs/Departments tabs live).
-- Add a `Locations` tab with full CRUD (Create / Edit / Activate-Deactivate / Delete with `ConfirmDestructiveDialog` per project policy).
-- Reuse existing tab patterns (search, sort, company filter).
+But the live DB has **no program with `incentive_base = 'fixed'`**:
 
-**3. Import engine — `location` becomes a managed master field**
-- File: `src/pages/admin/ImportData.tsx` + `src/lib/importValidation.ts`.
-- Resolution: `row.location` (free text from import) is matched (case-insensitive, trimmed) against `locations.name`.
-  - Match found → store `profiles.location_id` (FK).
-  - No match → row error: *"Location 'X' not found in master. Please add it under Organization Structure → Locations."* (mirrors existing department/BU validation behavior).
-- Non-destructive update preserved: blank `location` cell → keep existing `profiles.location_id`.
+| program_type | incentive_base | count |
+|---|---|---|
+| production | basic_salary | 2 |
+| material_yard_recovery_fines_incentive_ | basic_salary | 2 |
+| **support** | **basic_salary** | **2** ← Port Incentive |
 
-**4. Schema change — Location stored as FK, not free text**
-- Replace earlier proposal of `profiles.location text` with `profiles.location_id uuid` referencing `locations(id)` (nullable, indexed).
-- Reason: matches how `division_id`, `business_unit_id`, `department_id` are modeled. Avoids dirty free-text variants.
-- Compute engine slab predicate continues to use a string at match time (resolved via join to `locations.name`).
+So for Port Incentive the engine:
+1. Skips the `vesselRateMap`/`vesselEntryMap` fetch entirely (block at line 246 never enters).
+2. Falls into the support-program branch (line 626) which computes incentive from `basic_salary × KRA-based slab%`. With no eligibility/salary data, output is ₹0.
 
-**5. Import Settings — per-field mandatory toggle**
-- New admin page section: `Admin → System Settings → Import Field Settings` (or extend existing import config if present).
-- New table `public.import_field_settings`:
-  - `import_type` ('employee' | 'pms' | 'org_structure' | …)
-  - `field_key` ('location', 'designation', 'pms_grade', …)
-  - `is_mandatory` boolean
-  - `is_visible` boolean (controls whether the column appears in template + parser at all)
-  - `updated_at`, `updated_by`
-- Seed defaults for existing fields (mandatory ones stay mandatory).
-- UI: simple table of fields per import type with two toggles. Admin-only.
+The vessel entry path is **completely dead code** in the current data model. Every previous round of fixes missed this because the gating field name (`incentive_base = 'fixed'`) does not match the chosen program shape (`program_type = 'support'` + vessel rates table).
 
-**6. Import flow honors the toggles**
-- `ImportData.tsx` reads `import_field_settings` for `import_type='employee'`.
-- For each row:
-  - if `field.is_mandatory && cell is blank` → row error: *"`<field>` is required by current import settings."*
-  - if `field.is_visible === false` → field is ignored even if present in the file.
-- Downloadable template auto-includes only visible fields; mandatory fields are marked with `*` in the header.
+### Why the upstream UI is fine
+- `VesselDataEntryGrid` correctly gates on the **presence of `incentive_vessel_rates` rows** for the selected program — not on `incentive_base`. So the entry screen shows employees and saves data correctly.
+- The compute engine uses a *different, mismatched* signal. That's the asymmetry.
 
-**7. Add/Edit User dialog — use `Location` dropdown**
-- Bound to `locations` master (active rows).
-- Replaces the earlier free-text input from the prior plan.
+### Fix (single, targeted, idempotent)
 
-**8. Compute engine re-wiring (unchanged from prior plan, adjusted to FK)**
-- `compute-monthly-incentives/index.ts`: select `location_id` on profiles; resolve `location.name` via a single batch fetch; pass that into the slab matching predicate at line ~454.
-- Mandatory `error` check from ADR-044 v3 still applies.
+**File: `supabase/functions/compute-monthly-incentives/index.ts`**
 
-**9. SSOT sync**
-- `DOCUMENTATION.md`: Version History — *"Location promoted to org master with FK on `profiles`; per-field mandatory toggles introduced for employee imports."*
-- `POLICY.md`: under Master Data — *"Location is a managed master; free-text values from imports must resolve against `locations.name` or the row is rejected."* Under Import Governance — *"Field mandatoriness is configurable via `import_field_settings`; defaults seed existing required fields."*
-- `mem://architecture/data-import-engine`: add `location` (FK-resolved) and the new field-settings layer.
+Replace the `incentive_base === 'fixed'` gate with a **data-driven** signal: *"this program is vessel-based iff it has any rows in `incentive_vessel_rates`."* This matches exactly what the data-entry UI already does and is robust to whatever `program_type` / `incentive_base` combination an admin chooses.
 
-### Files Touched (delta vs prior plan)
-- migration: `locations` table, `profiles.location_id`, `import_field_settings` table + seeds
-- `src/pages/admin/OrganizationStructure.tsx` — new Locations tab
-- `src/pages/admin/ImportData.tsx` — FK resolution + mandatory/visible enforcement + dynamic template
-- `src/lib/importValidation.ts` (+ test) — dynamic schema based on settings
-- `src/pages/admin/UserManagement.tsx` — Location dropdown
-- new: `src/pages/admin/ImportFieldSettings.tsx` (or section inside System Settings)
-- `supabase/functions/create-employee/index.ts` — accept `location_id`
-- `supabase/functions/compute-monthly-incentives/index.ts` — FK-aware location pass-through
-- `DOCUMENTATION.md`, `POLICY.md`, `mem://architecture/data-import-engine`
+1. **Line 246**: change
+   ```ts
+   if (program.incentive_base === 'fixed') {
+   ```
+   to
+   ```ts
+   // Vessel-based detection: any program with vessel rates configured
+   const { data: vRatesProbe, error: vRatesProbeErr } = await supabase
+     .from('incentive_vessel_rates')
+     .select('employee_id, rate_per_vessel')
+     .eq('program_id', program_id);
+   if (vRatesProbeErr) throw new Error(`Vessel rates fetch failed: ${vRatesProbeErr.message}`);
+   const isVesselProgram = (vRatesProbe?.length ?? 0) > 0;
+   if (isVesselProgram) {
+   ```
+   (Hoists the rate fetch and reuses its result inside the block; removes the second redundant query.)
+
+2. **Lines 603 & 621**: replace both `program.incentive_base === 'fixed' && vesselRate !== undefined` with `isVesselProgram && vesselRate !== undefined`.
+
+3. **Line 626 branch**: leave the support/KRA path untouched — it remains the correct fallback for non-vessel support programs.
+
+4. **Mandatory error checks (per ADR-044 v3)** added on both vessel queries (rates + monthly entries) so any future schema mismatch surfaces as 500, not as silent ₹0.
+
+### Diagnostics enhancement (low-risk)
+Extend the existing diagnostics block (already shown in `IncentiveDryRunDialog`) to include:
+- `vessel_program_detected: boolean`
+- `employees_with_vessel_rate: number`
+- `employees_with_vessel_entries: number`
+
+This makes the next regression of this class instantly visible in the preview dialog instead of silently producing ₹0.
+
+### Regression guard
+Add a Deno test in `supabase/functions/compute-monthly-incentives/_test.ts`:
+- Seeds a `support` / `basic_salary` program with 2 vessel rates and 2 monthly entries.
+- Asserts the returned record's `incentive_amount` equals `vessels × rate` and `incentive_status = 'finalised'`.
+- This locks the contract independently of the `incentive_base` field name.
+
+### SSOT sync (per project rule #1)
+- **DOCUMENTATION.md** — Version History entry: *"Vessel-based incentive detection switched from `incentive_base='fixed'` to data-driven (presence of `incentive_vessel_rates` rows). Aligns compute engine with data-entry UI."*
+- **POLICY.md** — under Incentive Engine Governance: *"A program is vessel-based iff it has rows in `incentive_vessel_rates`. Compute engine MUST NOT rely on `incentive_base` value strings to detect vessel mode."*
+- **docs/adr/ADR-044.md** — append v4 note: *"Detection-by-data pattern preferred over enum-string gating to prevent UI/engine drift."*
+- **mem://features/incentive/core-engine-specifications** — add the data-driven vessel detection rule.
 
 ### Risk & Impact
 | Area | Impact |
 |---|---|
-| Data | New tables + nullable FK; zero backfill required. Existing employees get `location_id = NULL` until imported/edited. |
-| Workflow | Import gains a strict master check for `location` (matches existing pattern for dept/BU). Per-field toggles are additive — defaults preserve current behavior. |
-| UI/UX | One new Org Structure tab, one new Settings page, one new dropdown in Add/Edit User, optional `*` markers on import templates. |
-| Regression | Low. Toggle defaults preserve current required-field set. Compute engine change is guarded by mandatory `error` checks (ADR-044 v3). |
-| Mitigation | Vitest cases: (a) location resolves by name, (b) unknown location rejected, (c) blank location preserved on existing rows, (d) mandatory toggle ON + blank cell → error, (e) visibility OFF → field ignored. Seed migration tested in dry-run. |
+| Data | None. No schema change. Existing computed records can be re-run; vessel programs will now produce non-zero amounts. |
+| Workflow | Port Incentive Feb 2026 will compute ₹24,000 total (₹20,000 + ₹4,000) on next "Compute Now" — matching screenshot 707. January 2026 (20 vessels) will also recompute correctly when re-run. |
+| UI/UX | Dry-run preview will now show real Base %, Amount, and `finalised` status for vessel programs. Diagnostics gain 3 new fields. |
+| Regression | Very low. The change is a strictly more inclusive detection (data presence) than the prior string match (which matched zero programs in production). Non-vessel programs are unaffected because they have zero `incentive_vessel_rates` rows. |
+| Mitigation | New Deno test locks the contract; ADR-044 v4 documents the principle. |
+
+### Files Touched
+- `supabase/functions/compute-monthly-incentives/index.ts` (3 small edits + error checks + 3 diagnostic fields)
+- `supabase/functions/compute-monthly-incentives/_test.ts` (new vessel-program test)
+- `DOCUMENTATION.md`, `POLICY.md`, `docs/adr/ADR-044.md` (sync)
+- `mem://features/incentive/core-engine-specifications` (sync)
 
 ### Out of Scope
-- Bulk-creating `locations` master from existing free-text values (none exist; column is new).
-- Slab editor UI to expose `location` as a configurable scope dimension (matching predicate only).
-- Per-company import templates (single global template per import type for now).
+- Reworking the `incentive_base` enum or `program_type` taxonomy (no business need; data-driven detection makes them irrelevant for vessel mode).
+- UI changes to `VesselDataEntryGrid` (already correct).
+- Touching the production / support / material-yard branches (all unrelated to this defect).
