@@ -94,22 +94,62 @@ export function MonthlyIncentiveTable() {
     });
   }, [records, statusFilter, incentiveStatusFilter, eligibilityFilter, periodFilter, searchTerm]);
 
-  const summaryStats = useMemo(() => {
-    const total = filteredRecords.length;
-    const eligible = filteredRecords.filter((r: any) => !r.is_disqualified).length;
-    const disqualified = filteredRecords.filter((r: any) => r.is_disqualified).length;
-    const prorata = filteredRecords.filter((r: any) => !r.is_disqualified && r.pro_rata_factor < 1).length;
-    const totalAmount = filteredRecords.reduce((s: number, r: any) => s + Math.round(r.incentive_amount || 0), 0);
-    return { total, eligible, disqualified, prorata, totalAmount };
+  // Aggregate to one row per employee for the UI table.
+  // Bulk actions still target the underlying record IDs (recordIds).
+  const aggregatedRows = useMemo(() => {
+    const byEmp = new Map<string, any>();
+    filteredRecords.forEach((r: any) => {
+      const empId = r.employee_id;
+      if (!empId) return;
+      const existing = byEmp.get(empId);
+      if (!existing) {
+        byEmp.set(empId, {
+          ...r,
+          id: empId, // row key = employee id
+          employee_id: empId,
+          recordIds: [r.id],
+          incentive_amount: Number(r.incentive_amount || 0),
+        });
+      } else {
+        existing.recordIds.push(r.id);
+        existing.incentive_amount = Number(existing.incentive_amount || 0) + Number(r.incentive_amount || 0);
+        // Prefer the highest final_incentive_percent for display
+        if ((r.final_incentive_percent || 0) > (existing.final_incentive_percent || 0)) {
+          existing.final_incentive_percent = r.final_incentive_percent;
+          existing.incentive_slabs = r.incentive_slabs;
+        }
+        // If any underlying record is non-final, weaken aggregate workflow status
+        if (existing.status === 'paid' && r.status !== 'paid') existing.status = r.status;
+        if (existing.status === 'confirmed' && r.status === 'draft') existing.status = 'draft';
+      }
+    });
+    return Array.from(byEmp.values());
   }, [filteredRecords]);
 
+  // Per-employee KPI status (Approved if all KPIs in period are status='approved', else Pending)
+  const employeeIds = useMemo(() => aggregatedRows.map((r: any) => r.employee_id).filter(Boolean), [aggregatedRows]);
+  const { data: kpiStatusMap } = useEmployeeKpiStatusForPeriod(
+    employeeIds,
+    isAllMode ? undefined : selectedMonth,
+    isAllMode ? undefined : Number(selectedYear),
+  );
+
+  const summaryStats = useMemo(() => {
+    const total = aggregatedRows.length;
+    const eligible = aggregatedRows.filter((r: any) => !r.is_disqualified).length;
+    const disqualified = aggregatedRows.filter((r: any) => r.is_disqualified).length;
+    const prorata = aggregatedRows.filter((r: any) => !r.is_disqualified && r.pro_rata_factor < 1).length;
+    const totalAmount = aggregatedRows.reduce((s: number, r: any) => s + Math.round(r.incentive_amount || 0), 0);
+    return { total, eligible, disqualified, prorata, totalAmount };
+  }, [aggregatedRows]);
+
   // Pagination
-  const totalPages = pageSize === 0 ? 1 : Math.max(1, Math.ceil(filteredRecords.length / pageSize));
+  const totalPages = pageSize === 0 ? 1 : Math.max(1, Math.ceil(aggregatedRows.length / pageSize));
   const paginatedRecords = pageSize === 0
-    ? filteredRecords
-    : filteredRecords.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  const showStart = filteredRecords.length === 0 ? 0 : (pageSize === 0 ? 1 : (currentPage - 1) * pageSize + 1);
-  const showEnd = pageSize === 0 ? filteredRecords.length : Math.min(currentPage * pageSize, filteredRecords.length);
+    ? aggregatedRows
+    : aggregatedRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const showStart = aggregatedRows.length === 0 ? 0 : (pageSize === 0 ? 1 : (currentPage - 1) * pageSize + 1);
+  const showEnd = pageSize === 0 ? aggregatedRows.length : Math.min(currentPage * pageSize, aggregatedRows.length);
 
   // Selection helpers
   const toggleSelect = (id: string) => {
