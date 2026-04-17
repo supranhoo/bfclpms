@@ -21,10 +21,12 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: auth.error }), { status: auth.status || 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const { review_period, review_year, program_id, dry_run = false } = await req.json();
+    const { review_period, review_year, program_id, dry_run = false, scope } = await req.json();
     if (!review_period || !review_year) {
       return new Response(JSON.stringify({ error: 'review_period and review_year required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
+    const scopeEmployeeIds: string[] | null = Array.isArray(scope?.employee_ids) && scope.employee_ids.length > 0 ? scope.employee_ids : null;
+    const scopePaymentPeriod: string | null = scope?.payment_period || null;
 
     // 1. Fetch the program and its slabs
     const { data: program } = await supabase
@@ -119,6 +121,20 @@ serve(async (req) => {
       }
 
       employeeFilter = Array.from(eligibleIds);
+    }
+
+    // Intersect with caller-supplied scope (UI Company filter)
+    if (scopeEmployeeIds) {
+      const scopeSet = new Set(scopeEmployeeIds);
+      employeeFilter = employeeFilter
+        ? employeeFilter.filter(id => scopeSet.has(id))
+        : scopeEmployeeIds.slice();
+      if (employeeFilter.length === 0) {
+        return new Response(
+          JSON.stringify({ computed: 0, message: 'No employees match selected filters' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     // Fetch employees (filtered if mappings exist, otherwise all)
@@ -684,52 +700,68 @@ serve(async (req) => {
       }
     }
 
+    // Apply payment_period scope (UI Period filter) — only meaningful for production split records.
+    // Non-production programmes always emit 'Full Month'; if a sub-range is requested, no records will match.
+    let scopedRecords = records;
+    if (scopePaymentPeriod) {
+      scopedRecords = records.filter((r: any) => r.payment_period === scopePaymentPeriod);
+    }
+
     // 6. Compute summary stats
-    const eligible = records.filter((r: any) => !r.is_disqualified);
-    const disqualified = records.filter((r: any) => r.is_disqualified);
+    const eligible = scopedRecords.filter((r: any) => !r.is_disqualified);
+    const disqualified = scopedRecords.filter((r: any) => r.is_disqualified);
     const avgIncentive = eligible.length > 0
       ? eligible.reduce((s: number, r: any) => s + r.final_incentive_percent, 0) / eligible.length
       : 0;
 
-    const totalAmount = records.reduce((s: number, r: any) => s + (r.incentive_amount || 0), 0);
+    const totalAmount = scopedRecords.reduce((s: number, r: any) => s + (r.incentive_amount || 0), 0);
 
     const summary = {
-      total: records.length,
+      total: scopedRecords.length,
       eligible: eligible.length,
       disqualified: disqualified.length,
       avg_incentive_percent: Math.round(avgIncentive * 100) / 100,
       total_amount: Math.round(totalAmount * 100) / 100,
+      scope: {
+        employee_count: scopeEmployeeIds ? scopeEmployeeIds.length : (employeeFilter?.length ?? null),
+        payment_period: scopePaymentPeriod,
+      },
     };
 
     // In dry_run mode, return preview without writing
     if (dry_run) {
       return new Response(
-        JSON.stringify({ computed, program: program.name, dry_run: true, summary, records }),
+        JSON.stringify({ computed: scopedRecords.length, program: program.name, dry_run: true, summary, records: scopedRecords }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // Delete existing records for all affected employees before upserting
-    // This prevents orphaned records when period structure changes (full → split or vice versa)
-    if (records.length > 0) {
-      const uniqueEmployeeIds = [...new Set(records.map((r: any) => r.employee_id))];
+    // This prevents orphaned records when period structure changes (full → split or vice versa).
+    // When a payment_period scope is set, only wipe matching period rows for affected employees.
+    if (scopedRecords.length > 0) {
+      const uniqueEmployeeIds = [...new Set(scopedRecords.map((r: any) => r.employee_id))];
       const empBatchSize = 50;
       for (let i = 0; i < uniqueEmployeeIds.length; i += empBatchSize) {
         const empBatch = uniqueEmployeeIds.slice(i, i + empBatchSize);
-        const { error: delError } = await supabase
+        let delQuery = supabase
           .from('employee_incentive_records')
           .delete()
           .eq('program_id', program_id)
           .eq('review_period', review_period)
           .eq('review_year', review_year)
           .in('employee_id', empBatch);
+        if (scopePaymentPeriod) {
+          delQuery = delQuery.eq('payment_period', scopePaymentPeriod);
+        }
+        const { error: delError } = await delQuery;
         if (delError) console.error('Delete error:', delError);
       }
 
       // Upsert fresh records
       const batchSize = 100;
-      for (let i = 0; i < records.length; i += batchSize) {
-        const batch = records.slice(i, i + batchSize);
+      for (let i = 0; i < scopedRecords.length; i += batchSize) {
+        const batch = scopedRecords.slice(i, i + batchSize);
         const { error } = await supabase
           .from('employee_incentive_records')
           .upsert(batch, { onConflict: 'employee_id,review_period,review_year,program_id,payment_period' });
@@ -738,7 +770,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ computed, program: program.name, summary }),
+      JSON.stringify({ computed: scopedRecords.length, program: program.name, summary }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (err) {
