@@ -12,7 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Download, CheckCircle2, DollarSign, Calculator, Loader2, Users, ShieldAlert, Clock, IndianRupee, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useIncentiveRecords, useConfirmIncentiveRecords, useMarkIncentivePaid, useComputeIncentives, useIncentiveReportData, useEmployeeKpiStatusForPeriod } from '@/hooks/useIncentiveRecords';
 import { useIncentivePrograms } from '@/hooks/useIncentivePrograms';
-import { useIncentiveProgramMappingCount } from '@/hooks/useIncentiveProgramMappingCount';
+import { useIncentiveProgramMappingCount, useIncentiveProgramMappedEmployeeIds } from '@/hooks/useIncentiveProgramMappingCount';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { MultiSelectFilter } from '@/components/ui/multi-select-filter';
 import { useAuth } from '@/contexts/AuthContext';
@@ -81,17 +81,46 @@ export function MonthlyIncentiveTable() {
   const { data: mappedEmployeeCount = 0 } = useIncentiveProgramMappingCount(
     selectedProgram !== 'all' ? selectedProgram : undefined
   );
+  const { data: mappedEmployeeIds = [] } = useIncentiveProgramMappedEmployeeIds(
+    selectedProgram !== 'all' ? selectedProgram : undefined
+  );
   const selectedProgramName = useMemo(
     () => (activePrograms.find((p: any) => p.id === selectedProgram)?.name) || 'this programme',
     [activePrograms, selectedProgram]
   );
-  const canComputeNow = selectedProgram !== 'all' && !isAllMode && mappedEmployeeCount > 0;
+
+  // Filter-aware scope: mapped employees ∩ selected companies
+  const scopedEmployeeIds = useMemo(() => {
+    if (!mappedEmployeeIds.length) return [] as string[];
+    if (selectedCompanyIds.length === 0) return mappedEmployeeIds;
+    const companySet = new Set(selectedCompanyIds);
+    return mappedEmployeeIds.filter(id => {
+      const c = employeeCompanyMap.get(id);
+      return c && companySet.has(c);
+    });
+  }, [mappedEmployeeIds, selectedCompanyIds, employeeCompanyMap]);
+
+  const filteredMappedCount = scopedEmployeeIds.length;
+  const scopeText = useMemo(() => {
+    const parts: string[] = [`${selectedMonth} ${selectedYear}`];
+    if (selectedCompanyNames.length > 0) parts.push(`Company: ${selectedCompanyNames.join(', ')}`);
+    if (periodFilter !== 'all') parts.push(`Period: ${periodFilter}`);
+    return parts.join(' · ');
+  }, [selectedMonth, selectedYear, selectedCompanyNames, periodFilter]);
+
+  const buildScope = () => ({
+    employee_ids: selectedCompanyIds.length > 0 ? scopedEmployeeIds : [],
+    payment_period: periodFilter !== 'all' ? periodFilter : null,
+  });
+
+  const canComputeNow = selectedProgram !== 'all' && !isAllMode && filteredMappedCount > 0;
   const handleComputeNow = () => {
     if (!canComputeNow) return;
     computeIncentives.mutate({
       review_period: selectedMonth,
       review_year: Number(selectedYear),
       program_id: selectedProgram,
+      scope: buildScope(),
     });
   };
 
@@ -333,6 +362,7 @@ export function MonthlyIncentiveTable() {
         review_year: Number(selectedYear),
         program_id: selectedProgram,
         dry_run: true,
+        scope: buildScope(),
       });
       setDryRunResult(result);
       setShowPreview(true);
@@ -358,6 +388,7 @@ export function MonthlyIncentiveTable() {
         review_year: Number(selectedYear),
         program_id: selectedProgram,
         dry_run: false,
+        scope: buildScope(),
       });
       setShowPreview(false);
       setDryRunResult(null);
