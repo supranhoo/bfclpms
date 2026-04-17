@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeRole, KpiImportRowSchema } from './importValidation';
+import { normalizeRole, KpiImportRowSchema, EmployeeImportRowSchema } from './importValidation';
 
 describe('normalizeRole', () => {
   it('returns employee for null/undefined', () => {
@@ -73,5 +73,29 @@ describe('KpiImportRowSchema', () => {
     expect(KpiImportRowSchema.safeParse({ ...validRow, isOrgLevel: 'yes' }).success).toBe(true);
     expect(KpiImportRowSchema.safeParse({ ...validRow, isOrgLevel: 'true' }).success).toBe(true);
     expect(KpiImportRowSchema.safeParse({ ...validRow, isOrgLevel: '' }).success).toBe(true);
+  });
+});
+
+describe('EmployeeImportRowSchema - location field', () => {
+  const baseRow = { employeeCode: 'EMP001', fullName: 'Jane Doe' };
+
+  it('accepts row with valid location', () => {
+    const r = EmployeeImportRowSchema.safeParse({ ...baseRow, location: 'Mumbai' });
+    expect(r.success).toBe(true);
+  });
+
+  it('accepts row with no location (optional)', () => {
+    const r = EmployeeImportRowSchema.safeParse(baseRow);
+    expect(r.success).toBe(true);
+  });
+
+  it('accepts unmatched/unknown location string (soft-resolved later)', () => {
+    const r = EmployeeImportRowSchema.safeParse({ ...baseRow, location: 'UnknownTown' });
+    expect(r.success).toBe(true);
+  });
+
+  it('rejects location longer than 100 chars', () => {
+    const r = EmployeeImportRowSchema.safeParse({ ...baseRow, location: 'x'.repeat(101) });
+    expect(r.success).toBe(false);
   });
 });
