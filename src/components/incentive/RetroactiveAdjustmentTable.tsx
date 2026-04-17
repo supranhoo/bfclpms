@@ -96,6 +96,19 @@ export function RetroactiveAdjustmentTable() {
               <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
               <SelectContent>{[2024, 2025, 2026, 2027].map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
             </Select>
+            {companies.length > 1 && (
+              <MultiSelectFilter
+                options={companies.map(c => c.name)}
+                value={selectedCompanyNames}
+                onChange={(names) => {
+                  const ids = names.map(n => companyNameToId.get(n)).filter(Boolean) as string[];
+                  setSelectedCompanyIds(ids);
+                }}
+                placeholder="All Companies"
+                searchPlaceholder="Search companies..."
+                className="w-[180px] h-9"
+              />
+            )}
             <div className="flex items-center gap-2">
               <Switch checked={slabChangeOnly} onCheckedChange={setSlabChangeOnly} id="slab-change-only" />
               <Label htmlFor="slab-change-only" className="text-sm">Slab changes only</Label>
