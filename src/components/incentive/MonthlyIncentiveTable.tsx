@@ -509,7 +509,7 @@ export function MonthlyIncentiveTable() {
                         <TableCell colSpan={16} className="text-center py-2 bg-muted/50">
                           <span className="text-sm">All {paginatedRecords.length} on this page are selected. </span>
                           <Button variant="link" size="sm" className="p-0 h-auto text-sm font-semibold" onClick={handleSelectAllRecords}>
-                            Select all {filteredRecords.length} records
+                            Select all {aggregatedRows.length} employees
                           </Button>
                         </TableCell>
                       </TableRow>
