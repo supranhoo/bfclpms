@@ -23,6 +23,7 @@ export function AssignTabContent({ selectedAuditor, assignmentsByAuditor, allPro
   const removeMutation = useRemoveAuditAssignment();
   const updateMutation = useUpdateAuditAssignment();
   const [reassignPopoverId, setReassignPopoverId] = useState<string | null>(null);
+  const [removingAssignment, setRemovingAssignment] = useState<{ id: string; name: string } | null>(null);
 
   const assignedEmployeeIds = useMemo(() => {
     if (!selectedAuditor) return new Set<string>();

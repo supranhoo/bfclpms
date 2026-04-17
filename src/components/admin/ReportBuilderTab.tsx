@@ -410,6 +410,16 @@ function CustomReportsCRUD() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDestructiveDialog
+        open={!!deletingReportId}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeletingReportId(null)}
+        title="Delete Custom Report?"
+        description="This will permanently delete this custom report definition. This cannot be undone."
+        confirmLabel="Delete Report"
+        isLoading={deleteReport.isPending}
+      />
     </div>
   );
 }
