@@ -1,63 +1,45 @@
 
-## Add "Location" as a First-Class Master in Organization Structure
+## Widen the inline "Code" editor in Organization Structure tabs
 
-### Context (verified)
-- The Organization Structure page (`src/pages/admin/OrganizationStructure.tsx`) currently exposes 7 tabs: Divisions, Business Units, Departments, Sub-Branches, Designations, PMS Grades, Levels.
-- A `locations` table already exists in the DB (used by the recent Employee Master Backfill + Location import field).
-- There is **no UI** to create / edit / delete location masters today — admins can only reference locations that magically appear, which is why imports soft-resolve to NULL.
+### What the user sees (verified from screenshot)
+On the Designations tab (and same pattern on Divisions, Business Units, Departments, Sub-Branches, Locations, PMS Grades, Levels), clicking the pencil on the **Code** column opens a tiny inline `<Input>` that truncates the value — e.g. `"...r Operator"` instead of the full code. There is plenty of empty horizontal space on both sides of the column.
 
-### Change — Add a "Locations" tab (8th tab)
+### Root cause
+The inline edit input inherits a narrow fixed width (likely `w-24` / `w-32` or the column's natural width) from the row template. The surrounding `<TableCell>` for the Code column is also constrained, so even widening the input alone wouldn't help — the cell needs to expand while editing.
 
-**Tab placement** (between Sub-Branches and Designations, since location is a physical-place master like sub-branch):
+### Fix (UI-only, per-tab)
+For every Org Structure tab component that supports inline edit of `code` / `name`:
 
-```text
-Divisions (7) | Business Units (24) | Departments (86) | Sub-Branches (0) | Locations (N) | Designations (262) | PMS Grades (5) | Levels (13)
-```
+1. **Inline input** — drop the fixed width; use `w-full min-w-[260px]` so the field fills the cell and never collapses below a readable size.
+2. **Cell during edit** — add `whitespace-nowrap` and let it grow: `className="min-w-[280px]"` on the editing `<TableCell>`.
+3. **Row layout** — keep the action buttons (✓ / ✗) inline to the right with `flex items-center gap-2 w-full`, so the input takes all remaining space.
+4. **Name column** — apply the same treatment (`min-w-[320px]`) since long designations like "1st Class Boiler Operator" also clip.
+5. **Tooltip on hover** — when not editing, show the full value via `title={code}` so users can read truncated values without entering edit mode.
 
-**Tab contents** (mirrors the existing Designations / Levels tab pattern for consistency):
-
-```text
-┌─ Locations ───────────────────────────────────────────────┐
-│  [+ Add Location]                          [Search ____]  │
-│ ┌───────────────────────────────────────────────────────┐ │
-│ │ Name              │ Code     │ Company         │ ⋯    │ │
-│ ├───────────────────────────────────────────────────────┤ │
-│ │ Mumbai HO         │ MUM      │ Bihar Foundry   │ ✎ 🗑 │ │
-│ │ Patna Plant       │ PAT      │ Bihar Foundry   │ ✎ 🗑 │ │
-│ │ Kolkata Office    │ KOL      │ —               │ ✎ 🗑 │ │
-│ └───────────────────────────────────────────────────────┘ │
-└───────────────────────────────────────────────────────────┘
-```
-
-**Add / Edit dialog** (reuses `Dialog` + `Form` patterns from `LevelsTab`):
-- Name * (text, max 100)
-- Code (text, max 20, optional, auto-uppercased)
-- Company (existing `CompanyCombobox`, scoped to current company by default)
-
-**Delete** → routed through the standard `ConfirmDestructiveDialog` (per `mem://design/destructive-action-governance`). Block delete if any `profiles.location_id` references the row; show toast "Cannot delete — N employees assigned".
+No schema, RLS, or business-logic change.
 
 ### Files Touched
-- `src/pages/admin/OrganizationStructure.tsx` — register new `<TabsTrigger value="locations">` + `<TabsContent>`.
-- `src/components/admin/LocationsTab.tsx` (new) — table + dialogs, modeled on `LevelsTab.tsx`.
-- `src/hooks/useOrganization.ts` — add `useLocations(companyId)`, `useCreateLocation`, `useUpdateLocation`, `useDeleteLocation` (mirroring the `useLevels` family).
-- `src/hooks/useCompanies.ts` — extend `CloneStructure` to optionally clone locations (new checkbox `cloneLocations`).
-- `src/components/admin/CloneStructureDialog.tsx` — add the checkbox.
-- **Clone-structure migration**: none — `locations` already has `company_id`; only the hook gains a 9th step.
-- `DOCUMENTATION.md` Version History + `POLICY.md` Org Structure section + `mem://features/admin/multi-company-governance` update.
+- `src/components/admin/DesignationsTab.tsx`
+- `src/components/admin/DivisionsTab.tsx`
+- `src/components/admin/BusinessUnitsTab.tsx`
+- `src/components/admin/DepartmentsTab.tsx`
+- `src/components/admin/SubBranchesTab.tsx`
+- `src/components/admin/LocationsTab.tsx`
+- `src/components/admin/PmsGradesTab.tsx`
+- `src/components/admin/LevelsTab.tsx`
 
-### RLS / Security
-- `locations` already has RLS (it's been used by imports). Verify policies allow Admin full CRUD; read for all authenticated users (matches Designations / Levels). If missing, add a migration with the standard `has_role(auth.uid(),'admin')` pattern.
+(Exact filenames will be confirmed at edit time; the same width fix is applied wherever an inline edit input exists.)
 
 ### Risk & Impact
 | Area | Impact |
 |---|---|
-| Data | Additive UI on existing table. No schema change. |
-| Workflow | Admins can finally seed/maintain the `locations` master, unblocking import soft-resolve warnings. |
-| UI/UX | One extra tab — same visual weight as Levels / PMS Grades. Tab bar already wraps (`flex-wrap`). |
-| Regression | Very low. New tab is isolated; clone flow gains an optional step that defaults OFF. |
-| Mitigation | Delete is reference-checked; `ConfirmDestructiveDialog` enforced; mirrors proven `LevelsTab` patterns. |
+| Data | None. Pure CSS / layout change. |
+| Workflow | None. |
+| UI/UX | Code & Name inline editors expand to show the full value. Table remains responsive (overflow-x-auto on the wrapper already in place). |
+| Regression | Very low. Width-only changes; no logic touched. |
+| Mitigation | Verified against existing `min-w` usage in tabs; falls back to horizontal scroll on narrow viewports. |
 
 ### Out of Scope
-- Geographic fields (lat/long, address) — kept lean, can be added later.
-- Bulk import of locations (existing import paths already accept location names; admins can add masters here).
-- Linking locations to sub-branches (locations remain a flat company-scoped master for now).
+- Switching inline edit to a modal dialog.
+- Restructuring the table columns.
+- Changing the save / cancel button placement beyond minor flex alignment.
