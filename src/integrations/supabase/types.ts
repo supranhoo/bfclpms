@@ -1705,12 +1705,18 @@ export type Database = {
         Row: {
           applicable_designations: string[] | null
           business_unit_id: string | null
+          company_id: string | null
           created_at: string
           department_id: string | null
+          division_id: string | null
+          effective_from: string
           id: string
           incentive_percent: number
+          location: string | null
           max_value: number
           min_value: number
+          pms_grade_id: string | null
+          pms_level: string | null
           program_id: string
           rating_label: string | null
           slab_category: string
@@ -1721,12 +1727,18 @@ export type Database = {
         Insert: {
           applicable_designations?: string[] | null
           business_unit_id?: string | null
+          company_id?: string | null
           created_at?: string
           department_id?: string | null
+          division_id?: string | null
+          effective_from?: string
           id?: string
           incentive_percent?: number
+          location?: string | null
           max_value: number
           min_value: number
+          pms_grade_id?: string | null
+          pms_level?: string | null
           program_id: string
           rating_label?: string | null
           slab_category: string
@@ -1737,12 +1749,18 @@ export type Database = {
         Update: {
           applicable_designations?: string[] | null
           business_unit_id?: string | null
+          company_id?: string | null
           created_at?: string
           department_id?: string | null
+          division_id?: string | null
+          effective_from?: string
           id?: string
           incentive_percent?: number
+          location?: string | null
           max_value?: number
           min_value?: number
+          pms_grade_id?: string | null
+          pms_level?: string | null
           program_id?: string
           rating_label?: string | null
           slab_category?: string
@@ -1759,10 +1777,31 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "incentive_slabs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "incentive_slabs_department_id_fkey"
             columns: ["department_id"]
             isOneToOne: false
             referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incentive_slabs_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incentive_slabs_pms_grade_id_fkey"
+            columns: ["pms_grade_id"]
+            isOneToOne: false
+            referencedRelation: "pms_grades"
             referencedColumns: ["id"]
           },
           {
