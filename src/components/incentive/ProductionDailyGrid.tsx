@@ -107,19 +107,30 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
     }
   }, [daysInMonth, dateRange]);
 
+  // targetDate = last day of selected month/year (for date-aware rate resolution)
+  const targetDate = useMemo(() => {
+    const monthIdx = MONTHS.indexOf(month);
+    const lastDay = new Date(year, monthIdx + 1, 0);
+    return lastDay.toISOString().slice(0, 10);
+  }, [month, year]);
+
   // Resolve effective rates for all mapped employees
   const employeeRates = useMemo(() => {
     const map = new Map<string, { rate: number; source: string }>();
     for (const emp of mappedEmployees) {
       const deptId = emp.department_id;
-      const buId = (emp as any).departments?.business_unit_id || null;
-      const resolved = resolveEmployeeRate(emp.id, deptId, buId, rates as any[]);
+      const dept = (emp as any).departments;
+      const buId = dept?.business_unit_id || null;
+      const companyId = (emp as any).company_id
+        || dept?.business_units?.divisions?.company_id
+        || null;
+      const resolved = resolveEmployeeRate(emp.id, deptId, buId, rates as any[], companyId, targetDate);
       if (resolved.source !== 'none') {
         map.set(emp.id, { rate: resolved.rate, source: resolved.source });
       }
     }
     return map;
-  }, [mappedEmployees, rates]);
+  }, [mappedEmployees, rates, targetDate]);
 
   // Only show employees that have a resolved rate (and pass company filter)
   const gridEmployees = useMemo(() => {
