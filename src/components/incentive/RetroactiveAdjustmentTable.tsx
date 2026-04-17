@@ -10,6 +10,8 @@ import { Download, Bell, Search, Loader2 } from 'lucide-react';
 import { useIncentiveRevisions, useMarkPayrollNotified } from '@/hooks/useIncentiveRevisions';
 import { useDetectRetroactiveChanges } from '@/hooks/useIncentiveRecords';
 import { useIncentivePrograms } from '@/hooks/useIncentivePrograms';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { MultiSelectFilter } from '@/components/ui/multi-select-filter';
 import * as XLSX from 'xlsx';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
