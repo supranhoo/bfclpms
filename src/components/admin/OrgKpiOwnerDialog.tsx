@@ -27,6 +27,7 @@ export function OrgKpiOwnerDialog({
   kpiName,
 }: OrgKpiOwnerDialogProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [removingOwner, setRemovingOwner] = useState<{ id: string; name: string } | null>(null);
   
   const { data: profiles, isLoading: loadingProfiles } = useProfiles();
   const { data: owners, isLoading: loadingOwners } = useOrgKpiOwners(categoryId, kraName, kpiName);
@@ -56,8 +57,8 @@ export function OrgKpiOwnerDialog({
     });
   };
 
-  const handleRemove = (ownerId: string) => {
-    removeOwner.mutate(ownerId);
+  const handleRemove = (ownerId: string, ownerName: string) => {
+    setRemovingOwner({ id: ownerId, name: ownerName });
   };
 
   const getInitials = (name: string | null) => {
