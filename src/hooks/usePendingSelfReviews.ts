@@ -1149,10 +1149,11 @@ export function useOverdueSkipLevelKpis(deadlineDay: number, filterMonth?: strin
         .from('kpis')
         .select(`
           id, employee_id, kpi_name, kra_name, review_period, review_year, frequency, is_org_level,
-          profiles!kpis_employee_id_fkey ( full_name, employee_code, department_id, reporting_manager_id, departments ( name ) )
+          profiles!kpis_employee_id_fkey!inner ( full_name, employee_code, department_id, reporting_manager_id, is_active, departments ( name ) )
         `)
         .eq('status', 'manager_check')
         .eq('is_org_level', false)
+        .eq('profiles.is_active', true)
         .in('frequency', ELIGIBLE_FREQUENCIES);
 
       if (filterMonth) query = query.eq('review_period', filterMonth);
