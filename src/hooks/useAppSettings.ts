@@ -70,7 +70,7 @@ export function useUpdateAppSettings() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (updates: Partial<Pick<AppSettings, 'organization_name' | 'app_name' | 'logo_url' | 'login_background_url' | 'login_wallpapers' | 'login_hero_headline' | 'login_hero_description' | 'pms_policy_url' | 'pms_policy_content' | 'pms_policy_visible_roles'>>) => {
+    mutationFn: async (updates: Partial<Pick<AppSettings, 'organization_name' | 'app_name' | 'logo_url' | 'login_background_url' | 'login_wallpapers' | 'login_hero_headline' | 'login_hero_description' | 'pms_policy_url' | 'pms_policy_content' | 'pms_policy_visible_roles' | 'view_mode_strip_color'>>) => {
       const { data, error } = await supabase
         .from('app_settings')
         .update({
