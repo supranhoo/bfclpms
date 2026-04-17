@@ -386,6 +386,28 @@ serve(async (req) => {
                 dqReasons.push(`LTI 1 (50% penalty)`);
               }
               break;
+            case 'kra_score': {
+              const op = config.operator || 'gte';
+              const threshold = config.threshold ?? 3;
+              if (pmsScore === null || pmsScore === undefined) {
+                if (config.no_kra_action === 'ineligible') {
+                  isDQ = true;
+                  dqReasons.push('No KRA score available');
+                }
+              } else {
+                const pass =
+                  (op === 'gte' && pmsScore >= threshold) ||
+                  (op === 'gt'  && pmsScore >  threshold) ||
+                  (op === 'lte' && pmsScore <= threshold) ||
+                  (op === 'lt'  && pmsScore <  threshold) ||
+                  (op === 'eq'  && pmsScore === threshold);
+                if (!pass) {
+                  isDQ = true;
+                  dqReasons.push(`KRA score ${pmsScore.toFixed(2)} fails ${op} ${threshold}`);
+                }
+              }
+              break;
+            }
             case 'custom':
               // Evaluate custom field-based DQ rules
               if (config.field_key && customFields[config.field_key] !== undefined) {

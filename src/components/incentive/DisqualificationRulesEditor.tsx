@@ -22,7 +22,10 @@ const RULE_TYPES = [
   { value: 'suspension', label: 'Suspension', defaultConfig: { disqualify: true } },
   { value: 'contract', label: 'Contract Worker', defaultConfig: { ineligible: true, exempt_bus: [] } },
   { value: 'lti', label: 'LTI (Lost Time Injury)', defaultConfig: { lti_1_penalty_percent: 50, lti_2_plus_penalty_percent: 100, scope: 'department' } },
+  { value: 'kra_score', label: 'KRA Score (PMS)', defaultConfig: { operator: 'gte', threshold: 3, no_kra_action: 'eligible' } },
 ];
+
+const OPERATOR_LABELS: Record<string, string> = { gte: '≥', gt: '>', lte: '≤', lt: '<', eq: '=' };
 
 function ConfigSummary({ ruleType, config }: { ruleType: string; config: any }) {
   switch (ruleType) {
@@ -42,6 +45,13 @@ function ConfigSummary({ ruleType, config }: { ruleType: string; config: any }) 
           1 LTI: <strong>{config.lti_1_penalty_percent ?? 0}%</strong>,{' '}
           2+ LTI: <strong>{config.lti_2_plus_penalty_percent ?? 0}%</strong>,{' '}
           Scope: <strong>{config.scope ?? 'department'}</strong>
+        </span>
+      );
+    case 'kra_score':
+      return (
+        <span className="text-sm text-muted-foreground">
+          Eligible if KRA <strong>{OPERATOR_LABELS[config.operator ?? 'gte']} {config.threshold ?? 3}</strong>
+          {' · '}No KRA: <strong>{config.no_kra_action === 'ineligible' ? 'Ineligible' : 'Eligible'}</strong>
         </span>
       );
     default:
@@ -108,6 +118,33 @@ function RuleConfigEditor({ ruleType, config, onChange }: { ruleType: string; co
               <SelectContent>
                 <SelectItem value="department">Department</SelectItem>
                 <SelectItem value="company">Company</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      );
+    case 'kra_score':
+      return (
+        <div className="flex flex-wrap items-center gap-3">
+          <Label className="text-xs whitespace-nowrap">Eligible if KRA</Label>
+          <Select value={config.operator ?? 'gte'} onValueChange={v => update('operator', v)}>
+            <SelectTrigger className="h-8 w-20"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="gte">≥</SelectItem>
+              <SelectItem value="gt">&gt;</SelectItem>
+              <SelectItem value="lte">≤</SelectItem>
+              <SelectItem value="lt">&lt;</SelectItem>
+              <SelectItem value="eq">=</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input type="number" step="0.1" min={0} max={5} className="h-8 w-20" value={config.threshold ?? 3} onChange={e => update('threshold', Number(e.target.value))} />
+          <div className="flex items-center gap-1">
+            <Label className="text-xs whitespace-nowrap">If no KRA score</Label>
+            <Select value={config.no_kra_action ?? 'eligible'} onValueChange={v => update('no_kra_action', v)}>
+              <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="eligible">Eligible</SelectItem>
+                <SelectItem value="ineligible">Ineligible</SelectItem>
               </SelectContent>
             </Select>
           </div>
