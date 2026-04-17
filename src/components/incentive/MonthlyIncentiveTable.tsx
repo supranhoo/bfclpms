@@ -12,6 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Download, CheckCircle2, DollarSign, Calculator, Loader2, Users, ShieldAlert, Clock, IndianRupee, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useIncentiveRecords, useConfirmIncentiveRecords, useMarkIncentivePaid, useComputeIncentives, useIncentiveReportData, useEmployeeKpiStatusForPeriod } from '@/hooks/useIncentiveRecords';
 import { useIncentivePrograms } from '@/hooks/useIncentivePrograms';
+import { useIncentiveProgramMappingCount } from '@/hooks/useIncentiveProgramMappingCount';
 import { useAuth } from '@/contexts/AuthContext';
 import { IncentiveDryRunDialog } from './IncentiveDryRunDialog';
 import { IncentiveStatusOverride } from './IncentiveStatusOverride';
@@ -66,6 +67,22 @@ export function MonthlyIncentiveTable() {
   const confirmRecords = useConfirmIncentiveRecords();
   const markPaid = useMarkIncentivePaid();
   const computeIncentives = useComputeIncentives();
+  const { data: mappedEmployeeCount = 0 } = useIncentiveProgramMappingCount(
+    selectedProgram !== 'all' ? selectedProgram : undefined
+  );
+  const selectedProgramName = useMemo(
+    () => (activePrograms.find((p: any) => p.id === selectedProgram)?.name) || 'this programme',
+    [activePrograms, selectedProgram]
+  );
+  const canComputeNow = selectedProgram !== 'all' && !isAllMode && mappedEmployeeCount > 0;
+  const handleComputeNow = () => {
+    if (!canComputeNow) return;
+    computeIncentives.mutate({
+      review_period: selectedMonth,
+      review_year: Number(selectedYear),
+      program_id: selectedProgram,
+    });
+  };
 
   // Reset selection and page when filters change
   useEffect(() => {
@@ -501,7 +518,45 @@ export function MonthlyIncentiveTable() {
                 ) : isError ? (
                   <TableRow><TableCell colSpan={16} className="text-center py-8 text-destructive">Error: {(error as Error)?.message || 'Unknown error'}</TableCell></TableRow>
                 ) : filteredRecords.length === 0 ? (
-                  <TableRow><TableCell colSpan={16} className="text-center py-8 text-muted-foreground">No records found. Adjust filters or compute incentives first.</TableCell></TableRow>
+                  <TableRow>
+                    <TableCell colSpan={16} className="py-10">
+                      {canComputeNow ? (
+                        <div className="mx-auto max-w-md text-center space-y-4">
+                          <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                            <Calculator className="h-6 w-6 text-primary" />
+                          </div>
+                          <div className="space-y-1">
+                            <h3 className="text-base font-semibold">No incentive records yet</h3>
+                            <p className="text-sm text-muted-foreground">
+                              {mappedEmployeeCount} employee{mappedEmployeeCount === 1 ? '' : 's'} mapped to{' '}
+                              <span className="font-medium text-foreground">{selectedProgramName}</span>. Click below to
+                              compute incentives for {selectedMonth} {selectedYear}.
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={handleComputeNow}
+                            disabled={computeIncentives.isPending}
+                          >
+                            {computeIncentives.isPending ? (
+                              <><Loader2 className="h-4 w-4 animate-spin" /> Computing…</>
+                            ) : (
+                              <><Calculator className="h-4 w-4" /> Compute Now</>
+                            )}
+                          </Button>
+                        </div>
+                      ) : selectedProgram !== 'all' && mappedEmployeeCount === 0 ? (
+                        <div className="text-center text-sm text-muted-foreground">
+                          No employees are mapped to <span className="font-medium text-foreground">{selectedProgramName}</span>.
+                          Map employees in the programme configuration before computing incentives.
+                        </div>
+                      ) : (
+                        <div className="text-center text-sm text-muted-foreground">
+                          No records found. Adjust filters or compute incentives first.
+                        </div>
+                      )}
+                    </TableCell>
+                  </TableRow>
                 ) : (
                   <>
                     {showSelectAllBanner && (
