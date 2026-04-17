@@ -700,21 +700,32 @@ serve(async (req) => {
       }
     }
 
+    // Apply payment_period scope (UI Period filter) — only meaningful for production split records.
+    // Non-production programmes always emit 'Full Month'; if a sub-range is requested, no records will match.
+    let scopedRecords = records;
+    if (scopePaymentPeriod) {
+      scopedRecords = records.filter((r: any) => r.payment_period === scopePaymentPeriod);
+    }
+
     // 6. Compute summary stats
-    const eligible = records.filter((r: any) => !r.is_disqualified);
-    const disqualified = records.filter((r: any) => r.is_disqualified);
+    const eligible = scopedRecords.filter((r: any) => !r.is_disqualified);
+    const disqualified = scopedRecords.filter((r: any) => r.is_disqualified);
     const avgIncentive = eligible.length > 0
       ? eligible.reduce((s: number, r: any) => s + r.final_incentive_percent, 0) / eligible.length
       : 0;
 
-    const totalAmount = records.reduce((s: number, r: any) => s + (r.incentive_amount || 0), 0);
+    const totalAmount = scopedRecords.reduce((s: number, r: any) => s + (r.incentive_amount || 0), 0);
 
     const summary = {
-      total: records.length,
+      total: scopedRecords.length,
       eligible: eligible.length,
       disqualified: disqualified.length,
       avg_incentive_percent: Math.round(avgIncentive * 100) / 100,
       total_amount: Math.round(totalAmount * 100) / 100,
+      scope: {
+        employee_count: scopeEmployeeIds ? scopeEmployeeIds.length : (employeeFilter?.length ?? null),
+        payment_period: scopePaymentPeriod,
+      },
     };
 
     // In dry_run mode, return preview without writing
