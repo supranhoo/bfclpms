@@ -1,62 +1,39 @@
 
 
-## Plan: Company-wise Production Rate
+## Plan: Hide "Final Rating" Column in Incentive Report (UI only)
 
 ### Scope
-Add **Company** as a new rate scope alongside Employee / Department / BU / Common in the Production Rates tab. Lets admins set one rate per company (e.g., BFCL = ₹478, Saibal = ₹500).
+Remove the **Final Rating** column from the on-screen Incentive Report table only. Keep the field intact in the Excel export.
 
-### Database Change
+### Change
 
-`incentive_production_rates.rate_type` check constraint currently allows `employee | department | bu | common`. Add `'company'` to the allowed list. The existing `entity_id` column already stores any UUID, so no schema/column change needed — `entity_id` will hold `companies.id` for company-scope rows. The unique index `(program_id, rate_type, employee_id, entity_id)` already handles uniqueness per company.
+**File:** `src/components/incentive/MonthlyIncentiveTable.tsx`
+- Remove the `<TableHead>Final Rating</TableHead>` header cell.
+- Remove the corresponding `<TableCell>` rendering the rating badge in each row.
+- Adjust any `colSpan` used by empty-state rows accordingly (current count drops by 1).
 
-```sql
-ALTER TABLE incentive_production_rates DROP CONSTRAINT incentive_production_rates_rate_type_check;
-ALTER TABLE incentive_production_rates ADD CONSTRAINT incentive_production_rates_rate_type_check 
-  CHECK (rate_type IN ('employee','department','bu','company','common'));
-```
+**File:** Excel export module (likely `src/lib/incentiveExportExcel.ts` or wherever `useExportIncentiveExcel` is defined) — **no change**. Verify the `Final Rating` column remains in the export sheet.
 
-### UI Mock
+### UI Mock (after)
 
 ```text
-┌─ Production Rates (Per Ton) ─────────────────── [+ Add Rate] ─┐
-│  ○ Employee  ○ Department  ○ Business Unit  ● Company  ○ Common
-│                                                                │
-│  [ Select company ▾ ]  [ Rate/Ton ]  [ Remarks ]  [Add] [X]   │
-│                                                                │
-│  Type      │ Applies To              │ Rate/Ton  │ Actions    │
-│  Company   │ Bihar Foundry & Casting │ ₹478.35   │  ✏  🗑    │
-│  Company   │ Saibal Kunar            │ ₹500.00   │  ✏  🗑    │
-│  Common    │ All Employees           │ ₹450.00   │  ✏  🗑    │
-└────────────────────────────────────────────────────────────────┘
+Employee │ Period │ PMS Score │ KPI Status │ Slab │ Base % │ ...
 ```
-
-### Resolution Cascade (Compute Engine)
-
-New priority order (most-specific wins):
-**Employee → Department → Business Unit → Company → Common**
-
-Company rate resolved via `employee → company_id` (using same chain as `useCompanyFilter`: profile.company_id OR profile.department → BU → division → company).
+(Final Rating column removed between PMS Score and KPI Status)
 
 ### Files Touched
 
 | File | Change |
 |---|---|
-| `supabase/migrations/...` (new) | Update `rate_type` CHECK constraint to include `'company'` |
-| `src/components/incentive/ProductionRatesTab.tsx` | Add `'company'` to RateType union; add radio option; add company `<Select>` populated from `companies`; track `assignedCompanyIds`; render company name in `getAppliesTo`; new `Company` badge |
-| `supabase/functions/compute-monthly-incentives/index.ts` | Build employee→company map (reuse profiles + departments + BUs + divisions chain); insert `companyRate` between `buRate` and `commonRate` in cascade; also fix existing typo `'business_unit'` → `'bu'` for BU lookup |
-| `DOCUMENTATION.md` / `POLICY.md` | v2.66.x — Production rates support company scope; cascade order documented |
+| `src/components/incentive/MonthlyIncentiveTable.tsx` | Remove Final Rating header + cell; fix empty-state colSpan |
 
 ### Risk & Impact
 
 | Area | Impact |
 |---|---|
-| Data | Constraint change is additive; existing rows unaffected |
-| Workflow | None — additive scope, defaults remain |
-| Compute | Cascade now 5-tier; cleaner BU resolution (bug fix included) |
-| Regression | Low — new code path only activates when a company-rate row exists |
-| Mitigation | If no company rate is configured, behaviour is unchanged from today |
-
-### Out of Scope
-- Bulk rate import
-- Rate effective-dating (rates remain current-only)
+| Data | None — pure UI hide |
+| Workflow | None |
+| Excel export | Untouched — column remains |
+| Regression | Very low — only column removal + colSpan adjustment |
+| Mitigation | Verify empty-state row still spans full table width |
 
