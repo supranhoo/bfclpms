@@ -142,11 +142,8 @@ serve(async (req) => {
     }
 
     // Fetch employees (filtered if mappings exist, otherwise all)
-    const empSelect = 'id, full_name, employee_code, department_id, designation, pms_grade, level, location';
-    let employeeQuery = supabase
-      .from('profiles')
-      .select(empSelect)
-      .eq('is_active', true);
+    // NOTE: profiles has no `location` column — never add it to this SELECT.
+    const empSelect = 'id, full_name, employee_code, department_id, designation, pms_grade, level';
 
     if (employeeFilter !== null) {
       if (employeeFilter.length === 0) {
@@ -160,16 +157,33 @@ serve(async (req) => {
       const allEmployees: any[] = [];
       for (let i = 0; i < employeeFilter.length; i += 100) {
         const batch = employeeFilter.slice(i, i + 100);
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('profiles')
           .select(empSelect)
           .eq('is_active', true)
           .in('id', batch);
+        if (error) {
+          return new Response(JSON.stringify({
+            computed: 0,
+            error: `Failed to fetch employees: ${error.message}`,
+            diagnostics: { employees_in_scope: employeeFilter.length, employees_processed: 0, records_pre_scope: 0, records_post_scope: 0 },
+          }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
         if (data) allEmployees.push(...data);
       }
       var employees = allEmployees;
     } else {
-      const { data } = await employeeQuery;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select(empSelect)
+        .eq('is_active', true);
+      if (error) {
+        return new Response(JSON.stringify({
+          computed: 0,
+          error: `Failed to fetch employees: ${error.message}`,
+          diagnostics: { employees_in_scope: 0, employees_processed: 0, records_pre_scope: 0, records_post_scope: 0 },
+        }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
       var employees = data;
     }
 
@@ -451,7 +465,7 @@ serve(async (req) => {
             [slab.business_unit_id, empBuId],
             [slab.department_id, emp.department_id],
             [slab.pms_grade_id, null], // pms_grade on profile is text (name); fallback below
-            [slab.location, emp.location],
+            [slab.location, null], // profiles has no location column; slabs using location are not supported until wired via department/BU
             [slab.pms_level, emp.level],
           ];
           let rejected = false;
