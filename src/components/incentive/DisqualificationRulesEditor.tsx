@@ -7,9 +7,10 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trash2, Plus, Save, Pencil, X } from 'lucide-react';
+import { Trash2, Plus, Save, Pencil, X, Check } from 'lucide-react';
 import { useDisqualificationRules, useUpsertDqRule, useDeleteDqRule } from '@/hooks/useIncentivePrograms';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
 interface Props {
   programId: string;
@@ -193,8 +194,50 @@ export function DisqualificationRulesEditor({ programId }: Props) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Disqualification Rules</CardTitle>
-        <CardDescription>Configure conditions that disqualify or reduce incentive eligibility</CardDescription>
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <CardTitle className="text-lg">Disqualification Rules</CardTitle>
+            <CardDescription>
+              Configure conditions that disqualify or reduce incentive eligibility.
+              <br />
+              <span className="text-xs">Available: Absence, LWP, LTI, Warning, Suspension, Contract, KRA Score (PMS).</span>
+            </CardDescription>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="default">
+                <Plus className="h-4 w-4 mr-1" /> Add DQ Rule
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuLabel>Select rule type</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {RULE_TYPES.map(rt => {
+                const added = existingTypes.includes(rt.value);
+                return (
+                  <DropdownMenuItem
+                    key={rt.value}
+                    disabled={added || upsertRule.isPending}
+                    onSelect={() => !added && handleAddRule(rt)}
+                    className="flex items-center justify-between gap-2"
+                  >
+                    <span className="flex items-center gap-2">
+                      {rt.label}
+                      {rt.value === 'kra_score' && (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">PMS</Badge>
+                      )}
+                    </span>
+                    {added && (
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Check className="h-3 w-3" /> Added
+                      </span>
+                    )}
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading ? (
@@ -212,7 +255,7 @@ export function DisqualificationRulesEditor({ programId }: Props) {
               </TableHeader>
               <TableBody>
                 {rules.length === 0 ? (
-                  <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">No rules configured</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">No rules configured. Click "Add DQ Rule" above to start.</TableCell></TableRow>
                 ) : (
                   rules.map((rule: any) => {
                     const typeLabel = RULE_TYPES.find(t => t.value === rule.rule_type)?.label || rule.rule_type;
@@ -253,17 +296,6 @@ export function DisqualificationRulesEditor({ programId }: Props) {
                 )}
               </TableBody>
             </Table>
-          </div>
-        )}
-
-        {availableTypes.length > 0 && (
-          <div className="flex gap-2 flex-wrap">
-            <span className="text-sm text-muted-foreground self-center">Add rule:</span>
-            {availableTypes.map(rt => (
-              <Button key={rt.value} size="sm" variant="outline" onClick={() => handleAddRule(rt)} disabled={upsertRule.isPending}>
-                <Plus className="h-3 w-3 mr-1" /> {rt.label}
-              </Button>
-            ))}
           </div>
         )}
       </CardContent>
