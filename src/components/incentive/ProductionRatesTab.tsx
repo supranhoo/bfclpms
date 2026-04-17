@@ -155,6 +155,10 @@ export function ProductionRatesTab({ programId }: Props) {
       const bu = businessUnits.find(b => b.id === r.entity_id);
       return bu?.name || r.entity_id?.slice(0, 8) || '—';
     }
+    if (r.rate_type === 'company') {
+      const c = companies.find(co => co.id === r.entity_id);
+      return c?.name || r.entity_id?.slice(0, 8) || '—';
+    }
     return '—';
   };
 
@@ -163,6 +167,7 @@ export function ProductionRatesTab({ programId }: Props) {
       employee: { label: 'Employee', variant: 'default' },
       department: { label: 'Dept', variant: 'secondary' },
       bu: { label: 'BU', variant: 'outline' },
+      company: { label: 'Company', variant: 'secondary' },
       common: { label: 'Common', variant: 'destructive' },
     };
     const m = map[type] || { label: type, variant: 'default' as const };
