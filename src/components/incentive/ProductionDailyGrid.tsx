@@ -69,10 +69,10 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
         else if (m.mapping_type === 'designation') desigs.push(m.mapping_value);
       }
 
-      // Fetch all profiles that match any mapping
+      // Fetch all profiles that match any mapping (with company chain)
       let query = supabase
         .from('profiles')
-        .select('id, full_name, employee_code, email, designation, department_id, departments(id, name, business_unit_id)')
+        .select('id, full_name, employee_code, email, designation, company_id, department_id, departments(id, name, business_unit_id, business_units(id, division_id, divisions(id, company_id)))')
         .order('full_name');
 
       const { data: allProfiles } = await query;
