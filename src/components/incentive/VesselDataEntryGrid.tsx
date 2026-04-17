@@ -19,16 +19,23 @@ const MONTHS = [
 interface VesselDataEntryGridProps {
   programs: Array<{ id: string; name: string; min_kra_score: number }>;
   onMonthYearChange?: (month: string, year: number) => void;
+  filterByCompany?: (employeeId: string | undefined | null) => boolean;
 }
 
-export function VesselDataEntryGrid({ programs, onMonthYearChange }: VesselDataEntryGridProps) {
+export function VesselDataEntryGrid({ programs, onMonthYearChange, filterByCompany }: VesselDataEntryGridProps) {
   const now = new Date();
   const [selectedProgram, setSelectedProgram] = useState(programs[0]?.id || '');
   const [month, setMonth] = useState(MONTHS[now.getMonth()]);
   const [year, setYear] = useState(now.getFullYear());
   const { user } = useAuth();
 
-  const { data: vesselRates = [], isLoading: ratesLoading } = useVesselRates(selectedProgram);
+  const { data: vesselRatesRaw = [], isLoading: ratesLoading } = useVesselRates(selectedProgram);
+  const vesselRates = useMemo(
+    () => filterByCompany
+      ? (vesselRatesRaw as any[]).filter((r: any) => filterByCompany(r.employee_id))
+      : vesselRatesRaw,
+    [vesselRatesRaw, filterByCompany]
+  );
   const { data: existingEntries = [], isLoading: entriesLoading } = useVesselMonthlyEntries(selectedProgram, month, year);
   const upsert = useUpsertVesselEntries();
 

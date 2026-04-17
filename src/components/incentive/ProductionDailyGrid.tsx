@@ -23,9 +23,10 @@ interface Props {
   programId: string;
   programName?: string;
   onMonthYearChange?: (month: string, year: number) => void;
+  filterByCompany?: (employeeId: string | undefined | null) => boolean;
 }
 
-export function ProductionDailyGrid({ programId, programName, onMonthYearChange }: Props) {
+export function ProductionDailyGrid({ programId, programName, onMonthYearChange, filterByCompany }: Props) {
   const now = new Date();
   const [month, setMonth] = useState(MONTHS[now.getMonth()]);
   const [year, setYear] = useState(now.getFullYear());
@@ -120,10 +121,14 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange 
     return map;
   }, [mappedEmployees, rates]);
 
-  // Only show employees that have a resolved rate
+  // Only show employees that have a resolved rate (and pass company filter)
   const gridEmployees = useMemo(() => {
-    return mappedEmployees.filter(e => employeeRates.has(e.id));
-  }, [mappedEmployees, employeeRates]);
+    return mappedEmployees.filter(e => {
+      if (!employeeRates.has(e.id)) return false;
+      if (filterByCompany && !filterByCompany(e.id)) return false;
+      return true;
+    });
+  }, [mappedEmployees, employeeRates, filterByCompany]);
 
   // Initialize from DB
   useEffect(() => {
