@@ -326,6 +326,9 @@ serve(async (req) => {
     // 6. Compute incentive for each employee
     const records: any[] = [];
     let computed = 0;
+    // Per-employee rate diagnostics (production programmes only)
+    let employeesWithResolvedRate = 0;
+    let employeesSkippedNoRate = 0;
 
     for (const emp of employees) {
       const elig = eligMap.get(emp.id);
