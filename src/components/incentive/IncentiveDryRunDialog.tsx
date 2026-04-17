@@ -94,6 +94,21 @@ export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, i
           ))}
         </div>
 
+        {(result.message || result.diagnostics) && (
+          <div className="rounded-md border bg-muted/40 p-3 text-xs space-y-1">
+            {result.message && <p className="font-medium text-foreground">{result.message}</p>}
+            {result.diagnostics && (
+              <p className="text-muted-foreground">
+                Mode: <span className="font-medium">{result.diagnostics.detected_program_type ?? '—'}</span> ·
+                In scope: <span className="font-medium">{result.diagnostics.employees_in_scope ?? '—'}</span> ·
+                With daily data: <span className="font-medium">{result.diagnostics.employees_with_daily_entries ?? '—'}</span> ·
+                With rate: <span className="font-medium">{result.diagnostics.employees_with_resolved_rate ?? '—'}</span> ·
+                Skipped (no rate): <span className="font-medium">{result.diagnostics.employees_skipped_no_rate ?? 0}</span>
+              </p>
+            )}
+          </div>
+        )}
+
         {records.length === 0 ? (
           <div className="h-[200px] rounded-md border flex items-center justify-center text-sm text-muted-foreground">
             No records to compute (filters returned 0 employees).
