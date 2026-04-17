@@ -142,6 +142,7 @@ interface EmployeeImportRow {
   division?: string;
   businessUnit?: string;
   department?: string;
+  location?: string;
   pmsGrade?: string;
   level?: string;
   managerEmployeeId?: string;
@@ -672,6 +673,7 @@ export default function ImportData() {
       division: getValue(['division', 'div']),
       businessUnit: getValue(['businessUnit', 'businessunit', 'business_unit', 'bu', 'unit']),
       department: getValue(['department', 'dept', 'dep', 'departmentName', 'departmentname', 'department_name']),
+      location: getValue(['location', 'workLocation', 'worklocation', 'work_location', 'site', 'plantLocation', 'plantlocation', 'plant_location']),
       pmsGrade: getValue(['pmsGrade', 'pmsgrade', 'pms_grade', 'grade']),
       level: getValue(['level', 'employeeLevel', 'employee_level', 'lvl']),
       managerEmployeeId: getValue(['managerEmployeeId', 'manageremployeeid', 'manager_employee_id', 'managerId', 'managerid', 'manager_id', 'reportingTo', 'reportingto', 'reporting_to', 'reportsTo', 'reportsto', 'reports_to']),
@@ -1332,6 +1334,7 @@ export default function ImportData() {
             level: sanitizeText(row.level) || undefined,
             reporting_manager_id: managerId || undefined,
             company_id: newCompanyId,
+            location: sanitizeText(row.location) || undefined,
             portal_access: hasPortalAccess,
           },
         });
@@ -1611,6 +1614,7 @@ export default function ImportData() {
         division: 'Operations',
         businessUnit: 'Plant',
         department: 'HR',
+        location: 'Mumbai',
         pmsGrade: 'A',
         level: 'Level 1',
         managerEmployeeId: '100002',

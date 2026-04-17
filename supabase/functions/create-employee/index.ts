@@ -16,6 +16,7 @@ interface CreateEmployeeRequest {
   level?: string;
   reporting_manager_id?: string;
   company_id?: string;
+  location?: string;
   portal_access?: boolean;
 }
 
@@ -81,6 +82,21 @@ Deno.serve(async (req) => {
     // Determine portal access: explicit flag or infer from email
     const portalAccess = body.portal_access !== undefined ? body.portal_access : !!body.email;
 
+    // Soft-resolve location name → location_id (case-insensitive). Unmatched values insert NULL.
+    let locationId: string | null = null;
+    if (body.location && body.location.trim()) {
+      const normalized = body.location.trim().toUpperCase();
+      const { data: locRows } = await supabaseAdmin
+        .from('locations')
+        .select('id, name')
+        .ilike('name', normalized);
+      const match = (locRows || []).find((l: any) => String(l.name).trim().toUpperCase() === normalized);
+      locationId = match?.id || null;
+      if (!match) {
+        console.warn(`[create-employee] Location "${body.location}" not found in master; inserting with location_id=NULL`);
+      }
+    }
+
     const profilePayload = {
       employee_code: body.employee_code,
       full_name: body.full_name,
@@ -90,6 +106,7 @@ Deno.serve(async (req) => {
       level: body.level || null,
       reporting_manager_id: body.reporting_manager_id || null,
       company_id: body.company_id || null,
+      location_id: locationId,
       portal_access: portalAccess,
     }
 
