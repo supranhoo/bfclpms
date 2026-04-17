@@ -144,7 +144,7 @@ export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, i
                           </span>
                         </TooltipTrigger>
                         <TooltipContent className="max-w-xs">
-                          Vessel-based records are scored as vessels × rate; PMS metrics don't apply and show N/A.
+                          Employees without assigned KRAs will show N/A here.
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
