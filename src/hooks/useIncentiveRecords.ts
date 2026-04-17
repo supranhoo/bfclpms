@@ -26,6 +26,46 @@ export function useIncentiveRecords(reviewPeriod?: string, reviewYear?: number, 
   });
 }
 
+/**
+ * Fetches per-employee KPI completion status for a period.
+ * Returns Map<employeeId, { total, approved, allApproved }>
+ * "Approved" means kpi.status === 'approved' (the canonical final stage).
+ */
+export function useEmployeeKpiStatusForPeriod(
+  employeeIds: string[],
+  reviewPeriod?: string,
+  reviewYear?: number,
+) {
+  const idsKey = employeeIds.slice().sort().join(',');
+  return useQuery({
+    queryKey: ['employee-kpi-status', reviewPeriod, reviewYear, idsKey, employeeIds.length],
+    enabled: !!reviewPeriod && !!reviewYear && employeeIds.length > 0,
+    queryFn: async () => {
+      const map = new Map<string, { total: number; approved: number; allApproved: boolean }>();
+      const BATCH = 200;
+      for (let i = 0; i < employeeIds.length; i += BATCH) {
+        const batch = employeeIds.slice(i, i + BATCH);
+        const { data, error } = await supabase
+          .from('kpis')
+          .select('employee_id, status')
+          .in('employee_id', batch)
+          .eq('review_period', reviewPeriod!)
+          .eq('review_year', reviewYear!);
+        if (error) throw error;
+        (data || []).forEach((k: any) => {
+          const cur = map.get(k.employee_id) || { total: 0, approved: 0, allApproved: false };
+          cur.total += 1;
+          if (k.status === 'approved') cur.approved += 1;
+          map.set(k.employee_id, cur);
+        });
+      }
+      // Finalize allApproved
+      map.forEach((v) => { v.allApproved = v.total > 0 && v.approved === v.total; });
+      return map;
+    },
+  });
+}
+
 export function useConfirmIncentiveRecords() {
   const qc = useQueryClient();
   const { toast } = useToast();
