@@ -479,10 +479,10 @@ export function MonthlyIncentiveTable() {
                     />
                   </TableHead>
                   <TableHead>Employee</TableHead>
-                  <TableHead>Dept</TableHead>
-                  <TableHead>Month</TableHead>
                   <TableHead>Period</TableHead>
                   <TableHead>PMS Score</TableHead>
+                  <TableHead>Final Rating</TableHead>
+                  <TableHead>KPI Status</TableHead>
                   <TableHead>Slab</TableHead>
                   <TableHead>Base %</TableHead>
                   <TableHead>DQ Reason</TableHead>
