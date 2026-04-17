@@ -18,6 +18,7 @@ export interface AppSettings {
   pms_policy_url: string | null;
   pms_policy_content: string | null;
   pms_policy_visible_roles: string[];
+  view_mode_strip_color: string;
   created_at: string;
   updated_at: string;
 }
