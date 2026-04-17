@@ -52,6 +52,7 @@ const IncentiveConfig = lazy(() => import("./pages/admin/IncentiveConfig"));
 const IncentiveDataEntry = lazy(() => import("./pages/admin/IncentiveDataEntry"));
 const EmployeeDevelopment = lazy(() => import("./pages/admin/EmployeeDevelopment"));
 const OrgKpiAuditReview = lazy(() => import("./pages/admin/OrgKpiAuditReview"));
+const EmployeeMasterBackfill = lazy(() => import("./pages/admin/EmployeeMasterBackfill"));
 
 // Report pages
 const PerformanceReport = lazy(() => import("./pages/reports/PerformanceReport"));
@@ -192,6 +193,11 @@ const App = () => (
                 <Route path="/admin/import" element={
                   <ProtectedRoute allowedRoles={['admin']} menuKey="admin-import">
                     <ImportData />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/employee-master-backfill" element={
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-settings">
+                    <EmployeeMasterBackfill />
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/settings" element={

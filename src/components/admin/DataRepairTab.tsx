@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
-import { AlertCircle, CheckCircle2, Download, RefreshCw, Search, Wrench } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Download, RefreshCw, Search, Wrench, Database, ArrowRight } from 'lucide-react';
 import { SiblingRepairSection } from './SiblingRepairSection';
 import { BulkZeroScoreSection } from './BulkZeroScoreSection';
 import { supabase } from '@/integrations/supabase/client';
@@ -423,6 +424,26 @@ export function DataRepairTab() {
       <SiblingRepairSection />
 
       <BulkZeroScoreSection />
+
+      {/* One-time Employee Master Backfill — recover historically-missed profiles */}
+      <Card className="border-2 border-primary/30">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Database className="h-5 w-5 text-primary" />
+            Employee Master Backfill (One-time)
+          </CardTitle>
+          <CardDescription>
+            Re-upload your employee master file to recover profiles that were silently dropped by past imports. <strong>Insert-only · idempotent · admin-only.</strong>
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button asChild>
+            <Link to="/admin/employee-master-backfill">
+              Open Backfill Tool <ArrowRight className="h-4 w-4 ml-1.5" />
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
 
       <ConfirmDestructiveDialog
         open={showConfirm}
