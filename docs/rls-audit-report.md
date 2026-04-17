@@ -70,7 +70,21 @@ Categorisation:
 
 ### 2.2 Files Targeted for Consolidation
 
-Action-level checks that duplicate what profile-based access already covers will be migrated to `canPerform(menuKey, action)`. `ProtectedRoute` route-level guards remain untouched.
+After filtering out route guards and role-array data editors, only **3 files** contain `effectiveRole === 'admin'` checks at the component level:
+
+| File | Check | Verdict |
+|------|-------|---------|
+| `src/components/review/UnifiedScorecard.tsx` | `const isAdmin = effectiveRole === 'admin'` for admin-bypass safety | **KEEP** — admin bypass, not configurable per-profile |
+| `src/components/layout/AppSidebar.tsx` | Hide non-admin section from admins (they see it in Administration menu) | **KEEP** — sidebar UX rule, not a permission |
+| `src/components/layout/DataOwnerRoute.tsx` | Admin bypass for data-owner route guard | **KEEP** — security safety net |
+
+**Conclusion:** The codebase **already follows the correct pattern**:
+- `ProtectedRoute` for route-level guards (with `menuKey` for profile override)
+- `canAccess(menuKey)` for menu visibility
+- `canPerform(menuKey, action)` for granular CRUD
+- The 3 remaining `effectiveRole === 'admin'` checks are intentional admin-bypass shortcuts, not gates that should be admin-configurable
+
+**No UI files need migration.** The profile-based access system is already the single source of truth wherever it should be.
 
 ---
 
