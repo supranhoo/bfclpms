@@ -1,109 +1,74 @@
 
 
-## Plan: KRA Score as a Configurable DQ Rule
+## Plan: Make KRA Score DQ Rule Discoverable in All Programs
 
-### Root-Cause: Why KRA Score Doesn't Show in DQ Rules
+### RCA — Why User Can't See It
 
-Two separate systems exist today:
+The KRA Score rule **is already implemented** correctly:
+- `DisqualificationRulesEditor.tsx` line 25: `kra_score` is in `RULE_TYPES`
+- Compute engine line 389: `case 'kra_score'` evaluates for ALL program types (no program-type gate)
+- Works for Port Incentive, Vessel, Basic Salary, Fixed — every program
 
-1. **Hardcoded program-level gate** (`incentive_programs.min_kra_score` + `no_kra_eligible`) — applies ONLY to vessel/fixed-base programs (compute engine line 426). Set in the program edit dialog, not in DQ Rules tab.
-2. **DQ Rules tab** (`incentive_disqualification_rules`) — has 6 rule types: `absence`, `lwp`, `warning`, `suspension`, `contract`, `lti`. There is **no `kra_score` rule type**.
+**The actual UX bug**: the "Add rule:" buttons only appear when there are un-added types (line 259 conditional). In the screenshot, Port Incentive already has 6 of 7 rule types — the lone "+ KRA Score (PMS)" button **is** rendered just below the table, but:
+1. It sits in a small grey row easy to miss visually, AND
+2. It only shows when not all rules are added — so the moment KRA Score is added, the row disappears entirely with no way to re-add it (other than deleting one).
 
-So when admin adds "kra_score" in the **Fields** tab, it lands in `incentive_eligibility_fields` (a UI/grid column), but the DQ Rules editor (`DisqualificationRulesEditor.tsx`) only knows the 6 hardcoded rule types — KRA score isn't one of them. Hence it doesn't appear.
+This makes KRA Score appear "missing" because users don't realize it's behind a small inconspicuous button at the table bottom.
 
-### Fix: Add `kra_score` as a 7th first-class DQ rule type (works for ALL incentive programs, not just vessel)
+### Fix — Three small UX changes
 
-#### 1. Add rule type to the editor
-In `DisqualificationRulesEditor.tsx`, extend `RULE_TYPES`:
+**1. Always show "Add Rule" as a prominent dropdown button** (replaces the current trailing pill row)
+- Use a `DropdownMenu` button labeled **"+ Add DQ Rule"** placed in the card header (right side).
+- Dropdown lists all `RULE_TYPES`. Already-added ones are shown disabled with a "✓ Added" badge.
+- Always visible regardless of how many rules exist.
 
-```ts
-{ value: 'kra_score', label: 'KRA Score (PMS)', 
-  defaultConfig: { 
-    operator: 'gte',          // gte | gt | lte | lt | eq
-    threshold: 3,              // numeric KRA score threshold
-    action: 'eligible_if_pass',// eligible_if_pass | disqualify_if_fail
-    no_kra_action: 'eligible'  // eligible | ineligible (when employee has no PMS score)
-  } 
-}
-```
+**2. Highlight KRA Score visually in the dropdown** so it's discoverable:
+- Add a subtle "PMS" badge next to "KRA Score (PMS)" in the dropdown.
+- Add helper text under the card description: *"You can gate eligibility on KRA score, absence, LWP, LTI, warnings, suspension, contract status, and more."*
 
-#### 2. UI mock for the new rule row (DQ Rules tab)
+**3. (Confirmed already true) Works in all programs**
+- Verified compute engine line 389 evaluates `kra_score` regardless of `program.incentive_base` or `program_type_id` — no gating, applies to all programs.
+- The legacy vessel-only `min_kra_score` field on `incentive_programs` (line 448) remains for backward compatibility, but the new DQ rule is the recommended path for all programs.
+
+### UI Mock
 
 ```text
-┌────────────────────────────────────────────────────────────────────────────┐
-│ Rule Type      │ Configuration                                  │ Active   │
-├────────────────────────────────────────────────────────────────────────────┤
-│ [KRA Score]    │ Eligible if KRA  [≥ ▾] [ 3.0 ]                 │  [ ●━ ]  │
-│                │ If no KRA score: [Eligible ▾]                  │          │
-└────────────────────────────────────────────────────────────────────────────┘
+┌─ Disqualification Rules ─────────────────────── [ + Add DQ Rule ▾ ] ─┐
+│ Configure conditions that disqualify or reduce eligibility.          │
+│ Available: Absence, LWP, LTI, Warning, Suspension, Contract, KRA.    │
+├──────────────────────────────────────────────────────────────────────┤
+│ Rule Type         │ Configuration              │ Active │ Actions    │
+│ Absence           │ Threshold: 1 day(s)        │  [●━]  │   🗑       │
+│ ...                                                                  │
+└──────────────────────────────────────────────────────────────────────┘
+
+Dropdown when clicked:
+   + Absence                       ✓ Added
+   + LWP (Leave Without Pay)       ✓ Added
+   + Warning Letter                ✓ Added
+   + Suspension                    ✓ Added
+   + Contract Worker               ✓ Added
+   + LTI (Lost Time Injury)        ✓ Added
+   + KRA Score (PMS)         [PMS]   ← clickable
 ```
-
-`RuleConfigEditor` gets a new case:
-
-- **Operator** select: `≥`, `>`, `≤`, `<`, `=`
-- **Threshold** numeric input (step 0.1, range 0–5)
-- **No-KRA fallback** select: `Eligible` / `Ineligible`
-
-`ConfigSummary` shows: `Eligible if KRA ≥ 3.0 · No KRA: Eligible`
-
-#### 3. Compute engine wiring (`compute-monthly-incentives/index.ts`)
-
-Add a new case in the DQ rules switch (around line 388):
-
-```ts
-case 'kra_score': {
-  const op = config.operator || 'gte';
-  const threshold = config.threshold ?? 3;
-  if (pmsScore === null || pmsScore === undefined) {
-    if (config.no_kra_action === 'ineligible') {
-      isDQ = true;
-      dqReasons.push('No KRA score available');
-    }
-  } else {
-    const pass =
-      (op === 'gte' && pmsScore >= threshold) ||
-      (op === 'gt'  && pmsScore >  threshold) ||
-      (op === 'lte' && pmsScore <= threshold) ||
-      (op === 'lt'  && pmsScore <  threshold) ||
-      (op === 'eq' && pmsScore === threshold);
-    if (!pass) {
-      isDQ = true;
-      dqReasons.push(`KRA score ${pmsScore.toFixed(2)} fails ${op} ${threshold}`);
-    }
-  }
-  break;
-}
-```
-
-#### 4. Backward compatibility
-
-- Existing `min_kra_score` / `no_kra_eligible` on `incentive_programs` (vessel-only gate at line 426) **stays as-is** — old vessel programs continue to work.
-- New `kra_score` DQ rule is **additive**; admins opt-in by adding it. Applies to ALL program types (basic_salary, fixed, etc.), unlocking KRA gating for non-vessel programs (Port Incentive in screenshot).
-
-#### 5. Why NOT auto-link the "kra_score" Field row from the Fields tab
-
-The Fields tab governs **eligibility data-entry grid columns** (per-employee per-month numeric inputs). KRA score is **system-derived** (from PMS final score), not admin-entered. Treating it as an eligibility field would create a duplicate, manually-overridable value that conflicts with PMS. Correct model: KRA score is a **derived signal** consumed by DQ rules, not a custom data field. We'll add a small note in the Fields tab when the user adds `kra_score`: *"KRA score is auto-pulled from PMS. To gate eligibility on it, add a 'KRA Score' rule in the DQ Rules tab."*
 
 ### Files Touched
 
 | File | Change |
 |------|--------|
-| `src/components/incentive/DisqualificationRulesEditor.tsx` | Add `kra_score` to `RULE_TYPES`, `ConfigSummary`, `RuleConfigEditor` |
-| `src/components/incentive/EligibilityFieldsConfig.tsx` | Add inline hint when admin types/adds field with key `kra_score` |
-| `supabase/functions/compute-monthly-incentives/index.ts` | Add `case 'kra_score'` in DQ rule switch |
-| `DOCUMENTATION.md` / `POLICY.md` | v2.65.x — KRA Score is now a configurable DQ rule for all incentive program types |
+| `src/components/incentive/DisqualificationRulesEditor.tsx` | Replace trailing "Add rule" pill row with header `DropdownMenu` button; show all rule types (added ones disabled); add helper text mentioning KRA score |
+| `DOCUMENTATION.md` / `POLICY.md` | v2.65.x — DQ Rules editor: KRA Score is a first-class rule for all programs; surfaced via header "Add DQ Rule" dropdown |
 
 ### Risk & Impact
 
 | Area | Impact |
 |------|--------|
-| Data | None — uses existing `incentive_disqualification_rules` table, JSONB `rule_config` |
-| Workflow | Additive — admins must explicitly add the rule per program; no auto-application |
-| Regression | Low — new switch case only fires when rule exists; vessel `min_kra_score` path untouched |
-| Mitigation | Default `operator=gte, threshold=3, no_kra_action=eligible` matches current vessel behaviour for safety |
+| Data | None — pure UI re-arrangement |
+| Workflow | None — same rule add/edit/delete flow |
+| Compute engine | None — already handles `kra_score` for all programs |
+| Regression | Low — only the "Add rule" UI control changes |
+| Mitigation | Existing rules render identically; only the entry point moves to a more visible location |
 
 ### Out of Scope
-
-- Removing/migrating legacy `min_kra_score` from `incentive_programs` (kept for vessel programs)
-- Auto-creating a `kra_score` DQ rule for existing programs (admin opt-in to avoid surprises)
+- Migration of legacy `incentive_programs.min_kra_score` for vessel programs (kept as-is for backward compatibility — the new DQ rule is additive and admin opt-in)
 
