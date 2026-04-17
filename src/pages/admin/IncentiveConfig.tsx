@@ -252,7 +252,7 @@ export default function IncentiveConfig() {
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => deleteProgram.mutate(p.id)}
+                          onClick={() => setDeletingProgram(p)}
                           title="Delete program"
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
