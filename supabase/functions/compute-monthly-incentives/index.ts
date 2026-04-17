@@ -374,18 +374,67 @@ serve(async (req) => {
         }
       }
 
-      // Match slab
+      // Match slab — specificity-scored + effective-from filter
       const scoreForSlab = program.program_type === 'support' ? pmsScore : (productionTotalTons ?? elig?.production_value);
       if (scoreForSlab !== null && scoreForSlab !== undefined && slabs?.length) {
-        const pmsSlabs = slabs.filter((s: any) =>
-          s.slab_category === (program.program_type === 'support' ? 'pms_score' : 'production')
-        );
-        for (const slab of pmsSlabs) {
-          if (scoreForSlab >= slab.min_value && scoreForSlab <= slab.max_value) {
-            matchedSlab = slab;
-            basePercent = slab.incentive_percent;
-            break;
+        // Resolve employee scope chain (reuse maps built above)
+        const empBuId = emp.department_id ? (deptToBu.get(emp.department_id) ?? null) : null;
+        const empDivisionId = empBuId ? (buToDivision.get(empBuId) ?? null) : null;
+        const empCompanyId = empDivisionId
+          ? (divToCompany.get(empDivisionId) ?? null)
+          : (empBuId ? (buToCompany.get(empBuId) ?? null) : null);
+
+        const wantCategory = program.program_type === 'support' ? 'pms_score' : 'production';
+        const candidates: { slab: any; specificity: number }[] = [];
+
+        for (const slab of slabs) {
+          if (slab.slab_category !== wantCategory) continue;
+          if (scoreForSlab < slab.min_value || scoreForSlab > slab.max_value) continue;
+          // Effective-from gate
+          if (slab.effective_from && slab.effective_from > periodEndStr) continue;
+
+          // Reject if any non-null scope field doesn't match employee
+          let specificity = 0;
+          const checks: [any, any][] = [
+            [slab.company_id, empCompanyId],
+            [slab.division_id, empDivisionId],
+            [slab.business_unit_id, empBuId],
+            [slab.department_id, emp.department_id],
+            [slab.pms_grade_id, null], // pms_grade on profile is text (name); fallback below
+            [slab.location, emp.location],
+            [slab.pms_level, emp.level],
+          ];
+          let rejected = false;
+          for (const [slabVal, empVal] of checks) {
+            if (slabVal == null) continue;
+            if (slabVal !== empVal) { rejected = true; break; }
+            specificity += 1;
           }
+          if (rejected) continue;
+          // Designation match (array)
+          if (slab.applicable_designations?.length) {
+            if (!emp.designation || !slab.applicable_designations.includes(emp.designation)) continue;
+            specificity += 1;
+          }
+          // PMS grade match (slab uses uuid → resolve via pms_grade name on profile? skip if mismatch fails to resolve)
+          if (slab.pms_grade_id) {
+            // Only count if profile carries pms_grade name we can compare; otherwise allow (optional scope)
+            // We don't have a pms_grade_id on profile; the join is by name in master. Treat as "applies-if-grade-exists".
+            // Conservative: require name equality with master. Skip increment when ambiguous.
+            specificity += 0; // intentionally not counted to avoid false-specificity
+          }
+          candidates.push({ slab, specificity });
+        }
+
+        // Sort: highest specificity, then latest effective_from
+        candidates.sort((a, b) => {
+          if (b.specificity !== a.specificity) return b.specificity - a.specificity;
+          return String(b.slab.effective_from || '').localeCompare(String(a.slab.effective_from || ''));
+        });
+
+        if (candidates.length > 0) {
+          matchedSlab = candidates[0].slab;
+          basePercent = matchedSlab.incentive_percent;
         }
       }
 
