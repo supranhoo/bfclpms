@@ -729,10 +729,18 @@ serve(async (req) => {
       },
     };
 
-    const diagnostics = {
+    const employeesWithDailyEntries = new Set<string>(records.map((r: any) => r.employee_id)).size;
+    const employeesWithSelectedPeriodData = scopePaymentPeriod
+      ? new Set<string>(records.filter((r: any) => r.payment_period === scopePaymentPeriod).map((r: any) => r.employee_id)).size
+      : employeesWithDailyEntries;
+
+    const diagnostics: any = {
       employees_processed: employeesProcessed,
+      employees_with_daily_entries: employeesWithDailyEntries,
+      employees_with_selected_period_data: employeesWithSelectedPeriodData,
       records_pre_scope: recordsPreScope,
       records_post_scope: recordsPostScope,
+      legacy_rows_deleted: 0,
     };
 
     // In dry_run mode, return preview without writing
@@ -743,14 +751,16 @@ serve(async (req) => {
       );
     }
 
-    // Delete existing records for all affected employees before upserting
-    // This prevents orphaned records when period structure changes (full → split or vice versa).
-    // When a payment_period scope is set, only wipe matching period rows for affected employees.
+    // Delete existing records for affected employees before upserting.
+    // For production programmes (canonical sub-period model), also purge legacy 'Full Month' rows
+    // so they cannot survive beside new 1-10 / 11-20 / 21-31 rows. (ADR-044 v2)
     if (scopedRecords.length > 0) {
       const uniqueEmployeeIds = [...new Set(scopedRecords.map((r: any) => r.employee_id))];
       const empBatchSize = 50;
+      let legacyDeleted = 0;
       for (let i = 0; i < uniqueEmployeeIds.length; i += empBatchSize) {
         const empBatch = uniqueEmployeeIds.slice(i, i + empBatchSize);
+
         let delQuery = supabase
           .from('employee_incentive_records')
           .delete()
@@ -763,7 +773,22 @@ serve(async (req) => {
         }
         const { error: delError } = await delQuery;
         if (delError) console.error('Delete error:', delError);
+
+        // Legacy 'Full Month' production cleanup when scope didn't already cover it
+        if (program.program_type === 'production' && scopePaymentPeriod && scopePaymentPeriod !== 'Full Month') {
+          const { error: legacyErr, count: legacyCount } = await supabase
+            .from('employee_incentive_records')
+            .delete({ count: 'exact' })
+            .eq('program_id', program_id)
+            .eq('review_period', review_period)
+            .eq('review_year', review_year)
+            .eq('payment_period', 'Full Month')
+            .in('employee_id', empBatch);
+          if (legacyErr) console.error('Legacy Full Month cleanup error:', legacyErr);
+          else legacyDeleted += legacyCount || 0;
+        }
       }
+      diagnostics.legacy_rows_deleted = legacyDeleted;
 
       // Upsert fresh records
       const batchSize = 100;
