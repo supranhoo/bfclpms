@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Trash2, Edit, Check, X, Info } from 'lucide-react';
 import { formatEmployeeName } from '@/lib/utils';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 interface Props {
   programId: string;
@@ -29,6 +30,7 @@ export function VesselRateEditor({ programId, minKraScore = 3 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editRate, setEditRate] = useState('');
   const [editRemarks, setEditRemarks] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Fetch all profiles for the employee selector
   const { data: allProfiles = [] } = useQuery({
@@ -188,7 +190,7 @@ export function VesselRateEditor({ programId, minKraScore = 3 }: Props) {
                           <Button size="icon" variant="ghost" onClick={() => startEdit(r)} title="Edit">
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button size="icon" variant="ghost" onClick={() => remove.mutate(r.id)} title="Remove">
+                          <Button size="icon" variant="ghost" onClick={() => setConfirmDeleteId(r.id)} title="Remove">
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </div>
@@ -201,6 +203,19 @@ export function VesselRateEditor({ programId, minKraScore = 3 }: Props) {
           )}
         </CardContent>
       </Card>
+      <ConfirmDestructiveDialog
+        open={!!confirmDeleteId}
+        onConfirm={() => {
+          if (confirmDeleteId) {
+            remove.mutate(confirmDeleteId, { onSuccess: () => setConfirmDeleteId(null) });
+          }
+        }}
+        onCancel={() => setConfirmDeleteId(null)}
+        title="Delete Vessel Rate?"
+        description="This will permanently delete this vessel rate entry. Historical compute results that already used this rate are preserved. This cannot be undone."
+        confirmLabel="Delete Rate"
+        isLoading={remove.isPending}
+      />
     </div>
   );
 }
