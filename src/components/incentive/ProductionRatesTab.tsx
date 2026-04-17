@@ -17,7 +17,7 @@ interface Props {
   programId: string;
 }
 
-type RateType = 'employee' | 'department' | 'bu' | 'common';
+type RateType = 'employee' | 'department' | 'bu' | 'company' | 'common';
 
 export function ProductionRatesTab({ programId }: Props) {
   const { data: rates = [], isLoading } = useProductionRates(programId);
@@ -60,6 +60,14 @@ export function ProductionRatesTab({ programId }: Props) {
     },
   });
 
+  const { data: companies = [] } = useQuery({
+    queryKey: ['companies-for-rates'],
+    queryFn: async () => {
+      const { data } = await supabase.from('companies').select('id, name').order('name');
+      return data || [];
+    },
+  });
+
   const assignedEmployeeIds = new Set(
     (rates as any[]).filter((r: any) => r.rate_type === 'employee').map((r: any) => r.employee_id)
   );
@@ -74,6 +82,11 @@ export function ProductionRatesTab({ programId }: Props) {
     (rates as any[]).filter((r: any) => r.rate_type === 'bu').map((r: any) => r.entity_id)
   );
   const availableBUs = businessUnits.filter(b => !assignedBUIds.has(b.id));
+
+  const assignedCompanyIds = new Set(
+    (rates as any[]).filter((r: any) => r.rate_type === 'company').map((r: any) => r.entity_id)
+  );
+  const availableCompanies = companies.filter(c => !assignedCompanyIds.has(c.id));
 
   const hasCommon = (rates as any[]).some((r: any) => r.rate_type === 'common');
 
@@ -142,6 +155,10 @@ export function ProductionRatesTab({ programId }: Props) {
       const bu = businessUnits.find(b => b.id === r.entity_id);
       return bu?.name || r.entity_id?.slice(0, 8) || '—';
     }
+    if (r.rate_type === 'company') {
+      const c = companies.find(co => co.id === r.entity_id);
+      return c?.name || r.entity_id?.slice(0, 8) || '—';
+    }
     return '—';
   };
 
@@ -150,6 +167,7 @@ export function ProductionRatesTab({ programId }: Props) {
       employee: { label: 'Employee', variant: 'default' },
       department: { label: 'Dept', variant: 'secondary' },
       bu: { label: 'BU', variant: 'outline' },
+      company: { label: 'Company', variant: 'secondary' },
       common: { label: 'Common', variant: 'destructive' },
     };
     const m = map[type] || { label: type, variant: 'default' as const };
@@ -172,7 +190,7 @@ export function ProductionRatesTab({ programId }: Props) {
               onValueChange={v => { setRateType(v as RateType); setSelectedEntity(''); }}
               className="flex flex-wrap gap-4"
             >
-              {(['employee', 'department', 'bu', 'common'] as RateType[]).map(t => (
+              {(['employee', 'department', 'bu', 'company', 'common'] as RateType[]).map(t => (
                 <div key={t} className="flex items-center space-x-2">
                   <RadioGroupItem value={t} id={`rt-${t}`} />
                   <Label htmlFor={`rt-${t}`} className="text-sm capitalize">{t === 'bu' ? 'Business Unit' : t}</Label>
@@ -214,6 +232,18 @@ export function ProductionRatesTab({ programId }: Props) {
                     <SelectContent>
                       {availableBUs.map(b => (
                         <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {rateType === 'company' && (
+                <div className="w-[220px]">
+                  <Select value={selectedEntity} onValueChange={setSelectedEntity}>
+                    <SelectTrigger><SelectValue placeholder="Select company" /></SelectTrigger>
+                    <SelectContent>
+                      {availableCompanies.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

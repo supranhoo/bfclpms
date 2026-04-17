@@ -258,6 +258,25 @@ serve(async (req) => {
       prodRates = rates || [];
     }
 
+    // Build dept -> BU and BU -> company resolution chain (for production rate cascade)
+    const deptToBu = new Map<string, string | null>();
+    const buToCompany = new Map<string, string | null>();
+    if (program.program_type === 'production') {
+      const { data: allDepts } = await supabase
+        .from('departments').select('id, business_unit_id');
+      allDepts?.forEach((d: any) => deptToBu.set(d.id, d.business_unit_id));
+
+      const { data: allBus } = await supabase
+        .from('business_units').select('id, division_id');
+      const { data: allDivs } = await supabase
+        .from('divisions').select('id, company_id');
+      const divToCompany = new Map<string, string | null>();
+      allDivs?.forEach((dv: any) => divToCompany.set(dv.id, dv.company_id));
+      allBus?.forEach((b: any) => {
+        buToCompany.set(b.id, b.division_id ? (divToCompany.get(b.division_id) ?? null) : null);
+      });
+    }
+
     // 5. Fetch existing records to check for manual overrides
     const { data: existingRecords } = await supabase
       .from('employee_incentive_records')
@@ -315,14 +334,18 @@ serve(async (req) => {
       if (program.program_type === 'production') {
         productionTotalTons = prodEntryMap.get(emp.id) ?? null;
 
-        // Priority cascade: employee > department > business_unit > common
+        // Resolve BU and company for this employee
+        const empBuId = emp.department_id ? (deptToBu.get(emp.department_id) ?? null) : null;
+        const empCompanyId = empBuId ? (buToCompany.get(empBuId) ?? null) : null;
+
+        // Priority cascade: employee > department > BU > company > common
         const empRate = prodRates.find((r: any) => r.rate_type === 'employee' && r.employee_id === emp.id);
         const deptRate = emp.department_id ? prodRates.find((r: any) => r.rate_type === 'department' && r.entity_id === emp.department_id) : null;
-        // For BU rate, we need to resolve dept -> BU
-        const buRate = prodRates.find((r: any) => r.rate_type === 'business_unit');
+        const buRate = empBuId ? prodRates.find((r: any) => r.rate_type === 'bu' && r.entity_id === empBuId) : null;
+        const companyRate = empCompanyId ? prodRates.find((r: any) => r.rate_type === 'company' && r.entity_id === empCompanyId) : null;
         const commonRate = prodRates.find((r: any) => r.rate_type === 'common');
 
-        const rateRecord = empRate || deptRate || buRate || commonRate;
+        const rateRecord = empRate || deptRate || buRate || companyRate || commonRate;
         resolvedRate = rateRecord?.rate_per_ton ?? null;
 
         if (productionTotalTons !== null && resolvedRate !== null) {
