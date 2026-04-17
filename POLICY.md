@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-16  
-> **Version:** 2.20.0 — Performance Optimization Pass (no policy change; build & runtime tuning only).
+> **Version:** 2.21.0 — Compute engine no longer references non-existent `profiles.location`; PostgREST errors now surface as HTTP 500 instead of silent zero-result. Edge functions must check `error` on every Supabase query (silent destructuring of `data` is forbidden).
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -605,6 +605,7 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 | Version | Date | Change |
 |---------|------|--------|
+| 2.21.0 | 2026-04-17 | Incentive compute engine: removed reference to non-existent `profiles.location` column from `compute-monthly-incentives` SELECT (root cause of "No active employees resolved" / 0-records-processed regression — PostgREST returned an error that was silently swallowed by destructuring `{ data }` only). All profile fetches in the function now check `error` and return HTTP 500 with the PostgREST message. New engine-governance rule: **edge functions must check `error` on every Supabase query — silent destructuring of `data` is forbidden.** |
 | 2.01.0 | 2026-04-13 | Observation inbox "Open in App" routing split: @mentions → read-only mention sheet; observation_raised/reply/resolved → role-aware employee scorecard deep-link (admin→team, auditor→audit, management→management). Backfilled existing notifications. |
 | 1.92.4 | 2026-04-10 | UX fix: bulk zero-score confirmation now accepts `ZERO`, `zero`, or `0` — previously only exact `ZERO` was accepted, blocking users who typed `0`. |
 | 1.90.4 | 2026-04-10 | Technical sync: §76 bulk zero-score edge function force-redeployed after stale kpiErr fix; added mandatory deployment verification to Edge Function Checklist. |
