@@ -1334,6 +1334,7 @@ export default function ImportData() {
             level: sanitizeText(row.level) || undefined,
             reporting_manager_id: managerId || undefined,
             company_id: newCompanyId,
+            location: sanitizeText(row.location) || undefined,
             portal_access: hasPortalAccess,
           },
         });
