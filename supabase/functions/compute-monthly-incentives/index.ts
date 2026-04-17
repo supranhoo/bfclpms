@@ -122,9 +122,10 @@ serve(async (req) => {
     }
 
     // Fetch employees (filtered if mappings exist, otherwise all)
+    const empSelect = 'id, full_name, employee_code, department_id, designation, pms_grade, level, location';
     let employeeQuery = supabase
       .from('profiles')
-      .select('id, full_name, employee_code, department_id')
+      .select(empSelect)
       .eq('is_active', true);
 
     if (employeeFilter !== null) {
@@ -138,7 +139,7 @@ serve(async (req) => {
         const batch = employeeFilter.slice(i, i + 100);
         const { data } = await supabase
           .from('profiles')
-          .select('id, full_name, employee_code, department_id')
+          .select(empSelect)
           .eq('is_active', true)
           .in('id', batch);
         if (data) allEmployees.push(...data);
