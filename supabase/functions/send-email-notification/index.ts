@@ -310,10 +310,11 @@ Resolution: {{resolution_notes}}`,
 
 Congratulations! Your KPI has received final approval and is now complete.
 
+✅ Final Approved Score: {{final_score}} / 5 — {{score_label}}
+
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
 Period: {{review_period}} {{review_year}}
-Final Score: {{final_score}} / 5 — {{score_label}}
 
 Thank you for your contribution!`,
   },
