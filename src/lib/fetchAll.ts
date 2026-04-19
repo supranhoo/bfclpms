@@ -12,7 +12,7 @@
  * correctly — it will fetch one extra empty page only in that edge case).
  */
 export async function fetchAllPaged<T>(
-  fetchPage: (from: number, to: number) => Promise<{ data: T[] | null; error: unknown }>,
+  fetchPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
   pageSize = 1000,
 ): Promise<T[]> {
   const all: T[] = [];
