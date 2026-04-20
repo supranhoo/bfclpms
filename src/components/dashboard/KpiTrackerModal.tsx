@@ -147,6 +147,7 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions, wo
           month: k.review_period || 'N/A',
           target: isNa ? null : (k.target_value || 0),
           achieved: isNa ? null : (sub ? (sub.achieved_value ?? null) : null),
+          finalAchieved: isNa ? null : getFinalAchieved(sub),
           selfScore: isNa ? null : (sub?.self_score ?? null),
           managerScore: isNa ? null : (sub?.manager_score ?? null),
           skipScore: isNa ? null : (sub?.skip_level_score ?? null),
