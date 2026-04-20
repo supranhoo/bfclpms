@@ -1508,6 +1508,19 @@ export function EmployeeSelectorGrid({
       {/* Stats Cards */}
       {renderStatsCards()}
 
+      {/* v2.64.9 — Roster resolution diagnostic (admin / full-access only) */}
+      {isFullAccess && requiredStage && rosterMeta && (
+        <div className="text-xs text-muted-foreground flex items-center gap-2 -mt-2">
+          <Info className="h-3 w-3" />
+          <span>
+            {(stageFilteredProfiles?.length ?? 0).toLocaleString()} eligible
+            {' '}of {rosterMeta.totalEligiblePool.toLocaleString()} active employees
+            {rosterMeta.seededFromKpis > 0 && ` · ${rosterMeta.seededFromKpis} seeded from KPI presence`}
+            {rosterMeta.fallbackUsed && ' · using fallback resolution'}
+          </span>
+        </div>
+      )}
+
       {/* Auditor Workload Summary (audit view only) */}
       {viewLevel === 'audit' && (auditorWorkloadStats.length > 0 || unassignedStats) && (
         <div className="space-y-2">
