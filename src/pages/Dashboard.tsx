@@ -108,15 +108,15 @@ export default function Dashboard() {
   }, [searchParams]);
 
   // Initialize from URL query param
+  const viewParam = searchParams.get('view');
   useEffect(() => {
-    const viewFromUrl = searchParams.get('view') as ViewMode | null;
-    if (viewFromUrl) {
-      const mappedMode = viewFromUrl === 'skip_level' ? 'team' : viewFromUrl;
-      if (availableModes.includes(mappedMode)) {
-        setViewMode(mappedMode);
-      }
+    if (!viewParam) return;
+    const mappedMode = (viewParam === 'skip_level' ? 'team' : viewParam) as ViewMode;
+    if (availableModes.includes(mappedMode) && mappedMode !== viewMode) {
+      setViewMode(mappedMode);
     }
-  }, [searchParams, availableModes]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewParam, availableModes]);
 
   // Deep-link: auto-open KPI from URL params (runs once per mount)
   useEffect(() => {
