@@ -165,6 +165,7 @@ export default function EmployeePerformanceSummary() {
           full_name,
           designation,
           reporting_manager_id,
+          is_active,
           departments (name, business_units (name, divisions (name)))
         `);
       if (profilesError) throw profilesError;
