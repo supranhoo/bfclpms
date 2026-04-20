@@ -1646,10 +1646,12 @@ export function EmployeeSelectorGrid({
               {/* Pagination footer — only render when there is more than one page */}
               {totalMembers > pageSize && (
                 <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t">
-                  <div className="text-xs sm:text-sm text-muted-foreground">
+                  <div className="text-xs sm:text-sm text-muted-foreground text-center sm:text-left">
+                    <span className="font-medium text-foreground">Page {safePage} of {totalPages}</span>
+                    <span className="mx-2">·</span>
                     Showing <span className="font-medium text-foreground">{sliceStart + 1}</span>–
                     <span className="font-medium text-foreground">{Math.min(sliceEnd, totalMembers)}</span> of{' '}
-                    <span className="font-medium text-foreground">{totalMembers.toLocaleString()}</span>
+                    <span className="font-medium text-foreground">{totalMembers.toLocaleString()}</span> employees
                   </div>
                   <div className="flex items-center gap-3 flex-wrap justify-center">
                     <div className="flex items-center gap-2">
