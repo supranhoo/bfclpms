@@ -8,7 +8,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { fetchAllPaged } from '@/lib/fetchAll';
 import { 
   useWorkflowTemplates, 
   useWorkflowConfigs, 
@@ -75,6 +78,9 @@ export default function WorkflowConfig() {
   const [archiveTarget, setArchiveTarget] = useState<WorkflowTemplate | null>(null);
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [isOngoing, setIsOngoing] = useState(false);
+  const [showPmsGradeColumn, setShowPmsGradeColumn] = useState(false);
+  const [employeePage, setEmployeePage] = useState(1);
+  const PAGE_SIZE = 50;
 
   // Period selector state: 'global' or specific period
   const currentYear = new Date().getFullYear();
@@ -143,12 +149,14 @@ export default function WorkflowConfig() {
   const { data: profiles } = useQuery({
     queryKey: ['all-profiles-workflow'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, employee_code, pms_grade, department_id, reporting_manager_id')
-        .order('full_name');
-      if (error) throw error;
-      return data;
+      // Use paged fetch to bypass PostgREST's 1000-row default cap (~2,533 employees)
+      return await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('profiles')
+          .select('id, full_name, email, employee_code, pms_grade, department_id, reporting_manager_id')
+          .order('full_name')
+          .range(from, to)
+      );
     },
   });
   
@@ -172,6 +180,18 @@ export default function WorkflowConfig() {
       p.employee_code?.toLowerCase().includes(search)
     );
   }, [profiles, employeeSearch]);
+
+  // Reset to page 1 when search changes
+  useMemo(() => { setEmployeePage(1); }, [employeeSearch]);
+
+  const totalPages = Math.max(1, Math.ceil((filteredProfiles?.length || 0) / PAGE_SIZE));
+  const safePage = Math.min(employeePage, totalPages);
+  const pagedProfiles = useMemo(
+    () => filteredProfiles.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [filteredProfiles, safePage]
+  );
+  const startIdx = filteredProfiles.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const endIdx = Math.min(safePage * PAGE_SIZE, filteredProfiles.length);
   
   // Helper to get config for a specific type and value (from filtered configs)
   const getConfigFor = (type: string, value: string) => {
