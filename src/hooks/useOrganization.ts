@@ -333,42 +333,105 @@ export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: 
 
       if (!profiles || profiles.length === 0) return [];
 
-      // 2. Use get_bulk_employee_workflows RPC which handles the FULL cascade:
-      //    employee-level override → department-level → pms_grade-level → default template
-      //    This is the authoritative resolution, identical to what useEmployeeWorkflowStages uses.
+      // 2. v2.64.9 — Chunked, resilient bulk workflow resolution.
+      // Large orgs (2,000+ employees) produce 90KB+ POST bodies that can fail at proxies.
+      // We chunk into 500-ID batches with one retry per chunk.
       const profileIds = profiles.map(p => p.id);
-      const rpcParams: Record<string, any> = { employee_ids: profileIds };
-      if (reviewPeriod) rpcParams.p_review_period = reviewPeriod;
-      if (reviewYear) rpcParams.p_review_year = reviewYear;
-      const { data: bulkData, error: bulkError } = await (supabase as any)
-        .rpc('get_bulk_employee_workflows', rpcParams);
-
-      if (bulkError) {
-        console.error('useProfilesByWorkflowStage: bulk workflow fetch failed, falling back to default', bulkError);
-        // Graceful fallback: only include employees whose default stages contain the stage
-        const { data: defaultTemplate } = await supabase
-          .from('workflow_templates')
-          .select('stages')
-          .eq('is_default', true)
-          .maybeSingle();
-        const defaultStages: string[] = (defaultTemplate?.stages as string[]) || [];
-        return defaultStages.includes(stage) ? profiles : [];
+      const CHUNK = 500;
+      const chunks: string[][] = [];
+      for (let i = 0; i < profileIds.length; i += CHUNK) {
+        chunks.push(profileIds.slice(i, i + CHUNK));
       }
 
-      // 3. Build employee_id → stages map from RPC result
+      const callChunk = async (ids: string[]) => {
+        const params: Record<string, any> = { employee_ids: ids };
+        if (reviewPeriod) params.p_review_period = reviewPeriod;
+        if (reviewYear) params.p_review_year = reviewYear;
+        const first = await (supabase as any).rpc('get_bulk_employee_workflows', params);
+        if (!first.error) return first;
+        await new Promise(r => setTimeout(r, 200));
+        return await (supabase as any).rpc('get_bulk_employee_workflows', params);
+      };
+
+      const results = await Promise.all(chunks.map(callChunk));
       const stagesMap = new Map<string, string[]>();
-      if (bulkData) {
-        for (const row of bulkData as { employee_id: string; stages: string[] }[]) {
+      let failedChunks = 0;
+      for (const r of results) {
+        if (r.error) { failedChunks++; continue; }
+        for (const row of (r.data || []) as { employee_id: string; stages: string[] }[]) {
           stagesMap.set(row.employee_id, row.stages);
         }
       }
 
-      // 4. Filter: include only employees whose EFFECTIVE workflow contains the required stage
-      const DEFAULT_STAGES = ['kra_set', 'self_review', 'manager_check', 'audit', 'management_review', 'approved'];
-      return profiles.filter(p => {
-        const empStages = stagesMap.get(p.id) || DEFAULT_STAGES;
-        return empStages.includes(stage);
+      // 3. Resilient fallback union of stages from ALL active templates
+      //    (not just is_default=true). Used only for employees missing from RPC.
+      let fallbackStages: string[] = ['kra_set', 'self_review', 'manager_check', 'audit', 'management_review', 'approved'];
+      if (failedChunks > 0 || stagesMap.size < profileIds.length) {
+        try {
+          const { data: templates } = await supabase
+            .from('workflow_templates')
+            .select('stages, is_active')
+            .eq('is_active', true);
+          if (templates && templates.length) {
+            const union = new Set<string>();
+            for (const t of templates) for (const s of (t.stages as string[]) || []) union.add(s);
+            if (union.size) fallbackStages = Array.from(union);
+          }
+        } catch (e) {
+          console.warn('useProfilesByWorkflowStage: template union fallback failed', e);
+        }
+      }
+
+      // 4. Stage-presence seed (Fix 4): always include employees with KPIs
+      //    actually at the requested stage in the requested period. This guarantees
+      //    no silent exclusion when workflow resolution is incomplete.
+      const seededIds = new Set<string>();
+      if (reviewPeriod && reviewYear) {
+        try {
+          const seed = await fetchAllPaged<{ employee_id: string }>((from, to) =>
+            supabase
+              .from('kpis')
+              .select('employee_id')
+              .eq('status', stage as any)
+              .eq('review_period', reviewPeriod)
+              .eq('review_year', reviewYear)
+              .range(from, to)
+          );
+          for (const row of seed || []) seededIds.add(row.employee_id);
+        } catch (e) {
+          console.warn('useProfilesByWorkflowStage: stage-presence seed failed', e);
+        }
+      }
+
+      // 5. Filter: include employee if (a) seeded by KPI presence, OR
+      //    (b) resolved workflow contains the stage, OR
+      //    (c) RPC failed for them AND fallback union contains the stage.
+      const filtered = profiles.filter(p => {
+        if (seededIds.has(p.id)) return true;
+        const empStages = stagesMap.get(p.id);
+        if (empStages) return empStages.includes(stage);
+        return fallbackStages.includes(stage);
       });
+
+      // Diagnostic breadcrumb (admin-visible in console)
+      console.info('[useProfilesByWorkflowStage]', {
+        stage, reviewPeriod, reviewYear,
+        totalProfiles: profiles.length,
+        resolvedFromRpc: stagesMap.size,
+        seededFromKpis: seededIds.size,
+        failedChunks,
+        included: filtered.length,
+      });
+
+      // Attach diagnostic flag for UI use (non-enumerable to keep React-Query cache clean is overkill;
+      // we just stash on a __meta property on the array).
+      (filtered as any).__meta = {
+        totalEligiblePool: profiles.length,
+        seededFromKpis: seededIds.size,
+        fallbackUsed: failedChunks > 0,
+      };
+
+      return filtered;
     },
     enabled: !!stage,
     placeholderData: keepPreviousData,
