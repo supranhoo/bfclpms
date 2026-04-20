@@ -582,10 +582,13 @@ export default function EmployeePerformanceSummary() {
         backTo="/reports"
         actions={
           canExport ? (
-            <Button onClick={handleExport} disabled={!filteredData.length}>
-              <Download className="mr-2 h-4 w-4" />
-              Download Excel
-            </Button>
+            <div className="flex items-center gap-3">
+              <EmployeeStatusFilter onChange={setEmpStatusMode} />
+              <Button onClick={handleExport} disabled={!filteredData.length}>
+                <Download className="mr-2 h-4 w-4" />
+                Download Excel
+              </Button>
+            </div>
           ) : undefined
         }
       />
