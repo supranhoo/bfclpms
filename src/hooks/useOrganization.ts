@@ -369,6 +369,7 @@ export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: 
       });
     },
     enabled: !!stage,
+    placeholderData: keepPreviousData,
   });
 }
 
