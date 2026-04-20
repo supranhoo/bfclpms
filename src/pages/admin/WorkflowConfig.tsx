@@ -624,8 +624,8 @@ export default function WorkflowConfig() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="mb-4">
-                <div className="relative">
+              <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="Search employees..."
@@ -634,6 +634,16 @@ export default function WorkflowConfig() {
                     className="pl-10"
                   />
                 </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="show-pms-grade"
+                    checked={showPmsGradeColumn}
+                    onCheckedChange={setShowPmsGradeColumn}
+                  />
+                  <Label htmlFor="show-pms-grade" className="text-sm cursor-pointer whitespace-nowrap">
+                    Show PMS Grade
+                  </Label>
+                </div>
               </div>
               
               <Table>
@@ -641,13 +651,13 @@ export default function WorkflowConfig() {
                   <TableRow>
                     <TableHead>Employee</TableHead>
                     <TableHead>Code</TableHead>
-                    <TableHead>PMS Grade</TableHead>
+                    {showPmsGradeColumn && <TableHead>PMS Grade</TableHead>}
                     <TableHead>Assigned Workflow</TableHead>
                     <TableHead className="w-[100px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredProfiles?.slice(0, 50).map(profile => {
+                  {pagedProfiles.map(profile => {
                     const config = getConfigFor('employee', profile.id);
                     const template = config ? getTemplate(config.workflow_template_id) : null;
                     
@@ -660,7 +670,7 @@ export default function WorkflowConfig() {
                           </div>
                         </TableCell>
                         <TableCell>{profile.employee_code || '-'}</TableCell>
-                        <TableCell>{profile.pms_grade || '-'}</TableCell>
+                        {showPmsGradeColumn && <TableCell>{profile.pms_grade || '-'}</TableCell>}
                         <TableCell>
                           <Select
                             value={config?.workflow_template_id || ''}
@@ -700,11 +710,37 @@ export default function WorkflowConfig() {
                   })}
                 </TableBody>
               </Table>
-              {filteredProfiles && filteredProfiles.length > 50 && (
-                <p className="text-sm text-muted-foreground mt-2">
-                  Showing 50 of {filteredProfiles.length} employees. Use search to find specific employees.
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4">
+                <p className="text-sm text-muted-foreground">
+                  {filteredProfiles.length === 0
+                    ? 'No employees found'
+                    : `Showing ${startIdx}–${endIdx} of ${filteredProfiles.length} employee${filteredProfiles.length === 1 ? '' : 's'}`}
+                  {employeeSearch && filteredProfiles.length > 0 && ` (${filteredProfiles.length} match${filteredProfiles.length === 1 ? '' : 'es'})`}
                 </p>
-              )}
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEmployeePage(p => Math.max(1, p - 1))}
+                      disabled={safePage === 1}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Page {safePage} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEmployeePage(p => Math.min(totalPages, p + 1))}
+                      disabled={safePage === totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
