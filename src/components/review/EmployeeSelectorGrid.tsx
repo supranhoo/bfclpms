@@ -723,6 +723,37 @@ export function EmployeeSelectorGrid({
     return otherMembers.slice(otherStart, otherStart + remaining);
   }, [assignedMembers.length, otherMembers, sliceStart, sliceEnd, pageSize]);
 
+  // Discoverability hint: when sorted by urgency (most-pending first), employees
+  // who are fully reviewed/forwarded sink to the back pages. Surface a one-click
+  // jump to filter directly to that "completed" status. Maps viewLevel → its
+  // "completed" statusFilter value (matches statusOptions definitions above).
+  const completedFilterForView = useMemo<string | null>(() => {
+    switch (viewLevel) {
+      case 'team':
+      case 'skip_level':
+      case 'hr_pms':
+        return 'reviewed';
+      case 'audit':
+        return 'forwarded';
+      case 'management':
+        return 'approved';
+      default:
+        return null;
+    }
+  }, [viewLevel]);
+
+  // Count of reviewed/completed employees in the CURRENT (statusFilter='all') set,
+  // i.e. those with badge1 === 0 AND total > 0. Used to gate the discoverability pill.
+  const reviewedOnBackPagesCount = useMemo(() => {
+    if (statusFilter !== 'all' || totalPages <= 1 || !displayMembers || !completedFilterForView) return 0;
+    let count = 0;
+    for (const m of displayMembers) {
+      const s = getEmployeeKpiStats(m.id, m.relationship);
+      if (s.total > 0 && s.badge1 === 0) count++;
+    }
+    return count;
+  }, [statusFilter, totalPages, displayMembers, completedFilterForView, getEmployeeKpiStats]);
+
   // Reset to page 1 when filters/sort/view change so users never land on an empty page.
   useEffect(() => {
     if (currentPage !== 1) setPage('1');
