@@ -157,6 +157,7 @@ export function ReviewPeriodSelectorEnhanced({
       customStartMonth: mode === 'custom' ? value.selectedMonth : undefined,
       customStartYear: mode === 'custom' ? value.selectedYear : undefined,
       periodRanges,
+      autoSwitchedFrom: undefined,
     });
   }, [value, onChange]);
 
@@ -186,6 +187,7 @@ export function ReviewPeriodSelectorEnhanced({
       selectedMonth: month,
       months,
       periodRanges,
+      autoSwitchedFrom: undefined,
     });
   }, [value, onChange]);
 
@@ -202,6 +204,7 @@ export function ReviewPeriodSelectorEnhanced({
       ...value,
       selectedYear: year,
       periodRanges,
+      autoSwitchedFrom: undefined,
     });
   }, [value, onChange]);
 
@@ -220,6 +223,7 @@ export function ReviewPeriodSelectorEnhanced({
       customStartMonth: month,
       months,
       periodRanges,
+      autoSwitchedFrom: undefined,
     });
   }, [value, onChange]);
 
@@ -236,6 +240,7 @@ export function ReviewPeriodSelectorEnhanced({
       ...value,
       customStartYear: year,
       periodRanges,
+      autoSwitchedFrom: undefined,
     });
   }, [value, onChange]);
 
