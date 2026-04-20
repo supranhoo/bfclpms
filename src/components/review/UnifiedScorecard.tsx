@@ -1346,6 +1346,20 @@ export function UnifiedScorecard({
         displayedYear={selectedYear}
         panelPeriod={periodSelection.autoSwitchedFrom?.month}
         panelYear={periodSelection.autoSwitchedFrom?.year}
+        onAcceptSwitch={() => {
+          // v2.64.8: Push the auto-switched period back to the parent grid
+          // so the card counts and scorecard counts agree on subsequent
+          // navigation. Clears autoSwitchedFrom since it becomes the user's
+          // explicit choice.
+          onPeriodSelectionChange({
+            ...periodSelection,
+            selectedMonth: selectedPeriod,
+            selectedYear: selectedYear,
+            months: [selectedPeriod],
+            periodRanges: [{ month: selectedPeriod, year: selectedYear }],
+            autoSwitchedFrom: undefined,
+          });
+        }}
       />
       {/* 1. Profile + Filters Row */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
