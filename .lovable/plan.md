@@ -1,76 +1,79 @@
 
 
-## RCA: Flicker when switching from Team Review → HR PMS
+## Pagination for Reviewer Dashboards (>2500 employees)
 
-### Root cause — confirmed from code reading
+### Current behavior (confirmed by code reading)
 
-When the user clicks a different mode in `ViewModeToggle`, `Dashboard.handleModeChange` (line 284) updates `viewMode` and clears the URL filter params. This causes `<EmployeeSelectorGrid>` to re-render with a **new `viewLevel` prop**. The flicker is caused by **a sequence of three intermediate render states** before HR PMS settles:
+`EmployeeSelectorGrid.tsx` fetches and renders **all** matching employees in a single pass for every panel (Team, HR PMS, Audit, Management, Pending*). Specifically:
 
-**Frame 1 — old grid still rendered** (Team view employee cards visible).
+- `useProfiles()` / `useProfilesByWorkflowStage()` return the full set (1000+ rows, batched via `fetchAllPaged`).
+- `useBulkEmployeeWorkflows(allEmployeeIds)` resolves workflow stages for **every** employee in one shot.
+- `useEmployeeScoresForPeriod(allEmployeeIds, ...)` fetches scores for all of them.
+- `useKpisByPeriodRanges(...)` pulls KPI rows used to compute per-card "pending/audit/forwarded" counts.
+- The grid then renders N `EmployeeCard` components — each subscribing to derived data via `useMemo`/selectors.
 
-**Frame 2 — `isLoading=true` skeleton shown** (`EmployeeSelectorGrid.tsx` line 1292):
-```
-<div className="h-20 bg-muted animate-pulse rounded-lg" />
-... grid of 4 + 6 skeleton placeholders ...
-```
-This happens because:
-- `viewLevel='hr_pms'` → `requiredStage='hr_pms_review'` → triggers `useProfilesByWorkflowStage('hr_pms_review', period, year)` (line 178)
-- `stageFilteredProfiles` is `undefined` while fetching → `stageFilteredLoading=true`
-- `isLoading` branch (line 265) returns `true` → renders the skeleton
-- The skeleton **replaces the entire scorecard layout**, including the `ViewModeToggle` strip itself becomes visually "below" a different block height — that's the *flicker* the user perceives
+For a company with >2500 employees, on Audit/HR PMS panels the grid can render 1500+ cards, each running its own per-card calculation. This causes:
+- Long initial JS task (hydration of N cards, layout)
+- Heavy memory (Bulk workflows + scores + KPI maps for everyone)
+- Slow filter/search responsiveness (every keystroke re-filters thousands)
+- Network: KPI ranges fetched cover all employee IDs
 
-**Frame 3 — HR PMS grid renders** with the actual cards.
+### Why pagination is the right fix
 
-So the user sees: **Team grid → blank/grey skeleton → HR PMS grid**, in ~200–800ms (depending on cache).
+- The user only ever **looks at** ~10–30 cards at a time (after sort/filter).
+- The expensive per-card computations (workflow resolution, score lookup, KPI counts) only matter for **visible** cards.
+- Search/sort already happens in-memory — we can keep that, but only mount cards for the current page.
 
-### Why it's worse for HR PMS specifically
+### Proposed approach — Client-side pagination with windowed enrichment
 
-- **Team view** (when admin/HR PMS): uses `profilesLoading` (`useProfiles`) which is usually already cached → no skeleton shown → instant render.
-- **HR PMS view**: triggers an **additional** query (`useProfilesByWorkflowStage('hr_pms_review', ...)`) keyed by `(stage, period, year)`. First time switching in the session, this is a cold cache → forces `isLoading=true` → skeleton flashes. Same applies to Audit, Management, and Pending* panels.
-- The Team grid → cached profiles → no skeleton.
-- HR PMS / Audit / Management → fresh `useProfilesByWorkflowStage` query → skeleton.
-- That asymmetry is what produces the visible "flicker between both screens".
+Three layers, smallest blast radius first:
 
-### Secondary contributors
+**Layer 1 — Render-only pagination (primary fix)**
+Keep the existing data fetching (so search/filter/sort still operate on the full set), but only render `pageSize` cards at a time. Use the existing `Pagination` component (`src/components/ui/pagination.tsx`).
 
-1. **Filter param clearing** (`handleModeChange` line 289–293) triggers a synchronous URL update, which re-runs the `useUrlFilterState` hooks and resets all derived `useMemo`s on the next render — a tiny extra layout pass.
-2. **`ViewModeToggle` itself does not unmount** (always rendered above the grid), but the grid block below collapses from N cards → 11 skeleton placeholders → M cards, creating a **height jump**. The eye reads this as a flicker.
-3. **`useBulkEmployeeWorkflows`** and **`useEmployeeScoresForPeriod`** chain off `allEmployeeIds` which changes the moment `stageFilteredProfiles` resolves → another render pass with progressively-filling data.
+- Default `pageSize = 24` (4 cols × 6 rows on desktop; user-configurable: 12 / 24 / 48 / 96).
+- Reset page to 1 on filter/search/sort change.
+- Preserve current page in URL (`?page=2`) so refresh and deep-link work — aligns with `mem://features/review/dashboard-view-persistence`.
+- "Showing 25–48 of 1,547" footer.
 
-### Working as designed, but UX needs polish
+**Layer 2 — Defer heavy per-card enrichment to visible page**
+Currently `useBulkEmployeeWorkflows(allEmployeeIds)` and `useEmployeeScoresForPeriod(allEmployeeIds, ...)` run for ALL ids. After Layer 1, change them to receive only the **current page's ids** (`pagedEmployeeIds`).
 
-Per `mem://features/admin/menu-access-rights` and `mem://features/review/period-specific-reviewer-visibility`, stage-filtered fetching is intentional (don't show employees outside the panel's workflow). The flicker is purely a **transition UX** issue — not a data/correctness bug.
+- Keeps card rendering fast and queries small.
+- The grid-card "pending KPI count" badges (which need org-wide KPI data) stay computed from the already-fetched `periodKpis` (no extra fetch) — only the per-card workflow/score lookups shrink.
+- Risk: "global" stats shown above the grid (e.g., total pending across all employees) must stay computed from the full set, not the page. We'll keep counts/aggregates on the full filtered set and only window the rendering + heavy per-card hooks.
 
-### Proposed fix (minimal, recommended — Option A)
+**Layer 3 — Keep urgency sort intact**
+Per `mem://features/review/reviewer-grid-progress-and-prioritization`, urgency sort runs across the full filtered set. After sorting, we slice the page — so the most urgent employees still appear on page 1. No change to sort logic.
 
-Use **`keepPreviousData`** on the stage-filtered query and gate the skeleton on "no previous data" instead of "loading":
+### Files Touched
 
-1. **`src/hooks/useOrganization.ts`** — add `placeholderData: keepPreviousData` (TanStack v5) to `useProfilesByWorkflowStage`. On panel switch, the previous panel's profiles stay rendered until the new ones arrive — no skeleton.
-2. **`src/components/review/EmployeeSelectorGrid.tsx`** — change `isLoading` skeleton condition to `isLoading && !baseMembers?.length` so we only show the skeleton on **true cold start** (no data at all), not on background re-fetch.
-3. Add a subtle top-right `<Loader2 className="animate-spin" />` indicator while a background fetch is in-flight — gives feedback without collapsing the layout.
-4. Optional: wrap the grid block in a fixed `min-h-[600px]` to prevent height jump even if a skeleton briefly appears.
+| File | Change |
+|---|---|
+| `src/components/review/EmployeeSelectorGrid.tsx` | Add `page` + `pageSize` state; slice `sortedMembers` → `pagedMembers`; render Pagination footer; pass paged ids to bulk hooks |
+| `src/hooks/useBulkEmployeeWorkflows.ts` (or call site) | Confirm safe to pass smaller id set; no signature change needed |
+| `src/hooks/useEmployeeScoresForPeriod.ts` (or call site) | Same — accept paged ids |
+| `src/components/ui/pagination.tsx` | Reused as-is |
+| `DOCUMENTATION.md` | Version History entry (v2.64.2 — Reviewer grid pagination) |
+| `mem://infrastructure/resource-and-performance-optimization` | Append note: reviewer grids use 24-card pagination + windowed enrichment |
 
-### Files Touched (Option A)
-- `src/hooks/useOrganization.ts` — add `placeholderData` to `useProfilesByWorkflowStage` (and same for `useProfiles` if cold)
-- `src/components/review/EmployeeSelectorGrid.tsx` — soften skeleton condition; add inline spinner; add `min-h` wrapper
-- `DOCUMENTATION.md` — Version History entry
-- Memory: append a one-line note to `mem://infrastructure/resource-and-performance-optimization` about `placeholderData` for panel-switching queries
+No DB / RLS / workflow changes. No edge function changes.
 
-### Alternative — Option B (heavier)
-Prefetch all panels' `useProfilesByWorkflowStage` queries on Dashboard mount so all panel switches are instant. Higher data cost on first load (4 extra queries even if user never switches).
-
-### Risk & Impact (Option A — recommended)
+### Risk & Impact
 
 | Area | Impact |
 |---|---|
-| Data | None. Read-only query option change. |
-| Workflow | None. |
-| UI | Smooth panel switch — old cards stay visible until new ones arrive (~100–500ms). Spinner top-right gives feedback. |
-| Regression | Very low. `placeholderData` is a TanStack-supported pattern; cold start (no prior data) still shows the skeleton, so first-mount UX is unchanged. |
-| Mitigation | Test all 4 panel transitions: Team → HR PMS, HR PMS → Audit, Audit → Management, and back to Team. Verify cold-start (hard refresh on `/dashboard?view=hr_pms`) still shows skeleton (no blank). |
+| Data | None — same queries, smaller id arrays for two of them |
+| Workflow | None |
+| UI | Reviewer grids show 24 cards/page with pager + page-size selector + "Showing X–Y of Z" |
+| Search/Sort/Filter | Unchanged — still operate on full filtered set; resets to page 1 |
+| Aggregates (top counts) | Unchanged — computed from full filtered set, not page |
+| Regression | Low. Main risks: (a) page not resetting on filter change → mitigated by `useEffect`; (b) per-card hooks racing on rapid pagination → mitigated by `keepPreviousData` already added in v2.64.1 |
+| Mitigation | Test: Team / HR PMS / Audit / Management / Pending* panels; search; sort by urgency; filter by department; deep-link `?page=3`; viewport <768px (cards stack, pager wraps) |
 
 ### Out of Scope
-- Changing the stage-filter logic itself.
-- Persisting all panels' data simultaneously (Option B).
-- Restyling `ViewModeToggle` or skeleton.
+- Server-side pagination (would require restructuring queries; current client-side approach handles 2500–10000 rows fine once render is windowed).
+- Virtualization (`react-window`) — unnecessary at 24 cards/page; can revisit if user wants 96+ per page.
+- Pagination on non-reviewer pages (Reports, Admin lists) — separate request.
+- Saving page-size preference to user profile (URL only, per existing dashboard-view-persistence pattern).
 
