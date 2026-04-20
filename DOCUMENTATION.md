@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-20  
-> **Version:** 2.64.3 — Cross-source flicker fix: cache last non-empty `baseMembers` in `EmployeeSelectorGrid` so Team → HR PMS / Audit / Management panel switches no longer flash the skeleton when the new query is cold-cached. Adds `placeholderData: keepPreviousData` to `useProfiles`/`useTeamMembers`/`useSkipLevelTeamMembers` and defers URL filter clearing in `Dashboard.handleModeChange` by one microtask to avoid extra render passes.
+> **Version:** 2.64.4 — Filter typing teleports user to previous panel — fixed. Effect A in `Dashboard.tsx` now depends only on the `view` URL slice (not the full `searchParams`), so typing in `q`/`dept`/`page` no longer re-runs view-init. `handleModeChange` now (a) synchronously clears `employee` along with filter params in a single batched URL write (dropped the prior `queueMicrotask` indirection) and (b) re-arms `deepLinkProcessedRef` so late "Restore selected employee" effects cannot retroactively pull the previous panel's employee back.
 > **Maintainer:** Lovable AI
 
 ---
@@ -5131,3 +5131,11 @@ Every new edge function **must** complete all of these steps before deployment:
 - **Fix (Layer 1 — render-only pagination)**: `EmployeeSelectorGrid` now slices the full sorted/filtered list into pages (default 24, configurable 12 / 24 / 48 / 96) and renders only the current page. Search, sort (incl. urgency), filters, and aggregate counts continue to operate on the **full** filtered set so totals and prioritization are unaffected. Page and page-size are URL-persisted (`?page=`, `?size=`) per `dashboard-view-persistence`. Page resets to 1 on any filter / sort / view change. Audit grouped view paginates the combined list (assigned-first ordering preserves "My Assignments on page 1").
 - **Skipped (Layer 2)**: Restricting `useBulkEmployeeWorkflows` / `useEmployeeScoresForPeriod` to paged ids was rejected — `workflowMap` is consumed by `displayMembers` status filtering and aggregate stats, so windowing it would produce incorrect pending counts for off-page employees. Layer 1 already eliminates the render-side bottleneck (the dominant cost).
 - **Modified files**: `src/components/review/EmployeeSelectorGrid.tsx`, `src/hooks/useUrlFilterState.ts` (added `page`/`size` to `FILTER_PARAM_NAMES` so "Clear All" resets pagination)
+
+### v2.64.4 — Filter typing teleports user to previous panel — fixed (2026-04-20)
+- **Problem (RCA)**: Admin on HR PMS (or Audit / Management / Pending*) panel types one letter into "Search Employees…" and the dashboard snaps back to the previous view (Self / Pending Self). Three interacting bugs in `Dashboard.tsx`:
+  1. Effect A ("Initialize from URL") depended on the entire `searchParams` object, so it re-ran on every `q`/`dept`/`page` keystroke and could re-apply a stale `view` during a `setSearchParams` updater race with `useUrlFilterState`.
+  2. `handleModeChange` cleared filter params via `queueMicrotask` but did NOT clear the stale `employee` URL param. The "Restore selected employee" effect then re-pulled the previous panel's employee back into state.
+  3. `deepLinkProcessedRef` was only set during deep-link processing on mount, never re-armed on manual mode change, leaving restore logic hot.
+- **Fix**: (1) Narrowed Effect A's dependency to `searchParams.get('view')` only, with a `mappedMode !== viewMode` guard. (2) `handleModeChange` now clears `employee` alongside `FILTER_PARAM_NAMES` in a single synchronous batched `setSearchParams` write (dropped `queueMicrotask`). (3) `handleModeChange` sets `deepLinkProcessedRef.current = true` to lock out late restore effects.
+- **Modified files**: `src/pages/Dashboard.tsx`
