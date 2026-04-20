@@ -1,81 +1,67 @@
 
 
-## RCA — Three bugs in HR PMS / Audit / Management dashboards
+## RCA — "Sanjeeb 101178 not visible in HR PMS" (March 2026)
 
-### Bug 1 — Sanjeeb Kumar Jena (101178) "missing" from HR PMS for March 2026
+### Evidence gathered
 
-**Status check (DB):**
-- Workflow: `[kra_set, self_review, manager_check, skip_level_check, hr_pms_review, approved]` — includes `hr_pms_review` ✅
-- March 2026 KPIs: 23 at `hr_pms_review`, 3 at `self_review`, 1 at `kra_set`
-- Therefore he IS in the HR PMS pool (`useProfilesByWorkflowStage` filter passes)
+| Check | Result |
+|---|---|
+| Sanjeeb exists, is_active, portal_access | ✅ true / true |
+| Workflow for March 2026 | ✅ `[kra_set, self_review, manager_check, skip_level_check, hr_pms_review, approved]` |
+| KPIs in March 2026 | ✅ 23 at `hr_pms_review`, 3 at `self_review`, 1 at `kra_set` |
+| HR PMS pool overall (March, status=`hr_pms_review`) | Only **2 employees** have any KPI at `hr_pms_review` for March — Sanjeeb (23) and one other (5) |
+| Total March KPIs in DB | 1,758 |
+| `get_bulk_employee_workflows(2533 IDs, 'March', 2026)` server-side | Returns 2,533 rows (works fine) |
+| Current user role | Admin → RLS allows everything |
+| Screenshot stat cards (Mar 2026, search "101178") | **Total Employees 0, Pending 0, In HR PMS 0, Reviewed 0, Total KPIs 0** |
 
-**Why he doesn't appear on page 1**: For HR PMS, `badge1` (pending) is computed via `resolveReviewableStatuses('hr_pms', stages) - 'hr_pms_review'`. For his 6-stage workflow that resolves to **only `skip_level_check`**. He has 0 KPIs at `skip_level_check`, so:
-- `badge1 = 0` (urgency-sort key)
-- `badge2 = 23` (in HR PMS review)
-- `badge3 = 0`
+### Root cause — TWO compounding issues
 
-The grid sort is `badge1 DESC` → he sinks behind every employee with even one item at skip_level_check, ending up far past page 1. The v2.64.5 discoverability pill only fires when `badge1 === 0 AND total > 0` — Sanjeeb qualifies but the pill points to "Reviewed" status, not "In Review". His 23 are `in_review`, not `reviewed`.
+**Issue A: HR PMS panel is silently empty when the bulk-workflow RPC fails.** In `useProfilesByWorkflowStage` (lines 346–356), if the RPC errors (e.g., 90KB+ POST body of 2,533 UUIDs gets blocked by a proxy, RLS hiccup, or transient timeout), the catch falls back to the **default workflow template stages**. The system default = `[kra_set, self_review, manager_check, audit, management_review, approved]` — which **does NOT contain `hr_pms_review`**. The fallback then returns `[]`, wiping the entire HR PMS pool. There is no toast, no banner, no log surfaced to the user — just an empty panel.
 
-**Root cause**: HR PMS sort uses only `badge1` for urgency. KPIs already at `hr_pms_review` (badge2) are equally actionable for the HR PMS reviewer — they ARE the review workload — yet are excluded from the urgency key. Same defect applies to Audit (`badge1` excludes `audit` stage items).
+**Issue B: The fallback doesn't try the actual HR PMS template** (or any non-default template that contains the requested stage). It only checks `is_default = true`, even though many orgs have multiple active templates. So even if the default fallback path triggers cleanly, anyone whose template differs from default (which is the entire HR PMS / Skip-Level cohort) becomes invisible.
 
-### Bug 2 — "Total Employees" inaccurate in Audit & Management dashboards
+**Why v2.64.8 didn't fix this:** v2.64.8 changed sort order. The bug now is not "Sanjeeb is on page 80" — it's "Sanjeeb is excluded from `baseMembers` entirely" in any session where the bulk RPC call fails or any HR-PMS employee uses a non-default template. The v2.64.8 stat-card recompute correctly shows `0` because `demographicFilteredMembers` is empty.
 
-**What it currently shows**: `demographicFilteredMembers.length` — every active employee whose resolved workflow includes the panel's stage (e.g., for Audit, every employee whose template contains `audit`). For most large orgs this is ~all 2,500+ employees, regardless of whether they have any KPI in the selected period.
-
-**Why it feels wrong**: Reviewers expect "Total Employees" to mean "people I have to review this period", not "people I might ever review". The metric is technically the size of the queryable pool, not the actionable cohort.
-
-**Root cause**: The stat card label is misleading. `totalEmployees` should reflect employees with at least one KPI in the selected period at a stage relevant to this reviewer (pending, in-review, or reviewed by them). The current value is closer to "Eligible Employees" than "Total Employees".
-
-### Bug 3 — Arun Goswami (100513) shows "no pending" on card, but KPIs ARE pending when opened
-
-**DB state for March 2026**: 1 at `self_review`, 3 at `management_review`, 9 `approved`. Workflow: `[kra_set, self_review, audit, management_review, approved]` (no manager_check).
-- Audit `badge1` for March = 1 (the self_review item) → pending IS visible
-
-**But user is on `?view=audit` with NO period in URL → defaults to current month = April 2026**: 13 at `kra_set` only. Audit `badge1` for April = 0 → card correctly shows "no pending".
-
-When the user **clicks Arun's card**, `UnifiedScorecard` runs the smart-period-detection workflow (per `mem://features/review/smart-period-detection-workflow`) and auto-switches to **March** because that's where his pending audit work lives. The PeriodAutoSwitchBanner is supposed to disclose this, but the user perceives the change as "card lied".
-
-**Root cause**: The grid card and the scorecard view two different periods after auto-switch. The card never updates to reflect the auto-switched period, so the "no pending" badge is stale relative to what the user sees inside the scorecard. Also, when the panel period is empty for an employee, the card gives no hint that "pending work exists in another period — click to see".
-
-### Bonus finding — React warning (`StatCard` ref)
-Console shows: `Function components cannot be given refs … Check the render method of EmployeeSelectorGrid` for `StatCard`. Tooltip wrappers in the stat cards forward refs into a plain function component. Per project memory: Radix children require `forwardRef`. Cosmetic but worth fixing since we're touching the grid.
+### Why it intermittently looks fine
+On a fast network with successful RPC, all 2,533 profiles get their actual stages and Sanjeeb's `[..., hr_pms_review, approved]` matches the filter → he appears. On the failure path (or in production where the request body is large enough to be slow/blocked), the fallback wipes him.
 
 ---
 
-## Proposed Fixes
+## Proposed Fix
 
-### Fix 1 — Smarter urgency sort for HR PMS / Audit (Sanjeeb visibility)
-Change the sort key in `EmployeeSelectorGrid.tsx` line 671 so that for `hr_pms` and `audit` views, urgency = `badge1 + badge2` (pending PLUS items currently at the reviewer's own stage). Both represent live workload for that reviewer.
+### Fix 1 — Make the RPC call resilient to large payloads (chunk it)
+In `useProfilesByWorkflowStage`, batch the 2,533 IDs into chunks of 500 and call `get_bulk_employee_workflows` per chunk in parallel, merging results. Eliminates large-payload failures and keeps the cache key stable.
 
 ```ts
-// Before
-if (statsB.badge1 !== statsA.badge1) return statsB.badge1 - statsA.badge1;
-// After (for hr_pms / audit / management):
-const urgencyA = (viewLevel === 'hr_pms' || viewLevel === 'audit' || viewLevel === 'management')
-  ? statsA.badge1 + statsA.badge2
-  : statsA.badge1;
-const urgencyB = ...statsB...;
-if (urgencyB !== urgencyA) return urgencyB - urgencyA;
+const CHUNK = 500;
+const chunks: string[][] = [];
+for (let i = 0; i < profileIds.length; i += CHUNK) {
+  chunks.push(profileIds.slice(i, i + CHUNK));
+}
+const results = await Promise.all(
+  chunks.map(ids => supabase.rpc('get_bulk_employee_workflows', { 
+    employee_ids: ids, p_review_period: reviewPeriod, p_review_year: reviewYear 
+  }))
+);
+// Merge into stagesMap; if ANY chunk errors, surface error not silent fallback.
 ```
 
-Result: Sanjeeb's 23 items at `hr_pms_review` push him onto page 1 alongside other actionable employees.
+### Fix 2 — Smarter fallback that respects requested stage
+Replace the silent "default template only" fallback with a resilient one:
+1. Per-chunk retry once (200ms backoff).
+2. If still failing, fetch ALL active workflow templates and union their stages — include any employee whose `pms_grade` / `department_id` maps to a template that contains the stage.
+3. As a last resort (only on total failure), surface a non-blocking toast: *"HR PMS roster is loading from a fallback source — refresh if employees appear missing"*. Never return `[]` silently.
 
-Also widen the `reviewedOnBackPagesCount` predicate: an employee is "fully reviewed" only if `badge1 + badge2 === 0 AND total > 0`.
+### Fix 3 — Visibility into pool resolution (debug + telemetry)
+Add a one-line console/log breadcrumb in `useProfilesByWorkflowStage` that prints `{ stage, totalProfiles, withStage, fallbackUsed }` (gated to non-prod or admin-only console). Also surface a tiny "X employees eligible / Y total" hint above the grid for full-access roles so empty states are diagnosable instantly:
 
-### Fix 2 — Period-aware "Total Employees" stat card
-Recompute `stats.totalEmployees` in `EmployeeSelectorGrid.tsx` line 764 block to reflect **employees with at least one KPI in the period** that is relevant to this view (pending, in-review, or reviewed). Add a tooltip on the stat card: *"Employees with at least one KPI in this period at a stage relevant to your role"*.
+```text
+HR PMS Review · 2 employees with KPIs at this stage in Mar 2026 (of 2,533 eligible)
+```
 
-For Admin / cross-check users, expose a secondary subtle line under the value: `(of N total in pool)` so the broader denominator stays visible without misleading the headline number.
-
-### Fix 3 — Reconcile card period with auto-switched scorecard period (Arun)
-Two-part fix:
-
-a. **In `EmployeeSelectorGrid` — "Activity in another period" hint**: when a card has `total === 0` for the selected period AND the employee has KPIs in nearby periods (already detectable via `useKpisByPeriodRanges` — extend with a one-time peek), render a subtle badge: `Last activity: March 2026` so the card and scorecard agree.
-
-b. **In `UnifiedScorecard` — already has `PeriodAutoSwitchBanner`**: confirm it renders for Arun's case, and make its CTA "Update grid period to match" — clicking it propagates the switched period back to the grid via the existing `onPeriodSelectionChange` prop, so the next time the user returns to the grid, the card numbers will match what they just saw.
-
-### Fix 4 — `StatCard` `forwardRef` cleanup
-Wrap `StatCard` (line 1766) in `React.forwardRef` to silence the warning and prevent broken Tooltip refs.
+### Fix 4 — Stage-presence pre-check (defensive)
+Before applying the workflow filter, run a tiny `SELECT DISTINCT employee_id FROM kpis WHERE status = 'hr_pms_review' AND review_period = 'March' AND review_year = 2026` to seed the visible set with employees who **demonstrably** have KPIs at the panel stage in this period. This guarantees Sanjeeb is in the pool regardless of workflow-resolution accuracy. The workflow filter is then layered on top as a sort/categorization aid, not a gate.
 
 ---
 
@@ -83,14 +69,12 @@ Wrap `StatCard` (line 1766) in `React.forwardRef` to silence the warning and pre
 
 | File | Change |
 |---|---|
-| `src/components/review/EmployeeSelectorGrid.tsx` | Sort key includes `badge2` for hr_pms / audit / management; `reviewedOnBackPagesCount` widened; stats `totalEmployees` recomputed against period KPIs; "Last activity in <period>" hint on zero-KPI cards; `StatCard` wrapped in `React.forwardRef` |
-| `src/components/scorecard/PeriodAutoSwitchBanner.tsx` (existing) | Add "Update grid period" CTA that calls `onPeriodSelectionChange` |
-| `src/components/scorecard/UnifiedScorecard.tsx` | Pass `onPeriodSelectionChange` to the banner so the grid period can be updated when user accepts the auto-switch |
-| `DOCUMENTATION.md` | Version History v2.64.8 — Reviewer grid urgency sort, total-employees accuracy, auto-switch reconciliation, StatCard ref fix |
-| `mem://features/review/reviewer-grid-progress-and-prioritization` | Append: "HR PMS / Audit / Management urgency = badge1 + badge2 (own-stage KPIs are part of live workload)" |
-| `mem://features/review/smart-period-detection-workflow` | Append: "Auto-switch banner exposes a CTA to push the switched period back to the parent grid for consistency" |
+| `src/hooks/useOrganization.ts` | Chunked RPC calls; resilient fallback with per-chunk retry; diagnostic breadcrumb; **always** include employees who have KPIs at the requested stage in the requested period (Fix 4 seed) |
+| `src/components/review/EmployeeSelectorGrid.tsx` | Small "N eligible of M total" diagnostic line above the grid for admin/HR PMS/auditor/management; non-blocking toast when fallback is used |
+| `DOCUMENTATION.md` | Version History v2.64.9 — Resilient HR PMS / Audit / Management roster resolution |
+| `mem://features/review/period-specific-reviewer-visibility` | Append: "Roster resolution must seed from `kpis(status, period)` actuals so reviewer panels never silently exclude employees on RPC fallback. Bulk RPC chunked at 500 IDs." |
 
-No DB / RLS / workflow / migration changes. Pure UI logic.
+No DB / RLS / migration / workflow changes. Pure client-side resilience.
 
 ---
 
@@ -98,16 +82,16 @@ No DB / RLS / workflow / migration changes. Pure UI logic.
 
 | Area | Impact |
 |---|---|
-| Data | None — read-only logic |
+| Data | None — read-only resolution |
 | Workflow / RLS | None |
-| UI ordering | HR PMS / Audit / Management grids re-order: employees actively in-review surface alongside employees with new pending items. Manager / Skip-level grids unchanged |
-| "Total Employees" number | Drops from "all eligible" to "active in this period" — matches user expectation. Add tooltip + secondary count to retain transparency |
-| Regression | Low. Sort change is local; recomputed stat is opt-in per view; `forwardRef` is additive. Existing v2.64.4 / v2.64.5 fixes (URL stability + discoverability pill) preserved |
-| Mitigation / test matrix | (a) HR PMS panel, March 2026 → Sanjeeb 101178 visible on page 1 with "23 in review" badge. (b) Audit panel, March 2026 → Arun shows "1 pending". (c) Audit panel, April 2026 → Arun shows "no pending" + "Last activity: March 2026" hint. (d) Click Arun → scorecard auto-switches to March → banner offers "Update grid". (e) HR PMS Total Employees count matches sum of pending+in-review+reviewed for the period. (f) Console clean (no `forwardRef` warning). (g) Mobile (<640px): stat tooltip accessible via long-press |
+| UI | Adds one diagnostic line above grid for power users; non-blocking toast on fallback use only |
+| Performance | Chunking sends 5 parallel RPC calls instead of 1 monster — actually faster for large orgs; 500-row chunks comfortably fit standard payload limits |
+| Regression | Low. Output is a superset of v2.64.8 (anyone visible before stays visible; previously-hidden employees with KPIs at the stage now appear). Sort/badges unchanged. |
+| Mitigation / test matrix | (a) HR PMS / Mar 2026 → Sanjeeb 101178 visible on page 1 with "23 in HR PMS Review" badge. (b) Audit / Mar 2026 → same workflow path validates. (c) Force-fail RPC (devtools network throttle) → toast appears, employees with March `hr_pms_review` KPIs still visible via Fix 4 seed. (d) Search "101178" in HR PMS → 1 result. (e) Diagnostic line shows "2 of 2,533" for HR PMS / Mar to confirm pool size matches DB. |
 
 ## Out of Scope
-- Server-side pagination
-- Refactoring `getEmployeeKpiStats` into a shared hook
-- Changing manager / skip-level urgency rules (their `badge1` already captures full workload)
-- Removing pagination
+- Server-side pagination of the reviewer grid
+- Refactoring the workflow resolution RPC itself
+- Changing v2.64.8 sort logic (it was correct; the bug was upstream in roster resolution)
+- Adding monitoring/alerting infrastructure for RPC failures
 
