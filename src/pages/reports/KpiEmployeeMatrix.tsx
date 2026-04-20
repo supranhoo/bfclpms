@@ -199,7 +199,7 @@ export default function KpiEmployeeMatrix() {
       {/* Filters */}
       <Card>
         <CardContent className="p-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
             <CompanyFilter
               companies={companies}
               selectedCompanyId={selectedCompanyId}
@@ -222,6 +222,18 @@ export default function KpiEmployeeMatrix() {
               </SelectContent>
             </Select>
 
+            <Select value={divisionId || 'all'} onValueChange={v => {
+              handleFilterChange(setDivisionId, v === 'all' ? '' : v);
+              setBusinessUnitId('');
+              setDepartmentId('');
+            }}>
+              <SelectTrigger><SelectValue placeholder="Division" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Divisions</SelectItem>
+                {divisions?.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+
             <Select value={businessUnitId || 'all'} onValueChange={v => {
               handleFilterChange(setBusinessUnitId, v === 'all' ? '' : v);
               setDepartmentId('');
@@ -229,7 +241,9 @@ export default function KpiEmployeeMatrix() {
               <SelectTrigger><SelectValue placeholder="Business Unit" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Business Units</SelectItem>
-                {businessUnits?.map(bu => <SelectItem key={bu.id} value={bu.id}>{bu.name}</SelectItem>)}
+                {(divisionId ? businessUnits?.filter(bu => bu.division_id === divisionId) : businessUnits)?.map(bu => (
+                  <SelectItem key={bu.id} value={bu.id}>{bu.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
 
