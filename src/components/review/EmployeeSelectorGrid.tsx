@@ -27,6 +27,7 @@ import * as XLSX from 'xlsx';
 import { ViewMode } from './ViewModeToggle';
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
 
 interface EmployeeProfile {
   id: string;
@@ -180,6 +181,22 @@ export function EmployeeSelectorGrid({
   const { data: stageFilteredProfiles, isLoading: stageFilteredLoading } = useProfilesByWorkflowStage(requiredStage, selectedPeriodForFilter, selectedYearForFilter);
 
   const { departments, designations, grades, managers } = useEmployeeFilterOptions();
+
+  // v2.64.9 — Roster resolution diagnostics surfaced from useProfilesByWorkflowStage __meta
+  const { toast } = useToast();
+  const rosterMeta = (stageFilteredProfiles as any)?.__meta as
+    | { totalEligiblePool: number; seededFromKpis: number; fallbackUsed: boolean }
+    | undefined;
+  const fallbackToastFiredRef = useRef(false);
+  useEffect(() => {
+    if (!rosterMeta?.fallbackUsed || fallbackToastFiredRef.current) return;
+    fallbackToastFiredRef.current = true;
+    toast({
+      title: 'Roster loaded from fallback source',
+      description: 'Some workflow data could not be resolved. Refresh if employees appear missing.',
+      variant: 'default',
+    });
+  }, [rosterMeta?.fallbackUsed, toast]);
   const [searchParams] = useSearchParams();
   const autoOpenKpiId = searchParams.get('kpi');
 
@@ -1490,6 +1507,19 @@ export function EmployeeSelectorGrid({
 
       {/* Stats Cards */}
       {renderStatsCards()}
+
+      {/* v2.64.9 — Roster resolution diagnostic (admin / full-access only) */}
+      {isFullAccess && requiredStage && rosterMeta && (
+        <div className="text-xs text-muted-foreground flex items-center gap-2 -mt-2">
+          <Info className="h-3 w-3" />
+          <span>
+            {(stageFilteredProfiles?.length ?? 0).toLocaleString()} eligible
+            {' '}of {rosterMeta.totalEligiblePool.toLocaleString()} active employees
+            {rosterMeta.seededFromKpis > 0 && ` · ${rosterMeta.seededFromKpis} seeded from KPI presence`}
+            {rosterMeta.fallbackUsed && ' · using fallback resolution'}
+          </span>
+        </div>
+      )}
 
       {/* Auditor Workload Summary (audit view only) */}
       {viewLevel === 'audit' && (auditorWorkloadStats.length > 0 || unassignedStats) && (
