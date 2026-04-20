@@ -216,7 +216,7 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions, wo
                   />
                   <Legend />
                   <Line type="monotone" dataKey="target" stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" name="Target" />
-                  <Line type="monotone" dataKey="achieved" stroke="hsl(var(--primary))" strokeWidth={2} name="Achieved" />
+                  <Line type="monotone" dataKey="finalAchieved" stroke="hsl(var(--primary))" strokeWidth={2} name="Achieved (Final)" connectNulls={false} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
