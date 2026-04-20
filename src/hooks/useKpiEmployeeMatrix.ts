@@ -66,13 +66,17 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters) {
     queryFn: async () => {
       const PAGE_SIZE = 1000;
 
-      // ── 0. Fetch dept→BU mapping if BU filter is active ───
+      // ── 0. Fetch dept→BU / dept→Division mapping if needed ──
       let deptBuMap: Map<string, string> | null = null;
-      if (filters.businessUnitId) {
+      let deptDivMap: Map<string, string> | null = null;
+      if (filters.businessUnitId || filters.divisionId) {
         const { data: depts } = await supabase
           .from('departments')
-          .select('id, business_unit_id');
-        deptBuMap = new Map((depts ?? []).map(d => [d.id, d.business_unit_id ?? '']));
+          .select('id, business_unit_id, business_units(division_id)');
+        deptBuMap = new Map((depts ?? []).map((d: any) => [d.id, d.business_unit_id ?? '']));
+        deptDivMap = new Map(
+          (depts ?? []).map((d: any) => [d.id, (d.business_units?.division_id as string) ?? ''])
+        );
       }
 
       // ── 1. Fetch KPIs for the period ──────────────────────
@@ -139,8 +143,12 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters) {
         const empId = kpi.employee_id;
         const deptId = profile.department_id;
 
-        // Business Unit filter
-        if (filters.businessUnitId && deptBuMap) {
+        // Division filter (narrower — takes precedence when both set)
+        if (filters.divisionId && deptDivMap) {
+          const divId = deptId ? deptDivMap.get(deptId) : undefined;
+          if (divId !== filters.divisionId) continue;
+        } else if (filters.businessUnitId && deptBuMap) {
+          // Business Unit filter
           const buId = deptId ? deptBuMap.get(deptId) : undefined;
           if (buId !== filters.businessUnitId) continue;
         }
