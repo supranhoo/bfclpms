@@ -22,7 +22,7 @@ import { EmployeeFilters } from '@/components/review/EmployeeFilters';
 import { EmployeeContactCard } from '@/components/review/EmployeeContactCard';
 import { supabase } from '@/integrations/supabase/client';
 import { formatEmployeeName } from '@/lib/utils';
-import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2, Download, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2, Download, ChevronDown, ChevronUp, Loader2, Info } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { ViewMode } from './ViewModeToggle';
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
@@ -722,6 +722,37 @@ export function EmployeeSelectorGrid({
     const otherStart = Math.max(0, sliceStart - assignedMembers.length);
     return otherMembers.slice(otherStart, otherStart + remaining);
   }, [assignedMembers.length, otherMembers, sliceStart, sliceEnd, pageSize]);
+
+  // Discoverability hint: when sorted by urgency (most-pending first), employees
+  // who are fully reviewed/forwarded sink to the back pages. Surface a one-click
+  // jump to filter directly to that "completed" status. Maps viewLevel → its
+  // "completed" statusFilter value (matches statusOptions definitions above).
+  const completedFilterForView = useMemo<string | null>(() => {
+    switch (viewLevel) {
+      case 'team':
+      case 'skip_level':
+      case 'hr_pms':
+        return 'reviewed';
+      case 'audit':
+        return 'forwarded';
+      case 'management':
+        return 'approved';
+      default:
+        return null;
+    }
+  }, [viewLevel]);
+
+  // Count of reviewed/completed employees in the CURRENT (statusFilter='all') set,
+  // i.e. those with badge1 === 0 AND total > 0. Used to gate the discoverability pill.
+  const reviewedOnBackPagesCount = useMemo(() => {
+    if (statusFilter !== 'all' || totalPages <= 1 || !displayMembers || !completedFilterForView) return 0;
+    let count = 0;
+    for (const m of displayMembers) {
+      const s = getEmployeeKpiStats(m.id, m.relationship);
+      if (s.total > 0 && s.badge1 === 0) count++;
+    }
+    return count;
+  }, [statusFilter, totalPages, displayMembers, completedFilterForView, getEmployeeKpiStats]);
 
   // Reset to page 1 when filters/sort/view change so users never land on an empty page.
   useEffect(() => {
@@ -1552,6 +1583,30 @@ export function EmployeeSelectorGrid({
         <CardContent>
           {displayMembers && displayMembers.length > 0 ? (
             <>
+              {/* Discoverability pill: explains urgency sort + offers quick-jump to completed */}
+              {statusFilter === 'all' && totalPages > 1 && reviewedOnBackPagesCount > 0 && completedFilterForView && (
+                <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs sm:text-sm">
+                  <div className="flex items-start sm:items-center gap-2 flex-1 text-muted-foreground">
+                    <Info className="h-4 w-4 shrink-0 mt-0.5 sm:mt-0" />
+                    <span>
+                      Page <span className="font-medium text-foreground">{safePage}</span> of{' '}
+                      <span className="font-medium text-foreground">{totalPages}</span> — sorted by most pending first.{' '}
+                      <span className="font-medium text-foreground">{reviewedOnBackPagesCount.toLocaleString()}</span>{' '}
+                      fully reviewed {reviewedOnBackPagesCount === 1 ? 'employee appears' : 'employees appear'} on later pages.
+                    </span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 shrink-0"
+                    onClick={() => setStatusFilter(completedFilterForView)}
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    Show only Reviewed
+                  </Button>
+                </div>
+              )}
+
               {/* Audit grouped view: Assigned to Me + All Others */}
               {isAuditGrouped ? (
                 <div className="space-y-6">
@@ -1591,10 +1646,12 @@ export function EmployeeSelectorGrid({
               {/* Pagination footer — only render when there is more than one page */}
               {totalMembers > pageSize && (
                 <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t">
-                  <div className="text-xs sm:text-sm text-muted-foreground">
+                  <div className="text-xs sm:text-sm text-muted-foreground text-center sm:text-left">
+                    <span className="font-medium text-foreground">Page {safePage} of {totalPages}</span>
+                    <span className="mx-2">·</span>
                     Showing <span className="font-medium text-foreground">{sliceStart + 1}</span>–
                     <span className="font-medium text-foreground">{Math.min(sliceEnd, totalMembers)}</span> of{' '}
-                    <span className="font-medium text-foreground">{totalMembers.toLocaleString()}</span>
+                    <span className="font-medium text-foreground">{totalMembers.toLocaleString()}</span> employees
                   </div>
                   <div className="flex items-center gap-3 flex-wrap justify-center">
                     <div className="flex items-center gap-2">
