@@ -26,6 +26,14 @@ export interface PeriodSelection {
   customStartYear?: number;
   /** For cross-year selections */
   periodRanges: Array<{ month: string; year: number }>;
+  /**
+   * When the system auto-switches the period (e.g. Smart Period Detection in
+   * EmployeeSelectorGrid jumps to the most recent period with data), this
+   * captures the period the user originally had selected so reviewer
+   * scorecards can disclose the switch via a banner. Cleared on any
+   * user-initiated change in ReviewPeriodSelectorEnhanced.
+   */
+  autoSwitchedFrom?: { month: string; year: number };
 }
 
 interface ReviewPeriodSelectorEnhancedProps {
