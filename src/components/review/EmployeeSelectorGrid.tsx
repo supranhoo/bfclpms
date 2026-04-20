@@ -1841,6 +1841,7 @@ interface StatCardProps {
   className?: string;
   onClick?: () => void;
   active?: boolean;
+  tooltip?: string;
 }
 
 const colorMap: Record<StatCardProps['color'], { border: string; bg: string; text: string }> = {
@@ -1857,13 +1858,13 @@ const colorMap: Record<StatCardProps['color'], { border: string; bg: string; tex
 // v2.64.8: forwardRef so Radix Tooltip and other ref-forwarding wrappers can
 // attach refs without React warnings.
 const StatCard = React.forwardRef<HTMLDivElement, StatCardProps>(function StatCard(
-  { icon: Icon, label, value, color, subtitle, className = '', onClick, active },
+  { icon: Icon, label, value, color, subtitle, className = '', onClick, active, tooltip },
   ref,
 ) {
   const colors = colorMap[color];
   const isClickable = !!onClick;
 
-  return (
+  const card = (
     <Card
       ref={ref}
       className={`border-l-4 ${colors.border} ${className} ${isClickable ? 'cursor-pointer transition-all hover:shadow-md' : ''} ${active ? 'ring-2 ring-primary shadow-md' : ''}`}
@@ -1872,7 +1873,10 @@ const StatCard = React.forwardRef<HTMLDivElement, StatCardProps>(function StatCa
       <CardContent className="pt-4 sm:pt-6">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs sm:text-sm font-medium text-muted-foreground">{label}</p>
+            <p className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-1">
+              {label}
+              {tooltip && <Info className="h-3 w-3 opacity-60" />}
+            </p>
             <p className={`text-xl sm:text-3xl font-bold ${color === 'primary' ? '' : colors.text}`}>{value}</p>
             {subtitle && <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">{subtitle}</p>}
           </div>
@@ -1882,6 +1886,16 @@ const StatCard = React.forwardRef<HTMLDivElement, StatCardProps>(function StatCa
         </div>
       </CardContent>
     </Card>
+  );
+
+  if (!tooltip) return card;
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>{card}</TooltipTrigger>
+        <TooltipContent side="bottom" className="max-w-xs text-xs">{tooltip}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 });
 
