@@ -1,90 +1,85 @@
 
 
-## Plan — Workflow Overrides Pagination + Search Fix + PMS Grade Defaults
+## RCA — HR PMS Stat Cards Show Wrong Counts (Mar 2026)
 
-### Goal
-1. Add real pagination to **Employee Workflow Overrides** table (50/page), with search spanning all employees.
-2. Fix the "search doesn't show all employees" bug — root cause: profiles query is silently capped at 1000 rows.
-3. Hide the **PMS Grade column** in the Overrides table by default (toggle to show).
-4. Hide the **PMS Grade filter** by default in all reviewer dashboards (Team / Manager / Skip-Level / HR PMS / Audit / Management) — surfaced via a "More filters" toggle so it neither loads options nor narrows results unless invoked.
+### Evidence (DB vs UI)
 
-### Root Cause — "Search not showing all employees"
+| Card | UI | DB Truth | Gap |
+|---|---|---|---|
+| Total Employees | 14 | 107 distinct employees have March KPIs at HR-PMS-relevant stages | -93 |
+| Pending Review | 0 | 0 at `skip_level_check` | ✅ |
+| In HR PMS Review | 28 | 28 at `hr_pms_review` | ✅ |
+| HR PMS Reviewed | 185 | 806 KPIs past HR PMS (or ~739 if "approved only") | -621 |
+| Total KPIs | 595 | 1,758 March KPIs | -1,163 |
 
-`WorkflowConfig.tsx` line 143–153 fetches `profiles` with no `.range()`. PostgREST default cap = **1000 rows**. With ~2,533 active employees, ~1,500 are silently missing → search can never find them. v2.64.9 fixed this in `useProfilesByWorkflowStage`; the same pattern was missed here.
+### Root Cause
 
-### UI Mockup — Workflow Overrides Table
+The v2.64.8 "period-aware Total Employees" fix in `EmployeeSelectorGrid.tsx` over-narrowed the denominator. For HR PMS / Audit / Management views, the recompute counts only employees whose CURRENT KPI status is at the reviewer's stage or immediately before it. It excludes:
+
+1. **Employees whose KPIs already advanced past the reviewer's stage** — for HR PMS, employees with KPIs now at `management_review` or `approved` were reviewed by HR PMS this period and must count toward "Total Employees" and "Reviewed".
+2. **Employees with mixed-status KPI sets** — some at `kra_set`, some at `manager_check`, some at `approved` — they belong in the period roster regardless of where the bulk sits today.
+3. **`Total KPIs` filter is over-scoped** — currently filters by stage-eligibility instead of "all KPIs of employees in this view's roster, this period".
+
+The `2,468 eligible of 2,533` diagnostic correctly identifies the workflow-eligible pool. The bug is in the second-stage narrowing (period-presence + stage-relevance) which drops anyone past the reviewer's stage.
+
+### Fix Plan
+
+#### Fix 1 — Correct "Total Employees" definition for review dashboards
+In `src/components/review/EmployeeSelectorGrid.tsx`, change the period-aware recompute so an employee counts if **any** of their KPIs in the selected period falls within the workflow stages relevant to this view:
+
+| View | Counts employees with any March KPI at any of: |
+|---|---|
+| `hr_pms` | `kra_set`, `self_review`, `manager_check`, `skip_level_check`, `hr_pms_review`, `audit`, `management_review`, `approved` (i.e., any stage their workflow contains) |
+| `audit` | same — any stage in their template |
+| `management` | same |
+| `manager` | same (limited to direct reports) |
+| `skip_level` | same (limited to skip-reports) |
+
+In short: **roster = employees whose workflow includes my review stage AND who have ≥1 KPI in this period**, regardless of where those KPIs currently sit.
+
+#### Fix 2 — Correct "HR PMS Reviewed" / "Audit Reviewed" / "Management Reviewed"
+Define "Reviewed by me this period" as: KPIs whose `<stage>_score` (or `<stage>_reviewed_at` audit column) is populated AND `review_period = March` AND `review_year = 2026`. This avoids double-counting work that bypassed the stage.
+
+For HR PMS: count KPIs where `hr_pms_score IS NOT NULL` (or equivalent) for March 2026.
+
+#### Fix 3 — Correct "Total KPIs" 
+Change to: total KPIs in this period belonging to employees in the current roster (after demographic + workflow filters), not stage-scoped. Label tooltip: *"All KPIs in this period for employees visible in this view"*.
+
+#### Fix 4 — Tooltip clarity
+Add tooltips to all 5 stat cards explaining the exact definition (e.g., *"Employees with at least one KPI in March whose workflow includes HR PMS"*).
+
+### UI Mockup
 
 ```text
-┌─ Employee Workflow Overrides ─────────────────────────────────────┐
-│  Showing overrides for March 2026                                  │
-│                                                                    │
-│  [🔍 Search employees…              ]   [☐ Show PMS Grade column]  │
-│                                                                    │
-│  ┌─────────────────────┬────────┬──────────────────────┬────────┐  │
-│  │ Employee            │ Code   │ Assigned Workflow    │ Action │  │
-│  ├─────────────────────┼────────┼──────────────────────┼────────┤  │
-│  │ Aakash Sharma       │ 100123 │ [Standard ▼]         │ 🗑     │  │
-│  │ Aarav Mehta         │ 100124 │ [Inherit (default)▼] │        │  │
-│  │ …                                                              │
-│  └────────────────────────────────────────────────────────────────┘  │
-│                                                                    │
-│  Showing 1–50 of 2,533 employees       [« Prev]  Page 1 of 51  [Next »] │
-└────────────────────────────────────────────────────────────────────┘
+┌──────────────────┬──────────────┬──────────────────┬──────────────────┬──────────────┐
+│ Total Employees  │ Pending      │ In HR PMS Review │ HR PMS Reviewed  │ Total KPIs   │
+│      107  ⓘ      │      0       │       28         │      739         │   1,758      │
+│ In Mar 2026      │ Before HR PMS│ Currently here   │ HR PMS completed │ This period  │
+└──────────────────┴──────────────┴──────────────────┴──────────────────┴──────────────┘
+ⓘ tooltip: "Employees with at least one KPI in March 2026 whose workflow includes the HR PMS stage"
 ```
-
-When user types in the search box, the entire roster (all 2,533) is filtered, then paginated 50/page. Result count badge updates: `"23 matches found"`.
-
-### UI Mockup — Reviewer Dashboard Filters (HR PMS / Audit / Management / etc.)
-
-```text
-Before:
-[Search…] [Department ▼] [Designation ▼] [PMS Grade ▼] [Manager ▼] [Status ▼]
-
-After:
-[Search…] [Department ▼] [Designation ▼] [Manager ▼] [Status ▼]   [+ More filters ▾]
-                                                                    └─► PMS Grade ▼   (only on click)
-```
-
-The PMS Grade dropdown:
-- Is hidden behind "More filters" toggle.
-- Its option list is only fetched the first time the user opens the toggle (lazy `enabled` flag on `useQuery`).
-- Does not narrow other dropdowns (already true today; no change needed).
-- When set, badge appears as today and is independently clearable.
 
 ### Files Touched
 
 | File | Change |
 |---|---|
-| `src/pages/admin/WorkflowConfig.tsx` | (a) Profiles query: switch to `fetchAllPaged` so all employees load. (b) Add `currentPage` state + 50/page pagination using existing `Pagination` UI. (c) Search filters the FULL list before pagination. (d) Add `showPmsGradeColumn` toggle (default `false`); hide column + header + cell when off. (e) Replace `.slice(0, 50)` with proper paged slice. (f) Replace "Showing 50 of N" hint with full pagination footer (`Showing X–Y of Z`). |
-| `src/components/review/EmployeeFilters.tsx` | (a) Remove PMS Grade from the default filter row. (b) Add a `Popover`-based "More filters" toggle (`[+ More filters]`) containing the PMS Grade `OrgFilterCombobox`. (c) When `selectedGrade` is set, the toggle button shows a count badge and the active-filter badge row still renders the chip. |
-| `src/hooks/useEmployeeFilterOptions.ts` | Make the `distinct-grades` query lazy: accept `{ enabledGrades?: boolean }` option, gate `useQuery({ enabled: enabledGrades })`. Default `false` so dashboards don't pay the round-trip until the user opens "More filters". |
-| `src/components/review/EmployeeSelectorGrid.tsx` | Wire local `gradesEnabled` boolean (set true once "More filters" opens), pass into `useEmployeeFilterOptions({ enabledGrades })`. No change to filter application logic. |
-| `DOCUMENTATION.md` | Version History v2.64.10 — Workflow Overrides pagination + roster cap fix; PMS Grade hidden by default in Overrides table and reviewer dashboards. |
-| `mem://features/admin/profile-based-menu-access` (append note) | Quick mention that admin tables querying `profiles` MUST use `fetchAllPaged` to bypass PostgREST's 1000-row cap. |
+| `src/components/review/EmployeeSelectorGrid.tsx` | Rewrite `stats.totalEmployees`, `stats.reviewed`, `stats.totalKpis` recompute blocks. Add Tooltip wrappers explaining each metric. Keep diagnostic line. |
+| `src/components/review/StatCard.tsx` (if separate) or inline | Accept `tooltip?: string` prop |
+| `DOCUMENTATION.md` | v2.64.11 — Stat card metric corrections for reviewer dashboards |
+| `mem://features/review/reviewer-dashboard-view-architecture` | Append: "Stat cards: Total Employees = period-present + workflow-eligible (any stage); Reviewed = KPIs with reviewer signature in period; Total KPIs = period total for visible roster" |
 
-### Technical Details
-
-- Reuse existing `Pagination` UI from `src/components/ui/pagination.tsx` (same pattern as v2.64.4 EmployeeSelectorGrid).
-- Reuse existing `fetchAllPaged` helper from `src/lib/fetchAll.ts` (already used by `useEmployeeFilterOptions` for managers).
-- `showPmsGradeColumn` state stored in component (not URL) — short-lived UI preference, no need to persist.
-- "More filters" popover uses existing `Popover` + `OrgFilterCombobox` — no new components.
-- Lazy-loading grades: `useQuery({ enabled: enabledGrades, ... })` — when `enabledGrades=false`, `data` stays `undefined`, dropdown shows "loading" the first time it's opened, then cached forever.
-
-### Risk & Impact Report
+### Risk & Impact
 
 | Area | Impact |
 |---|---|
-| Data | None — read-only changes |
+| Data | None (read-only metrics) |
 | Workflow / RLS | None |
-| Workflow Overrides table | Page can now find any of ~2,533 employees via search (regression fix). PMS Grade column hidden by default (toggle to show). Existing assignments unchanged. |
-| Reviewer dashboards | PMS Grade filter dropdown moved into a "More filters" popover. Employees previously filtered by PMS Grade via URL param (`?grade=…`) still work — popover auto-opens if grade is preset. No change to filtering logic. |
-| Performance | Removes one initial query on every dashboard load (grades). Workflow Overrides page does 3–4 paged fetches once instead of 1 capped fetch. Net improvement. |
-| Regression risk | Low. Pagination component already battle-tested. Filter component changes are additive (existing props/behavior preserved). |
-| Mitigation / test matrix | (a) Workflow Overrides → search "101178" → Sanjeeb appears. (b) Pagination shows correct counts and navigates. (c) "Show PMS Grade column" toggle works. (d) HR PMS / Audit / Management dashboards: PMS Grade filter no longer in the default row. (e) Click "More filters" → grade dropdown appears, fetches options once. (f) Select a grade → reviewer grid filters as before; chip appears in active filter row. (g) Refresh URL with `?grade=L4` → popover auto-opens, grade pre-selected. (h) Mobile (<640px): "More filters" expands inline below other filters. |
+| Numbers shown | All 5 cards on HR PMS / Audit / Management / Manager / Skip-Level dashboards will increase to match DB truth. May surprise users — version note + tooltips explain why. |
+| Regression | Low. Sort, badges, filters, employee list all unchanged. Only stat card numerator/denominator math changes. |
+| Test matrix | (a) HR PMS Mar 2026 → Total Employees ≈ 107, Total KPIs = 1,758, In Review = 28, Reviewed ≥ 739. (b) Audit Mar 2026 → numbers reflect audit-stage truth. (c) Manager Review → only direct reports counted. (d) Tooltips render on hover. (e) Diagnostic line still shows "X eligible of Y active". |
 
 ### Out of Scope
-- Server-side pagination or search of profiles (client-side is sufficient at ~2.5K rows after the cap fix).
-- Persisting "Show PMS Grade column" toggle across sessions.
-- Changing Department/Designation/Manager filter behavior.
-- Changing PMS Grade tab in WorkflowConfig (separate tab; unaffected).
+- Server-side metric aggregation (current client-side calc is fast enough)
+- Changing the employee card list / sort / pagination
+- Touching dashboards outside the reviewer grid (admin reports, etc.)
 
