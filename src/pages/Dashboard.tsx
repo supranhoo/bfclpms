@@ -285,12 +285,17 @@ export default function Dashboard() {
     setViewMode(mode);
     setSelectedEmployee(null);
     setAutoOpenKpiId(null);
-    // Clear filter params when switching view modes
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      FILTER_PARAM_NAMES.forEach((p) => next.delete(p));
-      return next;
-    }, { replace: true });
+    // v2.64.3 — Defer URL filter clearing one tick so the new viewMode renders FIRST
+    // (using the last-good baseMembers fallback). Doing 6 sequential URL writes
+    // synchronously inside the same React commit causes extra re-renders and
+    // contributes to the cross-source flicker on Team → HR PMS / Audit / Management.
+    queueMicrotask(() => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        FILTER_PARAM_NAMES.forEach((p) => next.delete(p));
+        return next;
+      }, { replace: true });
+    });
   }, [setSearchParams]);
 
   // Handle employee selection from grid

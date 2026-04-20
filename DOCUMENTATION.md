@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-04-16  
-> **Version:** 2.64.0 — Performance Optimization Pass: Vite manualChunks bundle splitting (entry chunk 628KB → 93KB), 10-min React Query staleTime, route prefetch on sidebar hover, realtime debounce 500ms → 1500ms.
+> **Last Updated:** 2026-04-20  
+> **Version:** 2.64.3 — Cross-source flicker fix: cache last non-empty `baseMembers` in `EmployeeSelectorGrid` so Team → HR PMS / Audit / Management panel switches no longer flash the skeleton when the new query is cold-cached. Adds `placeholderData: keepPreviousData` to `useProfiles`/`useTeamMembers`/`useSkipLevelTeamMembers` and defers URL filter clearing in `Dashboard.handleModeChange` by one microtask to avoid extra render passes.
 > **Maintainer:** Lovable AI
 
 ---

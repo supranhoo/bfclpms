@@ -280,6 +280,7 @@ export function useProfiles() {
 
       return profilesWithRoles;
     },
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -301,6 +302,7 @@ export function useTeamMembers(managerId: string | undefined) {
       return data;
     },
     enabled: !!managerId,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -404,5 +406,6 @@ export function useSkipLevelTeamMembers(userId: string | undefined) {
       return data || [];
     },
     enabled: !!userId,
+    placeholderData: keepPreviousData,
   });
 }
