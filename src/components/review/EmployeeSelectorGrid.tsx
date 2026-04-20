@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useUrlFilterState, useUrlFilterStateNullable, useClearAllFilters } from '@/hooks/useUrlFilterState';
 import { useMyAuditAssignments } from '@/hooks/useAuditAssignments';
@@ -667,8 +667,17 @@ export function EmployeeSelectorGrid({
       // Employees with 0 KPIs sink to bottom
       if (statsA.total === 0 && statsB.total > 0) return 1;
       if (statsB.total === 0 && statsA.total > 0) return -1;
-      // Most pending first
-      if (statsB.badge1 !== statsA.badge1) return statsB.badge1 - statsA.badge1;
+      // Most pending first. For hr_pms / audit / management, in-review items
+      // (badge2) are also live workload — count them in the urgency key so
+      // employees actively under review don't sink behind those with only
+      // tiny upstream-pending counts. (v2.64.8 — Sanjeeb 101178 fix.)
+      const includeBadge2 =
+        viewLevel === 'hr_pms' ||
+        viewLevel === 'audit' ||
+        viewLevel === 'management';
+      const urgencyA = includeBadge2 ? statsA.badge1 + statsA.badge2 : statsA.badge1;
+      const urgencyB = includeBadge2 ? statsB.badge1 + statsB.badge2 : statsB.badge1;
+      if (urgencyB !== urgencyA) return urgencyB - urgencyA;
       // More total KPIs = higher priority
       if (statsB.total !== statsA.total) return statsB.total - statsA.total;
       // Alphabetical fallback
@@ -749,10 +758,19 @@ export function EmployeeSelectorGrid({
     let count = 0;
     for (const m of displayMembers) {
       const s = getEmployeeKpiStats(m.id, m.relationship);
-      if (s.total > 0 && s.badge1 === 0) count++;
+      // v2.64.8: For hr_pms / audit / management, badge2 (in-review) is also
+      // live workload, so an employee is only "fully reviewed/forwarded" when
+      // both badge1 AND badge2 are zero. Otherwise the discoverability pill
+      // misclassifies actively-in-review employees as "completed".
+      const includeBadge2 =
+        viewLevel === 'hr_pms' ||
+        viewLevel === 'audit' ||
+        viewLevel === 'management';
+      const remaining = includeBadge2 ? s.badge1 + s.badge2 : s.badge1;
+      if (s.total > 0 && remaining === 0) count++;
     }
     return count;
-  }, [statusFilter, totalPages, displayMembers, completedFilterForView, getEmployeeKpiStats]);
+  }, [statusFilter, totalPages, displayMembers, completedFilterForView, getEmployeeKpiStats, viewLevel]);
 
   // Reset to page 1 when filters/sort/view change so users never land on an empty page.
   useEffect(() => {
@@ -802,20 +820,26 @@ export function EmployeeSelectorGrid({
       };
     } else if (viewLevel === 'audit') {
       let pending = 0, inAudit = 0, forwarded = 0;
+      const activeEmployeeIds = new Set<string>();
       relevantKpis.forEach(k => {
         // Guard: skip employees without resolved workflows to avoid DEFAULT_WORKFLOW_STAGES fallback overcounting
         if (!hasResolvedWorkflow(k.employee_id)) return;
         const stages = getStages(k.employee_id);
         const auditIdx = stages.indexOf('audit');
         if (auditIdx === -1) return;
-        if (k.status === 'audit') inAudit++;
-        else if (['management_review', 'approved'].includes(k.status || '')) forwarded++;
+        if (k.status === 'audit') { inAudit++; activeEmployeeIds.add(k.employee_id); }
+        else if (['management_review', 'approved'].includes(k.status || '')) { forwarded++; activeEmployeeIds.add(k.employee_id); }
         else {
           const auditReviewable = resolveReviewableStatuses('auditor', stages);
-          if (auditReviewable.includes(k.status || '') && k.status !== 'audit') pending++;
+          if (auditReviewable.includes(k.status || '') && k.status !== 'audit') {
+            pending++;
+            activeEmployeeIds.add(k.employee_id);
+          }
         }
       });
-      return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: inAudit, stat3: forwarded, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+      // v2.64.8: "Total Employees" = those with at least one auditor-relevant
+      // KPI in this period (not the entire eligible-for-audit pool).
+      return { totalEmployees: activeEmployeeIds.size, stat1: pending, stat2: inAudit, stat3: forwarded, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'skip_level') {
       let pending = 0, reviewed = 0;
       relevantKpis.forEach(k => {
@@ -830,19 +854,25 @@ export function EmployeeSelectorGrid({
       return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'hr_pms') {
       let pending = 0, inReview = 0, forwarded = 0;
+      const activeEmployeeIds = new Set<string>();
       relevantKpis.forEach(k => {
         const stages = getStages(k.employee_id);
         const hrIdx = stages.indexOf('hr_pms_review');
         if (hrIdx === -1) return;
-        if (k.status === 'hr_pms_review') inReview++;
+        if (k.status === 'hr_pms_review') { inReview++; activeEmployeeIds.add(k.employee_id); }
         else {
           const hrReviewable = resolveReviewableStatuses('hr_pms', stages);
-          if (hrReviewable.includes(k.status || '') && k.status !== 'hr_pms_review') pending++;
+          if (hrReviewable.includes(k.status || '') && k.status !== 'hr_pms_review') {
+            pending++;
+            activeEmployeeIds.add(k.employee_id);
+          }
           const afterHr = stages.slice(hrIdx + 1);
-          if (afterHr.includes(k.status || '')) forwarded++;
+          if (afterHr.includes(k.status || '')) { forwarded++; activeEmployeeIds.add(k.employee_id); }
         }
       });
-      return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: inReview, stat3: forwarded, stat4: relevantKpis.length, stat5: 0, totalKpis: relevantKpis.length };
+      // v2.64.8: "Total Employees" = those with at least one HR-PMS-relevant
+      // KPI in this period (pending, in-review, or forwarded).
+      return { totalEmployees: activeEmployeeIds.size, stat1: pending, stat2: inReview, stat3: forwarded, stat4: relevantKpis.length, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'pending_self_review') {
       const pendingKpis = relevantKpis.filter(k => k.status === 'kra_set');
       const pendingCount = pendingKpis.length;
@@ -863,8 +893,16 @@ export function EmployeeSelectorGrid({
       const regularCount = pendingKpis.filter(k => !k.is_org_level && (!k.frequency || ['monthly','daily','weekly'].includes(k.frequency.toLowerCase()))).length;
       return { totalEmployees: demographicFilteredMembers.length, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else {
+      // Management view (default branch): Total Employees = those with at
+      // least one management-relevant KPI (pending or approved) in the period.
+      const mgmtActive = new Set<string>();
+      relevantKpis.forEach(k => {
+        if (k.status === 'management_review' || k.status === 'approved') {
+          mgmtActive.add(k.employee_id);
+        }
+      });
       return {
-        totalEmployees: demographicFilteredMembers.length,
+        totalEmployees: mgmtActive.size,
         stat1: relevantKpis.filter(k => k.status === 'management_review').length,
         stat2: relevantKpis.filter(k => k.status === 'approved').length,
         stat3: relevantKpis.length,
@@ -1763,12 +1801,18 @@ const colorMap: Record<StatCardProps['color'], { border: string; bg: string; tex
   orange: { border: 'border-l-orange-500', bg: 'bg-orange-500/10', text: 'text-orange-600' },
 };
 
-function StatCard({ icon: Icon, label, value, color, subtitle, className = '', onClick, active }: StatCardProps) {
+// v2.64.8: forwardRef so Radix Tooltip and other ref-forwarding wrappers can
+// attach refs without React warnings.
+const StatCard = React.forwardRef<HTMLDivElement, StatCardProps>(function StatCard(
+  { icon: Icon, label, value, color, subtitle, className = '', onClick, active },
+  ref,
+) {
   const colors = colorMap[color];
   const isClickable = !!onClick;
-  
+
   return (
     <Card
+      ref={ref}
       className={`border-l-4 ${colors.border} ${className} ${isClickable ? 'cursor-pointer transition-all hover:shadow-md' : ''} ${active ? 'ring-2 ring-primary shadow-md' : ''}`}
       onClick={onClick}
     >
@@ -1786,7 +1830,7 @@ function StatCard({ icon: Icon, label, value, color, subtitle, className = '', o
       </CardContent>
     </Card>
   );
-}
+});
 
 // Mini progress bar for employee cards
 function EmployeeProgressBar({ done, inProgress, total, clearedKraSet }: { done: number; inProgress: number; total: number; clearedKraSet: number }) {
