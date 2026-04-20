@@ -820,20 +820,26 @@ export function EmployeeSelectorGrid({
       };
     } else if (viewLevel === 'audit') {
       let pending = 0, inAudit = 0, forwarded = 0;
+      const activeEmployeeIds = new Set<string>();
       relevantKpis.forEach(k => {
         // Guard: skip employees without resolved workflows to avoid DEFAULT_WORKFLOW_STAGES fallback overcounting
         if (!hasResolvedWorkflow(k.employee_id)) return;
         const stages = getStages(k.employee_id);
         const auditIdx = stages.indexOf('audit');
         if (auditIdx === -1) return;
-        if (k.status === 'audit') inAudit++;
-        else if (['management_review', 'approved'].includes(k.status || '')) forwarded++;
+        if (k.status === 'audit') { inAudit++; activeEmployeeIds.add(k.employee_id); }
+        else if (['management_review', 'approved'].includes(k.status || '')) { forwarded++; activeEmployeeIds.add(k.employee_id); }
         else {
           const auditReviewable = resolveReviewableStatuses('auditor', stages);
-          if (auditReviewable.includes(k.status || '') && k.status !== 'audit') pending++;
+          if (auditReviewable.includes(k.status || '') && k.status !== 'audit') {
+            pending++;
+            activeEmployeeIds.add(k.employee_id);
+          }
         }
       });
-      return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: inAudit, stat3: forwarded, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+      // v2.64.8: "Total Employees" = those with at least one auditor-relevant
+      // KPI in this period (not the entire eligible-for-audit pool).
+      return { totalEmployees: activeEmployeeIds.size, stat1: pending, stat2: inAudit, stat3: forwarded, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'skip_level') {
       let pending = 0, reviewed = 0;
       relevantKpis.forEach(k => {
@@ -848,19 +854,25 @@ export function EmployeeSelectorGrid({
       return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'hr_pms') {
       let pending = 0, inReview = 0, forwarded = 0;
+      const activeEmployeeIds = new Set<string>();
       relevantKpis.forEach(k => {
         const stages = getStages(k.employee_id);
         const hrIdx = stages.indexOf('hr_pms_review');
         if (hrIdx === -1) return;
-        if (k.status === 'hr_pms_review') inReview++;
+        if (k.status === 'hr_pms_review') { inReview++; activeEmployeeIds.add(k.employee_id); }
         else {
           const hrReviewable = resolveReviewableStatuses('hr_pms', stages);
-          if (hrReviewable.includes(k.status || '') && k.status !== 'hr_pms_review') pending++;
+          if (hrReviewable.includes(k.status || '') && k.status !== 'hr_pms_review') {
+            pending++;
+            activeEmployeeIds.add(k.employee_id);
+          }
           const afterHr = stages.slice(hrIdx + 1);
-          if (afterHr.includes(k.status || '')) forwarded++;
+          if (afterHr.includes(k.status || '')) { forwarded++; activeEmployeeIds.add(k.employee_id); }
         }
       });
-      return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: inReview, stat3: forwarded, stat4: relevantKpis.length, stat5: 0, totalKpis: relevantKpis.length };
+      // v2.64.8: "Total Employees" = those with at least one HR-PMS-relevant
+      // KPI in this period (pending, in-review, or forwarded).
+      return { totalEmployees: activeEmployeeIds.size, stat1: pending, stat2: inReview, stat3: forwarded, stat4: relevantKpis.length, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'pending_self_review') {
       const pendingKpis = relevantKpis.filter(k => k.status === 'kra_set');
       const pendingCount = pendingKpis.length;
@@ -881,8 +893,16 @@ export function EmployeeSelectorGrid({
       const regularCount = pendingKpis.filter(k => !k.is_org_level && (!k.frequency || ['monthly','daily','weekly'].includes(k.frequency.toLowerCase()))).length;
       return { totalEmployees: demographicFilteredMembers.length, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else {
+      // Management view (default branch): Total Employees = those with at
+      // least one management-relevant KPI (pending or approved) in the period.
+      const mgmtActive = new Set<string>();
+      relevantKpis.forEach(k => {
+        if (k.status === 'management_review' || k.status === 'approved') {
+          mgmtActive.add(k.employee_id);
+        }
+      });
       return {
-        totalEmployees: demographicFilteredMembers.length,
+        totalEmployees: mgmtActive.size,
         stat1: relevantKpis.filter(k => k.status === 'management_review').length,
         stat2: relevantKpis.filter(k => k.status === 'approved').length,
         stat3: relevantKpis.length,
