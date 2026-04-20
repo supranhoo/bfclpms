@@ -5120,3 +5120,8 @@ Every new edge function **must** complete all of these steps before deployment:
 - **New files**: `src/components/review/PeriodAutoSwitchBanner.tsx`
 - **Modified files**: `src/components/ui/ReviewPeriodSelectorEnhanced.tsx`, `src/components/review/EmployeeSelectorGrid.tsx`, `src/components/review/UnifiedScorecard.tsx`
 - **Note**: `AuditScorecard.tsx` and `ManagementScorecard.tsx` are dead code (no call sites) — only `UnifiedScorecard` is in use, so the banner only needed to be added there.
+
+### v2.64.1 — Eliminate flicker on reviewer panel switch (2026-04-20)
+- **Problem (RCA)**: Switching from Team Review → HR PMS / Audit / Management produced a visible flicker (Team grid → grey skeleton → new grid). Cause: `useProfilesByWorkflowStage` was a cold cache for the new stage, so `isLoading=true` collapsed the entire grid into a skeleton placeholder for 200–800ms. Team view didn't flicker because `useProfiles` was already cached.
+- **Fix**: Added `placeholderData: keepPreviousData` to `useProfilesByWorkflowStage` so the previous panel's data stays rendered during stage swaps. Softened skeleton condition in `EmployeeSelectorGrid` to `isLoading && !hasAnyData` (true cold start only). Added a discreet top-right "Updating…" spinner during background fetch and a `min-h-[600px]` wrapper to prevent layout-collapse jumps.
+- **Modified files**: `src/hooks/useOrganization.ts`, `src/components/review/EmployeeSelectorGrid.tsx`

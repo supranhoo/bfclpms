@@ -22,7 +22,7 @@ import { EmployeeFilters } from '@/components/review/EmployeeFilters';
 import { EmployeeContactCard } from '@/components/review/EmployeeContactCard';
 import { supabase } from '@/integrations/supabase/client';
 import { formatEmployeeName } from '@/lib/utils';
-import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2, Download, ChevronDown, ChevronUp } from 'lucide-react';
+import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2, Download, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { ViewMode } from './ViewModeToggle';
 
@@ -1289,9 +1289,15 @@ export function EmployeeSelectorGrid({
     );
   };
 
-  if (isLoading) {
+  // Soften loading: only show full skeleton on true cold start (no previous data).
+  // During panel switches, keepPreviousData keeps the old grid visible while
+  // new data loads — avoiding the flicker. A subtle spinner indicates background fetch.
+  const hasAnyData = (baseMembers?.length ?? 0) > 0;
+  const isBackgroundFetching = isLoading && hasAnyData;
+
+  if (isLoading && !hasAnyData) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 min-h-[600px]">
         <div className="h-20 bg-muted animate-pulse rounded-lg" />
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map(i => (
@@ -1309,7 +1315,17 @@ export function EmployeeSelectorGrid({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-h-[600px] relative">
+      {isBackgroundFetching && (
+        <div
+          className="absolute top-0 right-0 z-10 flex items-center gap-2 text-xs text-muted-foreground bg-background/80 backdrop-blur-sm px-2 py-1 rounded-md border"
+          role="status"
+          aria-label="Loading view"
+        >
+          <Loader2 className="h-3 w-3 animate-spin" />
+          <span>Updating…</span>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div className="flex items-center gap-3">
