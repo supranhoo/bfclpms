@@ -1,77 +1,76 @@
 
-## RCA: "No pendency outside" but "4 in self_review pending for audit" inside
 
-### Root cause — confirmed from data + code
+## RCA: Flicker when switching from Team Review → HR PMS
 
-Arun Goswami's KPIs in DB:
-- **April 2026**: 13 KPIs, all at `kra_set` (not yet submitted)
-- **March 2026**: **4 KPIs at `self_review`** ← these are the 4 the auditor sees inside
+### Root cause — confirmed from code reading
 
-Two different counting rules produce the discrepancy:
+When the user clicks a different mode in `ViewModeToggle`, `Dashboard.handleModeChange` (line 284) updates `viewMode` and clears the URL filter params. This causes `<EmployeeSelectorGrid>` to re-render with a **new `viewLevel` prop**. The flicker is caused by **a sequence of three intermediate render states** before HR PMS settles:
 
-**1. Outside (Audit Panel grid card)** — `EmployeeSelectorGrid.tsx` lines 503–508:
-```ts
-if (k.status === 'audit') inAudit++;
-else if (['management_review','approved'].includes(k.status)) forwarded++;
-else if (auditReviewable.includes(k.status) && k.status !== 'audit') pending++;
+**Frame 1 — old grid still rendered** (Team view employee cards visible).
+
+**Frame 2 — `isLoading=true` skeleton shown** (`EmployeeSelectorGrid.tsx` line 1292):
 ```
-But the grid is **filtered by `selectedPeriod` / `selectedYear`** (the ReviewPeriodSelector at the top of the page). When the auditor is viewing **April 2026**, Arun's only April KPIs are at `kra_set` → counted as 0 pending. So his card shows "no pendency".
-
-**2. Inside (AuditScorecard.tsx) at lines 261–262**:
-```ts
-const auditPendingStatuses = resolvePendingStatuses('auditor', stages);
-// returns ['self_review', 'audit'] when audit stage exists with manager_check before
-const pendingAuditCount = kpis?.filter(k => auditPendingStatuses.includes(k.status)).length;
+<div className="h-20 bg-muted animate-pulse rounded-lg" />
+... grid of 4 + 6 skeleton placeholders ...
 ```
-The scorecard pulls KPIs across periods (or specifically the period where data exists), and `self_review` is in the auditor's pending status list — so the 4 March KPIs at `self_review` show as "Pending: 4".
+This happens because:
+- `viewLevel='hr_pms'` → `requiredStage='hr_pms_review'` → triggers `useProfilesByWorkflowStage('hr_pms_review', period, year)` (line 178)
+- `stageFilteredProfiles` is `undefined` while fetching → `stageFilteredLoading=true`
+- `isLoading` branch (line 265) returns `true` → renders the skeleton
+- The skeleton **replaces the entire scorecard layout**, including the `ViewModeToggle` strip itself becomes visually "below" a different block height — that's the *flicker* the user perceives
 
-Per `mem://features/review/smart-period-detection-workflow`, the inside view auto-switches to the **most relevant active period** when opened — that's why it lands on March (where Arun has live KPIs) instead of April (where he's at `kra_set`).
+**Frame 3 — HR PMS grid renders** with the actual cards.
 
-### Why this happens (working as designed, but confusing UX)
+So the user sees: **Team grid → blank/grey skeleton → HR PMS grid**, in ~200–800ms (depending on cache).
 
-| Layer | Period scope | Status counted | Result |
-|---|---|---|---|
-| Outside grid card | Strict to selected period (April) | All April KPIs at `kra_set` | 0 pending |
-| Inside scorecard | Smart-detects to March | 4 KPIs at `self_review` | 4 pending |
+### Why it's worse for HR PMS specifically
 
-Both are **technically correct** for their respective period scope. The auditor is seeing a period mismatch:
-- They selected **April 2026** in the panel filter
-- Smart Period Detection inside the scorecard switched to **March 2026** because that's where Arun has unfinished work
-- The "Pending: 4" badge inside refers to **March**, not April
+- **Team view** (when admin/HR PMS): uses `profilesLoading` (`useProfiles`) which is usually already cached → no skeleton shown → instant render.
+- **HR PMS view**: triggers an **additional** query (`useProfilesByWorkflowStage('hr_pms_review', ...)`) keyed by `(stage, period, year)`. First time switching in the session, this is a cold cache → forces `isLoading=true` → skeleton flashes. Same applies to Audit, Management, and Pending* panels.
+- The Team grid → cached profiles → no skeleton.
+- HR PMS / Audit / Management → fresh `useProfilesByWorkflowStage` query → skeleton.
+- That asymmetry is what produces the visible "flicker between both screens".
 
-### The actual UX bug
+### Secondary contributors
 
-The outside card and the inside scorecard show counts for **different periods** without telling the auditor. There is no visible indicator on the inside that the period was auto-switched.
+1. **Filter param clearing** (`handleModeChange` line 289–293) triggers a synchronous URL update, which re-runs the `useUrlFilterState` hooks and resets all derived `useMemo`s on the next render — a tiny extra layout pass.
+2. **`ViewModeToggle` itself does not unmount** (always rendered above the grid), but the grid block below collapses from N cards → 11 skeleton placeholders → M cards, creating a **height jump**. The eye reads this as a flicker.
+3. **`useBulkEmployeeWorkflows`** and **`useEmployeeScoresForPeriod`** chain off `allEmployeeIds` which changes the moment `stageFilteredProfiles` resolves → another render pass with progressively-filling data.
 
-### Proposed fix (Option A — minimal, recommended)
+### Working as designed, but UX needs polish
 
-In `AuditScorecard.tsx` (and Manager/HR/Management scorecards using smart period detection), show a **clear period banner** when the displayed period differs from the panel-selected period:
+Per `mem://features/admin/menu-access-rights` and `mem://features/review/period-specific-reviewer-visibility`, stage-filtered fetching is intentional (don't show employees outside the panel's workflow). The flicker is purely a **transition UX** issue — not a data/correctness bug.
 
-> "Showing March 2026 (auto-switched — KPIs found here). Selected period: April 2026 has no pending audit work."
+### Proposed fix (minimal, recommended — Option A)
 
-Add a small dismissible alert at the top of the scorecard, plus the period chip already present.
+Use **`keepPreviousData`** on the stage-filtered query and gate the skeleton on "no previous data" instead of "loading":
 
-### Proposed fix (Option B — stricter)
+1. **`src/hooks/useOrganization.ts`** — add `placeholderData: keepPreviousData` (TanStack v5) to `useProfilesByWorkflowStage`. On panel switch, the previous panel's profiles stay rendered until the new ones arrive — no skeleton.
+2. **`src/components/review/EmployeeSelectorGrid.tsx`** — change `isLoading` skeleton condition to `isLoading && !baseMembers?.length` so we only show the skeleton on **true cold start** (no data at all), not on background re-fetch.
+3. Add a subtle top-right `<Loader2 className="animate-spin" />` indicator while a background fetch is in-flight — gives feedback without collapsing the layout.
+4. Optional: wrap the grid block in a fixed `min-h-[600px]` to prevent height jump even if a skeleton briefly appears.
 
-Make the outside grid card respect the same Smart Period Detection so the count and the inside view always agree. Higher impact because the outside grid would no longer be a strict period filter — could surprise users who DO want to see only April.
+### Files Touched (Option A)
+- `src/hooks/useOrganization.ts` — add `placeholderData` to `useProfilesByWorkflowStage` (and same for `useProfiles` if cold)
+- `src/components/review/EmployeeSelectorGrid.tsx` — soften skeleton condition; add inline spinner; add `min-h` wrapper
+- `DOCUMENTATION.md` — Version History entry
+- Memory: append a one-line note to `mem://infrastructure/resource-and-performance-optimization` about `placeholderData` for panel-switching queries
+
+### Alternative — Option B (heavier)
+Prefetch all panels' `useProfilesByWorkflowStage` queries on Dashboard mount so all panel switches are instant. Higher data cost on first load (4 extra queries even if user never switches).
 
 ### Risk & Impact (Option A — recommended)
 
 | Area | Impact |
 |---|---|
-| Data | None |
-| Workflow | None |
-| UI | One inline banner in the 4 reviewer scorecards (Audit, Manager, HR PMS, Management) |
-| Regression | Negligible — purely informational |
-| Mitigation | Read existing `selectedPeriod` (panel) vs `effectivePeriod` (auto-switched) from existing hooks; show banner only when they differ |
-
-### Files Touched (Option A)
-- `src/components/review/AuditScorecard.tsx` — add period-mismatch banner
-- `src/components/review/ManagerScorecard.tsx`, `HrPmsScorecard.tsx`, `ManagementScorecard.tsx` — same banner for consistency
-- `DOCUMENTATION.md` — Version History note
-- Memory: append a one-line note to `mem://features/review/smart-period-detection-workflow` about the visible disclosure
+| Data | None. Read-only query option change. |
+| Workflow | None. |
+| UI | Smooth panel switch — old cards stay visible until new ones arrive (~100–500ms). Spinner top-right gives feedback. |
+| Regression | Very low. `placeholderData` is a TanStack-supported pattern; cold start (no prior data) still shows the skeleton, so first-mount UX is unchanged. |
+| Mitigation | Test all 4 panel transitions: Team → HR PMS, HR PMS → Audit, Audit → Management, and back to Team. Verify cold-start (hard refresh on `/dashboard?view=hr_pms`) still shows skeleton (no blank). |
 
 ### Out of Scope
-- Changing Smart Period Detection itself
-- Changing the outside grid's strict period filter
-- Any DB / RLS work
+- Changing the stage-filter logic itself.
+- Persisting all panels' data simultaneously (Option B).
+- Restyling `ViewModeToggle` or skeleton.
+
