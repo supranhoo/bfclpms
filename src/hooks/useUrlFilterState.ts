@@ -67,7 +67,7 @@ export function useUrlFilterStateNullable(
 /**
  * Clear all filter-related URL params at once (used by "Clear All" buttons).
  */
-export const FILTER_PARAM_NAMES = ['q', 'dept', 'desig', 'grade', 'mgr', 'status', 'auditor'] as const;
+export const FILTER_PARAM_NAMES = ['q', 'dept', 'desig', 'grade', 'mgr', 'status', 'auditor', 'page', 'size'] as const;
 
 export function useClearAllFilters() {
   const [, setSearchParams] = useSearchParams();

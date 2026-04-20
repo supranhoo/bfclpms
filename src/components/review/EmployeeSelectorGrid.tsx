@@ -25,6 +25,8 @@ import { formatEmployeeName } from '@/lib/utils';
 import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2, Download, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { ViewMode } from './ViewModeToggle';
+import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface EmployeeProfile {
   id: string;
@@ -195,6 +197,14 @@ export function EmployeeSelectorGrid({
   const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
   const [auditorFilter, setAuditorFilter] = useUrlFilterStateNullable('auditor');
   const [auditorWorkloadExpanded, setAuditorWorkloadExpanded] = useState(true);
+
+  // Pagination state — windowed rendering for large reviewer grids (>2500 employees).
+  // Search/sort/filter still operate on the FULL set; only the rendered slice is windowed.
+  const PAGE_SIZE_OPTIONS = [12, 24, 48, 96];
+  const [page, setPage] = useUrlFilterState('page', '1');
+  const [pageSizeStr, setPageSizeStr] = useUrlFilterState('size', '24');
+  const currentPage = Math.max(1, parseInt(page, 10) || 1);
+  const pageSize = PAGE_SIZE_OPTIONS.includes(parseInt(pageSizeStr, 10)) ? parseInt(pageSizeStr, 10) : 24;
 
   // Audit assignments: fetch current user's assigned employees
   const { data: myAssignedEmployeeIds } = useMyAuditAssignments();
@@ -685,6 +695,39 @@ export function EmployeeSelectorGrid({
     });
     return { assignedMembers: assigned, otherMembers: others };
   }, [displayMembers, viewLevel, myAssignedEmployeeIds, myKpiLevelData, statusFilter]);
+
+  // Pagination derivations: total count + slice. Audit grouped view paginates the
+  // combined list (assigned first, then others) so My Assignments stay on page 1.
+  const isAuditGrouped = viewLevel === 'audit' && assignedMembers.length > 0 && statusFilter !== 'my_assigned';
+  const totalMembers = isAuditGrouped
+    ? assignedMembers.length + otherMembers.length
+    : (displayMembers?.length ?? 0);
+  const totalPages = Math.max(1, Math.ceil(totalMembers / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const sliceStart = (safePage - 1) * pageSize;
+  const sliceEnd = sliceStart + pageSize;
+
+  const pagedDisplayMembers = useMemo(
+    () => (displayMembers || []).slice(sliceStart, sliceEnd),
+    [displayMembers, sliceStart, sliceEnd]
+  );
+  const pagedAssignedMembers = useMemo(
+    () => assignedMembers.slice(sliceStart, sliceEnd),
+    [assignedMembers, sliceStart, sliceEnd]
+  );
+  const pagedOtherMembers = useMemo(() => {
+    const assignedOnPage = Math.max(0, Math.min(assignedMembers.length, sliceEnd) - sliceStart);
+    const remaining = pageSize - assignedOnPage;
+    if (remaining <= 0) return [];
+    const otherStart = Math.max(0, sliceStart - assignedMembers.length);
+    return otherMembers.slice(otherStart, otherStart + remaining);
+  }, [assignedMembers.length, otherMembers, sliceStart, sliceEnd, pageSize]);
+
+  // Reset to page 1 when filters/sort/view change so users never land on an empty page.
+  useEffect(() => {
+    if (currentPage !== 1) setPage('1');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, statusFilter, selectedDepartment, selectedDesignation, selectedGrade, selectedManager, auditorFilter, viewLevel, pageSize]);
 
   // Calculate stats using per-employee workflow-aware resolution
   const stats = useMemo(() => {
@@ -1493,9 +1536,10 @@ export function EmployeeSelectorGrid({
           {displayMembers && displayMembers.length > 0 ? (
             <>
               {/* Audit grouped view: Assigned to Me + All Others */}
-              {viewLevel === 'audit' && assignedMembers.length > 0 && statusFilter !== 'my_assigned' ? (
+              {isAuditGrouped ? (
                 <div className="space-y-6">
                   {/* Assigned Section */}
+                  {pagedAssignedMembers.length > 0 && (
                   <div>
                     <div className="flex items-center gap-2 mb-3">
                       <Badge variant="default" className="text-xs">
@@ -1503,11 +1547,12 @@ export function EmployeeSelectorGrid({
                       </Badge>
                     </div>
                     <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                      {assignedMembers.map(member => renderEmployeeCard(member))}
+                      {pagedAssignedMembers.map(member => renderEmployeeCard(member))}
                     </div>
                   </div>
+                  )}
                   {/* Separator */}
-                  {otherMembers.length > 0 && (
+                  {pagedOtherMembers.length > 0 && (
                     <div>
                       <div className="flex items-center gap-2 mb-3">
                         <Badge variant="outline" className="text-xs">
@@ -1515,14 +1560,85 @@ export function EmployeeSelectorGrid({
                         </Badge>
                       </div>
                       <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                        {otherMembers.map(member => renderEmployeeCard(member))}
+                        {pagedOtherMembers.map(member => renderEmployeeCard(member))}
                       </div>
                     </div>
                   )}
                 </div>
               ) : (
                 <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                  {displayMembers.map(member => renderEmployeeCard(member))}
+                  {pagedDisplayMembers.map(member => renderEmployeeCard(member))}
+                </div>
+              )}
+
+              {/* Pagination footer — only render when there is more than one page */}
+              {totalMembers > pageSize && (
+                <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t">
+                  <div className="text-xs sm:text-sm text-muted-foreground">
+                    Showing <span className="font-medium text-foreground">{sliceStart + 1}</span>–
+                    <span className="font-medium text-foreground">{Math.min(sliceEnd, totalMembers)}</span> of{' '}
+                    <span className="font-medium text-foreground">{totalMembers.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center gap-3 flex-wrap justify-center">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground hidden sm:inline">Per page</span>
+                      <Select value={String(pageSize)} onValueChange={(v) => setPageSizeStr(v)}>
+                        <SelectTrigger className="h-8 w-[72px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PAGE_SIZE_OPTIONS.map(s => (
+                            <SelectItem key={s} value={String(s)}>{s}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Pagination className="mx-0 w-auto">
+                      <PaginationContent>
+                        <PaginationItem>
+                          <PaginationPrevious
+                            href="#"
+                            onClick={(e) => { e.preventDefault(); if (safePage > 1) setPage(String(safePage - 1)); }}
+                            className={safePage <= 1 ? 'pointer-events-none opacity-50' : ''}
+                          />
+                        </PaginationItem>
+                        {(() => {
+                          const pages: (number | 'ellipsis')[] = [];
+                          const add = (n: number) => pages.push(n);
+                          const window = 1;
+                          const start = Math.max(2, safePage - window);
+                          const end = Math.min(totalPages - 1, safePage + window);
+                          add(1);
+                          if (start > 2) pages.push('ellipsis');
+                          for (let i = start; i <= end; i++) add(i);
+                          if (end < totalPages - 1) pages.push('ellipsis');
+                          if (totalPages > 1) add(totalPages);
+                          return pages.map((p, idx) =>
+                            p === 'ellipsis' ? (
+                              <PaginationItem key={`e-${idx}`}><PaginationEllipsis /></PaginationItem>
+                            ) : (
+                              <PaginationItem key={p}>
+                                <PaginationLink
+                                  href="#"
+                                  isActive={p === safePage}
+                                  onClick={(e) => { e.preventDefault(); setPage(String(p)); }}
+                                >
+                                  {p}
+                                </PaginationLink>
+                              </PaginationItem>
+                            )
+                          );
+                        })()}
+                        <PaginationItem>
+                          <PaginationNext
+                            href="#"
+                            onClick={(e) => { e.preventDefault(); if (safePage < totalPages) setPage(String(safePage + 1)); }}
+                            className={safePage >= totalPages ? 'pointer-events-none opacity-50' : ''}
+                          />
+                        </PaginationItem>
+                      </PaginationContent>
+                    </Pagination>
+                  </div>
                 </div>
               )}
             </>
