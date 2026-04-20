@@ -932,17 +932,18 @@ export function EmployeeSelectorGrid({
       return { totalEmployees: demographicFilteredMembers.length, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else {
       // Management view (default branch): Total Employees = those with at
-      // least one management-relevant KPI (pending or approved) in the period.
-      const mgmtActive = new Set<string>();
+      // v2.64.11: Total Employees = unique employees with any KPI in period
+      // (workflow-filtered roster), regardless of current stage.
+      const periodEmployeeIds = new Set<string>();
+      let reviewed = 0;
       relevantKpis.forEach(k => {
-        if (k.status === 'management_review' || k.status === 'approved') {
-          mgmtActive.add(k.employee_id);
-        }
+        periodEmployeeIds.add(k.employee_id);
+        if ((k as any).management_score !== null && (k as any).management_score !== undefined) reviewed++;
       });
       return {
-        totalEmployees: mgmtActive.size,
+        totalEmployees: periodEmployeeIds.size,
         stat1: relevantKpis.filter(k => k.status === 'management_review').length,
-        stat2: relevantKpis.filter(k => k.status === 'approved').length,
+        stat2: reviewed > 0 ? reviewed : relevantKpis.filter(k => k.status === 'approved').length,
         stat3: relevantKpis.length,
         stat4: 0,
         stat5: 0,
