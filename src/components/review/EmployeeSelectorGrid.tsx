@@ -696,6 +696,39 @@ export function EmployeeSelectorGrid({
     return { assignedMembers: assigned, otherMembers: others };
   }, [displayMembers, viewLevel, myAssignedEmployeeIds, myKpiLevelData, statusFilter]);
 
+  // Pagination derivations: total count + slice. Audit grouped view paginates the
+  // combined list (assigned first, then others) so My Assignments stay on page 1.
+  const isAuditGrouped = viewLevel === 'audit' && assignedMembers.length > 0 && statusFilter !== 'my_assigned';
+  const totalMembers = isAuditGrouped
+    ? assignedMembers.length + otherMembers.length
+    : (displayMembers?.length ?? 0);
+  const totalPages = Math.max(1, Math.ceil(totalMembers / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const sliceStart = (safePage - 1) * pageSize;
+  const sliceEnd = sliceStart + pageSize;
+
+  const pagedDisplayMembers = useMemo(
+    () => (displayMembers || []).slice(sliceStart, sliceEnd),
+    [displayMembers, sliceStart, sliceEnd]
+  );
+  const pagedAssignedMembers = useMemo(
+    () => assignedMembers.slice(sliceStart, sliceEnd),
+    [assignedMembers, sliceStart, sliceEnd]
+  );
+  const pagedOtherMembers = useMemo(() => {
+    const assignedOnPage = Math.max(0, Math.min(assignedMembers.length, sliceEnd) - sliceStart);
+    const remaining = pageSize - assignedOnPage;
+    if (remaining <= 0) return [];
+    const otherStart = Math.max(0, sliceStart - assignedMembers.length);
+    return otherMembers.slice(otherStart, otherStart + remaining);
+  }, [assignedMembers.length, otherMembers, sliceStart, sliceEnd, pageSize]);
+
+  // Reset to page 1 when filters/sort/view change so users never land on an empty page.
+  useEffect(() => {
+    if (currentPage !== 1) setPage('1');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, statusFilter, selectedDepartment, selectedDesignation, selectedGrade, selectedManager, auditorFilter, viewLevel, pageSize]);
+
   // Calculate stats using per-employee workflow-aware resolution
   const stats = useMemo(() => {
     if (!periodKpis || !demographicFilteredMembers) {
