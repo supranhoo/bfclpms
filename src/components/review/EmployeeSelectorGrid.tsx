@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useUrlFilterState, useUrlFilterStateNullable, useClearAllFilters } from '@/hooks/useUrlFilterState';
 import { useMyAuditAssignments } from '@/hooks/useAuditAssignments';
@@ -667,8 +667,17 @@ export function EmployeeSelectorGrid({
       // Employees with 0 KPIs sink to bottom
       if (statsA.total === 0 && statsB.total > 0) return 1;
       if (statsB.total === 0 && statsA.total > 0) return -1;
-      // Most pending first
-      if (statsB.badge1 !== statsA.badge1) return statsB.badge1 - statsA.badge1;
+      // Most pending first. For hr_pms / audit / management, in-review items
+      // (badge2) are also live workload — count them in the urgency key so
+      // employees actively under review don't sink behind those with only
+      // tiny upstream-pending counts. (v2.64.8 — Sanjeeb 101178 fix.)
+      const includeBadge2 =
+        viewLevel === 'hr_pms' ||
+        viewLevel === 'audit' ||
+        viewLevel === 'management';
+      const urgencyA = includeBadge2 ? statsA.badge1 + statsA.badge2 : statsA.badge1;
+      const urgencyB = includeBadge2 ? statsB.badge1 + statsB.badge2 : statsB.badge1;
+      if (urgencyB !== urgencyA) return urgencyB - urgencyA;
       // More total KPIs = higher priority
       if (statsB.total !== statsA.total) return statsB.total - statsA.total;
       // Alphabetical fallback
