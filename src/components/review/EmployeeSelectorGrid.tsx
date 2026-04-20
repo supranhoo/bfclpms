@@ -180,7 +180,12 @@ export function EmployeeSelectorGrid({
   const selectedYearForFilter = periodSelection.selectedYear;
   const { data: stageFilteredProfiles, isLoading: stageFilteredLoading } = useProfilesByWorkflowStage(requiredStage, selectedPeriodForFilter, selectedYearForFilter);
 
-  const { departments, designations, grades, managers } = useEmployeeFilterOptions();
+  // Lazy-load PMS Grades only after the user opens the "More filters" popover
+  // (or if a grade is already preset via URL ?grade=...)
+  const [gradesEnabled, setGradesEnabled] = useState<boolean>(false);
+  const { departments, designations, grades, managers } = useEmployeeFilterOptions({
+    enabledGrades: gradesEnabled,
+  });
 
   // v2.64.9 — Roster resolution diagnostics surfaced from useProfilesByWorkflowStage __meta
   const { toast } = useToast();
