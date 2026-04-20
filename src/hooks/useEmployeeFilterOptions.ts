@@ -3,7 +3,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useDepartments } from '@/hooks/useOrganization';
 import { fetchAllPaged } from '@/lib/fetchAll';
 
-export function useEmployeeFilterOptions() {
+interface UseEmployeeFilterOptionsArgs {
+  enabledGrades?: boolean;
+}
+
+export function useEmployeeFilterOptions(args: UseEmployeeFilterOptionsArgs = {}) {
+  const { enabledGrades = false } = args;
   // Fetch departments
   const { data: departments } = useDepartments();
 
@@ -31,6 +36,7 @@ export function useEmployeeFilterOptions() {
         .not('pms_grade', 'is', null);
       return [...new Set(data?.map(p => p.pms_grade))].filter(Boolean).sort() as string[];
     },
+    enabled: enabledGrades,
   });
 
   // Fetch managers (profiles who have direct reports)

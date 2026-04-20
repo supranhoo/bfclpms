@@ -8,7 +8,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { fetchAllPaged } from '@/lib/fetchAll';
 import { 
   useWorkflowTemplates, 
   useWorkflowConfigs, 
@@ -75,6 +78,9 @@ export default function WorkflowConfig() {
   const [archiveTarget, setArchiveTarget] = useState<WorkflowTemplate | null>(null);
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [isOngoing, setIsOngoing] = useState(false);
+  const [showPmsGradeColumn, setShowPmsGradeColumn] = useState(false);
+  const [employeePage, setEmployeePage] = useState(1);
+  const PAGE_SIZE = 50;
 
   // Period selector state: 'global' or specific period
   const currentYear = new Date().getFullYear();
@@ -143,12 +149,14 @@ export default function WorkflowConfig() {
   const { data: profiles } = useQuery({
     queryKey: ['all-profiles-workflow'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, employee_code, pms_grade, department_id, reporting_manager_id')
-        .order('full_name');
-      if (error) throw error;
-      return data;
+      // Use paged fetch to bypass PostgREST's 1000-row default cap (~2,533 employees)
+      return await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('profiles')
+          .select('id, full_name, email, employee_code, pms_grade, department_id, reporting_manager_id')
+          .order('full_name')
+          .range(from, to)
+      );
     },
   });
   
@@ -172,6 +180,18 @@ export default function WorkflowConfig() {
       p.employee_code?.toLowerCase().includes(search)
     );
   }, [profiles, employeeSearch]);
+
+  // Reset to page 1 when search changes
+  useMemo(() => { setEmployeePage(1); }, [employeeSearch]);
+
+  const totalPages = Math.max(1, Math.ceil((filteredProfiles?.length || 0) / PAGE_SIZE));
+  const safePage = Math.min(employeePage, totalPages);
+  const pagedProfiles = useMemo(
+    () => filteredProfiles.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [filteredProfiles, safePage]
+  );
+  const startIdx = filteredProfiles.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const endIdx = Math.min(safePage * PAGE_SIZE, filteredProfiles.length);
   
   // Helper to get config for a specific type and value (from filtered configs)
   const getConfigFor = (type: string, value: string) => {
@@ -604,8 +624,8 @@ export default function WorkflowConfig() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="mb-4">
-                <div className="relative">
+              <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="Search employees..."
@@ -614,6 +634,16 @@ export default function WorkflowConfig() {
                     className="pl-10"
                   />
                 </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="show-pms-grade"
+                    checked={showPmsGradeColumn}
+                    onCheckedChange={setShowPmsGradeColumn}
+                  />
+                  <Label htmlFor="show-pms-grade" className="text-sm cursor-pointer whitespace-nowrap">
+                    Show PMS Grade
+                  </Label>
+                </div>
               </div>
               
               <Table>
@@ -621,13 +651,13 @@ export default function WorkflowConfig() {
                   <TableRow>
                     <TableHead>Employee</TableHead>
                     <TableHead>Code</TableHead>
-                    <TableHead>PMS Grade</TableHead>
+                    {showPmsGradeColumn && <TableHead>PMS Grade</TableHead>}
                     <TableHead>Assigned Workflow</TableHead>
                     <TableHead className="w-[100px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredProfiles?.slice(0, 50).map(profile => {
+                  {pagedProfiles.map(profile => {
                     const config = getConfigFor('employee', profile.id);
                     const template = config ? getTemplate(config.workflow_template_id) : null;
                     
@@ -640,7 +670,7 @@ export default function WorkflowConfig() {
                           </div>
                         </TableCell>
                         <TableCell>{profile.employee_code || '-'}</TableCell>
-                        <TableCell>{profile.pms_grade || '-'}</TableCell>
+                        {showPmsGradeColumn && <TableCell>{profile.pms_grade || '-'}</TableCell>}
                         <TableCell>
                           <Select
                             value={config?.workflow_template_id || ''}
@@ -680,11 +710,37 @@ export default function WorkflowConfig() {
                   })}
                 </TableBody>
               </Table>
-              {filteredProfiles && filteredProfiles.length > 50 && (
-                <p className="text-sm text-muted-foreground mt-2">
-                  Showing 50 of {filteredProfiles.length} employees. Use search to find specific employees.
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4">
+                <p className="text-sm text-muted-foreground">
+                  {filteredProfiles.length === 0
+                    ? 'No employees found'
+                    : `Showing ${startIdx}–${endIdx} of ${filteredProfiles.length} employee${filteredProfiles.length === 1 ? '' : 's'}`}
+                  {employeeSearch && filteredProfiles.length > 0 && ` (${filteredProfiles.length} match${filteredProfiles.length === 1 ? '' : 'es'})`}
                 </p>
-              )}
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEmployeePage(p => Math.max(1, p - 1))}
+                      disabled={safePage === 1}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Page {safePage} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEmployeePage(p => Math.min(totalPages, p + 1))}
+                      disabled={safePage === totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
