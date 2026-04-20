@@ -379,7 +379,12 @@ export default function EmployeePerformanceSummary() {
     if (!enrichedPerformanceData) return [];
     
     const term = searchTerm.toLowerCase();
-    return enrichedPerformanceData
+    const statusFiltered = applyEmployeeStatusFilter(
+      enrichedPerformanceData,
+      empStatusMode,
+      (r) => r.isActive
+    );
+    return statusFiltered
       .filter(row => {
         // Hide employees that only have frequency-locked KPIs when toggle is off
         if (!showFreqLocked && row.kpiCount === 0 && row.lockedKpiCount > 0) return false;
@@ -400,7 +405,7 @@ export default function EmployeePerformanceSummary() {
         const pctB = b.outOfScore > 0 ? (b.totalScore / b.outOfScore) * 100 : 0;
         return pctB - pctA;
       });
-  }, [enrichedPerformanceData, searchTerm, selectedStatus, showFreqLocked]);
+  }, [enrichedPerformanceData, searchTerm, selectedStatus, showFreqLocked, empStatusMode]);
 
   // Pagination
   const totalPages = Math.ceil(filteredData.length / pageSize);
