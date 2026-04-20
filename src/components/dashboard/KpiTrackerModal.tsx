@@ -59,6 +59,7 @@ interface MonthEntry {
   month: string;
   target: number | null;
   achieved: number | null;
+  finalAchieved: number | null;
   selfScore: number | null;
   managerScore: number | null;
   skipScore: number | null;
@@ -86,6 +87,19 @@ function getLast2Remarks(sub: ReviewSubmission, stages: string[]): RemarksEntry[
     }
   }
   return result;
+}
+
+function getFinalAchieved(sub: ReviewSubmission | undefined): number | null {
+  if (!sub) return null;
+  return (
+    sub.management_achieved_value ??
+    sub.auditor_achieved_value ??
+    sub.hr_pms_achieved_value ??
+    sub.skip_level_achieved_value ??
+    sub.manager_achieved_value ??
+    sub.achieved_value ??
+    null
+  );
 }
 
 const getRatingColor = (score: number) => {
@@ -133,6 +147,7 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions, wo
           month: k.review_period || 'N/A',
           target: isNa ? null : (k.target_value || 0),
           achieved: isNa ? null : (sub ? (sub.achieved_value ?? null) : null),
+          finalAchieved: isNa ? null : getFinalAchieved(sub),
           selfScore: isNa ? null : (sub?.self_score ?? null),
           managerScore: isNa ? null : (sub?.manager_score ?? null),
           skipScore: isNa ? null : (sub?.skip_level_score ?? null),
@@ -201,7 +216,7 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions, wo
                   />
                   <Legend />
                   <Line type="monotone" dataKey="target" stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" name="Target" />
-                  <Line type="monotone" dataKey="achieved" stroke="hsl(var(--primary))" strokeWidth={2} name="Achieved" />
+                  <Line type="monotone" dataKey="finalAchieved" stroke="hsl(var(--primary))" strokeWidth={2} name="Achieved (Final)" connectNulls={false} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
