@@ -1340,6 +1340,13 @@ export function UnifiedScorecard({
 
   return (
     <div className="space-y-6">
+      {/* Disclose Smart Period Detection auto-switch */}
+      <PeriodAutoSwitchBanner
+        displayedPeriod={selectedPeriod}
+        displayedYear={selectedYear}
+        panelPeriod={periodSelection.autoSwitchedFrom?.month}
+        panelYear={periodSelection.autoSwitchedFrom?.year}
+      />
       {/* 1. Profile + Filters Row */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         {/* Profile Card */}
