@@ -80,6 +80,7 @@ interface EmployeePerformance {
   lockedKpiCount: number;
   orphanedKpiCount: number;
   orphanedStatuses: Set<string>;
+  isActive?: boolean;
 }
 
 export default function EmployeePerformanceSummary() {
