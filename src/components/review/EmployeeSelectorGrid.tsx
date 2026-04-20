@@ -847,29 +847,36 @@ export function EmployeeSelectorGrid({
       };
     } else if (viewLevel === 'audit') {
       let pending = 0, inAudit = 0, forwarded = 0;
-      const activeEmployeeIds = new Set<string>();
+      const periodEmployeeIds = new Set<string>();
+      let reviewed = 0;
       relevantKpis.forEach(k => {
+        // v2.64.11: Total Employees = ANY employee with KPIs in this period
+        // whose workflow includes the audit stage (not just those at/before audit).
+        periodEmployeeIds.add(k.employee_id);
         // Guard: skip employees without resolved workflows to avoid DEFAULT_WORKFLOW_STAGES fallback overcounting
         if (!hasResolvedWorkflow(k.employee_id)) return;
         const stages = getStages(k.employee_id);
         const auditIdx = stages.indexOf('audit');
         if (auditIdx === -1) return;
-        if (k.status === 'audit') { inAudit++; activeEmployeeIds.add(k.employee_id); }
-        else if (['management_review', 'approved'].includes(k.status || '')) { forwarded++; activeEmployeeIds.add(k.employee_id); }
+        if (k.status === 'audit') { inAudit++; }
+        else if (['management_review', 'approved'].includes(k.status || '')) { forwarded++; }
         else {
           const auditReviewable = resolveReviewableStatuses('auditor', stages);
           if (auditReviewable.includes(k.status || '') && k.status !== 'audit') {
             pending++;
-            activeEmployeeIds.add(k.employee_id);
           }
         }
+        // v2.64.11: "Reviewed by me" = KPIs with audit signature for this period.
+        if ((k as any).audit_score !== null && (k as any).audit_score !== undefined) reviewed++;
       });
-      // v2.64.8: "Total Employees" = those with at least one auditor-relevant
-      // KPI in this period (not the entire eligible-for-audit pool).
-      return { totalEmployees: activeEmployeeIds.size, stat1: pending, stat2: inAudit, stat3: forwarded, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+      // v2.64.11: Total Employees = unique employees with any KPI in period
+      // (workflow-filtered roster); reviewed counted via audit_score signature.
+      return { totalEmployees: periodEmployeeIds.size, stat1: pending, stat2: inAudit, stat3: forwarded, stat4: reviewed, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'skip_level') {
       let pending = 0, reviewed = 0;
+      const periodEmployeeIds = new Set<string>();
       relevantKpis.forEach(k => {
+        periodEmployeeIds.add(k.employee_id);
         const stages = getStages(k.employee_id);
         const reviewable = resolveReviewableStatuses('skip_level', stages);
         if (reviewable.includes(k.status || '')) pending++;
@@ -878,28 +885,32 @@ export function EmployeeSelectorGrid({
           if (slIdx >= 0 && stages.slice(slIdx).includes(k.status || '')) reviewed++;
         }
       });
-      return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: periodEmployeeIds.size, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'hr_pms') {
       let pending = 0, inReview = 0, forwarded = 0;
-      const activeEmployeeIds = new Set<string>();
+      const periodEmployeeIds = new Set<string>();
+      let reviewed = 0;
       relevantKpis.forEach(k => {
+        // v2.64.11: Count any employee with at least one KPI in period.
+        periodEmployeeIds.add(k.employee_id);
         const stages = getStages(k.employee_id);
         const hrIdx = stages.indexOf('hr_pms_review');
         if (hrIdx === -1) return;
-        if (k.status === 'hr_pms_review') { inReview++; activeEmployeeIds.add(k.employee_id); }
+        if (k.status === 'hr_pms_review') { inReview++; }
         else {
           const hrReviewable = resolveReviewableStatuses('hr_pms', stages);
           if (hrReviewable.includes(k.status || '') && k.status !== 'hr_pms_review') {
             pending++;
-            activeEmployeeIds.add(k.employee_id);
           }
           const afterHr = stages.slice(hrIdx + 1);
-          if (afterHr.includes(k.status || '')) { forwarded++; activeEmployeeIds.add(k.employee_id); }
+          if (afterHr.includes(k.status || '')) { forwarded++; }
         }
+        // v2.64.11: "HR PMS Reviewed" = KPIs with hr_pms_score signature.
+        if ((k as any).hr_pms_score !== null && (k as any).hr_pms_score !== undefined) reviewed++;
       });
-      // v2.64.8: "Total Employees" = those with at least one HR-PMS-relevant
-      // KPI in this period (pending, in-review, or forwarded).
-      return { totalEmployees: activeEmployeeIds.size, stat1: pending, stat2: inReview, stat3: forwarded, stat4: relevantKpis.length, stat5: 0, totalKpis: relevantKpis.length };
+      // v2.64.11: Total Employees = unique employees with any KPI in period
+      // (workflow-filtered roster). Stat3 = reviewed via hr_pms_score signature.
+      return { totalEmployees: periodEmployeeIds.size, stat1: pending, stat2: inReview, stat3: reviewed, stat4: relevantKpis.length, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'pending_self_review') {
       const pendingKpis = relevantKpis.filter(k => k.status === 'kra_set');
       const pendingCount = pendingKpis.length;
