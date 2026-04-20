@@ -198,6 +198,14 @@ export function EmployeeSelectorGrid({
   const [auditorFilter, setAuditorFilter] = useUrlFilterStateNullable('auditor');
   const [auditorWorkloadExpanded, setAuditorWorkloadExpanded] = useState(true);
 
+  // Pagination state — windowed rendering for large reviewer grids (>2500 employees).
+  // Search/sort/filter still operate on the FULL set; only the rendered slice is windowed.
+  const PAGE_SIZE_OPTIONS = [12, 24, 48, 96];
+  const [page, setPage] = useUrlFilterState('page', '1');
+  const [pageSizeStr, setPageSizeStr] = useUrlFilterState('size', '24');
+  const currentPage = Math.max(1, parseInt(page, 10) || 1);
+  const pageSize = PAGE_SIZE_OPTIONS.includes(parseInt(pageSizeStr, 10)) ? parseInt(pageSizeStr, 10) : 24;
+
   // Audit assignments: fetch current user's assigned employees
   const { data: myAssignedEmployeeIds } = useMyAuditAssignments();
   const { data: myKpiLevelData } = useMyKpiLevelAssignments();
