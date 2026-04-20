@@ -1536,9 +1536,10 @@ export function EmployeeSelectorGrid({
           {displayMembers && displayMembers.length > 0 ? (
             <>
               {/* Audit grouped view: Assigned to Me + All Others */}
-              {viewLevel === 'audit' && assignedMembers.length > 0 && statusFilter !== 'my_assigned' ? (
+              {isAuditGrouped ? (
                 <div className="space-y-6">
                   {/* Assigned Section */}
+                  {pagedAssignedMembers.length > 0 && (
                   <div>
                     <div className="flex items-center gap-2 mb-3">
                       <Badge variant="default" className="text-xs">
@@ -1546,11 +1547,12 @@ export function EmployeeSelectorGrid({
                       </Badge>
                     </div>
                     <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                      {assignedMembers.map(member => renderEmployeeCard(member))}
+                      {pagedAssignedMembers.map(member => renderEmployeeCard(member))}
                     </div>
                   </div>
+                  )}
                   {/* Separator */}
-                  {otherMembers.length > 0 && (
+                  {pagedOtherMembers.length > 0 && (
                     <div>
                       <div className="flex items-center gap-2 mb-3">
                         <Badge variant="outline" className="text-xs">
@@ -1558,14 +1560,85 @@ export function EmployeeSelectorGrid({
                         </Badge>
                       </div>
                       <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                        {otherMembers.map(member => renderEmployeeCard(member))}
+                        {pagedOtherMembers.map(member => renderEmployeeCard(member))}
                       </div>
                     </div>
                   )}
                 </div>
               ) : (
                 <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                  {displayMembers.map(member => renderEmployeeCard(member))}
+                  {pagedDisplayMembers.map(member => renderEmployeeCard(member))}
+                </div>
+              )}
+
+              {/* Pagination footer — only render when there is more than one page */}
+              {totalMembers > pageSize && (
+                <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t">
+                  <div className="text-xs sm:text-sm text-muted-foreground">
+                    Showing <span className="font-medium text-foreground">{sliceStart + 1}</span>–
+                    <span className="font-medium text-foreground">{Math.min(sliceEnd, totalMembers)}</span> of{' '}
+                    <span className="font-medium text-foreground">{totalMembers.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center gap-3 flex-wrap justify-center">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground hidden sm:inline">Per page</span>
+                      <Select value={String(pageSize)} onValueChange={(v) => setPageSizeStr(v)}>
+                        <SelectTrigger className="h-8 w-[72px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PAGE_SIZE_OPTIONS.map(s => (
+                            <SelectItem key={s} value={String(s)}>{s}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Pagination className="mx-0 w-auto">
+                      <PaginationContent>
+                        <PaginationItem>
+                          <PaginationPrevious
+                            href="#"
+                            onClick={(e) => { e.preventDefault(); if (safePage > 1) setPage(String(safePage - 1)); }}
+                            className={safePage <= 1 ? 'pointer-events-none opacity-50' : ''}
+                          />
+                        </PaginationItem>
+                        {(() => {
+                          const pages: (number | 'ellipsis')[] = [];
+                          const add = (n: number) => pages.push(n);
+                          const window = 1;
+                          const start = Math.max(2, safePage - window);
+                          const end = Math.min(totalPages - 1, safePage + window);
+                          add(1);
+                          if (start > 2) pages.push('ellipsis');
+                          for (let i = start; i <= end; i++) add(i);
+                          if (end < totalPages - 1) pages.push('ellipsis');
+                          if (totalPages > 1) add(totalPages);
+                          return pages.map((p, idx) =>
+                            p === 'ellipsis' ? (
+                              <PaginationItem key={`e-${idx}`}><PaginationEllipsis /></PaginationItem>
+                            ) : (
+                              <PaginationItem key={p}>
+                                <PaginationLink
+                                  href="#"
+                                  isActive={p === safePage}
+                                  onClick={(e) => { e.preventDefault(); setPage(String(p)); }}
+                                >
+                                  {p}
+                                </PaginationLink>
+                              </PaginationItem>
+                            )
+                          );
+                        })()}
+                        <PaginationItem>
+                          <PaginationNext
+                            href="#"
+                            onClick={(e) => { e.preventDefault(); if (safePage < totalPages) setPage(String(safePage + 1)); }}
+                            className={safePage >= totalPages ? 'pointer-events-none opacity-50' : ''}
+                          />
+                        </PaginationItem>
+                      </PaginationContent>
+                    </Pagination>
+                  </div>
                 </div>
               )}
             </>
