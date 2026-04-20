@@ -542,6 +542,8 @@ export default function EmployeePerformanceSummary() {
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
+    // Prepend metadata header row indicating filter scope
+    XLSX.utils.sheet_add_aoa(ws, [[`Filter: ${employeeStatusLabel(empStatusMode)}`]], { origin: -1 });
     XLSX.utils.book_append_sheet(wb, ws, 'Employee Performance Summary');
     
     ws['!cols'] = [
