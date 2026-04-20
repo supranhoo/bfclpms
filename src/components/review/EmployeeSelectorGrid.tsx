@@ -1801,12 +1801,18 @@ const colorMap: Record<StatCardProps['color'], { border: string; bg: string; tex
   orange: { border: 'border-l-orange-500', bg: 'bg-orange-500/10', text: 'text-orange-600' },
 };
 
-function StatCard({ icon: Icon, label, value, color, subtitle, className = '', onClick, active }: StatCardProps) {
+// v2.64.8: forwardRef so Radix Tooltip and other ref-forwarding wrappers can
+// attach refs without React warnings.
+const StatCard = React.forwardRef<HTMLDivElement, StatCardProps>(function StatCard(
+  { icon: Icon, label, value, color, subtitle, className = '', onClick, active },
+  ref,
+) {
   const colors = colorMap[color];
   const isClickable = !!onClick;
-  
+
   return (
     <Card
+      ref={ref}
       className={`border-l-4 ${colors.border} ${className} ${isClickable ? 'cursor-pointer transition-all hover:shadow-md' : ''} ${active ? 'ring-2 ring-primary shadow-md' : ''}`}
       onClick={onClick}
     >
@@ -1824,7 +1830,7 @@ function StatCard({ icon: Icon, label, value, color, subtitle, className = '', o
       </CardContent>
     </Card>
   );
-}
+});
 
 // Mini progress bar for employee cards
 function EmployeeProgressBar({ done, inProgress, total, clearedKraSet }: { done: number; inProgress: number; total: number; clearedKraSet: number }) {
