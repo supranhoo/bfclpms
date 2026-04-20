@@ -1,9 +1,10 @@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Search, X, Filter } from 'lucide-react';
+import { Search, X, Filter, SlidersHorizontal } from 'lucide-react';
 import { OrgFilterCombobox, ComboboxOption } from '@/components/admin/OrgFilterCombobox';
-import { useMemo } from 'react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { useMemo, useState, useEffect } from 'react';
 
 interface StatusOption {
   value: string;
@@ -29,6 +30,7 @@ interface EmployeeFiltersProps {
   statusFilter: string;
   onStatusChange: (status: string) => void;
   statusOptions: StatusOption[];
+  onMoreFiltersOpen?: () => void;
 }
 
 export function EmployeeFilters({
@@ -50,7 +52,23 @@ export function EmployeeFilters({
   statusFilter,
   onStatusChange,
   statusOptions,
+  onMoreFiltersOpen,
 }: EmployeeFiltersProps) {
+  // Auto-open "More filters" popover if a grade is preset (e.g. via URL ?grade=L4)
+  const [moreFiltersOpen, setMoreFiltersOpen] = useState<boolean>(!!selectedGrade);
+  useEffect(() => {
+    if (selectedGrade && !moreFiltersOpen) {
+      setMoreFiltersOpen(true);
+      onMoreFiltersOpen?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedGrade]);
+
+  const handleMoreFiltersOpenChange = (open: boolean) => {
+    setMoreFiltersOpen(open);
+    if (open) onMoreFiltersOpen?.();
+  };
+
   const activeFiltersCount = [
     selectedDepartment,
     selectedDesignation,
@@ -132,15 +150,6 @@ export function EmployeeFilters({
             />
           </div>
 
-          <div className="w-full sm:w-[140px]">
-            <OrgFilterCombobox
-              value={selectedGrade || ''}
-              onValueChange={(v) => onGradeChange(toNull(v))}
-              options={gradeOptions}
-              placeholder="Grade"
-            />
-          </div>
-
           {showManagerFilter && onManagerChange && (
             <div className="w-full sm:w-[160px]">
               <OrgFilterCombobox
@@ -159,6 +168,31 @@ export function EmployeeFilters({
               options={statusOpts}
               placeholder="Status"
             />
+          </div>
+
+          <div className="w-full sm:w-auto">
+            <Popover open={moreFiltersOpen} onOpenChange={handleMoreFiltersOpenChange}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="default" className="h-10 w-full sm:w-auto gap-2">
+                  <SlidersHorizontal className="h-4 w-4" />
+                  More filters
+                  {selectedGrade && (
+                    <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">1</Badge>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-3" align="end">
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-muted-foreground">PMS Grade</div>
+                  <OrgFilterCombobox
+                    value={selectedGrade || ''}
+                    onValueChange={(v) => onGradeChange(toNull(v))}
+                    options={gradeOptions}
+                    placeholder={grades.length === 0 ? 'Loading…' : 'Grade'}
+                  />
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
 
