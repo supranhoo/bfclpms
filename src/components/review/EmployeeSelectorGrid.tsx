@@ -186,6 +186,10 @@ export function EmployeeSelectorGrid({
   const { departments, designations, grades, managers } = useEmployeeFilterOptions({
     enabledGrades: gradesEnabled,
   });
+  // Auto-enable grade fetching when a grade is already preset via URL
+  useEffect(() => {
+    if (selectedGrade && !gradesEnabled) setGradesEnabled(true);
+  }, [selectedGrade, gradesEnabled]);
 
   // v2.64.9 — Roster resolution diagnostics surfaced from useProfilesByWorkflowStage __meta
   const { toast } = useToast();
