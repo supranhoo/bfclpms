@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useUrlFilterState, useUrlFilterStateNullable, useClearAllFilters } from '@/hooks/useUrlFilterState';
 import { useMyAuditAssignments } from '@/hooks/useAuditAssignments';
@@ -1333,9 +1333,26 @@ export function EmployeeSelectorGrid({
   };
 
   // Soften loading: only show full skeleton on true cold start (no previous data).
-  // During panel switches, keepPreviousData keeps the old grid visible while
-  // new data loads — avoiding the flicker. A subtle spinner indicates background fetch.
-  const hasAnyData = (baseMembers?.length ?? 0) > 0;
+  // v2.64.3 — Cross-source flicker fix: `keepPreviousData` only retains data within
+  // the same query key. When switching panels (e.g. Team → HR PMS) the data source
+  // changes (allProfiles → stageFilteredProfiles), so baseMembers becomes undefined
+  // for one render → skeleton flashes. Cache the last non-empty baseMembers in a
+  // ref and use it as the render fallback during cross-source switches. Reset on
+  // viewLevel change ONLY after the new query has resolved with an empty result.
+  const lastGoodMembersRef = useRef<EmployeeProfile[]>([]);
+  const lastViewLevelRef = useRef<typeof viewLevel>(viewLevel);
+  useEffect(() => {
+    if (baseMembers && baseMembers.length > 0) {
+      lastGoodMembersRef.current = baseMembers;
+      lastViewLevelRef.current = viewLevel;
+    } else if (!isLoading && baseMembers && baseMembers.length === 0 && lastViewLevelRef.current !== viewLevel) {
+      // New panel resolved to a legitimate empty state — clear stale fallback
+      lastGoodMembersRef.current = [];
+      lastViewLevelRef.current = viewLevel;
+    }
+  }, [baseMembers, isLoading, viewLevel]);
+
+  const hasAnyData = (baseMembers?.length ?? 0) > 0 || lastGoodMembersRef.current.length > 0;
   const isBackgroundFetching = isLoading && hasAnyData;
 
   if (isLoading && !hasAnyData) {
