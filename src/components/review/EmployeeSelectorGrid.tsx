@@ -1641,6 +1641,7 @@ export function EmployeeSelectorGrid({
         statusFilter={statusFilter}
         onStatusChange={setStatusFilter}
         statusOptions={statusOptions}
+        onMoreFiltersOpen={() => setGradesEnabled(true)}
       />
 
       {/* Employees Grid */}
