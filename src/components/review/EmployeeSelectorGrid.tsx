@@ -1583,6 +1583,30 @@ export function EmployeeSelectorGrid({
         <CardContent>
           {displayMembers && displayMembers.length > 0 ? (
             <>
+              {/* Discoverability pill: explains urgency sort + offers quick-jump to completed */}
+              {statusFilter === 'all' && totalPages > 1 && reviewedOnBackPagesCount > 0 && completedFilterForView && (
+                <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs sm:text-sm">
+                  <div className="flex items-start sm:items-center gap-2 flex-1 text-muted-foreground">
+                    <Info className="h-4 w-4 shrink-0 mt-0.5 sm:mt-0" />
+                    <span>
+                      Page <span className="font-medium text-foreground">{safePage}</span> of{' '}
+                      <span className="font-medium text-foreground">{totalPages}</span> — sorted by most pending first.{' '}
+                      <span className="font-medium text-foreground">{reviewedOnBackPagesCount.toLocaleString()}</span>{' '}
+                      fully reviewed {reviewedOnBackPagesCount === 1 ? 'employee appears' : 'employees appear'} on later pages.
+                    </span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 shrink-0"
+                    onClick={() => setStatusFilter(completedFilterForView)}
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    Show only Reviewed
+                  </Button>
+                </div>
+              )}
+
               {/* Audit grouped view: Assigned to Me + All Others */}
               {isAuditGrouped ? (
                 <div className="space-y-6">
