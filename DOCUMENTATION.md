@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-20  
-> **Version:** 2.64.3 — Cross-source flicker fix: cache last non-empty `baseMembers` in `EmployeeSelectorGrid` so Team → HR PMS / Audit / Management panel switches no longer flash the skeleton when the new query is cold-cached. Adds `placeholderData: keepPreviousData` to `useProfiles`/`useTeamMembers`/`useSkipLevelTeamMembers` and defers URL filter clearing in `Dashboard.handleModeChange` by one microtask to avoid extra render passes.
+> **Version:** 2.64.4 — Filter typing teleports user to previous panel — fixed. Effect A in `Dashboard.tsx` now depends only on the `view` URL slice (not the full `searchParams`), so typing in `q`/`dept`/`page` no longer re-runs view-init. `handleModeChange` now (a) synchronously clears `employee` along with filter params in a single batched URL write (dropped the prior `queueMicrotask` indirection) and (b) re-arms `deepLinkProcessedRef` so late "Restore selected employee" effects cannot retroactively pull the previous panel's employee back.
 > **Maintainer:** Lovable AI
 
 ---
