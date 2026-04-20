@@ -17,6 +17,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { FrequencyLockToggle } from '@/components/ui/FrequencyLockToggle';
 import { isKpiLockedForPeriod } from '@/lib/frequencyUtils';
 import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
+import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
+import { applyEmployeeStatusFilter, employeeStatusLabel, type EmployeeStatusMode } from '@/lib/reportEmployeeFilter';
 import * as XLSX from 'xlsx';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
@@ -78,6 +80,7 @@ interface EmployeePerformance {
   lockedKpiCount: number;
   orphanedKpiCount: number;
   orphanedStatuses: Set<string>;
+  isActive?: boolean;
 }
 
 export default function EmployeePerformanceSummary() {
@@ -95,6 +98,7 @@ export default function EmployeePerformanceSummary() {
   const [comparisonEmployee, setComparisonEmployee] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [showFreqLocked, setShowFreqLocked] = useState(false);
+  const [empStatusMode, setEmpStatusMode] = useState<EmployeeStatusMode>('active');
 
   // (review_periods query removed – month filter is now static)
 
@@ -162,6 +166,7 @@ export default function EmployeePerformanceSummary() {
           full_name,
           designation,
           reporting_manager_id,
+          is_active,
           departments (name, business_units (name, divisions (name)))
         `);
       if (profilesError) throw profilesError;
@@ -232,6 +237,7 @@ export default function EmployeePerformanceSummary() {
             lockedKpiCount: isLocked ? 1 : 0,
             orphanedKpiCount: 0,
             orphanedStatuses: new Set<string>(),
+            isActive: (profile as any).is_active !== false,
           });
         }
       });
@@ -373,7 +379,12 @@ export default function EmployeePerformanceSummary() {
     if (!enrichedPerformanceData) return [];
     
     const term = searchTerm.toLowerCase();
-    return enrichedPerformanceData
+    const statusFiltered = applyEmployeeStatusFilter(
+      enrichedPerformanceData,
+      empStatusMode,
+      (r) => r.isActive
+    );
+    return statusFiltered
       .filter(row => {
         // Hide employees that only have frequency-locked KPIs when toggle is off
         if (!showFreqLocked && row.kpiCount === 0 && row.lockedKpiCount > 0) return false;
@@ -394,7 +405,7 @@ export default function EmployeePerformanceSummary() {
         const pctB = b.outOfScore > 0 ? (b.totalScore / b.outOfScore) * 100 : 0;
         return pctB - pctA;
       });
-  }, [enrichedPerformanceData, searchTerm, selectedStatus, showFreqLocked]);
+  }, [enrichedPerformanceData, searchTerm, selectedStatus, showFreqLocked, empStatusMode]);
 
   // Pagination
   const totalPages = Math.ceil(filteredData.length / pageSize);
@@ -531,6 +542,8 @@ export default function EmployeePerformanceSummary() {
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
+    // Prepend metadata header row indicating filter scope
+    XLSX.utils.sheet_add_aoa(ws, [[`Filter: ${employeeStatusLabel(empStatusMode)}`]], { origin: -1 });
     XLSX.utils.book_append_sheet(wb, ws, 'Employee Performance Summary');
     
     ws['!cols'] = [
@@ -569,10 +582,13 @@ export default function EmployeePerformanceSummary() {
         backTo="/reports"
         actions={
           canExport ? (
-            <Button onClick={handleExport} disabled={!filteredData.length}>
-              <Download className="mr-2 h-4 w-4" />
-              Download Excel
-            </Button>
+            <div className="flex items-center gap-3">
+              <EmployeeStatusFilter onChange={setEmpStatusMode} />
+              <Button onClick={handleExport} disabled={!filteredData.length}>
+                <Download className="mr-2 h-4 w-4" />
+                Download Excel
+              </Button>
+            </div>
           ) : undefined
         }
       />
