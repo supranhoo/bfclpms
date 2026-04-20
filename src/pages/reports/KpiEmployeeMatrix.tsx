@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2, Download, Search, Users, Target, AlertTriangle, BarChart3 } from 'lucide-react';
 import { useKpiEmployeeMatrix, type MatrixFilters } from '@/hooks/useKpiEmployeeMatrix';
-import { useDepartments, useBusinessUnits, useKraCategories } from '@/hooks/useOrganization';
+import { useDepartments, useBusinessUnits, useKraCategories, useDivisions } from '@/hooks/useOrganization';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { CompanyFilter } from '@/components/reports/CompanyFilter';
 import { useToast } from '@/hooks/use-toast';
@@ -27,6 +27,7 @@ export default function KpiEmployeeMatrix() {
   const [reviewPeriod, setReviewPeriod] = useState(currentMonth);
   const [reviewYear, setReviewYear] = useState(currentYear);
   const [businessUnitId, setBusinessUnitId] = useState<string>('');
+  const [divisionId, setDivisionId] = useState<string>('');
   const [departmentId, setDepartmentId] = useState<string>('');
   const [categoryId, setCategoryId] = useState<string>('');
   const [search, setSearch] = useState('');
@@ -38,24 +39,32 @@ export default function KpiEmployeeMatrix() {
   // Org data
   const { data: departments } = useDepartments();
   const { data: businessUnits } = useBusinessUnits();
+  const { data: divisions } = useDivisions();
   const { data: categories } = useKraCategories();
 
-  // Filter departments by selected BU
+  // Filter departments by selected Division (narrower) or BU
   const filteredDepartments = useMemo(() => {
     if (!departments) return [];
-    if (!businessUnitId) return departments;
-    return departments.filter(d => d.business_unit_id === businessUnitId);
-  }, [departments, businessUnitId]);
+    let list = departments;
+    if (divisionId && businessUnits) {
+      const buIdsInDiv = new Set(businessUnits.filter(bu => bu.division_id === divisionId).map(bu => bu.id));
+      list = list.filter(d => d.business_unit_id && buIdsInDiv.has(d.business_unit_id));
+    } else if (businessUnitId) {
+      list = list.filter(d => d.business_unit_id === businessUnitId);
+    }
+    return list;
+  }, [departments, businessUnitId, divisionId, businessUnits]);
 
   // Matrix filters
   const filters: MatrixFilters = useMemo(() => ({
     businessUnitId: businessUnitId || undefined,
+    divisionId: divisionId || undefined,
     departmentId: departmentId || undefined,
     categoryId: categoryId || undefined,
     search: search || undefined,
     reviewPeriod,
     reviewYear,
-  }), [businessUnitId, departmentId, categoryId, search, reviewPeriod, reviewYear]);
+  }), [businessUnitId, divisionId, departmentId, categoryId, search, reviewPeriod, reviewYear]);
 
   const { data, isLoading } = useKpiEmployeeMatrix(filters);
 
@@ -190,7 +199,7 @@ export default function KpiEmployeeMatrix() {
       {/* Filters */}
       <Card>
         <CardContent className="p-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
             <CompanyFilter
               companies={companies}
               selectedCompanyId={selectedCompanyId}
@@ -213,6 +222,18 @@ export default function KpiEmployeeMatrix() {
               </SelectContent>
             </Select>
 
+            <Select value={divisionId || 'all'} onValueChange={v => {
+              handleFilterChange(setDivisionId, v === 'all' ? '' : v);
+              setBusinessUnitId('');
+              setDepartmentId('');
+            }}>
+              <SelectTrigger><SelectValue placeholder="Division" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Divisions</SelectItem>
+                {divisions?.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+
             <Select value={businessUnitId || 'all'} onValueChange={v => {
               handleFilterChange(setBusinessUnitId, v === 'all' ? '' : v);
               setDepartmentId('');
@@ -220,7 +241,9 @@ export default function KpiEmployeeMatrix() {
               <SelectTrigger><SelectValue placeholder="Business Unit" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Business Units</SelectItem>
-                {businessUnits?.map(bu => <SelectItem key={bu.id} value={bu.id}>{bu.name}</SelectItem>)}
+                {(divisionId ? businessUnits?.filter(bu => bu.division_id === divisionId) : businessUnits)?.map(bu => (
+                  <SelectItem key={bu.id} value={bu.id}>{bu.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
 
