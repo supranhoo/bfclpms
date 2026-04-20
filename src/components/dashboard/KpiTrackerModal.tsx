@@ -59,6 +59,7 @@ interface MonthEntry {
   month: string;
   target: number | null;
   achieved: number | null;
+  finalAchieved: number | null;
   selfScore: number | null;
   managerScore: number | null;
   skipScore: number | null;
@@ -86,6 +87,19 @@ function getLast2Remarks(sub: ReviewSubmission, stages: string[]): RemarksEntry[
     }
   }
   return result;
+}
+
+function getFinalAchieved(sub: ReviewSubmission | undefined): number | null {
+  if (!sub) return null;
+  return (
+    sub.management_achieved_value ??
+    sub.auditor_achieved_value ??
+    sub.hr_pms_achieved_value ??
+    sub.skip_level_achieved_value ??
+    sub.manager_achieved_value ??
+    sub.achieved_value ??
+    null
+  );
 }
 
 const getRatingColor = (score: number) => {
