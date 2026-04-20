@@ -24,6 +24,7 @@ import { QualitativeOption } from '@/lib/qualitativeUom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKpiSorting } from '@/hooks/useKpiSorting';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
+import { PeriodAutoSwitchBanner } from '@/components/review/PeriodAutoSwitchBanner';
 import { OverallScoreChart } from '@/components/dashboard/OverallScoreChart';
 import { CategoryScoreChart, type CategorySortBy } from '@/components/dashboard/CategoryScoreChart';
 import { PreviousMonthsScoreMini } from '@/components/review/PreviousMonthsScoreMini';
@@ -1339,6 +1340,13 @@ export function UnifiedScorecard({
 
   return (
     <div className="space-y-6">
+      {/* Disclose Smart Period Detection auto-switch */}
+      <PeriodAutoSwitchBanner
+        displayedPeriod={selectedPeriod}
+        displayedYear={selectedYear}
+        panelPeriod={periodSelection.autoSwitchedFrom?.month}
+        panelYear={periodSelection.autoSwitchedFrom?.year}
+      />
       {/* 1. Profile + Filters Row */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         {/* Profile Card */}

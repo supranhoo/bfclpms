@@ -26,6 +26,14 @@ export interface PeriodSelection {
   customStartYear?: number;
   /** For cross-year selections */
   periodRanges: Array<{ month: string; year: number }>;
+  /**
+   * When the system auto-switches the period (e.g. Smart Period Detection in
+   * EmployeeSelectorGrid jumps to the most recent period with data), this
+   * captures the period the user originally had selected so reviewer
+   * scorecards can disclose the switch via a banner. Cleared on any
+   * user-initiated change in ReviewPeriodSelectorEnhanced.
+   */
+  autoSwitchedFrom?: { month: string; year: number };
 }
 
 interface ReviewPeriodSelectorEnhancedProps {
@@ -149,6 +157,7 @@ export function ReviewPeriodSelectorEnhanced({
       customStartMonth: mode === 'custom' ? value.selectedMonth : undefined,
       customStartYear: mode === 'custom' ? value.selectedYear : undefined,
       periodRanges,
+      autoSwitchedFrom: undefined,
     });
   }, [value, onChange]);
 
@@ -178,6 +187,7 @@ export function ReviewPeriodSelectorEnhanced({
       selectedMonth: month,
       months,
       periodRanges,
+      autoSwitchedFrom: undefined,
     });
   }, [value, onChange]);
 
@@ -194,6 +204,7 @@ export function ReviewPeriodSelectorEnhanced({
       ...value,
       selectedYear: year,
       periodRanges,
+      autoSwitchedFrom: undefined,
     });
   }, [value, onChange]);
 
@@ -212,6 +223,7 @@ export function ReviewPeriodSelectorEnhanced({
       customStartMonth: month,
       months,
       periodRanges,
+      autoSwitchedFrom: undefined,
     });
   }, [value, onChange]);
 
@@ -228,6 +240,7 @@ export function ReviewPeriodSelectorEnhanced({
       ...value,
       customStartYear: year,
       periodRanges,
+      autoSwitchedFrom: undefined,
     });
   }, [value, onChange]);
 

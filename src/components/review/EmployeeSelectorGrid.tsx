@@ -829,6 +829,12 @@ export function EmployeeSelectorGrid({
         selectedYear: data.review_year,
         months: [data.review_period],
         periodRanges: [{ month: data.review_period, year: data.review_year }],
+        // Capture the user's original panel selection so reviewer scorecards
+        // can disclose the auto-switch via PeriodAutoSwitchBanner.
+        autoSwitchedFrom: {
+          month: periodSelection.selectedMonth,
+          year: periodSelection.selectedYear,
+        },
       });
     }
 
