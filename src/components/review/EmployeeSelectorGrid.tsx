@@ -181,6 +181,22 @@ export function EmployeeSelectorGrid({
   const { data: stageFilteredProfiles, isLoading: stageFilteredLoading } = useProfilesByWorkflowStage(requiredStage, selectedPeriodForFilter, selectedYearForFilter);
 
   const { departments, designations, grades, managers } = useEmployeeFilterOptions();
+
+  // v2.64.9 — Roster resolution diagnostics surfaced from useProfilesByWorkflowStage __meta
+  const { toast } = useToast();
+  const rosterMeta = (stageFilteredProfiles as any)?.__meta as
+    | { totalEligiblePool: number; seededFromKpis: number; fallbackUsed: boolean }
+    | undefined;
+  const fallbackToastFiredRef = useRef(false);
+  useEffect(() => {
+    if (!rosterMeta?.fallbackUsed || fallbackToastFiredRef.current) return;
+    fallbackToastFiredRef.current = true;
+    toast({
+      title: 'Roster loaded from fallback source',
+      description: 'Some workflow data could not be resolved. Refresh if employees appear missing.',
+      variant: 'default',
+    });
+  }, [rosterMeta?.fallbackUsed, toast]);
   const [searchParams] = useSearchParams();
   const autoOpenKpiId = searchParams.get('kpi');
 
