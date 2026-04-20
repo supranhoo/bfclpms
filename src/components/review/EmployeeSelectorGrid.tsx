@@ -758,10 +758,19 @@ export function EmployeeSelectorGrid({
     let count = 0;
     for (const m of displayMembers) {
       const s = getEmployeeKpiStats(m.id, m.relationship);
-      if (s.total > 0 && s.badge1 === 0) count++;
+      // v2.64.8: For hr_pms / audit / management, badge2 (in-review) is also
+      // live workload, so an employee is only "fully reviewed/forwarded" when
+      // both badge1 AND badge2 are zero. Otherwise the discoverability pill
+      // misclassifies actively-in-review employees as "completed".
+      const includeBadge2 =
+        viewLevel === 'hr_pms' ||
+        viewLevel === 'audit' ||
+        viewLevel === 'management';
+      const remaining = includeBadge2 ? s.badge1 + s.badge2 : s.badge1;
+      if (s.total > 0 && remaining === 0) count++;
     }
     return count;
-  }, [statusFilter, totalPages, displayMembers, completedFilterForView, getEmployeeKpiStats]);
+  }, [statusFilter, totalPages, displayMembers, completedFilterForView, getEmployeeKpiStats, viewLevel]);
 
   // Reset to page 1 when filters/sort/view change so users never land on an empty page.
   useEffect(() => {
