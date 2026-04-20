@@ -5113,3 +5113,10 @@ Every new edge function **must** complete all of these steps before deployment:
 - **Database**: New `custom_reports` table with RLS (admin full CRUD, role-filtered read for active reports).
 - **New files**: `src/lib/reportFieldRegistry.ts`, `src/hooks/useCustomReports.ts`, `src/hooks/useReportColumnOverrides.ts`, `src/components/admin/ReportBuilderTab.tsx`, `src/components/admin/ReportSequenceConfig.tsx`, `src/components/admin/ReportFieldPicker.tsx`, `src/components/admin/ReportFilterConfig.tsx`, `src/pages/reports/CustomReport.tsx`
 - **Modified files**: `src/pages/admin/SystemSettings.tsx`, `src/pages/reports/ReportsHub.tsx`, `src/App.tsx`
+
+### v2.64.0 — Disclose Smart Period Detection auto-switch in reviewer scorecard (2026-04-20)
+- **Problem (RCA)**: Auditor saw "no pendency" on the outside Audit Panel grid card for Arun Goswami while inside the scorecard saw "Pending: 4". Outside grid is filtered strictly by the panel-selected period (April 2026, all KPIs at `kra_set` → 0 pending). Inside scorecard auto-switched to March 2026 via Smart Period Detection (where 4 KPIs sit at `self_review`). Both technically correct; the period mismatch was invisible.
+- **Fix**: Added optional `autoSwitchedFrom` field to `PeriodSelection`. `EmployeeSelectorGrid.handleEmployeeClick` now records the user's original panel period when it auto-switches. `ReviewPeriodSelectorEnhanced` clears it on every user-initiated change. New `PeriodAutoSwitchBanner` shown at the top of `UnifiedScorecard` when displayed period ≠ panel-selected period: "Showing March 2026 (auto-switched — KPIs found here). You selected April 2026 …".
+- **New files**: `src/components/review/PeriodAutoSwitchBanner.tsx`
+- **Modified files**: `src/components/ui/ReviewPeriodSelectorEnhanced.tsx`, `src/components/review/EmployeeSelectorGrid.tsx`, `src/components/review/UnifiedScorecard.tsx`
+- **Note**: `AuditScorecard.tsx` and `ManagementScorecard.tsx` are dead code (no call sites) — only `UnifiedScorecard` is in use, so the banner only needed to be added there.
