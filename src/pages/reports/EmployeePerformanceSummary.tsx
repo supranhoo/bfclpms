@@ -236,6 +236,7 @@ export default function EmployeePerformanceSummary() {
             lockedKpiCount: isLocked ? 1 : 0,
             orphanedKpiCount: 0,
             orphanedStatuses: new Set<string>(),
+            isActive: (profile as any).is_active !== false,
           });
         }
       });
