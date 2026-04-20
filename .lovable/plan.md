@@ -1,97 +1,90 @@
 
 
-## RCA — "Sanjeeb 101178 not visible in HR PMS" (March 2026)
+## Plan — Workflow Overrides Pagination + Search Fix + PMS Grade Defaults
 
-### Evidence gathered
+### Goal
+1. Add real pagination to **Employee Workflow Overrides** table (50/page), with search spanning all employees.
+2. Fix the "search doesn't show all employees" bug — root cause: profiles query is silently capped at 1000 rows.
+3. Hide the **PMS Grade column** in the Overrides table by default (toggle to show).
+4. Hide the **PMS Grade filter** by default in all reviewer dashboards (Team / Manager / Skip-Level / HR PMS / Audit / Management) — surfaced via a "More filters" toggle so it neither loads options nor narrows results unless invoked.
 
-| Check | Result |
-|---|---|
-| Sanjeeb exists, is_active, portal_access | ✅ true / true |
-| Workflow for March 2026 | ✅ `[kra_set, self_review, manager_check, skip_level_check, hr_pms_review, approved]` |
-| KPIs in March 2026 | ✅ 23 at `hr_pms_review`, 3 at `self_review`, 1 at `kra_set` |
-| HR PMS pool overall (March, status=`hr_pms_review`) | Only **2 employees** have any KPI at `hr_pms_review` for March — Sanjeeb (23) and one other (5) |
-| Total March KPIs in DB | 1,758 |
-| `get_bulk_employee_workflows(2533 IDs, 'March', 2026)` server-side | Returns 2,533 rows (works fine) |
-| Current user role | Admin → RLS allows everything |
-| Screenshot stat cards (Mar 2026, search "101178") | **Total Employees 0, Pending 0, In HR PMS 0, Reviewed 0, Total KPIs 0** |
+### Root Cause — "Search not showing all employees"
 
-### Root cause — TWO compounding issues
+`WorkflowConfig.tsx` line 143–153 fetches `profiles` with no `.range()`. PostgREST default cap = **1000 rows**. With ~2,533 active employees, ~1,500 are silently missing → search can never find them. v2.64.9 fixed this in `useProfilesByWorkflowStage`; the same pattern was missed here.
 
-**Issue A: HR PMS panel is silently empty when the bulk-workflow RPC fails.** In `useProfilesByWorkflowStage` (lines 346–356), if the RPC errors (e.g., 90KB+ POST body of 2,533 UUIDs gets blocked by a proxy, RLS hiccup, or transient timeout), the catch falls back to the **default workflow template stages**. The system default = `[kra_set, self_review, manager_check, audit, management_review, approved]` — which **does NOT contain `hr_pms_review`**. The fallback then returns `[]`, wiping the entire HR PMS pool. There is no toast, no banner, no log surfaced to the user — just an empty panel.
-
-**Issue B: The fallback doesn't try the actual HR PMS template** (or any non-default template that contains the requested stage). It only checks `is_default = true`, even though many orgs have multiple active templates. So even if the default fallback path triggers cleanly, anyone whose template differs from default (which is the entire HR PMS / Skip-Level cohort) becomes invisible.
-
-**Why v2.64.8 didn't fix this:** v2.64.8 changed sort order. The bug now is not "Sanjeeb is on page 80" — it's "Sanjeeb is excluded from `baseMembers` entirely" in any session where the bulk RPC call fails or any HR-PMS employee uses a non-default template. The v2.64.8 stat-card recompute correctly shows `0` because `demographicFilteredMembers` is empty.
-
-### Why it intermittently looks fine
-On a fast network with successful RPC, all 2,533 profiles get their actual stages and Sanjeeb's `[..., hr_pms_review, approved]` matches the filter → he appears. On the failure path (or in production where the request body is large enough to be slow/blocked), the fallback wipes him.
-
----
-
-## Proposed Fix
-
-### Fix 1 — Make the RPC call resilient to large payloads (chunk it)
-In `useProfilesByWorkflowStage`, batch the 2,533 IDs into chunks of 500 and call `get_bulk_employee_workflows` per chunk in parallel, merging results. Eliminates large-payload failures and keeps the cache key stable.
-
-```ts
-const CHUNK = 500;
-const chunks: string[][] = [];
-for (let i = 0; i < profileIds.length; i += CHUNK) {
-  chunks.push(profileIds.slice(i, i + CHUNK));
-}
-const results = await Promise.all(
-  chunks.map(ids => supabase.rpc('get_bulk_employee_workflows', { 
-    employee_ids: ids, p_review_period: reviewPeriod, p_review_year: reviewYear 
-  }))
-);
-// Merge into stagesMap; if ANY chunk errors, surface error not silent fallback.
-```
-
-### Fix 2 — Smarter fallback that respects requested stage
-Replace the silent "default template only" fallback with a resilient one:
-1. Per-chunk retry once (200ms backoff).
-2. If still failing, fetch ALL active workflow templates and union their stages — include any employee whose `pms_grade` / `department_id` maps to a template that contains the stage.
-3. As a last resort (only on total failure), surface a non-blocking toast: *"HR PMS roster is loading from a fallback source — refresh if employees appear missing"*. Never return `[]` silently.
-
-### Fix 3 — Visibility into pool resolution (debug + telemetry)
-Add a one-line console/log breadcrumb in `useProfilesByWorkflowStage` that prints `{ stage, totalProfiles, withStage, fallbackUsed }` (gated to non-prod or admin-only console). Also surface a tiny "X employees eligible / Y total" hint above the grid for full-access roles so empty states are diagnosable instantly:
+### UI Mockup — Workflow Overrides Table
 
 ```text
-HR PMS Review · 2 employees with KPIs at this stage in Mar 2026 (of 2,533 eligible)
+┌─ Employee Workflow Overrides ─────────────────────────────────────┐
+│  Showing overrides for March 2026                                  │
+│                                                                    │
+│  [🔍 Search employees…              ]   [☐ Show PMS Grade column]  │
+│                                                                    │
+│  ┌─────────────────────┬────────┬──────────────────────┬────────┐  │
+│  │ Employee            │ Code   │ Assigned Workflow    │ Action │  │
+│  ├─────────────────────┼────────┼──────────────────────┼────────┤  │
+│  │ Aakash Sharma       │ 100123 │ [Standard ▼]         │ 🗑     │  │
+│  │ Aarav Mehta         │ 100124 │ [Inherit (default)▼] │        │  │
+│  │ …                                                              │
+│  └────────────────────────────────────────────────────────────────┘  │
+│                                                                    │
+│  Showing 1–50 of 2,533 employees       [« Prev]  Page 1 of 51  [Next »] │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
-### Fix 4 — Stage-presence pre-check (defensive)
-Before applying the workflow filter, run a tiny `SELECT DISTINCT employee_id FROM kpis WHERE status = 'hr_pms_review' AND review_period = 'March' AND review_year = 2026` to seed the visible set with employees who **demonstrably** have KPIs at the panel stage in this period. This guarantees Sanjeeb is in the pool regardless of workflow-resolution accuracy. The workflow filter is then layered on top as a sort/categorization aid, not a gate.
+When user types in the search box, the entire roster (all 2,533) is filtered, then paginated 50/page. Result count badge updates: `"23 matches found"`.
 
----
+### UI Mockup — Reviewer Dashboard Filters (HR PMS / Audit / Management / etc.)
 
-## Files Touched
+```text
+Before:
+[Search…] [Department ▼] [Designation ▼] [PMS Grade ▼] [Manager ▼] [Status ▼]
+
+After:
+[Search…] [Department ▼] [Designation ▼] [Manager ▼] [Status ▼]   [+ More filters ▾]
+                                                                    └─► PMS Grade ▼   (only on click)
+```
+
+The PMS Grade dropdown:
+- Is hidden behind "More filters" toggle.
+- Its option list is only fetched the first time the user opens the toggle (lazy `enabled` flag on `useQuery`).
+- Does not narrow other dropdowns (already true today; no change needed).
+- When set, badge appears as today and is independently clearable.
+
+### Files Touched
 
 | File | Change |
 |---|---|
-| `src/hooks/useOrganization.ts` | Chunked RPC calls; resilient fallback with per-chunk retry; diagnostic breadcrumb; **always** include employees who have KPIs at the requested stage in the requested period (Fix 4 seed) |
-| `src/components/review/EmployeeSelectorGrid.tsx` | Small "N eligible of M total" diagnostic line above the grid for admin/HR PMS/auditor/management; non-blocking toast when fallback is used |
-| `DOCUMENTATION.md` | Version History v2.64.9 — Resilient HR PMS / Audit / Management roster resolution |
-| `mem://features/review/period-specific-reviewer-visibility` | Append: "Roster resolution must seed from `kpis(status, period)` actuals so reviewer panels never silently exclude employees on RPC fallback. Bulk RPC chunked at 500 IDs." |
+| `src/pages/admin/WorkflowConfig.tsx` | (a) Profiles query: switch to `fetchAllPaged` so all employees load. (b) Add `currentPage` state + 50/page pagination using existing `Pagination` UI. (c) Search filters the FULL list before pagination. (d) Add `showPmsGradeColumn` toggle (default `false`); hide column + header + cell when off. (e) Replace `.slice(0, 50)` with proper paged slice. (f) Replace "Showing 50 of N" hint with full pagination footer (`Showing X–Y of Z`). |
+| `src/components/review/EmployeeFilters.tsx` | (a) Remove PMS Grade from the default filter row. (b) Add a `Popover`-based "More filters" toggle (`[+ More filters]`) containing the PMS Grade `OrgFilterCombobox`. (c) When `selectedGrade` is set, the toggle button shows a count badge and the active-filter badge row still renders the chip. |
+| `src/hooks/useEmployeeFilterOptions.ts` | Make the `distinct-grades` query lazy: accept `{ enabledGrades?: boolean }` option, gate `useQuery({ enabled: enabledGrades })`. Default `false` so dashboards don't pay the round-trip until the user opens "More filters". |
+| `src/components/review/EmployeeSelectorGrid.tsx` | Wire local `gradesEnabled` boolean (set true once "More filters" opens), pass into `useEmployeeFilterOptions({ enabledGrades })`. No change to filter application logic. |
+| `DOCUMENTATION.md` | Version History v2.64.10 — Workflow Overrides pagination + roster cap fix; PMS Grade hidden by default in Overrides table and reviewer dashboards. |
+| `mem://features/admin/profile-based-menu-access` (append note) | Quick mention that admin tables querying `profiles` MUST use `fetchAllPaged` to bypass PostgREST's 1000-row cap. |
 
-No DB / RLS / migration / workflow changes. Pure client-side resilience.
+### Technical Details
 
----
+- Reuse existing `Pagination` UI from `src/components/ui/pagination.tsx` (same pattern as v2.64.4 EmployeeSelectorGrid).
+- Reuse existing `fetchAllPaged` helper from `src/lib/fetchAll.ts` (already used by `useEmployeeFilterOptions` for managers).
+- `showPmsGradeColumn` state stored in component (not URL) — short-lived UI preference, no need to persist.
+- "More filters" popover uses existing `Popover` + `OrgFilterCombobox` — no new components.
+- Lazy-loading grades: `useQuery({ enabled: enabledGrades, ... })` — when `enabledGrades=false`, `data` stays `undefined`, dropdown shows "loading" the first time it's opened, then cached forever.
 
-## Risk & Impact
+### Risk & Impact Report
 
 | Area | Impact |
 |---|---|
-| Data | None — read-only resolution |
+| Data | None — read-only changes |
 | Workflow / RLS | None |
-| UI | Adds one diagnostic line above grid for power users; non-blocking toast on fallback use only |
-| Performance | Chunking sends 5 parallel RPC calls instead of 1 monster — actually faster for large orgs; 500-row chunks comfortably fit standard payload limits |
-| Regression | Low. Output is a superset of v2.64.8 (anyone visible before stays visible; previously-hidden employees with KPIs at the stage now appear). Sort/badges unchanged. |
-| Mitigation / test matrix | (a) HR PMS / Mar 2026 → Sanjeeb 101178 visible on page 1 with "23 in HR PMS Review" badge. (b) Audit / Mar 2026 → same workflow path validates. (c) Force-fail RPC (devtools network throttle) → toast appears, employees with March `hr_pms_review` KPIs still visible via Fix 4 seed. (d) Search "101178" in HR PMS → 1 result. (e) Diagnostic line shows "2 of 2,533" for HR PMS / Mar to confirm pool size matches DB. |
+| Workflow Overrides table | Page can now find any of ~2,533 employees via search (regression fix). PMS Grade column hidden by default (toggle to show). Existing assignments unchanged. |
+| Reviewer dashboards | PMS Grade filter dropdown moved into a "More filters" popover. Employees previously filtered by PMS Grade via URL param (`?grade=…`) still work — popover auto-opens if grade is preset. No change to filtering logic. |
+| Performance | Removes one initial query on every dashboard load (grades). Workflow Overrides page does 3–4 paged fetches once instead of 1 capped fetch. Net improvement. |
+| Regression risk | Low. Pagination component already battle-tested. Filter component changes are additive (existing props/behavior preserved). |
+| Mitigation / test matrix | (a) Workflow Overrides → search "101178" → Sanjeeb appears. (b) Pagination shows correct counts and navigates. (c) "Show PMS Grade column" toggle works. (d) HR PMS / Audit / Management dashboards: PMS Grade filter no longer in the default row. (e) Click "More filters" → grade dropdown appears, fetches options once. (f) Select a grade → reviewer grid filters as before; chip appears in active filter row. (g) Refresh URL with `?grade=L4` → popover auto-opens, grade pre-selected. (h) Mobile (<640px): "More filters" expands inline below other filters. |
 
-## Out of Scope
-- Server-side pagination of the reviewer grid
-- Refactoring the workflow resolution RPC itself
-- Changing v2.64.8 sort logic (it was correct; the bug was upstream in roster resolution)
-- Adding monitoring/alerting infrastructure for RPC failures
+### Out of Scope
+- Server-side pagination or search of profiles (client-side is sufficient at ~2.5K rows after the cap fix).
+- Persisting "Show PMS Grade column" toggle across sessions.
+- Changing Department/Designation/Manager filter behavior.
+- Changing PMS Grade tab in WorkflowConfig (separate tab; unaffected).
 
