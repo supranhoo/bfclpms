@@ -16,6 +16,7 @@ import { getScoreBadgeClass } from '@/lib/reviewConstants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ReviewPeriodSelectorEnhanced, type PeriodSelection } from '@/components/ui/ReviewPeriodSelectorEnhanced';
 import { EmployeeFilters } from '@/components/review/EmployeeFilters';
@@ -846,29 +847,36 @@ export function EmployeeSelectorGrid({
       };
     } else if (viewLevel === 'audit') {
       let pending = 0, inAudit = 0, forwarded = 0;
-      const activeEmployeeIds = new Set<string>();
+      const periodEmployeeIds = new Set<string>();
+      let reviewed = 0;
       relevantKpis.forEach(k => {
+        // v2.64.11: Total Employees = ANY employee with KPIs in this period
+        // whose workflow includes the audit stage (not just those at/before audit).
+        periodEmployeeIds.add(k.employee_id);
         // Guard: skip employees without resolved workflows to avoid DEFAULT_WORKFLOW_STAGES fallback overcounting
         if (!hasResolvedWorkflow(k.employee_id)) return;
         const stages = getStages(k.employee_id);
         const auditIdx = stages.indexOf('audit');
         if (auditIdx === -1) return;
-        if (k.status === 'audit') { inAudit++; activeEmployeeIds.add(k.employee_id); }
-        else if (['management_review', 'approved'].includes(k.status || '')) { forwarded++; activeEmployeeIds.add(k.employee_id); }
+        if (k.status === 'audit') { inAudit++; }
+        else if (['management_review', 'approved'].includes(k.status || '')) { forwarded++; }
         else {
           const auditReviewable = resolveReviewableStatuses('auditor', stages);
           if (auditReviewable.includes(k.status || '') && k.status !== 'audit') {
             pending++;
-            activeEmployeeIds.add(k.employee_id);
           }
         }
+        // v2.64.11: "Reviewed by me" = KPIs with audit signature for this period.
+        if ((k as any).audit_score !== null && (k as any).audit_score !== undefined) reviewed++;
       });
-      // v2.64.8: "Total Employees" = those with at least one auditor-relevant
-      // KPI in this period (not the entire eligible-for-audit pool).
-      return { totalEmployees: activeEmployeeIds.size, stat1: pending, stat2: inAudit, stat3: forwarded, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+      // v2.64.11: Total Employees = unique employees with any KPI in period
+      // (workflow-filtered roster); reviewed counted via audit_score signature.
+      return { totalEmployees: periodEmployeeIds.size, stat1: pending, stat2: inAudit, stat3: forwarded, stat4: reviewed, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'skip_level') {
       let pending = 0, reviewed = 0;
+      const periodEmployeeIds = new Set<string>();
       relevantKpis.forEach(k => {
+        periodEmployeeIds.add(k.employee_id);
         const stages = getStages(k.employee_id);
         const reviewable = resolveReviewableStatuses('skip_level', stages);
         if (reviewable.includes(k.status || '')) pending++;
@@ -877,28 +885,32 @@ export function EmployeeSelectorGrid({
           if (slIdx >= 0 && stages.slice(slIdx).includes(k.status || '')) reviewed++;
         }
       });
-      return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: periodEmployeeIds.size, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'hr_pms') {
       let pending = 0, inReview = 0, forwarded = 0;
-      const activeEmployeeIds = new Set<string>();
+      const periodEmployeeIds = new Set<string>();
+      let reviewed = 0;
       relevantKpis.forEach(k => {
+        // v2.64.11: Count any employee with at least one KPI in period.
+        periodEmployeeIds.add(k.employee_id);
         const stages = getStages(k.employee_id);
         const hrIdx = stages.indexOf('hr_pms_review');
         if (hrIdx === -1) return;
-        if (k.status === 'hr_pms_review') { inReview++; activeEmployeeIds.add(k.employee_id); }
+        if (k.status === 'hr_pms_review') { inReview++; }
         else {
           const hrReviewable = resolveReviewableStatuses('hr_pms', stages);
           if (hrReviewable.includes(k.status || '') && k.status !== 'hr_pms_review') {
             pending++;
-            activeEmployeeIds.add(k.employee_id);
           }
           const afterHr = stages.slice(hrIdx + 1);
-          if (afterHr.includes(k.status || '')) { forwarded++; activeEmployeeIds.add(k.employee_id); }
+          if (afterHr.includes(k.status || '')) { forwarded++; }
         }
+        // v2.64.11: "HR PMS Reviewed" = KPIs with hr_pms_score signature.
+        if ((k as any).hr_pms_score !== null && (k as any).hr_pms_score !== undefined) reviewed++;
       });
-      // v2.64.8: "Total Employees" = those with at least one HR-PMS-relevant
-      // KPI in this period (pending, in-review, or forwarded).
-      return { totalEmployees: activeEmployeeIds.size, stat1: pending, stat2: inReview, stat3: forwarded, stat4: relevantKpis.length, stat5: 0, totalKpis: relevantKpis.length };
+      // v2.64.11: Total Employees = unique employees with any KPI in period
+      // (workflow-filtered roster). Stat3 = reviewed via hr_pms_score signature.
+      return { totalEmployees: periodEmployeeIds.size, stat1: pending, stat2: inReview, stat3: reviewed, stat4: relevantKpis.length, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'pending_self_review') {
       const pendingKpis = relevantKpis.filter(k => k.status === 'kra_set');
       const pendingCount = pendingKpis.length;
@@ -920,17 +932,18 @@ export function EmployeeSelectorGrid({
       return { totalEmployees: demographicFilteredMembers.length, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else {
       // Management view (default branch): Total Employees = those with at
-      // least one management-relevant KPI (pending or approved) in the period.
-      const mgmtActive = new Set<string>();
+      // v2.64.11: Total Employees = unique employees with any KPI in period
+      // (workflow-filtered roster), regardless of current stage.
+      const periodEmployeeIds = new Set<string>();
+      let reviewed = 0;
       relevantKpis.forEach(k => {
-        if (k.status === 'management_review' || k.status === 'approved') {
-          mgmtActive.add(k.employee_id);
-        }
+        periodEmployeeIds.add(k.employee_id);
+        if ((k as any).management_score !== null && (k as any).management_score !== undefined) reviewed++;
       });
       return {
-        totalEmployees: mgmtActive.size,
+        totalEmployees: periodEmployeeIds.size,
         stat1: relevantKpis.filter(k => k.status === 'management_review').length,
-        stat2: relevantKpis.filter(k => k.status === 'approved').length,
+        stat2: reviewed > 0 ? reviewed : relevantKpis.filter(k => k.status === 'approved').length,
         stat3: relevantKpis.length,
         stat4: 0,
         stat5: 0,
@@ -1104,11 +1117,11 @@ export function EmployeeSelectorGrid({
     } else if (viewLevel === 'hr_pms') {
       return (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
-          <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
-          <StatCard icon={Clock} label="Pending Review" value={stats.stat1} color="amber" subtitle="Before HR PMS stage" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
-          <StatCard icon={FileCheck} label="In HR PMS Review" value={stats.stat2} color="purple" subtitle="Currently in HR PMS" onClick={() => toggleStatusFilter('in_review')} active={statusFilter === 'in_review'} />
-          <StatCard icon={CheckCircle2} label="HR PMS Reviewed" value={stats.stat3} color="green" subtitle="HR PMS completed" onClick={() => toggleStatusFilter('reviewed')} active={statusFilter === 'reviewed'} />
-          <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" />
+          <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} tooltip="Employees with at least one KPI in this period whose workflow includes the HR PMS stage." />
+          <StatCard icon={Clock} label="Pending Review" value={stats.stat1} color="amber" subtitle="Before HR PMS stage" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} tooltip="KPIs at the stage immediately before HR PMS, awaiting your queue." />
+          <StatCard icon={FileCheck} label="In HR PMS Review" value={stats.stat2} color="purple" subtitle="Currently in HR PMS" onClick={() => toggleStatusFilter('in_review')} active={statusFilter === 'in_review'} tooltip="KPIs currently sitting in the HR PMS review stage." />
+          <StatCard icon={CheckCircle2} label="HR PMS Reviewed" value={stats.stat3} color="green" subtitle="HR PMS completed" onClick={() => toggleStatusFilter('reviewed')} active={statusFilter === 'reviewed'} tooltip="KPIs with an HR PMS score recorded for this period (regardless of current stage)." />
+          <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" tooltip="All KPIs in this period for employees visible in this view (after filters)." />
         </div>
       );
     } else if (viewLevel === 'pending_self_review' || viewLevel === 'pending_manager_review' || viewLevel === 'pending_skip_review') {
@@ -1126,20 +1139,20 @@ export function EmployeeSelectorGrid({
     } else if (viewLevel === 'audit') {
       return (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
-          <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
-          <StatCard icon={Clock} label="Pending Audit" value={stats.stat1} color="amber" subtitle="In pipeline for audit" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
-          <StatCard icon={FileCheck} label="In Audit" value={stats.stat2} color="purple" subtitle="Currently reviewing" onClick={() => toggleStatusFilter('in_audit')} active={statusFilter === 'in_audit'} />
-          <StatCard icon={CheckCircle2} label="Forwarded" value={stats.stat3} color="green" subtitle="Sent for management" onClick={() => toggleStatusFilter('forwarded')} active={statusFilter === 'forwarded'} />
-          <StatCard icon={Target} label="My KPIs" value={myKpiLevelData?.totalAssignedKpis || 0} color="blue" subtitle="KPIs assigned to you" onClick={() => toggleStatusFilter('my_assigned')} active={statusFilter === 'my_assigned'} />
+          <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} tooltip="Employees with at least one KPI in this period whose workflow includes the Audit stage." />
+          <StatCard icon={Clock} label="Pending Audit" value={stats.stat1} color="amber" subtitle="In pipeline for audit" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} tooltip="KPIs at the stage immediately before Audit, awaiting your queue." />
+          <StatCard icon={FileCheck} label="In Audit" value={stats.stat2} color="purple" subtitle="Currently reviewing" onClick={() => toggleStatusFilter('in_audit')} active={statusFilter === 'in_audit'} tooltip="KPIs currently sitting in the Audit stage." />
+          <StatCard icon={CheckCircle2} label="Forwarded" value={stats.stat3} color="green" subtitle="Sent for management" onClick={() => toggleStatusFilter('forwarded')} active={statusFilter === 'forwarded'} tooltip="KPIs that have moved past Audit (Management Review or Approved)." />
+          <StatCard icon={Target} label="My KPIs" value={myKpiLevelData?.totalAssignedKpis || 0} color="blue" subtitle="KPIs assigned to you" onClick={() => toggleStatusFilter('my_assigned')} active={statusFilter === 'my_assigned'} tooltip="KPIs explicitly assigned to you for audit." />
         </div>
       );
     } else {
       return (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
-          <StatCard icon={Clock} label="Pending Review" value={stats.stat1} color="emerald" subtitle="KPIs awaiting approval" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
-          <StatCard icon={CheckCircle2} label="Approved" value={stats.stat2} color="green" subtitle="KPIs completed" onClick={() => toggleStatusFilter('approved')} active={statusFilter === 'approved'} />
-          <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" />
+          <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} tooltip="Employees with at least one KPI in this period whose workflow includes Management Review." />
+          <StatCard icon={Clock} label="Pending Review" value={stats.stat1} color="emerald" subtitle="KPIs awaiting approval" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} tooltip="KPIs currently in Management Review awaiting approval." />
+          <StatCard icon={CheckCircle2} label="Approved" value={stats.stat2} color="green" subtitle="KPIs completed" onClick={() => toggleStatusFilter('approved')} active={statusFilter === 'approved'} tooltip="KPIs with a management score recorded (or approved) this period." />
+          <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" tooltip="All KPIs in this period for employees visible in this view (after filters)." />
         </div>
       );
     }
@@ -1828,6 +1841,7 @@ interface StatCardProps {
   className?: string;
   onClick?: () => void;
   active?: boolean;
+  tooltip?: string;
 }
 
 const colorMap: Record<StatCardProps['color'], { border: string; bg: string; text: string }> = {
@@ -1844,13 +1858,13 @@ const colorMap: Record<StatCardProps['color'], { border: string; bg: string; tex
 // v2.64.8: forwardRef so Radix Tooltip and other ref-forwarding wrappers can
 // attach refs without React warnings.
 const StatCard = React.forwardRef<HTMLDivElement, StatCardProps>(function StatCard(
-  { icon: Icon, label, value, color, subtitle, className = '', onClick, active },
+  { icon: Icon, label, value, color, subtitle, className = '', onClick, active, tooltip },
   ref,
 ) {
   const colors = colorMap[color];
   const isClickable = !!onClick;
 
-  return (
+  const card = (
     <Card
       ref={ref}
       className={`border-l-4 ${colors.border} ${className} ${isClickable ? 'cursor-pointer transition-all hover:shadow-md' : ''} ${active ? 'ring-2 ring-primary shadow-md' : ''}`}
@@ -1859,7 +1873,10 @@ const StatCard = React.forwardRef<HTMLDivElement, StatCardProps>(function StatCa
       <CardContent className="pt-4 sm:pt-6">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs sm:text-sm font-medium text-muted-foreground">{label}</p>
+            <p className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-1">
+              {label}
+              {tooltip && <Info className="h-3 w-3 opacity-60" />}
+            </p>
             <p className={`text-xl sm:text-3xl font-bold ${color === 'primary' ? '' : colors.text}`}>{value}</p>
             {subtitle && <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">{subtitle}</p>}
           </div>
@@ -1869,6 +1886,16 @@ const StatCard = React.forwardRef<HTMLDivElement, StatCardProps>(function StatCa
         </div>
       </CardContent>
     </Card>
+  );
+
+  if (!tooltip) return card;
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>{card}</TooltipTrigger>
+        <TooltipContent side="bottom" className="max-w-xs text-xs">{tooltip}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 });
 
