@@ -36,7 +36,13 @@ interface Verification {
 }
 
 interface RepairResult {
-  mode: 'scan' | 'repair' | 'scan_stuck' | 'repair_stuck';
+  mode:
+    | 'scan'
+    | 'repair'
+    | 'scan_stuck'
+    | 'repair_stuck'
+    | 'scan_propagation_failures'
+    | 'repair_propagation_failures';
   repaired: number;
   null_values_fixed: number;
   skipped: number;
@@ -55,6 +61,10 @@ const REASON_LABELS: Record<string, string> = {
   null_achieved_value: 'Achieved value is NULL',
   missing_submission: 'Missing submission — repairable',
   submission_created: 'Submission created successfully',
+  propagation_failure_zero_advance: 'Propagated but 0 employees advanced — Bucket F',
+  okv_reset_to_draft: 'OKV reset to draft — DO can re-propagate',
+  no_matching_kpis: 'No matching employee KPIs (orphaned definition)',
+  partial_advance_healthy: 'Some employees advanced — not a failure',
 };
 
 export function DataRepairTab() {
@@ -69,6 +79,11 @@ export function DataRepairTab() {
   const [stuckRepairing, setStuckRepairing] = useState(false);
   const [stuckResults, setStuckResults] = useState<RepairResult | null>(null);
   const [showStuckConfirm, setShowStuckConfirm] = useState(false);
+  // Bucket F — Propagation Failures (OKV propagated but 0 employees advanced)
+  const [pfScanning, setPfScanning] = useState(false);
+  const [pfRepairing, setPfRepairing] = useState(false);
+  const [pfResults, setPfResults] = useState<RepairResult | null>(null);
+  const [showPfConfirm, setShowPfConfirm] = useState(false);
 
   const repairableRows = useMemo(
     () => scanResults?.filter(r => r.action === 'repairable') ?? [],
@@ -78,6 +93,11 @@ export function DataRepairTab() {
   const stuckRepairableCount = useMemo(
     () => stuckResults?.details?.filter(r => r.action === 'repairable').length ?? 0,
     [stuckResults]
+  );
+
+  const pfRepairableCount = useMemo(
+    () => pfResults?.details?.filter(r => r.action === 'repairable').length ?? 0,
+    [pfResults]
   );
 
   const handleStuckScan = async () => {
@@ -119,6 +139,52 @@ export function DataRepairTab() {
       toast({ title: 'Repair failed', description: err.message || 'Unknown error', variant: 'destructive' });
     } finally {
       setStuckRepairing(false);
+    }
+  };
+
+  const handlePfScan = async () => {
+    setPfScanning(true);
+    setPfResults(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('repair-orphaned-propagations', {
+        body: { mode: 'scan_propagation_failures', limit: 1500 },
+      });
+      if (error) throw error;
+      const result = data as RepairResult;
+      setPfResults(result);
+      const found = result.details?.filter(d => d.action === 'repairable').length ?? 0;
+      toast({
+        title: 'Propagation-failure scan complete',
+        description: `Found ${found} OKV definition(s) where Propagate ran but 0 employees advanced.`,
+      });
+    } catch (err: any) {
+      toast({ title: 'Scan failed', description: err.message || 'Unknown error', variant: 'destructive' });
+    } finally {
+      setPfScanning(false);
+    }
+  };
+
+  const handlePfRepair = async () => {
+    setShowPfConfirm(false);
+    setPfRepairing(true);
+    try {
+      const repairableIds = (pfResults?.details ?? [])
+        .filter(d => d.action === 'repairable')
+        .map(d => d.kpi_id);
+      const { data, error } = await supabase.functions.invoke('repair-orphaned-propagations', {
+        body: { mode: 'repair_propagation_failures', okv_ids: repairableIds, limit: 1500 },
+      });
+      if (error) throw error;
+      const result = data as RepairResult;
+      setPfResults(result);
+      toast({
+        title: 'Propagation-failure repair complete',
+        description: `Reset ${result.repaired} OKV definition(s) back to draft.`,
+      });
+    } catch (err: any) {
+      toast({ title: 'Repair failed', description: err.message || 'Unknown error', variant: 'destructive' });
+    } finally {
+      setPfRepairing(false);
     }
   };
 
@@ -578,6 +644,110 @@ export function DataRepairTab() {
         </CardContent>
       </Card>
 
+      {/* Bucket F — Propagation Failures (OKV propagated, 0 employees advanced) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Wrench className="h-5 w-5" />
+            Repair Propagation Failures (Bucket F)
+          </CardTitle>
+          <CardDescription>
+            Org KPI definitions marked as <code>propagated</code> where the per-employee loop silently failed —
+            zero matching employees advanced past <code>kra_set</code>. Repair resets <code>org_kpi_values.status</code>
+            back to <code>draft</code> so the Data Owner can re-run Propagate.
+            <br />
+            <strong className="text-amber-600">Note:</strong> until the RPC patch (roadmap Step 3) ships,
+            re-propagation may re-trigger the bug. Use this scan after each propagation cycle until the patch lands.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            <Button onClick={handlePfScan} disabled={pfScanning || pfRepairing} variant="outline">
+              {pfScanning ? (
+                <><RefreshCw className="h-4 w-4 animate-spin" /> Scanning…</>
+              ) : (
+                <><Search className="h-4 w-4" /> Scan Propagation Failures</>
+              )}
+            </Button>
+            {pfResults && pfRepairableCount > 0 && (
+              <Button onClick={() => setShowPfConfirm(true)} disabled={pfRepairing}>
+                <Wrench className="h-4 w-4" /> Reset {pfRepairableCount} OKV Definition(s)
+              </Button>
+            )}
+          </div>
+
+          {pfResults && (
+            <div className="rounded-lg border p-3 space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="secondary">{pfResults.total_checked} OKV checked</Badge>
+                <Badge variant="outline">{pfRepairableCount} failed propagations</Badge>
+                {pfResults.repaired > 0 && pfResults.mode === 'repair_propagation_failures' && (
+                  <Badge>{pfResults.repaired} reset to draft</Badge>
+                )}
+                <Badge variant="secondary">{pfResults.skipped} skipped</Badge>
+              </div>
+              {pfResults.details.length > 0 && (
+                <div className="rounded-md border max-h-[320px] overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Category</TableHead>
+                        <TableHead>KRA</TableHead>
+                        <TableHead>KPI</TableHead>
+                        <TableHead>Period</TableHead>
+                        <TableHead>Achieved</TableHead>
+                        <TableHead>Detection</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Reason</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pfResults.details.map(row => (
+                        <TableRow key={row.kpi_id} className={row.action === 'skippable' ? 'opacity-60' : ''}>
+                          <TableCell className="text-sm max-w-[140px] truncate">{row.category}</TableCell>
+                          <TableCell className="text-sm max-w-[160px] truncate">{row.kra_name}</TableCell>
+                          <TableCell className="text-sm max-w-[200px] truncate">{row.kpi_name}</TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">{row.review_period} {row.review_year}</TableCell>
+                          <TableCell className="text-sm">{row.achieved_value ?? '—'}</TableCell>
+                          <TableCell className="text-xs">{row.employee_name}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                row.action === 'repaired'
+                                  ? 'default'
+                                  : row.action === 'error'
+                                  ? 'destructive'
+                                  : row.action === 'repairable'
+                                  ? 'default'
+                                  : 'secondary'
+                              }
+                              className="text-xs"
+                            >
+                              {row.action}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {REASON_LABELS[row.reason] || row.reason}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+              {pfResults.errors.length > 0 && (
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-destructive">Errors ({pfResults.errors.length}):</span>
+                  {pfResults.errors.map((e, i) => (
+                    <p key={i} className="text-xs text-destructive/80 font-mono">{e}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <ConfirmDestructiveDialog
         open={showConfirm}
         onConfirm={handleRepairSelected}
@@ -586,6 +756,26 @@ export function DataRepairTab() {
         description={`This will create missing review submissions and advance ${selectedIds.size} KPI(s) from "KRA Set" to "Self Review". This action cannot be undone.`}
         confirmLabel="Repair Selected"
         isLoading={isRepairing}
+      />
+
+      <ConfirmDestructiveDialog
+        open={showStuckConfirm}
+        onConfirm={handleStuckRepair}
+        onCancel={() => setShowStuckConfirm(false)}
+        title={`Repair ${stuckRepairableCount} status-stuck KPI(s)?`}
+        description={`This will advance ${stuckRepairableCount} KPI(s) from "KRA Set" to "Self Review" where a self-review submission already exists. This action cannot be undone.`}
+        confirmLabel="Repair Stuck"
+        isLoading={stuckRepairing}
+      />
+
+      <ConfirmDestructiveDialog
+        open={showPfConfirm}
+        onConfirm={handlePfRepair}
+        onCancel={() => setShowPfConfirm(false)}
+        title={`Reset ${pfRepairableCount} OKV definition(s) to draft?`}
+        description={`This will reset ${pfRepairableCount} org_kpi_values row(s) from "propagated" back to "draft" so the Data Owner can re-run Propagate. Audit logs are written to every affected employee KPI. This action is reversible by manually re-running Propagate.`}
+        confirmLabel="Reset to Draft"
+        isLoading={pfRepairing}
       />
     </div>
   );
