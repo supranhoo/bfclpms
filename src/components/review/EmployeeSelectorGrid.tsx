@@ -295,6 +295,17 @@ export function EmployeeSelectorGrid({
 
   // isLoading accounts for stage-filtered fetch when a required stage is active
   const isCrossCheckMode = viewLevel === 'audit' && statusFilter === 'cross_check';
+  // v2.65.0 — Explorer Mode (auditor read-only org-wide browse).
+  // Treat Explorer Mode as a UI-level alias of cross_check; auto-applies when
+  // ?explore=1 is in the URL or when the user toggles the pill.
+  const exploreParam = searchParams.get('explore');
+  const isExploreMode = viewLevel === 'audit' && (statusFilter === 'cross_check' || exploreParam === '1');
+  // Auto-promote to cross_check when ?explore=1 is set but status filter hasn't caught up yet
+  useEffect(() => {
+    if (viewLevel === 'audit' && exploreParam === '1' && statusFilter !== 'cross_check') {
+      setStatusFilter('cross_check');
+    }
+  }, [viewLevel, exploreParam, statusFilter, setStatusFilter]);
   const isLoading = viewLevel === 'team'
     ? (isFullAccess ? profilesLoading : (teamLoading || skipLevelLoading))
     : isCrossCheckMode
