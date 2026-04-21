@@ -13,6 +13,8 @@
                                 ├──► Step 5
  Step 4 (independent)           │
  Step 6 (independent) ──────────┘
+ Step 7 (revision flow) — independent of 4/5/6, depends on Step 3
+ Step 8 (late-joiner trigger) — independent, depends on Step 3
 ```
 
 - **Steps 1 → 2 → 3** are sequentially dependent (clean data, then repair the new bug class, then change behaviour).
@@ -117,6 +119,24 @@
 | **Rollback plan** | Trivial revert; UI strings only. |
 | **Risk** | **Negligible.** Pure presentation. |
 | **Done when** | Every count tile across the 4 surfaces in spec §6 includes its unit. |
+
+---
+
+## Step 7 — Reviewer "Request Revision from Data Owner" action (Bucket J)
+
+| Field | Value |
+|---|---|
+| **Goal** | Give reviewers an explicit path to push an org KPI back to the Data Owner when the **source value** itself is wrong (not the score). Closes Gap #1 ("stuck in the middle" rejection where DO is never notified). |
+| **Status** | **✅ Implemented (v2.66.2 — 2026-04-21).** New columns on `org_kpi_values` (`last_revision_reason`, `last_revision_requested_by`, `last_revision_requested_at`, `revision_count`). New atomic RPC `request_org_kpi_revision(p_kpi_id, p_reason)`. New hook `useRequestOrgKpiRevision`. SendBackDialog extended with an "Issue is with the source value" toggle that appears only on `is_org_level=true` KPIs. |
+| **Code change** | DB migration + RPC, new hook, SendBackDialog extension. No changes required to individual scorecard files — every reviewer surface (Audit, Management, Unified, Employee) inherits the new mode automatically. |
+| **Effort** | ~2 hours. |
+| **Files touched** | New migration `20260421_request_org_kpi_revision.sql`, `src/hooks/useRequestOrgKpiRevision.ts`, `src/components/review/SendBackDialog.tsx`, `docs/specs/org-kpi-fix-roadmap.md`. |
+| **Behaviour** | (1) Reverts OKV from `propagated`→`draft` and stores revision metadata. (2) Cascades: every sibling employee KPI in `self_review` or `manager_review` is rolled back to `kra_set` with submission scores cleared (evidence preserved per send-back governance). (3) Employees past `manager_check` stay put but get an `ORG_KPI_REVISION_FLAGGED` audit entry — their score stands against the pre-revision value. (4) Audit logs `ORG_KPI_REVISION_REQUESTED` (parent) + `STATUS_REVISION_CASCADE` (children). (5) Notifications + emails to all data owners via existing `org_kpi_data_owners` pipeline (event type `org_kpi_revision_requested`). |
+| **Atomicity** | The RPC runs in a single PL/pgSQL transaction. If any cascade step fails, the entire revision is rolled back — OKV stays `propagated`. |
+| **Dependencies** | Step 3 (OKV status integrity must be reliable before adding a new transition). |
+| **Rollback plan** | Per-employee rollback is reversible via existing Step Back tool. OKV revert is reversible by manually setting `status='propagated'`. The four new columns are nullable additions — safe to leave in place. |
+| **Risk** | **Low.** Additive feature gated to `is_org_level=true` KPIs. The existing send-back path is untouched. |
+| **Done when** | Reviewers see the toggle on org-level KPIs; clicking Request Revision shows toast with cascade counts; OKV returns to `draft`; data owners receive notification + email. |
 
 ---
 
