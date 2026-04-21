@@ -1604,7 +1604,7 @@ export function UnifiedScorecard({
                     onAction={isSelfMode ? selfReviewHandler : openReviewSheet}
                     onView={isSelfMode ? selfReviewHandler : openReviewSheet}
                     onShowLogic={(kpi) => { setSelectedKpi(kpi); setLogicModalOpen(true); }}
-                    onSendBack={isSelfMode ? undefined : openSendBackDialog}
+                    onSendBack={isSelfMode || exploreMode ? undefined : openSendBackDialog}
                     onToggleExpand={toggleDailyExpand}
                     isExpanded={expandedDailyKpis.has(kpi.id)}
                     getOrgKpiValue={getOrgKpiValue}
@@ -1636,7 +1636,7 @@ export function UnifiedScorecard({
               onView={isSelfMode 
                 ? (kpi: KPI) => { setSelfAutoOpenQueryHistory(false); setSelectedKpiForSelfReview(kpi); } 
                 : openReviewSheet}
-              onSendBack={isSelfMode ? undefined : openSendBackDialog}
+              onSendBack={isSelfMode || exploreMode ? undefined : openSendBackDialog}
               onShowLogic={(kpi) => { setSelectedKpi(kpi); setLogicModalOpen(true); }}
               expandedKpis={expandedDailyKpis}
               onToggleExpand={toggleDailyExpand}
