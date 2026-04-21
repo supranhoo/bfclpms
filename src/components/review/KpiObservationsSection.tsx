@@ -37,6 +37,8 @@ interface KpiObservationsSectionProps {
   viewLevel: 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' | 'admin';
   baseScore?: number | null;
   isOwnKpi?: boolean;
+  /** v2.65.0 — Explorer Mode: hide all add/edit affordances, render observations as read-only */
+  exploreMode?: boolean;
 }
 
 function getObserverRole(viewLevel: string, isOwnKpi: boolean): ObserverRole {
@@ -67,6 +69,7 @@ export function KpiObservationsSection({
   viewLevel,
   baseScore,
   isOwnKpi = false,
+  exploreMode = false,
 }: KpiObservationsSectionProps) {
   const { user } = useAuth();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -78,9 +81,9 @@ export function KpiObservationsSection({
   const updateMutation = useUpdateObservation();
   const deleteMutation = useDeleteObservation();
 
-  const isReadOnly = false;
+  const isReadOnly = exploreMode;
   const observerRole = getObserverRole(viewLevel, isOwnKpi);
-  const showAddButton = canAddObservation(viewLevel, kpiStatus, isOwnKpi);
+  const showAddButton = !exploreMode && canAddObservation(viewLevel, kpiStatus, isOwnKpi);
   const autoApply = isAutoApply(viewLevel);
 
   // Status counts

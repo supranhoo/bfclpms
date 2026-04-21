@@ -1,0 +1,8 @@
+---
+name: auditor-access-expansion
+description: Audit Panel cross-check filter and v2.65.0 first-class Explorer Mode (read-only org-wide browsing) for auditors with UI-enforced read-only state and EXPLORER_VIEW audit logging
+type: feature
+---
+The Audit Panel includes an 'All Employees (Cross-Check)' filter that allows auditors to view scores for all active employees organization-wide in a read-only state. This mode bypasses standard workflow-stage filters.
+
+v2.65.0 — Explorer Mode is now a first-class toggle in the Audit view (next to Manage Assignments) and a sidebar sub-link "Explore Employees (Read-Only)" deep-linking via `?explore=1`. When ON: status dropdown is hidden, an amber banner appears, and `cross_check` is auto-applied. The scorecard receives `exploreMode={true}` which (a) forces `isReviewable()` to return false so the read-only viewer renders, (b) hides per-row Send Back affordances, (c) sets `KpiObservationsSection` to read-only and hides the Add Observation button. Each KPI opened in Explorer Mode inserts a fire-and-forget `kpi_audit_logs` entry with action `EXPLORER_VIEW` (performed_by, kpi_id, period metadata) for compliance. RLS is unchanged — server-side write protection already exists; this aligns the UI with that contract.

@@ -38,6 +38,8 @@ interface KpiReviewPanelProps {
   orgKpiEnteredByName?: string | null;
   orgKpiDataOwnerNames?: string[];
   orgAchievedValue?: number | null;
+  /** v2.65.0 — Explorer Mode: read-only browsing for auditors outside their scope */
+  exploreMode?: boolean;
 }
 
 export function KpiReviewPanel({
@@ -60,6 +62,7 @@ export function KpiReviewPanel({
   orgKpiEnteredByName,
   orgKpiDataOwnerNames,
   orgAchievedValue,
+  exploreMode = false,
 }: KpiReviewPanelProps) {
   const isOwnKpi = currentUserId ? kpi.employee_id === currentUserId : false;
   return (
@@ -111,6 +114,7 @@ export function KpiReviewPanel({
             viewLevel={viewLevel}
             baseScore={(kpi.status === 'approved' ? submission?.final_score : null) ?? submission?.management_score ?? submission?.auditor_score ?? submission?.manager_score ?? submission?.self_score ?? null}
             isOwnKpi={isOwnKpi}
+            exploreMode={exploreMode}
           />
         </div>
       </div>
