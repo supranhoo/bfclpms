@@ -5151,3 +5151,22 @@ Every new edge function **must** complete all of these steps before deployment:
 - **Problem (RCA)**: The v2.64.8 "period-aware Total Employees" recompute over-narrowed the denominator for HR PMS / Audit / Management views by counting only employees whose CURRENT KPI status sat at or before the reviewer's stage. Employees whose KPIs had already advanced past that stage (e.g. management_review, approved) were excluded from both "Total Employees" and "Reviewed", producing dashboards that under-reported actual workload (HR PMS Mar 2026: UI showed 14 employees / 595 KPIs / 185 reviewed against DB truth of 107 / 1,758 / 739).
 - **Fix**: In `EmployeeSelectorGrid.tsx` `stats` recompute — (a) **Total Employees** now equals unique employees in `relevantKpis` (i.e. anyone in the filtered, workflow-eligible roster with ≥1 KPI in the period), regardless of their current stage; (b) **Reviewed** for HR PMS / Audit / Management now counts KPIs whose stage-specific signature column is populated (`hr_pms_score`, `audit_score`, `management_score`) so that work already advanced past the stage is still credited to the reviewer; (c) **Total KPIs** continues to reflect the full period total for the visible roster; (d) `StatCard` accepts an optional `tooltip` prop and renders an `Info` icon plus Radix Tooltip; all five cards on HR PMS / Audit / Management dashboards now disclose their precise definition. Skip-Level stats also switched from `demographicFilteredMembers.length` to period-presence for consistency.
 - **Modified files**: `src/components/review/EmployeeSelectorGrid.tsx`
+
+### v2.66.0 — Atomic Org KPI propagation RPC (Phase A3, 2026-04-21)
+- **Problem (RCA)**: `propagate_org_kpi_value` advanced status without verifying `ROW_COUNT`, so KPIs already past `kra_set` silently incremented the success counter. Root cause for Buckets B, C, F (87 silent failures).
+- **Fix**: Both overloads now use guarded `UPDATE … WHERE status='kra_set'` + `GET DIAGNOSTICS ROW_COUNT`, return `{propagated_count, skipped_count, details, skipped[]}`, emit `PROPAGATION_PARTIAL` audit logs.
+- **Modified files**: `supabase/migrations/20260421173624_*.sql`, `src/hooks/usePropagateOrgKpiValue.ts`
+
+### v2.66.1 — Pre-flight Org KPI propagation preview (Phase A4, 2026-04-21)
+- **Fix**: New read-only RPC `preview_org_kpi_propagation(uuid[])` + `PropagationPreviewDialog` showing `total/will_advance/will_skip` breakdown before the live call. `OrgKpiDataEntry.tsx` gates Save & Propagate behind the preview.
+- **Modified files**: `supabase/migrations/20260421173856_*.sql`, `src/hooks/usePreviewOrgKpiPropagation.ts`, `src/components/admin/PropagationPreviewDialog.tsx`, `src/pages/admin/OrgKpiDataEntry.tsx`
+
+### v2.66.2 — Reviewer "Request Revision" action (Phase B1, 2026-04-21)
+- **Problem (Gap #1)**: When a reviewer rejected an Org KPI because the source value was wrong, only the rejected employee rolled back; DO was never notified, OKV stayed `propagated`.
+- **Fix**: New OKV columns (`last_revision_reason`, `last_revision_requested_by`, `last_revision_requested_at`, `revision_count`). New atomic RPC `request_org_kpi_revision(p_kpi_id, p_reason)` reverts OKV → `draft`, cascades early-stage employees back to `kra_set` (clearing scores, preserving evidence), flags late-stage employees with `ORG_KPI_REVISION_FLAGGED`. SendBackDialog adds an "Issue is with the source value" toggle on `is_org_level=true` KPIs.
+- **Modified files**: `supabase/migrations/20260421174309_*.sql`, `src/hooks/useRequestOrgKpiRevision.ts`, `src/components/review/SendBackDialog.tsx`
+
+### v2.66.3 — Late-joiner Org KPI auto-pull trigger (Phase B2, 2026-04-21)
+- **Problem (Gap #3)**: Employees onboarded after Propagate received a `kpis` row but no submission — ghost assignments stuck at `kra_set`.
+- **Fix**: New flag `app_settings.enable_org_kpi_autopull` (default off). Helper `compute_org_kpi_score_for_kpi(uuid, numeric)`. Trigger `trg_autopull_propagated_org_kpi` on `kpis AFTER INSERT` resolves OKV via natural-key lookup with most-specific scope (employee → department → org-wide), pre-fills submission, advances to `self_review`, audit-logs `ORG_KPI_AUTOPULLED_FOR_LATE_JOINER`. Honors `is_na`. New `backfill_late_joiner_org_kpis(p_dry_run)` admin RPC + Bucket K card in Data Repair for historical rows.
+- **Modified files**: `supabase/migrations/20260421_*.sql`, `src/hooks/useLateJoinerBackfill.ts`, `src/components/admin/LateJoinerBackfillSection.tsx`, `src/components/admin/DataRepairTab.tsx`
