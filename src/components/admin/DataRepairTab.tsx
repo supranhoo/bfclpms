@@ -749,6 +749,9 @@ export function DataRepairTab() {
         </CardContent>
       </Card>
 
+      {/* Bucket K — Late-Joiner Auto-Pull (Phase B2) */}
+      <LateJoinerBackfillSection />
+
       <ConfirmDestructiveDialog
         open={showConfirm}
         onConfirm={handleRepairSelected}
