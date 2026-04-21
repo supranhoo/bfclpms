@@ -190,29 +190,21 @@ export default function OrgKpiDataEntry() {
       return 'pending';
     }
      const prefix = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||`;
-    const matching = Array.from(existingValuesMap.entries()).filter(([k, v]) =>
-      k.startsWith(prefix) && ((v.achieved_value !== null && v.achieved_value !== undefined) || v.is_na)
-    );
-    // Scope-aware filter: ignore orphan rows from a different scope (legacy org-scope rows
-    // have key suffix `||null||null` but current scope is employee/department).
-    const scopeMatching = matching.filter(([k]) => {
-      if (scope === 'employee') return !k.endsWith('||null||null') && !k.endsWith('||null');
-      if (scope === 'department') return !k.endsWith('||null||null');
-      return true;
-    }).filter(([k]) => {
-      // For employee scope, key ends with ||<deptOrNull>||<empId>; empId must not be 'null'
-      if (scope === 'employee') {
-        const parts = k.split('||');
-        return parts[parts.length - 1] !== 'null';
-      }
-      if (scope === 'department') {
-        const parts = k.split('||');
-        return parts[parts.length - 2] !== 'null';
-      }
+    // Scope-aware: key format is `${kpiKey}||${deptId|'null'}||${empId|'null'}`.
+    // Ignore orphan rows from a different scope (e.g. legacy org-scope rows with
+    // both ids 'null' when current scope is employee/department).
+    const matching = Array.from(existingValuesMap.entries()).filter(([k, v]) => {
+      if (!k.startsWith(prefix)) return false;
+      if (!((v.achieved_value !== null && v.achieved_value !== undefined) || v.is_na)) return false;
+      const parts = k.split('||');
+      const empPart = parts[parts.length - 1];
+      const deptPart = parts[parts.length - 2];
+      if (scope === 'employee') return empPart !== 'null';
+      if (scope === 'department') return deptPart !== 'null';
       return true;
     });
-    if (scopeMatching.length > 0) {
-      return scopeMatching.every(([, v]) => v.status === 'propagated' || v.status === 'approved') ? 'propagated' : 'entered';
+    if (matching.length > 0) {
+      return matching.every(([, v]) => v.status === 'propagated' || v.status === 'approved') ? 'propagated' : 'entered';
     }
     return 'pending';
   }, [existingValuesMap]);
