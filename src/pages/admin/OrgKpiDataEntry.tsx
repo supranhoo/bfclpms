@@ -585,8 +585,8 @@ export default function OrgKpiDataEntry() {
     }
   }, [existingValuesMap, selectedPeriod, selectedYear, profile?.id, bulkUpsert, insertAuditLogs]);
 
-  // Save & Propagate handler
-  const handleCardSaveAndPropagate = useCallback(async (
+  // Save & Propagate handler — internal executor (called after preview confirmation)
+  const executeSaveAndPropagate = useCallback(async (
     kpi: typeof filteredKpis[0],
     values: Parameters<typeof handleCardSave>[1],
     filterEmployeeIds?: string[],
