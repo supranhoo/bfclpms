@@ -92,7 +92,6 @@ export function OrgKpiMappingDashboard({ reviewPeriod, reviewYear }: MappingProp
   const [scopeTarget, setScopeTarget] = useState<{ kpiGroup: KpiMapping; newScope: 'organization' | 'department' | 'employee' } | null>(null);
 
   const removeMutation = useRemoveEmployeeFromOrgKpi();
-  const changeScopeMutation = useChangeOrgKpiScope();
 
   // Group by KPI
   const byKpi = useMemo(() => {
