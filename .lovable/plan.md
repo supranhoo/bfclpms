@@ -1,81 +1,179 @@
+<final-text>## RCA — KPI Scorecard Detail Still Shows 0 Rows
 
+### Confirmed facts
+- The **1000-row paging fix is already in the code**:
+  - `src/hooks/useCompanyFilter.ts` uses `fetchAllPaged`
+  - `src/pages/reports/KpiScorecardDetail.tsx` uses `fetchAllPaged` for `profiles` and `org_kpi_data_owners`
+- The database **does contain March 2026 data**:
+  - `1,758` KPIs
+  - `107` distinct employees
+- Your screenshot shows:
+  - `March`
+  - `2026`
+  - `All Companies`
+  - `All Departments`
+  - no visible search term
+  - still `0 KPIs`
+- The page currently **does not surface query errors**. If the query fails or returns nothing because of access scope, the UI still shows:
+  - `0 KPIs`
+  - `No KPIs found for the selected filters`
 
-## Plan — KPI Scorecard Detail: Fix Data Fetch + Add "Click to Load" Pattern (v2.65.2)
+### Assumptions I am not making silently
+I cannot prove which of these is happening for your current login without implementation/runtime instrumentation, so I am treating both as live possibilities:
 
-### Root Cause Analysis
+1. **Access-scope mismatch**
+   - The report is described as org-wide: “Flat table of all KPIs…”
+   - But the app currently grants route access to `manager`
+   - RLS on `kpis` gives managers access only to **their own direct reports**
+   - So for a manager (or admin switched into natural manager UI mode), this report can legitimately return 0 rows even though the org has 1,758 rows
 
-**Issue A — "0 KPIs" sometimes shown despite data existing**
-The query for March 2026 (1,758 KPIs) does fetch correctly from the `kpis` table. However, two silent 1,000-row caps elsewhere can cause rows to be dropped during the join/enrichment phase:
+2. **Client is masking a real fetch failure**
+   - `KpiScorecardDetail.tsx` reads `rows`, `isLoading`, `isFetching`
+   - but does **not** handle `error`
+   - so a failed query can look identical to “no data”
 
-1. **`useCompanyFilter` hook** fetches all `profiles` without paging (line 33-36) — capped at 1,000 of 2,536 rows. This breaks `filterByCompany`, `getCompanyName`, and `getCompanyCode` for ~60% of employees. When "All Companies" is selected, filtering passes (returns `true`), but company labels in the export are blank for many rows.
-2. **`KpiScorecardDetail`'s own profiles fetch** (line 136-138) also has no paging — same 1,000-row cap. Result: any KPI whose `employee_id` belongs to a profile beyond row 1,000 renders with blank Code/Name/Designation/Department, and gets filtered out by the Department filter and search.
+### Multiple valid interpretations
+#### Interpretation A — This report is supposed to be org-wide
+Then the current setup is inconsistent:
+- UI/report description says org-wide
+- route access includes manager
+- DB access for manager is team-scoped only
 
-**Issue B — Auto-load consumes CPU**
-Every filter change (Month, Year, Company, Department, Search) triggers a full re-fetch + re-render, even before the user finishes choosing filters. With 1,758 rows × 6 stages of joins, this is expensive. Same pattern exists across most report dashboards.
+#### Interpretation B — This report is supposed to be team-scoped for managers
+Then the current setup is misleading:
+- report title/description are too broad
+- empty results are expected for some managers
+- the page needs scope disclosure, not broader access
 
-### Fix Plan
+### Recommended direction
+Use the safer interpretation first:
 
-#### Fix 1 — Repair the silent profile cap (high-impact, fixes data)
-Replace direct `.select('...')` profile fetches with the existing `fetchAllPaged` helper (already used in `useKpiFilters.ts`).
+**Recommended:** keep this report **org-wide only** and restrict it to roles that already have org-wide read access (`admin`, `management`, `hr_pms`, `auditor`, explicit override users).
+
+Reason:
+- simpler
+- safer
+- aligned with the current report description
+- avoids expanding sensitive KPI visibility to all managers
+
+I would push back on silently granting org-wide KPI visibility to managers unless that is an explicit policy decision.
+
+---
+
+## Plan — Fix the real bug, not the symptom
+
+### 1. Expose the actual failure mode in the UI
+Update `src/pages/reports/KpiScorecardDetail.tsx` so it distinguishes:
+- **not loaded yet**
+- **loading**
+- **query error**
+- **loaded with 0 rows**
+
+Add explicit handling for:
+- `error`
+- partial nested-fetch failures
+- access-scope empty states
+
+Result:
+- users stop seeing “No KPIs found” when the real problem is access or query failure
+
+### 2. Make the report scope honest
+Update access/scope in one of these two ways:
+
+#### Recommended path
+- Remove `manager` from `kpi-scorecard-detail` default access in `src/hooks/useReportAccess.ts`
+- align `report_access_config` seed / policy docs / report description
+- keep report available to org-wide roles and approved override users only
+
+#### Alternative path
+If you explicitly want managers to use it:
+- rename/reframe it as a **team scorecard detail**
+- update description and empty-state copy to say “team data only”
+- do not silently imply org-wide coverage
+
+### 3. Add diagnostic empty states
+For loaded-but-empty results, show one of:
+- “No KPI rows exist for March 2026”
+- “You currently do not have permission to view org-wide KPI data for this report”
+- “This report is scoped to your team, and no matching KPI rows were found”
+
+This removes ambiguity.
+
+### 4. Keep click-to-load, but make filter state clearer
+The current “Load Data / Reload” pattern is reasonable and cheaper on CPU.
+I would **not** revert to auto-fetch.
+
+Instead:
+- keep click-to-load
+- add a stronger “filters changed — data shown is from last load” notice
+- reset `lastLoadedAt` / applied state more clearly when period changes
+- optionally show “Loaded period: March 2026” beside the count
+
+### 5. Add regression protection
+Per project rules, add tests and mocks for:
+- org-wide role sees March 2026 rows
+- manager without org-wide access gets access-denied/scope message, not fake “No KPIs found”
+- query error renders an error state
+- click-to-load does not auto-fire on filter changes
+- company/department/search filter only operate on already loaded rows
+
+### 6. Sync documentation/policy
+Update:
+- `DOCUMENTATION.md`
+- `POLICY.md` or policy section
+- version history
+
+Document:
+- report scope
+- why manager access was removed or reframed
+- why click-to-load remains
+
+---
+
+## Files likely to change
 
 | File | Change |
 |---|---|
-| `src/hooks/useCompanyFilter.ts` | Wrap `profiles`, `departments`, `business_units`, `divisions` fetches in `fetchAllPaged`. Profiles is the critical one (2,536 rows). |
-| `src/pages/reports/KpiScorecardDetail.tsx` | Wrap the `profiles` fetch (line 136) in `fetchAllPaged`. Also wrap `org_kpi_data_owners` fetch (line 144) defensively. |
+| `src/pages/reports/KpiScorecardDetail.tsx` | Add explicit `error` handling, scope-aware empty states, clearer loaded/applied-state messaging |
+| `src/hooks/useReportAccess.ts` | Recommended: remove `manager` from default `kpi-scorecard-detail` access if report stays org-wide |
+| `src/components/layout/ReportRoute.tsx` | No logic change likely, but confirm route behavior with updated access rules |
+| `DOCUMENTATION.md` | Sync report scope, RCA, click-to-load pattern |
+| `POLICY.md` / policy section | Sync access policy if report scope is changed |
+| test files | Add unit/component tests for error/scope/empty-state behavior |
+| mock data | Add realistic March 2026 KPI fixtures for org-wide vs manager-scoped cases |
 
-Result: every employee resolves correctly; "0 KPIs" disappears; export columns populate correctly.
+---
 
-#### Fix 2 — Add "Click to Load" / "Apply Filters" pattern
-Restructure the page so heavy data fetching happens only when the user explicitly clicks a button:
+## Risk & Impact Report
 
-- New state: `appliedFilters` (Month, Year, Company, Department) separate from the controlled inputs.
-- `useQuery` keys off `appliedFilters` only; `enabled: !!appliedFilters`.
-- Initial state: `appliedFilters = null` → empty table with a clear call-to-action banner: *"Select your filters and click 'Load Data' to view the scorecard."*
-- "Apply Filters / Load Data" button next to the filter row. Disabled when filters haven't changed since last load. Shows a "filters changed — click to refresh" hint.
-- Search box stays client-side (cheap, operates on already-loaded data) — no re-fetch.
-- Sort + pagination stay client-side (cheap).
-- An "Auto-load on first visit (current month)" optional toggle, OFF by default to honor the CPU concern.
+### Data impact
+- No schema change required for the recommended fix
+- No historical KPI data changes
 
-```text
-┌─ Filters ────────────────────────────────────────────────────────┐
-│  Month [▼]  Year [▼]  Company [▼]  Department [▼]               │
-│  [🔄 Load Data]  ← primary CTA, disabled until filters change   │
-│  Search [_____] (filters loaded data only — no re-fetch)         │
-└──────────────────────────────────────────────────────────────────┘
-```
+### Workflow impact
+- If manager access is removed, some users may lose access to this report
+- That is intentional if the report is defined as org-wide
 
-#### Fix 3 — Performance polish
-- Add `staleTime: 5min` (already present) + `gcTime: 10min` so re-clicks within window are instant.
-- Add `placeholderData: keepPrevious` (already present) so old data stays visible while new data loads.
-- Show row count + last-loaded timestamp ("Loaded 1,758 KPIs at 14:35").
-- Wrap the `filtered` and `paged` `useMemo` dependencies as-is (already correct).
+### UI/UX consistency
+- Improves clarity by separating:
+  - no data
+  - no permission
+  - query failed
 
-### Files Touched
+### Regression risk
+- Low to medium
+- Main risk is changing access expectations for manager users
 
-| File | Change |
-|---|---|
-| `src/hooks/useCompanyFilter.ts` | Use `fetchAllPaged` for profiles + supporting org tables. |
-| `src/pages/reports/KpiScorecardDetail.tsx` | Use `fetchAllPaged` for profiles & org owners; restructure to "click-to-load"; add Apply button + dirty-state indicator + last-loaded timestamp. |
-| `DOCUMENTATION.md` | v2.65.2 — Scorecard Detail data-fetch fix + click-to-load pattern. |
-| `mem://infrastructure/resource-and-performance-optimization` | Append: "Reports must use `fetchAllPaged` for profiles to bypass the 1,000-row cap; heavy report dashboards adopt explicit 'Load Data' CTA over auto-fetch on filter change." |
+### Mitigation
+- keep RLS unchanged unless policy explicitly changes
+- add tests for role-based behavior
+- document scope clearly in UI and docs
 
-### Risk & Impact
+---
 
-| Area | Impact |
-|---|---|
-| Data | Positive — fixes silent row-cap data loss across all reports using `useCompanyFilter`. |
-| Workflow | None. |
-| RLS | Unchanged (admin already has full read access on `kpis`). |
-| UX | Slightly more interactive (extra click) but predictable load times and clear data-state feedback. Banner explains the new pattern. |
-| Performance | Significant CPU savings: a user adjusting Month → Year → Department now triggers 1 fetch instead of 3. With `placeholderData`, the table doesn't re-mount during refetch. |
-| Regression | Low. Filter logic is the same; only the trigger moves from auto to manual. |
-| Test matrix | (a) Fresh page → empty table + "Click Load Data" prompt. (b) Click Load with default filters → 1,758 rows for March 2026 (matches DB). (c) Change Department → button highlights "filters changed". (d) Click Load again → re-fetch + new count. (e) Search box filters loaded rows instantly without re-fetch. (f) Export → all employee codes/names populated (no blanks from profile cap). (g) Other reports using `useCompanyFilter` (Performance Report, KPI Matrix, etc.) get correct company labels on rows beyond profile #1000. |
+## Tradeoff summary
+- **Simpler and safer:** restrict this report to org-wide roles and fix the UI states
+- **More permissive but riskier:** expand manager visibility to org-wide KPI data
+- **Best compromise if managers still need something:** keep this report org-wide, and create/use a separate team-scoped detail report
 
-### Future Rollout (separate, out-of-scope here)
-The same "click-to-load" + `fetchAllPaged` pattern should be applied to: Performance Report, KPI Employee Matrix, TNI Report, Incentive Report. Listed as follow-up; not changed in this iteration to keep the diff small and reviewable.
-
-### Out of Scope
-- Server-side aggregation/cursor pagination of the `kpis` query (current batched fetch with `fetchAllPaged` is acceptable for ~2K rows).
-- Persisting last-applied filters across sessions.
-- Touching auditor / management dashboards.
-
+</final-text>
