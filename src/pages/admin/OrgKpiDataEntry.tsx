@@ -193,21 +193,34 @@ export default function OrgKpiDataEntry() {
     // Scope-aware: key format is `${kpiKey}||${deptId|'null'}||${empId|'null'}`.
     // Ignore orphan rows from a different scope (e.g. legacy org-scope rows with
     // both ids 'null' when current scope is employee/department).
+    // Also ignore rows for employees/departments no longer in the KPI's current
+    // assignment set (stale ghosts left after scope changes — v2.65.5).
+    const kKey = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
+    const currentEmpIds = mappedEmployeesMap.get(kKey);
+    const currentDeptIds = mappedDepartmentsMap.get(kKey);
     const matching = Array.from(existingValuesMap.entries()).filter(([k, v]) => {
       if (!k.startsWith(prefix)) return false;
       if (!((v.achieved_value !== null && v.achieved_value !== undefined) || v.is_na)) return false;
       const parts = k.split('||');
       const empPart = parts[parts.length - 1];
       const deptPart = parts[parts.length - 2];
-      if (scope === 'employee') return empPart !== 'null';
-      if (scope === 'department') return deptPart !== 'null';
+      if (scope === 'employee') {
+        if (empPart === 'null') return false;
+        if (currentEmpIds && currentEmpIds.size > 0 && !currentEmpIds.has(empPart)) return false;
+        return true;
+      }
+      if (scope === 'department') {
+        if (deptPart === 'null') return false;
+        if (currentDeptIds && currentDeptIds.size > 0 && !currentDeptIds.has(deptPart)) return false;
+        return true;
+      }
       return true;
     });
     if (matching.length > 0) {
       return matching.every(([, v]) => v.status === 'propagated' || v.status === 'approved') ? 'propagated' : 'entered';
     }
     return 'pending';
-  }, [existingValuesMap]);
+  }, [existingValuesMap, mappedEmployeesMap, mappedDepartmentsMap]);
 
   // Filter by category, search, and status
   const filteredKpis = useMemo(() => {
