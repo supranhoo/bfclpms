@@ -29,6 +29,12 @@ interface Props {
   };
   currentScope: string;
   newScope: 'organization' | 'department' | 'employee';
+  /**
+   * Optional: KPI frequency (e.g. 'Bi-Monthly', 'Quarterly'). When provided and
+   * multi-month, the dialog surfaces a cycle-anchor warning so admins know the
+   * change applies to the cycle's terminal month, not the current calendar month.
+   */
+  frequency?: string | null;
 }
 
 export function OrgKpiScopeChangeDialog({
@@ -37,6 +43,7 @@ export function OrgKpiScopeChangeDialog({
   identifier,
   currentScope,
   newScope,
+  frequency,
 }: Props) {
   const [cascadeForward, setCascadeForward] = useState(false);
   const previewMutation = useScopeCascadePreview();
@@ -66,6 +73,8 @@ export function OrgKpiScopeChangeDialog({
     (currentScope === 'organization' && newScope !== 'organization') ||
     (currentScope === 'department' && newScope === 'employee');
 
+  const isMultiMonth = !!frequency && ['Bi-Monthly','Quarterly','Half-Yearly','Yearly'].includes(frequency);
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-2xl">
@@ -79,6 +88,19 @@ export function OrgKpiScopeChangeDialog({
             </span>
           </DialogDescription>
         </DialogHeader>
+
+        {isMultiMonth && (
+          <div className="flex gap-2 rounded-md border border-warning/40 bg-warning/5 p-3 text-xs">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
+            <div className="space-y-1">
+              <p>
+                <strong>{frequency} cycle:</strong> the change targets the cycle's <em>terminal month</em>,
+                not the displayed calendar month. OKV migration uses the terminal month as the cycle anchor.
+                Forward-cascade visits each future cycle exactly once.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Aggregation/Split warning */}
         {(isAggregating || isSplitting) && (
