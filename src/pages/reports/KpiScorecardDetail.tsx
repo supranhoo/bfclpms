@@ -103,10 +103,19 @@ export default function KpiScorecardDetail() {
 
   const years = [selectedYear - 1, selectedYear, selectedYear + 1];
 
-  // Batch-fetch all KPIs for the month (no row limit)
-  const { data: rows, isLoading } = useQuery({
-    queryKey: ['kpi-scorecard-detail', selectedMonth, selectedYear],
+  // Click-to-load: heavy fetch only fires when user clicks "Load Data".
+  // appliedQuery holds the period actually fetched; controlled selects don't trigger queries.
+  const [appliedQuery, setAppliedQuery] = useState<{ month: string; year: number } | null>(null);
+  const [lastLoadedAt, setLastLoadedAt] = useState<Date | null>(null);
+
+  const isDirty = !appliedQuery || appliedQuery.month !== selectedMonth || appliedQuery.year !== selectedYear;
+
+  const { data: rows, isLoading, isFetching } = useQuery({
+    queryKey: ['kpi-scorecard-detail', appliedQuery?.month, appliedQuery?.year],
+    enabled: !!appliedQuery,
     queryFn: async () => {
+      const month = appliedQuery!.month;
+      const year = appliedQuery!.year;
       const allKpis: any[] = [];
       let offset = 0;
       let hasMore = true;
@@ -120,8 +129,8 @@ export default function KpiScorecardDetail() {
             kra_categories ( name ),
             review_submissions ( self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score, is_na, achieved_value, manager_achieved_value, skip_level_achieved_value, hr_pms_achieved_value, auditor_achieved_value, management_achieved_value )
           `)
-          .eq('review_period', selectedMonth)
-          .eq('review_year', selectedYear)
+          .eq('review_period', month)
+          .eq('review_year', year)
           .range(offset, offset + 999);
         if (error) throw error;
         if (data && data.length > 0) {
@@ -133,18 +142,23 @@ export default function KpiScorecardDetail() {
         }
       }
 
-      // Fetch profiles with department + designation
-      const { data: profiles, error: pErr } = await supabase
-        .from('profiles')
-        .select('id, employee_code, full_name, designation, departments ( name )');
-      if (pErr) throw pErr;
+      // Fetch profiles with department + designation — paged to bypass 1000-row cap.
+      const profiles = await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('profiles')
+          .select('id, employee_code, full_name, designation, departments ( name )')
+          .range(from, to)
+      );
 
       // Fetch org KPI data owners (use explicit FK to avoid ambiguity)
       let ownerMap = new Map<string, string[]>();
       try {
-        const { data: dataOwners } = await supabase
-          .from('org_kpi_data_owners')
-          .select('category_id, kra_name, kpi_name, owner:profiles!org_kpi_data_owners_owner_id_fkey(full_name)');
+        const dataOwners = await fetchAllPaged<any>((from, to) =>
+          supabase
+            .from('org_kpi_data_owners')
+            .select('category_id, kra_name, kpi_name, owner:profiles!org_kpi_data_owners_owner_id_fkey(full_name)')
+            .range(from, to)
+        );
         (dataOwners ?? []).forEach((o: any) => {
           const key = `${o.category_id}||${o.kra_name}||${o.kpi_name}`;
           const name = o.owner?.full_name ?? '';
@@ -198,8 +212,19 @@ export default function KpiScorecardDetail() {
       });
     },
     staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
+
+  // Track last successful load time
+  useEffect(() => {
+    if (rows && !isFetching) setLastLoadedAt(new Date());
+  }, [rows, isFetching]);
+
+  const handleLoadData = () => {
+    setAppliedQuery({ month: selectedMonth, year: selectedYear });
+    setCurrentPage(1);
+  };
 
   // Departments for filter
   const departments = useMemo(() => {
