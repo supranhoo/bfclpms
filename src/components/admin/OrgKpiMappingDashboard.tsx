@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import { useRemoveEmployeeFromOrgKpi, useChangeOrgKpiScope } from '@/hooks/useOrgKpiManagement';
 import { OrgKpiAddEmployeeDialog } from '@/components/admin/OrgKpiAddEmployeeDialog';
+import { OrgKpiScopeChangeDialog } from '@/components/admin/OrgKpiScopeChangeDialog';
 
 interface MappingProps {
   reviewPeriod: string;
@@ -86,6 +87,9 @@ export function OrgKpiMappingDashboard({ reviewPeriod, reviewYear }: MappingProp
 
   // Remove confirmation state
   const [removeTarget, setRemoveTarget] = useState<{ kpiId: string; employeeName: string; kpiName: string } | null>(null);
+
+  // Scope change dialog state
+  const [scopeTarget, setScopeTarget] = useState<{ kpiGroup: KpiMapping; newScope: 'organization' | 'department' | 'employee' } | null>(null);
 
   const removeMutation = useRemoveEmployeeFromOrgKpi();
   const changeScopeMutation = useChangeOrgKpiScope();
@@ -190,16 +194,8 @@ export function OrgKpiMappingDashboard({ reviewPeriod, reviewYear }: MappingProp
   );
 
   const handleScopeChange = (kpiGroup: KpiMapping, newScope: 'organization' | 'department' | 'employee') => {
-    changeScopeMutation.mutate({
-      identifier: {
-        categoryId: kpiGroup.categoryId,
-        kraName: kpiGroup.kraName,
-        kpiName: kpiGroup.kpiName,
-        reviewPeriod,
-        reviewYear,
-      },
-      newScope,
-    });
+    if ((kpiGroup.orgLevelScope || 'employee') === newScope) return;
+    setScopeTarget({ kpiGroup, newScope });
   };
 
   const handleRemoveConfirm = () => {
