@@ -24,6 +24,7 @@ import { MenuAccessTab } from '@/components/admin/MenuAccessTab';
 import { DataRepairTab } from '@/components/admin/DataRepairTab';
 import { ReportBuilderTab } from '@/components/admin/ReportBuilderTab';
 import { UploadSettingsTab } from '@/components/admin/UploadSettingsTab';
+import { OrgKpiGovernanceSettings } from '@/components/admin/OrgKpiGovernanceSettings';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -481,6 +482,8 @@ export default function SystemSettings() {
                 </div>
               </CardContent>
             </Card>
+
+            <OrgKpiGovernanceSettings />
           </>
         );
       case 'scoring':
