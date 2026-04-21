@@ -1704,7 +1704,7 @@ export function EmployeeSelectorGrid({
         showManagerFilter={isFullAccess}
         statusFilter={statusFilter}
         onStatusChange={setStatusFilter}
-        statusOptions={statusOptions}
+        statusOptions={isExploreMode ? [] : statusOptions}
         onMoreFiltersOpen={() => setGradesEnabled(true)}
       />
 
