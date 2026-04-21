@@ -10,6 +10,7 @@ import { AlertCircle, CheckCircle2, Download, RefreshCw, Search, Wrench, Databas
 import { SiblingRepairSection } from './SiblingRepairSection';
 import { BulkZeroScoreSection } from './BulkZeroScoreSection';
 import { LateJoinerBackfillSection } from './LateJoinerBackfillSection';
+import { OrgKpiInheritanceReconciler } from './OrgKpiInheritanceReconciler';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
@@ -751,6 +752,9 @@ export function DataRepairTab() {
 
       {/* Bucket K — Late-Joiner Auto-Pull (Phase B2) */}
       <LateJoinerBackfillSection />
+
+      {/* v2.66.6 — Org KPI Inheritance Reconciler */}
+      <OrgKpiInheritanceReconciler />
 
       <ConfirmDestructiveDialog
         open={showConfirm}

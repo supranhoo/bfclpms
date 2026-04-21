@@ -5203,3 +5203,17 @@ Every new edge function **must** complete all of these steps before deployment:
 - **Auto-pull activation**: `app_settings.enable_org_kpi_autopull` flipped to `true`. Trigger `trg_autopull_propagated_org_kpi` confirmed deployed. Late-joiner `kpis` inserts now auto-pull matching propagated OKV values.
 - **Modified files**: `supabase/migrations/<timestamp>_org_kpi_scope_cascade.sql`, `src/hooks/useOrgKpiManagement.ts`, `src/components/admin/OrgKpiScopeChangeDialog.tsx` (new), `src/components/admin/OrgKpiMappingDashboard.tsx`, `app_settings` data update.
 - **Reversibility**: `okv_migration_history` retains every original OKV payload as JSONB so any aggregation can be manually unwound. Splits leave the new draft OKVs visible to Data Owners — declining/clearing them returns to the prior shape.
+
+### v2.66.6 — Auto-Inherit Org KPI Status on KPI Creation (2026-04-21)
+- **Goal**: Close Scenario 2 of the Q&A audit — when an admin creates a new KPI for an employee mid-month and that KPI matches an existing Org KPI signature (same Category + KRA + KPI name + period + year), it must automatically become Org-level so the data owner is implicitly mapped and (combined with v2.66.5's auto-pull) the achieved value is pre-filled.
+- **DB additions**:
+  - Column `app_settings.enable_org_kpi_auto_inherit boolean NOT NULL DEFAULT true` — feature flag for the new trigger.
+  - Function + trigger `trg_autoinherit_org_level_on_kpi_insert` (BEFORE INSERT on `kpis`) — sets `NEW.is_org_level = true` and inherits `org_level_scope` from a matching sibling KPI when one exists. Flag-gated.
+  - Function + trigger `trg_audit_org_level_inheritance` (AFTER INSERT on `kpis`) — records `ORG_KPI_AUTO_INHERITED` audit log entries (system performer = NULL) with the source KPI ID and inherited scope, but only for rows that were inheritors (not originators).
+  - RPC `reconcile_org_kpi_inheritance(p_dry_run boolean)` — admin-only; finds existing KPIs with `is_org_level=false` that have an Org-level sibling and bulk-promotes them in dry-run-then-apply fashion. Each update is audit-logged with `ORG_KPI_INHERITANCE_RECONCILED`.
+- **Frontend**:
+  - New `OrgKpiGovernanceSettings` component (System Settings → General) exposes both `enable_org_kpi_auto_inherit` and `enable_org_kpi_autopull` toggles in one card.
+  - New `OrgKpiInheritanceReconciler` section added to System Settings → Data Repair tab. Provides scan → preview → confirm-apply UX for the new RPC.
+- **Trigger pipeline**: `trg_autoinherit_org_level_on_kpi_insert` (BEFORE) → row inserted with `is_org_level=true` → `trg_autopull_propagated_org_kpi` (AFTER) → fills value if a propagated OKV exists. Net effect: a brand-new mid-month KPI immediately enters the Org KPI workflow at `self_review` if its OKV is already propagated, otherwise sits at `kra_set` waiting for the data owner.
+- **Modified files**: new migration file, `src/components/admin/OrgKpiGovernanceSettings.tsx` (new), `src/components/admin/OrgKpiInheritanceReconciler.tsx` (new), `src/pages/admin/SystemSettings.tsx`, `src/components/admin/DataRepairTab.tsx`.
+- **Reversibility**: existing "Step Back" admin tool reverts any single false-positive inheritance. The reconciler can be re-run safely (idempotent — already-inherited rows are skipped).
