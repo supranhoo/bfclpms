@@ -565,6 +565,10 @@ Deno.serve(async (req) => {
 });
 
 function buildNewKpi(source: any, targetMonth: string, targetYear: number) {
+  const resolvedCycleStart = resolveCycleAnchorForPeriod(source.frequency, targetMonth) ?? source.frequency_cycle_start;
+  if (resolvedCycleStart !== source.frequency_cycle_start) {
+    console.log(`[Rollover] Cycle anchor resolved for ${source.kpi_name}: ${source.frequency_cycle_start} → ${resolvedCycleStart} (${source.frequency} @ ${targetMonth})`);
+  }
   return {
     employee_id: source.employee_id,
     category_id: source.category_id,
@@ -590,7 +594,7 @@ function buildNewKpi(source: any, targetMonth: string, targetYear: number) {
     org_level_scope: source.org_level_scope,
     ref_code: source.ref_code,
     day_count_type: source.day_count_type,
-    frequency_cycle_start: source.frequency_cycle_start,
+    frequency_cycle_start: resolvedCycleStart,
     require_resubmit_reason: source.require_resubmit_reason,
     review_period: targetMonth,
     review_year: targetYear,
