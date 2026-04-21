@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-04-20  
-> **Version:** 2.64.4 — Filter typing teleports user to previous panel — fixed. Effect A in `Dashboard.tsx` now depends only on the `view` URL slice (not the full `searchParams`), so typing in `q`/`dept`/`page` no longer re-runs view-init. `handleModeChange` now (a) synchronously clears `employee` along with filter params in a single batched URL write (dropped the prior `queueMicrotask` indirection) and (b) re-arms `deepLinkProcessedRef` so late "Restore selected employee" effects cannot retroactively pull the previous panel's employee back.
+> **Last Updated:** 2026-04-21  
+> **Version:** 2.65.0 — Auditor Explorer Mode. Auditors get a first-class "Explore All" toggle on the Audit panel that switches to read-only org-wide browsing (powered by the existing `cross_check` filter). UI now enforces read-only: scoring inputs, Save/Send Back/Forward, query, and observation actions are hidden in the scorecard sheet; per-row Send Back is suppressed; an amber banner explains the mode. Sidebar gains an "Explore Employees (Read-Only)" sub-link that deep-links via `?explore=1`. Each KPI opened in Explorer Mode appends a lightweight `EXPLORER_VIEW` entry to `kpi_audit_logs` for compliance. No DB / RLS / workflow changes — RLS already blocked writes; this aligns the UI with that contract.
 > **Maintainer:** Lovable AI
 
 ---
