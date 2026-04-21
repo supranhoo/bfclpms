@@ -43,7 +43,7 @@ export interface OrgKpiCardData {
   previousValue: number | null;
   previousPeriodLabel: string | null;
   // Status
-  status: 'pending' | 'entered' | 'propagated';
+  status: 'pending' | 'entered' | 'propagated' | 'stuck';
   // Scoped rows for dept/employee scope
   scopedRows?: ScopedRow[];
   scopeLabel?: string;
