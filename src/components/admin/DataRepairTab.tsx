@@ -36,7 +36,13 @@ interface Verification {
 }
 
 interface RepairResult {
-  mode: 'scan' | 'repair' | 'scan_stuck' | 'repair_stuck';
+  mode:
+    | 'scan'
+    | 'repair'
+    | 'scan_stuck'
+    | 'repair_stuck'
+    | 'scan_propagation_failures'
+    | 'repair_propagation_failures';
   repaired: number;
   null_values_fixed: number;
   skipped: number;
@@ -55,6 +61,10 @@ const REASON_LABELS: Record<string, string> = {
   null_achieved_value: 'Achieved value is NULL',
   missing_submission: 'Missing submission — repairable',
   submission_created: 'Submission created successfully',
+  propagation_failure_zero_advance: 'Propagated but 0 employees advanced — Bucket F',
+  okv_reset_to_draft: 'OKV reset to draft — DO can re-propagate',
+  no_matching_kpis: 'No matching employee KPIs (orphaned definition)',
+  partial_advance_healthy: 'Some employees advanced — not a failure',
 };
 
 export function DataRepairTab() {
