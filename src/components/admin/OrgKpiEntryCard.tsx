@@ -369,7 +369,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
     triggerAutoSave();
   };
 
-  const statusInfo = statusConfig[data.status];
+  const statusInfo = statusConfig[data.status] ?? statusConfig.pending;
   const StatusIcon = statusInfo.icon;
   const ScopeIcon = scopeIcons[data.scope];
 
