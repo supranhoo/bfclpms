@@ -25,15 +25,139 @@ Deno.serve(async (req) => {
     // Parse request body
     let batchLimit = 100;
     let fixNullValues = true;
-    let mode: "scan" | "repair" = "repair";
+    let mode: "scan" | "repair" | "scan_stuck" | "repair_stuck" = "repair";
     let kpiIds: string[] = [];
     try {
       const body = await req.json();
       if (body?.limit) batchLimit = Math.min(body.limit, 1500);
       if (body?.fix_null_values === false) fixNullValues = false;
       if (body?.mode === "scan") mode = "scan";
+      if (body?.mode === "scan_stuck") mode = "scan_stuck";
+      if (body?.mode === "repair_stuck") mode = "repair_stuck";
       if (Array.isArray(body?.kpi_ids)) kpiIds = body.kpi_ids;
     } catch { /* no body is fine */ }
+
+    // === STATUS-STUCK PASS ===
+    // Signature: kpis.status='kra_set' + is_org_level=true + review_submissions row exists with non-null self_score.
+    // The previous repair tool only handled "missing submission" — these rows have the submission but
+    // the kpis.status was never advanced to self_review. Single-column UPDATE per row.
+    if (mode === "scan_stuck" || mode === "repair_stuck") {
+      const { data: stuckKpis, error: stuckErr } = await supabase
+        .from("kpis")
+        .select("id, category_id, kra_name, kpi_name, review_period, review_year, employee_id")
+        .eq("is_org_level", true)
+        .eq("status", "kra_set")
+        .limit(batchLimit);
+      if (stuckErr) throw stuckErr;
+
+      let candidates = stuckKpis ?? [];
+      if (kpiIds.length > 0) candidates = candidates.filter(k => kpiIds.includes(k.id));
+
+      const candIds = candidates.map(c => c.id);
+      const subsByKpi = new Map<string, { self_score: number | null }>();
+      for (let i = 0; i < candIds.length; i += 500) {
+        const batch = candIds.slice(i, i + 500);
+        const { data: subs } = await supabase
+          .from("review_submissions")
+          .select("kpi_id, self_score")
+          .in("kpi_id", batch);
+        subs?.forEach(s => subsByKpi.set(s.kpi_id, { self_score: s.self_score }));
+      }
+
+      const empIds2 = [...new Set(candidates.map(c => c.employee_id))];
+      const { data: empProfiles2 } = await supabase
+        .from("profiles").select("id, full_name").in("id", empIds2);
+      const empNameMap2 = new Map<string, string>();
+      empProfiles2?.forEach(p => empNameMap2.set(p.id, p.full_name || "Unknown"));
+
+      const catIds2 = [...new Set(candidates.map(c => c.category_id))];
+      const { data: cats2 } = await supabase
+        .from("kra_categories").select("id, name").in("id", catIds2);
+      const catNameMap2 = new Map<string, string>();
+      cats2?.forEach(c => catNameMap2.set(c.id, c.name));
+
+      const stuckDetails: any[] = [];
+      let stuckRepaired = 0;
+      let stuckSkipped = 0;
+      const stuckErrors: string[] = [];
+
+      for (const k of candidates) {
+        const sub = subsByKpi.get(k.id);
+        if (!sub || sub.self_score === null) {
+          stuckSkipped++;
+          stuckDetails.push({
+            kpi_id: k.id, kpi_name: k.kpi_name, kra_name: k.kra_name,
+            employee_id: k.employee_id, employee_name: empNameMap2.get(k.employee_id) || "Unknown",
+            category: catNameMap2.get(k.category_id) || "",
+            review_period: k.review_period, review_year: k.review_year,
+            achieved_value: null, self_score: sub?.self_score ?? null, self_rating: null,
+            action: "skippable", reason: sub ? "submission_no_score" : "no_submission_row",
+          });
+          continue;
+        }
+
+        if (mode === "scan_stuck") {
+          stuckDetails.push({
+            kpi_id: k.id, kpi_name: k.kpi_name, kra_name: k.kra_name,
+            employee_id: k.employee_id, employee_name: empNameMap2.get(k.employee_id) || "Unknown",
+            category: catNameMap2.get(k.category_id) || "",
+            review_period: k.review_period, review_year: k.review_year,
+            achieved_value: null, self_score: sub.self_score, self_rating: null,
+            action: "repairable", reason: "status_stuck_at_kra_set",
+          });
+          stuckRepaired++;
+          continue;
+        }
+
+        // repair_stuck: single column update
+        const { error: updErr } = await supabase
+          .from("kpis")
+          .update({ status: "self_review", updated_at: new Date().toISOString() })
+          .eq("id", k.id)
+          .eq("status", "kra_set");
+        if (updErr) {
+          stuckErrors.push(`${k.id}: ${updErr.message}`);
+          stuckDetails.push({
+            kpi_id: k.id, kpi_name: k.kpi_name, kra_name: k.kra_name,
+            employee_id: k.employee_id, employee_name: empNameMap2.get(k.employee_id) || "Unknown",
+            category: catNameMap2.get(k.category_id) || "",
+            review_period: k.review_period, review_year: k.review_year,
+            achieved_value: null, self_score: sub.self_score, self_rating: null,
+            action: "error", reason: updErr.message,
+          });
+          continue;
+        }
+        // Audit log (best-effort)
+        await supabase.from("kpi_audit_logs").insert({
+          kpi_id: k.id,
+          action: "STATUS_STUCK_REPAIR",
+          old_value: { status: "kra_set" },
+          new_value: { status: "self_review" },
+          metadata: { tool: "repair-orphaned-propagations", pass: "status_stuck" },
+        });
+        stuckRepaired++;
+        stuckDetails.push({
+          kpi_id: k.id, kpi_name: k.kpi_name, kra_name: k.kra_name,
+          employee_id: k.employee_id, employee_name: empNameMap2.get(k.employee_id) || "Unknown",
+          category: catNameMap2.get(k.category_id) || "",
+          review_period: k.review_period, review_year: k.review_year,
+          achieved_value: null, self_score: sub.self_score, self_rating: null,
+          action: "repaired", reason: "status_advanced_to_self_review",
+        });
+      }
+
+      return new Response(JSON.stringify({
+        mode,
+        repaired: stuckRepaired,
+        null_values_fixed: 0,
+        skipped: stuckSkipped,
+        total_checked: candidates.length,
+        errors: stuckErrors.slice(0, 20),
+        details: stuckDetails.slice(0, 1500),
+        verification: null,
+        ran_at: new Date().toISOString(),
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     // === PHASE 1: Fix NULL-value org_kpi_values marked as propagated ===
     let nullFixedCount = 0;
