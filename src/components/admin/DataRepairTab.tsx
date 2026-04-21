@@ -142,6 +142,52 @@ export function DataRepairTab() {
     }
   };
 
+  const handlePfScan = async () => {
+    setPfScanning(true);
+    setPfResults(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('repair-orphaned-propagations', {
+        body: { mode: 'scan_propagation_failures', limit: 1500 },
+      });
+      if (error) throw error;
+      const result = data as RepairResult;
+      setPfResults(result);
+      const found = result.details?.filter(d => d.action === 'repairable').length ?? 0;
+      toast({
+        title: 'Propagation-failure scan complete',
+        description: `Found ${found} OKV definition(s) where Propagate ran but 0 employees advanced.`,
+      });
+    } catch (err: any) {
+      toast({ title: 'Scan failed', description: err.message || 'Unknown error', variant: 'destructive' });
+    } finally {
+      setPfScanning(false);
+    }
+  };
+
+  const handlePfRepair = async () => {
+    setShowPfConfirm(false);
+    setPfRepairing(true);
+    try {
+      const repairableIds = (pfResults?.details ?? [])
+        .filter(d => d.action === 'repairable')
+        .map(d => d.kpi_id);
+      const { data, error } = await supabase.functions.invoke('repair-orphaned-propagations', {
+        body: { mode: 'repair_propagation_failures', okv_ids: repairableIds, limit: 1500 },
+      });
+      if (error) throw error;
+      const result = data as RepairResult;
+      setPfResults(result);
+      toast({
+        title: 'Propagation-failure repair complete',
+        description: `Reset ${result.repaired} OKV definition(s) back to draft.`,
+      });
+    } catch (err: any) {
+      toast({ title: 'Repair failed', description: err.message || 'Unknown error', variant: 'destructive' });
+    } finally {
+      setPfRepairing(false);
+    }
+  };
+
   const handleScan = async () => {
     setIsScanning(true);
     setScanResults(null);
