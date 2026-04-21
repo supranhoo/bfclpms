@@ -163,8 +163,29 @@ export function useRemoveEmployeeFromOrgKpi() {
   });
 }
 
+export type ScopeCascadeMode = 'current_only' | 'current_and_future';
+
+interface CascadePeriodResult {
+  period: string;
+  year: number;
+  old_scope?: string;
+  new_scope?: string;
+  kpis_updated?: number;
+  okv_migration?: { action: string; aggregated: number; split: number };
+  preview?: boolean;
+}
+
+interface CascadeResponse {
+  dry_run: boolean;
+  periods: CascadePeriodResult[];
+  skipped: Array<{ period: string; year: number; reason: string }>;
+}
+
 /**
  * Change the org_level_scope on all matching KPI records for a given Org KPI.
+ * When cascadeMode = 'current_and_future', applies the same change to all
+ * unlocked open future periods within the same fiscal year (July→June) and
+ * migrates org_kpi_values via aggregation/split.
  */
 export function useChangeOrgKpiScope() {
   const queryClient = useQueryClient();
@@ -174,36 +195,75 @@ export function useChangeOrgKpiScope() {
     mutationFn: async ({
       identifier,
       newScope,
+      cascadeMode = 'current_only',
     }: {
       identifier: OrgKpiIdentifier;
       newScope: 'organization' | 'department' | 'employee';
-    }) => {
+      cascadeMode?: ScopeCascadeMode;
+    }): Promise<CascadeResponse> => {
       const { categoryId, kraName, kpiName, reviewPeriod, reviewYear } = identifier;
+      const { data: { user } } = await supabase.auth.getUser();
 
-      const { data, error } = await supabase
-        .from('kpis')
-        .update({ org_level_scope: newScope })
-        .eq('category_id', categoryId)
-        .eq('kra_name', kraName)
-        .eq('kpi_name', kpiName)
-        .eq('review_period', reviewPeriod)
-        .eq('review_year', reviewYear)
-        .eq('is_org_level', true)
-        .select('id');
+      const { data, error } = await supabase.rpc('change_org_kpi_scope_cascading', {
+        p_category_id: categoryId,
+        p_kra_name: kraName,
+        p_kpi_name: kpiName,
+        p_base_period: reviewPeriod,
+        p_base_year: reviewYear,
+        p_new_scope: newScope,
+        p_cascade_forward: cascadeMode === 'current_and_future',
+        p_dry_run: false,
+        p_triggered_by: user?.id ?? null,
+      });
 
       if (error) throw error;
-      return { updatedCount: data?.length || 0 };
+      return data as unknown as CascadeResponse;
     },
     onSuccess: (result, vars) => {
       queryClient.invalidateQueries({ queryKey: ['org-kpi-full-mapping'] });
       queryClient.invalidateQueries({ queryKey: ['org-level-kpis'] });
+      const periodsTouched = result.periods.length;
+      const skipped = result.skipped.length;
       toast({
         title: 'Scope updated',
-        description: `Changed to "${vars.newScope}" across ${result.updatedCount} records`,
+        description: `Changed to "${vars.newScope}" across ${periodsTouched} period(s)${skipped ? ` · ${skipped} skipped (locked)` : ''}`,
       });
     },
     onError: (error: Error) => {
       toast({ title: 'Failed to change scope', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+/**
+ * Dry-run preview of a cascading scope change — returns affected periods
+ * and any skipped (locked) periods without writing.
+ */
+export function useScopeCascadePreview() {
+  return useMutation({
+    mutationFn: async ({
+      identifier,
+      newScope,
+      cascadeForward,
+    }: {
+      identifier: OrgKpiIdentifier;
+      newScope: 'organization' | 'department' | 'employee';
+      cascadeForward: boolean;
+    }): Promise<CascadeResponse> => {
+      const { categoryId, kraName, kpiName, reviewPeriod, reviewYear } = identifier;
+      const { data, error } = await supabase.rpc('change_org_kpi_scope_cascading', {
+        p_category_id: categoryId,
+        p_kra_name: kraName,
+        p_kpi_name: kpiName,
+        p_base_period: reviewPeriod,
+        p_base_year: reviewYear,
+        p_new_scope: newScope,
+        p_cascade_forward: cascadeForward,
+        p_dry_run: true,
+        p_triggered_by: null,
+      });
+      if (error) throw error;
+      return data as unknown as CascadeResponse;
     },
   });
 }

@@ -10,8 +10,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Loader2, Search, Building2, Users, User, UserPlus, Trash2, ChevronDown, Globe, Building, UserCheck } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
-import { useRemoveEmployeeFromOrgKpi, useChangeOrgKpiScope } from '@/hooks/useOrgKpiManagement';
+import { useRemoveEmployeeFromOrgKpi } from '@/hooks/useOrgKpiManagement';
 import { OrgKpiAddEmployeeDialog } from '@/components/admin/OrgKpiAddEmployeeDialog';
+import { OrgKpiScopeChangeDialog } from '@/components/admin/OrgKpiScopeChangeDialog';
 
 interface MappingProps {
   reviewPeriod: string;
@@ -87,8 +88,10 @@ export function OrgKpiMappingDashboard({ reviewPeriod, reviewYear }: MappingProp
   // Remove confirmation state
   const [removeTarget, setRemoveTarget] = useState<{ kpiId: string; employeeName: string; kpiName: string } | null>(null);
 
+  // Scope change dialog state
+  const [scopeTarget, setScopeTarget] = useState<{ kpiGroup: KpiMapping; newScope: 'organization' | 'department' | 'employee' } | null>(null);
+
   const removeMutation = useRemoveEmployeeFromOrgKpi();
-  const changeScopeMutation = useChangeOrgKpiScope();
 
   // Group by KPI
   const byKpi = useMemo(() => {
@@ -190,16 +193,8 @@ export function OrgKpiMappingDashboard({ reviewPeriod, reviewYear }: MappingProp
   );
 
   const handleScopeChange = (kpiGroup: KpiMapping, newScope: 'organization' | 'department' | 'employee') => {
-    changeScopeMutation.mutate({
-      identifier: {
-        categoryId: kpiGroup.categoryId,
-        kraName: kpiGroup.kraName,
-        kpiName: kpiGroup.kpiName,
-        reviewPeriod,
-        reviewYear,
-      },
-      newScope,
-    });
+    if ((kpiGroup.orgLevelScope || 'employee') === newScope) return;
+    setScopeTarget({ kpiGroup, newScope });
   };
 
   const handleRemoveConfirm = () => {
@@ -475,6 +470,23 @@ export function OrgKpiMappingDashboard({ reviewPeriod, reviewYear }: MappingProp
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Scope Change Cascade Dialog */}
+      {scopeTarget && (
+        <OrgKpiScopeChangeDialog
+          open={!!scopeTarget}
+          onClose={() => setScopeTarget(null)}
+          identifier={{
+            categoryId: scopeTarget.kpiGroup.categoryId,
+            kraName: scopeTarget.kpiGroup.kraName,
+            kpiName: scopeTarget.kpiGroup.kpiName,
+            reviewPeriod,
+            reviewYear,
+          }}
+          currentScope={scopeTarget.kpiGroup.orgLevelScope || 'employee'}
+          newScope={scopeTarget.newScope}
+        />
+      )}
     </div>
   );
 }

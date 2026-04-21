@@ -2870,6 +2870,60 @@ export type Database = {
           },
         ]
       }
+      okv_migration_history: {
+        Row: {
+          action: string
+          category_id: string
+          id: string
+          kpi_name: string
+          kra_name: string
+          migrated_at: string
+          migrated_by: string | null
+          new_okv_id: string | null
+          new_scope: string
+          old_scope: string
+          original_okv_id: string | null
+          original_payload: Json | null
+          review_period: string
+          review_year: number
+          triggered_by: string | null
+        }
+        Insert: {
+          action: string
+          category_id: string
+          id?: string
+          kpi_name: string
+          kra_name: string
+          migrated_at?: string
+          migrated_by?: string | null
+          new_okv_id?: string | null
+          new_scope: string
+          old_scope: string
+          original_okv_id?: string | null
+          original_payload?: Json | null
+          review_period: string
+          review_year: number
+          triggered_by?: string | null
+        }
+        Update: {
+          action?: string
+          category_id?: string
+          id?: string
+          kpi_name?: string
+          kra_name?: string
+          migrated_at?: string
+          migrated_by?: string | null
+          new_okv_id?: string | null
+          new_scope?: string
+          old_scope?: string
+          original_okv_id?: string | null
+          original_payload?: Json | null
+          review_period?: string
+          review_year?: number
+          triggered_by?: string | null
+        }
+        Relationships: []
+      }
       org_kpi_data_entry_logs: {
         Row: {
           action: string
@@ -5084,6 +5138,20 @@ export type Database = {
         Args: { p_dry_run?: boolean }
         Returns: Json
       }
+      change_org_kpi_scope_cascading: {
+        Args: {
+          p_base_period: string
+          p_base_year: number
+          p_cascade_forward?: boolean
+          p_category_id: string
+          p_dry_run?: boolean
+          p_kpi_name: string
+          p_kra_name: string
+          p_new_scope: string
+          p_triggered_by?: string
+        }
+        Returns: Json
+      }
       check_review_period_permission: {
         Args: {
           p_action: string
@@ -5248,6 +5316,19 @@ export type Database = {
       is_period_locked: {
         Args: { _period_name: string; _review_year: number }
         Returns: boolean
+      }
+      migrate_okv_on_scope_change: {
+        Args: {
+          p_category_id: string
+          p_kpi_name: string
+          p_kra_name: string
+          p_new_scope: string
+          p_old_scope: string
+          p_review_period: string
+          p_review_year: number
+          p_triggered_by?: string
+        }
+        Returns: Json
       }
       month_name_to_index: { Args: { p_month: string }; Returns: number }
       preview_org_kpi_propagation: {

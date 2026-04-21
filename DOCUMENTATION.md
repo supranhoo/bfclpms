@@ -5183,3 +5183,23 @@ Every new edge function **must** complete all of these steps before deployment:
 - **Post-state**: Bucket B remaining = 0, Bucket F remaining = 0. Verification confirmed against the same census query used pre-execution.
 - **Reversibility**: Every change recorded in `kpi_audit_logs`; the existing Step Back tool can revert any individual row by referencing the prior-state JSON in the audit entries.
 - **Follow-up**: The 4 reset OKVs need to be re-propagated by the Data Owner (or by an admin via Org KPI Data Entry → Propagate) to advance the corresponding employees through the workflow. The new atomic RPC will succeed-or-rollback-cleanly, so a silent failure cannot recur.
+
+### v2.66.5 — Org KPI Scope Cascade + OKV Migration + Auto-pull Activation (2026-04-21)
+- **Goal**: Close 3 governance gaps identified in the Q&A audit:
+  (1) scope changes don't cascade to future open periods,
+  (2) existing OKV values are silently orphaned when scope changes,
+  (3) `enable_org_kpi_autopull` was still off so late-joiners weren't auto-filled.
+- **DB additions**:
+  - Table `okv_migration_history` — archives every OKV row touched by a scope change so admins have a revert trail (RLS: admin read/insert only).
+  - Function `migrate_okv_on_scope_change(...)` — handles the 6-way transition matrix:
+    * `employee → department` / `employee → organization` / `department → organization` → AVG-aggregate, inherit highest status (`approved` > `propagated` > `draft`).
+    * `organization → department` / `organization → employee` / `department → employee` → split into seeded `draft` rows for each target owner.
+  - RPC `change_org_kpi_scope_cascading(category_id, kra_name, kpi_name, base_period, base_year, new_scope, cascade_forward, dry_run, triggered_by)` — applies the scope change to the base period and (if `cascade_forward=true`) every unlocked future period in the same fiscal year (July→June). Returns per-period results and a list of locked periods that were skipped. Audit-logs `ORG_KPI_SCOPE_CASCADED` with the OKV migration summary in metadata.
+- **Frontend**:
+  - `useChangeOrgKpiScope` rewritten to call the new RPC with `cascadeMode: 'current_only' | 'current_and_future'`.
+  - New hook `useScopeCascadePreview` for the dry-run preview.
+  - New `OrgKpiScopeChangeDialog` — replaces the silent dropdown action with: (a) aggregation/split warning, (b) "Apply to all open future periods" checkbox, (c) live preview list of affected periods + skipped locked periods.
+  - `OrgKpiMappingDashboard` now opens the dialog instead of mutating directly.
+- **Auto-pull activation**: `app_settings.enable_org_kpi_autopull` flipped to `true`. Trigger `trg_autopull_propagated_org_kpi` confirmed deployed. Late-joiner `kpis` inserts now auto-pull matching propagated OKV values.
+- **Modified files**: `supabase/migrations/<timestamp>_org_kpi_scope_cascade.sql`, `src/hooks/useOrgKpiManagement.ts`, `src/components/admin/OrgKpiScopeChangeDialog.tsx` (new), `src/components/admin/OrgKpiMappingDashboard.tsx`, `app_settings` data update.
+- **Reversibility**: `okv_migration_history` retains every original OKV payload as JSONB so any aggregation can be manually unwound. Splits leave the new draft OKVs visible to Data Owners — declining/clearing them returns to the prior shape.

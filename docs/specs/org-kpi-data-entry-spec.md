@@ -200,6 +200,29 @@ If a downstream reviewer rejects an Org KPI:
 ### 4.2 Reviewer "Request Revision" path (Phase B1 — v2.66.2)
 When a reviewer determines the **source value itself** is wrong (not the score), they toggle "Issue is with the source value" inside the SendBack dialog (visible only on `is_org_level=true` KPIs) and submit. The `request_org_kpi_revision(p_kpi_id, p_reason)` RPC runs atomically: (1) reverts OKV to `draft` and stores `last_revision_reason`/`last_revision_requested_by`/`last_revision_requested_at`/`revision_count`; (2) cascades sibling employee KPIs in `self_review`/`manager_review` back to `kra_set` with submission scores cleared (evidence preserved per send-back governance); (3) employees past `manager_check` stay put but receive an `ORG_KPI_REVISION_FLAGGED` audit entry; (4) audit logs `ORG_KPI_REVISION_REQUESTED` (parent) + `STATUS_REVISION_CASCADE` (children); (5) notifies all data owners via the standard `org_kpi_data_owners` pipeline.
 
+### 4.3 Scope Change Cascade & OKV Migration (v2.66.5)
+Scope changes (employee ↔ department ↔ organization) are no longer applied silently to a single period. The `OrgKpiScopeChangeDialog` exposes a "Apply to all open future periods" checkbox. Submission calls RPC `change_org_kpi_scope_cascading(p_category_id, p_kra_name, p_kpi_name, p_base_period, p_base_year, p_new_scope, p_cascade_forward, p_dry_run, p_triggered_by)`:
+
+1. Resolves target periods: always the base period; plus all months > base in the same fiscal year (July→June) when `p_cascade_forward=true`.
+2. Skips any period whose `review_period_locks` row has `is_locked=true` and `lock_type IN ('global','full')`. Skipped periods are reported back so admins know what to revisit after unlock.
+3. For each open period, updates `kpis.org_level_scope` for all `is_org_level=true` rows and calls `migrate_okv_on_scope_change(...)`.
+4. Audit-logs `ORG_KPI_SCOPE_CASCADED` per period with `metadata.okv_migration` containing the action summary.
+
+**OKV migration matrix** (`migrate_okv_on_scope_change`):
+
+| old_scope → new_scope | Action | Aggregation rule | Status inheritance |
+|---|---|---|---|
+| employee → department | aggregate per dept | AVG of `achieved_value` | approved > propagated > draft |
+| employee → organization | aggregate org-wide | AVG | same |
+| department → organization | aggregate org-wide | AVG | same |
+| organization → department | split per assigned dept | seed value from org row | always `draft` |
+| organization → employee | split per assigned employee | seed value from org row | always `draft` |
+| department → employee | split per assigned employee | seed value from employee's dept row | always `draft` |
+
+Every source OKV touched by an aggregation is archived in `okv_migration_history` (RLS: admin-only) with the full prior payload as JSONB so an admin can manually revert a misapplied cascade. Splits do not delete a source until the new draft rows are inserted.
+
+The dialog includes a **dry-run preview** (`useScopeCascadePreview`) that calls the RPC with `p_dry_run=true` and lists all affected periods plus skipped (locked) ones before the admin confirms.
+
 ---
 
 ## 5. UI Surface Map
