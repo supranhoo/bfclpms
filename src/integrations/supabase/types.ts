@@ -5361,9 +5361,17 @@ export type Database = {
         }
         Returns: Json
       }
+      repair_org_kpi_cycle_anchors: {
+        Args: { p_dry_run?: boolean }
+        Returns: Json
+      }
       request_org_kpi_revision: {
         Args: { p_kpi_id: string; p_reason: string }
         Returns: Json
+      }
+      resolve_cycle_anchor: {
+        Args: { p_frequency: string; p_month_idx: number }
+        Returns: string
       }
       resolve_terminal_period: {
         Args: {
