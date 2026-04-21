@@ -16,32 +16,41 @@ export function OrgKpiGovernanceSettings() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('app_settings')
-        .select('enable_org_kpi_autopull, enable_org_kpi_auto_inherit')
+        .select('enable_org_kpi_autopull, enable_org_kpi_auto_inherit, enable_org_kpi_forward_sync')
         .eq('id', APP_SETTINGS_ID)
         .maybeSingle();
       if (error) throw error;
-      return data as { enable_org_kpi_autopull: boolean; enable_org_kpi_auto_inherit: boolean } | null;
+      return data as {
+        enable_org_kpi_autopull: boolean;
+        enable_org_kpi_auto_inherit: boolean;
+        enable_org_kpi_forward_sync: boolean;
+      } | null;
     },
   });
 
   const [autopull, setAutopull] = useState(false);
   const [autoInherit, setAutoInherit] = useState(true);
+  const [forwardSync, setForwardSync] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
 
   useEffect(() => {
     if (data) {
       setAutopull(!!data.enable_org_kpi_autopull);
       setAutoInherit(!!data.enable_org_kpi_auto_inherit);
+      setForwardSync(data.enable_org_kpi_forward_sync ?? true);
     }
   }, [data]);
 
   const updateFlag = async (
-    field: 'enable_org_kpi_autopull' | 'enable_org_kpi_auto_inherit',
+    field: 'enable_org_kpi_autopull' | 'enable_org_kpi_auto_inherit' | 'enable_org_kpi_forward_sync',
     value: boolean,
     setter: (v: boolean) => void,
   ) => {
     setSaving(field);
-    const previous = field === 'enable_org_kpi_autopull' ? autopull : autoInherit;
+    const previous =
+      field === 'enable_org_kpi_autopull' ? autopull
+      : field === 'enable_org_kpi_auto_inherit' ? autoInherit
+      : forwardSync;
     setter(value);
     try {
       const { error } = await supabase
