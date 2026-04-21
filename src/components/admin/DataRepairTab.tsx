@@ -477,6 +477,87 @@ export function DataRepairTab() {
 
       <BulkZeroScoreSection />
 
+      {/* Status-Stuck Org KPIs (Part 2 — second bug variant) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Wrench className="h-5 w-5" />
+            Repair Status-Stuck Org KPIs
+          </CardTitle>
+          <CardDescription>
+            Org KPIs stuck at "KRA Set" even though a self-review submission exists. Single column update — advances <code>kpis.status</code> from <code>kra_set</code> → <code>self_review</code>.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            <Button onClick={handleStuckScan} disabled={stuckScanning || stuckRepairing} variant="outline">
+              {stuckScanning ? <><RefreshCw className="h-4 w-4 animate-spin" /> Scanning…</> : <><Search className="h-4 w-4" /> Scan Status-Stuck</>}
+            </Button>
+            {stuckResults && stuckRepairableCount > 0 && (
+              <Button onClick={() => setShowStuckConfirm(true)} disabled={stuckRepairing}>
+                <Wrench className="h-4 w-4" /> Repair {stuckRepairableCount} Stuck KPI(s)
+              </Button>
+            )}
+          </div>
+
+          {stuckResults && (
+            <div className="rounded-lg border p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">{stuckResults.total_checked} checked</Badge>
+                <Badge variant="outline">{stuckRepairableCount} repairable</Badge>
+                {stuckResults.repaired > 0 && stuckResults.mode === 'repair_stuck' && (
+                  <Badge>{stuckResults.repaired} repaired</Badge>
+                )}
+                <Badge variant="secondary">{stuckResults.skipped} skipped</Badge>
+              </div>
+              {stuckResults.details.length > 0 && (
+                <div className="rounded-md border max-h-[320px] overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Employee</TableHead>
+                        <TableHead>KPI</TableHead>
+                        <TableHead>Period</TableHead>
+                        <TableHead>Score</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Reason</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {stuckResults.details.map(row => (
+                        <TableRow key={row.kpi_id} className={row.action === 'skippable' ? 'opacity-60' : ''}>
+                          <TableCell className="text-sm">{row.employee_name}</TableCell>
+                          <TableCell className="text-sm max-w-[220px] truncate">{row.kpi_name}</TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">{row.review_period} {row.review_year}</TableCell>
+                          <TableCell className="text-sm">{row.self_score ?? '—'}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={row.action === 'repaired' ? 'default' : row.action === 'error' ? 'destructive' : row.action === 'repairable' ? 'default' : 'secondary'}
+                              className="text-xs"
+                            >
+                              {row.action}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{row.reason}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+              {stuckResults.errors.length > 0 && (
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-destructive">Errors ({stuckResults.errors.length}):</span>
+                  {stuckResults.errors.map((e, i) => (
+                    <p key={i} className="text-xs text-destructive/80 font-mono">{e}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* One-time Employee Master Backfill — recover historically-missed profiles */}
       <Card className="border-2 border-primary/30">
         <CardHeader>
