@@ -1,179 +1,114 @@
-<final-text>## RCA — KPI Scorecard Detail Still Shows 0 Rows
+
+## RCA — Current bug is a query timeout, not a visibility bug
 
 ### Confirmed facts
-- The **1000-row paging fix is already in the code**:
-  - `src/hooks/useCompanyFilter.ts` uses `fetchAllPaged`
-  - `src/pages/reports/KpiScorecardDetail.tsx` uses `fetchAllPaged` for `profiles` and `org_kpi_data_owners`
-- The database **does contain March 2026 data**:
+- The page is now surfacing the real backend error: `canceling statement due to statement timeout`.
+- The failing request is the `kpis` fetch itself, specifically the paged request with `offset=1000&limit=1000`.
+- The failing query currently asks for:
+  - base KPI fields
+  - `kra_categories(name)`
+  - nested `review_submissions(...)`
+- March 2026 data exists:
   - `1,758` KPIs
-  - `107` distinct employees
-- Your screenshot shows:
-  - `March`
-  - `2026`
-  - `All Companies`
-  - `All Departments`
-  - no visible search term
-  - still `0 KPIs`
-- The page currently **does not surface query errors**. If the query fails or returns nothing because of access scope, the UI still shows:
-  - `0 KPIs`
-  - `No KPIs found for the selected filters`
+  - `107` employees
+  - `1,664` linked `review_submissions`
+- The current logged-in user is `admin`, so the old manager/RLS explanation is **not** the blocker for this screenshot.
 
-### Assumptions I am not making silently
-I cannot prove which of these is happening for your current login without implementation/runtime instrumentation, so I am treating both as live possibilities:
-
-1. **Access-scope mismatch**
-   - The report is described as org-wide: “Flat table of all KPIs…”
-   - But the app currently grants route access to `manager`
-   - RLS on `kpis` gives managers access only to **their own direct reports**
-   - So for a manager (or admin switched into natural manager UI mode), this report can legitimately return 0 rows even though the org has 1,758 rows
-
-2. **Client is masking a real fetch failure**
-   - `KpiScorecardDetail.tsx` reads `rows`, `isLoading`, `isFetching`
-   - but does **not** handle `error`
-   - so a failed query can look identical to “no data”
+### Assumptions I am making explicitly
+1. The timeout is most likely caused by the nested `review_submissions(...)` join inside the paged `kpis` query.
+2. I am **not** assuming the `profiles` fetch is the problem, because the network failure happens before that step.
+3. I am **not** assuming a database schema/index change is needed first, because there is already an index on `review_submissions.kpi_id` and the simplest fix is to change the query shape.
 
 ### Multiple valid interpretations
-#### Interpretation A — This report is supposed to be org-wide
-Then the current setup is inconsistent:
-- UI/report description says org-wide
-- route access includes manager
-- DB access for manager is team-scoped only
+#### Interpretation A — `review_submissions` join is the real bottleneck
+This is the most likely case. The minimal fix is to stop loading submissions as a nested relation inside the large paged `kpis` query.
 
-#### Interpretation B — This report is supposed to be team-scoped for managers
-Then the current setup is misleading:
-- report title/description are too broad
-- empty results are expected for some managers
-- the page needs scope disclosure, not broader access
+#### Interpretation B — the remaining `kra_categories(name)` join also contributes
+Possible, but I would **not** change this first. If the timeout persists after removing nested `review_submissions`, then split categories too in a second pass.
 
-### Recommended direction
-Use the safer interpretation first:
+### Recommended fix
+Use the **minimum-code** change:
 
-**Recommended:** keep this report **org-wide only** and restrict it to roles that already have org-wide read access (`admin`, `management`, `hr_pms`, `auditor`, explicit override users).
+1. Keep the paged `kpis` fetch.
+2. Remove nested `review_submissions(...)` from that query.
+3. After KPI rows are loaded, fetch `review_submissions` separately in chunks using `kpi_id in (...)`.
+4. Merge submissions back in-memory by `kpi_id`.
+5. Leave the rest of the page behavior unchanged.
 
-Reason:
-- simpler
-- safer
-- aligned with the current report description
-- avoids expanding sensitive KPI visibility to all managers
+This is the smallest change that directly targets the timed-out query.
 
-I would push back on silently granting org-wide KPI visibility to managers unless that is an explicit policy decision.
+## What to build
 
----
+### 1. Change only the heavy query path
+In `src/pages/reports/KpiScorecardDetail.tsx`:
 
-## Plan — Fix the real bug, not the symptom
+- Change the paged `kpis` select to fetch only KPI columns needed for the table, plus `kra_categories(name)` if kept.
+- Build a `kpiIds` array from the loaded KPI rows.
+- Fetch `review_submissions` separately in chunks of 500 using:
+  - `kpi_id`
+  - all currently-used score/actual fields
+  - `is_na`
+- Build a `Map<kpi_id, submission>` and merge during `FlatRow` mapping.
 
-### 1. Expose the actual failure mode in the UI
-Update `src/pages/reports/KpiScorecardDetail.tsx` so it distinguishes:
-- **not loaded yet**
-- **loading**
-- **query error**
-- **loaded with 0 rows**
+### 2. Do not add new features
+Do **not** change:
+- click-to-load behavior
+- filters
+- access policy
+- exports
+- UI copy beyond what is necessary
+- database schema
+- RLS
+- config tables
+- generic service abstractions
 
-Add explicit handling for:
-- `error`
-- partial nested-fetch failures
-- access-scope empty states
+### 3. Keep fallback scope narrow
+If the timeout still happens after step 1:
+- second, and only then, remove nested `kra_categories(name)` too
+- fetch categories separately by `category_id`
+- merge client-side
 
-Result:
-- users stop seeing “No KPIs found” when the real problem is access or query failure
+I would not do this in the first pass unless the first minimal fix fails.
 
-### 2. Make the report scope honest
-Update access/scope in one of these two ways:
-
-#### Recommended path
-- Remove `manager` from `kpi-scorecard-detail` default access in `src/hooks/useReportAccess.ts`
-- align `report_access_config` seed / policy docs / report description
-- keep report available to org-wide roles and approved override users only
-
-#### Alternative path
-If you explicitly want managers to use it:
-- rename/reframe it as a **team scorecard detail**
-- update description and empty-state copy to say “team data only”
-- do not silently imply org-wide coverage
-
-### 3. Add diagnostic empty states
-For loaded-but-empty results, show one of:
-- “No KPI rows exist for March 2026”
-- “You currently do not have permission to view org-wide KPI data for this report”
-- “This report is scoped to your team, and no matching KPI rows were found”
-
-This removes ambiguity.
-
-### 4. Keep click-to-load, but make filter state clearer
-The current “Load Data / Reload” pattern is reasonable and cheaper on CPU.
-I would **not** revert to auto-fetch.
-
-Instead:
-- keep click-to-load
-- add a stronger “filters changed — data shown is from last load” notice
-- reset `lastLoadedAt` / applied state more clearly when period changes
-- optionally show “Loaded period: March 2026” beside the count
-
-### 5. Add regression protection
-Per project rules, add tests and mocks for:
-- org-wide role sees March 2026 rows
-- manager without org-wide access gets access-denied/scope message, not fake “No KPIs found”
-- query error renders an error state
-- click-to-load does not auto-fire on filter changes
-- company/department/search filter only operate on already loaded rows
-
-### 6. Sync documentation/policy
-Update:
-- `DOCUMENTATION.md`
-- `POLICY.md` or policy section
-- version history
-
-Document:
-- report scope
-- why manager access was removed or reframed
-- why click-to-load remains
-
----
-
-## Files likely to change
-
+## Files to change
 | File | Change |
 |---|---|
-| `src/pages/reports/KpiScorecardDetail.tsx` | Add explicit `error` handling, scope-aware empty states, clearer loaded/applied-state messaging |
-| `src/hooks/useReportAccess.ts` | Recommended: remove `manager` from default `kpi-scorecard-detail` access if report stays org-wide |
-| `src/components/layout/ReportRoute.tsx` | No logic change likely, but confirm route behavior with updated access rules |
-| `DOCUMENTATION.md` | Sync report scope, RCA, click-to-load pattern |
-| `POLICY.md` / policy section | Sync access policy if report scope is changed |
-| test files | Add unit/component tests for error/scope/empty-state behavior |
-| mock data | Add realistic March 2026 KPI fixtures for org-wide vs manager-scoped cases |
+| `src/pages/reports/KpiScorecardDetail.tsx` | Replace nested `review_submissions(...)` relation with separate chunked `review_submissions` fetch and local merge |
+| `DOCUMENTATION.md` | Add RCA note and record that the report no longer joins `review_submissions` inside the large paged KPI query |
+| test file | Add one regression test for 1000+ KPI load path using separate submissions fetch |
 
----
+## Regression protection
+Add one focused test only:
+- Scenario: more than 1000 KPIs for a period
+- Expectation: page loads data successfully when KPI rows are paged and submissions are fetched separately
+- No need for broad new abstractions or a large test suite for this fix
 
 ## Risk & Impact Report
-
 ### Data impact
-- No schema change required for the recommended fix
-- No historical KPI data changes
+- No schema change
+- No RLS change
+- No historical data impact
 
 ### Workflow impact
-- If manager access is removed, some users may lose access to this report
-- That is intentional if the report is defined as org-wide
+- None
 
-### UI/UX consistency
-- Improves clarity by separating:
-  - no data
-  - no permission
-  - query failed
+### UI/UX impact
+- None intended
+- Same page, same filters, same load button
 
 ### Regression risk
-- Low to medium
-- Main risk is changing access expectations for manager users
+- Low
+- Main risk is mismatching submission rows to KPIs during merge
 
 ### Mitigation
-- keep RLS unchanged unless policy explicitly changes
-- add tests for role-based behavior
-- document scope clearly in UI and docs
+- Merge strictly by `kpi_id`
+- Keep field list identical to current usage
+- Add one regression test for paged KPI + separate submissions path
 
----
+## Why this is the simplest correct fix
+- It addresses the actual failing request shown in the network log
+- It avoids speculative database work
+- It avoids new architecture
+- It keeps the change local to one report
+- It uses an existing project pattern already used elsewhere: chunked `.in('kpi_id', batch)` reads
 
-## Tradeoff summary
-- **Simpler and safer:** restrict this report to org-wide roles and fix the UI states
-- **More permissive but riskier:** expand manager visibility to org-wide KPI data
-- **Best compromise if managers still need something:** keep this report org-wide, and create/use a separate team-scoped detail report
-
-</final-text>
