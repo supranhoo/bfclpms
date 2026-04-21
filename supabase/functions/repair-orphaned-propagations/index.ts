@@ -169,6 +169,194 @@ Deno.serve(async (req) => {
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // === BUCKET F: PROPAGATION FAILURES ===
+    // Signature: org_kpi_values.status='propagated' (or 'approved') BUT zero matching `kpis`
+    // rows have advanced past 'kra_set'. The Data Owner clicked Propagate, OKV.status flipped,
+    // but the per-employee loop produced no advances (RPC bug — see roadmap Step 3).
+    // Repair: reset OKV.status back to 'draft' so DO can re-propagate against the patched RPC.
+    if (mode === "scan_propagation_failures" || mode === "repair_propagation_failures") {
+      // 1. Pull candidate OKV rows (status='propagated' / 'approved')
+      const { data: candidateOkvs, error: okvErr } = await supabase
+        .from("org_kpi_values")
+        .select("id, category_id, kra_name, kpi_name, review_period, review_year, achieved_value, is_na, status, propagated_at, department_id, employee_id")
+        .in("status", ["propagated", "approved"])
+        .limit(batchLimit);
+      if (okvErr) throw okvErr;
+
+      let okvCandidates = candidateOkvs ?? [];
+      if (okvIds.length > 0) okvCandidates = okvCandidates.filter(o => okvIds.includes(o.id));
+
+      // 2. For each OKV, count matching kpis with status != 'kra_set' (i.e. advanced)
+      const failureDetails: any[] = [];
+      let pfRepaired = 0;
+      let pfSkipped = 0;
+      const pfErrors: string[] = [];
+
+      // Pre-fetch category names for display
+      const okvCatIds = [...new Set(okvCandidates.map(o => o.category_id))];
+      const { data: okvCats } = await supabase
+        .from("kra_categories").select("id, name").in("id", okvCatIds);
+      const okvCatMap = new Map<string, string>();
+      okvCats?.forEach(c => okvCatMap.set(c.id, c.name));
+
+      for (const okv of okvCandidates) {
+        try {
+          // Find matching kpis
+          let kpiQ = supabase
+            .from("kpis")
+            .select("id, status, employee_id", { count: "exact" })
+            .eq("category_id", okv.category_id)
+            .eq("kra_name", okv.kra_name)
+            .eq("kpi_name", okv.kpi_name)
+            .eq("review_period", okv.review_period)
+            .eq("review_year", okv.review_year)
+            .eq("is_org_level", true);
+          const { data: matchKpis, count: totalKpis } = await kpiQ;
+
+          const detected = matchKpis?.length ?? 0;
+          const advanced = (matchKpis ?? []).filter(k => k.status !== "kra_set").length;
+
+          // Failure condition: detected > 0 AND advanced === 0
+          if (detected === 0 || advanced > 0) {
+            pfSkipped++;
+            failureDetails.push({
+              kpi_id: okv.id,
+              kpi_name: okv.kpi_name,
+              kra_name: okv.kra_name,
+              employee_id: okv.employee_id ?? "",
+              employee_name: detected === 0 ? "(no matching KPIs)" : `(${advanced}/${detected} advanced — healthy)`,
+              category: okvCatMap.get(okv.category_id) || "",
+              review_period: okv.review_period,
+              review_year: okv.review_year,
+              achieved_value: okv.achieved_value,
+              self_score: null,
+              self_rating: null,
+              action: "skippable",
+              reason: detected === 0 ? "no_matching_kpis" : "partial_advance_healthy",
+            });
+            continue;
+          }
+
+          // Genuine Bucket F failure
+          if (mode === "scan_propagation_failures") {
+            failureDetails.push({
+              kpi_id: okv.id,
+              kpi_name: okv.kpi_name,
+              kra_name: okv.kra_name,
+              employee_id: okv.employee_id ?? "",
+              employee_name: `${detected} employees, 0 advanced`,
+              category: okvCatMap.get(okv.category_id) || "",
+              review_period: okv.review_period,
+              review_year: okv.review_year,
+              achieved_value: okv.achieved_value,
+              self_score: null,
+              self_rating: null,
+              action: "repairable",
+              reason: "propagation_failure_zero_advance",
+            });
+            pfRepaired++;
+            continue;
+          }
+
+          // repair_propagation_failures: reset OKV to draft
+          const { error: resetErr } = await supabase
+            .from("org_kpi_values")
+            .update({
+              status: "draft",
+              propagated_at: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", okv.id)
+            .in("status", ["propagated", "approved"]);
+
+          if (resetErr) {
+            pfErrors.push(`${okv.id}: ${resetErr.message}`);
+            failureDetails.push({
+              kpi_id: okv.id,
+              kpi_name: okv.kpi_name,
+              kra_name: okv.kra_name,
+              employee_id: okv.employee_id ?? "",
+              employee_name: `${detected} employees, 0 advanced`,
+              category: okvCatMap.get(okv.category_id) || "",
+              review_period: okv.review_period,
+              review_year: okv.review_year,
+              achieved_value: okv.achieved_value,
+              self_score: null,
+              self_rating: null,
+              action: "error",
+              reason: resetErr.message,
+            });
+            continue;
+          }
+
+          // Audit log on the OKV's matching KPIs (so it surfaces in KpiTimeline)
+          const auditEntries = (matchKpis ?? []).slice(0, 50).map(k => ({
+            kpi_id: k.id,
+            action: "PROPAGATION_FAILURE_RESET",
+            old_value: { okv_status: okv.status },
+            new_value: { okv_status: "draft" },
+            metadata: {
+              tool: "repair-orphaned-propagations",
+              pass: "propagation_failures",
+              okv_id: okv.id,
+              detected_employees: detected,
+              advanced: 0,
+              note: "OKV reset to draft so Data Owner can re-propagate against patched RPC",
+            },
+          }));
+          if (auditEntries.length > 0) {
+            await supabase.from("kpi_audit_logs").insert(auditEntries);
+          }
+
+          pfRepaired++;
+          failureDetails.push({
+            kpi_id: okv.id,
+            kpi_name: okv.kpi_name,
+            kra_name: okv.kra_name,
+            employee_id: okv.employee_id ?? "",
+            employee_name: `${detected} employees reset`,
+            category: okvCatMap.get(okv.category_id) || "",
+            review_period: okv.review_period,
+            review_year: okv.review_year,
+            achieved_value: okv.achieved_value,
+            self_score: null,
+            self_rating: null,
+            action: "repaired",
+            reason: "okv_reset_to_draft",
+          });
+        } catch (e) {
+          pfErrors.push(`${okv.id}: ${(e as Error).message}`);
+          failureDetails.push({
+            kpi_id: okv.id,
+            kpi_name: okv.kpi_name,
+            kra_name: okv.kra_name,
+            employee_id: okv.employee_id ?? "",
+            employee_name: "",
+            category: okvCatMap.get(okv.category_id) || "",
+            review_period: okv.review_period,
+            review_year: okv.review_year,
+            achieved_value: okv.achieved_value,
+            self_score: null,
+            self_rating: null,
+            action: "error",
+            reason: (e as Error).message,
+          });
+        }
+      }
+
+      return new Response(JSON.stringify({
+        mode,
+        repaired: pfRepaired,
+        null_values_fixed: 0,
+        skipped: pfSkipped,
+        total_checked: okvCandidates.length,
+        errors: pfErrors.slice(0, 20),
+        details: failureDetails.slice(0, 1500),
+        verification: null,
+        ran_at: new Date().toISOString(),
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     // === PHASE 1: Fix NULL-value org_kpi_values marked as propagated ===
     let nullFixedCount = 0;
     if (mode === "repair" && fixNullValues) {
