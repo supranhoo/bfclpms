@@ -64,11 +64,63 @@ export function DataRepairTab() {
   const [repairResults, setRepairResults] = useState<RepairResult | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showConfirm, setShowConfirm] = useState(false);
+  // Status-Stuck repair state (separate pass — kpis stuck at 'kra_set' even though submission exists)
+  const [stuckScanning, setStuckScanning] = useState(false);
+  const [stuckRepairing, setStuckRepairing] = useState(false);
+  const [stuckResults, setStuckResults] = useState<RepairResult | null>(null);
+  const [showStuckConfirm, setShowStuckConfirm] = useState(false);
 
   const repairableRows = useMemo(
     () => scanResults?.filter(r => r.action === 'repairable') ?? [],
     [scanResults]
   );
+
+  const stuckRepairableCount = useMemo(
+    () => stuckResults?.details?.filter(r => r.action === 'repairable').length ?? 0,
+    [stuckResults]
+  );
+
+  const handleStuckScan = async () => {
+    setStuckScanning(true);
+    setStuckResults(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('repair-orphaned-propagations', {
+        body: { mode: 'scan_stuck', limit: 1500 },
+      });
+      if (error) throw error;
+      const result = data as RepairResult;
+      setStuckResults(result);
+      toast({
+        title: 'Status-Stuck scan complete',
+        description: `Found ${result.details?.filter(d => d.action === 'repairable').length ?? 0} status-stuck KPI(s) ready to repair.`,
+      });
+    } catch (err: any) {
+      toast({ title: 'Scan failed', description: err.message || 'Unknown error', variant: 'destructive' });
+    } finally {
+      setStuckScanning(false);
+    }
+  };
+
+  const handleStuckRepair = async () => {
+    setShowStuckConfirm(false);
+    setStuckRepairing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('repair-orphaned-propagations', {
+        body: { mode: 'repair_stuck', limit: 1500 },
+      });
+      if (error) throw error;
+      const result = data as RepairResult;
+      setStuckResults(result);
+      toast({
+        title: 'Status-Stuck repair complete',
+        description: `Advanced ${result.repaired} KPI(s) from "KRA Set" to "Self Review".`,
+      });
+    } catch (err: any) {
+      toast({ title: 'Repair failed', description: err.message || 'Unknown error', variant: 'destructive' });
+    } finally {
+      setStuckRepairing(false);
+    }
+  };
 
   const handleScan = async () => {
     setIsScanning(true);
