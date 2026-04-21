@@ -94,6 +94,7 @@
 | Field | Value |
 |---|---|
 | **Goal** | Before committing a propagation, show the Data Owner a 3-line breakdown: "X employees will advance, Y already past, Z mismatched (will be skipped — see why)." |
+| **Status** | **✅ Implemented (v2.66.1 — 2026-04-21).** New read-only RPC `preview_org_kpi_propagation(uuid[])`, hook `usePreviewOrgKpiPropagation`, and `PropagationPreviewDialog` component. Every Save & Propagate click on `OrgKpiEntryCard` now opens a confirmation modal showing total/will_advance/will_skip with per-employee breakdown before the live RPC runs. |
 | **Code change** | New RPC `preview_org_kpi_propagation(p_definition_id)` that runs the same loop as the patched RPC but with read-only semantics; returns the same `{propagated_count, skipped:[…]}` shape. UI shows a confirmation modal. |
 | **Effort** | ~1 hour. |
 | **Files touched** | new migration for `preview_org_kpi_propagation`, `OrgKpiEntryCard.tsx`, `docs/specs/org-kpi-data-entry-spec.md` §4 (insert step 5.0 "Preview"). |
