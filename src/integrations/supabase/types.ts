@@ -190,6 +190,7 @@ export type Database = {
         Row: {
           app_name: string
           created_at: string
+          enable_org_kpi_autopull: boolean
           enabled_modules: Json | null
           id: string
           login_background_url: string | null
@@ -207,6 +208,7 @@ export type Database = {
         Insert: {
           app_name?: string
           created_at?: string
+          enable_org_kpi_autopull?: boolean
           enabled_modules?: Json | null
           id?: string
           login_background_url?: string | null
@@ -224,6 +226,7 @@ export type Database = {
         Update: {
           app_name?: string
           created_at?: string
+          enable_org_kpi_autopull?: boolean
           enabled_modules?: Json | null
           id?: string
           login_background_url?: string | null
@@ -5077,6 +5080,10 @@ export type Database = {
         Args: { p_kpi_id: string; p_month: string; p_year: number }
         Returns: number
       }
+      backfill_late_joiner_org_kpis: {
+        Args: { p_dry_run?: boolean }
+        Returns: Json
+      }
       check_review_period_permission: {
         Args: {
           p_action: string
@@ -5089,6 +5096,13 @@ export type Database = {
       check_template_has_active_kpis: {
         Args: { template_uuid: string }
         Returns: boolean
+      }
+      compute_org_kpi_score_for_kpi: {
+        Args: { p_achieved: number; p_kpi_id: string }
+        Returns: {
+          rating: string
+          score: number
+        }[]
       }
       detect_training_needs_for_period: {
         Args: {
