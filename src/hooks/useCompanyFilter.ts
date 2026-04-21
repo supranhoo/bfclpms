@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllPaged } from '@/lib/fetchAll';
 
 export interface CompanyOption {
   id: string;
@@ -30,25 +31,19 @@ export function useCompanyFilter() {
   const { data: mapData } = useQuery({
     queryKey: ['employee-company-map'],
     queryFn: async () => {
-      const { data: profiles, error: pErr } = await supabase
-        .from('profiles')
-        .select('id, department_id, company_id, employee_code');
-      if (pErr) throw pErr;
-
-      const { data: departments, error: dErr } = await supabase
-        .from('departments')
-        .select('id, business_unit_id');
-      if (dErr) throw dErr;
-
-      const { data: bus, error: bErr } = await supabase
-        .from('business_units')
-        .select('id, division_id');
-      if (bErr) throw bErr;
-
-      const { data: divs, error: divErr } = await supabase
-        .from('divisions')
-        .select('id, company_id');
-      if (divErr) throw divErr;
+      // Paged fetches to bypass PostgREST's 1000-row default cap.
+      const profiles = await fetchAllPaged<any>((from, to) =>
+        supabase.from('profiles').select('id, department_id, company_id, employee_code').range(from, to)
+      );
+      const departments = await fetchAllPaged<any>((from, to) =>
+        supabase.from('departments').select('id, business_unit_id').range(from, to)
+      );
+      const bus = await fetchAllPaged<any>((from, to) =>
+        supabase.from('business_units').select('id, division_id').range(from, to)
+      );
+      const divs = await fetchAllPaged<any>((from, to) =>
+        supabase.from('divisions').select('id, company_id').range(from, to)
+      );
 
       const deptToBu = new Map(departments?.map(d => [d.id, d.business_unit_id]) ?? []);
       const buToDiv = new Map(bus?.map(b => [b.id, b.division_id]) ?? []);

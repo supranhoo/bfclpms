@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useReportAccess } from '@/hooks/useReportAccess';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllPaged } from '@/lib/fetchAll';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { CompanyFilter } from '@/components/reports/CompanyFilter';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -11,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Download, Search, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { Download, Search, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw, Info } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import * as XLSX from 'xlsx';
 
@@ -102,10 +103,19 @@ export default function KpiScorecardDetail() {
 
   const years = [selectedYear - 1, selectedYear, selectedYear + 1];
 
-  // Batch-fetch all KPIs for the month (no row limit)
-  const { data: rows, isLoading } = useQuery({
-    queryKey: ['kpi-scorecard-detail', selectedMonth, selectedYear],
+  // Click-to-load: heavy fetch only fires when user clicks "Load Data".
+  // appliedQuery holds the period actually fetched; controlled selects don't trigger queries.
+  const [appliedQuery, setAppliedQuery] = useState<{ month: string; year: number } | null>(null);
+  const [lastLoadedAt, setLastLoadedAt] = useState<Date | null>(null);
+
+  const isDirty = !appliedQuery || appliedQuery.month !== selectedMonth || appliedQuery.year !== selectedYear;
+
+  const { data: rows, isLoading, isFetching } = useQuery({
+    queryKey: ['kpi-scorecard-detail', appliedQuery?.month, appliedQuery?.year],
+    enabled: !!appliedQuery,
     queryFn: async () => {
+      const month = appliedQuery!.month;
+      const year = appliedQuery!.year;
       const allKpis: any[] = [];
       let offset = 0;
       let hasMore = true;
@@ -119,8 +129,8 @@ export default function KpiScorecardDetail() {
             kra_categories ( name ),
             review_submissions ( self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score, is_na, achieved_value, manager_achieved_value, skip_level_achieved_value, hr_pms_achieved_value, auditor_achieved_value, management_achieved_value )
           `)
-          .eq('review_period', selectedMonth)
-          .eq('review_year', selectedYear)
+          .eq('review_period', month)
+          .eq('review_year', year)
           .range(offset, offset + 999);
         if (error) throw error;
         if (data && data.length > 0) {
@@ -132,18 +142,23 @@ export default function KpiScorecardDetail() {
         }
       }
 
-      // Fetch profiles with department + designation
-      const { data: profiles, error: pErr } = await supabase
-        .from('profiles')
-        .select('id, employee_code, full_name, designation, departments ( name )');
-      if (pErr) throw pErr;
+      // Fetch profiles with department + designation — paged to bypass 1000-row cap.
+      const profiles = await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('profiles')
+          .select('id, employee_code, full_name, designation, departments ( name )')
+          .range(from, to)
+      );
 
       // Fetch org KPI data owners (use explicit FK to avoid ambiguity)
       let ownerMap = new Map<string, string[]>();
       try {
-        const { data: dataOwners } = await supabase
-          .from('org_kpi_data_owners')
-          .select('category_id, kra_name, kpi_name, owner:profiles!org_kpi_data_owners_owner_id_fkey(full_name)');
+        const dataOwners = await fetchAllPaged<any>((from, to) =>
+          supabase
+            .from('org_kpi_data_owners')
+            .select('category_id, kra_name, kpi_name, owner:profiles!org_kpi_data_owners_owner_id_fkey(full_name)')
+            .range(from, to)
+        );
         (dataOwners ?? []).forEach((o: any) => {
           const key = `${o.category_id}||${o.kra_name}||${o.kpi_name}`;
           const name = o.owner?.full_name ?? '';
@@ -197,8 +212,19 @@ export default function KpiScorecardDetail() {
       });
     },
     staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
+
+  // Track last successful load time
+  useEffect(() => {
+    if (rows && !isFetching) setLastLoadedAt(new Date());
+  }, [rows, isFetching]);
+
+  const handleLoadData = () => {
+    setAppliedQuery({ month: selectedMonth, year: selectedYear });
+    setCurrentPage(1);
+  };
 
   // Departments for filter
   const departments = useMemo(() => {
@@ -325,7 +351,7 @@ export default function KpiScorecardDetail() {
       <Card>
         <CardContent className="pt-4 pb-3">
           <div className="flex flex-wrap items-center gap-3">
-            <Select value={selectedMonth} onValueChange={v => { setSelectedMonth(v); setCurrentPage(1); }}>
+            <Select value={selectedMonth} onValueChange={v => setSelectedMonth(v)}>
               <SelectTrigger className="w-[130px] h-8 text-xs">
                 <SelectValue />
               </SelectTrigger>
@@ -334,7 +360,7 @@ export default function KpiScorecardDetail() {
               </SelectContent>
             </Select>
 
-            <Select value={String(selectedYear)} onValueChange={v => { setSelectedYear(parseInt(v)); setCurrentPage(1); }}>
+            <Select value={String(selectedYear)} onValueChange={v => setSelectedYear(parseInt(v))}>
               <SelectTrigger className="w-[85px] h-8 text-xs">
                 <SelectValue />
               </SelectTrigger>
@@ -342,6 +368,17 @@ export default function KpiScorecardDetail() {
                 {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
               </SelectContent>
             </Select>
+
+            <Button
+              size="sm"
+              variant={isDirty ? 'default' : 'outline'}
+              className="h-8 text-xs gap-1"
+              onClick={handleLoadData}
+              disabled={isFetching}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+              {appliedQuery ? (isDirty ? 'Reload (filters changed)' : 'Reload Data') : 'Load Data'}
+            </Button>
 
             <CompanyFilter
               companies={companies}
@@ -370,7 +407,14 @@ export default function KpiScorecardDetail() {
             </div>
 
             <div className="ml-auto flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">{filtered.length} KPIs</span>
+              <span className="text-xs text-muted-foreground">
+                {appliedQuery ? `${filtered.length} KPIs` : 'Not loaded'}
+                {lastLoadedAt && appliedQuery && (
+                  <span className="ml-2 text-[10px] opacity-70">
+                    · loaded {lastLoadedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+              </span>
               {canExport && (
                 <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={handleExport} disabled={!filtered.length}>
                   <Download className="h-3.5 w-3.5" /> Export
@@ -378,13 +422,32 @@ export default function KpiScorecardDetail() {
               )}
             </div>
           </div>
+          {isDirty && appliedQuery && (
+            <div className="mt-2 flex items-center gap-1.5 text-[11px] text-warning">
+              <Info className="h-3 w-3" />
+              Filters changed — click "Reload" to fetch updated data.
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* Table */}
       <Card>
         <CardContent className="p-0">
-          {isLoading ? (
+          {!appliedQuery ? (
+            <div className="p-12 text-center space-y-3">
+              <RefreshCw className="h-10 w-10 mx-auto text-muted-foreground/50" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Select your filters and click "Load Data"</p>
+                <p className="text-xs text-muted-foreground">
+                  Data is loaded on demand to keep the page fast. Search, sort, and pagination will work on loaded data without refetching.
+                </p>
+              </div>
+              <Button size="sm" onClick={handleLoadData} className="gap-1">
+                <RefreshCw className="h-3.5 w-3.5" /> Load Data
+              </Button>
+            </div>
+          ) : isLoading ? (
             <div className="p-6 space-y-3">
               {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
             </div>
