@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useReportAccess } from '@/hooks/useReportAccess';
+import { useAuth } from '@/contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchAllPaged } from '@/lib/fetchAll';
@@ -12,8 +13,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Download, Search, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw, Info } from 'lucide-react';
+import { Download, Search, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw, Info, AlertCircle, ShieldAlert } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import * as XLSX from 'xlsx';
 
 const MONTHS = [
@@ -90,6 +92,9 @@ const statusLabels: Record<string, string> = {
 export default function KpiScorecardDetail() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('kpi-scorecard-detail');
+  const { effectiveRole } = useAuth();
+  const ORG_WIDE_ROLES: Array<string> = ['admin', 'management', 'hr_pms', 'auditor'];
+  const hasOrgWideAccess = effectiveRole ? ORG_WIDE_ROLES.includes(effectiveRole) : false;
   const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany, getCompanyName, getCompanyCode } = useCompanyFilter();
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[now.getMonth()]);
@@ -110,7 +115,7 @@ export default function KpiScorecardDetail() {
 
   const isDirty = !appliedQuery || appliedQuery.month !== selectedMonth || appliedQuery.year !== selectedYear;
 
-  const { data: rows, isLoading, isFetching } = useQuery({
+  const { data: rows, isLoading, isFetching, error, isError } = useQuery({
     queryKey: ['kpi-scorecard-detail', appliedQuery?.month, appliedQuery?.year],
     enabled: !!appliedQuery,
     queryFn: async () => {
@@ -451,6 +456,31 @@ export default function KpiScorecardDetail() {
             <div className="p-6 space-y-3">
               {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
             </div>
+          ) : isError ? (
+            <div className="p-6">
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Failed to load KPI data</AlertTitle>
+                <AlertDescription className="text-xs mt-1">
+                  {(error as Error)?.message || 'An unexpected error occurred while fetching KPIs.'}
+                  {!hasOrgWideAccess && (
+                    <div className="mt-2">
+                      Your role ({effectiveRole ?? 'unknown'}) does not have org-wide access. Row-Level Security may be blocking this query. Contact an administrator to request a per-user access override.
+                    </div>
+                  )}
+                </AlertDescription>
+              </Alert>
+            </div>
+          ) : rows && rows.length === 0 && !hasOrgWideAccess ? (
+            <div className="p-6">
+              <Alert>
+                <ShieldAlert className="h-4 w-4" />
+                <AlertTitle>Limited visibility</AlertTitle>
+                <AlertDescription className="text-xs mt-1">
+                  This is an org-wide report. Your role ({effectiveRole ?? 'unknown'}) only has access to your direct reports, and none have KPIs for {appliedQuery?.month} {appliedQuery?.year}. Ask an administrator to grant a per-user override if you need full org access.
+                </AlertDescription>
+              </Alert>
+            </div>
           ) : (
             <>
               <div className="overflow-auto max-h-[calc(100vh-300px)]">
@@ -476,7 +506,11 @@ export default function KpiScorecardDetail() {
                   <TableBody>
                     {paged.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={14} className="text-center text-muted-foreground py-8">No KPIs found for the selected filters</TableCell>
+                        <TableCell colSpan={14} className="text-center text-muted-foreground py-8">
+                          {rows && rows.length > 0
+                            ? `No KPIs match the current Company / Department / Search filters (${rows.length} loaded for ${appliedQuery?.month} ${appliedQuery?.year}).`
+                            : `No KPI rows exist for ${appliedQuery?.month} ${appliedQuery?.year}.`}
+                        </TableCell>
                       </TableRow>
                     ) : paged.map((r, i) => {
                       const typeLabel = getOrgTypeLabel(r);

@@ -42,7 +42,9 @@ const DEFAULT_CONFIGS: Record<string, { view_roles: AppRole[]; download_roles: A
   'incentive': { view_roles: ['admin', 'management', 'hr_pms'], download_roles: ['admin'] },
   'manager-team-kpi': { view_roles: ['admin', 'manager', 'management', 'hr_pms'], download_roles: ['admin'] },
   'team-vs-manager-score': { view_roles: ['admin', 'manager', 'management', 'hr_pms'], download_roles: ['admin'] },
-  'kpi-scorecard-detail': { view_roles: ['admin', 'manager', 'management', 'hr_pms', 'auditor'], download_roles: ['admin'] },
+  // Org-wide report — managers excluded by default since RLS restricts them to direct reports,
+  // which would silently return 0 rows. Grant via per-user override if a manager needs access.
+  'kpi-scorecard-detail': { view_roles: ['admin', 'management', 'hr_pms', 'auditor'], download_roles: ['admin'] },
   'kpi-employee-matrix': { view_roles: ['admin', 'manager', 'management', 'hr_pms', 'auditor'], download_roles: ['admin'] },
 };
 
