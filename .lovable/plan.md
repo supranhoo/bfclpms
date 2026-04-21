@@ -1,104 +1,59 @@
 
 
-## Plan — Forward-Cascade Scope Change + OKV Migration Helper + Auto-Pull Activation
+## Plan — Auto-Inherit Org KPI Status on New KPI Creation
 
-Three related Org KPI governance gaps. Doing them in one loop because they share the same RPC + UI surface (`useChangeOrgKpiScope` + Admin "Org KPI Management" tab).
+Close the Scenario 2 gap so any newly-created KPI that matches an existing Org KPI signature (same category + KRA + KPI name in the same period) automatically becomes Org-level, inheriting scope and data owner — no admin click required.
 
-### 1. Cascade Scope Change Forward
+### 1. New DB Trigger: `trg_autoinherit_org_level_on_kpi_insert`
 
-**Where**: `src/hooks/useOrgKpiManagement.ts` → `useChangeOrgKpiScope`, plus the dialog that calls it.
+Fires `BEFORE INSERT ON public.kpis`. Before the row is written:
+- Check if any other KPI exists with the same `(category_id, kra_name, kpi_name, review_period, review_year)` and `is_org_level = true`.
+- If yes: set `NEW.is_org_level = true` and `NEW.org_level_scope = <inherited_scope>` on the new row.
+- Audit-log the inheritance with `ORG_KPI_AUTO_INHERITED` (system performer = NULL), capturing the source KPI ID and inherited scope.
+- Feature-flagged: gated on a new `app_settings.enable_org_kpi_auto_inherit` boolean (default `true`).
 
-**Change**:
-- Extend mutation input with `cascadeMode: 'current_only' | 'current_and_future'`.
-- New atomic RPC `change_org_kpi_scope_cascading(category_id, kra_name, kpi_name, base_period, base_year, new_scope, cascade_forward bool)`:
-  - Resolves all `(period, year)` tuples ≥ base period that are **not locked** (joins `review_period_locks`).
-  - For each open future period, updates `kpis.org_level_scope` for matching `is_org_level=true` rows.
-  - Calls the OKV migration helper (see #2) per period.
-  - Returns per-period rowcounts + a list of skipped locked periods.
-  - Audit-logs `ORG_KPI_SCOPE_CASCADED` with `performed_by = NULL` (system) plus `triggered_by = admin_user_id` in metadata.
-- UI: add a checkbox in the existing "Change Scope" dialog → "Apply to all open future periods". Show preview of which periods will be touched (dry-run via the same RPC with `cascade_forward=false` returning the resolution list).
+Sequencing: this BEFORE INSERT trigger runs first, sets `is_org_level=true`, then the existing AFTER INSERT `trg_autopull_propagated_org_kpi` runs and pre-fills the value if a propagated OKV exists. The data owner is already mapped because ownership is KPI-name-scoped, not employee-scoped.
 
-### 2. OKV Migration Helper
+### 2. Fallback Safety Net — Background Reconciler
 
-**Where**: New SQL function `migrate_okv_on_scope_change(category_id, kra_name, kpi_name, period, year, old_scope, new_scope)` called by the cascading RPC and by the existing scope change path.
+For KPIs that pre-date the trigger or were created during a flag-disabled window:
+- Add a new admin tool button in the Data Repair tab: **"Reconcile Org KPI Inheritance"**.
+- Scans for KPIs where another KPI in the same `(category, kra, kpi, period, year)` group is org-level but this one isn't.
+- Preview UI shows count + per-KPI breakdown before write.
+- On confirm: bulk-updates `is_org_level=true`, sets matching `org_level_scope`, and the existing autopull trigger then fires per row to fill values where OKVs are propagated.
+- Audit action: `ORG_KPI_INHERITANCE_RECONCILED`.
 
-**Behavior matrix**:
+### 3. Admin Settings UI
 
-```text
-old_scope  →  new_scope          Action
-─────────────────────────────────────────────────────────────
-employee   →  department         Aggregate per-employee OKVs
-                                 into one per department.
-                                 Aggregation = AVG (numeric) or
-                                 MAX of submitted_at (qualitative).
-                                 Source values archived in
-                                 okv_migration_history.
+In the existing System Settings → Org KPI section (where `enable_org_kpi_autopull` toggle lives):
+- Add a sibling toggle for `enable_org_kpi_auto_inherit` with a tooltip explaining: "When ON, any new KPI matching an existing Org KPI signature auto-inherits Org status, scope, and data owner."
 
-employee   →  organization       Aggregate ALL employee OKVs
-                                 into one org-wide OKV. Same
-                                 aggregation rule.
+### 4. Documentation & Memory
 
-department →  organization       Aggregate department OKVs into
-                                 one org-wide OKV.
-
-department →  employee           Split: create one draft OKV
-                                 placeholder per assigned
-                                 employee, copying dept value
-                                 as the suggested achieved.
-
-organization → department        Split: one draft OKV per dept
-                                 that has assigned employees,
-                                 seeded with org value.
-
-organization → employee          Split: one draft OKV per
-                                 assigned employee, seeded with
-                                 org value.
-```
-
-- All migrations preserve `propagated`/`approved` status when aggregating (the higher-scope OKV inherits the most-advanced status of its sources). Splits always produce `draft` because each new owner must reconfirm.
-- New table `okv_migration_history` (id, original_okv_id, new_okv_id, action, old_scope, new_scope, original_value, original_status, migrated_at, migrated_by) — gives admins a one-click revert path if a cascade was wrong.
-- All writes inside a single transaction per period.
-
-**What this does NOT do**: it does not re-trigger propagation. The new/migrated OKVs sit at their inherited status; if they were `propagated`, child KPIs already have values and stay put. If a split results in `draft` OKVs, the Data Owner gets them in their queue (existing UX).
-
-### 3. Activate `enable_org_kpi_autopull`
-
-- Single `UPDATE app_settings SET enable_org_kpi_autopull = true WHERE id = '00000000-0000-0000-0000-000000000001'`.
-- Done via the insert/update tool (data, not schema).
-- Admin UI already exposes the flag (from Phase B2) — flipping it server-side and verifying the trigger `trg_autopull_propagated_org_kpi` fires on a synthetic late-joiner insert in a dry test.
-
-### Execution sequence
-
-1. Pre-flight `cloud_status` → must be `ACTIVE_HEALTHY`.
-2. **Migration**: create `okv_migration_history` table + RLS, create `migrate_okv_on_scope_change` function, create `change_org_kpi_scope_cascading` RPC.
-3. **Frontend**: extend `useChangeOrgKpiScope` (new param `cascadeMode`), add a new hook `useScopeCascadePreview` for the dry-run, update the "Change Scope" dialog with the checkbox + preview list of affected periods.
-4. **Tests**: Deno unit tests for the migration helper covering all 6 transitions with synthetic data.
-5. **Activation**: `UPDATE app_settings ... = true`. Verify with a test insert that the autopull trigger fires (then roll back the test row).
-6. **Docs/Memory**:
-   - `DOCUMENTATION.md` v2.66.5 changelog entry.
-   - `docs/specs/org-kpi-data-entry-spec.md` → new §4.3 "Scope Change Cascade & OKV Migration".
-   - Update `mem://features/admin/org-kpi-management-suite` with the cascade + migration matrix.
+- `DOCUMENTATION.md` v2.66.6 changelog entry covering both the trigger and the reconciler tool.
+- Update `docs/specs/org-kpi-data-entry-spec.md` §4.0 ("Continuous late-joiner fill") to add §4.0.2 "Auto-Inheritance on KPI Creation", documenting the BEFORE INSERT trigger sequence with autopull.
+- Update `mem://features/admin/org-kpi-management-suite` to capture the inheritance + autopull two-trigger pipeline.
+- Update `mem://features/admin/data-repair-engine` to add the new reconciler tool.
 
 ### Risk & Impact Report
 
-- **Data Impact**: Aggregations average numeric OKVs — the source values are preserved in `okv_migration_history` for revert. Splits create new OKV rows; no source data lost. RLS on `okv_migration_history` restricted to admin role.
-- **Workflow Impact**: Cascading forward respects `review_period_locks` — never touches locked months. Splits to `draft` re-queue Data Owners (intended). Aggregations preserve approved status — no regression of in-flight reviews.
-- **UI/UX**: One new checkbox in an existing dialog, one new preview panel. Default = `current_only` (existing behavior). No nav changes.
-- **Regression Risk**: Medium — aggregation logic must handle qualitative vs numeric vs binary correctly. Mitigated by per-transition unit tests + the audit history table letting admins revert.
-- **Auto-pull Activation Risk**: Low — trigger has been deployed and dormant since v2.66.3. Activation is a single boolean flip; verified by synthetic insert + immediate read of the resulting `kpis.achieved_value`.
-- **Mitigation**: All writes audit-logged; `okv_migration_history` enables manual revert; preview-before-cascade in UI; locked-period skip list returned to admin.
+- **Data Impact**: Trigger only flips `is_org_level` from false → true on net-new INSERTs. Never modifies existing rows. The reconciler operates on existing rows but is admin-confirmed with a preview. No schema change beyond the `app_settings` flag.
+- **Workflow Impact**: New KPIs that previously sat as normal KPIs in `kra_set` now correctly enter the Org KPI workflow (data owner manages the value, autopull fills the child). This **changes user-visible behavior**: if an admin creates a KPI mid-month and an OKV is already propagated, the employee will see it as `self_review` immediately instead of `kra_set`. This is the intended fix.
+- **UI/UX**: One new toggle, one new button in Data Repair. No nav changes.
+- **Regression Risk**: Medium — if an admin INTENTIONALLY creates a normal-scope KPI with the same name as an existing Org KPI, the trigger will silently make it Org-level. Mitigated by: (a) the feature flag (admin can disable), (b) the audit log entry (visible in KPI history), (c) name collisions of this kind are policy-violating anyway given the existing duplicate-KPI prevention constraint.
+- **Mitigation**: Flag-gated rollout (default ON since duplicate-KPI prevention already protects against accidental name collisions); audit log captures every inheritance; reconciler tool has dry-run preview; existing "Step Back" admin tool can revert any false positive.
+
+### Out of Scope
+
+- Re-propagating the 4 OKVs from Phase A2 (still pending).
+- Cross-period inheritance (e.g., March KPI inheriting from Feb Org KPI) — would conflict with monthly rollover semantics, handled separately by the rollover engine.
+- Auto-creating OKVs for periods that don't have one yet (admin still controls value entry).
 
 ### Deliverables
 
-- New RPCs: `change_org_kpi_scope_cascading`, `migrate_okv_on_scope_change`.
-- New table: `okv_migration_history` (+ RLS).
-- Extended hook + dialog with cascade option and preview.
-- Deno tests for the 6 transition matrix.
-- `enable_org_kpi_autopull = true` in `app_settings`.
-- DOCUMENTATION.md v2.66.5 entry, spec §4.3, memory update.
-
-### Out of scope
-
-- Re-propagating the 4 OKVs from Phase A2 (still pending your call).
-- Backfilling `okv_migration_history` for prior manual scope changes (no source data exists).
+- New BEFORE INSERT trigger `trg_autoinherit_org_level_on_kpi_insert` + function.
+- New `app_settings.enable_org_kpi_auto_inherit` column (default `true`).
+- New admin reconciler tool (UI + edge function or RPC).
+- Admin Settings toggle for the new flag.
+- DOCUMENTATION.md v2.66.6 entry, spec §4.0.2, memory updates.
 
