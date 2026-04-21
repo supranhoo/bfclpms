@@ -600,6 +600,10 @@ export default function OrgKpiDataEntry() {
         // Skip if filterEmployeeIds provided and this scope isn't in the list
         if (filterEmployeeIds && !filterEmployeeIds.includes(sv.scopeId)) continue;
         if (sv.achievedValue === null && !sv.isNa) continue;
+        // v2.65.4 — Block silent zero-propagation:
+        // Skip rows that hold 0 but were not edited this session (stale Save value).
+        // Owner must explicitly type a value (or 0) before Propagate writes it.
+        if (!(sv as any)._touched && sv.achievedValue === 0 && !sv.isNa) continue;
         const result = await propagate.mutateAsync({
           categoryId: kpi.category_id,
           kraName: kpi.kra_name,
