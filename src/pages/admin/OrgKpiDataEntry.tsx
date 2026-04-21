@@ -644,6 +644,46 @@ export default function OrgKpiDataEntry() {
       });
     }
 
+    // v2.65.6 — Half-propagation forward-guard
+    // Detect employees with a kpis row for this (category, kra, kpi, period, year, is_org_level)
+    // who did NOT receive a propagate call this session. Such rows would otherwise have their
+    // org_kpi_values.status flipped to 'propagated' below while their kpis.status stays 'kra_set'
+    // and no review_submissions row is created — the exact "half-propagation" defect.
+    let missedEmployeeIds: string[] = [];
+    if ((scope === 'department' || scope === 'employee') && propagatedScopeIds.length > 0) {
+      try {
+        const { data: allOrgKpiRows } = await supabase
+          .from('kpis')
+          .select('employee_id, profiles!kpis_employee_id_fkey(full_name, employee_code)')
+          .eq('category_id', kpi.category_id)
+          .ilike('kra_name', kpi.kra_name)
+          .ilike('kpi_name', kpi.kpi_name)
+          .eq('review_period', selectedPeriod)
+          .eq('review_year', selectedYear)
+          .eq('is_org_level', true);
+
+        const expectedEmpIds = new Set((allOrgKpiRows || []).map(r => r.employee_id));
+        const propagatedSet = new Set(propagatedScopeIds);
+        // For department scope, propagatedScopeIds are department IDs — only check employee scope here
+        if (scope === 'employee') {
+          const missed = (allOrgKpiRows || []).filter(r => !propagatedSet.has(r.employee_id));
+          missedEmployeeIds = missed.map(r => r.employee_id);
+          if (missed.length > 0) {
+            const names = missed.slice(0, 5).map((r: any) => r.profiles?.full_name || r.employee_id).join(', ');
+            const suffix = missed.length > 5 ? ` +${missed.length - 5} more` : '';
+            toast({
+              title: `${missed.length} employee KPI(s) skipped during propagation`,
+              description: `Not in current view — their org_kpi_values.status was NOT updated to keep state consistent. Missed: ${names}${suffix}. Use Data Repair → "Repair Orphaned Propagations" to fix historical rows.`,
+              variant: 'destructive',
+            });
+          }
+        }
+      } catch (err) {
+        // Non-blocking — guard failure should not block propagation
+        console.warn('[OrgKpiDataEntry] Half-propagation guard query failed:', err);
+      }
+    }
+
     // Only update org_kpi_values status for rows that were actually propagated
     if (propagatedScopeIds.length > 0) {
       if (scope === 'organization') {
