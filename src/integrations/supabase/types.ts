@@ -190,6 +190,7 @@ export type Database = {
         Row: {
           app_name: string
           created_at: string
+          enable_org_kpi_auto_inherit: boolean
           enable_org_kpi_autopull: boolean
           enabled_modules: Json | null
           id: string
@@ -208,6 +209,7 @@ export type Database = {
         Insert: {
           app_name?: string
           created_at?: string
+          enable_org_kpi_auto_inherit?: boolean
           enable_org_kpi_autopull?: boolean
           enabled_modules?: Json | null
           id?: string
@@ -226,6 +228,7 @@ export type Database = {
         Update: {
           app_name?: string
           created_at?: string
+          enable_org_kpi_auto_inherit?: boolean
           enable_org_kpi_autopull?: boolean
           enabled_modules?: Json | null
           id?: string
@@ -5341,6 +5344,10 @@ export type Database = {
             Args: { p_is_na?: boolean; p_kpi_ratings: Json; p_remarks?: string }
             Returns: Json
           }
+      reconcile_org_kpi_inheritance: {
+        Args: { p_dry_run?: boolean }
+        Returns: Json
+      }
       reconcile_workflow_statuses: {
         Args: {
           p_dry_run?: boolean
