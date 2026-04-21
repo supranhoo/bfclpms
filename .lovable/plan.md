@@ -1,114 +1,65 @@
 
-## RCA — Current bug is a query timeout, not a visibility bug
 
-### Confirmed facts
-- The page is now surfacing the real backend error: `canceling statement due to statement timeout`.
-- The failing request is the `kpis` fetch itself, specifically the paged request with `offset=1000&limit=1000`.
-- The failing query currently asks for:
-  - base KPI fields
-  - `kra_categories(name)`
-  - nested `review_submissions(...)`
-- March 2026 data exists:
-  - `1,758` KPIs
-  - `107` employees
-  - `1,664` linked `review_submissions`
-- The current logged-in user is `admin`, so the old manager/RLS explanation is **not** the blocker for this screenshot.
+## RCA — "Entered" badge stays even after Propagate
 
-### Assumptions I am making explicitly
-1. The timeout is most likely caused by the nested `review_submissions(...)` join inside the paged `kpis` query.
-2. I am **not** assuming the `profiles` fetch is the problem, because the network failure happens before that step.
-3. I am **not** assuming a database schema/index change is needed first, because there is already an index on `review_submissions.kpi_id` and the simplest fix is to change the query shape.
+### Confirmed root cause
+The KPI in your screenshot (Sajid Raza, "Achieve 3*100 TPD Power Generation target") has **two `org_kpi_values` rows** for `March 2026`:
 
-### Multiple valid interpretations
-#### Interpretation A — `review_submissions` join is the real bottleneck
-This is the most likely case. The minimal fix is to stop loading submissions as a nested relation inside the large paged `kpis` query.
+| Row | employee_id | dept_id | status | achieved | when |
+|---|---|---|---|---|---|
+| `ef6cd63c…` | Sajid Raza | null | **propagated** | 0 | 11:54 (after Propagate) |
+| `bc179d72…` | **null** | **null** | **entered** | 5 | 11:37 (older save, org-scoped) |
 
-#### Interpretation B — the remaining `kra_categories(name)` join also contributes
-Possible, but I would **not** change this first. If the timeout persists after removing nested `review_submissions`, then split categories too in a second pass.
+The KPI's current `org_level_scope = 'employee'`. The Propagate handler correctly updated only the employee-scoped row.
 
-### Recommended fix
-Use the **minimum-code** change:
+But `getKpiStatus` in `src/pages/admin/OrgKpiDataEntry.tsx` (lines 192–199) computes the badge for non-organization scopes by **prefix-matching all rows** under the same `(category, kra, kpi)` key, regardless of `employee_id` / `department_id`. It then requires `every` matched row to be `propagated`. The orphan org-scoped row (`status='entered'`) drags the badge back to **Entered**.
 
-1. Keep the paged `kpis` fetch.
-2. Remove nested `review_submissions(...)` from that query.
-3. After KPI rows are loaded, fetch `review_submissions` separately in chunks using `kpi_id in (...)`.
-4. Merge submissions back in-memory by `kpi_id`.
-5. Leave the rest of the page behavior unchanged.
+The orphan row exists because this KPI was previously saved under `org_level_scope='organization'` (or via a legacy path) before being switched to employee scope. A DB sweep shows this is **widespread** — dozens of employee/department-scoped org KPIs have orphan org-level `org_kpi_values` rows polluting their status.
 
-This is the smallest change that directly targets the timed-out query.
+### Why "showing in Employee's Dashboard" is **not** a separate bug
+Propagation correctly wrote Sajid's score to `review_submissions` — that's the intended behavior. The KPI appearing on his dashboard is expected, not a regression.
 
-## What to build
+### Assumptions stated explicitly
+1. The orphan rows should be **ignored** when computing badge status for employee/department-scoped KPIs (they don't belong to the current scope).
+2. We should not delete the orphan rows in this fix — they are historical data and a separate cleanup decision. The simplest, safest fix is to make `getKpiStatus` scope-aware.
+3. No schema change, no RLS change, no policy change.
 
-### 1. Change only the heavy query path
-In `src/pages/reports/KpiScorecardDetail.tsx`:
+### Alternatives I considered and rejected
+- **Delete orphan rows in a migration.** Higher risk, irreversible, and out of scope for "fix the badge". Listed as optional follow-up only.
+- **Change Propagate to also flip orphan rows to 'propagated'.** Wrong — those rows don't represent any real propagated value.
 
-- Change the paged `kpis` select to fetch only KPI columns needed for the table, plus `kra_categories(name)` if kept.
-- Build a `kpiIds` array from the loaded KPI rows.
-- Fetch `review_submissions` separately in chunks of 500 using:
-  - `kpi_id`
-  - all currently-used score/actual fields
-  - `is_na`
-- Build a `Map<kpi_id, submission>` and merge during `FlatRow` mapping.
+---
 
-### 2. Do not add new features
-Do **not** change:
-- click-to-load behavior
-- filters
-- access policy
-- exports
-- UI copy beyond what is necessary
-- database schema
-- RLS
-- config tables
-- generic service abstractions
+## Plan — Minimum-code fix
 
-### 3. Keep fallback scope narrow
-If the timeout still happens after step 1:
-- second, and only then, remove nested `kra_categories(name)` too
-- fetch categories separately by `category_id`
-- merge client-side
+### Single change
+In `src/pages/admin/OrgKpiDataEntry.tsx`, `getKpiStatus` (lines 192–199), filter the prefix match by the current scope so orphan rows from a different scope are ignored:
 
-I would not do this in the first pass unless the first minimal fix fails.
+- For `org_level_scope = 'employee'` → only consider rows where `employee_id IS NOT NULL`.
+- For `org_level_scope = 'department'` → only consider rows where `department_id IS NOT NULL`.
 
-## Files to change
+Everything else stays the same.
+
+### Files touched
 | File | Change |
 |---|---|
-| `src/pages/reports/KpiScorecardDetail.tsx` | Replace nested `review_submissions(...)` relation with separate chunked `review_submissions` fetch and local merge |
-| `DOCUMENTATION.md` | Add RCA note and record that the report no longer joins `review_submissions` inside the large paged KPI query |
-| test file | Add one regression test for 1000+ KPI load path using separate submissions fetch |
+| `src/pages/admin/OrgKpiDataEntry.tsx` | Add scope-aware filter inside `getKpiStatus` (lines 192–199). ~3 lines. |
+| `DOCUMENTATION.md` | Append v2.65.3 RCA note: orphan org-scoped rows from legacy saves; status calc now scope-filtered. |
 
-## Regression protection
-Add one focused test only:
-- Scenario: more than 1000 KPIs for a period
-- Expectation: page loads data successfully when KPI rows are paged and submissions are fetched separately
-- No need for broad new abstractions or a large test suite for this fix
+### Out of scope
+- No DB cleanup of orphan rows (separate decision).
+- No change to Propagate handler — it is already correct.
+- No change to `handleCardSave` — it already writes to the correct scope.
+- No change to `review_submissions` flow — Sajid's dashboard entry is expected.
+- No new tests/abstractions for a 3-line fix.
 
-## Risk & Impact Report
-### Data impact
-- No schema change
-- No RLS change
-- No historical data impact
+### Risk & Impact
+- **Data:** none — read-only badge logic.
+- **Workflow:** none — Propagate already worked; only the badge label was wrong.
+- **UI/UX:** badges will now correctly show **Propagated** for employee/department-scope KPIs after propagation, even when legacy orphan rows exist. Affects many KPIs flagged in the DB sweep (positive impact).
+- **Regression risk:** very low — the change narrows the filter; org-scope KPIs are unaffected (they use a different code path on line 184–191).
+- **Mitigation:** keep the existing org-scope branch untouched; only tighten the employee/department branch.
 
-### Workflow impact
-- None
-
-### UI/UX impact
-- None intended
-- Same page, same filters, same load button
-
-### Regression risk
-- Low
-- Main risk is mismatching submission rows to KPIs during merge
-
-### Mitigation
-- Merge strictly by `kpi_id`
-- Keep field list identical to current usage
-- Add one regression test for paged KPI + separate submissions path
-
-## Why this is the simplest correct fix
-- It addresses the actual failing request shown in the network log
-- It avoids speculative database work
-- It avoids new architecture
-- It keeps the change local to one report
-- It uses an existing project pattern already used elsewhere: chunked `.in('kpi_id', batch)` reads
+### Optional follow-up (not in this change)
+A one-time cleanup migration could delete `org_kpi_values` rows where `employee_id IS NULL AND department_id IS NULL` and the corresponding KPI's current `org_level_scope <> 'organization'`. Flag for separate approval.
 
