@@ -1170,6 +1170,7 @@ export default function OrgKpiDataEntry() {
               { key: 'pending' as const, label: 'Pending', count: progressData.totalKpis - progressData.enteredKpis - progressData.propagatedKpis },
               { key: 'entered' as const, label: 'Entered', count: progressData.enteredKpis },
               { key: 'propagated' as const, label: 'Propagated', count: progressData.propagatedKpis },
+              { key: 'stuck' as const, label: 'Stuck (admin repair)', count: frequencyFilteredKpis.filter(k => getKpiStatus(k) === 'stuck').length },
             ]).map(f => (
               <Badge
                 key={f.key}
