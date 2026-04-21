@@ -423,7 +423,7 @@ export default function KpiScorecardDetail() {
             </div>
           </div>
           {isDirty && appliedQuery && (
-            <div className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400">
+            <div className="mt-2 flex items-center gap-1.5 text-[11px] text-warning">
               <Info className="h-3 w-3" />
               Filters changed — click "Reload" to fetch updated data.
             </div>
