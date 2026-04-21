@@ -80,6 +80,16 @@ export default function OrgKpiDataEntry() {
   // ALL org-level KPIs (unfiltered) for Data Owners tab
   const { data: allOrgLevelKpis } = useOrgLevelKpis(selectedPeriod, selectedYear);
   const orgLevelKpis = useMemo(() => orgLevelData?.kpis?.map(k => k.kpi) || [], [orgLevelData]);
+  // Set of kpiKey definitions that have at least one underlying kpis row still in 'kra_set' status.
+  // Used to flag "Stuck" rows on the Pending Report (value entered, but workflow never advanced).
+  const stuckDefinitionKeys = useMemo(() => {
+    const set = new Set<string>();
+    const map = orgLevelData?.kraSetKpiRowsByKey || {};
+    Object.entries(map).forEach(([k, ids]) => {
+      if (Array.isArray(ids) && ids.length > 0) set.add(k);
+    });
+    return set;
+  }, [orgLevelData]);
   const employeeCountMap = useMemo(() => {
     const map = new Map<string, number>();
     orgLevelData?.kpis?.forEach(k => {
