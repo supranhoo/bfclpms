@@ -1,85 +1,76 @@
 
 
-## RCA — HR PMS Stat Cards Show Wrong Counts (Mar 2026)
+## Explore — Auditor "Explorer / Read-Only" Mode
 
-### Evidence (DB vs UI)
+### TL;DR
+**This already partially exists.** The Audit panel has an `All Employees (Cross-Check)` filter that shows every active employee regardless of audit scope. The gaps are:
 
-| Card | UI | DB Truth | Gap |
-|---|---|---|---|
-| Total Employees | 14 | 107 distinct employees have March KPIs at HR-PMS-relevant stages | -93 |
-| Pending Review | 0 | 0 at `skip_level_check` | ✅ |
-| In HR PMS Review | 28 | 28 at `hr_pms_review` | ✅ |
-| HR PMS Reviewed | 185 | 806 KPIs past HR PMS (or ~739 if "approved only") | -621 |
-| Total KPIs | 595 | 1,758 March KPIs | -1,163 |
+1. **Discoverability** — it's hidden inside the Status dropdown. Auditors don't know it exists.
+2. **Read-only enforcement in the scorecard** — when an auditor opens an out-of-scope employee from cross-check, the scorecard does not visibly switch to a read-only mode. RLS blocks writes server-side, but the UI still renders the auditor edit fields, which is confusing and looks like a bug.
+3. **No explicit "exploration intent"** — there's no banner/badge telling the auditor "you are viewing out-of-audit scope, in observe-only mode."
 
-### Root Cause
+The existing process (audit assignments, queries, observations, scoring on assigned KPIs) is **not interrupted** — Cross-Check already routes through the same scorecard, just without write capability.
 
-The v2.64.8 "period-aware Total Employees" fix in `EmployeeSelectorGrid.tsx` over-narrowed the denominator. For HR PMS / Audit / Management views, the recompute counts only employees whose CURRENT KPI status is at the reviewer's stage or immediately before it. It excludes:
+### What to build
 
-1. **Employees whose KPIs already advanced past the reviewer's stage** — for HR PMS, employees with KPIs now at `management_review` or `approved` were reviewed by HR PMS this period and must count toward "Total Employees" and "Reviewed".
-2. **Employees with mixed-status KPI sets** — some at `kra_set`, some at `manager_check`, some at `approved` — they belong in the period roster regardless of where the bulk sits today.
-3. **`Total KPIs` filter is over-scoped** — currently filters by stage-eligibility instead of "all KPIs of employees in this view's roster, this period".
-
-The `2,468 eligible of 2,533` diagnostic correctly identifies the workflow-eligible pool. The bug is in the second-stage narrowing (period-presence + stage-relevance) which drops anyone past the reviewer's stage.
-
-### Fix Plan
-
-#### Fix 1 — Correct "Total Employees" definition for review dashboards
-In `src/components/review/EmployeeSelectorGrid.tsx`, change the period-aware recompute so an employee counts if **any** of their KPIs in the selected period falls within the workflow stages relevant to this view:
-
-| View | Counts employees with any March KPI at any of: |
-|---|---|
-| `hr_pms` | `kra_set`, `self_review`, `manager_check`, `skip_level_check`, `hr_pms_review`, `audit`, `management_review`, `approved` (i.e., any stage their workflow contains) |
-| `audit` | same — any stage in their template |
-| `management` | same |
-| `manager` | same (limited to direct reports) |
-| `skip_level` | same (limited to skip-reports) |
-
-In short: **roster = employees whose workflow includes my review stage AND who have ≥1 KPI in this period**, regardless of where those KPIs currently sit.
-
-#### Fix 2 — Correct "HR PMS Reviewed" / "Audit Reviewed" / "Management Reviewed"
-Define "Reviewed by me this period" as: KPIs whose `<stage>_score` (or `<stage>_reviewed_at` audit column) is populated AND `review_period = March` AND `review_year = 2026`. This avoids double-counting work that bypassed the stage.
-
-For HR PMS: count KPIs where `hr_pms_score IS NOT NULL` (or equivalent) for March 2026.
-
-#### Fix 3 — Correct "Total KPIs" 
-Change to: total KPIs in this period belonging to employees in the current roster (after demographic + workflow filters), not stage-scoped. Label tooltip: *"All KPIs in this period for employees visible in this view"*.
-
-#### Fix 4 — Tooltip clarity
-Add tooltips to all 5 stat cards explaining the exact definition (e.g., *"Employees with at least one KPI in March whose workflow includes HR PMS"*).
-
-### UI Mockup
+#### 1. Promote "Explorer Mode" as a first-class toggle (not a hidden status filter)
+Add a prominent **"Explore All Employees"** toggle pill at the top of the Audit dashboard, next to the view title. When ON:
+- Status filter auto-switches to `cross_check` (we keep the existing logic — zero risk).
+- An amber "Explorer Mode (Read-Only)" badge appears in the header.
+- The Status dropdown itself is hidden (it has no meaning when browsing all employees).
+- The diagnostic line shows "Browsing all 2,533 active employees — read-only".
 
 ```text
-┌──────────────────┬──────────────┬──────────────────┬──────────────────┬──────────────┐
-│ Total Employees  │ Pending      │ In HR PMS Review │ HR PMS Reviewed  │ Total KPIs   │
-│      107  ⓘ      │      0       │       28         │      739         │   1,758      │
-│ In Mar 2026      │ Before HR PMS│ Currently here   │ HR PMS completed │ This period  │
-└──────────────────┴──────────────┴──────────────────┴──────────────────┴──────────────┘
-ⓘ tooltip: "Employees with at least one KPI in March 2026 whose workflow includes the HR PMS stage"
+┌─ Audit Panel ──────────────────────────────────────────────┐
+│  March 2026 ▼   [🔍 Explore All Employees: ◉ ON]   [+ Filters] │
+│  ⚠ Explorer Mode (Read-Only) — viewing employees outside   │
+│     your assigned audit scope                              │
+└────────────────────────────────────────────────────────────┘
 ```
+
+Toggling OFF returns the auditor to their normal scope (default `all` status filter, assignments visible, scoring enabled where in-scope).
+
+#### 2. Enforce read-only state in the scorecard for explorer mode
+When an employee is opened from explorer mode (cross-check), pass `exploreMode={true}` into `UnifiedScorecard` and `KpiReviewPanel`. This:
+- Hides the **Auditor Score** input fields, **Save**, **Send Back**, **Forward** buttons.
+- Replaces them with a read-only banner: *"You are viewing this employee in Explorer Mode. Scoring, queries, and workflow actions are disabled. Switch off Explorer Mode to act on assigned employees."*
+- Allows: viewing all scores (Self / Manager / Skip / HR PMS / Auditor / Management / Final), viewing the journey timeline, viewing evidence, viewing observations & queries.
+- Disables: writing observations, raising queries, marking N/A, sending back, scoring, downloading evidence (configurable — default ON, since auditors can already download from in-scope).
+
+#### 3. Make the entry point obvious — sidebar mini-link
+Under "Audit Panel" in the sidebar, add a sub-item: **"Explore Employees (Read-Only)"** → `/dashboard?view=audit&explore=1`. Same destination as the toggle, just discoverable from the sidebar.
+
+#### 4. Tooltip + telemetry-light log entry
+Hover tooltip on the toggle: *"Browse all employees in the organization in read-only mode. Useful for cross-checking ratings outside your assigned audit scope."* Each time an auditor opens a scorecard in Explorer Mode, write a `kpi_audit_log` entry `EXPLORER_VIEW` (performed_by = auditor, kpi_id, period). Lightweight, satisfies the "Audit Trail" project rule.
 
 ### Files Touched
 
 | File | Change |
 |---|---|
-| `src/components/review/EmployeeSelectorGrid.tsx` | Rewrite `stats.totalEmployees`, `stats.reviewed`, `stats.totalKpis` recompute blocks. Add Tooltip wrappers explaining each metric. Keep diagnostic line. |
-| `src/components/review/StatCard.tsx` (if separate) or inline | Accept `tooltip?: string` prop |
-| `DOCUMENTATION.md` | v2.64.11 — Stat card metric corrections for reviewer dashboards |
-| `mem://features/review/reviewer-dashboard-view-architecture` | Append: "Stat cards: Total Employees = period-present + workflow-eligible (any stage); Reviewed = KPIs with reviewer signature in period; Total KPIs = period total for visible roster" |
+| `src/components/review/EmployeeSelectorGrid.tsx` | Add `Explore All` toggle in audit view header; wire to `statusFilter='cross_check'`; show amber Explorer banner; hide Status dropdown when on; pass `exploreMode` down to the opened scorecard. |
+| `src/components/review/UnifiedScorecard.tsx` | Accept `exploreMode?: boolean` prop. When true, hide auditor edit inputs + workflow action buttons, show read-only banner, disable observation/query mutations. |
+| `src/components/review/KpiReviewPanel.tsx` | Same — pass-through of `exploreMode`, gate the panel actions. |
+| `src/components/layout/AppSidebar.tsx` | Add "Explore Employees (Read-Only)" sub-link under Audit for `auditor` + `admin` roles. |
+| `src/pages/Dashboard.tsx` | Read `?explore=1` URL param → set initial `statusFilter='cross_check'` and `exploreMode=true`. |
+| Edge function / DB | None needed — RLS already blocks any unintended writes. Optional: `kpi_audit_logs` insert from client for `EXPLORER_VIEW` (no schema change). |
+| `DOCUMENTATION.md` | v2.65.0 — Auditor Explorer Mode (read-only org-wide browsing). |
+| `mem://features/review/auditor-access-expansion` | Append: "Explorer Mode = first-class toggle in Audit view; enforces UI read-only on top of existing RLS gates; logs `EXPLORER_VIEW` to audit log per opened KPI." |
 
 ### Risk & Impact
 
 | Area | Impact |
 |---|---|
-| Data | None (read-only metrics) |
-| Workflow / RLS | None |
-| Numbers shown | All 5 cards on HR PMS / Audit / Management / Manager / Skip-Level dashboards will increase to match DB truth. May surprise users — version note + tooltips explain why. |
-| Regression | Low. Sort, badges, filters, employee list all unchanged. Only stat card numerator/denominator math changes. |
-| Test matrix | (a) HR PMS Mar 2026 → Total Employees ≈ 107, Total KPIs = 1,758, In Review = 28, Reviewed ≥ 739. (b) Audit Mar 2026 → numbers reflect audit-stage truth. (c) Manager Review → only direct reports counted. (d) Tooltips render on hover. (e) Diagnostic line still shows "X eligible of Y active". |
+| Data | None. All writes already gated by RLS. New `EXPLORER_VIEW` audit log inserts are append-only, no business data. |
+| Workflow | None. Auditors' assignment-based scoring path is untouched; Explorer Mode is a separate UI mode. |
+| RLS | No changes. Existing `audit`-stage policies already prevent out-of-scope writes — we're just aligning the UI. |
+| Existing process | Zero interruption. Default landing on Audit panel = current behavior (assignments first). Explorer is opt-in. |
+| Performance | Same as today's Cross-Check — uses already-cached `allProfiles` query. |
+| Regression risk | Low. Adds a UI toggle + a `exploreMode` boolean prop. No state machine changes, no permission changes. |
+| Test matrix | (a) Auditor logs in → sees "Audit Panel" with assignments as today. (b) Toggles "Explore All" → sees all 2,533 employees, amber banner, status dropdown hidden. (c) Opens Sanjeeb 101178 → scorecard renders all stage scores, no auditor input fields, banner says read-only. (d) Tries to raise query/observation → buttons disabled with tooltip. (e) Toggles OFF → returns to normal Audit panel, full scoring restored on assigned. (f) Sidebar link `/dashboard?view=audit&explore=1` lands directly in Explorer Mode. (g) Audit log shows `EXPLORER_VIEW` entries. |
 
 ### Out of Scope
-- Server-side metric aggregation (current client-side calc is fast enough)
-- Changing the employee card list / sort / pagination
-- Touching dashboards outside the reviewer grid (admin reports, etc.)
+- Adding an Explorer Mode for non-auditor roles (HR PMS / Management already have org-wide access via their normal flows).
+- Persisting Explorer Mode across sessions (URL param + toggle is enough).
+- New filters specific to Explorer Mode (the existing demographic + period + search filters already work).
+- Bulk export of scores from Explorer Mode (separate Reports feature already covers this).
 
