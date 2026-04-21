@@ -25,8 +25,15 @@ Deno.serve(async (req) => {
     // Parse request body
     let batchLimit = 100;
     let fixNullValues = true;
-    let mode: "scan" | "repair" | "scan_stuck" | "repair_stuck" = "repair";
+    let mode:
+      | "scan"
+      | "repair"
+      | "scan_stuck"
+      | "repair_stuck"
+      | "scan_propagation_failures"
+      | "repair_propagation_failures" = "repair";
     let kpiIds: string[] = [];
+    let okvIds: string[] = [];
     try {
       const body = await req.json();
       if (body?.limit) batchLimit = Math.min(body.limit, 1500);
@@ -34,7 +41,10 @@ Deno.serve(async (req) => {
       if (body?.mode === "scan") mode = "scan";
       if (body?.mode === "scan_stuck") mode = "scan_stuck";
       if (body?.mode === "repair_stuck") mode = "repair_stuck";
+      if (body?.mode === "scan_propagation_failures") mode = "scan_propagation_failures";
+      if (body?.mode === "repair_propagation_failures") mode = "repair_propagation_failures";
       if (Array.isArray(body?.kpi_ids)) kpiIds = body.kpi_ids;
+      if (Array.isArray(body?.okv_ids)) okvIds = body.okv_ids;
     } catch { /* no body is fine */ }
 
     // === STATUS-STUCK PASS ===
