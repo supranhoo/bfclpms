@@ -1,70 +1,120 @@
 
 
-## RCA — "Value Entered" badge persists despite all visible employees being propagated
+## RCA — Why "KPI Scorecard Detail" shows >30 pending KPIs for Biswajit
 
-### Confirmed root cause
-The KPI "Enhance Campaign life of 1050 TPD" (March 2026) has **5 employee-scoped rows** in `org_kpi_values`, but the card only shows **3 employees** (Devendra, Subhransu, Sudhakar — all `propagated`).
+### Confirmed: this IS a real Org KPI propagation bug, not a report misreading.
 
-The two extra rows are stale assignment ghosts:
+For Biswajit Sahoo as **data owner** (March 2026), the database shows:
 
-| Employee | Status | Updated | Visible in card? |
+| Bucket | Count |
+|---|---|
+| Owned org KPIs (distinct) | 55 |
+| Total employee rows under those KPIs | 108 |
+| Rows in `kpis.status = 'kra_set'` | 36 |
+| ↳ of those, **half-propagated** (org_kpi_values has value + status `propagated`/`approved`, but NO `review_submissions` row and `kpis.status` still `kra_set`) | **29** |
+| ↳ truly no data entered yet | 5 |
+| ↳ has submission but stuck for other reasons | 2 |
+
+**Concrete proof** — KPI "Handle all breakdowns…" / "Achieve organization's production target", March 2026, 6 assigned employees, all `org_kpi_values` rows updated within a 5-second window today (11:38:00–11:38:05):
+
+| Employee | `kpis.status` | `org_kpi_values.status` | Has `review_submissions`? |
 |---|---|---|---|
-| Devendra Kumar Yadav | propagated | 12:33 today | ✓ |
-| Subhransu Sekhar Nayak | propagated | 12:33 today | ✓ |
-| Sudhakar Kumar Pandey | propagated | 12:33 today | ✓ |
-| **Biswanatha Mahanta** | **entered** | 07:23 today | ✗ (no longer assigned) |
-| Sajid Raza | approved | Apr 5 (prior) | ✗ |
+| Y R V S Murthy | `self_review` | propagated | ✓ |
+| Shrikant Ganguly | `approved` | propagated | ✓ |
+| **Monu Kumar Soni** | **kra_set** | propagated | ✗ |
+| **Prabhat Kumar Singh** | **kra_set** | approved | ✗ |
+| **Sanjay Kumar Dubey** | **kra_set** | approved | ✗ |
+| **Sushanta Ghosh** | **kra_set** | approved | ✗ |
 
-`getKpiStatus` (lines 192–209 of `src/pages/admin/OrgKpiDataEntry.tsx`) requires **every** matched row to be `propagated`/`approved`. Biswanatha's `entered` row — for someone who is not currently in the card's scoped employee list — drags the pill back to "Value Entered".
+Same Propagate click. 4 of 6 silently fell through.
 
-The v2.65.3 scope-aware filter only excludes rows with `employee_id='null'`. It does **not** exclude employee rows that are no longer in the KPI's current assignment set. That gap is the bug.
+### Why this happens
 
-### Why the orphan row exists
-Biswanatha was likely an assigned scoped employee for this KPI earlier today, then removed from the scope after data was saved. The `org_kpi_values` row was not deleted (matches existing policy — historical data is preserved). The badge logic must therefore be the place that ignores it.
+`handleCardSaveAndPropagate` (`src/pages/admin/OrgKpiDataEntry.tsx`) iterates over `values.scopedValues` — the rows the **card currently shows** (from `mappedEmployeesMap`, sourced from `useOrgLevelKpisWithEmployees`). For each, it calls the propagate RPC with that one `employeeId`.
 
-### Assumptions stated explicitly
-1. The fix belongs in `getKpiStatus`, not in DB cleanup. Historical rows are intentionally preserved.
-2. The card's currently-displayed scoped employee list is the source of truth for "who counts" toward the badge. I will use the same `scopedEmployeeIds` set the card already computes from `org_kpi_data_owners` / scope assignments.
-3. No schema, RLS, or RPC change.
+Inside the hook (`src/hooks/usePropagateOrgKpiValue.ts`, `fetchTargetKpis`), the call:
+1. Selects `kpis` rows matching `(category_id, kra_name, kpi_name)` and `is_org_level=true`.
+2. Filters down to `employee_id = employeeId`.
+3. Sends `kpi_ratings` to the `propagate_org_kpi_value` RPC.
+
+The RPC then `UPDATE kpis SET status='self_review' WHERE id=…`. Good for those rows.
+
+**The gap:** if an employee has an `org_kpi_values` row but **no matching row in `kpis`** (e.g. KPI was retroactively reassigned, KPI name changed slightly via "Copy KRAs" / KRA library sync, or `is_org_level` flag was toggled off and on for some employees), the propagate loop never includes them, so neither `review_submissions` nor `kpis.status` is updated for that employee. Yet a separate code path (the `await supabase.from('org_kpi_values').update({status:'propagated'})` block at lines 671–680) bulk-updates **all** matching `org_kpi_values` rows for any `propagatedScopeIds` employee. That mass update is **scope-id-driven**, not `kpi_id`-driven, so it can flip `org_kpi_values.status` for an employee whose `kpis` row was never touched.
+
+This is exactly the half-propagation we patched the dashboard for in v2.65.4 (display gating). The dashboard now hides the phantom value, but the **underlying state divergence still exists**, which is why the report still flags those rows as pending — because they truly are pending: `kpis.status = 'kra_set'`.
+
+### Two things to fix
+
+1. **Stop creating new half-propagations** (forward-fix, prevents recurrence).
+2. **Repair the existing 29 half-propagated rows for Biswajit + the equivalent rows for all other owners across all periods** (one-time data backfill).
+
+### Assumptions explicitly stated
+
+- The RPC itself is fine — given a `kpi_id`, it correctly upserts `review_submissions` and advances `kpis.status`. The bug is upstream: which `kpi_id`s the caller sends.
+- The card's "currently mapped employees" set (`mappedEmployeesMap`) is the source of truth for who SHOULD receive a propagate call. Any drift between that set and the actual `kpis` rows for that `(category, kra, kpi, period)` is the bug surface.
+- Backfill should reuse the existing RPC (`propagate_org_kpi_value`) per-`kpi_id`, not invent new logic, so the audit trail stays consistent.
 
 ### Alternatives considered and rejected
-- **Delete orphan `org_kpi_values` rows when scope changes.** Rejected — silent historical data loss.
-- **Mark orphan rows as `propagated` automatically.** Rejected — fabricates state.
-- **Match by row `updated_at` recency.** Rejected — brittle and wrong semantics.
+
+- **Tighten the report to hide rows where `org_kpi_values.status='approved'`**. Rejected — that hides the real workflow gap from operators and contradicts v2.65.4's "honest display" policy.
+- **Auto-advance `kpis.status` whenever `org_kpi_values.status='approved'`**. Rejected — fabricates submission data and violates submission-score-integrity policy.
+- **Delete orphan `org_kpi_values` rows**. Rejected — destroys historical entry record.
 
 ---
 
-## Plan — minimum-code fix
+## Plan — minimum-code fix in two parts
 
-### Single change in `src/pages/admin/OrgKpiDataEntry.tsx`
-Inside `getKpiStatus`, after the existing `null`-filter, add one more filter step: only count rows whose `employee_id` (or `department_id` for department scope) is in the KPI's **current** scoped-id set.
+### Part 1 — Forward-fix: align the Propagate loop with all `kpis` rows that actually exist
 
-The card already computes the current scoped employee/department ids per KPI to render the rows. I will lift/reuse that computation (via the same hook/util the card uses — `useOrgKpiScopedAssignments` or equivalent) and pass the set into `getKpiStatus` via a `Map<kpiKey, Set<string>>`.
+Single change in `src/pages/admin/OrgKpiDataEntry.tsx` `handleCardSaveAndPropagate`:
 
-Estimated: ~10 lines in `OrgKpiDataEntry.tsx`, no other files.
+After the existing scoped-values loop, do **one consistency check**: for every employee that has a `kpis` row for this `(category_id, kra_name, kpi_name, period, year, is_org_level=true)` but did **not** receive a propagate call (i.e. they were not in `values.scopedValues` because the card didn't render them), surface a clear warning toast listing the missed employees, and **do not** update their `org_kpi_values.status` to `propagated` (so the data state stays consistent with workflow state).
+
+That stops new half-propagations. ~15 lines.
+
+### Part 2 — One-time backfill via the existing Data Repair engine
+
+Add one new repair workflow under `/admin/settings` → Data Repair (existing engine, see `mem://features/admin/data-repair-engine`):
+
+- **"Repair Half-Propagated Org KPIs"**
+  - Dry-run first: lists every `(kpi_id, employee_name, period)` where:
+    - `kpis.status = 'kra_set'`
+    - matching `org_kpi_values` row exists with `achieved_value` not null and `status IN ('propagated','approved')`
+    - no `review_submissions` row exists for `kpi_id`
+  - On confirm: for each row, calls the existing `propagate_org_kpi_value` RPC with the stored `achieved_value` to create the `review_submissions` row and advance `kpis.status` to `self_review`.
+  - Audit trail: every backfilled `kpi_id` gets a `kpi_audit_logs` entry with `action='ORG_KPI_BACKFILL_PROPAGATION'`, `performed_by=admin`, source recorded.
+
+This is a self-contained admin tool, fits the Data Repair pattern already in use. ~80 lines (UI dialog + handler + dry-run query).
 
 ### Files touched
+
 | File | Change |
 |---|---|
-| `src/pages/admin/OrgKpiDataEntry.tsx` | Build `currentScopedIdsByKpi: Map<kpiKey, Set<string>>` from existing scope data; in `getKpiStatus` filter `matching` to rows whose `employee_id`/`department_id` is in that set. |
-| `DOCUMENTATION.md` | Append v2.65.5: badge ignores orphan rows for employees/departments no longer in the KPI's current scope. |
+| `src/pages/admin/OrgKpiDataEntry.tsx` | Add post-loop consistency check; warn on missed employees; don't flip their `org_kpi_values.status`. |
+| `src/pages/admin/AdminSettings.tsx` (or existing Data Repair component) | Add "Repair Half-Propagated Org KPIs" card with dry-run + confirm. |
+| `src/hooks/useRepairHalfPropagatedOrgKpis.ts` (new) | Dry-run query + per-`kpi_id` repair loop calling existing RPC. |
+| `DOCUMENTATION.md` | v2.65.6 — Half-propagation forward-guard + backfill tool. |
+| `mem://features/admin/data-repair-engine` | Append new workflow. |
 
 ### Out of scope
-- No DB cleanup of orphan `org_kpi_values` rows.
-- No change to save/propagate handlers.
-- No change to org-scope branch (lines 184–191), already correct.
-- No new abstractions, no tests beyond the v2.65.3 baseline (this is a 1-condition tightening of an existing filter).
+
+- No change to `propagate_org_kpi_value` RPC.
+- No change to RLS or schema.
+- No change to the report — it is correct.
+- No automated cron repair. Admin-triggered only.
 
 ### Risk & Impact
-- **Data:** none — read-only badge logic.
-- **Workflow:** none — propagate already worked.
-- **UI/UX:** badge will now correctly show **Propagated** when all currently-scoped employees are propagated, ignoring rows for unassigned/historical employees. Affects all employee/department-scoped Org KPIs where membership has changed mid-period (positive impact).
-- **Regression risk:** low. Org-scope branch untouched. Employee/department branch only narrows further.
-- **Mitigation:** reuse the exact scoped-id source the card itself uses to render rows, so badge state and visible rows stay in sync by construction.
+
+- **Data:** Backfill creates `review_submissions` rows from existing `org_kpi_values.achieved_value` and advances `kpis.status` from `kra_set` → `self_review`. Reversible via existing rollback mutation. Dry-run mandatory.
+- **Workflow:** Affected employees will see their KPIs jump from "KRA Set" to "Self Review" with the propagated value pre-filled. Matches what they should have seen if the original Propagate hadn't half-failed.
+- **UI/UX:** No visible change to Org KPI Data Entry page beyond a warning toast on incomplete propagations.
+- **Regression risk:** low. Backfill reuses the production RPC. Forward-guard only narrows existing flow.
+- **Mitigation:** dry-run preview lists every affected row by name; admin approves explicitly; rollback path exists.
 
 ### Why this is the simplest correct fix
-- One filter step in one function.
-- Uses data the page already has.
-- No DB changes, no data migration, no new abstractions.
-- A senior engineer would call this a one-line semantic fix: "match the badge to what the card actually shows."
+
+- Forward-guard is one consistency check on existing data the page already has.
+- Backfill reuses the production RPC — no new propagation logic.
+- Report stays unchanged because the report was right all along.
+- A senior engineer would call this "stop the bleeding + repair the wound, using tools already in the kit."
 
