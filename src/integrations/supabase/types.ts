@@ -3091,6 +3091,9 @@ export type Database = {
           is_na: boolean
           kpi_name: string
           kra_name: string
+          last_revision_reason: string | null
+          last_revision_requested_at: string | null
+          last_revision_requested_by: string | null
           qualitative_options: Json | null
           r0: string | null
           r1: string | null
@@ -3101,6 +3104,7 @@ export type Database = {
           remarks: string | null
           review_period: string
           review_year: number
+          revision_count: number
           sent_back_at: string | null
           sent_back_by: string | null
           sent_back_reason: string | null
@@ -3126,6 +3130,9 @@ export type Database = {
           is_na?: boolean
           kpi_name: string
           kra_name: string
+          last_revision_reason?: string | null
+          last_revision_requested_at?: string | null
+          last_revision_requested_by?: string | null
           qualitative_options?: Json | null
           r0?: string | null
           r1?: string | null
@@ -3136,6 +3143,7 @@ export type Database = {
           remarks?: string | null
           review_period: string
           review_year: number
+          revision_count?: number
           sent_back_at?: string | null
           sent_back_by?: string | null
           sent_back_reason?: string | null
@@ -3161,6 +3169,9 @@ export type Database = {
           is_na?: boolean
           kpi_name?: string
           kra_name?: string
+          last_revision_reason?: string | null
+          last_revision_requested_at?: string | null
+          last_revision_requested_by?: string | null
           qualitative_options?: Json | null
           r0?: string | null
           r1?: string | null
@@ -3171,6 +3182,7 @@ export type Database = {
           remarks?: string | null
           review_period?: string
           review_year?: number
+          revision_count?: number
           sent_back_at?: string | null
           sent_back_by?: string | null
           sent_back_reason?: string | null
@@ -5242,6 +5254,10 @@ export type Database = {
           p_review_period?: string
           p_review_year?: number
         }
+        Returns: Json
+      }
+      request_org_kpi_revision: {
+        Args: { p_kpi_id: string; p_reason: string }
         Returns: Json
       }
     }
