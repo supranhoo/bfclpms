@@ -47,6 +47,11 @@ export function OrgKpiPendingReport({ rows, reviewPeriod, reviewYear }: OrgKpiPe
     const propagatedCount = rows.filter(r => r.status === 'Propagated').length;
     const completionPct = totalKpis > 0 ? Math.round(((enteredCount + propagatedCount) / totalKpis) * 100) : 0;
 
+    // Distinct KPI counts (one card per category+KRA+KPI)
+    const kpiKey = (r: PendingReportRow) => `${r.category}||${r.kraName}||${r.kpiName}`;
+    const distinctTotalKpis = new Set(rows.map(kpiKey)).size;
+    const distinctPendingKpis = new Set(rows.filter(r => r.status === 'Pending').map(kpiKey)).size;
+
     const toSheetRow = (r: PendingReportRow) => ({
       'Category': r.category,
       'KRA': r.kraName,
@@ -89,7 +94,7 @@ export function OrgKpiPendingReport({ rows, reviewPeriod, reviewYear }: OrgKpiPe
     const summaryPending = [
       [`Org KPI Pending Report — ${reviewPeriod} ${reviewYear}`],
       [`Generated: ${new Date().toLocaleDateString()}`],
-      [`Total: ${totalKpis} | Pending: ${pendingCount} | Entered: ${enteredCount} | Propagated: ${propagatedCount} | Completion: ${completionPct}%`],
+      [`${pendingCount} employee assignment(s) across ${distinctPendingKpis} distinct KPI(s) pending. (Total: ${totalKpis} assignments / ${distinctTotalKpis} KPIs | Entered: ${enteredCount} | Propagated: ${propagatedCount} | Completion: ${completionPct}%)`],
       [],
     ];
     const ws1 = XLSX.utils.aoa_to_sheet(summaryPending);
@@ -107,7 +112,7 @@ export function OrgKpiPendingReport({ rows, reviewPeriod, reviewYear }: OrgKpiPe
     const summaryFull = [
       [`Org KPI Full Status Report — ${reviewPeriod} ${reviewYear}`],
       [`Generated: ${new Date().toLocaleDateString()}`],
-      [`Total: ${totalKpis} | Pending: ${pendingCount} | Entered: ${enteredCount} | Propagated: ${propagatedCount} | Completion: ${completionPct}%`],
+      [`${totalKpis} employee assignment(s) across ${distinctTotalKpis} distinct KPI(s). (Pending: ${pendingCount} / ${distinctPendingKpis} KPIs | Entered: ${enteredCount} | Propagated: ${propagatedCount} | Completion: ${completionPct}%)`],
       [],
     ];
     const ws2 = XLSX.utils.aoa_to_sheet(summaryFull);
