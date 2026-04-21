@@ -82,8 +82,8 @@ export function OrgKpiScopeChangeDialog({
 
         {/* Aggregation/Split warning */}
         {(isAggregating || isSplitting) && (
-          <div className="flex gap-2 rounded-md border border-warning/30 bg-warning/5 p-3 text-xs">
-            <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
+          <div className="flex gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
             <div className="space-y-1">
               {isAggregating && (
                 <p>
@@ -140,7 +140,7 @@ export function OrgKpiScopeChangeDialog({
                   className="flex items-center justify-between px-3 py-2 text-sm"
                 >
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-success" />
+                    <CheckCircle2 className="h-4 w-4 text-primary" />
                     <span className="font-medium">{p.period} {p.year}</span>
                   </div>
                   <Badge variant="outline" className="text-[11px]">
