@@ -351,7 +351,7 @@ export default function KpiScorecardDetail() {
       <Card>
         <CardContent className="pt-4 pb-3">
           <div className="flex flex-wrap items-center gap-3">
-            <Select value={selectedMonth} onValueChange={v => { setSelectedMonth(v); setCurrentPage(1); }}>
+            <Select value={selectedMonth} onValueChange={v => setSelectedMonth(v)}>
               <SelectTrigger className="w-[130px] h-8 text-xs">
                 <SelectValue />
               </SelectTrigger>
@@ -360,7 +360,7 @@ export default function KpiScorecardDetail() {
               </SelectContent>
             </Select>
 
-            <Select value={String(selectedYear)} onValueChange={v => { setSelectedYear(parseInt(v)); setCurrentPage(1); }}>
+            <Select value={String(selectedYear)} onValueChange={v => setSelectedYear(parseInt(v))}>
               <SelectTrigger className="w-[85px] h-8 text-xs">
                 <SelectValue />
               </SelectTrigger>
@@ -368,6 +368,17 @@ export default function KpiScorecardDetail() {
                 {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
               </SelectContent>
             </Select>
+
+            <Button
+              size="sm"
+              variant={isDirty ? 'default' : 'outline'}
+              className="h-8 text-xs gap-1"
+              onClick={handleLoadData}
+              disabled={isFetching}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+              {appliedQuery ? (isDirty ? 'Reload (filters changed)' : 'Reload Data') : 'Load Data'}
+            </Button>
 
             <CompanyFilter
               companies={companies}
@@ -396,7 +407,14 @@ export default function KpiScorecardDetail() {
             </div>
 
             <div className="ml-auto flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">{filtered.length} KPIs</span>
+              <span className="text-xs text-muted-foreground">
+                {appliedQuery ? `${filtered.length} KPIs` : 'Not loaded'}
+                {lastLoadedAt && appliedQuery && (
+                  <span className="ml-2 text-[10px] opacity-70">
+                    · loaded {lastLoadedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+              </span>
               {canExport && (
                 <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={handleExport} disabled={!filtered.length}>
                   <Download className="h-3.5 w-3.5" /> Export
@@ -404,13 +422,32 @@ export default function KpiScorecardDetail() {
               )}
             </div>
           </div>
+          {isDirty && appliedQuery && (
+            <div className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400">
+              <Info className="h-3 w-3" />
+              Filters changed — click "Reload" to fetch updated data.
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* Table */}
       <Card>
         <CardContent className="p-0">
-          {isLoading ? (
+          {!appliedQuery ? (
+            <div className="p-12 text-center space-y-3">
+              <RefreshCw className="h-10 w-10 mx-auto text-muted-foreground/50" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Select your filters and click "Load Data"</p>
+                <p className="text-xs text-muted-foreground">
+                  Data is loaded on demand to keep the page fast. Search, sort, and pagination will work on loaded data without refetching.
+                </p>
+              </div>
+              <Button size="sm" onClick={handleLoadData} className="gap-1">
+                <RefreshCw className="h-3.5 w-3.5" /> Load Data
+              </Button>
+            </div>
+          ) : isLoading ? (
             <div className="p-6 space-y-3">
               {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
             </div>
