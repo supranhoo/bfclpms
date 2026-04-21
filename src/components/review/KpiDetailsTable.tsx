@@ -556,7 +556,12 @@ export function KpiDetailsTable({
                 {/* Achieved Value */}
                 <TableCell>
                   {(() => {
-                    const achievedVal = orgValue?.achieved_value ?? submission?.achieved_value ?? null;
+                    // v2.65.4 — Only fall back to org_kpi_values when a real submission
+                    // record exists for this KPI. Prevents phantom "Achieved" values for
+                    // KPIs still in kra_set with no propagated workflow row.
+                    const achievedVal = submission
+                      ? (submission.achieved_value ?? orgValue?.achieved_value ?? null)
+                      : null;
                     if (achievedVal === null || achievedVal === undefined) {
                       return <span className="text-muted-foreground">—</span>;
                     }

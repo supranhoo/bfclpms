@@ -176,6 +176,11 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
   useEffect(() => { evidenceUrlRef.current = evidenceUrl; }, [evidenceUrl]);
   useEffect(() => { scopedValuesRef.current = scopedValues; }, [scopedValues]);
 
+  // v2.65.4 — Track which scope rows the user actually edited this session.
+  // Used by parent's Propagate handler to skip untouched rows that happen to
+  // hold a stale 0 from a prior Save, preventing silent zero-propagation.
+  const touchedScopeIdsRef = useRef<Set<string>>(new Set());
+
   const [isPropagating, setIsPropagating] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -302,6 +307,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
             evidenceUrl: s.isNa ? null : s.evidenceUrl,
             isNa: s.isNa,
             subFactors: s.subFactors,
+            _touched: touchedScopeIdsRef.current.has(s.scopeId),
           }))
         : undefined,
     };
@@ -339,6 +345,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
   };
 
   const handleScopedChange = (scopeId: string, field: 'achievedValue' | 'remarks' | 'evidenceUrl' | 'isNa' | 'subFactors', value: string | null) => {
+    touchedScopeIdsRef.current.add(scopeId);
     setScopedValues(prev => prev.map(r => {
       if (r.scopeId !== scopeId) return r;
       if (field === 'subFactors') {
