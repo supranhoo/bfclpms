@@ -1,75 +1,79 @@
 
 
-## RCA — Half-propagated Org KPIs across March 2026
+## RCA — Why "Org KPI Data Entry" shows 10 but the report shows 21+
 
-### Yes — the same bug affects multiple KPIs, not just Biswajit's.
+### Both numbers are correct. They count different things.
 
-Querying the entire org for March 2026 with the half-propagation signature (`kpis.status='kra_set'` + `org_kpi_values.status` in (`propagated`,`approved`) + `achieved_value` present + **no** `review_submissions` row):
+| View | Unit | Count for Biswajit (March 2026) |
+|---|---|---|
+| Org KPI Data Entry page | **Distinct KPI cards** (category + KRA + KPI). One card per KPI definition, regardless of how many employees it's assigned to. | **10** |
+| KPI Scorecard Detail report | **Per-employee KPI rows**. One row for every (employee × KPI) assignment. | **21** |
 
-| Scope | Count |
-|---|---|
-| Total half-propagated rows (March 2026) | **25** |
-| Distinct KPIs affected | **13** |
-| Distinct employees affected | **20** |
-| Same pattern in Feb 2026 | 1 row |
-| Older periods | 0 |
+### Math checks out
+The 21 rows in the user's export collapse to 10 unique KPIs:
 
-### KPIs affected in March 2026
+| KPI | Rows in report | Card on Org KPI page |
+|---|---|---|
+| Compliance to TAT for In-bound vehicles (12 hrs) | 4 (Anant, Bhoopendra, Jitendra, Rakesh) | 1 |
+| Compliance to TAT for In-bound vehicles (6 hrs) | 1 (Sajid) | 1 |
+| Refractory life - Campaign life tonnage wise | 4 (Anant, Anil, Umesh, Vidhan) | 1 |
+| Pending metal for jigging Inventory below 5T | 1 (Anant) | 1 |
+| Raw Material Plan & Other MIS (Monthly) | 3 (Bhoopendra, Ramchandra, Subhransu) | 1 |
+| Raw Material Plan & Other MIS (Daily) | 1 (Jyoti) | 1 |
+| Consumable cost | 1 (Jitendra) | 1 |
+| Ensure target availability of furnace and all associated equipment | 1 (Mandala) | 1 |
+| Handle all breakdowns and minimize downtime | 5 (Mandala, Monu, Prabhat, Sanjay, Sushanta) | 1 |
+| **Total** | **21** | **10** |
 
-| KPI | Employees stuck |
-|---|---|
-| Handle all breakdowns and minimize downtime to achieve production Target | 4 |
-| Raw Material Plan & Other MIS | 4 |
-| Refractory life - Campaign life tonnage wise | 4 |
-| Ensure target availability of furnace and all equipment | 3 |
-| Keep Inventory below 300T | 2 |
-| Achieve production target from 3X100 TPD | 1 |
-| Consumable cost | 1 |
-| Enhance Campaign life of 1050 TPD | 1 |
-| Enhance Campaign life of 3x100 | 1 |
-| Ensure target availability of furnace and all associated equipment | 1 |
-| Furnace & Equipment Availability | 1 |
-| Mechanical Availability of Critical Equipment | 1 |
-| Pending metal for jigging Inventory below 5T | 1 |
+DB confirms: 10 distinct (category, kra, kpi) tuples are pending; those tuples have 21 underlying `kpis` rows in `kra_set` status.
 
-The "Handle all breakdowns…" / "Achieve org production target" KPI alone has 4 stuck employees from a single Propagate click on 21-Apr — confirming the bug is current, not just historical.
+### Why the design works this way
+- **Data Entry page is action-oriented**: "How many KPIs do I, the data owner, need to enter a value for?" The owner enters one value per KPI; propagation distributes it to all assigned employees. So one card = one action.
+- **Scorecard Detail report is workflow-oriented**: "Which employee × KPI combinations are still pending review?" Each employee owns the next-stage workflow action, so each is listed.
 
-### What this means
-- The forward-guard already shipped (v2.65.6) prevents **new** half-propagations from this point forward.
-- These 26 existing rows (25 March + 1 February) need the **one-time backfill** that Part 2 of the prior plan covered. Until that runs, all 20 employees see "Pending" in the Scorecard Detail report and their dashboards even though the data was entered and Propagate was clicked.
+### What's NOT happening
+- No half-propagation (verified — the prior v2.65.6 forward-guard and the data-repair tool already addressed those for March 2026).
+- No data desync between `org_kpi_values` and `kpis.status`.
+- No filter mismatch in either view.
+
+### The real issue
+This is a **UX clarity problem**, not a code bug. Users naturally expect "Pending: 10" and "21 rows in report" to be the same number. The page does not currently disclose that the count is "KPIs to enter" vs "employee assignments."
 
 ---
 
-## Plan — run the existing repair tool against this scope
+## Plan — single small UI clarification, no logic change
 
-### What to do (no new code)
-The repair tool already exists at **Admin Settings → Data Repair → "Repair Orphaned Propagations"** (edge function `repair-orphaned-propagations`, source already in `supabase/functions/`). It's designed for exactly this signature.
+### Single change
+In `src/pages/admin/OrgKpiDataEntry.tsx`, update the "Pending" stat tile (and the Pending Report subtitle) to show **both numerators**:
 
-Steps:
-1. Open Admin Settings → Data Repair.
-2. Run the tool in **scan mode** first (dry-run). Expect ~26 rows listed across March + February 2026.
-3. Review the dry-run output. Confirm the listed `(employee, KPI, achieved_value)` triples match the table above.
-4. Re-run in **repair mode**. The tool will:
-   - Create the missing `review_submissions` row from the stored `achieved_value`.
-   - Compute `self_score` and `self_rating` from the KPI's thresholds.
-   - Advance `kpis.status` from `kra_set` → `self_review`.
-   - Write a `kpi_audit_logs` entry per repaired KPI.
-5. Verify: the "KPI Scorecard Detail" report's pending count for these 20 employees drops by the corresponding number of rows; their dashboards now show the propagated values.
+> **10 KPIs pending** (covering 21 employee assignments)
+
+Implementation:
+- Add a one-liner derived count from the existing `pendingReportRows` (already computed in the component) — count of distinct `(category_id, kra_name, kpi_name)` vs total row count.
+- Render as small caption text under the existing "Pending" badge / count.
+- Mirror the same dual-count caption in `OrgKpiPendingReport` header (e.g. "21 employee assignments across 10 KPIs").
+
+That's it. Pure presentational, ~10 lines.
 
 ### Files touched
-None. Repair tool already shipped.
-
-### Risk & Impact
-- **Data:** creates 26 `review_submissions` rows from existing `org_kpi_values` data; advances 26 `kpis` rows. Reversible via existing rollback. Audit-logged.
-- **Workflow:** affected employees' KPIs jump from "KRA Set" → "Self Review" with pre-filled propagated values — exactly the state they should have been in if Propagate hadn't half-failed.
-- **Regression risk:** zero. Tool was used previously; logic unchanged.
-- **Scope:** narrow — only the 26 rows matching the half-propagation signature are touched.
+| File | Change |
+|---|---|
+| `src/pages/admin/OrgKpiDataEntry.tsx` | Compute `distinctPendingKpis` from existing `pendingReportRows`; render dual-count caption. |
+| `src/components/admin/OrgKpiPendingReport.tsx` | Show "X assignments across Y KPIs" subtitle. |
+| `DOCUMENTATION.md` | v2.65.7 — UI clarification: dual-count display on Org KPI Data Entry. |
 
 ### Out of scope
-- No code changes. Forward-guard already in place from v2.65.6.
-- No DB migration. Repair runs through the existing edge function.
-- No report changes. Report is correct; counts will resolve naturally after repair.
+- No DB query changes. Data is already correct.
+- No changes to KPI Scorecard Detail report.
+- No new endpoints.
+- No data repair (none needed).
 
-### Recommendation
-Run the existing repair tool. Dry-run first, confirm 26 rows, then repair. That fully closes the loop opened in v2.65.6.
+### Risk & Impact
+- **Data:** none.
+- **Workflow:** none.
+- **UI/UX:** purely additive caption. No layout reflow risk beyond one extra line of small text.
+- **Regression risk:** zero — read-only derivation from already-rendered data.
+
+### Why this is the simplest correct fix
+Both numbers are right. The only thing missing is telling the user that "10" and "21" measure different things. One caption resolves it without touching any logic.
 
