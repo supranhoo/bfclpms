@@ -140,6 +140,25 @@
 
 ---
 
+## Step 8 — Late-joiner auto-pull trigger (Bucket K)
+
+| Field | Value |
+|---|---|
+| **Goal** | Pre-fill submissions for employees onboarded **after** a Data Owner clicked Propagate. Closes Gap #3 ("ghost assignment" — late joiner gets `kpis` row but no `review_submissions`). |
+| **Status** | **✅ Implemented (v2.66.3 — 2026-04-21).** New feature flag `app_settings.enable_org_kpi_autopull` (default `false`). New helper `compute_org_kpi_score_for_kpi(uuid, numeric)`. New trigger `trg_autopull_propagated_org_kpi` on `kpis AFTER INSERT`. New RPC `backfill_late_joiner_org_kpis(p_dry_run)` for historical rows. New hook `useLateJoinerBackfill`. New `LateJoinerBackfillSection` mounted in DataRepairTab. |
+| **Code change** | DB migration (flag + helper + trigger + RPC), `src/hooks/useLateJoinerBackfill.ts`, `src/components/admin/LateJoinerBackfillSection.tsx`, wired into `DataRepairTab.tsx`. |
+| **Effort** | ~2 hours. |
+| **Behaviour** | When a `kpis` row is inserted with `is_org_level=true` and `status='kra_set'`, the trigger looks up the most-specific matching `org_kpi_values` row (employee → department → org-wide) where `status IN ('propagated', 'approved')`. If found: pre-fills `review_submissions` with the OKV's `achieved_value`, computes self-score from KPI thresholds, advances status to `self_review`, and audit-logs `ORG_KPI_AUTOPULLED_FOR_LATE_JOINER` with scope match metadata. If OKV is `is_na=true`, the N/A flag is propagated. |
+| **Feature flag** | `app_settings.enable_org_kpi_autopull` defaults to `false` for one release. The trigger short-circuits early if the flag is off — near-zero overhead on regular KPI inserts. Admins enable in System Settings when ready. |
+| **Repair pass** | `LateJoinerBackfillSection` (Bucket K card in DataRepairTab) provides dry-run scan + confirmed apply for any historical late-joiner rows created BEFORE the trigger shipped. Uses identical scope-resolution logic. |
+| **Atomicity** | Trigger runs inside the original INSERT transaction — if any step fails, the entire `kpis` insert rolls back. The repair RPC processes rows individually (skip-on-error). |
+| **Dependencies** | Step 3 (OKV propagated/approved status must be reliable before consuming it). |
+| **Rollback plan** | Trigger can be disabled instantly via the feature flag. Backfill rows are reversible via Step Back per row. The new column / trigger / 2 functions are isolated — safe to drop. |
+| **Risk** | **Medium.** Trigger fires on every `kpis` insert. Mitigated by (a) early short-circuit on `is_org_level=false`, (b) feature flag default `false`, (c) `ON CONFLICT (kpi_id) DO NOTHING` prevents duplicate-key crashes. |
+| **Done when** | New employees onboarded mid-period get pre-filled scores when the flag is on; admin scan reports historical late-joiners; one-click backfill clears the bucket; audit log shows the trigger entries. |
+
+---
+
 ## Cross-cutting requirements (apply to every step)
 
 1. **Atomic doc sync.** Every step's PR must update `docs/specs/org-kpi-data-entry-spec.md` (Version History entry + status table in §9) and `DOCUMENTATION.md` in the same commit.
