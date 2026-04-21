@@ -60,6 +60,25 @@ function getCycleLength(frequency: string): number {
   }
 }
 
+const MONTH_ABBREV = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+/**
+ * Resolve the correct cycle anchor (e.g. 'Apr-May', 'Apr-Jun', 'Jan-Dec') for a given
+ * frequency + target month. Standard calendar-aligned cycles (Jan-anchored) are used to
+ * match the existing UI options and the database `resolve_cycle_anchor` helper.
+ */
+function resolveCycleAnchorForPeriod(frequency: string | null, targetMonth: string): string | null {
+  if (!frequency) return null;
+  const len = getCycleLength(frequency);
+  if (len <= 1) return null;
+  const idx = MONTHS.indexOf(targetMonth);
+  if (idx < 0) return null;
+  if (len === 12) return 'Jan-Dec';
+  const startIdx = Math.floor(idx / len) * len;
+  const endIdx = startIdx + len - 1;
+  return `${MONTH_ABBREV[startIdx]}-${MONTH_ABBREV[endIdx]}`;
+}
+
 /**
  * Given a target month index (0-based), a KPI frequency, and optional cycle start,
  * resolve the correct terminal month index for the cycle that contains the target month.
@@ -546,6 +565,10 @@ Deno.serve(async (req) => {
 });
 
 function buildNewKpi(source: any, targetMonth: string, targetYear: number) {
+  const resolvedCycleStart = resolveCycleAnchorForPeriod(source.frequency, targetMonth) ?? source.frequency_cycle_start;
+  if (resolvedCycleStart !== source.frequency_cycle_start) {
+    console.log(`[Rollover] Cycle anchor resolved for ${source.kpi_name}: ${source.frequency_cycle_start} → ${resolvedCycleStart} (${source.frequency} @ ${targetMonth})`);
+  }
   return {
     employee_id: source.employee_id,
     category_id: source.category_id,
@@ -571,7 +594,7 @@ function buildNewKpi(source: any, targetMonth: string, targetYear: number) {
     org_level_scope: source.org_level_scope,
     ref_code: source.ref_code,
     day_count_type: source.day_count_type,
-    frequency_cycle_start: source.frequency_cycle_start,
+    frequency_cycle_start: resolvedCycleStart,
     require_resubmit_reason: source.require_resubmit_reason,
     review_period: targetMonth,
     review_year: targetYear,

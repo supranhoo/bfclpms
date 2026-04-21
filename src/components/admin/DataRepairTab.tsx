@@ -11,6 +11,7 @@ import { SiblingRepairSection } from './SiblingRepairSection';
 import { BulkZeroScoreSection } from './BulkZeroScoreSection';
 import { LateJoinerBackfillSection } from './LateJoinerBackfillSection';
 import { OrgKpiInheritanceReconciler } from './OrgKpiInheritanceReconciler';
+import { OrgKpiCycleAnchorRepair } from './OrgKpiCycleAnchorRepair';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
@@ -755,6 +756,9 @@ export function DataRepairTab() {
 
       {/* v2.66.6 — Org KPI Inheritance Reconciler */}
       <OrgKpiInheritanceReconciler />
+
+      {/* v2.66.7.2 — Org KPI Cycle Anchor Repair */}
+      <OrgKpiCycleAnchorRepair />
 
       <ConfirmDestructiveDialog
         open={showConfirm}
