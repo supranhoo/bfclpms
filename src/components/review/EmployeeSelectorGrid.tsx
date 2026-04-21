@@ -1528,6 +1528,29 @@ export function EmployeeSelectorGrid({
               Manage Assignments
             </Button>
           )}
+          {viewLevel === 'audit' && (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={isExploreMode ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setStatusFilter(isExploreMode ? 'all' : 'cross_check')}
+                    className={isExploreMode
+                      ? 'gap-1.5 bg-amber-500 hover:bg-amber-600 text-white border-amber-500'
+                      : 'gap-1.5'}
+                  >
+                    <Eye className="h-4 w-4" />
+                    <span className="hidden sm:inline">Explore All</span>
+                    {isExploreMode && <Badge variant="secondary" className="ml-1 bg-white/20 text-white border-0 text-[10px] px-1.5">ON</Badge>}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs text-xs">
+                  Browse all employees in the organization in read-only mode. Useful for cross-checking ratings outside your assigned audit scope.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           {/* Compact Period Selector */}
           <div className="p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50">
             <ReviewPeriodSelectorEnhanced
@@ -1538,8 +1561,21 @@ export function EmployeeSelectorGrid({
         </div>
       </div>
 
+      {/* v2.65.0 — Explorer Mode banner */}
+      {isExploreMode && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30 px-4 py-3 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div className="flex-1 text-sm">
+            <p className="font-semibold text-amber-900 dark:text-amber-200">Explorer Mode (Read-Only)</p>
+            <p className="text-amber-800 dark:text-amber-300/90 text-xs mt-0.5">
+              Viewing all employees in the organization — including those outside your assigned audit scope. Scoring, queries, and workflow actions are disabled. Toggle off to return to your assignments.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Stats Cards */}
-      {renderStatsCards()}
+      {!isExploreMode && renderStatsCards()}
 
       {/* v2.64.9 — Roster resolution diagnostic (admin / full-access only) */}
       {isFullAccess && requiredStage && rosterMeta && (
