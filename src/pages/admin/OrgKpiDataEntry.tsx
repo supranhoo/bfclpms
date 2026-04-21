@@ -930,7 +930,10 @@ export default function OrgKpiDataEntry() {
         const valKey = `${kk}||null||null`;
         const val = existingValuesMap.get(valKey);
         const hasValue = val?.achieved_value !== null && val?.achieved_value !== undefined;
-        const status = hasValue ? ((val?.status === 'propagated' || val?.status === 'approved') ? 'Propagated' : 'Entered') : 'Pending';
+        const isStuck = hasValue && stuckDefinitionKeys.has(kk);
+        const status = hasValue
+          ? (isStuck ? 'Stuck' : ((val?.status === 'propagated' || val?.status === 'approved') ? 'Propagated' : 'Entered'))
+          : 'Pending';
         rows.push({
           ...baseRow,
           status: status as PendingReportRow['status'],
@@ -951,7 +954,10 @@ export default function OrgKpiDataEntry() {
           const valKey = `${kk}||${dept.id}||null`;
           const val = existingValuesMap.get(valKey);
           const hasValue = val?.achieved_value !== null && val?.achieved_value !== undefined;
-          const status = hasValue ? ((val?.status === 'propagated' || val?.status === 'approved') ? 'Propagated' : 'Entered') : 'Pending';
+          const isStuck = hasValue && stuckDefinitionKeys.has(kk);
+          const status = hasValue
+            ? (isStuck ? 'Stuck' : ((val?.status === 'propagated' || val?.status === 'approved') ? 'Propagated' : 'Entered'))
+            : 'Pending';
           rows.push({
             ...baseRow,
             status: status as PendingReportRow['status'],
@@ -974,7 +980,10 @@ export default function OrgKpiDataEntry() {
           const valKey = `${kk}||null||${emp.id}`;
           const val = existingValuesMap.get(valKey);
           const hasValue = val?.achieved_value !== null && val?.achieved_value !== undefined;
-          const status = hasValue ? ((val?.status === 'propagated' || val?.status === 'approved') ? 'Propagated' : 'Entered') : 'Pending';
+          const isStuck = hasValue && stuckDefinitionKeys.has(kk);
+          const status = hasValue
+            ? (isStuck ? 'Stuck' : ((val?.status === 'propagated' || val?.status === 'approved') ? 'Propagated' : 'Entered'))
+            : 'Pending';
           rows.push({
             ...baseRow,
             status: status as PendingReportRow['status'],
@@ -991,7 +1000,7 @@ export default function OrgKpiDataEntry() {
     });
 
     return rows;
-  }, [frequencyFilteredKpis, existingValuesMap, ownershipMap, prevValuesMap, employeeCountMap, departments, allProfiles, mappedDepartmentsMap, mappedEmployeesMap, selectedPeriod, selectedYear]);
+  }, [frequencyFilteredKpis, existingValuesMap, ownershipMap, prevValuesMap, employeeCountMap, departments, allProfiles, mappedDepartmentsMap, mappedEmployeesMap, selectedPeriod, selectedYear, stuckDefinitionKeys]);
   if (kpisLoading) {
     return <TableSkeleton rows={5} columns={5} />;
   }
