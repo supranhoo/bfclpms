@@ -1572,7 +1572,7 @@ export function EmployeeSelectorGrid({
           <div className="flex-1 text-sm">
             <p className="font-semibold text-amber-900 dark:text-amber-200">Explorer Mode (Read-Only)</p>
             <p className="text-amber-800 dark:text-amber-300/90 text-xs mt-0.5">
-              Viewing all employees in the organization — including those outside your assigned audit scope. Scoring, queries, and workflow actions are disabled. Toggle off to return to your assignments.
+              Viewing all employees in the organization — including those outside your assigned scope. Scoring, queries, and workflow actions are disabled. Toggle off to return to your normal review queue.
             </p>
           </div>
         </div>
