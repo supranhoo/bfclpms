@@ -456,6 +456,31 @@ export default function KpiScorecardDetail() {
             <div className="p-6 space-y-3">
               {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
             </div>
+          ) : isError ? (
+            <div className="p-6">
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Failed to load KPI data</AlertTitle>
+                <AlertDescription className="text-xs mt-1">
+                  {(error as Error)?.message || 'An unexpected error occurred while fetching KPIs.'}
+                  {!hasOrgWideAccess && (
+                    <div className="mt-2">
+                      Your role ({effectiveRole ?? 'unknown'}) does not have org-wide access. Row-Level Security may be blocking this query. Contact an administrator to request a per-user access override.
+                    </div>
+                  )}
+                </AlertDescription>
+              </Alert>
+            </div>
+          ) : rows && rows.length === 0 && !hasOrgWideAccess ? (
+            <div className="p-6">
+              <Alert>
+                <ShieldAlert className="h-4 w-4" />
+                <AlertTitle>Limited visibility</AlertTitle>
+                <AlertDescription className="text-xs mt-1">
+                  This is an org-wide report. Your role ({effectiveRole ?? 'unknown'}) only has access to your direct reports, and none have KPIs for {appliedQuery?.month} {appliedQuery?.year}. Ask an administrator to grant a per-user override if you need full org access.
+                </AlertDescription>
+              </Alert>
+            </div>
           ) : (
             <>
               <div className="overflow-auto max-h-[calc(100vh-300px)]">
