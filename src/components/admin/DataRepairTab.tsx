@@ -79,6 +79,11 @@ export function DataRepairTab() {
   const [stuckRepairing, setStuckRepairing] = useState(false);
   const [stuckResults, setStuckResults] = useState<RepairResult | null>(null);
   const [showStuckConfirm, setShowStuckConfirm] = useState(false);
+  // Bucket F — Propagation Failures (OKV propagated but 0 employees advanced)
+  const [pfScanning, setPfScanning] = useState(false);
+  const [pfRepairing, setPfRepairing] = useState(false);
+  const [pfResults, setPfResults] = useState<RepairResult | null>(null);
+  const [showPfConfirm, setShowPfConfirm] = useState(false);
 
   const repairableRows = useMemo(
     () => scanResults?.filter(r => r.action === 'repairable') ?? [],
@@ -88,6 +93,11 @@ export function DataRepairTab() {
   const stuckRepairableCount = useMemo(
     () => stuckResults?.details?.filter(r => r.action === 'repairable').length ?? 0,
     [stuckResults]
+  );
+
+  const pfRepairableCount = useMemo(
+    () => pfResults?.details?.filter(r => r.action === 'repairable').length ?? 0,
+    [pfResults]
   );
 
   const handleStuckScan = async () => {
