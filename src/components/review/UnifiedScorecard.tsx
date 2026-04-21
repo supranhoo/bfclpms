@@ -1690,6 +1690,15 @@ export function UnifiedScorecard({
 
           {selectedKpi && (
             <div className="space-y-4 sm:space-y-6 py-4 sm:py-6">
+              {/* v2.65.0 — Explorer Mode read-only banner */}
+              {exploreMode && (
+                <Alert className="border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30">
+                  <Eye className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  <AlertDescription className="text-xs text-amber-900 dark:text-amber-200">
+                    <strong>Explorer Mode (Read-Only).</strong> You are viewing this employee outside your assigned audit scope. Scoring, queries, and workflow actions are disabled. Toggle off Explorer Mode to act on assigned employees.
+                  </AlertDescription>
+                </Alert>
+              )}
               {/* KPI Review Panel */}
               <KpiReviewPanel
                 kpi={selectedKpi}
