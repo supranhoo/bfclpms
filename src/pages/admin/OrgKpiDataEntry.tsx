@@ -7,6 +7,8 @@ import { useOrgLevelKpisWithEmployees, useOrgLevelKpis } from '@/hooks/useOrgLev
 import { useOrgKpiOwnershipMap } from '@/hooks/useOrgKpiDataOwner';
 import { useUnmarkAsOrgLevel } from '@/hooks/useMarkAsOrgLevel';
 import { usePropagateOrgKpiValue } from '@/hooks/usePropagateOrgKpiValue';
+import { usePreviewOrgKpiPropagation, PropagationPreviewResult } from '@/hooks/usePreviewOrgKpiPropagation';
+import { PropagationPreviewDialog } from '@/components/admin/PropagationPreviewDialog';
 
 import { useBatchInsertAuditLogs } from '@/hooks/useOrgKpiAuditLog';
 import { useRollbackOrgKpiPropagation, useBulkRollbackOrgKpiPropagation } from '@/hooks/useRollbackOrgKpiPropagation';
@@ -123,6 +125,15 @@ export default function OrgKpiDataEntry() {
   const { ownershipMap, isAdmin } = useOrgKpiOwnershipMap();
   const bulkUpsert = useBulkUpsertOrgKpiValues();
   const propagate = usePropagateOrgKpiValue();
+  const previewPropagation = usePreviewOrgKpiPropagation();
+
+  // Phase A4 — pre-flight propagation preview state
+  const [previewState, setPreviewState] = useState<{
+    open: boolean;
+    loading: boolean;
+    result: PropagationPreviewResult | null;
+    pendingExec: (() => Promise<void>) | null;
+  }>({ open: false, loading: false, result: null, pendingExec: null });
 
   // Governance permissions check
   const governancePerms = useReviewPeriodPermissions(selectedPeriod, selectedYear);
