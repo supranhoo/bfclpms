@@ -1695,7 +1695,7 @@ export function UnifiedScorecard({
                 <Alert className="border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30">
                   <Eye className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                   <AlertDescription className="text-xs text-amber-900 dark:text-amber-200">
-                    <strong>Explorer Mode (Read-Only).</strong> You are viewing this employee outside your assigned audit scope. Scoring, queries, and workflow actions are disabled. Toggle off Explorer Mode to act on assigned employees.
+                    <strong>Explorer Mode (Read-Only).</strong> You are viewing this employee outside your assigned review scope. Scoring, queries, and workflow actions are disabled. Toggle off Explorer Mode to act on assigned employees.
                   </AlertDescription>
                 </Alert>
               )}
