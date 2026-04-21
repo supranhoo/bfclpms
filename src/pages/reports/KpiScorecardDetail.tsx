@@ -131,8 +131,7 @@ export default function KpiScorecardDetail() {
           .select(`
             id, employee_id, kra_name, kpi_name, weightage, target_value, review_period, review_year, status,
             frequency, is_org_level, org_level_scope, category_id,
-            kra_categories ( name ),
-            review_submissions ( self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score, is_na, achieved_value, manager_achieved_value, skip_level_achieved_value, hr_pms_achieved_value, auditor_achieved_value, management_achieved_value )
+            kra_categories ( name )
           `)
           .eq('review_period', month)
           .eq('review_year', year)
@@ -145,6 +144,21 @@ export default function KpiScorecardDetail() {
         } else {
           hasMore = false;
         }
+      }
+
+      // Fetch review_submissions separately in chunks of 500 to avoid timeout
+      // from joining a large nested relation inside the paged kpis query.
+      const submissionMap = new Map<string, any>();
+      const kpiIds = allKpis.map(k => k.id);
+      const CHUNK = 500;
+      for (let i = 0; i < kpiIds.length; i += CHUNK) {
+        const batch = kpiIds.slice(i, i + CHUNK);
+        const { data: subs, error: subErr } = await supabase
+          .from('review_submissions')
+          .select('kpi_id, self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score, is_na, achieved_value, manager_achieved_value, skip_level_achieved_value, hr_pms_achieved_value, auditor_achieved_value, management_achieved_value')
+          .in('kpi_id', batch);
+        if (subErr) throw subErr;
+        (subs ?? []).forEach((s: any) => submissionMap.set(s.kpi_id, s));
       }
 
       // Fetch profiles with department + designation — paged to bypass 1000-row cap.
@@ -176,7 +190,7 @@ export default function KpiScorecardDetail() {
 
       return allKpis.map((kpi): FlatRow => {
         const profile = profileMap.get(kpi.employee_id);
-        const sub = Array.isArray(kpi.review_submissions) ? kpi.review_submissions[0] : kpi.review_submissions;
+        const sub = submissionMap.get(kpi.id);
         const isNa = sub?.is_na ?? false;
         const dept = profile?.departments;
         const isOrgKpi = kpi.is_org_level === true;
