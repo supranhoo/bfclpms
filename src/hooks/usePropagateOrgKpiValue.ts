@@ -16,6 +16,8 @@ export interface PropagationDetail {
 export interface PropagationResultWithDetails {
   propagatedCount: number;
   details: PropagationDetail[];
+  skippedCount?: number;
+  skipped?: Array<{ kpi_id: string; current_status: string; reason: string }>;
 }
 
 interface PropagateParams {
@@ -228,7 +230,12 @@ async function callPropagationRpc(
     };
   });
 
-  return { propagatedCount: rpcResult.propagated_count, details };
+  return {
+    propagatedCount: rpcResult.propagated_count,
+    details,
+    skippedCount: rpcResult.skipped_count ?? 0,
+    skipped: rpcResult.skipped ?? [],
+  };
 }
 
 /**
@@ -291,7 +298,15 @@ export function usePropagateOrgKpiValue() {
       if (result.propagatedCount > 0) {
         toast({
           title: `Propagated to ${result.propagatedCount} employee KPI(s)`,
-          description: 'Review submissions updated with org-level values',
+          description: result.skippedCount && result.skippedCount > 0
+            ? `Review submissions updated. ${result.skippedCount} KPI(s) skipped (already past initial stage).`
+            : 'Review submissions updated with org-level values',
+        });
+      } else if (result.skippedCount && result.skippedCount > 0) {
+        toast({
+          title: 'Nothing to propagate',
+          description: `All ${result.skippedCount} matching KPI(s) are already past the initial stage. Definition was not advanced.`,
+          variant: 'destructive',
         });
       }
     },
@@ -356,6 +371,15 @@ export function useBulkPropagateOrgKpiValues() {
       if (result.propagatedCount > 0) {
         toast({
           title: `Propagated to ${result.propagatedCount} employee KPI(s)`,
+          description: result.skippedCount && result.skippedCount > 0
+            ? `${result.skippedCount} KPI(s) skipped (already past initial stage).`
+            : undefined,
+        });
+      } else if (result.skippedCount && result.skippedCount > 0) {
+        toast({
+          title: 'Nothing to propagate',
+          description: `All ${result.skippedCount} KPI(s) already past initial stage.`,
+          variant: 'destructive',
         });
       }
     },

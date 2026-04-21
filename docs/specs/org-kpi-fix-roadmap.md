@@ -62,6 +62,7 @@
 | Field | Value |
 |---|---|
 | **Goal** | Stop creating new B/C/F rows. Make the RPC self-reporting. |
+| **Status** | **✅ Implemented (v2.66.0 — 2026-04-21).** Both 2-arg and 3-arg overloads patched: `ROW_COUNT`-guarded status advance, `skipped[]` return array, `PROPAGATION_PARTIAL` audit logs per skipped KPI, atomic via PL/pgSQL implicit transaction. Caller hook (`usePropagateOrgKpiValue.ts`) updated to surface `skippedCount` in toasts. |
 | **Code change** | DB migration patching the 3-arg and 2-arg overloads of `propagate_org_kpi_value`. React caller updated to consume the new return shape. |
 | **Effort** | ~2 hours including tests. |
 | **Files touched** | New migration in `supabase/migrations/`, `src/hooks/useOrgKpiPropagation.ts` (or wherever the RPC is called), `docs/specs/org-kpi-data-entry-spec.md` §3 + §7, `DOCUMENTATION.md`, `mem://features/admin/org-kpi-management-suite`. |
