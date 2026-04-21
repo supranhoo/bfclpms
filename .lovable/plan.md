@@ -1,122 +1,111 @@
 
 
-## RCA — Why "Org KPI Data Entry" shows ~10 pending but the report shows 21
+## Deep Audit Plan — Org KPI Data Entry End-to-End Gap Analysis
 
-**Both numbers are correct under their own definition. The gap is 14 rows that are truly broken — same v2.65.6 half-propagation bug, in rows that escaped the earlier repair.**
-
-### Direct DB evidence (Biswajit, March 2026)
-
-| Bucket | Count |
-|---|---|
-| `kpis` rows in `status='kra_set'` (what the report calls "Pending") | **21** |
-| ↳ rows with `org_kpi_values.achieved_value` filled but **no** `review_submissions` row → **half-propagated** | **14** |
-| ↳ rows with submission row created but `kpis.status` still `kra_set` → **status-stuck** | **2** |
-| ↳ rows truly empty (no value entered) | **5** |
-| Org KPI Data Entry "Pending Report" rows (counts only the 5 truly empty) | **5–10** |
-
-### Why the gap exists
-
-The "Pending Report" on Org KPI Data Entry (`OrgKpiDataEntry.tsx` lines 919/940/963) classifies a row by `org_kpi_values.achieved_value`:
-- value present + status `propagated`/`approved` → **"Propagated"** (hidden from Pending)
-- value present + other status → **"Entered"** (hidden from Pending)
-- value absent → **"Pending"**
-
-The Scorecard Detail report classifies by `kpis.status`:
-- `kra_set` → **"Pending"** (regardless of whether `org_kpi_values` was filled)
-
-When propagation half-fails — value lands in `org_kpi_values` but `review_submissions` is never created and `kpis.status` stays `kra_set` — the two views diverge:
-- Org KPI Data Entry says: "value entered, you're done" ✅
-- Scorecard Detail says: "still pending review" ✅
-- Reality: stuck. Employee can't submit, manager can't review.
-
-### Org-wide footprint (March 2026, all data owners)
-
-- **14 half-propagated rows** across **6 distinct KPIs** affecting **13 employees** (all under Biswajit)
-- **4 status-stuck rows** (have submission, but `kpis.status` never advanced) — different bug variant
-
-Examples confirmed in DB:
-- "Handle all breakdowns…" (Monthly): 3 employees half-propagated
-- "Raw Material Plan & Other MIS" (Monthly v2 — Ramchandra & Subhransu): 2 half-propagated
-- "Refractory life - Campaign life tonnage wise": multiple half-propagated
-- "Pending metal for jigging" (Anant): half-propagated
-- "Consumable cost" (Jitendra), "Ensure target availability of furnace" (Mandala), "Handle all breakdowns E&I" (Mandala), Bi-Monthly variant (Prabhat): all half-propagated
-
-### Why the previous repair didn't fix these
-
-The user approved the repair plan two messages ago but the repair tool was **never actually executed** (it required an admin to click "Repair Orphaned Propagations" in the UI, which doesn't appear to have been done). The forward-guard from v2.65.6 is in place and is preventing **new** half-propagations, but the **historical** rows remain.
-
-The 4 status-stuck rows (submission exists but `status` still `kra_set`) are a **second bug variant** that the existing "Repair Orphaned Propagations" tool may not handle, because it likely keys off "no submission row exists".
+### Why this audit
+We've patched 3 symptoms in the last week (half-propagation, status-stuck, dual-count UI) — all pointing to the same underlying problem: **the Org KPI Data Entry surface and the downstream workflow data model can drift apart silently**. Before patching a 4th symptom, do one structured audit that maps every divergence point and ranks them. Output is a written gap register plus a prioritized fix list — no code changes in this loop.
 
 ---
 
-## Plan — Two-part repair, no new code
+### Scope
 
-### Part 1 — Run the existing Data Repair tool (handles the 14 half-propagated rows)
+**In scope (Org-level KPIs only, all periods):**
+1. The data entry UI (`OrgKpiDataEntry.tsx`, `OrgKpiEntryCard.tsx`)
+2. The propagation RPC (`propagate_org_kpi_value`) and its forward-guard
+3. The three storage layers: `org_kpi_values`, `review_submissions`, `kpis.status`
+4. The two reporting surfaces: Org KPI Pending Report vs KPI Scorecard Detail
+5. The repair tooling (`repair-orphaned-propagations` + new status-stuck pass)
+6. Counting/classification logic in every surface (Pending / Entered / Propagated / Stuck)
 
-**Action (admin, in UI):**
-1. Open **Admin Settings → Data Repair → "Repair Orphaned Propagations"**.
-2. Click **Scan** — expect **14 rows** listed for March 2026.
-3. Verify the list matches the KPIs above (Handle all breakdowns, Raw Material Plan, Refractory life, Pending metal for jigging, Consumable cost, Ensure furnace availability).
-4. Click **Repair** — this will, for each row:
-   - Create the missing `review_submissions` row from `org_kpi_values.achieved_value`.
-   - Compute `self_score` and `self_rating` from the KPI's R5–R1 thresholds.
-   - Advance `kpis.status` from `kra_set` → `self_review`.
-   - Write a `kpi_audit_logs` entry.
+**Out of scope:** non-org-level KPIs, scoring math, manager-and-above review stages.
 
-**Expected outcome:** Scorecard Detail "Pending" count for Biswajit drops by 14 (from 21 → 7). Org KPI Data Entry "Pending Report" count is unchanged (already excluded these from "Pending"). Both views converge on the same 5–7 truly-empty rows.
+---
 
-### Part 2 — Extend the repair tool to handle the 4 status-stuck rows
+### Method — 6 audit passes
 
-The existing tool likely targets the signature `org_kpi_values has value + no review_submissions`. The 4 status-stuck rows have a different signature: `org_kpi_values has value + review_submissions exists + kpis.status='kra_set'`. They need their own repair.
+**Pass 1 — Data integrity census (DB-only, read-only)**
+For every active period (last 12 months), count rows in each of these 9 buckets:
 
-**Add a second scan/repair pass to `useRepairOrphanedPropagations` (or create a sibling hook `useRepairStatusStuckOrgKpis`):**
+| # | Signature | Meaning |
+|---|---|---|
+| A | `kpis.status='kra_set'` + no `org_kpi_values` row | Truly empty (correct) |
+| B | `kpis.status='kra_set'` + `org_kpi_values` exists + no submission | **Half-propagated** |
+| C | `kpis.status='kra_set'` + `org_kpi_values` exists + submission exists | **Status-stuck** |
+| D | `kpis.status='self_review'` + `org_kpi_values` missing | Manual entry (no propagation) — verify legitimate |
+| E | `kpis.status='self_review'` + `org_kpi_values` exists + submission missing | Impossible — flag |
+| F | `org_kpi_values.status='propagated'` + 0 employees actually advanced | Bulk propagation failure |
+| G | `org_kpi_values.status='draft'` + age > 7 days | Abandoned drafts |
+| H | Multiple `org_kpi_values` rows for same (cat, kra, kpi, period) | Duplicate definitions |
+| I | `kpis.is_org_level=true` but no `org_kpi_data_owners` mapping | Orphaned ownership |
 
-- **Scan signature:** `kpis.status='kra_set'` AND `is_org_level=true` AND a `review_submissions` row exists for that `kpi_id` with non-null `self_score`.
-- **Repair action:** simply `UPDATE kpis SET status='self_review' WHERE id=…` (no submission creation needed — it already exists). Audit-log it.
-- **UI:** add a second card in Data Repair: "Repair Status-Stuck Org KPIs" with dry-run + confirm.
+Output: a CSV per period showing counts in each bucket + a summary heatmap.
 
-~50 lines. Reuses existing `ConfirmDestructiveDialog` and audit pattern.
+**Pass 2 — RPC behaviour audit (read-only code review)**
+Read `propagate_org_kpi_value` end-to-end. Document:
+- Exact transactional boundary (what's inside `BEGIN/COMMIT`?)
+- Failure modes that can leave partial state
+- Whether the v2.65.6 forward-guard covers all failure paths or only the one that surfaced
+- What happens on RLS denial mid-loop (does it abort or skip?)
 
-### Part 3 — Reconcile the two reports' definitions (UI clarity)
+**Pass 3 — UI classification audit (code review)**
+For each of the 4 surfaces below, write down the exact predicate it uses to classify a row:
 
-Add a second classification in `OrgKpiDataEntry.tsx` `pendingReportRows` so a row with value entered but `kpis.status='kra_set'` for any of its assigned employees is flagged as **"Stuck"** (orange) instead of "Propagated" (green). This makes the half-propagation visible on the Org KPI Data Entry page itself, so the data owner knows to ask admin for repair instead of thinking "I'm done".
+| Surface | "Pending" predicate | "Entered" predicate | "Propagated" predicate | "Stuck" predicate |
+|---|---|---|---|---|
+| OrgKpiDataEntry main grid | ? | ? | ? | ? (newly added) |
+| OrgKpiPendingReport sheet | ? | ? | ? | ? |
+| Scorecard Detail report | ? | ? | ? | (none) |
+| Employee dashboard | ? | ? | ? | (none) |
 
-Implementation:
-- Pull `kpis.status` for each employee in the same fetch that populates `mappedEmployeesMap`.
-- In the row-classification block (lines 919/940/963), add: if `hasValue` but **any** matching `kpis` row is still `kra_set`, mark `status='Stuck'` and include in Pending Report.
-- Add "Stuck" filter chip alongside Pending/Entered/Propagated.
+Goal: prove all four surfaces use the **same** definitions, or list exactly where they diverge.
 
-~40 lines. Pure additive, no logic regression.
+**Pass 4 — Counting unit audit**
+Confirm every "count" in every surface declares its unit (KPI cards vs employee-assignments vs submissions). Flag any count that's ambiguous in the UI (after v2.65.7 only one tile was clarified — audit the rest).
 
-### Files touched
+**Pass 5 — Repair tooling coverage audit**
+For each of the 9 signatures from Pass 1, mark which is covered by which repair tool:
 
-| File | Change |
-|---|---|
-| `src/hooks/useRepairOrphanedPropagations.ts` (or new sibling) | Add status-stuck signature + repair pass. |
-| `src/components/admin/DataRepairPanel.tsx` (or wherever the existing repair card lives) | Add "Repair Status-Stuck Org KPIs" card. |
-| `src/pages/admin/OrgKpiDataEntry.tsx` | Add "Stuck" classification + filter chip; cross-check `kpis.status` in row builder. |
-| `src/components/admin/OrgKpiPendingReport.tsx` | Include "Stuck" rows in pending-only sheet; add column note. |
-| `DOCUMENTATION.md` | v2.65.8 — Status-stuck repair pass + "Stuck" classification on Org KPI Data Entry. |
-| `mem://features/admin/data-repair-engine` | Append status-stuck workflow. |
+| Signature | `repair-orphaned-propagations` (scan) | `repair-orphaned-propagations` (scan_stuck) | `reconcile_workflow_statuses` | None |
+|---|---|---|---|---|
+| B (half-propagated) | ✓ | | | |
+| C (status-stuck) | | ✓ (new) | | |
+| E, F, G, H, I | ? | ? | ? | ? |
 
-### Out of scope
+Identify gaps where no tool exists.
 
-- No DB schema change.
-- No change to Scorecard Detail report — it's correct.
-- No change to `propagate_org_kpi_value` RPC — bug is upstream/historical.
-- No automated cron repair.
+**Pass 6 — Audit-trail completeness**
+For every state transition in the org-KPI lifecycle (draft → propagated → submitted → advanced → stuck-recovered), confirm a `kpi_audit_logs` entry exists. List any silent transitions.
+
+---
+
+### Deliverables (in this loop, after approval)
+
+1. **`docs/audits/org-kpi-data-entry-2026-04.md`** — full written audit with:
+   - Census numbers per period
+   - RPC failure-mode table
+   - 4-surface classification matrix
+   - Coverage matrix
+   - Audit-trail gap list
+2. **`/mnt/documents/org-kpi-gap-census.xlsx`** — raw counts per period for all 9 signatures, reviewable by user.
+3. **Ranked fix list** — each gap tagged P0/P1/P2 with effort estimate. No code written; user picks what to implement next.
+
+### What this loop will NOT do
+
+- No DB migrations
+- No edge function changes
+- No UI changes
+- No data repair execution
+
+This is purely an inspection + report loop. After you read the audit, you decide which P0/P1 items to schedule.
 
 ### Risk & Impact
 
-- **Data:** Part 1 creates 14 `review_submissions` rows + advances 14 `kpis.status`. Part 2 advances 4 `kpis.status` only (no new rows). Audit-logged. Reversible via existing rollback.
-- **Workflow:** affected employees' KPIs jump from "KRA Set" → "Self Review" with pre-filled values. Matches the state they should have been in if Propagate had succeeded.
-- **UI/UX:** Org KPI Data Entry gains a "Stuck" status chip. Pure additive.
-- **Regression risk:** low. Status-stuck repair is the smallest possible operation (single column update). "Stuck" classification reads same data already loaded.
-- **Mitigation:** dry-run preview required for both repair passes; admin confirms explicitly.
+- **Data:** read-only.
+- **Workflow:** none.
+- **Output:** one markdown report + one xlsx + a ranked list.
+- **Time:** ~1 working session of focused inspection.
 
-### Why this closes the loop properly
+### Why this is the right next step
 
-- Part 1 fixes the 14 historical half-propagations the previous plan identified but never repaired.
-- Part 2 catches a sibling bug variant the existing tool misses.
-- Part 3 makes the Org KPI Data Entry page **honest** — it stops claiming "Propagated" for rows that didn't actually reach the workflow, so the discrepancy you just hit can't recur silently.
+Three back-to-back patches in one week on the same surface = the surface needs a proper audit, not a 4th patch. This produces the map; you choose the route.
 
