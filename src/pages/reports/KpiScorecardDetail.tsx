@@ -92,6 +92,9 @@ const statusLabels: Record<string, string> = {
 export default function KpiScorecardDetail() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('kpi-scorecard-detail');
+  const { effectiveRole } = useAuth();
+  const ORG_WIDE_ROLES: Array<string> = ['admin', 'management', 'hr_pms', 'auditor'];
+  const hasOrgWideAccess = effectiveRole ? ORG_WIDE_ROLES.includes(effectiveRole) : false;
   const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany, getCompanyName, getCompanyCode } = useCompanyFilter();
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[now.getMonth()]);
@@ -112,7 +115,7 @@ export default function KpiScorecardDetail() {
 
   const isDirty = !appliedQuery || appliedQuery.month !== selectedMonth || appliedQuery.year !== selectedYear;
 
-  const { data: rows, isLoading, isFetching } = useQuery({
+  const { data: rows, isLoading, isFetching, error, isError } = useQuery({
     queryKey: ['kpi-scorecard-detail', appliedQuery?.month, appliedQuery?.year],
     enabled: !!appliedQuery,
     queryFn: async () => {
