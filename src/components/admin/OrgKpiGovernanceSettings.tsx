@@ -113,6 +113,23 @@ export function OrgKpiGovernanceSettings() {
             onCheckedChange={(v) => updateFlag('enable_org_kpi_autopull', v, setAutopull)}
           />
         </div>
+
+        <div className="flex items-center justify-between p-4 rounded-lg border">
+          <div className="space-y-1 pr-4">
+            <Label htmlFor="forward-sync" className="text-base font-medium">
+              Auto Forward-Sync Org KPI Status
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              When ON, promoting or demoting a KPI to/from Org-level automatically cascades the change (and scope) to all matching KPIs in <strong>future open periods</strong>. Locked periods are skipped. Demotions also delete orphaned draft Org values in those future periods. Recommended.
+            </p>
+          </div>
+          <Switch
+            id="forward-sync"
+            checked={forwardSync}
+            disabled={isLoading || saving === 'enable_org_kpi_forward_sync'}
+            onCheckedChange={(v) => updateFlag('enable_org_kpi_forward_sync', v, setForwardSync)}
+          />
+        </div>
       </CardContent>
     </Card>
   );
