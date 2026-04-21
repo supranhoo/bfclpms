@@ -5170,3 +5170,16 @@ Every new edge function **must** complete all of these steps before deployment:
 - **Problem (Gap #3)**: Employees onboarded after Propagate received a `kpis` row but no submission — ghost assignments stuck at `kra_set`.
 - **Fix**: New flag `app_settings.enable_org_kpi_autopull` (default off). Helper `compute_org_kpi_score_for_kpi(uuid, numeric)`. Trigger `trg_autopull_propagated_org_kpi` on `kpis AFTER INSERT` resolves OKV via natural-key lookup with most-specific scope (employee → department → org-wide), pre-fills submission, advances to `self_review`, audit-logs `ORG_KPI_AUTOPULLED_FOR_LATE_JOINER`. Honors `is_na`. New `backfill_late_joiner_org_kpis(p_dry_run)` admin RPC + Bucket K card in Data Repair for historical rows.
 - **Modified files**: `supabase/migrations/20260421_*.sql`, `src/hooks/useLateJoinerBackfill.ts`, `src/components/admin/LateJoinerBackfillSection.tsx`, `src/components/admin/DataRepairTab.tsx`
+
+### v2.66.4 — Phase A1 + A2 Execution Report (2026-04-21)
+- **Context**: Historical-data sweep for Buckets B, C, F using the same logic as `repair-orphaned-propagations` edge function, executed server-side with full audit trail.
+- **Pre-state**: Bucket B (orphaned org-level children) = 20 repairable / 809 total at `kra_set`; Bucket C = 0; Bucket F (silent propagation failures) = 4.
+- **Phase A1 (Buckets B + C)**: Created 20 `review_submissions` from matching `propagated`/`approved` OKV values, advanced 20 KPIs from `kra_set` → `self_review`, scored via `compute_org_kpi_score_for_kpi()`. Audit action: `PROPAGATION_BACKFILL` (20 entries, `tool=bucket_bc_repair`, `pass=phase_a1`, `performed_by=NULL`).
+- **Phase A2 (Bucket F)**: Reset 4 OKVs from `propagated` → `draft` so the Data Owner can re-propagate via the new atomic RPC (v2.66.0). Affected period: February 2026. Audit action: `PROPAGATION_FAILURE_RESET` (4 entries, `tool=bucket_f_repair`, `pass=phase_a2`, `performed_by=NULL`). Reset OKV IDs:
+  - `29bf640c-02ca-491e-971f-6d5042d741d3` — Achieve Power generation target from WHRB 1050 TPD (Production & Operations / Achieve organization's production target)
+  - `96a62c9b-0f80-47ed-a0e2-0f1eb4af538f` — Enhance Campaign life of 1050 TPD (Maintenance & Reliability / Enhance Campaign Life)
+  - `6d344293-c067-4d76-a803-4035100b2713` — Power generation from 45 MWh/AFBC (Production & Operations / Achieve organization's production target)
+  - `9571e37b-99ec-4c0b-87e6-82eb26cabea8` — Achieve production target from 3X100 TPD (Production & Operations / Achieve organization's production target)
+- **Post-state**: Bucket B remaining = 0, Bucket F remaining = 0. Verification confirmed against the same census query used pre-execution.
+- **Reversibility**: Every change recorded in `kpi_audit_logs`; the existing Step Back tool can revert any individual row by referencing the prior-state JSON in the audit entries.
+- **Follow-up**: The 4 reset OKVs need to be re-propagated by the Data Owner (or by an admin via Org KPI Data Entry → Propagate) to advance the corresponding employees through the workflow. The new atomic RPC will succeed-or-rollback-cleanly, so a silent failure cannot recur.
