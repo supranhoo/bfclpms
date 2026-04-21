@@ -10,7 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Loader2, Search, Building2, Users, User, UserPlus, Trash2, ChevronDown, Globe, Building, UserCheck } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
-import { useRemoveEmployeeFromOrgKpi, useChangeOrgKpiScope } from '@/hooks/useOrgKpiManagement';
+import { useRemoveEmployeeFromOrgKpi } from '@/hooks/useOrgKpiManagement';
 import { OrgKpiAddEmployeeDialog } from '@/components/admin/OrgKpiAddEmployeeDialog';
 import { OrgKpiScopeChangeDialog } from '@/components/admin/OrgKpiScopeChangeDialog';
 
