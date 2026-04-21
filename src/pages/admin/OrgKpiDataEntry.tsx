@@ -787,6 +787,63 @@ export default function OrgKpiDataEntry() {
     queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
   }, [handleCardSave, propagate, selectedPeriod, selectedYear, queryClient, profile?.id, insertAuditLogs, employeeCountMap]);
 
+  /**
+   * Phase A4 — Pre-flight propagation gate.
+   * Resolves matching KPI ids, asks the read-only preview RPC how many will
+   * actually advance, then opens a confirmation dialog. The live propagation
+   * RPC only runs if the user confirms.
+   */
+  const handleCardSaveAndPropagate = useCallback(async (
+    kpi: typeof filteredKpis[0],
+    values: Parameters<typeof handleCardSave>[1],
+    filterEmployeeIds?: string[],
+  ) => {
+    // Resolve the candidate kpi_ids using the same matching rules as the live RPC.
+    let candidateIds: string[] = [];
+    try {
+      const escapedKra = kpi.kra_name.replace(/[%_]/g, '\\$&');
+      const escapedKpi = kpi.kpi_name.replace(/[%_]/g, '\\$&');
+      const { data: rows } = await supabase
+        .from('kpis')
+        .select('id, employee_id')
+        .eq('category_id', kpi.category_id)
+        .ilike('kra_name', escapedKra)
+        .ilike('kpi_name', escapedKpi)
+        .eq('review_period', selectedPeriod)
+        .eq('review_year', selectedYear)
+        .eq('is_org_level', true);
+
+      let allRows = rows || [];
+      const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'employee';
+      if (scope === 'employee' && Array.isArray(filterEmployeeIds) && filterEmployeeIds.length > 0) {
+        allRows = allRows.filter(r => filterEmployeeIds.includes(r.employee_id));
+      }
+      candidateIds = allRows.map(r => r.id);
+    } catch (err) {
+      console.warn('[OrgKpiDataEntry] preview candidate resolution failed:', err);
+    }
+
+    // Open dialog in loading state, fetch preview
+    setPreviewState({
+      open: true,
+      loading: true,
+      result: null,
+      pendingExec: () => executeSaveAndPropagate(kpi, values, filterEmployeeIds),
+    });
+
+    try {
+      const result = await previewPropagation.mutateAsync({ kpiIds: candidateIds });
+      setPreviewState((s) => ({ ...s, loading: false, result }));
+    } catch (err: any) {
+      setPreviewState({ open: false, loading: false, result: null, pendingExec: null });
+      toast({
+        title: 'Could not preview propagation',
+        description: err?.message || 'Unknown error',
+        variant: 'destructive',
+      });
+    }
+  }, [selectedPeriod, selectedYear, previewPropagation, executeSaveAndPropagate, toast]);
+
   // Copy from previous period
   const handleCopyFromPrevious = async () => {
     if (!previousValues || previousValues.length === 0) {
@@ -1402,6 +1459,19 @@ export default function OrgKpiDataEntry() {
           currentAchievedValue={impactTarget.achievedValue}
         />
       )}
+
+      {/* Phase A4 — Pre-flight propagation preview */}
+      <PropagationPreviewDialog
+        open={previewState.open}
+        isLoading={previewState.loading}
+        preview={previewState.result}
+        onCancel={() => setPreviewState({ open: false, loading: false, result: null, pendingExec: null })}
+        onConfirm={async () => {
+          const exec = previewState.pendingExec;
+          setPreviewState({ open: false, loading: false, result: null, pendingExec: null });
+          if (exec) await exec();
+        }}
+      />
     </div>
   );
 }
