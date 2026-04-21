@@ -506,7 +506,11 @@ export default function KpiScorecardDetail() {
                   <TableBody>
                     {paged.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={14} className="text-center text-muted-foreground py-8">No KPIs found for the selected filters</TableCell>
+                        <TableCell colSpan={14} className="text-center text-muted-foreground py-8">
+                          {rows && rows.length > 0
+                            ? `No KPIs match the current Company / Department / Search filters (${rows.length} loaded for ${appliedQuery?.month} ${appliedQuery?.year}).`
+                            : `No KPI rows exist for ${appliedQuery?.month} ${appliedQuery?.year}.`}
+                        </TableCell>
                       </TableRow>
                     ) : paged.map((r, i) => {
                       const typeLabel = getOrgTypeLabel(r);
