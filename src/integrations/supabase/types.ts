@@ -192,6 +192,7 @@ export type Database = {
           created_at: string
           enable_org_kpi_auto_inherit: boolean
           enable_org_kpi_autopull: boolean
+          enable_org_kpi_forward_sync: boolean
           enabled_modules: Json | null
           id: string
           login_background_url: string | null
@@ -211,6 +212,7 @@ export type Database = {
           created_at?: string
           enable_org_kpi_auto_inherit?: boolean
           enable_org_kpi_autopull?: boolean
+          enable_org_kpi_forward_sync?: boolean
           enabled_modules?: Json | null
           id?: string
           login_background_url?: string | null
@@ -230,6 +232,7 @@ export type Database = {
           created_at?: string
           enable_org_kpi_auto_inherit?: boolean
           enable_org_kpi_autopull?: boolean
+          enable_org_kpi_forward_sync?: boolean
           enabled_modules?: Json | null
           id?: string
           login_background_url?: string | null
@@ -5361,6 +5364,18 @@ export type Database = {
       request_org_kpi_revision: {
         Args: { p_kpi_id: string; p_reason: string }
         Returns: Json
+      }
+      resolve_terminal_period: {
+        Args: {
+          p_frequency: string
+          p_period: string
+          p_sub_frequency: string
+          p_year: number
+        }
+        Returns: {
+          terminal_period: string
+          terminal_year: number
+        }[]
       }
     }
     Enums: {
