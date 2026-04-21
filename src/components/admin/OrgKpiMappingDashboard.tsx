@@ -471,6 +471,23 @@ export function OrgKpiMappingDashboard({ reviewPeriod, reviewYear }: MappingProp
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Scope Change Cascade Dialog */}
+      {scopeTarget && (
+        <OrgKpiScopeChangeDialog
+          open={!!scopeTarget}
+          onClose={() => setScopeTarget(null)}
+          identifier={{
+            categoryId: scopeTarget.kpiGroup.categoryId,
+            kraName: scopeTarget.kpiGroup.kraName,
+            kpiName: scopeTarget.kpiGroup.kpiName,
+            reviewPeriod,
+            reviewYear,
+          }}
+          currentScope={scopeTarget.kpiGroup.orgLevelScope || 'employee'}
+          newScope={scopeTarget.newScope}
+        />
+      )}
     </div>
   );
 }
