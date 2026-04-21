@@ -83,6 +83,7 @@ const STATUS_OPTIONS_BY_LEVEL: Record<Exclude<ViewMode, 'self'>, Array<{ value: 
     { value: 'all', label: 'All Employees' },
     { value: 'pending', label: 'With Pending Reviews' },
     { value: 'approved', label: 'Approved' },
+    { value: 'cross_check', label: 'All Employees (Cross-Check)' },
   ],
   pending_self_review: [
     { value: 'all', label: 'All Employees' },
@@ -258,7 +259,7 @@ export function EmployeeSelectorGrid({
       return [...new Set([...directIds, ...indirectIds])];
     }
     // Cross-check mode: include ALL profiles so workflowMap covers everyone
-    const isCrossCheck = viewLevel === 'audit' && statusFilter === 'cross_check';
+    const isCrossCheck = (viewLevel === 'audit' || viewLevel === 'management') && statusFilter === 'cross_check';
     const source = isCrossCheck ? allProfiles : (requiredStage ? stageFilteredProfiles : (isFullAccess ? allProfiles : teamMembers));
     if (!source) return [];
     return source.map((p: { id: string }) => p.id);
@@ -294,18 +295,19 @@ export function EmployeeSelectorGrid({
   };
 
   // isLoading accounts for stage-filtered fetch when a required stage is active
-  const isCrossCheckMode = viewLevel === 'audit' && statusFilter === 'cross_check';
-  // v2.65.0 — Explorer Mode (auditor read-only org-wide browse).
+  const isExplorerCapable = viewLevel === 'audit' || viewLevel === 'management';
+  const isCrossCheckMode = isExplorerCapable && statusFilter === 'cross_check';
+  // v2.65.0 — Explorer Mode (auditor + management read-only org-wide browse).
   // Treat Explorer Mode as a UI-level alias of cross_check; auto-applies when
   // ?explore=1 is in the URL or when the user toggles the pill.
   const exploreParam = searchParams.get('explore');
-  const isExploreMode = viewLevel === 'audit' && (statusFilter === 'cross_check' || exploreParam === '1');
+  const isExploreMode = isExplorerCapable && (statusFilter === 'cross_check' || exploreParam === '1');
   // Auto-promote to cross_check when ?explore=1 is set but status filter hasn't caught up yet
   useEffect(() => {
-    if (viewLevel === 'audit' && exploreParam === '1' && statusFilter !== 'cross_check') {
+    if (isExplorerCapable && exploreParam === '1' && statusFilter !== 'cross_check') {
       setStatusFilter('cross_check');
     }
-  }, [viewLevel, exploreParam, statusFilter, setStatusFilter]);
+  }, [isExplorerCapable, exploreParam, statusFilter, setStatusFilter]);
   const isLoading = viewLevel === 'team'
     ? (isFullAccess ? profilesLoading : (teamLoading || skipLevelLoading))
     : isCrossCheckMode
@@ -333,7 +335,7 @@ export function EmployeeSelectorGrid({
       return [...directTagged, ...indirectTagged];
     }
     // Cross-check mode: bypass workflow stage filter, show ALL employees
-    if (viewLevel === 'audit' && statusFilter === 'cross_check') {
+    if ((viewLevel === 'audit' || viewLevel === 'management') && statusFilter === 'cross_check') {
       return (allProfiles as EmployeeProfile[] | undefined) || [];
     }
     // For reviewer panels (hr_pms, audit, management, skip_level):
@@ -610,6 +612,8 @@ export function EmployeeSelectorGrid({
       );
     } else if (statusFilter === 'cross_check' && viewLevel === 'audit') {
       // Cross-check: show ALL employees, no KPI-status filtering (demographic filters still apply above)
+    } else if (statusFilter === 'cross_check' && viewLevel === 'management') {
+      // Management cross-check (Explorer Mode): same — no status filtering applied
     } else if (statusFilter !== 'all' && statusFilter !== 'my_assigned' && periodKpis) {
       const employeeIds = new Set<string>();
       // For merged team view, build direct + skip-level member sets for relationship detection
@@ -1528,7 +1532,7 @@ export function EmployeeSelectorGrid({
               Manage Assignments
             </Button>
           )}
-          {viewLevel === 'audit' && (
+          {isExplorerCapable && (
             <TooltipProvider delayDuration={200}>
               <Tooltip>
                 <TooltipTrigger asChild>
