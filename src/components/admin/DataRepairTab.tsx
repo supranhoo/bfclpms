@@ -9,6 +9,7 @@ import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDial
 import { AlertCircle, CheckCircle2, Download, RefreshCw, Search, Wrench, Database, ArrowRight } from 'lucide-react';
 import { SiblingRepairSection } from './SiblingRepairSection';
 import { BulkZeroScoreSection } from './BulkZeroScoreSection';
+import { LateJoinerBackfillSection } from './LateJoinerBackfillSection';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
