@@ -862,6 +862,19 @@ export function UnifiedScorecard({
   // Open review sheet
   const openReviewSheet = (kpi: KPI) => {
     setSelectedKpi(kpi);
+    // v2.65.0 — Explorer Mode: append-only audit trail entry per opened KPI.
+    // Fire-and-forget; never block the UI on logging.
+    if (exploreMode && user?.id) {
+      supabase
+        .from('kpi_audit_logs')
+        .insert({
+          kpi_id: kpi.id,
+          action: 'EXPLORER_VIEW',
+          performed_by: user.id,
+          metadata: { period: selectedPeriod, year: selectedYear, viewLevel },
+        } as any)
+        .then(() => {}, () => {});
+    }
     const existing = submissionMap.get(kpi.id);
     
     // Get the reviewer's OWN score (not inherited)
