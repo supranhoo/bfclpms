@@ -161,14 +161,16 @@ export function EmployeeFilters({
             </div>
           )}
 
-          <div className="w-full sm:w-[160px]">
-            <OrgFilterCombobox
-              value={statusFilter || 'all'}
-              onValueChange={(v) => onStatusChange(v || 'all')}
-              options={statusOpts}
-              placeholder="Status"
-            />
-          </div>
+          {statusOptions.length > 0 && (
+            <div className="w-full sm:w-[160px]">
+              <OrgFilterCombobox
+                value={statusFilter || 'all'}
+                onValueChange={(v) => onStatusChange(v || 'all')}
+                options={statusOpts}
+                placeholder="Status"
+              />
+            </div>
+          )}
 
           <div className="w-full sm:w-auto">
             <Popover open={moreFiltersOpen} onOpenChange={handleMoreFiltersOpenChange}>
