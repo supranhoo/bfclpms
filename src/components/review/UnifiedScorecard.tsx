@@ -109,6 +109,8 @@ interface UnifiedScorecardProps {
   onPeriodSelectionChange: (selection: PeriodSelection) => void;
   onBack?: () => void;
   autoOpenKpiId?: string | null;
+  /** v2.65.0 — Explorer Mode: read-only browsing for auditors outside their scope */
+  exploreMode?: boolean;
 }
 
 // Static configuration per view level (non-workflow-dependent parts)
@@ -176,7 +178,8 @@ export function UnifiedScorecard({
   periodSelection,
   onPeriodSelectionChange,
   onBack,
-  autoOpenKpiId 
+  autoOpenKpiId,
+  exploreMode = false,
 }: UnifiedScorecardProps) {
   // Derived values from period selection
   const selectedPeriod = periodSelection.selectedMonth;
@@ -1330,7 +1333,8 @@ export function UnifiedScorecard({
                : 'management';
 
   // Check if KPI is reviewable at current level (disabled in multi-month mode to prevent cross-period mutations)
-  const isReviewable = (kpi: KPI) => !isMultiMonth && config.reviewableStatuses.includes(kpi.status || '');
+  // v2.65.0 — Explorer Mode forces every KPI into the read-only viewer branch.
+  const isReviewable = (kpi: KPI) => !exploreMode && !isMultiMonth && config.reviewableStatuses.includes(kpi.status || '');
 
   if (isLoading) {
     return <ReviewPanelSkeleton />;
@@ -1693,6 +1697,7 @@ export function UnifiedScorecard({
                 orgAchievedValue={getOrgKpiValue(selectedKpi)?.achieved_value ?? null}
                 employeeName={employee.full_name || undefined}
                 employeeCode={employee.employee_code || undefined}
+                exploreMode={exploreMode}
               />
               
               
