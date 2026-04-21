@@ -5224,6 +5224,10 @@ export type Database = {
         Returns: boolean
       }
       month_name_to_index: { Args: { p_month: string }; Returns: number }
+      preview_org_kpi_propagation: {
+        Args: { p_kpi_ids: string[] }
+        Returns: Json
+      }
       propagate_org_kpi_value:
         | { Args: { p_is_na?: boolean; p_kpi_ratings: Json }; Returns: Json }
         | {
