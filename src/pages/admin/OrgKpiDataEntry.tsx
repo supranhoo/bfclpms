@@ -193,8 +193,26 @@ export default function OrgKpiDataEntry() {
     const matching = Array.from(existingValuesMap.entries()).filter(([k, v]) =>
       k.startsWith(prefix) && ((v.achieved_value !== null && v.achieved_value !== undefined) || v.is_na)
     );
-    if (matching.length > 0) {
-      return matching.every(([, v]) => v.status === 'propagated' || v.status === 'approved') ? 'propagated' : 'entered';
+    // Scope-aware filter: ignore orphan rows from a different scope (legacy org-scope rows
+    // have key suffix `||null||null` but current scope is employee/department).
+    const scopeMatching = matching.filter(([k]) => {
+      if (scope === 'employee') return !k.endsWith('||null||null') && !k.endsWith('||null');
+      if (scope === 'department') return !k.endsWith('||null||null');
+      return true;
+    }).filter(([k]) => {
+      // For employee scope, key ends with ||<deptOrNull>||<empId>; empId must not be 'null'
+      if (scope === 'employee') {
+        const parts = k.split('||');
+        return parts[parts.length - 1] !== 'null';
+      }
+      if (scope === 'department') {
+        const parts = k.split('||');
+        return parts[parts.length - 2] !== 'null';
+      }
+      return true;
+    });
+    if (scopeMatching.length > 0) {
+      return scopeMatching.every(([, v]) => v.status === 'propagated' || v.status === 'approved') ? 'propagated' : 'entered';
     }
     return 'pending';
   }, [existingValuesMap]);
