@@ -1140,22 +1140,38 @@ export default function OrgKpiDataEntry() {
 
       {/* Status Filter Chips */}
       {frequencyFilteredKpis.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {([
-            { key: 'all' as const, label: 'All', count: progressData.totalKpis },
-            { key: 'pending' as const, label: 'Pending', count: progressData.totalKpis - progressData.enteredKpis - progressData.propagatedKpis },
-            { key: 'entered' as const, label: 'Entered', count: progressData.enteredKpis },
-            { key: 'propagated' as const, label: 'Propagated', count: progressData.propagatedKpis },
-          ]).map(f => (
-            <Badge
-              key={f.key}
-              variant={statusFilter === f.key ? 'default' : 'outline'}
-              className="cursor-pointer"
-              onClick={() => setStatusFilter(f.key)}
-            >
-              {f.label} ({f.count})
-            </Badge>
-          ))}
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap gap-2">
+            {([
+              { key: 'all' as const, label: 'All', count: progressData.totalKpis },
+              { key: 'pending' as const, label: 'Pending', count: progressData.totalKpis - progressData.enteredKpis - progressData.propagatedKpis },
+              { key: 'entered' as const, label: 'Entered', count: progressData.enteredKpis },
+              { key: 'propagated' as const, label: 'Propagated', count: progressData.propagatedKpis },
+            ]).map(f => (
+              <Badge
+                key={f.key}
+                variant={statusFilter === f.key ? 'default' : 'outline'}
+                className="cursor-pointer"
+                onClick={() => setStatusFilter(f.key)}
+              >
+                {f.label} ({f.count})
+              </Badge>
+            ))}
+          </div>
+          {(() => {
+            const pendingRows = pendingReportRows.filter(r => r.status === 'Pending');
+            const pendingAssignments = pendingRows.length;
+            const pendingKpis = new Set(
+              pendingRows.map(r => `${r.category}||${r.kraName}||${r.kpiName}`)
+            ).size;
+            if (pendingAssignments === 0) return null;
+            return (
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">{pendingKpis} KPI{pendingKpis === 1 ? '' : 's'} pending</span>
+                {' '}(covering {pendingAssignments} employee assignment{pendingAssignments === 1 ? '' : 's'}). One card = one KPI to enter; the Pending Report lists each employee assignment individually.
+              </p>
+            );
+          })()}
         </div>
       )}
 
