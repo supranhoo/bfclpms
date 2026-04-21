@@ -1,54 +1,104 @@
 
 
-## Plan — Execute Phase A1 & A2 Repair Passes
+## Plan — Forward-Cascade Scope Change + OKV Migration Helper + Auto-Pull Activation
 
-Phases A1 (Bucket B/C historical repair) and A2 (Bucket F propagation-failure repair) ship as **admin-driven UI actions**, not background scripts. The migrations and edge function modes are already deployed. What's left is for an admin to actually click through the scan → preview → confirm → repair flow in the Data Repair tab so the historical orphans get cleared.
+Three related Org KPI governance gaps. Doing them in one loop because they share the same RPC + UI surface (`useChangeOrgKpiScope` + Admin "Org KPI Management" tab).
 
-Since I'm in read-only mode, I can't click those buttons for you. But I can drive the same RPCs/edge function modes directly from the database side once you switch me to default mode, audit-log everything the same way the UI would, and report back the row counts.
+### 1. Cascade Scope Change Forward
 
-### What will run
+**Where**: `src/hooks/useOrgKpiManagement.ts` → `useChangeOrgKpiScope`, plus the dialog that calls it.
 
-**A1 — Bucket B + Bucket C historical repair**
-- Bucket B: `kpis.is_org_level=true, status='kra_set'` where the matching OKV is `propagated`/`approved` (orphaned children — propagation silently skipped them).
-- Bucket C: `kpis.is_org_level=true, status='kra_set'` where the matching OKV is `draft` but `achieved_value` exists (DO entered a value but never clicked Propagate, then KPI was reset).
-- Tool: existing `repair-orphaned-propagations` edge function in `scan` + `repair` modes.
-- Output: row counts per bucket, per-employee breakdown, audit log entries (`PROPAGATION_BACKFILL` action, `performed_by = NULL`, tool = `bucket_bc_repair`).
+**Change**:
+- Extend mutation input with `cascadeMode: 'current_only' | 'current_and_future'`.
+- New atomic RPC `change_org_kpi_scope_cascading(category_id, kra_name, kpi_name, base_period, base_year, new_scope, cascade_forward bool)`:
+  - Resolves all `(period, year)` tuples ≥ base period that are **not locked** (joins `review_period_locks`).
+  - For each open future period, updates `kpis.org_level_scope` for matching `is_org_level=true` rows.
+  - Calls the OKV migration helper (see #2) per period.
+  - Returns per-period rowcounts + a list of skipped locked periods.
+  - Audit-logs `ORG_KPI_SCOPE_CASCADED` with `performed_by = NULL` (system) plus `triggered_by = admin_user_id` in metadata.
+- UI: add a checkbox in the existing "Change Scope" dialog → "Apply to all open future periods". Show preview of which periods will be touched (dry-run via the same RPC with `cascade_forward=false` returning the resolution list).
 
-**A2 — Bucket F propagation-failure repair**
-- Detection: OKVs marked `propagated`/`approved` where 100% of matching `kpis` are still `kra_set` (the propagation row update silently failed for the entire batch).
-- Tool: `repair-orphaned-propagations` edge function in `scan_propagation_failures` + `repair_propagation_failures` modes.
-- Action: resets affected OKVs back to `draft`, clears `propagated_at`, audit-logs `PROPAGATION_FAILURE_RESET`.
-- Output: list of reset OKVs (kpi_name + period + employee/dept scope), so admin can re-propagate them through the new atomic RPC (A3).
+### 2. OKV Migration Helper
 
-### Execution sequence (in default mode)
+**Where**: New SQL function `migrate_okv_on_scope_change(category_id, kra_name, kpi_name, period, year, old_scope, new_scope)` called by the cascading RPC and by the existing scope change path.
 
-1. Run `cloud_status` to confirm the backend is `ACTIVE_HEALTHY` before any writes.
-2. Snapshot pre-state counts (Bucket B/C/F sizes) via `read_query`.
-3. Invoke the edge function for **A1 scan** → present preview counts.
-4. Invoke **A1 repair** → log results.
-5. Invoke **A2 scan_propagation_failures** → present preview.
-6. Invoke **A2 repair_propagation_failures** → log results.
-7. Snapshot post-state counts and diff against pre-state.
-8. Append a "Phase A1+A2 Execution Report" entry to `DOCUMENTATION.md` change log with exact row counts, timestamp, and any anomalies.
-9. Note any OKVs that A2 reset to `draft` so you can decide whether to re-propagate them now (using the new atomic RPC from A3) or hand them to the relevant Data Owner.
+**Behavior matrix**:
 
-### Risk & Impact
+```text
+old_scope  →  new_scope          Action
+─────────────────────────────────────────────────────────────
+employee   →  department         Aggregate per-employee OKVs
+                                 into one per department.
+                                 Aggregation = AVG (numeric) or
+                                 MAX of submitted_at (qualitative).
+                                 Source values archived in
+                                 okv_migration_history.
 
-- **Data Impact**: Both passes are repair-only. A1 advances orphaned `kra_set` rows into `self_review` with pre-filled scores from the OKV (matches what propagation should have done). A2 *reverts* OKV status from `propagated` → `draft` (the propagation didn't actually happen, so this corrects the lie). All changes audit-logged with `performed_by = NULL`.
-- **Workflow Impact**: A1 makes employees see new self-reviews waiting (one-time backfill). A2 makes Data Owners see KPIs back in `draft` needing a re-propagate click — expected and intended.
-- **Reversibility**: Every row touched is audit-logged with the prior state. The existing "Step Back" admin tool can reverse individual rows if any false positive is found.
-- **Regression Risk**: Low — same code paths the UI uses, just driven server-side. No schema change.
-- **Mitigation**: Dry-run scan first, present counts, only run repair after I show you the preview numbers. If anything looks wrong, abort before the write step.
+employee   →  organization       Aggregate ALL employee OKVs
+                                 into one org-wide OKV. Same
+                                 aggregation rule.
 
-### Deliverables on completion
+department →  organization       Aggregate department OKVs into
+                                 one org-wide OKV.
 
-- Row-count delta report (Buckets B/C/F before vs after).
-- List of OKVs reset by A2 (so you know which ones need re-propagation).
-- Audit log entry IDs for traceability.
-- DOCUMENTATION.md change log entry.
+department →  employee           Split: create one draft OKV
+                                 placeholder per assigned
+                                 employee, copying dept value
+                                 as the suggested achieved.
 
-### What this loop will NOT do
+organization → department        Split: one draft OKV per dept
+                                 that has assigned employees,
+                                 seeded with org value.
 
-- Not touching A3/A4/B1/B2 — those are already shipped.
-- Not auto-re-propagating A2's reset OKVs. After A2 you tell me which ones (or all) to push through the new atomic RPC, and that's a follow-up loop.
+organization → employee          Split: one draft OKV per
+                                 assigned employee, seeded with
+                                 org value.
+```
+
+- All migrations preserve `propagated`/`approved` status when aggregating (the higher-scope OKV inherits the most-advanced status of its sources). Splits always produce `draft` because each new owner must reconfirm.
+- New table `okv_migration_history` (id, original_okv_id, new_okv_id, action, old_scope, new_scope, original_value, original_status, migrated_at, migrated_by) — gives admins a one-click revert path if a cascade was wrong.
+- All writes inside a single transaction per period.
+
+**What this does NOT do**: it does not re-trigger propagation. The new/migrated OKVs sit at their inherited status; if they were `propagated`, child KPIs already have values and stay put. If a split results in `draft` OKVs, the Data Owner gets them in their queue (existing UX).
+
+### 3. Activate `enable_org_kpi_autopull`
+
+- Single `UPDATE app_settings SET enable_org_kpi_autopull = true WHERE id = '00000000-0000-0000-0000-000000000001'`.
+- Done via the insert/update tool (data, not schema).
+- Admin UI already exposes the flag (from Phase B2) — flipping it server-side and verifying the trigger `trg_autopull_propagated_org_kpi` fires on a synthetic late-joiner insert in a dry test.
+
+### Execution sequence
+
+1. Pre-flight `cloud_status` → must be `ACTIVE_HEALTHY`.
+2. **Migration**: create `okv_migration_history` table + RLS, create `migrate_okv_on_scope_change` function, create `change_org_kpi_scope_cascading` RPC.
+3. **Frontend**: extend `useChangeOrgKpiScope` (new param `cascadeMode`), add a new hook `useScopeCascadePreview` for the dry-run, update the "Change Scope" dialog with the checkbox + preview list of affected periods.
+4. **Tests**: Deno unit tests for the migration helper covering all 6 transitions with synthetic data.
+5. **Activation**: `UPDATE app_settings ... = true`. Verify with a test insert that the autopull trigger fires (then roll back the test row).
+6. **Docs/Memory**:
+   - `DOCUMENTATION.md` v2.66.5 changelog entry.
+   - `docs/specs/org-kpi-data-entry-spec.md` → new §4.3 "Scope Change Cascade & OKV Migration".
+   - Update `mem://features/admin/org-kpi-management-suite` with the cascade + migration matrix.
+
+### Risk & Impact Report
+
+- **Data Impact**: Aggregations average numeric OKVs — the source values are preserved in `okv_migration_history` for revert. Splits create new OKV rows; no source data lost. RLS on `okv_migration_history` restricted to admin role.
+- **Workflow Impact**: Cascading forward respects `review_period_locks` — never touches locked months. Splits to `draft` re-queue Data Owners (intended). Aggregations preserve approved status — no regression of in-flight reviews.
+- **UI/UX**: One new checkbox in an existing dialog, one new preview panel. Default = `current_only` (existing behavior). No nav changes.
+- **Regression Risk**: Medium — aggregation logic must handle qualitative vs numeric vs binary correctly. Mitigated by per-transition unit tests + the audit history table letting admins revert.
+- **Auto-pull Activation Risk**: Low — trigger has been deployed and dormant since v2.66.3. Activation is a single boolean flip; verified by synthetic insert + immediate read of the resulting `kpis.achieved_value`.
+- **Mitigation**: All writes audit-logged; `okv_migration_history` enables manual revert; preview-before-cascade in UI; locked-period skip list returned to admin.
+
+### Deliverables
+
+- New RPCs: `change_org_kpi_scope_cascading`, `migrate_okv_on_scope_change`.
+- New table: `okv_migration_history` (+ RLS).
+- Extended hook + dialog with cascade option and preview.
+- Deno tests for the 6 transition matrix.
+- `enable_org_kpi_autopull = true` in `app_settings`.
+- DOCUMENTATION.md v2.66.5 entry, spec §4.3, memory update.
+
+### Out of scope
+
+- Re-propagating the 4 OKVs from Phase A2 (still pending your call).
+- Backfilling `okv_migration_history` for prior manual scope changes (no source data exists).
 
