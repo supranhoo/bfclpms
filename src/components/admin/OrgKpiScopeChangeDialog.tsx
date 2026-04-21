@@ -90,8 +90,8 @@ export function OrgKpiScopeChangeDialog({
         </DialogHeader>
 
         {isMultiMonth && (
-          <div className="flex gap-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs">
-            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+          <div className="flex gap-2 rounded-md border border-warning/40 bg-warning/5 p-3 text-xs">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
             <div className="space-y-1">
               <p>
                 <strong>{frequency} cycle:</strong> the change targets the cycle's <em>terminal month</em>,
