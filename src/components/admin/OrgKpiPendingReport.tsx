@@ -10,7 +10,7 @@ export interface PendingReportRow {
   target: number | null;
   uom: string | null;
   scope: string;
-  status: 'Pending' | 'Entered' | 'Propagated';
+  status: 'Pending' | 'Entered' | 'Propagated' | 'Stuck';
   department: string;
   employee: string;
   employeeCode: string;
@@ -45,6 +45,7 @@ export function OrgKpiPendingReport({ rows, reviewPeriod, reviewYear }: OrgKpiPe
     const pendingCount = rows.filter(r => r.status === 'Pending').length;
     const enteredCount = rows.filter(r => r.status === 'Entered').length;
     const propagatedCount = rows.filter(r => r.status === 'Propagated').length;
+    const stuckCount = rows.filter(r => r.status === 'Stuck').length;
     const completionPct = totalKpis > 0 ? Math.round(((enteredCount + propagatedCount) / totalKpis) * 100) : 0;
 
     // Distinct KPI counts (one card per category+KRA+KPI)
@@ -89,12 +90,13 @@ export function OrgKpiPendingReport({ rows, reviewPeriod, reviewYear }: OrgKpiPe
 
     const wb = XLSX.utils.book_new();
 
-    // --- Sheet 1: Pending Only ---
-    const pendingRows = rows.filter(r => r.status === 'Pending');
+    // --- Sheet 1: Pending + Stuck (action-needed) ---
+    // "Stuck" rows have a value entered but kpis.status never advanced — admin repair required.
+    const pendingRows = rows.filter(r => r.status === 'Pending' || r.status === 'Stuck');
     const summaryPending = [
       [`Org KPI Pending Report — ${reviewPeriod} ${reviewYear}`],
       [`Generated: ${new Date().toLocaleDateString()}`],
-      [`${pendingCount} employee assignment(s) across ${distinctPendingKpis} distinct KPI(s) pending. (Total: ${totalKpis} assignments / ${distinctTotalKpis} KPIs | Entered: ${enteredCount} | Propagated: ${propagatedCount} | Completion: ${completionPct}%)`],
+      [`${pendingCount} pending + ${stuckCount} stuck employee assignment(s) across ${distinctPendingKpis} distinct KPI(s). (Total: ${totalKpis} assignments / ${distinctTotalKpis} KPIs | Entered: ${enteredCount} | Propagated: ${propagatedCount} | Stuck: ${stuckCount} — admin repair needed | Completion: ${completionPct}%)`],
       [],
     ];
     const ws1 = XLSX.utils.aoa_to_sheet(summaryPending);
@@ -112,7 +114,7 @@ export function OrgKpiPendingReport({ rows, reviewPeriod, reviewYear }: OrgKpiPe
     const summaryFull = [
       [`Org KPI Full Status Report — ${reviewPeriod} ${reviewYear}`],
       [`Generated: ${new Date().toLocaleDateString()}`],
-      [`${totalKpis} employee assignment(s) across ${distinctTotalKpis} distinct KPI(s). (Pending: ${pendingCount} / ${distinctPendingKpis} KPIs | Entered: ${enteredCount} | Propagated: ${propagatedCount} | Completion: ${completionPct}%)`],
+      [`${totalKpis} employee assignment(s) across ${distinctTotalKpis} distinct KPI(s). (Pending: ${pendingCount} / ${distinctPendingKpis} KPIs | Entered: ${enteredCount} | Propagated: ${propagatedCount} | Stuck: ${stuckCount} | Completion: ${completionPct}%)`],
       [],
     ];
     const ws2 = XLSX.utils.aoa_to_sheet(summaryFull);

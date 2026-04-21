@@ -65,7 +65,7 @@ export default function OrgKpiDataEntry() {
   const [selectedYear, setSelectedYear] = useState(defaultYear);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'entered' | 'propagated'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'entered' | 'propagated' | 'stuck'>('all');
   const [activeTab, setActiveTab] = useState<'entry' | 'suggestions' | 'owners'>('entry');
   const [importOpen, setImportOpen] = useState(false);
   const [selectedOwnerId, setSelectedOwnerId] = useState<string | null>(null);
@@ -80,6 +80,16 @@ export default function OrgKpiDataEntry() {
   // ALL org-level KPIs (unfiltered) for Data Owners tab
   const { data: allOrgLevelKpis } = useOrgLevelKpis(selectedPeriod, selectedYear);
   const orgLevelKpis = useMemo(() => orgLevelData?.kpis?.map(k => k.kpi) || [], [orgLevelData]);
+  // Set of kpiKey definitions that have at least one underlying kpis row still in 'kra_set' status.
+  // Used to flag "Stuck" rows on the Pending Report (value entered, but workflow never advanced).
+  const stuckDefinitionKeys = useMemo(() => {
+    const set = new Set<string>();
+    const map = orgLevelData?.kraSetKpiRowsByKey || {};
+    Object.entries(map).forEach(([k, ids]) => {
+      if (Array.isArray(ids) && ids.length > 0) set.add(k);
+    });
+    return set;
+  }, [orgLevelData]);
   const employeeCountMap = useMemo(() => {
     const map = new Map<string, number>();
     orgLevelData?.kpis?.forEach(k => {
@@ -178,26 +188,29 @@ export default function OrgKpiDataEntry() {
     return categories.filter(c => categoryIds.has(c.id));
   }, [frequencyFilteredKpis, categories]);
 
-  // Helper: get KPI status from existingValuesMap
-  const getKpiStatus = useCallback((kpi: typeof frequencyFilteredKpis[0]): 'pending' | 'entered' | 'propagated' => {
+  // Helper: get KPI status from existingValuesMap.
+  // 'stuck' = value entered but at least one underlying kpis row is still 'kra_set' (half-propagation / status-stuck bug).
+  const getKpiStatus = useCallback((kpi: typeof frequencyFilteredKpis[0]): 'pending' | 'entered' | 'propagated' | 'stuck' => {
     const scope = (kpi as any).org_level_scope || 'employee';
+    const defKey = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
+    const isStuckCandidate = stuckDefinitionKeys.has(defKey);
     if (scope === 'organization') {
-      const key = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||null||null`;
+      const key = `${defKey}||null||null`;
       const val = existingValuesMap.get(key);
       if ((val?.achieved_value !== null && val?.achieved_value !== undefined) || val?.is_na) {
+        if (isStuckCandidate) return 'stuck';
         return (val?.status === 'propagated' || val?.status === 'approved') ? 'propagated' : 'entered';
       }
       return 'pending';
     }
-     const prefix = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||`;
+    const prefix = `${defKey}||`;
     // Scope-aware: key format is `${kpiKey}||${deptId|'null'}||${empId|'null'}`.
     // Ignore orphan rows from a different scope (e.g. legacy org-scope rows with
     // both ids 'null' when current scope is employee/department).
     // Also ignore rows for employees/departments no longer in the KPI's current
     // assignment set (stale ghosts left after scope changes — v2.65.5).
-    const kKey = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
-    const currentEmpIds = mappedEmployeesMap.get(kKey);
-    const currentDeptIds = mappedDepartmentsMap.get(kKey);
+    const currentEmpIds = mappedEmployeesMap.get(defKey);
+    const currentDeptIds = mappedDepartmentsMap.get(defKey);
     const matching = Array.from(existingValuesMap.entries()).filter(([k, v]) => {
       if (!k.startsWith(prefix)) return false;
       if (!((v.achieved_value !== null && v.achieved_value !== undefined) || v.is_na)) return false;
@@ -217,10 +230,11 @@ export default function OrgKpiDataEntry() {
       return true;
     });
     if (matching.length > 0) {
+      if (isStuckCandidate) return 'stuck';
       return matching.every(([, v]) => v.status === 'propagated' || v.status === 'approved') ? 'propagated' : 'entered';
     }
     return 'pending';
-  }, [existingValuesMap, mappedEmployeesMap, mappedDepartmentsMap]);
+  }, [existingValuesMap, mappedEmployeesMap, mappedDepartmentsMap, stuckDefinitionKeys]);
 
   // Filter by category, search, and status
   const filteredKpis = useMemo(() => {
@@ -916,7 +930,10 @@ export default function OrgKpiDataEntry() {
         const valKey = `${kk}||null||null`;
         const val = existingValuesMap.get(valKey);
         const hasValue = val?.achieved_value !== null && val?.achieved_value !== undefined;
-        const status = hasValue ? ((val?.status === 'propagated' || val?.status === 'approved') ? 'Propagated' : 'Entered') : 'Pending';
+        const isStuck = hasValue && stuckDefinitionKeys.has(kk);
+        const status = hasValue
+          ? (isStuck ? 'Stuck' : ((val?.status === 'propagated' || val?.status === 'approved') ? 'Propagated' : 'Entered'))
+          : 'Pending';
         rows.push({
           ...baseRow,
           status: status as PendingReportRow['status'],
@@ -937,7 +954,10 @@ export default function OrgKpiDataEntry() {
           const valKey = `${kk}||${dept.id}||null`;
           const val = existingValuesMap.get(valKey);
           const hasValue = val?.achieved_value !== null && val?.achieved_value !== undefined;
-          const status = hasValue ? ((val?.status === 'propagated' || val?.status === 'approved') ? 'Propagated' : 'Entered') : 'Pending';
+          const isStuck = hasValue && stuckDefinitionKeys.has(kk);
+          const status = hasValue
+            ? (isStuck ? 'Stuck' : ((val?.status === 'propagated' || val?.status === 'approved') ? 'Propagated' : 'Entered'))
+            : 'Pending';
           rows.push({
             ...baseRow,
             status: status as PendingReportRow['status'],
@@ -960,7 +980,10 @@ export default function OrgKpiDataEntry() {
           const valKey = `${kk}||null||${emp.id}`;
           const val = existingValuesMap.get(valKey);
           const hasValue = val?.achieved_value !== null && val?.achieved_value !== undefined;
-          const status = hasValue ? ((val?.status === 'propagated' || val?.status === 'approved') ? 'Propagated' : 'Entered') : 'Pending';
+          const isStuck = hasValue && stuckDefinitionKeys.has(kk);
+          const status = hasValue
+            ? (isStuck ? 'Stuck' : ((val?.status === 'propagated' || val?.status === 'approved') ? 'Propagated' : 'Entered'))
+            : 'Pending';
           rows.push({
             ...baseRow,
             status: status as PendingReportRow['status'],
@@ -977,7 +1000,7 @@ export default function OrgKpiDataEntry() {
     });
 
     return rows;
-  }, [frequencyFilteredKpis, existingValuesMap, ownershipMap, prevValuesMap, employeeCountMap, departments, allProfiles, mappedDepartmentsMap, mappedEmployeesMap, selectedPeriod, selectedYear]);
+  }, [frequencyFilteredKpis, existingValuesMap, ownershipMap, prevValuesMap, employeeCountMap, departments, allProfiles, mappedDepartmentsMap, mappedEmployeesMap, selectedPeriod, selectedYear, stuckDefinitionKeys]);
   if (kpisLoading) {
     return <TableSkeleton rows={5} columns={5} />;
   }
@@ -1147,6 +1170,7 @@ export default function OrgKpiDataEntry() {
               { key: 'pending' as const, label: 'Pending', count: progressData.totalKpis - progressData.enteredKpis - progressData.propagatedKpis },
               { key: 'entered' as const, label: 'Entered', count: progressData.enteredKpis },
               { key: 'propagated' as const, label: 'Propagated', count: progressData.propagatedKpis },
+              { key: 'stuck' as const, label: 'Stuck (admin repair)', count: frequencyFilteredKpis.filter(k => getKpiStatus(k) === 'stuck').length },
             ]).map(f => (
               <Badge
                 key={f.key}

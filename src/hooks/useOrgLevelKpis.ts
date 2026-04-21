@@ -84,6 +84,9 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
       const perEmployeeTargetMap = new Map<string, { target_value: number | null; uom: string | null }>();
       const employeeKpiIdsMap = new Map<string, string[]>();
       const countMap = new Map<string, Set<string>>();
+      // Track per-kpi-definition the set of underlying kpis.id rows still in 'kra_set' status.
+      // Used by OrgKpiDataEntry to detect "Stuck" rows (value entered but workflow never advanced).
+      const stuckKpiRowsMap = new Map<string, string[]>();
       allOrgKpis?.forEach(k => {
         const key = mkKey(k.category_id, k.kra_name, k.kpi_name);
         const s = countMap.get(key) || new Set<string>();
@@ -99,6 +102,12 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
           const ids = employeeKpiIdsMap.get(key) || [];
           ids.push(k.id);
           employeeKpiIdsMap.set(key, ids);
+        }
+        // Collect kra_set KPI rows per definition (for "Stuck" detection)
+        if ((k as any).status === 'kra_set') {
+          const arr = stuckKpiRowsMap.get(key) || [];
+          arr.push(k.id);
+          stuckKpiRowsMap.set(key, arr);
         }
       });
 
@@ -160,7 +169,10 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
       const employeeKpiIds: Record<string, string[]> = {};
       employeeKpiIdsMap.forEach((val, key) => { employeeKpiIds[key] = val; });
 
-      return { kpis: result, unmappedCount, totalOrgKpis: uniqueMap.size, perEmployeeTargetMap: perEmployeeTargets, employeeKpiIdsMap: employeeKpiIds };
+      const kraSetKpiRowsByKey: Record<string, string[]> = {};
+      stuckKpiRowsMap.forEach((val, key) => { kraSetKpiRowsByKey[key] = val; });
+
+      return { kpis: result, unmappedCount, totalOrgKpis: uniqueMap.size, perEmployeeTargetMap: perEmployeeTargets, employeeKpiIdsMap: employeeKpiIds, kraSetKpiRowsByKey };
     },
     enabled: !!reviewPeriod && !!reviewYear,
   });
