@@ -36,7 +36,7 @@ interface Verification {
 }
 
 interface RepairResult {
-  mode: 'scan' | 'repair';
+  mode: 'scan' | 'repair' | 'scan_stuck' | 'repair_stuck';
   repaired: number;
   null_values_fixed: number;
   skipped: number;
