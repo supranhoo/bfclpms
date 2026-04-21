@@ -71,6 +71,7 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
   management: [
     { title: 'Management Dashboard', icon: LayoutDashboard, path: '/management-dashboard', menuKey: 'management-dashboard', roles: ['management', 'admin'] },
     { title: 'Management Review', icon: Briefcase, path: '/dashboard?view=management', menuKey: 'management-review', roles: ['management', 'admin'] },
+    { title: 'Explore Employees (Read-Only)', icon: Eye, path: '/dashboard?view=management&explore=1', menuKey: 'management-review', roles: ['management', 'admin'] },
   ],
   audit: [
     { title: 'Audit Panel', icon: Shield, path: '/dashboard?view=audit', menuKey: 'audit-panel', roles: ['auditor', 'admin'] },

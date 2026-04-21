@@ -1,6 +1,8 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-21  
+> **Version:** 2.65.1 — Explorer Mode extended to Management view. Management users now see the same "Explore All" toggle and amber read-only banner on the Management Review panel, with a sidebar sub-link "Explore Employees (Read-Only)" deep-linking via `/dashboard?view=management&explore=1`. Cross-check filter, read-only scorecard enforcement (`isReviewable()` returns false in explore mode hiding Final Score input, Approve, Send Back, queries, and observations), and `EXPLORER_VIEW` audit-log entries (with `metadata.viewLevel='management'`) are reused unchanged. No DB / RLS / workflow changes.
+>
 > **Version:** 2.65.0 — Auditor Explorer Mode. Auditors get a first-class "Explore All" toggle on the Audit panel that switches to read-only org-wide browsing (powered by the existing `cross_check` filter). UI now enforces read-only: scoring inputs, Save/Send Back/Forward, query, and observation actions are hidden in the scorecard sheet; per-row Send Back is suppressed; an amber banner explains the mode. Sidebar gains an "Explore Employees (Read-Only)" sub-link that deep-links via `?explore=1`. Each KPI opened in Explorer Mode appends a lightweight `EXPLORER_VIEW` entry to `kpi_audit_logs` for compliance. No DB / RLS / workflow changes — RLS already blocked writes; this aligns the UI with that contract.
 > **Maintainer:** Lovable AI
 

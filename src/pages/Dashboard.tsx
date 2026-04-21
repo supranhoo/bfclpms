@@ -110,7 +110,7 @@ export default function Dashboard() {
   // Initialize from URL query param
   const viewParam = searchParams.get('view');
   const exploreParam = searchParams.get('explore');
-  const exploreMode = viewMode === 'audit' && exploreParam === '1';
+  const exploreMode = (viewMode === 'audit' || viewMode === 'management') && exploreParam === '1';
   useEffect(() => {
     if (!viewParam) return;
     const mappedMode = (viewParam === 'skip_level' ? 'team' : viewParam) as ViewMode;
