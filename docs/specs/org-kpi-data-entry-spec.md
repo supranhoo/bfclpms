@@ -136,9 +136,10 @@ org_kpi_values  ⟷  kpis                 ⟷  review_submissions
 
 ### 3.1 Definition state (`org_kpi_values.status`)
 ```
-        ┌──────────────────────────── send_back ───────────────────────────┐
-        │                                                                  │
-        ▼                                                                  │
+        ┌──────────────── send_back ─────────────────┐
+        │                                            │
+        │   ┌──── revision requested (Phase B1) ─────┤
+        ▼   ▼                                        │
     ┌────────┐    save     ┌────────┐   propagate    ┌────────────┐    final approval
  ●─►│ (none) │────────────►│ draft  │───────────────►│ propagated │──────────────────► approved
     └────────┘             └────────┘                └────────────┘
@@ -146,6 +147,8 @@ org_kpi_values  ⟷  kpis                 ⟷  review_submissions
                                 │                          │
                                 └────── repair (bucket F) ─┘
 ```
+
+New transition (v2.66.2): a reviewer may invoke `request_org_kpi_revision(kpi_id, reason)` on any `is_org_level=true` KPI at or past `self_review`. This reverts the OKV from `propagated` → `draft`, cascades sibling employee KPIs in `self_review`/`manager_review` back to `kra_set` (clearing scores, preserving evidence), and flags employees past `manager_check` with `ORG_KPI_REVISION_FLAGGED` so their score stands against the pre-revision value.
 
 ### 3.2 Per-employee instance state (`kpis.status`)
 Driven by the resolved `workflow_template`. Canonical order:
@@ -186,10 +189,16 @@ Violations:
 | 8 | Reviewers | Standard workflow advances per resolved template | Standard |
 | 9 | System | On final approval of a multi-month KPI's terminal sub-period, `percolate_multimonth_score` trigger fires and copies the final score/rating to all sibling sub-periods | INSERT/UPSERT `review_submissions`, UPDATE `kpis.status='approved'`, INSERT `kpi_audit_logs` (`SCORE_PERCOLATED`) |
 
+### 4.0 Continuous late-joiner fill (Phase B2 — v2.66.3)
+After step 5 propagates the OKV, a database trigger (`trg_autopull_propagated_org_kpi`) keeps the OKV "live" for new joiners. When a fresh `kpis` row is inserted with `is_org_level=true` and `status='kra_set'`, the trigger looks up the most-specific matching OKV (employee → department → org-wide) where `status IN ('propagated', 'approved')` and, if the feature flag `app_settings.enable_org_kpi_autopull` is on, pre-fills `review_submissions`, computes self-score from the KPI's thresholds, advances status to `self_review`, and audit-logs `ORG_KPI_AUTOPULLED_FOR_LATE_JOINER`. Honors `is_na`. Admins can run `backfill_late_joiner_org_kpis(p_dry_run)` (UI: Bucket K card in Data Repair) to apply the same logic to historical late-joiner rows.
+
 ### 4.1 Send-back path
 If a downstream reviewer rejects an Org KPI:
 - For the rejected employee's row, `kpis.status` rolls back to the configured step-back stage (typically `kra_set` or `self_review`).
 - The OKV definition is **not** automatically rolled back — other employees' workflows continue. A separate Admin action ("Send back to Data Owner") sets `org_kpi_values.status='draft'` and clears `propagated_at`. Contract: emit `ORG_KPI_SENT_BACK` audit log.
+
+### 4.2 Reviewer "Request Revision" path (Phase B1 — v2.66.2)
+When a reviewer determines the **source value itself** is wrong (not the score), they toggle "Issue is with the source value" inside the SendBack dialog (visible only on `is_org_level=true` KPIs) and submit. The `request_org_kpi_revision(p_kpi_id, p_reason)` RPC runs atomically: (1) reverts OKV to `draft` and stores `last_revision_reason`/`last_revision_requested_by`/`last_revision_requested_at`/`revision_count`; (2) cascades sibling employee KPIs in `self_review`/`manager_review` back to `kra_set` with submission scores cleared (evidence preserved per send-back governance); (3) employees past `manager_check` stay put but receive an `ORG_KPI_REVISION_FLAGGED` audit entry; (4) audit logs `ORG_KPI_REVISION_REQUESTED` (parent) + `STATUS_REVISION_CASCADE` (children); (5) notifies all data owners via the standard `org_kpi_data_owners` pipeline.
 
 ---
 
@@ -239,6 +248,8 @@ Every surface MUST adopt this vocabulary and label its counts. New surfaces inhe
 | **G** | OKV.status='draft' + age > 7 days | (no tool — preventive monitoring only) | scheduled report |
 | **H** | Multiple OKV rows for same natural key | (no tool — confirmed 0 occurrences after natural-key normalization) | n/a |
 | **I** | `kpis.is_org_level=true` + no `org_kpi_data_owners` row | **GAP — Roadmap step 4** (orphaned-ownership UI) | inline owner assignment |
+| **J** | OKV.status='propagated' + at least one child `kpis.status='kra_set'` after a `STATUS_REJECTED` audit entry post `propagated_at` | (legitimised by Phase B1 — `request_org_kpi_revision` returns OKV to `draft`); detection still flags reviewers who used the legacy send-back path | manual: ask reviewer to use "Request Revision" |
+| **K** | `kpis.is_org_level=true, status='kra_set'` + matching OKV.status IN (`propagated`,`approved`) + `kpis.created_at > okv.updated_at` | Phase B2 — DB trigger `trg_autopull_propagated_org_kpi` (live) + `backfill_late_joiner_org_kpis(p_dry_run)` RPC (historical) | Trigger pre-fills submission, advances to `self_review`, audit-logs `ORG_KPI_AUTOPULLED_FOR_LATE_JOINER` |
 
 See `mem://features/admin/data-repair-engine` for the repair engine architecture and `mem://features/admin/workflow-reconciliation-logic` for the related (non-Org) reconciler.
 
@@ -258,6 +269,10 @@ See `mem://features/admin/data-repair-engine` for the repair engine architecture
 | **v2.65.9 (planned)** | 2026-Q2 | Bucket F detection + repair (`scan_propagation_failures` / `repair_propagation_failures`). | Audit 2026-04 found 87 silent propagation failures. | edge fn + `DataRepairTab.tsx` | Stops bleed; root cause fixed in v2.65.10. |
 | **v2.65.10 (planned)** | 2026-Q2 | Atomic propagation RPC patch: `GET DIAGNOSTICS row_count`, skipped[] return, audit log inside loop, OKV.status revert on zero advance. | Eliminates the source of buckets B, C, and F. | `propagate_org_kpi_value` | Pre-flight preview still missing (roadmap 5). |
 | **v2.65.11 (planned)** | 2026-Q2 | Orphaned-ownership UI + pre-flight propagation preview + remaining unit labels. | Bucket I + UX polish. | `OrgKpiDataEntry.tsx`, new admin sheet | none anticipated |
+| v2.66.0 | 2026-04-21 | RPC patched (Phase A3): `ROW_COUNT`-guarded status advance on both 2-arg and 3-arg overloads, `skipped[]` return, `PROPAGATION_PARTIAL` audit logs per skipped KPI. Caller surfaces `skippedCount` in toasts. | Closes root-cause for buckets B, C, F. | `propagate_org_kpi_value` (both overloads), `usePropagateOrgKpiValue.ts` | None known. |
+| v2.66.1 | 2026-04-21 | Pre-flight propagation preview (Phase A4): read-only RPC `preview_org_kpi_propagation(uuid[])`, `PropagationPreviewDialog` modal showing `total/will_advance/will_skip` breakdown before the live call. | Roadmap step 5; eliminates blind propagation. | `preview_org_kpi_propagation` RPC, `usePreviewOrgKpiPropagation.ts`, `PropagationPreviewDialog.tsx`, `OrgKpiDataEntry.tsx` | None known. |
+| v2.66.2 | 2026-04-21 | Reviewer "Request Revision" action (Phase B1): new columns on OKV (`last_revision_reason`, `last_revision_requested_by`, `last_revision_requested_at`, `revision_count`), atomic RPC `request_org_kpi_revision`, SendBackDialog toggle for org-level KPIs. Cascades sibling rollbacks + flags late-stage employees. | Closes Gap #1 ("stuck in the middle" — DO not notified after rejection). | OKV migration, `useRequestOrgKpiRevision.ts`, `SendBackDialog.tsx` | None known. |
+| v2.66.3 | 2026-04-21 | Late-joiner auto-pull trigger (Phase B2): `app_settings.enable_org_kpi_autopull` flag (default off), `trg_autopull_propagated_org_kpi` AFTER INSERT trigger, `backfill_late_joiner_org_kpis(p_dry_run)` repair RPC, Bucket K card in Data Repair. | Closes Gap #3 ("ghost assignment" — late joiner gets `kpis` row but no submission). | OKV migration, `useLateJoinerBackfill.ts`, `LateJoinerBackfillSection.tsx`, `DataRepairTab.tsx` | Trigger ships OFF for one release; admin enables when ready. |
 
 Pull additional historical detail from: `DOCUMENTATION.md`, `mem://features/admin/org-kpi-management-suite`, `mem://features/admin/copy-kras-org-kpi-integrity`, `mem://features/admin/data-repair-engine`, `mem://features/admin/compliance-kpi-sub-factors`.
 
@@ -271,13 +286,15 @@ Direct copy of the ranked fix list from `docs/audits/org-kpi-data-entry-2026-04.
 |---|---|---|---|---|
 | 1 | Run existing repair tools to clear 14 B + 6 C rows. | B, C | **Pending admin click** | Roadmap step 1 |
 | 2 | Bucket F detection + repair pass. | F (87 rows) | **Not yet implemented** | Roadmap step 2 |
-| 3 | Atomic propagation RPC patch (row-count check, skipped[], audit-in-loop, OKV revert). | Prevents new B/C/F | **Not yet implemented** | Roadmap step 3 |
+| 3 | Atomic propagation RPC patch (row-count check, skipped[], audit-in-loop, OKV revert). | Prevents new B/C/F | **✅ Resolved (v2.66.0)** | Roadmap step 3 |
 | 4 | Orphaned-ownership UI (44 distinct unowned KPIs). | I | **Not yet implemented** | Roadmap step 4 |
-| 5 | Pre-flight propagation preview ("X will advance, Y already past"). | UX | **Not yet implemented** | Roadmap step 5 |
+| 5 | Pre-flight propagation preview ("X will advance, Y already past"). | UX | **✅ Resolved (v2.66.1)** | Roadmap step 5 |
 | 6 | Unit labels on remaining 4 count tiles. | UX | **Not yet implemented** | Roadmap step 6 |
 | 7 | Bucket D verification (23 self_review-without-OKV rows — confirm benign). | D | **Pending SQL check** | one-off |
 | 8 | Bucket G monitoring (abandoned drafts > 7d). | G | **Not yet implemented** | optional |
 | 9 | Audit-trail completeness inside the RPC loop. | trail | **Bundled with item 3** | Roadmap step 3 |
+| 10 | Reviewer "Request Revision" action — closes "stuck in the middle" gap. | J | **✅ Resolved (v2.66.2)** | Roadmap step 7 |
+| 11 | Late-joiner auto-pull trigger — closes "ghost assignment" gap. | K | **✅ Resolved (v2.66.3, flag-gated)** | Roadmap step 8 |
 
 ---
 
