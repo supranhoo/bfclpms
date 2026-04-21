@@ -17,7 +17,7 @@ import { QualitativeSelect } from '@/components/review/QualitativeSelect';
 import { BINARY_OPTIONS, type QualitativeOption } from '@/lib/qualitativeUom';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle, RotateCcw, Trash2, Ban, Undo2 } from 'lucide-react';
+import { Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle, RotateCcw, Trash2, Ban, Undo2, FileEdit, ShieldCheck } from 'lucide-react';
 import { useSentBackOrgKpiEmployees, type SentBackInfo } from '@/hooks/useSentBackOrgKpiEmployees';
 import { isComplianceKpi, useBulkEmployeeSubmissionDates } from '@/hooks/useComplianceSubFactors';
 
@@ -43,7 +43,7 @@ export interface OrgKpiCardData {
   previousValue: number | null;
   previousPeriodLabel: string | null;
   // Status
-  status: 'pending' | 'entered' | 'propagated' | 'stuck';
+  status: 'pending' | 'entered' | 'propagated' | 'approved' | 'draft' | 'stuck';
   // Scoped rows for dept/employee scope
   scopedRows?: ScopedRow[];
   scopeLabel?: string;
@@ -88,10 +88,13 @@ interface OrgKpiEntryCardProps {
   onRemoveFromOrg?: () => Promise<void>;
 }
 
-const statusConfig = {
-  pending: { label: 'Pending', icon: Clock, variant: 'outline' as const, className: 'text-muted-foreground border-muted-foreground/30' },
-  entered: { label: 'Value Entered', icon: CheckCircle2, variant: 'secondary' as const, className: 'text-orange-600 bg-orange-50 border-orange-200 dark:text-orange-400 dark:bg-orange-950 dark:border-orange-800' },
-  propagated: { label: 'Propagated', icon: ArrowUpRight, variant: 'default' as const, className: 'text-green-600 bg-green-50 border-green-200 dark:text-green-400 dark:bg-green-950 dark:border-green-800' },
+const statusConfig: Record<string, { label: string; icon: typeof Clock; variant: 'outline' | 'secondary' | 'default' | 'destructive'; className: string }> = {
+  pending: { label: 'Pending', icon: Clock, variant: 'outline', className: 'text-muted-foreground border-muted-foreground/30' },
+  entered: { label: 'Value Entered', icon: CheckCircle2, variant: 'secondary', className: 'text-orange-600 bg-orange-50 border-orange-200 dark:text-orange-400 dark:bg-orange-950 dark:border-orange-800' },
+  propagated: { label: 'Propagated', icon: ArrowUpRight, variant: 'default', className: 'text-green-600 bg-green-50 border-green-200 dark:text-green-400 dark:bg-green-950 dark:border-green-800' },
+  draft: { label: 'Draft', icon: FileEdit, variant: 'outline', className: 'text-muted-foreground border-dashed' },
+  approved: { label: 'Approved', icon: ShieldCheck, variant: 'default', className: 'text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-950 dark:border-emerald-800' },
+  stuck: { label: 'Stuck', icon: AlertTriangle, variant: 'destructive', className: 'text-destructive border-destructive/40' },
 };
 
 const scopeIcons = {
