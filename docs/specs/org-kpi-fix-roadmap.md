@@ -43,6 +43,7 @@
 | Field | Value |
 |---|---|
 | **Goal** | Detect and reset the 87 OKV rows where `status='propagated'` but zero employees advanced. |
+| **Status** | **✅ Implemented (v2.65.9 — 2026-04-21).** Two new edge function modes (`scan_propagation_failures`, `repair_propagation_failures`) + new "Repair Propagation Failures (Bucket F)" section in `DataRepairTab.tsx`. |
 | **Code change** | Edge function: 2 new actions in `repair-orphaned-propagations` (`scan_propagation_failures`, `repair_propagation_failures`). UI: 1 new section in `DataRepairTab.tsx`. |
 | **Effort** | ~1 hour. |
 | **Files touched** | `supabase/functions/repair-orphaned-propagations/index.ts`, `src/components/admin/DataRepairTab.tsx`, `docs/specs/org-kpi-data-entry-spec.md` (mark item 2 as Implemented), `DOCUMENTATION.md`. |
