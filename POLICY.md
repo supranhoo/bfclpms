@@ -1658,3 +1658,19 @@ Every Org KPI propagation event must produce **one `ORG_KPI_PROPAGATED` row in `
 3. Compliance and SLA reporting depend on per-KPI provenance (which Data Owner propagated which value to which employee, when).
 
 Bulk-summary audit rows that omit `kpi_id` may be added **in addition** to per-KPI rows (for analytics dashboards), but must never replace them. Any change that collapses per-KPI propagation events into a single JSON-blob row is **forbidden** under this policy.
+
+---
+
+## §90 — Bulk Data Wipe Operations Require Triple-Lock Confirmation (v2.66.7.4)
+
+Any administrative action that **bulk-deletes data across the entire organisation** (e.g. "Clear All KPI Data", future "Clear All Reviews", "Reset All Incentive Records", etc.) MUST be guarded by a hardened multi-stage confirmation pattern. A single `AlertDialog` / native `confirm()` is insufficient and is **forbidden** for this class of action.
+
+The mandatory pattern is implemented by `src/components/admin/ClearAllKpiDataDialog.tsx` and consists of three interlocked gates:
+
+1. **Stage 1 — Live Blast-Radius Disclosure.** The dialog must fetch and display the exact row counts that will be deleted (per affected table) at the moment the dialog opens. The "Continue" button must be disabled by a **3-second cooldown** to prevent rage-click bypass and accidental Enter-key flows.
+2. **Stage 2 — Type-to-Confirm.** The admin must type a fixed, case-sensitive phrase (e.g. `DELETE ALL KPI DATA`) into a text input. The destructive button stays disabled until the typed text matches exactly.
+3. **Stage 2 — Responsibility Acknowledgement.** A separate checkbox stating "I have taken a backup or accept full responsibility for this irreversible action" must be ticked in addition to the typed phrase. Both gates must pass before the destructive button enables.
+
+**Forensic audit:** Before the destructive query executes, the handler MUST insert a row into `system_audit_logs` (or an equivalent immutable log) with `action = '<BULK_*_CLEARED>'`, `performed_by = auth.uid()`, and a `metadata.counts_at_deletion` JSON capturing the per-table row counts. `system_audit_logs` is RLS-restricted to admins for SELECT and is policy-locked against UPDATE/DELETE.
+
+**Reusability:** New bulk-wipe buttons must reuse the `ClearAllKpiDataDialog` pattern (parameterised) rather than re-implementing it. Any deviation requires explicit policy review.

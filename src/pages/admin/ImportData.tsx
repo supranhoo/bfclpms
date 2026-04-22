@@ -19,6 +19,7 @@ import ImportResultsSummary, { type ImportRowResult } from '@/components/admin/I
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
+import { ClearAllKpiDataDialog } from '@/components/admin/ClearAllKpiDataDialog';
 import * as XLSX from 'xlsx';
 import { validateFileSize, IMPORT_LIMITS, sanitizeText, normalizeRole, VALID_ROLES } from '@/lib/importValidation';
 import { scoreToRatingLevel } from '@/lib/reviewConstants';
@@ -183,6 +184,7 @@ export default function ImportData() {
   
   // Clear data state
   const [isClearing, setIsClearing] = useState(false);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
   
   // Employee search in preview
   const [employeeSearchQuery, setEmployeeSearchQuery] = useState('');
@@ -195,6 +197,29 @@ export default function ImportData() {
   const handleClearKpiData = async () => {
     setIsClearing(true);
     try {
+      // Forensic audit BEFORE deletion — capture blast radius for traceability
+      const [{ count: kpiCount }, { count: subCount }, { count: revCount }, { count: impCount }] = await Promise.all([
+        supabase.from('kpis').select('id', { count: 'exact', head: true }),
+        supabase.from('review_submissions').select('id', { count: 'exact', head: true }),
+        supabase.from('performance_reviews').select('id', { count: 'exact', head: true }),
+        supabase.from('import_progress').select('id', { count: 'exact', head: true }),
+      ]);
+      const { data: { user: auditUser } } = await supabase.auth.getUser();
+      await supabase.from('system_audit_logs').insert({
+        action: 'BULK_KPI_DATA_CLEARED',
+        performed_by: auditUser?.id ?? null,
+        metadata: {
+          counts_at_deletion: {
+            kpis: kpiCount ?? 0,
+            review_submissions: subCount ?? 0,
+            performance_reviews: revCount ?? 0,
+            import_progress: impCount ?? 0,
+          },
+          source: 'admin/import - Clear All KPI Data',
+          confirmed_via: 'ClearAllKpiDataDialog (two-stage type-to-confirm + ack + cooldown)',
+        },
+      });
+
       // Delete in order: review_submissions → kpis → performance_reviews → import_progress
       const { error: submissionsError } = await supabase
         .from('review_submissions')
@@ -239,6 +264,7 @@ export default function ImportData() {
       setImportSuccess(0);
       setBackgroundImportId(null);
       setBackgroundProgress(null);
+      setClearDialogOpen(false);
     } catch (error: any) {
       console.error('Error clearing data:', error);
       toast({
@@ -2190,29 +2216,20 @@ export default function ImportData() {
                     className="cursor-pointer"
                   />
                 </div>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="destructive" disabled={isClearing}>
-                      {isClearing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
-                      Clear All KPI Data
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Clear All KPI Data?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This will permanently delete all KPIs, review submissions, and performance reviews. 
-                        This action cannot be undone. Use this before importing fresh data.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleClearKpiData} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                        Yes, Clear All Data
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                <Button
+                  variant="destructive"
+                  disabled={isClearing}
+                  onClick={() => setClearDialogOpen(true)}
+                >
+                  {isClearing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                  Clear All KPI Data
+                </Button>
+                <ClearAllKpiDataDialog
+                  open={clearDialogOpen}
+                  onOpenChange={setClearDialogOpen}
+                  onConfirm={handleClearKpiData}
+                  isClearing={isClearing}
+                />
                 <div className="flex items-center gap-2 ml-auto">
                   <Checkbox
                     id="background-import"
