@@ -97,7 +97,7 @@ export function LoginSlideshow({
                 'absolute inset-0 bg-cover bg-center transition-opacity duration-1000',
                 index === currentIndex && !isTransitioning ? 'opacity-100' : 'opacity-0'
               )}
-              style={{ backgroundImage: `url(${url})` }}
+              style={{ backgroundImage: `url(${optimizeWallpaperUrl(url)})` }}
             />
           ))}
           {/* Overlay gradient - lighter for better wallpaper visibility, from right */}
