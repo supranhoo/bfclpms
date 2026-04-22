@@ -1,104 +1,57 @@
 
 
-## Plan — Re-evaluating the Three "Overdoing" Claims
+## Plan — Add Multi-Step Confirmation Guard for "Clear All KPI Data"
 
-I audited each claim against the actual code/schema. Verdict: **2 of 3 are false alarms; 1 is partially valid but small-scope.** No big refactor warranted.
+The current flow has only a single AlertDialog with one click → destructive action fires. Per `mem://design/destructive-action-governance`, system-wide destructive operations require a hardened reconfirmation guard. "Clear All KPI Data" is the most destructive button in the entire app (wipes all KPIs, submissions, reviews) and is currently one mis-click away.
 
----
+### Fix — Strong Triple-Lock Guard
 
-### Claim 1 — `nk()` Natural Key Joins on `kra_name`/`kpi_name`
+Replace the existing single AlertDialog (lines 2193–2215 in `src/pages/admin/ImportData.tsx`) with a **two-stage hardened confirmation dialog**:
 
-**Verdict: FALSE ALARM. Do not change.**
+**Stage 1 — Warning Dialog**
+- Big red warning icon + heading "Danger: This will erase all PMS data"
+- Bullet list of exactly what gets deleted (KPIs, review_submissions, performance reviews, audit logs references, sub-period evidence, observations, queries — pulled from the existing `handleClearKpiData` scope)
+- Display live row counts fetched on dialog-open (e.g., "You are about to delete **2,847 KPIs**, **9,231 submissions**, **412 reviews**") so the admin sees the blast radius
+- "Cancel" button (default focus) and "I understand, continue" button
 
-Evidence:
-- `nk()` exists in **3 client-side files only** (`OrgKpiDataEntry.tsx`, `useOrgKpiDataOwner.ts`, `useOrgLevelKpis.ts`) — used to build **JS Map keys** for in-memory grouping after the rows are already fetched. It **never runs in a SQL JOIN**.
-- The actual DB joins use **`category_id + kra_name + kpi_name + review_period + review_year`** which is backed by a **UNIQUE INDEX** (`20260106132841_*.sql` line 19). Postgres uses this index — no string manipulation per row.
-- Server-side matching in `propagate_org_kpi_value`, `change_org_kpi_scope_cascading`, `trg_sync_org_status_to_future_open_periods`, etc. is all **plain equality on indexed columns** — no `lower()`, no `regexp_replace()`.
-- The `category_id` is already a UUID FK; `kra_name`/`kpi_name` are governed by the KRA Library Master, so non-breaking-space drift is prevented at the source.
+**Stage 2 — Type-to-Confirm Dialog**
+- Requires the admin to type the exact phrase **`DELETE ALL KPI DATA`** (case-sensitive) into a text input
+- Confirm button stays disabled until the typed text matches exactly
+- A second checkbox: *"I have taken a backup or accept full responsibility for this irreversible action"* — must be checked
+- Both gates required → only then the red "Permanently Delete" button enables
+- On confirm: triggers `handleClearKpiData` (unchanged)
 
-Adding a `kpi_template_id` or `content_hash` would be a multi-month refactor of every KPI row, every audit log, every report, and every import path — for **zero performance gain** and the introduction of a new identity that has to be kept in sync with the human-readable name everyone already uses.
+**Additional Safeguards**
+- Audit-log a `BULK_KPI_DATA_CLEARED` row attributing the action to the admin (`performed_by = auth.uid()`) before the destructive query runs, capturing the row counts deleted — so the action is forensically traceable per `POLICY.md` audit mandate.
+- Disable the trigger button entirely when `isClearing` is true (already done) and add a 3-second cooldown after dialog open before the Stage-1 "continue" button activates, preventing rage-click bypass.
 
-**Action: no change. Document the rationale.**
+### Files Changed
 
----
-
-### Claim 2 — Redundant `achieved_value` Storage in `review_submissions`
-
-**Verdict: FALSE ALARM. The current design is correct for HR audit law.**
-
-Evidence:
-- `review_submissions.achieved_value` is **not a cache** — it is the **employee's submitted self-value at submission time**, which by HR policy must be **immutable per submission**. Org KPI propagation pre-fills it but the employee/reviewer can subsequently amend their own row (sub-factors, remarks, evidence, score overrides).
-- The 8-stage scoring fallback chain (`mem://architecture/pms/universal-scoring-logic`) and `final_score` immutability rule (`mem://features/review/final-score-governance-and-immutability`) **explicitly require a frozen per-employee snapshot** so that approved scores can never silently change when an admin edits the OKV row years later.
-- A live FK to `org_kpi_values.id` would mean: edit one OKV → 5,000 already-approved final scores silently change → audit/legal nightmare.
-- Storage cost: a numeric column × 5,000 rows = ~40 KB. This is not a cost concern.
-
-The user's "fix" (live FK lookup) would directly violate `final-score-governance-and-immutability` which has been explicitly enforced across multiple migrations.
-
-**Action: no change. Document why this is intentional immutability, not redundancy.**
-
----
-
-### Claim 3 — One Audit Row per Propagated KPI
-
-**Verdict: PARTIALLY VALID but the proposed fix is wrong. Small optimization possible.**
-
-Evidence:
-- `usePropagateOrgKpiValue.ts` line 251–259 inserts one `ORG_KPI_PROPAGATED` row **per KPI** in `kpi_audit_logs`.
-- These per-KPI rows are **load-bearing**, not noise:
-  - `KpiTimeline.tsx` (line 89) renders them in each employee's Review Journey.
-  - `KpiJourneySection.tsx` (line 522) labels them.
-  - `repair-stepped-back-siblings/index.ts` (line 81–82) **reconstructs submission data from these rows** for the rollback engine.
-- Collapsing them into a single `ORG_KPI_BULK_PROPAGATED` row with a JSON blob would **break three downstream features**: per-KPI timeline display, per-KPI journey labels, and the step-back recovery engine.
-
-What **is** valid: the existing `PROPAGATION_PARTIAL` summary row (migration `20260421173624_*.sql` line 122–137) already inserts one row per skipped KPI — that one **could** legitimately collapse into a single summary because nothing reads it per-KPI.
-
-**Proposed light optimization (only if you want it):**
-- Keep `ORG_KPI_PROPAGATED` per-KPI (required by 3 features).
-- Add an additional **single** `ORG_KPI_BULK_PROPAGATION_SUMMARY` row per propagation call carrying `{batch_size, propagated_count, skipped_count, owner_id, period}` — useful for analytics dashboards without touching the per-KPI rows.
-- Optionally compact `PROPAGATION_PARTIAL` from N rows to 1 summary row (no consumer reads it per-row today).
-
----
-
-### Recommended Action: Documentation-Only Update (no code changes)
-
-Because the first two claims would actively damage the system and the third has no net benefit, the deliverable is a **single documentation entry** that records the rationale so this doesn't get reopened later.
-
-#### Files to update
-
-1. **`DOCUMENTATION.md`** — new section §"Design Decisions & Rejected Refactors" (v2.66.7.3):
-   - Why client-side `nk()` is not a perf concern (it's a JS Map key, not a SQL predicate).
-   - Why `achieved_value` is intentionally duplicated per submission (immutability mandate).
-   - Why `ORG_KPI_PROPAGATED` is per-KPI by design (consumed by 3 features).
-
-2. **`POLICY.md`** — append:
-   - "Submission Snapshot Immutability": once a value lands in `review_submissions`, it is the employee's frozen submission and is never recomputed from the OKV source.
-   - "Per-KPI Audit Granularity": every propagation/score event must be individually addressable for timeline display and rollback recovery.
-
-3. **`mem://features/admin/org-kpi-management-suite`** — add note (13): "Submission snapshot is immutable per HR audit policy; OKV-to-submission link is by-value, not by-FK."
-
-4. **`mem://architecture/pms/universal-scoring-logic`** — add note: "review_submissions stores frozen submission values per HR immutability policy; never replace with live FK to source tables."
-
-#### Optional follow-up (not in this loop unless requested)
-
-- Add `ORG_KPI_BULK_PROPAGATION_SUMMARY` summary row alongside per-KPI rows (purely additive, no consumer impact).
-- Compact `PROPAGATION_PARTIAL` from N rows to 1 summary row.
+1. **`src/pages/admin/ImportData.tsx`** — replace the single `AlertDialog` block (lines 2193–2215) with the new two-stage guard. Add a small local `useState` for `confirmText`, `ackChecked`, `stage`, and `cooldownDone`. Add a `useQuery` (or one-off `supabase.from('kpis').select('id', { count: 'exact', head: true })` etc.) to fetch the live counts when the dialog opens.
+2. **New helper component** `src/components/admin/ClearAllKpiDataDialog.tsx` — encapsulates the two-stage dialog so `ImportData.tsx` stays lean (separation of concerns per workspace policy). Props: `{ open, onOpenChange, onConfirm, isClearing }`.
+3. **Migration** `supabase/migrations/<ts>_audit_bulk_kpi_clear.sql` — extend the `kpi_audit_logs.action` allow-list (if constrained) to include `BULK_KPI_DATA_CLEARED` and write the audit insert from inside `handleClearKpiData` before deletes execute.
+4. **`DOCUMENTATION.md`** — v2.66.7.4 entry under "Destructive Action Governance" describing the new triple-lock for KPI data wipe.
+5. **`POLICY.md`** — append rule §90: *"Bulk Data Wipe Operations require type-to-confirm + acknowledgement checkbox + cooldown; single AlertDialog is insufficient."*
+6. **`mem://design/destructive-action-governance`** — add note: *"Bulk wipe actions (Clear All KPI Data, Clear All Reviews, etc.) require the two-stage `ClearAllKpiDataDialog` pattern: live row counts → type-to-confirm + checkbox + 3s cooldown."*
 
 ### Risk & Impact Report
 
-- **Data Impact**: None — documentation only.
-- **Workflow Impact**: None.
-- **UI/UX**: None.
-- **Regression Risk**: Zero.
-- **Mitigation**: By documenting the rationale, future contributors won't re-propose these refactors.
+- **Data Impact**: None — the destructive query itself is unchanged. Only adds a `BULK_KPI_DATA_CLEARED` audit row before deletion.
+- **Workflow Impact**: Admins now require ~5 extra seconds and a typed phrase to wipe data. Intentional friction.
+- **UI/UX**: Modernized destructive flow consistent with `ConfirmDestructiveDialog` governance; component is reusable for future bulk-wipe buttons.
+- **Regression Risk**: Very low — the underlying `handleClearKpiData` and its mutation chain are untouched; only the dialog wrapper changes.
+- **Mitigation**: Confirm button literally cannot fire until both gates pass; cooldown blocks accidental enter-key flows.
 
 ### Out of Scope
 
-- Any change to the schema, RPCs, propagation flow, audit logging, or `nk()` helper.
-- The optional bulk-summary audit row (deferred unless requested).
+- Refactoring `handleClearKpiData` itself.
+- Adding "Restore" or "Undo" capability (genuine deletes, not soft-delete).
+- Applying the same guard to other destructive admin actions (deferred — would be a follow-up sweep).
 
 ### Deliverables
 
-- DOCUMENTATION.md v2.66.7.3 entry (Design Decisions & Rejected Refactors).
-- POLICY.md additions (Snapshot Immutability + Per-KPI Audit Granularity).
-- Two memory file updates.
+- New `ClearAllKpiDataDialog.tsx` component (two-stage, type-to-confirm, checkbox, cooldown, live counts).
+- Patched `ImportData.tsx` integrating the new dialog.
+- Migration adding `BULK_KPI_DATA_CLEARED` audit action + audit insert in handler.
+- DOCUMENTATION.md v2.66.7.4, POLICY.md §90, memory update for destructive-action-governance.
 
