@@ -197,6 +197,29 @@ export default function ImportData() {
   const handleClearKpiData = async () => {
     setIsClearing(true);
     try {
+      // Forensic audit BEFORE deletion — capture blast radius for traceability
+      const [{ count: kpiCount }, { count: subCount }, { count: revCount }, { count: impCount }] = await Promise.all([
+        supabase.from('kpis').select('id', { count: 'exact', head: true }),
+        supabase.from('review_submissions').select('id', { count: 'exact', head: true }),
+        supabase.from('performance_reviews').select('id', { count: 'exact', head: true }),
+        supabase.from('import_progress').select('id', { count: 'exact', head: true }),
+      ]);
+      const { data: { user: auditUser } } = await supabase.auth.getUser();
+      await supabase.from('system_audit_logs').insert({
+        action: 'BULK_KPI_DATA_CLEARED',
+        performed_by: auditUser?.id ?? null,
+        metadata: {
+          counts_at_deletion: {
+            kpis: kpiCount ?? 0,
+            review_submissions: subCount ?? 0,
+            performance_reviews: revCount ?? 0,
+            import_progress: impCount ?? 0,
+          },
+          source: 'admin/import - Clear All KPI Data',
+          confirmed_via: 'ClearAllKpiDataDialog (two-stage type-to-confirm + ack + cooldown)',
+        },
+      });
+
       // Delete in order: review_submissions → kpis → performance_reviews → import_progress
       const { error: submissionsError } = await supabase
         .from('review_submissions')
@@ -241,6 +264,7 @@ export default function ImportData() {
       setImportSuccess(0);
       setBackgroundImportId(null);
       setBackgroundProgress(null);
+      setClearDialogOpen(false);
     } catch (error: any) {
       console.error('Error clearing data:', error);
       toast({
