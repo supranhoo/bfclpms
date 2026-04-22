@@ -5262,3 +5262,29 @@ This section records architectural patterns that have been audited and intention
 - **Workflow Impact**: None.
 - **UI/UX**: None.
 - **Regression Risk**: Zero. Purely defensive against future destructive refactors.
+
+### v2.66.7.9 — Profiles Query Policy: Paged Fetches for All List Reads (2026-04-22)
+
+**Root Cause Class.** PostgREST silently caps unranged `select(...)` queries at 1000 rows. Several admin pickers and distinct-value queries on the `profiles` table relied on this implicit cap, so any employee beyond row ~1000 (active roster ≈ 2,533) was invisible to client-side search/filter UIs that only inspect the loaded array. The originating ticket: employee `101784` (Vivek Kumar Dansena, ~row 2512) was missing from the Copy KRAs picker.
+
+**Standard.** All client-side `supabase.from('profiles').select(...)` calls that produce a **list** (for rendering, selection, filtering, search, or distinct-value extraction) MUST be wrapped in `fetchAllPaged()` from `src/lib/fetchAll.ts`. Single-row `.maybeSingle()` lookups and `.in('id', [...])` filtered lookups are exempt — they are not bounded by the row-scrolling cap.
+
+**Files Migrated to `fetchAllPaged`.**
+- `src/components/admin/CopyKrasDialog.tsx` (prior turn)
+- `src/components/admin/OrgKpiAddEmployeeDialog.tsx` — Org KPI assignment picker
+- `src/components/admin/CompetencyManagerTab.tsx` — competency employee search
+- `src/components/admin/ReportAccessTab.tsx` — report-access user-override picker (also added `is_active=true`)
+- `src/components/admin/AccessProfilesManager.tsx` — `AssignmentTab` user picker AND `distinct-levels` query
+- `src/hooks/useEmployeeFilterOptions.ts` — `distinct-designations` and `distinct-grades`
+
+**Hardened Data Contract.** `EmployeeCombobox.tsx`'s `employees` prop now carries a JSDoc warning documenting that callers MUST supply a fully-paged dataset. The combobox cannot recover from a truncated input.
+
+**Regression Coverage.** `src/components/admin/__tests__/employeePickerPaging.test.ts` simulates a 2,533-row roster, places the target employee at index 1150, and asserts that `fetchAllPaged` walks all pages and the same client-side filter EmployeeCombobox uses can locate the employee by code, name, and department — and that the `excludeIds` and multi-select contracts still hold.
+
+**Risk & Impact.**
+- *Data Impact*: None. Identical SELECT shape — restores previously-dropped rows.
+- *Workflow Impact*: None. No business logic changed.
+- *UI/UX*: Pickers now show the complete active roster. No layout/interaction changes.
+- *Performance*: Each affected picker now issues ~3 paged requests (~2.5k rows total) instead of 1 capped request (~1k). React Query caches across components; dialogs remain `enabled`-gated so the cost is paid only on open.
+- *Regression Risk*: Very low. Single well-trodden helper, no schema or business-logic changes.
+
