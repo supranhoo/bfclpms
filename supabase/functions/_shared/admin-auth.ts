@@ -41,19 +41,26 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
 }
 
 export async function verifyAdminJwt(token: string, supabaseUrl: string, anonKey: string, authHeader: string): Promise<VerifiedAdminUser> {
-  const userClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
+  const roleResponse = await fetch(
+    `${supabaseUrl}/rest/v1/user_roles?select=user_id,role&role=eq.admin&limit=1`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: authHeader,
+        apikey: anonKey,
+        'Content-Type': 'application/json',
+        'Accept-Profile': 'public',
+      },
+    },
+  );
 
-  const { data: roleCheck, error } = await userClient
-    .from('user_roles')
-    .select('user_id, role')
-    .eq('role', 'admin')
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(error.message);
+  if (!roleResponse.ok) {
+    const raw = await roleResponse.text();
+    throw new Error(raw || `Role verification failed (${roleResponse.status})`);
   }
+
+  const roleRows = await roleResponse.json() as Array<{ user_id: string; role: string }>;
+  const roleCheck = roleRows[0];
 
   if (!roleCheck?.user_id) {
     throw new Error('Admin access required');
