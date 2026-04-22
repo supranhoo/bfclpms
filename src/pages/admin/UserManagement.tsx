@@ -831,8 +831,9 @@ export default function UserManagement() {
                 {paginatedProfiles.map(profile => {
                   const role = (profile.user_roles as any)?.[0]?.role || 'employee';
                   const manager = profiles?.find(p => p.id === profile.reporting_manager_id);
+                  const isInactive = (profile as any).is_active === false;
                   return (
-                    <TableRow key={profile.id}>
+                    <TableRow key={profile.id} className={isInactive ? 'opacity-60 bg-muted/30' : ''}>
                       <TableCell>
                         <Checkbox
                           checked={selectedUserIds.has(profile.id)}
