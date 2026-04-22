@@ -747,8 +747,9 @@ export default function UserManagement() {
               {paginatedProfiles.map(profile => {
                 const role = (profile.user_roles as any)?.[0]?.role || 'employee';
                 const manager = profiles?.find(p => p.id === profile.reporting_manager_id);
+                const isInactive = (profile as any).is_active === false;
                 return (
-                  <div key={profile.id} className="border rounded-lg p-3 space-y-2">
+                  <div key={profile.id} className={`border rounded-lg p-3 space-y-2 ${isInactive ? 'opacity-60 bg-muted/30' : ''}`}>
                     <div className="flex items-center gap-3">
                       <Avatar className="h-10 w-10">
                         <AvatarImage src={profile.avatar_url || undefined} />
