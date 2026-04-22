@@ -24,22 +24,60 @@ export interface AdminAuthResult {
 type VerifiedAdminUser = { id: string; email?: string };
 
 interface AdminAuthDependencies {
-  verifyUser?: (token: string, supabaseUrl: string, anonKey: string) => Promise<VerifiedAdminUser>;
+  verifyUser?: (token: string, supabaseUrl: string, anonKey: string, authHeader: string) => Promise<VerifiedAdminUser>;
   createAdminClient?: (supabaseUrl: string, serviceRoleKey: string) => SupabaseClient;
 }
 
-export async function verifyAdminJwt(token: string, supabaseUrl: string, anonKey: string): Promise<VerifiedAdminUser> {
-  const userClient = createClient(supabaseUrl, anonKey);
-  const { data, error } = await userClient.auth.getClaims(token);
-  const claims = data?.claims;
+function decodeJwtPayload(token: string): Record<string, unknown> {
+  const parts = token.split('.');
+  if (parts.length < 2) {
+    throw new Error('Malformed JWT');
+  }
 
-  if (error || typeof claims?.sub !== 'string' || claims.sub.length === 0) {
-    throw new Error(error?.message ?? 'Missing sub claim');
+  const normalized = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+  const json = atob(padded);
+  return JSON.parse(json) as Record<string, unknown>;
+}
+
+export async function verifyAdminJwt(token: string, supabaseUrl: string, anonKey: string, authHeader: string): Promise<VerifiedAdminUser> {
+  const payload = decodeJwtPayload(token);
+  if (typeof payload.sub !== 'string' || payload.sub.length === 0) {
+    throw new Error('Missing sub claim');
+  }
+
+  const roleResponse = await fetch(
+    `${supabaseUrl}/rest/v1/user_roles?select=user_id,role&user_id=eq.${encodeURIComponent(payload.sub)}&role=eq.admin&limit=1`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: authHeader,
+        apikey: anonKey,
+        'Content-Type': 'application/json',
+        'Accept-Profile': 'public',
+      },
+    },
+  );
+
+  if (!roleResponse.ok) {
+    const raw = await roleResponse.text();
+    throw new Error(raw || `Role verification failed (${roleResponse.status})`);
+  }
+
+  const roleRows = await roleResponse.json() as Array<{ user_id: string; role: string }>;
+  const roleCheck = roleRows[0];
+
+  if (!roleCheck?.user_id) {
+    throw new Error('Admin access required');
+  }
+
+  if (payload.sub !== roleCheck.user_id) {
+    throw new Error('JWT subject mismatch');
   }
 
   return {
-    id: claims.sub,
-    email: typeof claims.email === 'string' ? claims.email : undefined,
+    id: roleCheck.user_id,
+    email: typeof payload.email === 'string' ? payload.email : undefined,
   };
 }
 
@@ -65,10 +103,17 @@ export async function requireAdminUser(req: Request, deps: AdminAuthDependencies
   // Step 2: Validate JWT signature + claims without depending on an auth session lookup.
   let user: VerifiedAdminUser;
   try {
-    user = await (deps.verifyUser ?? verifyAdminJwt)(token, supabaseUrl, anonKey);
+    user = await (deps.verifyUser ?? verifyAdminJwt)(token, supabaseUrl, anonKey, authHeader);
   } catch (error) {
-    console.warn('[admin-auth] Identity validation failed:', error instanceof Error ? error.message : String(error));
-    return { authorized: false, user: null, adminClient: null, error: 'Unauthorized', status: 401 };
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn('[admin-auth] Identity validation failed:', message);
+    return {
+      authorized: false,
+      user: null,
+      adminClient: null,
+      error: message === 'Admin access required' ? 'Admin access required' : 'Unauthorized',
+      status: message === 'Admin access required' ? 403 : 401,
+    };
   }
 
   // Step 3: Verify admin role via service-role client
