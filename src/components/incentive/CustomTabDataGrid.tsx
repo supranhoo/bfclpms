@@ -43,11 +43,15 @@ export function CustomTabDataGrid({ tab, programId, onEditTab, onDeleteTab }: Pr
         .map((m: any) => m.mapping_value);
 
       if (employeeIds.length === 0) {
-        const { data } = await supabase
-          .from('profiles')
-          .select('id, full_name, employee_code')
-          .order('full_name') as { data: any[] | null };
-        return data || [];
+        const data = await fetchAllPaged<any>((from, to) =>
+          supabase
+            .from('profiles')
+            .select('id, full_name, employee_code')
+            .eq('is_active', true)
+            .order('full_name')
+            .range(from, to)
+        );
+        return data;
       }
 
       const { data } = await supabase

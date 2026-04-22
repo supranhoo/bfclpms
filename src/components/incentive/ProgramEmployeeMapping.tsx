@@ -51,12 +51,15 @@ export function ProgramEmployeeMapping({ programId }: Props) {
   const { data: allEmployees = [] } = useQuery({
     queryKey: ['employees-for-mapping'],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, full_name, employee_code, designation, pms_grade, level, department_id, departments(name, business_unit_id, business_units(name, division_id, divisions(name)))')
-        .eq('is_active', true)
-        .order('full_name');
-      return (data || []).map((e: any) => ({
+      const data = await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('profiles')
+          .select('id, full_name, employee_code, designation, pms_grade, level, department_id, departments(name, business_unit_id, business_units(name, division_id, divisions(name)))')
+          .eq('is_active', true)
+          .order('full_name')
+          .range(from, to)
+      );
+      return data.map((e: any) => ({
         id: e.id,
         full_name: e.full_name || 'Unknown',
         employee_code: e.employee_code || '',

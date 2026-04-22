@@ -11,6 +11,7 @@ import { useProductionRates, useProductionDailyEntries, useBulkUpsertDailyEntrie
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
+import { fetchAllPaged } from '@/lib/fetchAll';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -69,14 +70,16 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
         else if (m.mapping_type === 'designation') desigs.push(m.mapping_value);
       }
 
-      // Fetch all profiles that match any mapping (with company chain)
-      let query = supabase
-        .from('profiles')
-        .select('id, full_name, employee_code, email, designation, company_id, department_id, departments(id, name, business_unit_id, business_units(id, division_id, divisions(id, company_id)))')
-        .order('full_name');
-
-      const { data: allProfiles } = await query;
-      if (!allProfiles) return [];
+      // Fetch ALL active profiles (paged — PostgREST caps unranged reads at 1000 rows; active roster ~2.5k)
+      const allProfiles = await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('profiles')
+          .select('id, full_name, employee_code, email, designation, company_id, department_id, departments(id, name, business_unit_id, business_units(id, division_id, divisions(id, company_id)))')
+          .eq('is_active', true)
+          .order('full_name')
+          .range(from, to)
+      );
+      if (!allProfiles.length) return [];
 
       return allProfiles.filter(p => {
         if (employeeIds.has(p.id)) return true;

@@ -36,11 +36,14 @@ export function VesselRateEditor({ programId, minKraScore = 3 }: Props) {
   const { data: allProfiles = [] } = useQuery({
     queryKey: ['profiles-for-vessel'],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, full_name, employee_code, email')
-        .order('full_name');
-      return data || [];
+      return await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('profiles')
+          .select('id, full_name, employee_code, email')
+          .eq('is_active', true)
+          .order('full_name')
+          .range(from, to)
+      );
     },
   });
 
