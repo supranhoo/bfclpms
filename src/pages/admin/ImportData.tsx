@@ -2216,29 +2216,20 @@ export default function ImportData() {
                     className="cursor-pointer"
                   />
                 </div>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="destructive" disabled={isClearing}>
-                      {isClearing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
-                      Clear All KPI Data
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Clear All KPI Data?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This will permanently delete all KPIs, review submissions, and performance reviews. 
-                        This action cannot be undone. Use this before importing fresh data.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleClearKpiData} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                        Yes, Clear All Data
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                <Button
+                  variant="destructive"
+                  disabled={isClearing}
+                  onClick={() => setClearDialogOpen(true)}
+                >
+                  {isClearing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                  Clear All KPI Data
+                </Button>
+                <ClearAllKpiDataDialog
+                  open={clearDialogOpen}
+                  onOpenChange={setClearDialogOpen}
+                  onConfirm={handleClearKpiData}
+                  isClearing={isClearing}
+                />
                 <div className="flex items-center gap-2 ml-auto">
                   <Checkbox
                     id="background-import"
