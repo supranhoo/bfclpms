@@ -676,6 +676,13 @@ export function useAdminStatusStepBack() {
 
       const effectiveTarget = full_reset ? 'kra_set' as const : target_status;
 
+      // If the regression lands on kra_set, stamp the admin's reason into
+      // the transaction-local var so the notify_on_kpi_status_change trigger
+      // can include it in metadata.send_back_reason (manager_rejected email).
+      if (effectiveTarget === 'kra_set' && reason) {
+        await supabase.rpc('record_send_back_reason' as any, { p_reason: reason });
+      }
+
       // 1. Update KPI status
       const { data, error } = await supabase
         .from('kpis')
