@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
+import { optimizeSupabaseImageUrl } from '@/lib/imageOptimization';
 
 interface LoginSlideshowProps {
   wallpapers: string[];
@@ -22,7 +23,7 @@ export function LoginSlideshow({
   // Preload the first wallpaper image so the browser discovers it early (improves LCP)
   useEffect(() => {
     if (wallpapers.length === 0) return;
-    const firstUrl = wallpapers[0];
+    const firstUrl = optimizeSupabaseImageUrl(wallpapers[0]);
     const existing = document.querySelector(`link[rel="preload"][href="${firstUrl}"]`);
     if (existing) return;
     const link = document.createElement('link');
@@ -72,7 +73,7 @@ export function LoginSlideshow({
                 'absolute inset-0 bg-cover bg-center transition-opacity duration-1000',
                 index === currentIndex && !isTransitioning ? 'opacity-100' : 'opacity-0'
               )}
-              style={{ backgroundImage: `url(${url})` }}
+              style={{ backgroundImage: `url(${optimizeSupabaseImageUrl(url)})` }}
             />
           ))}
           {/* Overlay gradient - lighter for better wallpaper visibility, from right */}
