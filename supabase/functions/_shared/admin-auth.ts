@@ -12,7 +12,7 @@
  */
 
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { createRemoteJWKSet, jwtVerify } from 'npm:jose@5.9.6';
+import { createRemoteJWKSet, jwtVerify } from 'https://esm.sh/jose@5.9.6';
 
 export interface AdminAuthResult {
   authorized: boolean;
