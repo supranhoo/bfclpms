@@ -319,40 +319,15 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
               <div className="space-y-3">
                 <Label className="text-sm font-semibold">Step 1: Source Employee & Period</Label>
                 <div className="space-y-2">
-                  <div className="space-y-1">
-                    <Input
-                      placeholder="Search employee..."
-                      value={sourceSearch}
-                      onChange={(e) => setSourceSearch(e.target.value)}
-                      className="text-sm"
-                    />
-                    {sourceSearch && !sourceEmployeeId && (
-                      <div className="border rounded-md max-h-48 overflow-y-auto">
-                        {filteredSourceEmployees.slice(0, 20).map(emp => (
-                          <button
-                            key={emp.id}
-                            className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted/50 flex items-center gap-2"
-                            onClick={() => {
-                              setSourceEmployeeId(emp.id);
-                              setSourceSearch(emp.name);
-                              setSelectedKraIds(new Set());
-                            }}
-                          >
-                            <span>{emp.name}</span>
-                            {emp.code && <Badge variant="outline" className="text-xs">{emp.code}</Badge>}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {sourceEmployee && (
-                      <div className="flex items-center gap-1">
-                        <Badge variant="secondary" className="text-xs">{sourceEmployee.name}</Badge>
-                        <button className="text-xs text-muted-foreground underline" onClick={() => { setSourceEmployeeId(''); setSourceSearch(''); setSelectedKraIds(new Set()); }}>
-                          Change
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  <EmployeeCombobox
+                    employees={employees}
+                    value={sourceEmployeeId}
+                    onChange={(id) => {
+                      setSourceEmployeeId(id);
+                      setSelectedKraIds(new Set());
+                    }}
+                    placeholder="Click to search source employee…"
+                  />
                   <div className="grid grid-cols-2 gap-2">
                     <Select value={sourcePeriod} onValueChange={setSourcePeriod}>
                       <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
