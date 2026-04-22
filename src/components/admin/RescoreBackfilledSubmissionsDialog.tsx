@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { invokeAdminEdgeFunction } from '@/lib/adminEdgeFunction';
 import { useToast } from '@/hooks/use-toast';
 import {
   Card,
@@ -65,11 +65,10 @@ export function RescoreBackfilledSubmissionsDialog() {
 
   const run = useMutation({
     mutationFn: async (dryRun: boolean): Promise<RescoreResult> => {
-      const { data, error } = await supabase.functions.invoke('rescore-backfilled-submissions', {
-        body: { dry_run: dryRun },
-      });
-      if (error) throw error;
-      return data as RescoreResult;
+      return await invokeAdminEdgeFunction<RescoreResult>(
+        'rescore-backfilled-submissions',
+        { dry_run: dryRun },
+      );
     },
     onError: (err: Error) => {
       toast({ title: 'Re-score failed', description: err.message, variant: 'destructive' });

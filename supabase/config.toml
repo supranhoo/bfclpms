@@ -71,3 +71,6 @@ verify_jwt = false
 
 [functions.bulk-zero-score-non-submitters]
 verify_jwt = false
+
+[functions.rescore-backfilled-submissions]
+verify_jwt = false
