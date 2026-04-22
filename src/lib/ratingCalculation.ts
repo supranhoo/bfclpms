@@ -320,6 +320,9 @@ function calculateAbsoluteRating(
   const r3 = parseThreshold(thresholds.r3, false);
   const r2 = parseThreshold(thresholds.r2, false);
   const r1 = parseThreshold(thresholds.r1, false);
+  const r0 = parseThreshold(thresholds.r0, false);
+
+  warnIfNonMonotonic({ r5, r4, r3, r2, r1, r0 }, criteria, 'calculateAbsoluteRating');
 
   const isLowerBetter = criteria?.toLowerCase().includes('lower');
   let rating = 0;
@@ -332,6 +335,7 @@ function calculateAbsoluteRating(
     else if (r3 !== null && achieved <= r3) rating = 3;
     else if (r2 !== null && achieved <= r2) rating = 2;
     else if (r1 !== null && achieved <= r1) rating = 1;
+    else if (r0 !== null && achieved > r0) rating = 0;
   } else {
     // Higher is Better: higher achieved value = higher rating
     // Thresholds should be in descending order (R5 = highest, R1 = lowest acceptable)
@@ -340,6 +344,7 @@ function calculateAbsoluteRating(
     else if (r3 !== null && achieved >= r3) rating = 3;
     else if (r2 !== null && achieved >= r2) rating = 2;
     else if (r1 !== null && achieved >= r1) rating = 1;
+    else if (r0 !== null && achieved < r0) rating = 0;
   }
 
   // Calculate percentage for display (achieved/target * 100) if target exists
