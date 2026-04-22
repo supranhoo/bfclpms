@@ -10,6 +10,7 @@ import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDial
 import type { CustomTab, CustomTabField } from '@/hooks/useIncentiveCustomTabs';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllPaged } from '@/lib/fetchAll';
 
 interface Props {
   tab: CustomTab;
