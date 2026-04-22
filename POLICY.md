@@ -1,6 +1,8 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-16  
+> **Version:** 2.21.2 — **Scoring engine — R0 governance.** R0 is an explicit, first-class threshold in the percentage and absolute scorers. A non-monotonic R5→R0 cascade (e.g. R2 < R3 in Lower-is-Better) is flagged with a dev-time console warning but is never auto-corrected — admins must repair via master-data UPDATE. Auto-rescore scripts triggered by master-data repairs MUST exclude `final_score IS NOT NULL` (snapshot immutability §88) and may only overwrite stage scores currently NULL or 0; reviewer-entered values are preserved.
+>
 > **Version:** 2.21.1 — User Management list (`/admin/users`) shows **all** users by default (active + inactive). The Status filter (All / Active / Inactive) governs the view; inactive rows are visually muted with a red **Inactive** badge so admins can discover and reactivate deactivated accounts without DB access. Other employee pickers/selectors continue to filter by `is_active=true` for assignment integrity.
 >
 > **Version:** 2.21.0 — Compute engine no longer references non-existent `profiles.location`; PostgREST errors now surface as HTTP 500 instead of silent zero-result. Edge functions must check `error` on every Supabase query (silent destructuring of `data` is forbidden).
