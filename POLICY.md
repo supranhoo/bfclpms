@@ -1674,3 +1674,20 @@ The mandatory pattern is implemented by `src/components/admin/ClearAllKpiDataDia
 **Forensic audit:** Before the destructive query executes, the handler MUST insert a row into `system_audit_logs` (or an equivalent immutable log) with `action = '<BULK_*_CLEARED>'`, `performed_by = auth.uid()`, and a `metadata.counts_at_deletion` JSON capturing the per-table row counts. `system_audit_logs` is RLS-restricted to admins for SELECT and is policy-locked against UPDATE/DELETE.
 
 **Reusability:** New bulk-wipe buttons must reuse the `ClearAllKpiDataDialog` pattern (parameterised) rather than re-implementing it. Any deviation requires explicit policy review.
+
+---
+
+## §94 — Profiles Query Policy: Paged Fetches for All List Reads (v2.66.7.9)
+
+PostgREST silently caps unranged `select(...)` queries at 1000 rows. With the active employee roster currently at ~2,533, any client UI that relied on a single unranged read of the `profiles` table silently dropped >60% of employees from search/filter/selection.
+
+**Rule.** All client-side `supabase.from('profiles').select(...)` calls that produce a **list** (for rendering, selection, filtering, search, or distinct-value extraction) MUST be wrapped in `fetchAllPaged()` from `src/lib/fetchAll.ts`.
+
+**Exempt.** Single-row `.maybeSingle()` lookups and `.in('id', [uuid, ...])` filtered lookups — these are not bounded by the row-scrolling cap.
+
+**Component Contract.** `EmployeeCombobox` and any equivalent client-side searchable picker filter their input array in memory. They cannot recover from a truncated dataset; the responsibility for completeness sits with the caller. This contract is documented inline on the `employees` prop.
+
+**Enforcement.** Code review for any new `supabase.from('profiles')` list query must verify either (a) `fetchAllPaged` is used, or (b) the call is one of the exempt single/filtered-lookup shapes. Violations are forbidden because they silently regress search visibility for employees past the 1000-row boundary.
+
+**Regression Coverage.** `src/components/admin/__tests__/employeePickerPaging.test.ts` locks in the contract by simulating a roster larger than 1000 rows and asserting target employees beyond the cap remain discoverable.
+

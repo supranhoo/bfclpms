@@ -1,0 +1,17 @@
+---
+name: profiles-query-policy
+description: Mandatory paged fetch (fetchAllPaged) for any list/search/distinct-value supabase.from('profiles').select(...) — PostgREST silently caps unranged reads at 1000 rows
+type: constraint
+---
+All client-side `supabase.from('profiles').select(...)` calls that produce a LIST (rendering, selection, filtering, search, distinct-value extraction) MUST be wrapped in `fetchAllPaged()` from `src/lib/fetchAll.ts`. Active roster is ~2,533 — unranged reads silently drop >60% of employees from pickers.
+
+Exempt:
+- `.maybeSingle()` single-row lookups
+- `.in('id', [uuid, ...])` filtered ID lookups
+- Server-side count queries (`{ count: 'exact', head: true }`)
+
+Why: PostgREST default cap is 1000 rows. EmployeeCombobox and similar pickers filter the input array in memory — they cannot recover from a truncated dataset.
+
+How to apply: Wrap with `fetchAllPaged<RowType>((from, to) => supabase.from('profiles').select(...).order(...).range(from, to))`. Always include `eq('is_active', true)` for picker contexts.
+
+Codified in POLICY.md §94. Regression test: src/components/admin/__tests__/employeePickerPaging.test.ts.

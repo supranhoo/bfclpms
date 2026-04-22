@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { toast } from '@/hooks/use-toast';
 import CompetencyAssessmentDialog from './CompetencyAssessmentDialog';
+import { fetchAllPaged } from '@/lib/fetchAll';
 
 interface Profile {
   id: string;
@@ -45,12 +46,17 @@ export default function CompetencyManagerTab() {
 
   useEffect(() => {
     const loadProfiles = async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, full_name, employee_code, designation')
-        .eq('is_active', true)
-        .order('full_name');
-      if (data) setProfiles(data);
+      // Paged fetch — bypasses PostgREST's 1000-row default cap so the full
+      // active roster is searchable in the competency picker.
+      const data = await fetchAllPaged<Profile>((from, to) =>
+        supabase
+          .from('profiles')
+          .select('id, full_name, employee_code, designation')
+          .eq('is_active', true)
+          .order('full_name')
+          .range(from, to)
+      );
+      setProfiles(data);
     };
     const loadPeriods = async () => {
       const { data } = await supabase

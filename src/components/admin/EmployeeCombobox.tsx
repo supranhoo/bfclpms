@@ -23,6 +23,19 @@ export interface EmployeeOption {
 }
 
 interface BaseProps {
+  /**
+   * Full employee dataset to render in the combobox.
+   *
+   * ⚠️ DATA CONTRACT — Profiles Query Policy (POLICY.md §94):
+   * The caller MUST provide a fully-paged list of profiles (e.g. via
+   * `fetchAllPaged()` in `src/lib/fetchAll.ts`, or a hook that already pages
+   * such as `useProfiles()`). A raw `supabase.from('profiles').select(...)`
+   * call without `.range(...)` is silently capped at 1000 rows by PostgREST,
+   * which would hide employees beyond that boundary from search.
+   *
+   * The combobox filters this array client-side; it cannot recover from a
+   * truncated dataset.
+   */
   employees: EmployeeOption[];
   excludeIds?: string[];
   placeholder?: string;

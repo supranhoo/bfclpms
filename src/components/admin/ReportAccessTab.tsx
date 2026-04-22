@@ -15,6 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { ALL_APP_ROLES, type AppRole } from '@/lib/roles';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
+import { fetchAllPaged } from '@/lib/fetchAll';
 
 const ROLE_LABELS: Record<AppRole, string> = {
   admin: 'Admin',
@@ -45,12 +46,17 @@ export function ReportAccessTab() {
   const { data: profiles = [] } = useQuery({
     queryKey: ['profiles-for-report-access'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, employee_code, email')
-        .order('full_name');
-      if (error) throw error;
-      return data || [];
+      // Paged fetch — bypasses PostgREST's 1000-row default cap so all active
+      // employees are searchable in the override picker.
+      return await fetchAllPaged<{ id: string; full_name: string | null; employee_code: string | null; email: string | null }>(
+        (from, to) =>
+          supabase
+            .from('profiles')
+            .select('id, full_name, employee_code, email')
+            .eq('is_active', true)
+            .order('full_name')
+            .range(from, to)
+      );
     },
   });
 

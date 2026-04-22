@@ -16,12 +16,17 @@ export function useEmployeeFilterOptions(args: UseEmployeeFilterOptionsArgs = {}
   const { data: designations } = useQuery({
     queryKey: ['distinct-designations'],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('designation')
-        .eq('is_active', true)
-        .not('designation', 'is', null);
-      return [...new Set(data?.map(p => p.designation))].filter(Boolean).sort() as string[];
+      // Paged fetch — bypasses PostgREST's 1000-row default cap so distinct
+      // designations from rows beyond row 1000 are not silently dropped.
+      const data = await fetchAllPaged<{ designation: string | null }>((from, to) =>
+        supabase
+          .from('profiles')
+          .select('designation')
+          .eq('is_active', true)
+          .not('designation', 'is', null)
+          .range(from, to)
+      );
+      return [...new Set(data.map(p => p.designation))].filter(Boolean).sort() as string[];
     },
   });
 
@@ -29,12 +34,16 @@ export function useEmployeeFilterOptions(args: UseEmployeeFilterOptionsArgs = {}
   const { data: grades } = useQuery({
     queryKey: ['distinct-grades'],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('pms_grade')
-        .eq('is_active', true)
-        .not('pms_grade', 'is', null);
-      return [...new Set(data?.map(p => p.pms_grade))].filter(Boolean).sort() as string[];
+      // Paged fetch — bypasses PostgREST's 1000-row default cap.
+      const data = await fetchAllPaged<{ pms_grade: string | null }>((from, to) =>
+        supabase
+          .from('profiles')
+          .select('pms_grade')
+          .eq('is_active', true)
+          .not('pms_grade', 'is', null)
+          .range(from, to)
+      );
+      return [...new Set(data.map(p => p.pms_grade))].filter(Boolean).sort() as string[];
     },
     enabled: enabledGrades,
   });
