@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { LoginSlideshow } from '@/components/auth/LoginSlideshow';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { cn } from '@/lib/utils';
+import { optimizeSupabaseImageUrl } from '@/lib/imageOptimization';
 
 export default function Auth() {
   const { user, loading, signIn } = useAuth();
@@ -62,7 +63,7 @@ export default function Auth() {
     if (wallpapers.length > 0) {
       const img = new window.Image();
       img.onload = () => setBgLoaded(true);
-      img.src = wallpapers[0];
+      img.src = optimizeSupabaseImageUrl(wallpapers[0], 1024, 60);
     }
   }, [wallpapers]);
 
@@ -158,7 +159,7 @@ export default function Auth() {
               {bgLoaded && (
                 <div
                   className="absolute inset-0 bg-cover bg-center opacity-20"
-                  style={{ backgroundImage: `url(${wallpapers[0]})` }}
+                  style={{ backgroundImage: `url(${optimizeSupabaseImageUrl(wallpapers[0], 1024, 60)})` }}
                 />
               )}
               <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
