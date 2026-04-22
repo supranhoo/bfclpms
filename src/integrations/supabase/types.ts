@@ -5220,6 +5220,15 @@ export type Database = {
         Returns: string
       }
       generate_bundles_from_kpis: { Args: never; Returns: Json }
+      get_active_send_back_markers: {
+        Args: { p_kpi_ids: string[] }
+        Returns: {
+          created_at: string
+          kpi_id: string
+          raised_by: string
+          reason: string
+        }[]
+      }
       get_bulk_employee_workflows: {
         Args: {
           employee_ids: string[]
