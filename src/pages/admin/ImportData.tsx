@@ -19,6 +19,7 @@ import ImportResultsSummary, { type ImportRowResult } from '@/components/admin/I
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
+import { ClearAllKpiDataDialog } from '@/components/admin/ClearAllKpiDataDialog';
 import * as XLSX from 'xlsx';
 import { validateFileSize, IMPORT_LIMITS, sanitizeText, normalizeRole, VALID_ROLES } from '@/lib/importValidation';
 import { scoreToRatingLevel } from '@/lib/reviewConstants';
