@@ -275,8 +275,6 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
       setSourceEmployeeId('');
       setSelectedKraIds(new Set());
       setTargetEmployeeIds([]);
-      setSourceSearch('');
-      setTargetSearch('');
     }, 300);
   };
 
@@ -294,10 +292,6 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
     } else {
       setSelectedKraIds(new Set(sourceKpis.map(k => k.id)));
     }
-  };
-
-  const toggleTargetEmployee = (id: string) => {
-    setTargetEmployeeIds(prev => prev.includes(id) ? prev.filter(e => e !== id) : [...prev, id]);
   };
 
   const sourceEmployee = employees.find(e => e.id === sourceEmployeeId);
