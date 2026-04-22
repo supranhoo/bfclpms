@@ -1,96 +1,104 @@
 
 
-## Plan — Fix April Bi-Monthly Cycle Anchor Drift (158 → 147 Discrepancy)
+## Plan — Re-evaluating the Three "Overdoing" Claims
 
-### Root Cause Analysis (RCA)
+I audited each claim against the actual code/schema. Verdict: **2 of 3 are false alarms; 1 is partially valid but small-scope.** No big refactor warranted.
 
-The count gap is **not a bug in display** — it's a **data drift in cycle anchors** introduced by the rollover engine pre-v2.66.7.
+---
 
-**The math:**
+### Claim 1 — `nk()` Natural Key Joins on `kra_name`/`kpi_name`
 
-| Period | Monthly | Daily | Bi-Monthly (visible) | Quarterly (visible) | **Total shown** |
-|---|---|---|---|---|---|
-| March | 142 | 4 | 10 (Feb-Mar terminating in Mar ✓) | 2 | **158** ✓ |
-| April | 146 | 4 | **0** (all 14 anchored Feb-Mar → already terminated → hidden) | 1 (mid-cycle, locked) | **147** (should be ~161) |
+**Verdict: FALSE ALARM. Do not change.**
 
-**Confirmed in DB**: all 33 Bi-Monthly Org KPI rows in April carry `frequency_cycle_start = 'Feb-Mar'`. Same for January, February, and March. **No row has been re-anchored to `Apr-May`** despite April starting a new cycle. The v2.66.7 frequency-aware lock correctly hides them — the lock is right, the anchor is stale.
+Evidence:
+- `nk()` exists in **3 client-side files only** (`OrgKpiDataEntry.tsx`, `useOrgKpiDataOwner.ts`, `useOrgLevelKpis.ts`) — used to build **JS Map keys** for in-memory grouping after the rows are already fetched. It **never runs in a SQL JOIN**.
+- The actual DB joins use **`category_id + kra_name + kpi_name + review_period + review_year`** which is backed by a **UNIQUE INDEX** (`20260106132841_*.sql` line 19). Postgres uses this index — no string manipulation per row.
+- Server-side matching in `propagate_org_kpi_value`, `change_org_kpi_scope_cascading`, `trg_sync_org_status_to_future_open_periods`, etc. is all **plain equality on indexed columns** — no `lower()`, no `regexp_replace()`.
+- The `category_id` is already a UUID FK; `kra_name`/`kpi_name` are governed by the KRA Library Master, so non-breaking-space drift is prevented at the source.
 
-**Why it happened**: The auto-rollover engine copies `frequency_cycle_start` verbatim from the source month. Pre-v2.66.7 this was harmless because the cycle lock didn't enforce it. v2.66.7's terminal-period awareness now exposes the drift: April with anchor `Feb-Mar` is treated as already-terminated.
+Adding a `kpi_template_id` or `content_hash` would be a multi-month refactor of every KPI row, every audit log, every report, and every import path — for **zero performance gain** and the introduction of a new identity that has to be kept in sync with the human-readable name everyone already uses.
 
-### Fix — Two parts
+**Action: no change. Document the rationale.**
 
-#### Part 1: Data Repair (one-shot, ~165 rows)
+---
 
-Re-anchor every Bi-Monthly / Quarterly / Half-Yearly / Yearly Org-level KPI row to the correct cycle for its `(review_period, review_year)`:
+### Claim 2 — Redundant `achieved_value` Storage in `review_submissions`
 
-| Frequency | Apr 2026 anchor | May 2026 anchor | Jun 2026 anchor |
-|---|---|---|---|
-| Bi-Monthly | `Apr-May` | `Apr-May` | `Jun-Jul` |
-| Quarterly | `Apr-Jun` | `Apr-Jun` | `Apr-Jun` |
-| Half-Yearly | `Apr-Sep` (or `Jan-Jun` per fiscal) | same | same |
+**Verdict: FALSE ALARM. The current design is correct for HR audit law.**
 
-- Build a SQL repair via migration: `UPDATE kpis SET frequency_cycle_start = <resolved>` for all rows where `is_org_level = true` AND current anchor doesn't match the period's true cycle.
-- Audit-log each correction as `KPI_CYCLE_ANCHOR_REPAIRED` (system-attributed, `performed_by = NULL`).
-- Dry-run preview surfaced in **Data Repair** tab as a new tool: **"Repair Frequency Cycle Anchors"** (count + per-frequency breakdown before write).
-- Idempotent: subsequent runs find no drift.
+Evidence:
+- `review_submissions.achieved_value` is **not a cache** — it is the **employee's submitted self-value at submission time**, which by HR policy must be **immutable per submission**. Org KPI propagation pre-fills it but the employee/reviewer can subsequently amend their own row (sub-factors, remarks, evidence, score overrides).
+- The 8-stage scoring fallback chain (`mem://architecture/pms/universal-scoring-logic`) and `final_score` immutability rule (`mem://features/review/final-score-governance-and-immutability`) **explicitly require a frozen per-employee snapshot** so that approved scores can never silently change when an admin edits the OKV row years later.
+- A live FK to `org_kpi_values.id` would mean: edit one OKV → 5,000 already-approved final scores silently change → audit/legal nightmare.
+- Storage cost: a numeric column × 5,000 rows = ~40 KB. This is not a cost concern.
 
-#### Part 2: Rollover Engine Hardening (prevent recurrence)
+The user's "fix" (live FK lookup) would directly violate `final-score-governance-and-immutability` which has been explicitly enforced across multiple migrations.
 
-Patch `supabase/functions/auto-rollover-kpis/index.ts` to **resolve the cycle anchor at rollover time** instead of copying it forward:
+**Action: no change. Document why this is intentional immutability, not redundancy.**
 
-```ts
-// Before (drift-prone):
-frequency_cycle_start: source.frequency_cycle_start
+---
 
-// After (cycle-aware):
-frequency_cycle_start: resolveCycleAnchorForPeriod(
-  source.frequency, target_period, target_year
-)
-```
+### Claim 3 — One Audit Row per Propagated KPI
 
-`resolveCycleAnchorForPeriod` reuses the existing `resolveTerminalMonth` + `BI_MONTHLY_OPTIONS` / `QUARTERLY_OPTIONS` logic to pick the correct cycle the target period belongs to. Audit-log mismatches as `ROLLOVER_CYCLE_ANCHOR_RESOLVED`.
+**Verdict: PARTIALLY VALID but the proposed fix is wrong. Small optimization possible.**
 
-### After Fix — Expected Counts
+Evidence:
+- `usePropagateOrgKpiValue.ts` line 251–259 inserts one `ORG_KPI_PROPAGATED` row **per KPI** in `kpi_audit_logs`.
+- These per-KPI rows are **load-bearing**, not noise:
+  - `KpiTimeline.tsx` (line 89) renders them in each employee's Review Journey.
+  - `KpiJourneySection.tsx` (line 522) labels them.
+  - `repair-stepped-back-siblings/index.ts` (line 81–82) **reconstructs submission data from these rows** for the rollback engine.
+- Collapsing them into a single `ORG_KPI_BULK_PROPAGATED` row with a JSON blob would **break three downstream features**: per-KPI timeline display, per-KPI journey labels, and the step-back recovery engine.
 
-- March: **158** (unchanged) ✓
-- April: **161** (147 currently + 14 Bi-Monthly Apr-May terminating in May → still hidden in April since April is mid-cycle… so they remain hidden, but **May** will then correctly show ~14 Bi-Monthly entries terminating in May).
+What **is** valid: the existing `PROPAGATION_PARTIAL` summary row (migration `20260421173624_*.sql` line 122–137) already inserts one row per skipped KPI — that one **could** legitimately collapse into a single summary because nothing reads it per-KPI.
 
-Wait — Bi-Monthly Apr-May terminates in **May**, so April is the locked (mid-cycle) month and they will remain hidden in April. **The expected count for April stays 147.** That's actually correct behavior per v2.66.7. The real recovery is:
+**Proposed light optimization (only if you want it):**
+- Keep `ORG_KPI_PROPAGATED` per-KPI (required by 3 features).
+- Add an additional **single** `ORG_KPI_BULK_PROPAGATION_SUMMARY` row per propagation call carrying `{batch_size, propagated_count, skipped_count, owner_id, period}` — useful for analytics dashboards without touching the per-KPI rows.
+- Optionally compact `PROPAGATION_PARTIAL` from N rows to 1 summary row (no consumer reads it per-row today).
 
-- **May 2026** will correctly show the 14 Bi-Monthly KPIs (today they would be hidden because their anchor says Feb-Mar already-ended).
-- **June 2026** will correctly start a new Jun-Jul cycle.
+---
 
-So the user should see **April 147 (correct as-is)** but the data underneath becomes truthful, and the **May/June views won't lose those 14 KPIs**.
+### Recommended Action: Documentation-Only Update (no code changes)
 
-### Documentation & Memory
+Because the first two claims would actively damage the system and the third has no net benefit, the deliverable is a **single documentation entry** that records the rationale so this doesn't get reopened later.
 
-- `DOCUMENTATION.md` v2.66.7.2 entry covering the anchor repair + rollover hardening.
-- Update `mem://features/admin/enhanced-kra-rollover-system` with the cycle-anchor resolution rule.
-- Update `mem://features/admin/data-repair-engine` to register the new repair tool.
-- Update `mem://features/admin/org-kpi-management-suite` to note the anchor-truth invariant.
+#### Files to update
+
+1. **`DOCUMENTATION.md`** — new section §"Design Decisions & Rejected Refactors" (v2.66.7.3):
+   - Why client-side `nk()` is not a perf concern (it's a JS Map key, not a SQL predicate).
+   - Why `achieved_value` is intentionally duplicated per submission (immutability mandate).
+   - Why `ORG_KPI_PROPAGATED` is per-KPI by design (consumed by 3 features).
+
+2. **`POLICY.md`** — append:
+   - "Submission Snapshot Immutability": once a value lands in `review_submissions`, it is the employee's frozen submission and is never recomputed from the OKV source.
+   - "Per-KPI Audit Granularity": every propagation/score event must be individually addressable for timeline display and rollback recovery.
+
+3. **`mem://features/admin/org-kpi-management-suite`** — add note (13): "Submission snapshot is immutable per HR audit policy; OKV-to-submission link is by-value, not by-FK."
+
+4. **`mem://architecture/pms/universal-scoring-logic`** — add note: "review_submissions stores frozen submission values per HR immutability policy; never replace with live FK to source tables."
+
+#### Optional follow-up (not in this loop unless requested)
+
+- Add `ORG_KPI_BULK_PROPAGATION_SUMMARY` summary row alongside per-KPI rows (purely additive, no consumer impact).
+- Compact `PROPAGATION_PARTIAL` from N rows to 1 summary row.
 
 ### Risk & Impact Report
 
-- **Data Impact**: Updates `kpis.frequency_cycle_start` only on Org KPI rows where the anchor disagrees with the period (~165 rows). Does not touch values, status, or workflow state.
-- **Workflow Impact**: KPIs that were silently hidden (because of a stale anchor) become visible in their correct terminal month. No KPI is moved to a different period; only the "which cycle does this row belong to?" metadata is corrected.
-- **UI/UX**: April's count stays 147 (correct), May/June views regain the missing Bi-Monthly Org KPIs.
-- **Regression Risk**: Low — the repair only flips one column on rows matching strict criteria. Rollover patch is additive (a function call replacing a verbatim copy).
-- **Mitigation**: Dry-run preview before write, audit log per row, idempotent repair, and the existing v2.66.7 forward-sync trigger continues to work unchanged.
-
-### Side-Fix: Runtime Error
-
-The summary surfaced `Cannot read properties of undefined (reading 'rows')`. While investigating, fix any unguarded `.rows` access in the Org KPI Data Entry hooks (likely in a propagate / preview RPC handler when the response is null). Quick defensive `?? { rows: [] }` fallback.
+- **Data Impact**: None — documentation only.
+- **Workflow Impact**: None.
+- **UI/UX**: None.
+- **Regression Risk**: Zero.
+- **Mitigation**: By documenting the rationale, future contributors won't re-propose these refactors.
 
 ### Out of Scope
 
-- Re-propagating the 4 Phase A2 OKVs (still pending; values are zero).
-- Fiscal-year boundary anchors for Half-Yearly Apr-Sep vs Jul-Dec (none currently exist in DB; defer until they appear).
+- Any change to the schema, RPCs, propagation flow, audit logging, or `nk()` helper.
+- The optional bulk-summary audit row (deferred unless requested).
 
 ### Deliverables
 
-- One migration: anchor repair RPC + audit logging.
-- New "Repair Frequency Cycle Anchors" tool in Data Repair tab (Scan → Preview → Apply).
-- Patched `auto-rollover-kpis/index.ts` with `resolveCycleAnchorForPeriod` helper.
-- Defensive guard for the `.rows` runtime error.
-- DOCUMENTATION.md v2.66.7.2 changelog + memory updates.
+- DOCUMENTATION.md v2.66.7.3 entry (Design Decisions & Rejected Refactors).
+- POLICY.md additions (Snapshot Immutability + Per-KPI Audit Granularity).
+- Two memory file updates.
 
