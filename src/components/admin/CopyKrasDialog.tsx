@@ -350,11 +350,14 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
                 <div className="space-y-3">
                   <Label className="text-sm font-semibold">Step 3: Target Employee(s) & Period</Label>
                   <div className="space-y-2">
-                    <Input
-                      placeholder="Search target employees..."
-                      value={targetSearch}
-                      onChange={(e) => setTargetSearch(e.target.value)}
-                      className="text-sm"
+                    <EmployeeCombobox
+                      multiple
+                      employees={employees}
+                      value={targetEmployeeIds}
+                      onChange={setTargetEmployeeIds}
+                      excludeIds={sourceEmployeeId ? [sourceEmployeeId] : []}
+                      duplicateCounts={duplicateCounts}
+                      placeholder="Click to select target employees…"
                     />
                     <div className="grid grid-cols-2 gap-2">
                       <Select value={targetPeriod} onValueChange={setTargetPeriod}>
@@ -372,26 +375,9 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
                     </div>
                   </div>
 
-                  <div className="border rounded-lg max-h-64 overflow-y-auto">
-                    {filteredTargetEmployees.slice(0, 50).map(emp => {
-                      const dupCount = duplicateCounts[emp.id] || 0;
-                      return (
-                        <label key={emp.id} className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer border-b last:border-0">
-                          <Checkbox
-                            checked={targetEmployeeIds.includes(emp.id)}
-                            onCheckedChange={() => toggleTargetEmployee(emp.id)}
-                          />
-                          <span className="text-sm font-medium">{emp.name}</span>
-                          {emp.code && <Badge variant="outline" className="text-xs">{emp.code}</Badge>}
-                          <span className="text-xs text-muted-foreground ml-auto">{emp.department}</span>
-                          {dupCount > 0 && targetEmployeeIds.includes(emp.id) && (
-                            <Badge variant="secondary" className="text-xs shrink-0">{dupCount} dup</Badge>
-                          )}
-                        </label>
-                      );
-                    })}
-                  </div>
-                  <p className="text-xs text-muted-foreground">{targetEmployeeIds.length} employee(s) selected</p>
+                  {targetEmployeeIds.length > 0 && (
+                    <p className="text-xs text-muted-foreground">{targetEmployeeIds.length} employee(s) selected</p>
+                  )}
 
                   {totalDuplicates > 0 && (
                     <Alert variant="default" className="border-amber-500/50 bg-amber-500/5">
