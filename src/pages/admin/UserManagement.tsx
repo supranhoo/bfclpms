@@ -67,7 +67,7 @@ export default function UserManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('active');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
 
   // Selection
@@ -141,7 +141,7 @@ export default function UserManagement() {
 
   // Filtered and paginated profiles
   const filteredProfiles = useMemo(() => {
-    return profiles?.filter(p => {
+    const filtered = profiles?.filter(p => {
       const matchesSearch = 
         p.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -159,6 +159,13 @@ export default function UserManagement() {
       
       return matchesSearch && matchesRole && matchesDepartment && matchesStatus;
     }) || [];
+    // Sort: active first, then inactive — both alphabetical by full_name
+    return [...filtered].sort((a, b) => {
+      const aActive = (a as any).is_active !== false ? 0 : 1;
+      const bActive = (b as any).is_active !== false ? 0 : 1;
+      if (aActive !== bActive) return aActive - bActive;
+      return (a.full_name || '').localeCompare(b.full_name || '');
+    });
   }, [profiles, searchQuery, roleFilter, departmentFilter, statusFilter]);
 
   // Helper: derive division ID from a department ID
