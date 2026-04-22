@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useVesselRates, useUpsertVesselRate, useDeleteVesselRate } from '@/hooks/useIncentiveVesselRates';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
+import { fetchAllPaged } from '@/lib/fetchAll';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,11 +37,14 @@ export function VesselRateEditor({ programId, minKraScore = 3 }: Props) {
   const { data: allProfiles = [] } = useQuery({
     queryKey: ['profiles-for-vessel'],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, full_name, employee_code, email')
-        .order('full_name');
-      return data || [];
+      return await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('profiles')
+          .select('id, full_name, employee_code, email')
+          .eq('is_active', true)
+          .order('full_name')
+          .range(from, to)
+      );
     },
   });
 
