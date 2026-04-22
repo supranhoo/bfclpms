@@ -1,53 +1,85 @@
 
 
-## Plan — Show Inactive Employees in User Management List
+## Plan — Fix "Only 30 of 69 Employees" in Incentive Data Entry
 
 ### Root Cause
 
-The User Management page (`/admin/users`) currently filters out inactive employees from the list, so once you deactivate someone they vanish from the table — making it impossible to find, review, or reactivate them.
+`src/components/incentive/ProductionDailyGrid.tsx` (lines 73–78) fetches profiles to resolve program mappings using a **direct unpaged Supabase query**:
 
-This contradicts the intent of the `is_active` lifecycle: deactivated users should remain **visible but clearly marked**, not hidden.
+```ts
+const { data: allProfiles } = await supabase
+  .from('profiles')
+  .select('id, full_name, ...')
+  .order('full_name');
+```
 
-### Fix — Add a Status Filter (default: All)
+PostgREST silently caps unranged reads at **1,000 rows**. Active roster = **2,531 employees** (confirmed via DB). When the code then filters this capped 1,000-row set against the program's department/BU/designation mappings, any matching employee whose alphabetical position is past row 1,000 is invisible to the grid.
 
-In `src/pages/admin/UserManagement.tsx`:
+This is the **exact same bug class** documented in `mem://architecture/profiles-query-policy` and `POLICY.md §94`. The Incentive Data Entry tab was missed in the previous app-wide audit because it lives outside the `admin/` folder we swept.
 
-1. **Remove the implicit active-only filter** from the user list query so inactive users are returned by default.
-2. **Add a Status filter dropdown** in the existing filter bar with three options:
-   - **All** (default) — shows active + inactive
-   - **Active only**
-   - **Inactive only**
-3. **Visual marker for inactive rows**:
-   - Greyed-out / muted row styling (`opacity-60`)
-   - Red "Inactive" badge next to the name (matching the green "Active" pill convention used elsewhere)
-4. **Sort behavior**: Active users first, then inactive, both alphabetical — so the working roster stays at the top.
-5. **Counts in tab/header**: Update the "Total Users" count to show `Active: X · Inactive: Y · Total: Z` for clarity.
+The "Saibal Kunar" line in the screenshot is just the program-mapping resolver — it's not the company filter that's hiding people. The 39 missing employees were simply never loaded.
 
-### Why default to "All" and not "Active"
+### Fix — Apply the Existing `fetchAllPaged` Pattern
 
-- Admin needs to *see* deactivated users to manage them (reactivate, audit, reassign).
-- Hiding them by default is exactly what caused this confusion.
-- The filter chip lets admins narrow down when they want a clean active-only view.
+Single-file change in `src/components/incentive/ProductionDailyGrid.tsx`:
+
+1. Import `fetchAllPaged` from `@/lib/fetchAll`.
+2. Replace the unpaged `.select(...).order('full_name')` call with a paged loop using `.range(from, to)` inside `fetchAllPaged`.
+3. Keep `is_active = true` filter so deactivated employees are correctly excluded from production data entry (they shouldn't earn incentives).
+4. Same select shape, same downstream filter logic — purely a data-layer fix.
+
+```ts
+const allProfiles = await fetchAllPaged<any>((from, to) =>
+  supabase
+    .from('profiles')
+    .select('id, full_name, employee_code, email, designation, company_id, department_id, departments(id, name, business_unit_id, business_units(id, division_id, divisions(id, company_id)))')
+    .eq('is_active', true)
+    .order('full_name')
+    .range(from, to)
+);
+```
+
+### Audit Sweep — Other Incentive Files
+
+While here, also audit and fix sibling incentive components that may share the bug:
+
+- `VesselDataEntryGrid.tsx` — vessel-program employee resolution
+- `ProductionTargetGrid.tsx` — target-program employee resolution
+- `EligibilityDataEntry.tsx` — eligibility picker (the other tab on this page)
+- `ProgramEmployeeMapping.tsx` — the mapping selector itself
+- `IncentiveDataExport.tsx` — export employee resolution
+- `MonthlyIncentiveTable.tsx` / `RetroactiveAdjustmentTable.tsx` — report grids
+
+Any unpaged `supabase.from('profiles').select(...)` list-fetch in the above gets converted to `fetchAllPaged`. `.maybeSingle()` and `.in('id', [...])` lookups stay as-is per policy.
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `src/pages/admin/UserManagement.tsx` | Remove active-only filter; add Status dropdown (All/Active/Inactive); style inactive rows; update counts; sort active-first |
-| `DOCUMENTATION.md` | v2.66.7.11 entry — inactive users now visible in admin list |
-| `POLICY.md` | Note: User Management list shows all users by default; status filter governs view |
-| `mem://features/user/employee-status-management` | Append: admin list shows inactive users (greyed + badge) so they're discoverable for reactivation |
+| `src/components/incentive/ProductionDailyGrid.tsx` | Wrap profiles fetch in `fetchAllPaged`, add `is_active=true` |
+| `src/components/incentive/VesselDataEntryGrid.tsx` | Same, if applicable after audit |
+| `src/components/incentive/ProductionTargetGrid.tsx` | Same, if applicable after audit |
+| `src/components/incentive/EligibilityDataEntry.tsx` | Same, if applicable after audit |
+| `src/components/incentive/ProgramEmployeeMapping.tsx` | Same, if applicable after audit |
+| `src/components/incentive/IncentiveDataExport.tsx` | Same, if applicable after audit |
+| `src/components/incentive/MonthlyIncentiveTable.tsx` | Same, if applicable after audit |
+| `src/components/incentive/RetroactiveAdjustmentTable.tsx` | Same, if applicable after audit |
+| `DOCUMENTATION.md` | v2.66.7.12 entry — incentive grids now obey Profiles Query Policy |
+| `POLICY.md` | §94 reaffirmed; note incentive module compliance |
+| `mem://features/incentive/core-engine-specifications` | Append: incentive grids must use `fetchAllPaged` for profile resolution |
 
 ### Risk & Impact Report
 
-- **Data Impact**: None. Read-only query change — same select shape, just no `is_active` filter.
-- **Workflow Impact**: Positive. Admins can now find and reactivate deactivated users without DB access.
-- **UI/UX**: Inactive rows clearly differentiated (muted + red badge); default sort keeps active users on top so the working view is unchanged.
-- **Regression Risk**: Very low. Existing edit/bulk/role flows already handle `is_active` correctly; only the list visibility changes.
-- **Mitigation**: Status filter lets admins restore the old "active only" view in one click; row styling makes status unambiguous.
+- **Data Impact**: None on stored data. Restores previously-hidden employees to the grid — strictly additive.
+- **Workflow Impact**: Positive. All 69 mapped employees will now appear in the daily production entry grid. Previously-entered values for visible employees are unaffected; previously-invisible employees become editable.
+- **UI/UX**: Same grid, same columns. Just complete rows.
+- **Performance**: 3 paged requests (~2.5k rows) instead of 1 capped (1k). Cached by React Query per `programId`. Trivial overhead, paid only when the program is selected.
+- **Regression Risk**: Very low. Identical select shape, well-trodden helper used in 6+ other places already. No schema, RLS, or business logic touched.
+- **Mitigation**: Existing regression test (`employeePickerPaging.test.ts`) already covers this pattern; no new test needed for the same code path. Add a brief assertion to that test referencing the incentive use-case if helpful.
 
 ### Out of Scope
 
-- Row-level activate/deactivate buttons (separate plan, previously declined).
-- Changes to other lists/pickers (those use `is_active=true` intentionally for assignment contexts).
+- Backend rate-resolution logic (`resolveEmployeeRate`) — unchanged.
+- Mapping editor UX — separate concern.
+- Adding deactivated employees back to production data entry (intentionally excluded by `is_active=true`).
 
