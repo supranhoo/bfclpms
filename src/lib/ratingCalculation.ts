@@ -80,6 +80,37 @@ export function ratingToLevel(rating: number): RatingLevel {
 }
 
 /**
+ * Dev-only guard: warns when threshold cascade is non-monotonic.
+ * Lower-is-Better expects R5 ≤ R4 ≤ R3 ≤ R2 ≤ R1 ≤ R0
+ * Higher-is-Better expects R5 ≥ R4 ≥ R3 ≥ R2 ≥ R1 ≥ R0
+ * A typo (e.g. R2=1 sandwiched between R3=100 and R1=101) breaks the cascade
+ * and silently scores values as 0. We log once per call site in dev.
+ */
+function warnIfNonMonotonic(
+  values: { r5: number | null; r4: number | null; r3: number | null; r2: number | null; r1: number | null; r0: number | null },
+  criteria: string,
+  source: string
+): void {
+  if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return;
+  const order = [values.r5, values.r4, values.r3, values.r2, values.r1, values.r0];
+  const isLowerBetter = criteria?.toLowerCase().includes('lower');
+  for (let i = 0; i < order.length - 1; i++) {
+    const a = order[i];
+    const b = order[i + 1];
+    if (a === null || b === null) continue;
+    const ok = isLowerBetter ? a <= b : a >= b;
+    if (!ok) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[${source}] Non-monotonic thresholds for "${criteria}": R${5 - i}=${a}, R${4 - i}=${b}. ` +
+        `Likely a master-data typo — scoring may yield unexpected 0s.`
+      );
+      return;
+    }
+  }
+}
+
+/**
  * Convert color-based rating level to display text
  */
 export function levelToText(level: RatingLevel): string {
@@ -320,6 +351,9 @@ function calculateAbsoluteRating(
   const r3 = parseThreshold(thresholds.r3, false);
   const r2 = parseThreshold(thresholds.r2, false);
   const r1 = parseThreshold(thresholds.r1, false);
+  const r0 = parseThreshold(thresholds.r0, false);
+
+  warnIfNonMonotonic({ r5, r4, r3, r2, r1, r0 }, criteria, 'calculateAbsoluteRating');
 
   const isLowerBetter = criteria?.toLowerCase().includes('lower');
   let rating = 0;
@@ -332,6 +366,7 @@ function calculateAbsoluteRating(
     else if (r3 !== null && achieved <= r3) rating = 3;
     else if (r2 !== null && achieved <= r2) rating = 2;
     else if (r1 !== null && achieved <= r1) rating = 1;
+    else if (r0 !== null && achieved > r0) rating = 0;
   } else {
     // Higher is Better: higher achieved value = higher rating
     // Thresholds should be in descending order (R5 = highest, R1 = lowest acceptable)
@@ -340,6 +375,7 @@ function calculateAbsoluteRating(
     else if (r3 !== null && achieved >= r3) rating = 3;
     else if (r2 !== null && achieved >= r2) rating = 2;
     else if (r1 !== null && achieved >= r1) rating = 1;
+    else if (r0 !== null && achieved < r0) rating = 0;
   }
 
   // Calculate percentage for display (achieved/target * 100) if target exists
@@ -456,6 +492,9 @@ function calculatePercentageRating(
   const r3 = parseThreshold(thresholds.r3, false);
   const r2 = parseThreshold(thresholds.r2, false);
   const r1 = parseThreshold(thresholds.r1, false);
+  const r0 = parseThreshold(thresholds.r0, false);
+
+  warnIfNonMonotonic({ r5, r4, r3, r2, r1, r0 }, criteria, 'calculatePercentageRating');
 
   const isLowerBetter = criteria?.toLowerCase().includes('lower');
   let rating = 0;
@@ -468,6 +507,7 @@ function calculatePercentageRating(
     else if (r3 !== null && achieved <= r3) rating = 3;
     else if (r2 !== null && achieved <= r2) rating = 2;
     else if (r1 !== null && achieved <= r1) rating = 1;
+    else if (r0 !== null && achieved > r0) rating = 0;
   } else {
     // Higher is Better: higher value = higher rating
     // Example: Success rate - 101% is better than 99%
@@ -476,6 +516,7 @@ function calculatePercentageRating(
     else if (r3 !== null && achieved >= r3) rating = 3;
     else if (r2 !== null && achieved >= r2) rating = 2;
     else if (r1 !== null && achieved >= r1) rating = 1;
+    else if (r0 !== null && achieved < r0) rating = 0;
   }
 
   return {

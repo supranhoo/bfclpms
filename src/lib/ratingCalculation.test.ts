@@ -721,6 +721,37 @@ describe("calculateRating with Percentage (%) UOM", () => {
       expect(result2.rating).toBe(result3.rating);
       expect(result1.rating).toBe(5);
     });
+
+    describe("R0 threshold (Maintenance Cost Control regression)", () => {
+      // Repaired master data: R5=99, R4=99.5, R3=100, R2=100.5, R1=101, R0=>101
+      const repaired: RatingThresholds = {
+        r5: "99%", r4: "99.5%", r3: "100%", r2: "100.5%", r1: "101%", r0: ">101%",
+      };
+
+      it("explicitly returns 0 when achieved exceeds R0 (>101%)", () => {
+        const result = calculateRating(105, 100, repaired, "Lower is Better", 10, "numeric", null, "%");
+        expect(result.rating).toBe(0);
+      });
+
+      it("returns 1 at exactly 101% (R1 boundary)", () => {
+        const result = calculateRating(101, 100, repaired, "Lower is Better", 10, "numeric", null, "%");
+        expect(result.rating).toBe(1);
+      });
+
+      it("returns 2 at 100.5% (R2 — repaired from typo R2=1)", () => {
+        const result = calculateRating(100.5, 100, repaired, "Lower is Better", 10, "numeric", null, "%");
+        expect(result.rating).toBe(2);
+      });
+
+      it("with corrupted R2=1 typo, value 100.3 still falls through to R1 (regression guard)", () => {
+        const corrupted: RatingThresholds = {
+          r5: "99%", r4: "99.5%", r3: "100%", r2: "1%", r1: "101%", r0: ">101%",
+        };
+        // 100.3 is > R3(100), > R2(1) [broken cascade], <= R1(101) → R1
+        const result = calculateRating(100.3, 100, corrupted, "Lower is Better", 10, "numeric", null, "%");
+        expect(result.rating).toBe(1);
+      });
+    });
   });
 
   describe("Higher is Better", () => {
