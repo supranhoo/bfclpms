@@ -1,6 +1,8 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-16  
+> **Version:** 2.21.1 — User Management list (`/admin/users`) shows **all** users by default (active + inactive). The Status filter (All / Active / Inactive) governs the view; inactive rows are visually muted with a red **Inactive** badge so admins can discover and reactivate deactivated accounts without DB access. Other employee pickers/selectors continue to filter by `is_active=true` for assignment integrity.
+>
 > **Version:** 2.21.0 — Compute engine no longer references non-existent `profiles.location`; PostgREST errors now surface as HTTP 500 instead of silent zero-result. Edge functions must check `error` on every Supabase query (silent destructuring of `data` is forbidden).
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
