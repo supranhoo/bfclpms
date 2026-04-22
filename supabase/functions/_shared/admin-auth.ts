@@ -21,7 +21,29 @@ export interface AdminAuthResult {
   status?: number;
 }
 
-export async function requireAdminUser(req: Request): Promise<AdminAuthResult> {
+type VerifiedAdminUser = { id: string; email?: string };
+
+interface AdminAuthDependencies {
+  verifyUser?: (token: string, supabaseUrl: string, anonKey: string) => Promise<VerifiedAdminUser>;
+  createAdminClient?: (supabaseUrl: string, serviceRoleKey: string) => SupabaseClient;
+}
+
+export async function verifyAdminJwt(token: string, supabaseUrl: string, anonKey: string): Promise<VerifiedAdminUser> {
+  const userClient = createClient(supabaseUrl, anonKey);
+  const { data, error } = await userClient.auth.getClaims(token);
+  const claims = data?.claims;
+
+  if (error || typeof claims?.sub !== 'string' || claims.sub.length === 0) {
+    throw new Error(error?.message ?? 'Missing sub claim');
+  }
+
+  return {
+    id: claims.sub,
+    email: typeof claims.email === 'string' ? claims.email : undefined,
+  };
+}
+
+export async function requireAdminUser(req: Request, deps: AdminAuthDependencies = {}): Promise<AdminAuthResult> {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -40,33 +62,35 @@ export async function requireAdminUser(req: Request): Promise<AdminAuthResult> {
     return { authorized: false, user: null, adminClient: null, error: 'Unauthorized', status: 401 };
   }
 
-  // Step 2: Validate identity via user-context client
-  const userClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
-
-  const { data: claimsData, error: authError } = await userClient.auth.getClaims(token);
-  const claims = claimsData?.claims;
-
-  if (authError || !claims?.sub) {
-    console.warn('[admin-auth] Identity validation failed:', authError?.message ?? 'no user returned');
+  // Step 2: Validate JWT signature + claims without depending on an auth session lookup.
+  let user: VerifiedAdminUser;
+  try {
+    user = await (deps.verifyUser ?? verifyAdminJwt)(token, supabaseUrl, anonKey);
+  } catch (error) {
+    console.warn('[admin-auth] Identity validation failed:', error instanceof Error ? error.message : String(error));
     return { authorized: false, user: null, adminClient: null, error: 'Unauthorized', status: 401 };
   }
 
-  const user = {
-    id: claims.sub,
-    email: typeof claims.email === 'string' ? claims.email : undefined,
-  };
-
   // Step 3: Verify admin role via service-role client
-  const adminClient = createClient(supabaseUrl, serviceRoleKey);
+  const adminClient = (deps.createAdminClient ?? ((url, key) => createClient(url, key)))(supabaseUrl, serviceRoleKey);
 
-  const { data: roleCheck } = await adminClient
+  const { data: roleCheck, error: roleError } = await adminClient
     .from('user_roles')
     .select('role')
     .eq('user_id', user.id)
     .eq('role', 'admin')
     .maybeSingle();
+
+  if (roleError) {
+    console.error('[admin-auth] Role lookup failed:', roleError.message);
+    return {
+      authorized: false,
+      user,
+      adminClient: null,
+      error: 'Authorization check failed',
+      status: 500,
+    };
+  }
 
   if (!roleCheck) {
     console.warn('[admin-auth] User resolved but not admin:', user.id);
