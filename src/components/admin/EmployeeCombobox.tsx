@@ -76,9 +76,16 @@ export function EmployeeCombobox(props: Props) {
     return employees.filter((e) => !excludeSet.has(e.id) && matches(e, search));
   }, [employees, excludeSet, search]);
 
+  const multiValues: string[] = props.multiple ? props.value : [];
+  const selectedEmployees = useMemo(
+    () => multiValues.map((id) => employees.find((e) => e.id === id)).filter(Boolean) as EmployeeOption[],
+    [multiValues, employees],
+  );
+
   // ---------- SINGLE-SELECT ----------
   if (!props.multiple) {
     const value = props.value;
+    const onChange = props.onChange;
     const selected = employees.find((e) => e.id === value);
 
     return (
@@ -121,7 +128,7 @@ export function EmployeeCombobox(props: Props) {
                       key={emp.id}
                       value={emp.id}
                       onSelect={() => {
-                        props.onChange(emp.id);
+                        onChange(emp.id);
                         setOpen(false);
                       }}
                       className="cursor-pointer"
@@ -154,7 +161,7 @@ export function EmployeeCombobox(props: Props) {
             <button
               type="button"
               className="text-xs text-muted-foreground underline"
-              onClick={() => props.onChange('')}
+              onClick={() => onChange('')}
             >
               Change
             </button>
@@ -166,28 +173,25 @@ export function EmployeeCombobox(props: Props) {
 
   // ---------- MULTI-SELECT ----------
   const values = props.value;
+  const onChangeMulti = props.onChange;
   const selectedSet = new Set(values);
-  const selectedEmployees = useMemo(
-    () => values.map((id) => employees.find((e) => e.id === id)).filter(Boolean) as EmployeeOption[],
-    [values, employees],
-  );
 
   const allFilteredSelected =
     filtered.length > 0 && filtered.every((e) => selectedSet.has(e.id));
 
   const toggle = (id: string) => {
-    if (selectedSet.has(id)) props.onChange(values.filter((v) => v !== id));
-    else props.onChange([...values, id]);
+    if (selectedSet.has(id)) onChangeMulti(values.filter((v) => v !== id));
+    else onChangeMulti([...values, id]);
   };
 
   const toggleAllFiltered = () => {
     if (allFilteredSelected) {
       const filteredIds = new Set(filtered.map((e) => e.id));
-      props.onChange(values.filter((v) => !filteredIds.has(v)));
+      onChangeMulti(values.filter((v) => !filteredIds.has(v)));
     } else {
       const merged = new Set(values);
       filtered.forEach((e) => merged.add(e.id));
-      props.onChange([...merged]);
+      onChangeMulti([...merged]);
     }
   };
 
