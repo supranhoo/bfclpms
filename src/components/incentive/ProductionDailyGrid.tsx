@@ -166,19 +166,24 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
     }));
   };
 
-  const getTotal = (empId: string): number => {
+  const getTotal = (empId: string, days: number[]): number => {
     const vals = localData[empId] || {};
-    return Object.values(vals).reduce((sum, v) => sum + (Number(v) || 0), 0);
+    return days.reduce((sum, d) => sum + (Number(vals[String(d)]) || 0), 0);
   };
+
+  const rangeLabel = useMemo(() => {
+    if (dateRange === 'all') return '';
+    return ` (${dateRange})`;
+  }, [dateRange]);
 
   const grandTotal = useMemo(() => {
     return Math.round(gridEmployees.reduce((sum, emp) => {
       const rateInfo = employeeRates.get(emp.id);
       const rate = rateInfo?.rate || 0;
-      return sum + getTotal(emp.id) * rate;
+      return sum + getTotal(emp.id, visibleDays) * rate;
     }, 0));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localData, gridEmployees, employeeRates]);
+  }, [localData, gridEmployees, employeeRates, visibleDays]);
 
   const handleSave = () => {
     const payload = gridEmployees.map((emp: any) => ({
@@ -247,8 +252,8 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
                     {visibleDays.map(d => (
                       <TableHead key={d} className="text-center min-w-[56px] px-1">{d}</TableHead>
                     ))}
-                    <TableHead className="text-right min-w-[70px]">Total</TableHead>
-                    <TableHead className="text-right min-w-[90px]">Amount (₹)</TableHead>
+                    <TableHead className="text-right min-w-[70px]">Total{rangeLabel}</TableHead>
+                    <TableHead className="text-right min-w-[90px]">Amount{rangeLabel} (₹)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -257,7 +262,7 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
                     const effectiveRate = rateInfo?.rate || 0;
                     const rateSource = rateInfo?.source || 'none';
                     const empVals = localData[emp.id] || {};
-                    const total = getTotal(emp.id);
+                    const total = getTotal(emp.id, visibleDays);
                     const amount = Math.round(total * effectiveRate);
                     const deptName = (emp as any).departments?.name || '—';
                     return (
