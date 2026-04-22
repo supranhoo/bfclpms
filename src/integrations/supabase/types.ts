@@ -5385,6 +5385,10 @@ export type Database = {
         }
         Returns: Json
       }
+      record_send_back_reason: {
+        Args: { p_reason: string }
+        Returns: undefined
+      }
       repair_org_kpi_cycle_anchors: {
         Args: { p_dry_run?: boolean }
         Returns: Json

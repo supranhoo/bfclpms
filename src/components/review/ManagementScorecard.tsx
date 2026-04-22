@@ -435,6 +435,11 @@ export function ManagementScorecard({
       // Use workflow engine to resolve the correct pending status
       const newStatus = resolveSendBackStatus(target, 'management', effectiveStages);
 
+      // Stamp reviewer remark into transaction-local var so the
+      // notify_on_kpi_status_change trigger can include it in metadata.send_back_reason
+      // (consumed by the manager_rejected email template).
+      await supabase.rpc('record_send_back_reason' as any, { p_reason: reason });
+
       const { error: kpiError } = await supabase
         .from('kpis')
         .update({ status: newStatus as any })

@@ -80,7 +80,10 @@ KRA: {{kra_name}}
 KPI: {{kpi_name}}
 Period: {{review_period}} {{review_year}}
 
-Please review the feedback and update your submission.`,
+{{#if send_back_reason}}Reviewer's Remark:
+{{send_back_reason}}
+
+{{/if}}Please review the feedback and update your submission.`,
     color: '#f59e0b',
     emoji: '🔄',
   },

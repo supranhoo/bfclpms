@@ -1011,6 +1011,11 @@ export function useSendBackKpi() {
     }) => {
       if (!user?.id) throw new Error('User not authenticated');
 
+      // Stamp reviewer remark into transaction-local var so the
+      // notify_on_kpi_status_change trigger can include it in metadata.send_back_reason
+      // (consumed by the manager_rejected email template).
+      await supabase.rpc('record_send_back_reason' as any, { p_reason: reason });
+
       // Manager sends back to employee = status goes to kra_set
       // Clear all downstream data from kra_set forward
       // Preserve employee self-review data; only clear manager+ fields
