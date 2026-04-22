@@ -71,7 +71,6 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
   const [sourceEmployeeId, setSourceEmployeeId] = useState('');
   const [sourcePeriod, setSourcePeriod] = useState(MONTHS[now.getMonth()]);
   const [sourceYear, setSourceYear] = useState(now.getFullYear());
-  const [sourceSearch, setSourceSearch] = useState('');
 
   // KRA selection
   const [selectedKraIds, setSelectedKraIds] = useState<Set<string>>(new Set());
@@ -80,7 +79,6 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
   const [targetEmployeeIds, setTargetEmployeeIds] = useState<string[]>([]);
   const [targetPeriod, setTargetPeriod] = useState(MONTHS[now.getMonth()]);
   const [targetYear, setTargetYear] = useState(now.getFullYear());
-  const [targetSearch, setTargetSearch] = useState('');
 
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i);
 
@@ -164,20 +162,6 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
   }, [sourceKpis, selectedKraIds, targetEmployeeIds, duplicateMap]);
 
   const totalDuplicates = Object.values(duplicateCounts).reduce((a, b) => a + b, 0);
-
-  // Filtered employee lists
-  const filteredSourceEmployees = useMemo(() => {
-    if (!sourceSearch) return employees;
-    const q = sourceSearch.toLowerCase();
-    return employees.filter(e => e.name.toLowerCase().includes(q) || e.code.toLowerCase().includes(q));
-  }, [employees, sourceSearch]);
-
-  const filteredTargetEmployees = useMemo(() => {
-    const filtered = employees.filter(e => e.id !== sourceEmployeeId);
-    if (!targetSearch) return filtered;
-    const q = targetSearch.toLowerCase();
-    return filtered.filter(e => e.name.toLowerCase().includes(q) || e.code.toLowerCase().includes(q));
-  }, [employees, sourceEmployeeId, targetSearch]);
 
   // Copy mutation
   const copyMutation = useMutation({
