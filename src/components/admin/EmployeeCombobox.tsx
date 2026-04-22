@@ -84,8 +84,8 @@ export function EmployeeCombobox(props: Props) {
 
   // ---------- SINGLE-SELECT ----------
   if (!props.multiple) {
-    const value = props.value;
-    const onChange = props.onChange;
+    const value = props.value as string;
+    const onChange = props.onChange as (id: string) => void;
     const selected = employees.find((e) => e.id === value);
 
     return (
@@ -172,8 +172,8 @@ export function EmployeeCombobox(props: Props) {
   }
 
   // ---------- MULTI-SELECT ----------
-  const values = props.value;
-  const onChangeMulti = props.onChange;
+  const values = props.value as string[];
+  const onChangeMulti = props.onChange as (ids: string[]) => void;
   const selectedSet = new Set(values);
 
   const allFilteredSelected =
