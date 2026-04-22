@@ -99,14 +99,13 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
 
   const groupedRows: Array<{ dept: string | null; rows: ScopedRow[] }> = [];
   if (isEmployeeScope) {
-    let lastDept: string | null = null;
     for (const row of sortedRows) {
       const dept = row.departmentName ?? null;
-      if (dept !== lastDept) {
+      const last = groupedRows[groupedRows.length - 1];
+      if (!last || last.dept !== dept) {
         groupedRows.push({ dept, rows: [row] });
-        lastDept = dept;
       } else {
-        groupedRows[groupedRows.length - 1].rows.push(row);
+        last.rows.push(row);
       }
     }
   }
