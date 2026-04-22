@@ -252,8 +252,8 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
                     {visibleDays.map(d => (
                       <TableHead key={d} className="text-center min-w-[56px] px-1">{d}</TableHead>
                     ))}
-                    <TableHead className="text-right min-w-[70px]">Total</TableHead>
-                    <TableHead className="text-right min-w-[90px]">Amount (₹)</TableHead>
+                    <TableHead className="text-right min-w-[70px]">Total{rangeLabel}</TableHead>
+                    <TableHead className="text-right min-w-[90px]">Amount{rangeLabel} (₹)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -262,7 +262,7 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
                     const effectiveRate = rateInfo?.rate || 0;
                     const rateSource = rateInfo?.source || 'none';
                     const empVals = localData[emp.id] || {};
-                    const total = getTotal(emp.id);
+                    const total = getTotal(emp.id, visibleDays);
                     const amount = Math.round(total * effectiveRate);
                     const deptName = (emp as any).departments?.name || '—';
                     return (
