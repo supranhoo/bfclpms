@@ -12,7 +12,6 @@
  */
 
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { createRemoteJWKSet, jwtVerify } from 'https://esm.sh/jose@5.9.6';
 
 export interface AdminAuthResult {
   authorized: boolean;
@@ -25,40 +24,28 @@ export interface AdminAuthResult {
 type VerifiedAdminUser = { id: string; email?: string };
 
 interface AdminAuthDependencies {
-  verifyUser?: (token: string, supabaseUrl: string) => Promise<VerifiedAdminUser>;
+  verifyUser?: (token: string, supabaseUrl: string, anonKey: string) => Promise<VerifiedAdminUser>;
   createAdminClient?: (supabaseUrl: string, serviceRoleKey: string) => SupabaseClient;
 }
 
-const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
+export async function verifyAdminJwt(token: string, supabaseUrl: string, anonKey: string): Promise<VerifiedAdminUser> {
+  const userClient = createClient(supabaseUrl, anonKey);
+  const { data, error } = await userClient.auth.getClaims(token);
+  const claims = data?.claims;
 
-function getJwks(issuer: string) {
-  const cached = jwksCache.get(issuer);
-  if (cached) return cached;
-
-  const jwks = createRemoteJWKSet(new URL(`${issuer}/.well-known/jwks.json`));
-  jwksCache.set(issuer, jwks);
-  return jwks;
-}
-
-export async function verifyAdminJwt(token: string, supabaseUrl: string): Promise<VerifiedAdminUser> {
-  const issuer = `${supabaseUrl}/auth/v1`;
-  const { payload } = await jwtVerify(token, getJwks(issuer), {
-    issuer,
-    audience: 'authenticated',
-  });
-
-  if (typeof payload.sub !== 'string' || payload.sub.length === 0) {
-    throw new Error('Missing sub claim');
+  if (error || typeof claims?.sub !== 'string' || claims.sub.length === 0) {
+    throw new Error(error?.message ?? 'Missing sub claim');
   }
 
   return {
-    id: payload.sub,
-    email: typeof payload.email === 'string' ? payload.email : undefined,
+    id: claims.sub,
+    email: typeof claims.email === 'string' ? claims.email : undefined,
   };
 }
 
 export async function requireAdminUser(req: Request, deps: AdminAuthDependencies = {}): Promise<AdminAuthResult> {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
   const authHeader = req.headers.get('Authorization');
@@ -78,7 +65,7 @@ export async function requireAdminUser(req: Request, deps: AdminAuthDependencies
   // Step 2: Validate JWT signature + claims without depending on an auth session lookup.
   let user: VerifiedAdminUser;
   try {
-    user = await (deps.verifyUser ?? verifyAdminJwt)(token, supabaseUrl);
+    user = await (deps.verifyUser ?? verifyAdminJwt)(token, supabaseUrl, anonKey);
   } catch (error) {
     console.warn('[admin-auth] Identity validation failed:', error instanceof Error ? error.message : String(error));
     return { authorized: false, user: null, adminClient: null, error: 'Unauthorized', status: 401 };
