@@ -12,6 +12,7 @@ import { BulkZeroScoreSection } from './BulkZeroScoreSection';
 import { LateJoinerBackfillSection } from './LateJoinerBackfillSection';
 import { OrgKpiInheritanceReconciler } from './OrgKpiInheritanceReconciler';
 import { OrgKpiCycleAnchorRepair } from './OrgKpiCycleAnchorRepair';
+import { RescoreBackfilledSubmissionsDialog } from './RescoreBackfilledSubmissionsDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
@@ -759,6 +760,9 @@ export function DataRepairTab() {
 
       {/* v2.66.7.2 — Org KPI Cycle Anchor Repair */}
       <OrgKpiCycleAnchorRepair />
+
+      {/* v2.66.7.16 — Re-score Phase A1 backfilled submissions */}
+      <RescoreBackfilledSubmissionsDialog />
 
       <ConfirmDestructiveDialog
         open={showConfirm}
