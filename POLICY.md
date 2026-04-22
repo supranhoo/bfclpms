@@ -1633,3 +1633,28 @@ Observation workflow notifications (`observation_raised`, `observation_reply`, `
 ## §87 — Incentive Report Pagination & Bulk Selection (v2.38.0)
 
 The Monthly Incentive Report table must support paginated navigation with configurable page sizes (25, 50, 100, All). When all rows on the current page are selected, a banner must appear offering to select all filtered records across all pages. Filter changes must reset pagination to page 1 and clear selection state.
+
+---
+
+## §88 — Submission Snapshot Immutability (v2.66.7.3)
+
+Once an `achieved_value` (and its supporting `sub_factors`, remarks, and evidence) has been written to `review_submissions`, that row is the employee's **frozen submission snapshot** for the given KPI/period. The system must **never** retroactively recompute or overwrite this value from an upstream source such as `org_kpi_values`. Specifically:
+
+1. Org KPI propagation **copies** the achieved value into each per-employee `review_submissions` row at propagation time. It does not store a foreign-key reference to `org_kpi_values`.
+2. After propagation, the employee or reviewer may amend their own row through normal workflow stages. The amended value remains the snapshot for that submission cycle.
+3. Once `final_score` is approved, the row is governed by `final-score-governance-and-immutability` and is locked.
+4. Admin edits to the source `org_kpi_values` row **must not** propagate into already-existing `review_submissions`. A re-propagation must be an explicit, audit-logged action initiated by a Data Owner or Admin.
+
+Refactors that replace the per-submission value column with a live foreign-key lookup are **forbidden** under this policy because they would silently mutate already-approved historical scores in violation of HR audit law.
+
+---
+
+## §89 — Per-KPI Audit Granularity for Org KPI Propagation (v2.66.7.3)
+
+Every Org KPI propagation event must produce **one `ORG_KPI_PROPAGATED` row in `kpi_audit_logs` per affected KPI**, individually addressable by `kpi_id`. This granularity is required because:
+
+1. The Review Journey UI (`KpiTimeline`, `KpiJourneySection`) filters timeline events by `kpi_id` to render per-employee history.
+2. The rollback recovery engine (`repair-stepped-back-siblings`) reconstructs prior submission state by reading these per-KPI rows.
+3. Compliance and SLA reporting depend on per-KPI provenance (which Data Owner propagated which value to which employee, when).
+
+Bulk-summary audit rows that omit `kpi_id` may be added **in addition** to per-KPI rows (for analytics dashboards), but must never replace them. Any change that collapses per-KPI propagation events into a single JSON-blob row is **forbidden** under this policy.

@@ -1,6 +1,9 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-04-21  
+> **Last Updated:** 2026-04-22  
+> **Version:** 2.66.7.3 — Design Decisions & Rejected Refactors documented.
+> **(Doc-only)** Records the architectural rationale for three patterns flagged as "overdoing": (a) the client-side `nk()` natural-key helper is a JS Map key, never a SQL predicate — DB joins use the indexed `(category_id, kra_name, kpi_name, review_period, review_year)` composite key; (b) `review_submissions.achieved_value` is an immutable per-submission snapshot mandated by HR audit policy and `final-score-governance-and-immutability`, not a cache — replacing with a live FK to `org_kpi_values` would silently mutate already-approved historical scores; (c) `ORG_KPI_PROPAGATED` audit rows are emitted per-KPI by design because they are consumed by `KpiTimeline`, `KpiJourneySection`, and the `repair-stepped-back-siblings` recovery engine. See §"Design Decisions & Rejected Refactors" below and POLICY.md §88, §89.
+>
 > **Version:** 2.66.7 — Forward-Sync of Org KPI Status + Bi-Monthly Cascade Awareness.
 > **(1) Forward-Sync Trigger:** New AFTER UPDATE trigger `trg_sync_org_status_to_future_open_periods` on `public.kpis`. When an admin promotes (`is_org_level` false→true) or demotes (true→false) a KPI — or changes `org_level_scope` — the change is automatically cascaded to all sibling KPIs (same `category_id+kra_name+kpi_name+employee_id`) in **future open periods** (later in the fiscal year, not in `review_period_locks`). Demotions additionally delete orphaned `draft` rows in `org_kpi_values` for those future periods. Every sync is audit-logged as `ORG_KPI_FORWARD_SYNCED` with full `from`/`to` metadata. Gated by new flag `app_settings.enable_org_kpi_forward_sync` (default `true`).
 > **(2) Bi-Monthly Cycle-Aware Cascade:** `change_org_kpi_scope_cascading` now detects KPI frequency and uses `resolve_terminal_period()` to map every requested period to its cycle's terminal month (e.g. Bi-Monthly Feb-Mar → March, Quarterly Jul-Sep → September). Forward-cascade de-duplicates so each cycle is touched exactly once. Audit metadata records the resolved `cycle_anchor`. Prevents silent no-ops when admins edit on a non-terminal month.
@@ -5223,3 +5226,36 @@ Every new edge function **must** complete all of these steps before deployment:
 - **Trigger pipeline**: `trg_autoinherit_org_level_on_kpi_insert` (BEFORE) → row inserted with `is_org_level=true` → `trg_autopull_propagated_org_kpi` (AFTER) → fills value if a propagated OKV exists. Net effect: a brand-new mid-month KPI immediately enters the Org KPI workflow at `self_review` if its OKV is already propagated, otherwise sits at `kra_set` waiting for the data owner.
 - **Modified files**: new migration file, `src/components/admin/OrgKpiGovernanceSettings.tsx` (new), `src/components/admin/OrgKpiInheritanceReconciler.tsx` (new), `src/pages/admin/SystemSettings.tsx`, `src/components/admin/DataRepairTab.tsx`.
 - **Reversibility**: existing "Step Back" admin tool reverts any single false-positive inheritance. The reconciler can be re-run safely (idempotent — already-inherited rows are skipped).
+
+### v2.66.7.3 — Design Decisions & Rejected Refactors (2026-04-22, doc-only)
+
+This section records architectural patterns that have been audited and intentionally retained, so future contributors do not re-propose refactors that would damage compliance, performance, or downstream features.
+
+#### Decision 1 — `nk()` Natural-Key Helper is a Client-Side Map Key, Not a SQL Predicate
+- **Pattern**: `src/lib/orgKpiKey.ts` exposes `nk(s)` which lowercases, trims, and collapses internal whitespace. Used only in `OrgKpiDataEntry.tsx`, `useOrgKpiDataOwner.ts`, and `useOrgLevelKpis.ts` — exclusively to build JS `Map` keys for in-memory grouping after rows are fetched.
+- **What it is NOT**: It is never embedded in a SQL `WHERE` or `JOIN` clause. All server-side joins (RPCs `propagate_org_kpi_value`, `change_org_kpi_scope_cascading`, trigger `trg_sync_org_status_to_future_open_periods`, etc.) use plain equality on `(category_id, kra_name, kpi_name, review_period, review_year)` backed by the unique index `idx_kpis_unique_signature` (migration `20260106132841_*.sql`).
+- **Rejected refactor**: Introducing a `kpi_template_id` UUID or `content_hash` column. This would force a multi-month schema migration of every `kpis`/`review_submissions`/`org_kpi_values`/`kpi_audit_logs` row, every report query, every import path, and every export — for **zero performance gain** (Postgres already uses the composite index). It would also create a second identity that must be kept in sync with the human-readable name everyone references in audits.
+- **Verdict**: Retain `nk()` as a small client-side ergonomics helper. Drift at the source is prevented by the KRA Library Master.
+
+#### Decision 2 — `review_submissions.achieved_value` is an Immutable Per-Submission Snapshot
+- **Pattern**: When an Org KPI is propagated, the achieved value is **copied** into every per-employee `review_submissions` row rather than referenced via a foreign key to `org_kpi_values`.
+- **Why**: HR audit law and `final-score-governance-and-immutability` require that once an employee's value is submitted (and certainly once a `final_score` is approved), no upstream edit may silently alter the historical score. The 8-stage scoring fallback chain (`mem://architecture/pms/universal-scoring-logic`) reads this frozen value as the canonical "Self" score.
+- **Rejected refactor**: Replacing the value column with `org_kpi_value_id` FK and deriving the value at read-time. This would mean a single admin edit to one OKV could mutate thousands of already-approved final scores — a direct violation of immutability policy and a compliance/legal risk. Storage cost (numeric × thousands of rows ≈ 40 KB) is irrelevant.
+- **Allowed delta**: Employees and reviewers may amend their own `review_submissions` row (sub-factors, remarks, evidence, score override) after pre-fill. Once `final_score` is set, the row is locked.
+- **Verdict**: Retain by-value copy. Codified in POLICY.md §88 (Submission Snapshot Immutability).
+
+#### Decision 3 — `ORG_KPI_PROPAGATED` Audit Rows Are Per-KPI by Design
+- **Pattern**: `usePropagateOrgKpiValue.ts` inserts one `ORG_KPI_PROPAGATED` row in `kpi_audit_logs` per affected KPI — not a single bulk-summary row.
+- **Why per-row is load-bearing**:
+  - `KpiTimeline.tsx` filters audit logs by `kpi_id` to render the per-employee Review Journey.
+  - `KpiJourneySection.tsx` labels and groups events per KPI.
+  - `supabase/functions/repair-stepped-back-siblings/index.ts` reconstructs prior submission state by reading these per-KPI rows; collapsing them would break the rollback-recovery engine.
+- **Rejected refactor**: Replacing per-KPI rows with one `ORG_KPI_BULK_PROPAGATED` row carrying a JSON array of affected IDs. This would silently break three downstream features.
+- **Allowed (optional, additive) optimization**: A single `ORG_KPI_BULK_PROPAGATION_SUMMARY` row may be added **alongside** the per-KPI rows for analytics; it must not replace them. The existing `PROPAGATION_PARTIAL` rows (no per-row consumer today) may also be compacted to a single summary if a future need arises.
+- **Verdict**: Retain per-KPI granularity. Codified in POLICY.md §89 (Per-KPI Audit Granularity).
+
+#### Risk & Impact
+- **Data Impact**: None — documentation only.
+- **Workflow Impact**: None.
+- **UI/UX**: None.
+- **Regression Risk**: Zero. Purely defensive against future destructive refactors.
