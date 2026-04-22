@@ -50,13 +50,10 @@ export function useSentBackOrgKpiEmployees(
       const kpiIds = kraSetKpis.map(k => k.id);
       const kpiToEmployee = new Map(kraSetKpis.map(k => [k.id, k.employee_id]));
 
-      // 2. Find the most recent send-back query for these KPIs (any status — open or resolved)
+      // 2. Use SECURITY DEFINER RPC to get only ACTIVE send-back markers
+      // (filters out resolved markers + markers older than the most recent KPI advance)
       const { data: queries, error: qErr } = await supabase
-        .from('kpi_queries')
-        .select('kpi_id, reason, created_at, raised_by')
-        .in('kpi_id', kpiIds)
-        .eq('query_type', 'send_back')
-        .order('created_at', { ascending: false });
+        .rpc('get_active_send_back_markers', { p_kpi_ids: kpiIds });
 
       if (qErr) throw qErr;
       if (!queries || queries.length === 0) return map;
