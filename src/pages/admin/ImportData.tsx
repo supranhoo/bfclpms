@@ -184,6 +184,7 @@ export default function ImportData() {
   
   // Clear data state
   const [isClearing, setIsClearing] = useState(false);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
   
   // Employee search in preview
   const [employeeSearchQuery, setEmployeeSearchQuery] = useState('');
