@@ -4,15 +4,15 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Copy, Search, AlertTriangle, Loader2 } from 'lucide-react';
+import { Copy, AlertTriangle, Loader2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { formatKpiInsertError } from '@/lib/kpiErrorUtils';
+import { EmployeeCombobox } from './EmployeeCombobox';
 
 
 const MONTHS = [
@@ -71,7 +71,6 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
   const [sourceEmployeeId, setSourceEmployeeId] = useState('');
   const [sourcePeriod, setSourcePeriod] = useState(MONTHS[now.getMonth()]);
   const [sourceYear, setSourceYear] = useState(now.getFullYear());
-  const [sourceSearch, setSourceSearch] = useState('');
 
   // KRA selection
   const [selectedKraIds, setSelectedKraIds] = useState<Set<string>>(new Set());
@@ -80,7 +79,6 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
   const [targetEmployeeIds, setTargetEmployeeIds] = useState<string[]>([]);
   const [targetPeriod, setTargetPeriod] = useState(MONTHS[now.getMonth()]);
   const [targetYear, setTargetYear] = useState(now.getFullYear());
-  const [targetSearch, setTargetSearch] = useState('');
 
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i);
 
@@ -164,20 +162,6 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
   }, [sourceKpis, selectedKraIds, targetEmployeeIds, duplicateMap]);
 
   const totalDuplicates = Object.values(duplicateCounts).reduce((a, b) => a + b, 0);
-
-  // Filtered employee lists
-  const filteredSourceEmployees = useMemo(() => {
-    if (!sourceSearch) return employees;
-    const q = sourceSearch.toLowerCase();
-    return employees.filter(e => e.name.toLowerCase().includes(q) || e.code.toLowerCase().includes(q));
-  }, [employees, sourceSearch]);
-
-  const filteredTargetEmployees = useMemo(() => {
-    const filtered = employees.filter(e => e.id !== sourceEmployeeId);
-    if (!targetSearch) return filtered;
-    const q = targetSearch.toLowerCase();
-    return filtered.filter(e => e.name.toLowerCase().includes(q) || e.code.toLowerCase().includes(q));
-  }, [employees, sourceEmployeeId, targetSearch]);
 
   // Copy mutation
   const copyMutation = useMutation({
@@ -291,8 +275,6 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
       setSourceEmployeeId('');
       setSelectedKraIds(new Set());
       setTargetEmployeeIds([]);
-      setSourceSearch('');
-      setTargetSearch('');
     }, 300);
   };
 
@@ -310,10 +292,6 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
     } else {
       setSelectedKraIds(new Set(sourceKpis.map(k => k.id)));
     }
-  };
-
-  const toggleTargetEmployee = (id: string) => {
-    setTargetEmployeeIds(prev => prev.includes(id) ? prev.filter(e => e !== id) : [...prev, id]);
   };
 
   const sourceEmployee = employees.find(e => e.id === sourceEmployeeId);
@@ -341,40 +319,15 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
               <div className="space-y-3">
                 <Label className="text-sm font-semibold">Step 1: Source Employee & Period</Label>
                 <div className="space-y-2">
-                  <div className="space-y-1">
-                    <Input
-                      placeholder="Search employee..."
-                      value={sourceSearch}
-                      onChange={(e) => setSourceSearch(e.target.value)}
-                      className="text-sm"
-                    />
-                    {sourceSearch && !sourceEmployeeId && (
-                      <div className="border rounded-md max-h-48 overflow-y-auto">
-                        {filteredSourceEmployees.slice(0, 20).map(emp => (
-                          <button
-                            key={emp.id}
-                            className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted/50 flex items-center gap-2"
-                            onClick={() => {
-                              setSourceEmployeeId(emp.id);
-                              setSourceSearch(emp.name);
-                              setSelectedKraIds(new Set());
-                            }}
-                          >
-                            <span>{emp.name}</span>
-                            {emp.code && <Badge variant="outline" className="text-xs">{emp.code}</Badge>}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {sourceEmployee && (
-                      <div className="flex items-center gap-1">
-                        <Badge variant="secondary" className="text-xs">{sourceEmployee.name}</Badge>
-                        <button className="text-xs text-muted-foreground underline" onClick={() => { setSourceEmployeeId(''); setSourceSearch(''); setSelectedKraIds(new Set()); }}>
-                          Change
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  <EmployeeCombobox
+                    employees={employees}
+                    value={sourceEmployeeId}
+                    onChange={(id) => {
+                      setSourceEmployeeId(id);
+                      setSelectedKraIds(new Set());
+                    }}
+                    placeholder="Click to search source employee…"
+                  />
                   <div className="grid grid-cols-2 gap-2">
                     <Select value={sourcePeriod} onValueChange={setSourcePeriod}>
                       <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
@@ -397,11 +350,14 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
                 <div className="space-y-3">
                   <Label className="text-sm font-semibold">Step 3: Target Employee(s) & Period</Label>
                   <div className="space-y-2">
-                    <Input
-                      placeholder="Search target employees..."
-                      value={targetSearch}
-                      onChange={(e) => setTargetSearch(e.target.value)}
-                      className="text-sm"
+                    <EmployeeCombobox
+                      multiple
+                      employees={employees}
+                      value={targetEmployeeIds}
+                      onChange={setTargetEmployeeIds}
+                      excludeIds={sourceEmployeeId ? [sourceEmployeeId] : []}
+                      duplicateCounts={duplicateCounts}
+                      placeholder="Click to select target employees…"
                     />
                     <div className="grid grid-cols-2 gap-2">
                       <Select value={targetPeriod} onValueChange={setTargetPeriod}>
@@ -419,26 +375,9 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
                     </div>
                   </div>
 
-                  <div className="border rounded-lg max-h-64 overflow-y-auto">
-                    {filteredTargetEmployees.slice(0, 50).map(emp => {
-                      const dupCount = duplicateCounts[emp.id] || 0;
-                      return (
-                        <label key={emp.id} className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer border-b last:border-0">
-                          <Checkbox
-                            checked={targetEmployeeIds.includes(emp.id)}
-                            onCheckedChange={() => toggleTargetEmployee(emp.id)}
-                          />
-                          <span className="text-sm font-medium">{emp.name}</span>
-                          {emp.code && <Badge variant="outline" className="text-xs">{emp.code}</Badge>}
-                          <span className="text-xs text-muted-foreground ml-auto">{emp.department}</span>
-                          {dupCount > 0 && targetEmployeeIds.includes(emp.id) && (
-                            <Badge variant="secondary" className="text-xs shrink-0">{dupCount} dup</Badge>
-                          )}
-                        </label>
-                      );
-                    })}
-                  </div>
-                  <p className="text-xs text-muted-foreground">{targetEmployeeIds.length} employee(s) selected</p>
+                  {targetEmployeeIds.length > 0 && (
+                    <p className="text-xs text-muted-foreground">{targetEmployeeIds.length} employee(s) selected</p>
+                  )}
 
                   {totalDuplicates > 0 && (
                     <Alert variant="default" className="border-amber-500/50 bg-amber-500/5">
