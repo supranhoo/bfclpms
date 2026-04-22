@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
+import { optimizeSupabaseImageUrl } from '@/lib/imageOptimization';
 
 interface LoginSlideshowProps {
   wallpapers: string[];
@@ -7,31 +8,6 @@ interface LoginSlideshowProps {
   organizationName?: string;
   appName?: string;
   logoUrl?: string | null;
-}
-
-/**
- * Rewrite a Supabase Storage public-object URL to the image-transform endpoint
- * so the CDN serves a resized + WebP-compressed variant. Falls back to the
- * original URL for any non-matching input (e.g. third-party CDN URLs).
- * Stored bytes are NOT modified — this only changes the request URL.
- */
-function optimizeWallpaperUrl(url: string, width = 1920, quality = 75): string {
-  if (!url) return url;
-  try {
-    const replaced = url.replace(
-      '/storage/v1/object/public/',
-      '/storage/v1/render/image/public/'
-    );
-    if (replaced === url) return url; // not a Supabase public-object URL
-    const u = new URL(replaced);
-    u.searchParams.set('width', String(width));
-    u.searchParams.set('quality', String(quality));
-    u.searchParams.set('format', 'webp');
-    u.searchParams.set('resize', 'cover');
-    return u.toString();
-  } catch {
-    return url;
-  }
 }
 
 export function LoginSlideshow({
