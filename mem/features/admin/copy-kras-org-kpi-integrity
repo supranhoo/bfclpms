@@ -1,0 +1,8 @@
+---
+name: copy-kras-org-kpi-integrity
+description: Copy KRAs preserves Org KPI integrity AND uses paged employee fetches (POLICY §94) so all active employees are searchable
+type: feature
+---
+The 'Copy KRAs' tool preserves Org KPI functional integrity when duplicating assignments between employees. For Org KPIs, references are inherited rather than duplicated to maintain shared-value semantics.
+
+**Employee picker paging (v2.66.7.9):** Both source and target employee pickers in CopyKrasDialog use `fetchAllPaged` (src/lib/fetchAll.ts) to load the complete active roster. The same rule applies app-wide to every profile-based picker (OrgKpiAddEmployeeDialog, CompetencyManagerTab, ReportAccessTab, AccessProfilesManager AssignmentTab). Codified in POLICY.md §94 — see `mem://architecture/profiles-query-policy`.
