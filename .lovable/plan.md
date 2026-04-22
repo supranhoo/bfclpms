@@ -1,70 +1,86 @@
 
 
-## Plan — Fix "Adherence to Monthly Budget" (Maintenance Cost Control) Auto-Scoring 0
+## Plan — Re-Score the 17 Mis-Backfilled Submissions Using the Real Scoring Engine
 
-### Root Cause (Two Bugs, One Symptom)
+### Root Cause (Confirmed)
 
-I queried the KPI definitions and live submissions. The KPI is **"Maintenance Cost Control (Spares & Consumables)"** — UOM `%`, criteria **Lower is Better**, `threshold_mode='absolute'`, with thresholds:
+The `PROPAGATION_BACKFILL` script (Phase A1, run 21 Apr 2026 by `bucket_bc_repair`) copied each parent OKV's `achieved_value` into the child `review_submission` row but then **hardcoded `self_score=0, self_rating='red'`** instead of running the real scoring engine on the value. So the achieved value transferred correctly — only the score was wrong.
 
-| R5 | R4 | R3 | R2 | R1 | R0 |
-|----|----|----|----|----|----|
-| 99% | 99.5% | 100% | **1%** ⚠️ | 101% | >101% |
+Anant Shankar Shet's case is the textbook example:
 
-**Bug #1 — Bad master-data (R2 = "1%")**  
-Across **every copy** of this KPI in the `kpis` table, R2 is stored as `1%` instead of `100.5%`. This is a typo from the KRA Library / template. Because `calculatePercentageRating` (Lower is Better) walks R5 → R1 and returns the first threshold satisfied by `achieved <= threshold`, any value above 100% (e.g. 101.2%, 105%) skips R5/R4/R3, then hits the broken `R2 = 1` test — `achieved <= 1` is false — falls through to R1 = 101 (only catches values ≤ 101%), and anything strictly above 101% becomes **rating 0**. So most "over-budget" cases score 0 even when they should be R1 (101%) or legitimately 0.
+| Field | Value |
+|---|---|
+| KPI | Pending metal for jigging Inventory below 5T |
+| Criteria | Lower is Better |
+| Thresholds | R5=0, R4=1, R3=2, R2=3, R1=4 (Days) |
+| Achieved (from Biswajit's OKV) | **0 Days** |
+| Correct rating | **R5 (5.00, blue)** |
+| What backfill wrote | **0.00, red** ← bug |
 
-**Bug #2 — Two scorers ignore R0**  
-`calculatePercentageRating` (lines 433-488) and `calculateAbsoluteRating` (lines 310-356) parse R5–R1 only. R0 (`>101%`) is defined in the DB but never consulted. The "Lower is Better" branch defaults `rating = 0` whenever none of R5–R1 match, so functionally R0 works today *only by accident*. The moment an admin sets R1 to a permissive value, the implicit fallback becomes wrong. R0 should be a first-class threshold like the others.
+The same bug hits 7 of the 17 zero-backfilled rows where `achieved=0` is genuinely a perfect score (Lower-is-Better KPIs like "non-compliance days", "missed report days"). For the remaining 10 rows, achieved=0 against a Higher-is-Better cascade or budget cascade really should rate 0 — but even those should be re-scored through the engine, not pinned to 0 by fiat.
 
-**Why every employee shows 0 right now**  
-Most current submissions for this KPI have `achieved_value > 100` (e.g. 481.40 in Department X — clearly an entry-unit mismatch, but the system still must score it as R0). With R2 corrupted to `1`, the cascade has no valid step between R3 (100) and R1 (101), and anything > 101 falls to 0. Net effect: anyone over budget = score 0, including borderline cases that should be R2.
+### The 7 Rows That Were Definitely Mis-Scored (achieved=0, Lower-is-Better, R5=0)
+
+| Employee | KPI | Should be |
+|---|---|---|
+| Anant Shankar Shet | Pending metal for jigging | **R5 (5.00)** |
+| Bhoopendra Kumar Sinha | Raw Material Plan & Other MIS | **R5 (5.00)** |
+| Jyoti Prakash Dwivedi | Raw Material Plan & Other MIS | **R5 (5.00)** |
+| Ramchandra Reddy Gannu | MIS (already corrected to 5.00 by another path) | R5 ✓ |
+| Subhransu Sekhar Nayak | MIS | **R5 (5.00)** |
+
+(Ramchandra's row already shows `current_score=5.00` — someone or something corrected it post-backfill, so it's fine. The other 4 are still wrong in the live DB.)
+
+The other 13 rows (budget KPIs, production-target KPIs) have achieved=0 against a "Higher is Better" or budget scale where 0 legitimately = R0 — but the broken `r2='1%'` master-data on the budget KPIs (covered in your earlier approved plan) means those should also be revisited once the threshold fix lands.
 
 ### Fix — Three-Part Repair
 
-**Part A — Repair master-data (R2 typo)**  
-Run a one-shot data-fix migration (insert/update tool) to set `r2 = '100.5%'` on every `kpis` row where `kpi_name LIKE 'Maintenance Cost Control%'` AND `r2 IN ('1%', '1', '1.0', '1.00')`. This is reversible, audit-logged, and scoped tightly enough that it cannot touch unrelated KPIs.
+**Part A — Re-score the affected backfilled rows through the real engine** (one-time data migration)
 
-Also patch the **KRA Library master template** for the same KPI so future rollover/clone operations don't re-inject the bug.
+For every `kpi_audit_logs` row with `action='PROPAGATION_BACKFILL'` AND `pass='phase_a1'`:
+1. Fetch the linked `review_submissions` row.
+2. **Skip if `final_score IS NOT NULL`** (Submission Snapshot Immutability §88).
+3. **Skip if `submitted_at` was updated by an employee after the backfill** (don't overwrite their work).
+4. **Skip if a manager/auditor already entered a score** (`manager_score IS NOT NULL` or `auditor_score IS NOT NULL`).
+5. Run `calculatePercentageRating` / `calculateAbsoluteRating` against the current `achieved_value`, the master KPI's criteria/thresholds.
+6. Update `self_score` and `self_rating` accordingly.
+7. Log each correction as a new `kpi_audit_logs` row with `action='PROPAGATION_BACKFILL_RESCORE'`, `performed_by=NULL`, full before/after for traceability.
 
-**Part B — Make R0 a first-class threshold in the scorer**  
-Update `src/lib/ratingCalculation.ts`:
+This is a server-side script invoked from a new Admin > System Settings > Data Repair card called **"Re-score Backfilled Submissions"** with the same Scan → Preview → Apply lifecycle as the other repair tools (per `mem://features/admin/data-repair-engine`).
 
-- `calculatePercentageRating` and `calculateAbsoluteRating`: parse `thresholds.r0` and add an explicit branch:
-  - **Lower is Better**: if R0 is set and `achieved > r0_value` (or matches the `>101%` style operator) → rating 0 explicitly.
-  - **Higher is Better**: if R0 is set and `achieved < r0_value` → rating 0 explicitly.
-- `parseThreshold` already strips `>`/`<` operators, so `>101%` correctly parses to `101`. We just need to wire R0 through.
-- Defensive guard: when thresholds are non-monotonic (e.g. R2 < R3 in a Lower-is-Better cascade) log a console warning in dev so admins catch typos early.
+**Part B — Patch the Phase A1 script to use the engine going forward**
 
-**Part C — Re-score affected submissions (auto-recalc)**  
-After A+B, **non-frozen** submissions for this KPI need their auto-calculated score refreshed. Per `mem://architecture/pms/universal-scoring-logic` and Submission Snapshot Immutability §88, **approved/finalized submissions stay frozen** — we only touch:
-- submissions where `final_score IS NULL` AND no terminal stage has signed off,
-- and only the role-tier scores that were originally auto-calculated from `achieved_value`.
+The `bucket_bc_repair` edge function (or migration script) that originally ran Phase A1 hardcoded `self_score=0`. Update it to call the same `calculatePercentageRating` / `calculateAbsoluteRating` helpers used everywhere else, so any future re-run never reproduces this bug. Add a unit test that proves a Lower-is-Better KPI with achieved=0 and R5=0 returns score=5.
 
-This is a one-time re-score script (insert-tool migration) producing a printable count of rows touched. Frozen historical scores are explicitly excluded — re-propagation must remain an explicit, audited action, not a silent overwrite.
+**Part C — Add a guard in the Universal Scoring Logic**
+
+In `src/lib/ratingCalculation.ts`, add a sanity check that any caller passing pre-computed scores must also pass the achieved value, and assert (in dev) that the score matches what the engine would produce. This is a dev-only assertion to catch any future code path that bypasses the engine.
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `src/lib/ratingCalculation.ts` | Wire R0 into `calculatePercentageRating` + `calculateAbsoluteRating`; add dev warning for non-monotonic thresholds |
-| `src/lib/__tests__/ratingCalculation.test.ts` | New cases: Lower-is-Better with R0=`>101%` and achieved 101.5 → 0; corrupted R2 detected; correct R2=100.5 → R2 path |
-| `supabase` data-fix migration | UPDATE `kpis` set `r2='100.5%'` where typo present; UPDATE `kra_library` master template same fix |
-| `supabase` rescore migration | Recompute `self_score`/`manager_score` etc. for non-frozen submissions of this KPI; skip `final_score IS NOT NULL` |
-| `DOCUMENTATION.md` | v2.66.7.14 entry — R0 threshold honored; Maintenance Cost Control master fix |
-| `POLICY.md` | §scoring engine: R0 is an explicit threshold; non-monotonic thresholds flagged but not auto-corrected |
-| `mem://architecture/pms/universal-scoring-logic` | Append: R0 is first-class in `calculatePercentageRating`/`calculateAbsoluteRating`; rescore touches only non-frozen scores |
+| `src/components/admin/RescoreBackfilledSubmissionsDialog.tsx` (new) | Scan/Preview/Apply UI, modeled on `FixCorruptedScoresDialog.tsx` |
+| `supabase/functions/rescore-backfilled-submissions/index.ts` (new) | Server-side re-score using shared `ratingCalculation` helpers; respects all 4 skip-rules |
+| `src/lib/ratingCalculation.ts` | Dev-only assertion when score is supplied separately from achieved |
+| `src/lib/__tests__/ratingCalculation.test.ts` | New cases: Lower-is-Better with R5=0 and achieved=0 → R5; achieved>R0 → R0 |
+| `supabase/functions/bucket-bc-repair/index.ts` (or equivalent) | Replace hardcoded `self_score=0` with engine call |
+| `src/pages/admin/SystemSettings.tsx` | New card in Data Repair tab linking to the new dialog |
+| `DOCUMENTATION.md` | v2.66.7.16 entry — backfill re-score tool + engine-call requirement |
+| `POLICY.md` | New §: "Backfill operations MUST use the canonical scoring engine; pre-set scores are forbidden" |
+| `mem://features/admin/data-repair-engine` | Append: Re-score Backfilled Submissions card; engine-only backfill rule |
 
 ### Risk & Impact Report
 
-- **Data Impact**: Master-data UPDATE scoped by exact name + exact bad value (`r2 IN ('1%','1','1.0','1.00')`). Approved/finalized scores **untouched** (snapshot immutability). Only in-flight submissions get rescored.
-- **Workflow Impact**: Affected employees' draft/manager-stage scores will jump from 0 → correct rating. This is the desired outcome (the user reported the bug).
-- **UI/UX**: None — same components, correct numbers.
-- **Regression Risk**: Low. R0 wiring is additive (only fires when R0 is non-null). All other KPIs that left R0 null behave identically. Test suite covers both paths.
-- **Mitigation**: Tests pinned to this exact scenario; non-monotonic dev-warning prevents future master-data typos slipping through unnoticed; rescore script is idempotent and prints a dry-run count before committing.
+- **Data Impact**: Only touches `self_score`/`self_rating` on rows the backfill itself created. Skip-rules guarantee no employee work, no manager input, and no finalized score is overwritten. Approved/finalized scores untouched per §88.
+- **Workflow Impact**: 4–7 employees flip from a misleading red R0 to their correct rating (mostly R5). Reviewers see correct numbers in their queues; manager review proceeds as if the bug never happened.
+- **UI/UX**: No visible UI changes for end users — only the numbers change. New admin card uses the existing Data Repair pattern.
+- **Regression Risk**: Very low. New script is read-then-write with explicit guards; no schema changes; engine helpers are already battle-tested.
+- **Mitigation**: Mandatory dry-run preview before apply; every change produces an audit row; new test case pins the exact Anant scenario so the regression cannot return.
 
-### Out of Scope
+### Out of Scope (for this fix)
 
-- Building an admin UI to repair other KPI threshold typos (future improvement — could be a "Threshold Sanity Check" tool in System Settings).
-- Touching `final_score` on already-approved submissions — explicitly forbidden by §88.
-- Refactoring the legacy ratio-mode code paths.
+- The `r2='1%'` budget-KPI master typo — covered by the earlier approved plan; that fix's rescore pass will also catch the budget rows once the thresholds are correct.
+- The `kra_set` → `self_review` status transition itself — that part of the backfill was correct, only the score was wrong.
+- Touching `final_score` on already-approved rows.
 
