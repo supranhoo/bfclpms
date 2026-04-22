@@ -41,8 +41,13 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
 }
 
 export async function verifyAdminJwt(token: string, supabaseUrl: string, anonKey: string, authHeader: string): Promise<VerifiedAdminUser> {
+  const payload = decodeJwtPayload(token);
+  if (typeof payload.sub !== 'string' || payload.sub.length === 0) {
+    throw new Error('Missing sub claim');
+  }
+
   const roleResponse = await fetch(
-    `${supabaseUrl}/rest/v1/user_roles?select=user_id,role&role=eq.admin&limit=1`,
+    `${supabaseUrl}/rest/v1/user_roles?select=user_id,role&user_id=eq.${encodeURIComponent(payload.sub)}&role=eq.admin&limit=1`,
     {
       method: 'GET',
       headers: {
@@ -66,7 +71,6 @@ export async function verifyAdminJwt(token: string, supabaseUrl: string, anonKey
     throw new Error('Admin access required');
   }
 
-  const payload = decodeJwtPayload(token);
   if (payload.sub !== roleCheck.user_id) {
     throw new Error('JWT subject mismatch');
   }
