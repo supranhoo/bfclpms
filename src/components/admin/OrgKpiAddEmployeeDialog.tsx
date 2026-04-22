@@ -10,6 +10,7 @@ import { Loader2, Search, UserPlus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import { useAddEmployeesToOrgKpi } from '@/hooks/useOrgKpiManagement';
+import { fetchAllPaged } from '@/lib/fetchAll';
 
 interface Props {
   open: boolean;
@@ -47,13 +48,17 @@ export function OrgKpiAddEmployeeDialog({
   const { data: allEmployees, isLoading } = useQuery<EmployeeRow[]>({
     queryKey: ['all-employees-for-org-kpi-assign'],
     queryFn: async (): Promise<EmployeeRow[]> => {
-      const { data, error } = await (supabase as any)
-        .from('profiles')
-        .select('id, full_name, employee_code, department_id, designation, departments(id, name)')
-        .eq('is_active', true)
-        .order('full_name');
-      if (error) throw error;
-      return (data || []) as EmployeeRow[];
+      // Paged fetch — bypasses PostgREST's 1000-row default cap so employees
+      // beyond row ~1000 (full active roster) remain searchable.
+      const data = await fetchAllPaged<EmployeeRow>((from, to) =>
+        (supabase as any)
+          .from('profiles')
+          .select('id, full_name, employee_code, department_id, designation, departments(id, name)')
+          .eq('is_active', true)
+          .order('full_name')
+          .range(from, to)
+      );
+      return data;
     },
     enabled: open,
   });

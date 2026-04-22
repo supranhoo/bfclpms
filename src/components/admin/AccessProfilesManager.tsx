@@ -19,6 +19,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { OrgFilterCombobox, type ComboboxOption } from './OrgFilterCombobox';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
+import { fetchAllPaged } from '@/lib/fetchAll';
 
 const SECTION_LABELS: Record<string, string> = {
   main: 'Main', manager: 'Manager', hr_pms: 'HR PMS', management: 'Management',
@@ -206,8 +207,17 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
   const { data: levels = [] } = useQuery({
     queryKey: ['distinct-levels'],
     queryFn: async () => {
-      const { data } = await supabase.from('profiles').select('level').eq('is_active', true).not('level', 'is', null);
-      return [...new Set(data?.map(p => p.level))].filter(Boolean).sort() as string[];
+      // Paged fetch — bypasses PostgREST's 1000-row default cap so distinct
+      // levels from rows beyond row 1000 are not silently dropped.
+      const data = await fetchAllPaged<{ level: string | null }>((from, to) =>
+        supabase
+          .from('profiles')
+          .select('level')
+          .eq('is_active', true)
+          .not('level', 'is', null)
+          .range(from, to)
+      );
+      return [...new Set(data.map(p => p.level))].filter(Boolean).sort() as string[];
     },
     staleTime: 5 * 60 * 1000,
   });
@@ -511,13 +521,17 @@ export function AssignmentTab({ profiles, assignments, assignUser, removeAssignm
   const { data: allProfiles = [] } = useQuery({
     queryKey: ['profiles-for-access-assignment'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, employee_code, email')
-        .eq('is_active', true)
-        .order('full_name');
-      if (error) throw error;
-      return data || [];
+      // Paged fetch — bypasses PostgREST's 1000-row default cap so all active
+      // employees are searchable in the access-profile assignment picker.
+      return await fetchAllPaged<{ id: string; full_name: string | null; employee_code: string | null; email: string | null }>(
+        (from, to) =>
+          supabase
+            .from('profiles')
+            .select('id, full_name, employee_code, email')
+            .eq('is_active', true)
+            .order('full_name')
+            .range(from, to)
+      );
     },
     staleTime: 5 * 60 * 1000,
   });
