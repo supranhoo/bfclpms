@@ -1,49 +1,70 @@
 
 
-## Plan — Make Amount Column Respect the Selected Date Range
+## Plan — Fix "Adherence to Monthly Budget" (Maintenance Cost Control) Auto-Scoring 0
 
-### Root Cause
+### Root Cause (Two Bugs, One Symptom)
 
-In `src/components/incentive/ProductionDailyGrid.tsx`, the `getTotal(empId)` helper sums **all** values in `localData[empId]` regardless of which date-range chip (1-10 / 11-20 / 21-31) is active. The "Amount" and "Grand Total" both derive from this unfiltered total, so they keep showing the full-month figure even when the grid only displays a partial range.
+I queried the KPI definitions and live submissions. The KPI is **"Maintenance Cost Control (Spares & Consumables)"** — UOM `%`, criteria **Lower is Better**, `threshold_mode='absolute'`, with thresholds:
 
-In your screenshot: Akalu Rajwar has 30 total tons across the month → 30 × ₹503.39 = ₹15,102 shown, even though the visible 11–20 window only contains 13 tons (should be ~₹6,544).
+| R5 | R4 | R3 | R2 | R1 | R0 |
+|----|----|----|----|----|----|
+| 99% | 99.5% | 100% | **1%** ⚠️ | 101% | >101% |
 
-### Fix — Scope Total/Amount to `visibleDays`
+**Bug #1 — Bad master-data (R2 = "1%")**  
+Across **every copy** of this KPI in the `kpis` table, R2 is stored as `1%` instead of `100.5%`. This is a typo from the KRA Library / template. Because `calculatePercentageRating` (Lower is Better) walks R5 → R1 and returns the first threshold satisfied by `achieved <= threshold`, any value above 100% (e.g. 101.2%, 105%) skips R5/R4/R3, then hits the broken `R2 = 1` test — `achieved <= 1` is false — falls through to R1 = 101 (only catches values ≤ 101%), and anything strictly above 101% becomes **rating 0**. So most "over-budget" cases score 0 even when they should be R1 (101%) or legitimately 0.
 
-Single-file change in `src/components/incentive/ProductionDailyGrid.tsx`:
+**Bug #2 — Two scorers ignore R0**  
+`calculatePercentageRating` (lines 433-488) and `calculateAbsoluteRating` (lines 310-356) parse R5–R1 only. R0 (`>101%`) is defined in the DB but never consulted. The "Lower is Better" branch defaults `rating = 0` whenever none of R5–R1 match, so functionally R0 works today *only by accident*. The moment an admin sets R1 to a permissive value, the implicit fallback becomes wrong. R0 should be a first-class threshold like the others.
 
-1. **Update `getTotal`** to accept the active day list and sum only those keys:
-   ```ts
-   const getTotal = (empId: string, days: number[]): number => {
-     const vals = localData[empId] || {};
-     return days.reduce((sum, d) => sum + (Number(vals[String(d)]) || 0), 0);
-   };
-   ```
-2. **Pass `visibleDays`** at every call site (row total, amount cell, grand total memo).
-3. **Add a header hint** next to "Total" / "Amount" when a partial range is active: e.g. `Total (11–20)` / `Amount (11–20)` so the user knows the figure is range-scoped, not month-scoped.
-4. **Grand Total** recomputes from the same range — consistent with the visible columns.
+**Why every employee shows 0 right now**  
+Most current submissions for this KPI have `achieved_value > 100` (e.g. 481.40 in Department X — clearly an entry-unit mismatch, but the system still must score it as R0). With R2 corrupted to `1`, the cascade has no valid step between R3 (100) and R1 (101), and anything > 101 falls to 0. Net effect: anyone over budget = score 0, including borderline cases that should be R2.
 
-Saving behavior is **unchanged**: the full `daily_values` JSON for the month is still persisted, so switching ranges only changes display math, never stored data.
+### Fix — Three-Part Repair
+
+**Part A — Repair master-data (R2 typo)**  
+Run a one-shot data-fix migration (insert/update tool) to set `r2 = '100.5%'` on every `kpis` row where `kpi_name LIKE 'Maintenance Cost Control%'` AND `r2 IN ('1%', '1', '1.0', '1.00')`. This is reversible, audit-logged, and scoped tightly enough that it cannot touch unrelated KPIs.
+
+Also patch the **KRA Library master template** for the same KPI so future rollover/clone operations don't re-inject the bug.
+
+**Part B — Make R0 a first-class threshold in the scorer**  
+Update `src/lib/ratingCalculation.ts`:
+
+- `calculatePercentageRating` and `calculateAbsoluteRating`: parse `thresholds.r0` and add an explicit branch:
+  - **Lower is Better**: if R0 is set and `achieved > r0_value` (or matches the `>101%` style operator) → rating 0 explicitly.
+  - **Higher is Better**: if R0 is set and `achieved < r0_value` → rating 0 explicitly.
+- `parseThreshold` already strips `>`/`<` operators, so `>101%` correctly parses to `101`. We just need to wire R0 through.
+- Defensive guard: when thresholds are non-monotonic (e.g. R2 < R3 in a Lower-is-Better cascade) log a console warning in dev so admins catch typos early.
+
+**Part C — Re-score affected submissions (auto-recalc)**  
+After A+B, **non-frozen** submissions for this KPI need their auto-calculated score refreshed. Per `mem://architecture/pms/universal-scoring-logic` and Submission Snapshot Immutability §88, **approved/finalized submissions stay frozen** — we only touch:
+- submissions where `final_score IS NULL` AND no terminal stage has signed off,
+- and only the role-tier scores that were originally auto-calculated from `achieved_value`.
+
+This is a one-time re-score script (insert-tool migration) producing a printable count of rows touched. Frozen historical scores are explicitly excluded — re-propagation must remain an explicit, audited action, not a silent overwrite.
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `src/components/incentive/ProductionDailyGrid.tsx` | Range-aware `getTotal`; update Amount/Grand Total memos; header label reflects active range |
-| `DOCUMENTATION.md` | v2.66.7.13 entry — Production Daily Grid Total/Amount honor date-range chip |
-| `POLICY.md` | Note: incentive grid totals are display-scoped to the visible date range; persisted data remains full-month |
-| `mem://features/incentive/core-engine-specifications` | Append: range chip in `ProductionDailyGrid` scopes Total + Amount + Grand Total to visible days only |
+| `src/lib/ratingCalculation.ts` | Wire R0 into `calculatePercentageRating` + `calculateAbsoluteRating`; add dev warning for non-monotonic thresholds |
+| `src/lib/__tests__/ratingCalculation.test.ts` | New cases: Lower-is-Better with R0=`>101%` and achieved 101.5 → 0; corrupted R2 detected; correct R2=100.5 → R2 path |
+| `supabase` data-fix migration | UPDATE `kpis` set `r2='100.5%'` where typo present; UPDATE `kra_library` master template same fix |
+| `supabase` rescore migration | Recompute `self_score`/`manager_score` etc. for non-frozen submissions of this KPI; skip `final_score IS NOT NULL` |
+| `DOCUMENTATION.md` | v2.66.7.14 entry — R0 threshold honored; Maintenance Cost Control master fix |
+| `POLICY.md` | §scoring engine: R0 is an explicit threshold; non-monotonic thresholds flagged but not auto-corrected |
+| `mem://architecture/pms/universal-scoring-logic` | Append: R0 is first-class in `calculatePercentageRating`/`calculateAbsoluteRating`; rescore touches only non-frozen scores |
 
 ### Risk & Impact Report
 
-- **Data Impact**: None. Pure display math; saved `daily_values` and computed monthly incentives untouched.
-- **Workflow Impact**: Positive — values now match what's on screen, removing user confusion.
-- **UI/UX**: Header label clarifies scope when a partial range is active; "Full Month" view behaves exactly as before.
-- **Regression Risk**: Very low. `getTotal` is only used in this component.
-- **Mitigation**: When `dateRange === 'all'`, `visibleDays` covers the whole month so totals are identical to the previous behavior — perfectly backwards-compatible.
+- **Data Impact**: Master-data UPDATE scoped by exact name + exact bad value (`r2 IN ('1%','1','1.0','1.00')`). Approved/finalized scores **untouched** (snapshot immutability). Only in-flight submissions get rescored.
+- **Workflow Impact**: Affected employees' draft/manager-stage scores will jump from 0 → correct rating. This is the desired outcome (the user reported the bug).
+- **UI/UX**: None — same components, correct numbers.
+- **Regression Risk**: Low. R0 wiring is additive (only fires when R0 is non-null). All other KPIs that left R0 null behave identically. Test suite covers both paths.
+- **Mitigation**: Tests pinned to this exact scenario; non-monotonic dev-warning prevents future master-data typos slipping through unnoticed; rescore script is idempotent and prints a dry-run count before committing.
 
 ### Out of Scope
 
-- Backend monthly incentive computation (always uses full-month sums by design).
-- Other incentive tabs (vessel/target/custom) — separate grids, can mirror this pattern later if needed.
+- Building an admin UI to repair other KPI threshold typos (future improvement — could be a "Threshold Sanity Check" tool in System Settings).
+- Touching `final_score` on already-approved submissions — explicitly forbidden by §88.
+- Refactoring the legacy ratio-mode code paths.
 
