@@ -1593,6 +1593,26 @@ export function EmployeeSelectorGrid({
         </div>
         
         <div className="flex items-center gap-2">
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                  className="gap-1.5"
+                  aria-label="Refresh data"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">Refresh</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                Reload employees, KPI rows, and review scores from the server.
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <Button variant="outline" size="sm" onClick={handleExportPendingKpis} className="gap-1.5">
             <Download className="h-4 w-4" />
             <span className="hidden sm:inline">Export Pending</span>
