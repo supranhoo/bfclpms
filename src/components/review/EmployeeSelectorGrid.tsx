@@ -900,7 +900,8 @@ export function EmployeeSelectorGrid({
           }
         }
         // v2.64.11: "Reviewed by me" = KPIs with audit signature for this period.
-        if ((k as any).audit_score !== null && (k as any).audit_score !== undefined) reviewed++;
+        const auditSub = submissionScoreMap?.get(k.id);
+        if (auditSub && auditSub.auditor_score != null) reviewed++;
       });
       // v2.64.11: Total Employees = unique employees with any KPI in period
       // (workflow-filtered roster); reviewed counted via audit_score signature.
@@ -939,7 +940,8 @@ export function EmployeeSelectorGrid({
           if (afterHr.includes(k.status || '')) { forwarded++; }
         }
         // v2.64.11: "HR PMS Reviewed" = KPIs with hr_pms_score signature.
-        if ((k as any).hr_pms_score !== null && (k as any).hr_pms_score !== undefined) reviewed++;
+        const hrSub = submissionScoreMap?.get(k.id);
+        if (hrSub && hrSub.hr_pms_score != null) reviewed++;
       });
       // v2.64.11: Total Employees = unique employees with any KPI in period
       // (workflow-filtered roster). Stat3 = reviewed via hr_pms_score signature.
@@ -971,7 +973,8 @@ export function EmployeeSelectorGrid({
       let reviewed = 0;
       relevantKpis.forEach(k => {
         periodEmployeeIds.add(k.employee_id);
-        if ((k as any).management_score !== null && (k as any).management_score !== undefined) reviewed++;
+        const mgmtSub = submissionScoreMap?.get(k.id);
+        if (mgmtSub && mgmtSub.management_score != null) reviewed++;
       });
       return {
         totalEmployees: periodEmployeeIds.size,
