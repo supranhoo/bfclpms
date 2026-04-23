@@ -1,86 +1,69 @@
 
 
-## Plan — Fix HR PMS Dashboard Stat Counts and Per-Employee Progress Bar
+## Plan — Fix Reviewer Dashboard "All Zeros" Regression (Wrong Column Location)
 
-### Root Cause Analysis
+### Root Cause (Confirmed)
 
-**Issue 2 (HR PMS Reviewed = 0, also affects Auditor / Management views):**
-`useKpisByPeriodRanges` (used by the dashboard) selects KPIs via `SLIM_KPI_SELECT` in `src/hooks/useKpis.ts` (lines 158–167). That column list **omits** `hr_pms_score`, `audit_score`, `management_score`, `manager_score`, `skip_level_score`. The stats logic in `EmployeeSelectorGrid.tsx` (lines 885, 924, 956) tries to count "reviewed" via:
+The previous fix added `manager_score, skip_level_score, hr_pms_score, audit_score, management_score` to `SLIM_KPI_SELECT` in `src/hooks/useKpis.ts`, **but those columns do not exist on the `kpis` table** — they live on `review_submissions` (and the auditor column is named `auditor_score`, not `audit_score`).
 
-```ts
-if ((k as any).hr_pms_score !== null && (k as any).hr_pms_score !== undefined) reviewed++;
-```
+Confirmed via DB introspection:
+- `kpis` table → none of these score columns exist.
+- `review_submissions` → has `manager_score, skip_level_score, hr_pms_score, management_score, auditor_score, self_score, final_score`.
 
-Since the field is never fetched, it is always `undefined`, so the counter is permanently **0**. "Total KPIs" (595) is correct because it just counts rows; only the score-signature counters are broken.
-
-**Issue 1 (some employee cards green, some not):**
-In HR PMS view, `getProgressSegments` (line 1179) maps:
-- `done` → `badge3` = KPIs in stages **strictly after** `hr_pms_review`
-- `inProgress` → `badge2` = KPIs currently at `hr_pms_review`
-
-The "X/X" label rendered on the bar is `clearedKraSet/total` (KPIs past `kra_set`), which has nothing to do with HR PMS. Result: an employee whose KPIs are all sitting at `manager_check` shows "27/27" with a fully **dark** bar (because nothing is at or past HR PMS yet), while an employee with even one KPI at `hr_pms_review` shows a green/amber segment. This is technically "correct" given the segment definitions but is visually misleading and inconsistent with the stat semantics fixed above.
+Result: every PostgREST request using `SLIM_KPI_SELECT` now 400s on the missing columns. Network logs show **zero successful kpis requests** — only an unrelated lightweight probe returning `[]`. With `placeholderData: keepPreviousData` masking the failure, all five stat cards collapse to 0 across HR PMS / Audit / Management / reviewer dashboards. "2,466 eligible of 2,531 active employees" still renders because the employee list comes from `profiles`, not `kpis`.
 
 ### Fix
 
-**A. Backend / Data Layer** — `src/hooks/useKpis.ts`
+**A. Revert the bad columns** — `src/hooks/useKpis.ts`
 
-Extend `SLIM_KPI_SELECT` to include the five reviewer-stage score columns so any consumer that needs to detect "has been reviewed at stage X" works correctly:
+Remove the line `manager_score, skip_level_score, hr_pms_score, audit_score, management_score,` from `SLIM_KPI_SELECT`. The slim select returns to its prior, working column set.
 
-```text
-... existing columns ...,
-manager_score, skip_level_score, hr_pms_score, audit_score, management_score,
-... kra_categories, profiles ...
-```
+**B. Source reviewer scores from the correct table** — `src/components/review/EmployeeSelectorGrid.tsx`
 
-These are small numeric/null columns; payload impact is negligible vs. the `*` selects already used elsewhere.
+Reviewer-stage progress and stat cards must derive "reviewed at stage X" from `review_submissions`, not from `kpis`. Two options; we'll use the lighter-weight one:
 
-**B. Per-employee progress bar** — `src/components/review/EmployeeSelectorGrid.tsx`
+1. Add a small companion hook `useReviewSubmissionScoresByPeriod(periodRanges)` in `src/hooks/useKpis.ts` that fetches a slim slice from `review_submissions` keyed on the same period set:  
+   `id, kpi_id, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score`
+2. In `EmployeeSelectorGrid`, build a `Map<kpi_id, submissionScores>` and use it inside `getEmployeeKpiStats`, `stats` memo, and `getProgressSegments` to compute `scoreReviewed` for HR PMS / Audit / Management views (`hr_pms_score IS NOT NULL`, `auditor_score IS NOT NULL`, `management_score IS NOT NULL` respectively).
+3. Stat cards (`stat3` etc.) and progress bar `done/total` label use the same submissionScoreMap-backed counter.
 
-Rework `getProgressSegments` so the progress bar reflects **stage-relative progress for the active reviewer view**, using the workflow stage list per employee:
+This keeps the kpis table query lean while still giving the dashboard accurate reviewer-stage counts.
 
-- `done` = KPIs whose status is at or beyond the current view's review stage (i.e. signed off by this reviewer or forwarded onward). For HR PMS, that means status is in `stages.slice(stages.indexOf('hr_pms_review') + 1)` **OR** `hr_pms_score IS NOT NULL` (covers approved-with-score signature).
-- `inProgress` = KPIs currently sitting at the reviewer's stage (e.g. `hr_pms_review`).
-- `pending` = KPIs in workflow stages strictly **before** the reviewer's stage but already past `kra_set`/`self_review` (i.e. waiting upstream — shown as muted track).
-- The label switches from `clearedKraSet/total` to `done/total` so it matches the green segment.
+**C. Fix the `audit_score` typo everywhere it leaked**
 
-Audit and Management views get the symmetric treatment using `audit_score` / `management_score` and `audit` / `management_review` stage anchors.
-
-**C. Stat-card counters** — same file, lines 885/924/956
-
-Now that `hr_pms_score` (and siblings) are actually present in `periodKpis`, the existing `(k as any).hr_pms_score != null` checks start working. Remove the `as any` casts and type them properly via the existing `Kpi` interface (already declares `hr_pms_score: number | null`).
+Search the codebase for any reference to `audit_score` introduced by the previous change and rename to `auditor_score`. (The DB column is `auditor_score`.) Confirmed locations to audit: `EmployeeSelectorGrid.tsx`, `bugBountyFixes.test.ts`, the new mock test file if any.
 
 **D. Regression test** — `src/test/bugBountyFixes.test.ts`
 
-Add **BUG-020**: assert that `SLIM_KPI_SELECT` contains `hr_pms_score`, `audit_score`, `management_score`, `manager_score`, `skip_level_score`. This pins the contract so a future trim of the slim select doesn't silently zero out reviewer dashboards again.
+Replace BUG-020. New assertions:
+- `SLIM_KPI_SELECT` does **not** contain any of `manager_score, skip_level_score, hr_pms_score, audit_score, auditor_score, management_score` (they belong to `review_submissions`, not `kpis`).
+- A schema-shape test that documents the five reviewer score columns live on `review_submissions` and that the auditor field is named `auditor_score`.
 
-**E. Mock data** — `src/components/review/__tests__/EmployeeSelectorGrid.stats.test.tsx` (new)
+**E. Documentation & policy**
 
-Mock a small set of KPIs across stages with and without `hr_pms_score` populated; assert:
-- `stat3` ("HR PMS Reviewed") counts only KPIs with non-null `hr_pms_score`.
-- `EmployeeProgressBar` renders a green segment when the employee has any HR-PMS-or-later KPI, regardless of whether any KPI is currently *at* `hr_pms_review`.
-- `done/total` label matches the green segment width.
+- `DOCUMENTATION.md` v2.66.7.21 — Reviewer dashboard zeros regression fix; reviewer-stage scoring data sourced from `review_submissions`.
+- `POLICY.md` §92 — Any new column added to a slim PostgREST select must be verified against `information_schema.columns` before merge. Reviewer-stage score columns belong on `review_submissions`, not `kpis`.
 
 ### Risk & Impact Report
 
-- **Data Impact:** None — additive SELECT columns only, no schema/RLS change. All five fields already exist in the `kpis` table and are returned by other queries (`SELECT *`).
-- **Workflow Impact:** None. Counters move from incorrect 0 to correct values; no permissions or state transitions change.
-- **UI/UX Consistency:** Improved. Per-employee bar now agrees with the top stat cards and with the stage the reviewer is actually in. Other views (Team, Skip-Level) keep their existing 2-tier segment behavior.
-- **Regression Risk:** Low. The slim select expansion is the only cross-cutting change; it can only *add* fields to existing query results, not remove or rename them. The progress-bar refactor is scoped to HR PMS / Audit / Management branches.
-- **Mitigation:** Regression test pins the slim select contract; component test pins the stat and bar semantics.
+- **Data Impact:** None (additive read-only hook on `review_submissions`, RLS already governs that table).
+- **Workflow Impact:** None.
+- **UI/UX:** Restores correct stat counts and progress bars on HR PMS / Audit / Management / Skip-Level / Team reviewer dashboards.
+- **Regression Risk:** Low. We're reverting an invalid column list and adding a scoped companion query. Every other reviewer screen that worked before today returns to working state.
+- **Mitigation:** New regression test pins the slim-select contract from the **opposite** direction (must NOT contain non-existent columns) and asserts the canonical home of the score fields.
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `src/hooks/useKpis.ts` | Add `manager_score, skip_level_score, hr_pms_score, audit_score, management_score` to `SLIM_KPI_SELECT` |
-| `src/components/review/EmployeeSelectorGrid.tsx` | Rework `getProgressSegments` for HR PMS / Audit / Management; switch bar label to `done/total`; remove `as any` casts on score fields |
-| `src/test/bugBountyFixes.test.ts` | BUG-020 — pin slim-select score columns |
-| `src/components/review/__tests__/EmployeeSelectorGrid.stats.test.tsx` (new) | Stat-card and progress-bar regression tests |
-| `DOCUMENTATION.md` | v2.66.7.20 — Reviewer dashboard stat counters and progress bar fix |
-| `POLICY.md` | §91 — Slim KPI select must retain all stage-score signature columns; per-stage progress bar must reflect stage-relative completion |
+| `src/hooks/useKpis.ts` | Remove non-existent score columns from `SLIM_KPI_SELECT`; add `useReviewSubmissionScoresByPeriodRanges` hook |
+| `src/components/review/EmployeeSelectorGrid.tsx` | Wire submissionScoreMap into stat cards and `getProgressSegments`; fix `audit_score` → `auditor_score` |
+| `src/test/bugBountyFixes.test.ts` | Rewrite BUG-020 to pin slim-select contract and document column ownership |
+| `DOCUMENTATION.md` | v2.66.7.21 changelog |
+| `POLICY.md` | §92 — verify columns against `information_schema.columns` before adding to slim selects |
 
 ### Out of Scope
 
-- The "Pending Review = 0 / In HR PMS Review = 0" cards in the screenshot are correct given the data state (no KPIs currently at or before `hr_pms_review` for visible employees) and are not changed.
-- No changes to RLS, workflow engine, or score-fallback chain.
+- The `Warning: Function components cannot be given refs` console warning in `PaginationEllipsis` is cosmetic and unrelated to this regression.
+- No RLS, workflow engine, or scoring engine changes.
 
