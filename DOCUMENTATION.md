@@ -5329,3 +5329,12 @@ This section records architectural patterns that have been audited and intention
 - *Workflow Impact*: None.
 - *UI/UX*: Restores correct stat counts and progress bars on every reviewer dashboard.
 - *Regression Risk*: Low — reverts an invalid column list and adds a scoped companion query covered by tests.
+
+### v2.66.7.24 — Reviewer Roster Score-Signature Seed (BUG-022) (2026-04-23)
+- **Issue:** "HR PMS Reviewed" stat card on the reviewer dashboard showed `0` for March 2026 even though the database had 504 KPIs with `hr_pms_score` recorded for the period (across 48 employees).
+- **RCA:** `useProfilesByWorkflowStage` only seeded employees whose KPIs were *currently* at the requested stage (`status='hr_pms_review'`). Once HR PMS reviewed a KPI and it advanced to `audit` / `management_review` / `approved`, the employee dropped out of the visible roster. Stat-card logic intersects period KPIs with the visible roster (`memberIds`), so all already-reviewed KPIs were filtered out and the count collapsed to 0. Same defect under-reported "Auditor Reviewed" and "Management Reviewed".
+- **Fix:** Added a **score-signature seed** branch in `useProfilesByWorkflowStage`. For reviewer stages (`hr_pms_review` → `hr_pms_score`, `audit` → `auditor_score`, `management_review` → `management_score`, plus `manager_check` and `skip_level_check`), the hook now also seeds employees whose `review_submissions` row for the period has the relevant score column non-null. Roster filter unions both seeds with workflow-resolution and template-fallback branches.
+- **Secondary fix:** Replaced fragile `${kpiIds.length}:${kpiIds[0]}` cache key in `useReviewSubmissionScoresByKpiIds` with a deterministic FNV-1a hash of the sorted id list to eliminate cross-period stale cache hits.
+- **Diagnostic:** Extended the `[useProfilesByWorkflowStage]` console breadcrumb to include `seededFromScoreSignature` for future regression visibility.
+- **Files:** `src/hooks/useOrganization.ts`, `src/hooks/useKpis.ts`, `src/test/bugBountyFixes.test.ts` (BUG-022).
+- *Data Impact*: None (read-only seed expansion). *Workflow Impact*: None. *UI Impact*: Reviewed stat cards become accurate; Total Employees may rise slightly as historically-scored employees re-enter the roster (correct behaviour, matches the existing tooltip). *Regression Risk*: Low — additive union of seeds; no employee is removed.
