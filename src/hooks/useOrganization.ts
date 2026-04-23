@@ -403,11 +403,68 @@ export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: 
         }
       }
 
+      // 4b. v2.66.7.24 — Score-signature seed (BUG-022 fix).
+      //     Reviewer-stage rosters (HR PMS / Audit / Management) MUST also include
+      //     employees whose KPIs have ALREADY been scored at this stage in the
+      //     requested period — even if the KPI has since advanced past the stage.
+      //     Without this, "HR PMS Reviewed", "Auditor Reviewed", and
+      //     "Management Reviewed" stat cards collapse to 0 because the scored
+      //     KPIs belong to employees no longer present in the visible roster.
+      const STAGE_TO_SCORE_COLUMN: Record<string, string> = {
+        hr_pms_review: 'hr_pms_score',
+        audit: 'auditor_score',
+        management_review: 'management_score',
+        manager_check: 'manager_score',
+        skip_level_check: 'skip_level_score',
+      };
+      const scoreSigSeededIds = new Set<string>();
+      const scoreColumn = STAGE_TO_SCORE_COLUMN[stage];
+      if (scoreColumn && reviewPeriod && reviewYear) {
+        try {
+          // Fetch KPI ids for the period first (paged), then look up review_submissions
+          // rows whose score column is non-null. We cannot join in PostgREST, so we
+          // do a two-step fetch keyed off `kpis(review_period, review_year)`.
+          const periodKpis = await fetchAllPaged<{ id: string; employee_id: string }>(
+            (from, to) =>
+              supabase
+                .from('kpis')
+                .select('id, employee_id')
+                .eq('review_period', reviewPeriod)
+                .eq('review_year', reviewYear)
+                .range(from, to)
+          );
+          const kpiToEmp = new Map<string, string>();
+          for (const k of periodKpis || []) kpiToEmp.set(k.id, k.employee_id);
+          const kpiIds = Array.from(kpiToEmp.keys());
+          const BATCH = 500;
+          for (let i = 0; i < kpiIds.length; i += BATCH) {
+            const batch = kpiIds.slice(i, i + BATCH);
+            const { data, error } = await supabase
+              .from('review_submissions')
+              .select(`kpi_id, ${scoreColumn}`)
+              .in('kpi_id', batch)
+              .not(scoreColumn, 'is', null);
+            if (error) {
+              console.warn('useProfilesByWorkflowStage: score-signature seed batch failed', error);
+              continue;
+            }
+            for (const r of (data || []) as Array<{ kpi_id: string }>) {
+              const empId = kpiToEmp.get(r.kpi_id);
+              if (empId) scoreSigSeededIds.add(empId);
+            }
+          }
+        } catch (e) {
+          console.warn('useProfilesByWorkflowStage: score-signature seed failed', e);
+        }
+      }
+
       // 5. Filter: include employee if (a) seeded by KPI presence, OR
-      //    (b) resolved workflow contains the stage, OR
-      //    (c) RPC failed for them AND fallback union contains the stage.
+      //    (b) seeded by completed-stage score signature (v2.66.7.24), OR
+      //    (c) resolved workflow contains the stage, OR
+      //    (d) RPC failed for them AND fallback union contains the stage.
       const filtered = profiles.filter(p => {
         if (seededIds.has(p.id)) return true;
+        if (scoreSigSeededIds.has(p.id)) return true;
         const empStages = stagesMap.get(p.id);
         if (empStages) return empStages.includes(stage);
         return fallbackStages.includes(stage);
@@ -419,6 +476,7 @@ export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: 
         totalProfiles: profiles.length,
         resolvedFromRpc: stagesMap.size,
         seededFromKpis: seededIds.size,
+        seededFromScoreSignature: scoreSigSeededIds.size,
         failedChunks,
         included: filtered.length,
       });
@@ -428,6 +486,7 @@ export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: 
       (filtered as any).__meta = {
         totalEligiblePool: profiles.length,
         seededFromKpis: seededIds.size,
+        seededFromScoreSignature: scoreSigSeededIds.size,
         fallbackUsed: failedChunks > 0,
       };
 
