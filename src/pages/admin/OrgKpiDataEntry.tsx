@@ -82,22 +82,7 @@ export default function OrgKpiDataEntry() {
   // ALL org-level KPIs (unfiltered) for Data Owners tab
   const { data: allOrgLevelKpis } = useOrgLevelKpis(selectedPeriod, selectedYear);
   const orgLevelKpis = useMemo(() => orgLevelData?.kpis?.map(k => k.kpi) || [], [orgLevelData]);
-  // Map kpiKey -> set of employee_ids whose underlying kpis row is still in 'kra_set' status.
-  // Genuine "Stuck" requires BOTH:
-  //   (a) the OKV row claims status='propagated' (or 'approved'), AND
-  //   (b) the matching child kpis row is still 'kra_set' (workflow never advanced).
-  // Pre-propagation entered rows must NEVER be flagged stuck — that was the regression.
-  const kraSetEmpIdsByKey = useMemo(() => {
-    // The hook currently returns kraSetKpiRowsByKey keyed by definition with kpis.id values.
-    // We re-derive employee scope from orgLevelData if available, otherwise fall back to a
-    // definition-level set used only to compute the precise per-scope check below.
-    const set = new Set<string>();
-    const map = orgLevelData?.kraSetKpiRowsByKey || {};
-    Object.entries(map).forEach(([k, ids]) => {
-      if (Array.isArray(ids) && ids.length > 0) set.add(k);
-    });
-    return set;
-  }, [orgLevelData]);
+  // (kraSetEmpIdsByKey is built below, scope-aware, after mappedEmployeesMap is in scope)
   const employeeCountMap = useMemo(() => {
     const map = new Map<string, number>();
     orgLevelData?.kpis?.forEach(k => {
