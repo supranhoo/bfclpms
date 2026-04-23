@@ -80,3 +80,25 @@ describe('BUG-003: HTML escaping in PolicyRenderer', () => {
     expect(escapeHtml('A & B')).toBe('A &amp; B');
   });
 });
+
+// BUG-019: Trigger / edge code role-string safety
+// RCA: notify_on_kpi_status_change referenced 'audit_lead' which is not in app_role enum,
+// causing manager Approve to fail with "invalid input value for enum app_role: audit_lead".
+// This test pins the contract: every role string used in SQL/edge code must exist in
+// ALL_APP_ROLES (single source of truth in src/lib/roles.ts).
+describe('BUG-019: Role-string safety in triggers and edge code', () => {
+  const KNOWN_ROLE_REFERENCES = ['auditor', 'admin', 'manager', 'employee', 'management', 'hr_pms', 'skip_level'];
+
+  it('every role literal referenced in code exists in ALL_APP_ROLES', () => {
+    for (const role of KNOWN_ROLE_REFERENCES) {
+      expect(
+        (ALL_APP_ROLES as readonly string[]).includes(role),
+        `Role "${role}" referenced in code but missing from app_role enum / ALL_APP_ROLES`,
+      ).toBe(true);
+    }
+  });
+
+  it('rejects the historical "audit_lead" typo', () => {
+    expect((ALL_APP_ROLES as readonly string[]).includes('audit_lead')).toBe(false);
+  });
+});
