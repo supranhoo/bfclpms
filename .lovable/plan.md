@@ -1,69 +1,124 @@
 
+## Plan — Fix False “Stuck” Status on Org KPI Cards
 
-## Plan — Fix Reviewer Dashboard "All Zeros" Regression (Wrong Column Location)
+### Exact Problem
 
-### Root Cause (Confirmed)
+The Org KPI page is marking KPIs as **Stuck** far too early.
 
-The previous fix added `manager_score, skip_level_score, hr_pms_score, audit_score, management_score` to `SLIM_KPI_SELECT` in `src/hooks/useKpis.ts`, **but those columns do not exist on the `kpis` table** — they live on `review_submissions` (and the auditor column is named `auditor_score`, not `audit_score`).
+For scoped Org KPIs, the current logic treats **any underlying employee KPI still in `kra_set`** as “stuck”. That is wrong because `kra_set` is the normal state **before** propagation. So as soon as a Data Owner enters values, the UI can show a red **Stuck** badge even though nothing is broken yet.
 
-Confirmed via DB introspection:
-- `kpis` table → none of these score columns exist.
-- `review_submissions` → has `manager_score, skip_level_score, hr_pms_score, management_score, auditor_score, self_score, final_score`.
+This is happening because:
 
-Result: every PostgREST request using `SLIM_KPI_SELECT` now 400s on the missing columns. Network logs show **zero successful kpis requests** — only an unrelated lightweight probe returning `[]`. With `placeholderData: keepPreviousData` masking the failure, all five stat cards collapse to 0 across HR PMS / Audit / Management / reviewer dashboards. "2,466 eligible of 2,531 active employees" still renders because the employee list comes from `profiles`, not `kpis`.
+- `src/hooks/useOrgLevelKpis.ts` builds `kraSetKpiRowsByKey` from any child KPI in `kra_set`
+- `src/pages/admin/OrgKpiDataEntry.tsx` turns that into `stuckDefinitionKeys`
+- `getKpiStatus()` then returns `stuck` for entered scoped KPIs **without checking the Org KPI value status**
+- the Pending Report reuses the same bad assumption, so both the card and report can mislabel normal “entered but not propagated yet” rows as failures
 
-### Fix
+### Root Cause
 
-**A. Revert the bad columns** — `src/hooks/useKpis.ts`
+The UI is conflating two different states:
 
-Remove the line `manager_score, skip_level_score, hr_pms_score, audit_score, management_score,` from `SLIM_KPI_SELECT`. The slim select returns to its prior, working column set.
+- **Normal entered state**: Org KPI value exists, but propagation has not been completed yet
+- **Real stuck state**: the Org KPI already claims to be propagated/approved, but one or more child KPI rows are still at `kra_set`
 
-**B. Source reviewer scores from the correct table** — `src/components/review/EmployeeSelectorGrid.tsx`
-
-Reviewer-stage progress and stat cards must derive "reviewed at stage X" from `review_submissions`, not from `kpis`. Two options; we'll use the lighter-weight one:
-
-1. Add a small companion hook `useReviewSubmissionScoresByPeriod(periodRanges)` in `src/hooks/useKpis.ts` that fetches a slim slice from `review_submissions` keyed on the same period set:  
-   `id, kpi_id, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score`
-2. In `EmployeeSelectorGrid`, build a `Map<kpi_id, submissionScores>` and use it inside `getEmployeeKpiStats`, `stats` memo, and `getProgressSegments` to compute `scoreReviewed` for HR PMS / Audit / Management views (`hr_pms_score IS NOT NULL`, `auditor_score IS NOT NULL`, `management_score IS NOT NULL` respectively).
-3. Stat cards (`stat3` etc.) and progress bar `done/total` label use the same submissionScoreMap-backed counter.
-
-This keeps the kpis table query lean while still giving the dashboard accurate reviewer-stage counts.
-
-**C. Fix the `audit_score` typo everywhere it leaked**
-
-Search the codebase for any reference to `audit_score` introduced by the previous change and rename to `auditor_score`. (The DB column is `auditor_score`.) Confirmed locations to audit: `EmployeeSelectorGrid.tsx`, `bugBountyFixes.test.ts`, the new mock test file if any.
-
-**D. Regression test** — `src/test/bugBountyFixes.test.ts`
-
-Replace BUG-020. New assertions:
-- `SLIM_KPI_SELECT` does **not** contain any of `manager_score, skip_level_score, hr_pms_score, audit_score, auditor_score, management_score` (they belong to `review_submissions`, not `kpis`).
-- A schema-shape test that documents the five reviewer score columns live on `review_submissions` and that the auditor field is named `auditor_score`.
-
-**E. Documentation & policy**
-
-- `DOCUMENTATION.md` v2.66.7.21 — Reviewer dashboard zeros regression fix; reviewer-stage scoring data sourced from `review_submissions`.
-- `POLICY.md` §92 — Any new column added to a slim PostgREST select must be verified against `information_schema.columns` before merge. Reviewer-stage score columns belong on `review_submissions`, not `kpis`.
+Only the second case is truly “stuck”.
 
 ### Risk & Impact Report
 
-- **Data Impact:** None (additive read-only hook on `review_submissions`, RLS already governs that table).
-- **Workflow Impact:** None.
-- **UI/UX:** Restores correct stat counts and progress bars on HR PMS / Audit / Management / Skip-Level / Team reviewer dashboards.
-- **Regression Risk:** Low. We're reverting an invalid column list and adding a scoped companion query. Every other reviewer screen that worked before today returns to working state.
-- **Mitigation:** New regression test pins the slim-select contract from the **opposite** direction (must NOT contain non-existent columns) and asserts the canonical home of the score fields.
+- **Data impact:** None. No schema, RLS, or historical data changes required.
+- **Workflow impact:** None. Propagation, approval, send-back, and repair flows stay unchanged.
+- **UI/UX consistency:** Improves accuracy by showing `Entered` until propagation actually occurs, and reserving `Stuck` for genuine integrity problems.
+- **Regression risk:** Medium. This status logic feeds card badges, filters, progress tiles, and the Pending Report.
+- **Mitigation plan:** Centralize Org KPI entry-status derivation into one helper and add regression tests for entered/propagated/stuck cases across scopes.
 
-### Files Changed
+### Implementation
+
+#### 1) Replace the current “any `kra_set` means stuck” rule
+In `src/pages/admin/OrgKpiDataEntry.tsx`, remove the current dependency on `stuckDefinitionKeys` as the primary classifier.
+
+New status contract:
+
+- **Pending**
+  - no Org KPI value entered for that scope
+- **Entered**
+  - Org KPI value exists, but its status is still draft/entered/sent_back (not propagated/approved)
+- **Propagated**
+  - Org KPI value status is `propagated`/`approved` and all relevant child KPI rows have advanced past `kra_set`
+- **Stuck**
+  - Org KPI value status is `propagated`/`approved`, but one or more relevant child KPI rows are still in `kra_set`
+
+This preserves genuine Bucket C/F visibility while removing false red badges before propagation.
+
+#### 2) Make the status calculation scope-aware
+The current stuck map is definition-wide. That is too coarse.
+
+Refactor status derivation so it evaluates the correct child set for each scope:
+
+- **organization** → all mapped employee KPI rows under that definition
+- **department** → only employees in that mapped department slice
+- **employee** → only that employee’s KPI row
+
+This avoids one incomplete branch incorrectly painting the whole definition red.
+
+#### 3) Extract the logic into a reusable helper
+Create a small Org KPI status utility/helper so the same rules are used by:
+
+- KPI cards
+- status filter chips
+- progress tiles
+- Pending Report rows
+
+This prevents the card and report from drifting again.
+
+#### 4) Update the Pending Report to use the corrected status
+In `src/pages/admin/OrgKpiDataEntry.tsx`, the Pending Report row builder currently repeats the same false-positive logic. Rewire it to use the same centralized status helper so:
+
+- “Entered” rows stay entered
+- only truly propagated-but-not-advanced rows show as “Stuck”
+
+#### 5) Preserve repair visibility for real failures
+Do not remove stuck detection entirely. Keep it for actual propagation integrity problems so existing repair workflows remain meaningful:
+
+- partial/failed propagation after OKV says propagated
+- status-stuck rows repaired by Data Repair
+- reviewer revision/send-back scenarios that intentionally revert OKV back to non-propagated states should show non-stuck statuses again
+
+### Regression Tests
+
+Add tests covering the exact failure mode:
+
+1. **Entered employee-scoped Org KPI + child KPI still `kra_set` => `entered`, not `stuck`**
+2. **Entered department-scoped Org KPI + all children still `kra_set` => `entered`**
+3. **Propagated Org KPI + all children advanced => `propagated`**
+4. **Propagated Org KPI + some children still `kra_set` => `stuck`**
+5. **Pending Report uses the same derived status as the card**
+
+Recommended files:
+- `src/test/bugBountyFixes.test.ts`
+- optionally a focused helper test if the status logic is extracted into its own module
+
+### Documentation / Policy Sync
+
+Update both required SSOT files in the same change:
+
+- `DOCUMENTATION.md`
+  - note that Org KPI “Stuck” is now reserved for **post-propagation integrity failures**, not pre-propagation entered rows
+- `POLICY.md`
+  - add a rule that Org KPI entry surfaces must derive status from **OKV lifecycle + child KPI workflow state together**
+  - forbid using raw child `kra_set` presence alone as a stuck signal
+
+### Files to Change
 
 | File | Change |
 |---|---|
-| `src/hooks/useKpis.ts` | Remove non-existent score columns from `SLIM_KPI_SELECT`; add `useReviewSubmissionScoresByPeriodRanges` hook |
-| `src/components/review/EmployeeSelectorGrid.tsx` | Wire submissionScoreMap into stat cards and `getProgressSegments`; fix `audit_score` → `auditor_score` |
-| `src/test/bugBountyFixes.test.ts` | Rewrite BUG-020 to pin slim-select contract and document column ownership |
-| `DOCUMENTATION.md` | v2.66.7.21 changelog |
-| `POLICY.md` | §92 — verify columns against `information_schema.columns` before adding to slim selects |
+| `src/pages/admin/OrgKpiDataEntry.tsx` | Replace false-positive stuck logic; use centralized scope-aware status derivation for cards, filters, progress, and report |
+| `src/hooks/useOrgLevelKpis.ts` | If needed, return richer per-scope child-status metadata instead of only definition-level `kraSet` flags |
+| `src/test/bugBountyFixes.test.ts` | Add regression coverage for entered vs propagated vs stuck states |
+| `DOCUMENTATION.md` | Record the corrected Org KPI status contract |
+| `POLICY.md` | Add policy that “stuck” requires propagated/approved OKV plus incomplete child advancement |
 
 ### Out of Scope
 
-- The `Warning: Function components cannot be given refs` console warning in `PaginationEllipsis` is cosmetic and unrelated to this regression.
-- No RLS, workflow engine, or scoring engine changes.
-
+- No change to the propagation RPC itself
+- No change to repair tools unless a separate real propagation failure is later confirmed
+- No workflow-template or reviewer-queue changes
