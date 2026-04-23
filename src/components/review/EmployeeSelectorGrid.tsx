@@ -23,12 +23,13 @@ import { EmployeeFilters } from '@/components/review/EmployeeFilters';
 import { EmployeeContactCard } from '@/components/review/EmployeeContactCard';
 import { supabase } from '@/integrations/supabase/client';
 import { formatEmployeeName } from '@/lib/utils';
-import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2, Download, ChevronDown, ChevronUp, Loader2, Info, Eye, AlertTriangle } from 'lucide-react';
+import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2, Download, ChevronDown, ChevronUp, Loader2, Info, Eye, AlertTriangle, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { ViewMode } from './ViewModeToggle';
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { useQueryClient, useIsFetching } from '@tanstack/react-query';
 
 interface EmployeeProfile {
   id: string;
@@ -158,6 +159,38 @@ export function EmployeeSelectorGrid({
   onSelectEmployee,
 }: EmployeeSelectorGridProps) {
   const { user, effectiveRole: role } = useAuth();
+  const queryClient = useQueryClient();
+  // Track in-flight fetches for the data this grid depends on so the refresh
+  // button can show a spinner and stay disabled until refetches settle.
+  const fetchingProfiles = useIsFetching({ queryKey: ['profiles-by-workflow-stage'] });
+  const fetchingKpis = useIsFetching({ queryKey: ['kpis-by-period-ranges'] });
+  const fetchingSubmissionScores = useIsFetching({ queryKey: ['review-submission-scores'] });
+  const fetchingProfilesAll = useIsFetching({ queryKey: ['profiles'] });
+  const fetchingTeam = useIsFetching({ queryKey: ['team-members'] });
+  const fetchingSkip = useIsFetching({ queryKey: ['skip-level-team-members'] });
+  const isRefreshing =
+    fetchingProfiles + fetchingKpis + fetchingSubmissionScores +
+    fetchingProfilesAll + fetchingTeam + fetchingSkip > 0;
+
+  const handleRefresh = useCallback(() => {
+    // Invalidate every dataset feeding the reviewer grid: employee lists,
+    // KPI rows for the period, and per-stage submission scores. Scoped by
+    // queryKey prefix so unrelated caches stay warm.
+    [
+      'profiles-by-workflow-stage',
+      'kpis-by-period-ranges',
+      'review-submission-scores',
+      'profiles',
+      'team-members',
+      'skip-level-team-members',
+      'employee-scores-for-period',
+      'bulk-employee-workflows',
+      'employee-filter-options',
+      'auditor-workload-summary',
+      'my-audit-assignments',
+    ].forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
+  }, [queryClient]);
+
   const { data: teamMembers, isLoading: teamLoading } = useTeamMembers(user?.id);
   const { data: allProfiles, isLoading: profilesLoading } = useProfiles();
   // Fetch skip-level members for team view (merged) or standalone skip_level view
@@ -1560,6 +1593,26 @@ export function EmployeeSelectorGrid({
         </div>
         
         <div className="flex items-center gap-2">
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                  className="gap-1.5"
+                  aria-label="Refresh data"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">Refresh</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                Reload employees, KPI rows, and review scores from the server.
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <Button variant="outline" size="sm" onClick={handleExportPendingKpis} className="gap-1.5">
             <Download className="h-4 w-4" />
             <span className="hidden sm:inline">Export Pending</span>
