@@ -434,6 +434,7 @@ export function EmployeeSelectorGrid({
         badge3: empKpis.filter(k => doneStatuses.includes(k.status || '')).length,
         total: empKpis.length,
         clearedKraSet,
+        scoreReviewed: empKpis.filter(k => (k as any).hr_pms_score !== null && (k as any).hr_pms_score !== undefined).length,
         orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
         nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
       };
@@ -446,6 +447,7 @@ export function EmployeeSelectorGrid({
         badge3: empKpis.filter(k => ['management_review', 'approved'].includes(k.status || '')).length,
         total: empKpis.length,
         clearedKraSet,
+        scoreReviewed: empKpis.filter(k => (k as any).audit_score !== null && (k as any).audit_score !== undefined).length,
         orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
         nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
       };
@@ -501,6 +503,7 @@ export function EmployeeSelectorGrid({
         badge3: inPipeline,
         total: empKpis.length,
         clearedKraSet,
+        scoreReviewed: empKpis.filter(k => (k as any).management_score !== null && (k as any).management_score !== undefined).length,
         orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
         nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
       };
@@ -1174,16 +1177,23 @@ export function EmployeeSelectorGrid({
   };
 
   // Compute progress bar segments from kpiStats based on view level
-  const getProgressSegments = (kpiStats: { badge1: number; badge2: number; badge3: number; total: number; clearedKraSet: number }) => {
-    // badge1 = pending, badge2 = in-progress or done (depends on level), badge3 = done (for 3-tier levels)
+  const getProgressSegments = (kpiStats: { badge1: number; badge2: number; badge3: number; total: number; clearedKraSet: number; scoreReviewed?: number }) => {
+    // For reviewer-stage views (hr_pms / audit / management), "done" = KPIs that
+    // carry this stage's score signature (matches the top stat-card semantics).
+    // This way the per-employee bar agrees with "HR PMS Reviewed / Auditor Reviewed
+    // / Management Reviewed" totals and stays consistent regardless of whether a
+    // KPI is currently sitting AT the stage or has already moved past it.
     if (viewLevel === 'hr_pms' || viewLevel === 'audit') {
-      // 3-tier: badge3=done, badge2=in-progress, badge1=pending
-      return { done: kpiStats.badge3, inProgress: kpiStats.badge2, total: kpiStats.total, clearedKraSet: kpiStats.clearedKraSet };
+      const done = kpiStats.scoreReviewed ?? kpiStats.badge3;
+      // In-progress = KPIs at the stage but not yet scored (avoid double-counting).
+      const inProgress = Math.max(0, kpiStats.badge2 - Math.max(0, done - kpiStats.badge3));
+      return { done, inProgress, total: kpiStats.total, clearedKraSet: kpiStats.clearedKraSet };
     }
     if (viewLevel === 'management') {
-      return { done: kpiStats.badge2, inProgress: kpiStats.badge3, total: kpiStats.total, clearedKraSet: kpiStats.clearedKraSet };
+      const done = kpiStats.scoreReviewed ?? kpiStats.badge2;
+      return { done, inProgress: kpiStats.badge3, total: kpiStats.total, clearedKraSet: kpiStats.clearedKraSet };
     }
-    // 2-tier: badge2=done, badge1=pending
+    // 2-tier (team / skip_level): badge2=done, badge1=pending
     return { done: kpiStats.badge2, inProgress: 0, total: kpiStats.total, clearedKraSet: kpiStats.clearedKraSet };
   };
 
@@ -1388,7 +1398,17 @@ export function EmployeeSelectorGrid({
 
     return (
       <div className="space-y-2 mt-2 w-full">
-        <EmployeeProgressBar done={segments.done} inProgress={segments.inProgress} total={segments.total} clearedKraSet={segments.clearedKraSet} />
+        <EmployeeProgressBar
+          done={segments.done}
+          inProgress={segments.inProgress}
+          total={segments.total}
+          clearedKraSet={segments.clearedKraSet}
+          labelMode={
+            viewLevel === 'hr_pms' || viewLevel === 'audit' || viewLevel === 'management'
+              ? 'done'
+              : 'cleared'
+          }
+        />
         <div className="flex items-center gap-2 flex-wrap">
           {renderBadges()}
         </div>
@@ -1951,10 +1971,11 @@ const StatCard = React.forwardRef<HTMLDivElement, StatCardProps>(function StatCa
 });
 
 // Mini progress bar for employee cards
-function EmployeeProgressBar({ done, inProgress, total, clearedKraSet }: { done: number; inProgress: number; total: number; clearedKraSet: number }) {
+function EmployeeProgressBar({ done, inProgress, total, clearedKraSet, labelMode = 'cleared' }: { done: number; inProgress: number; total: number; clearedKraSet: number; labelMode?: 'cleared' | 'done' }) {
   if (total === 0) return null;
   const donePct = (done / total) * 100;
   const inProgressPct = (inProgress / total) * 100;
+  const labelLeft = labelMode === 'done' ? done : clearedKraSet;
   return (
     <div className="flex items-center gap-2 w-full">
       <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden flex flex-row">
@@ -1966,7 +1987,7 @@ function EmployeeProgressBar({ done, inProgress, total, clearedKraSet }: { done:
         )}
       </div>
       <span className="text-xs text-muted-foreground whitespace-nowrap font-medium">
-        {clearedKraSet}/{total}
+        {labelLeft}/{total}
       </span>
     </div>
   );

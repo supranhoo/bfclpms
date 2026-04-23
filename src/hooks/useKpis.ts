@@ -162,6 +162,7 @@ const SLIM_KPI_SELECT = `
   sub_frequency, frequency_cycle_start, source_template_id, threshold_mode,
   source_of_data, qualitative_options, is_issued, ref_code,
   is_frequency_locked, require_resubmit_reason, day_count_type, created_at, updated_at,
+  manager_score, skip_level_score, hr_pms_score, audit_score, management_score,
   kra_categories (id, name, color, weightage),
   profiles:employee_id (id, full_name, email, employee_code, department_id, reporting_manager_id)
 `;
