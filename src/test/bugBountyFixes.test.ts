@@ -222,3 +222,48 @@ describe('BUG-021: Org KPI status — entered != stuck', () => {
     })).toBe('entered');
   });
 });
+
+// BUG-022 (v2.66.7.24): Reviewer-stage rosters (HR PMS / Audit / Management) must
+// include employees whose KPIs have ALREADY been scored at the stage in the period,
+// not only employees whose KPIs are currently AT the stage. Without this, the
+// "HR PMS Reviewed", "Auditor Reviewed", and "Management Reviewed" stat cards
+// collapse to 0 because scored KPIs belong to employees no longer in the visible
+// roster (they advanced to audit / management / approved).
+// Also pins the deterministic-hash cache key for useReviewSubmissionScoresByKpiIds.
+describe('BUG-022: Reviewer roster includes score-signature seed', () => {
+  const orgSource = fs.readFileSync(
+    path.resolve(__dirname, '../hooks/useOrganization.ts'),
+    'utf8',
+  );
+  const kpisSource = fs.readFileSync(
+    path.resolve(__dirname, '../hooks/useKpis.ts'),
+    'utf8',
+  );
+
+  it('useProfilesByWorkflowStage maps reviewer stages to score columns', () => {
+    expect(orgSource).toContain('STAGE_TO_SCORE_COLUMN');
+    expect(orgSource).toContain("hr_pms_review: 'hr_pms_score'");
+    expect(orgSource).toContain("audit: 'auditor_score'");
+    expect(orgSource).toContain("management_review: 'management_score'");
+  });
+
+  it('useProfilesByWorkflowStage queries review_submissions for the score signature', () => {
+    expect(orgSource).toContain('scoreSigSeededIds');
+    expect(orgSource).toMatch(/from\(['"]review_submissions['"]\)/);
+    expect(orgSource).toMatch(/\.not\(scoreColumn[^,]*,\s*['"]is['"],\s*null\)/);
+  });
+
+  it('roster filter unions both KPI-presence and score-signature seeds', () => {
+    expect(orgSource).toContain('if (seededIds.has(p.id)) return true;');
+    expect(orgSource).toContain('if (scoreSigSeededIds.has(p.id)) return true;');
+  });
+
+  it('useReviewSubmissionScoresByKpiIds no longer uses fragile length:firstId cache key', () => {
+    const hookBlock = kpisSource.match(/useReviewSubmissionScoresByKpiIds[\s\S]*?^}/m)?.[0] ?? '';
+    // Old fragile form was: `${kpiIds.length}:${kpiIds[0]}`
+    expect(hookBlock).not.toMatch(/\$\{kpiIds\.length\}:\$\{kpiIds\[0\]\}/);
+    // New form sorts ids and produces a deterministic hash
+    expect(hookBlock).toContain('sort()');
+    expect(hookBlock).toMatch(/0x811c9dc5|hash/);
+  });
+});
