@@ -1707,3 +1707,14 @@ PostgREST silently caps unranged `select(...)` queries at 1000 rows. With the ac
 1. Adding a new role requires (a) `ALTER TYPE app_role ADD VALUE`, (b) update `ALL_APP_ROLES` in `src/lib/roles.ts`, in the same change set.
 2. `src/test/bugBountyFixes.test.ts::BUG-019` asserts every code-referenced role exists in `ALL_APP_ROLES` and that `audit_lead` is rejected.
 3. Code review must reject any new role literal not present in `ALL_APP_ROLES`.
+
+## §92 — Slim PostgREST Selects Must Be Verified Against `information_schema.columns` (v2.66.7.21)
+
+**Rule.** Before any column is added to a slim PostgREST `select(...)` clause (e.g. `SLIM_KPI_SELECT`), the column MUST be confirmed to exist on the target table by querying `information_schema.columns`. Reviewer-stage score columns (`manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score, self_score`) live on `review_submissions`, NOT on `kpis`. The auditor column is canonically named `auditor_score` — never `audit_score`.
+
+**Rationale.** PostgREST returns a 400 for any unknown column. With `keepPreviousData` (or any error suppression), the failure is invisible to the user and collapses every dependent dashboard to zero — exactly the v2.66.7.20 → v2.66.7.21 incident.
+
+**Enforcement.**
+1. When extending a slim select, the change set must reference the migration or schema source that defines each new column on the target table.
+2. `src/test/bugBountyFixes.test.ts::BUG-020` pins that `SLIM_KPI_SELECT` must NOT contain any reviewer-stage score column and that the `auditor_score` canonical name is used in the companion hook.
+3. Reviewer-stage score signatures must be sourced from `review_submissions` via `useReviewSubmissionScoresByKpiIds` (or an equivalent map-based hook), never from a join inside the kpis query.
