@@ -23,12 +23,13 @@ import { EmployeeFilters } from '@/components/review/EmployeeFilters';
 import { EmployeeContactCard } from '@/components/review/EmployeeContactCard';
 import { supabase } from '@/integrations/supabase/client';
 import { formatEmployeeName } from '@/lib/utils';
-import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2, Download, ChevronDown, ChevronUp, Loader2, Info, Eye, AlertTriangle } from 'lucide-react';
+import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2, Download, ChevronDown, ChevronUp, Loader2, Info, Eye, AlertTriangle, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { ViewMode } from './ViewModeToggle';
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { useQueryClient, useIsFetching } from '@tanstack/react-query';
 
 interface EmployeeProfile {
   id: string;
