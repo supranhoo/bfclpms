@@ -7,7 +7,7 @@ import { useAuditorWorkloadSummary } from '@/hooks/useAuditorWorkloadSummary';
 import { AuditAssignmentDialog } from '@/components/admin/AuditAssignmentDialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTeamMembers, useProfiles, useSkipLevelTeamMembers, useProfilesByWorkflowStage } from '@/hooks/useOrganization';
-import { useKpisByPeriodRanges, KPI } from '@/hooks/useKpis';
+import { useKpisByPeriodRanges, useReviewSubmissionScoresByKpiIds, KPI } from '@/hooks/useKpis';
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
 import { useEmployeeScoresForPeriod } from '@/hooks/useEmployeeScoresForPeriod';
