@@ -153,3 +153,72 @@ describe('BUG-020: Slim KPI select must not reference review_submissions score c
     expect(hookBlock.includes('audit_score,') || hookBlock.includes(' audit_score ')).toBe(false);
   });
 });
+
+// BUG-021 (v2.66.7.22): Org KPI status helper must NOT mark an entered-but-not-yet-propagated
+// row as "Stuck". 'kra_set' is the normal pre-propagation state. Genuine stuck requires
+// OKV.status to already be propagated/approved AND the matching child kpis row still 'kra_set'.
+describe('BUG-021: Org KPI status — entered != stuck', () => {
+  type Status = 'pending' | 'entered' | 'propagated' | 'stuck';
+
+  const isPropagatedOrApproved = (s: string | null | undefined) =>
+    s === 'propagated' || s === 'approved';
+
+  function deriveOrgStatus(opts: {
+    okvStatus: string | null;
+    hasOkvValue: boolean;
+    childKraSetEmpIds: Set<string>;
+    relevantEmpIds: string[]; // empty for org scope -> use childKraSetEmpIds size as "any"
+  }): Status {
+    if (!opts.hasOkvValue) return 'pending';
+    if (!isPropagatedOrApproved(opts.okvStatus)) return 'entered';
+    const stuckHit = opts.relevantEmpIds.length === 0
+      ? opts.childKraSetEmpIds.size > 0
+      : opts.relevantEmpIds.some(e => opts.childKraSetEmpIds.has(e));
+    return stuckHit ? 'stuck' : 'propagated';
+  }
+
+  it('entered employee-scoped Org KPI with kra_set child returns "entered" (NOT "stuck")', () => {
+    expect(deriveOrgStatus({
+      okvStatus: 'draft',
+      hasOkvValue: true,
+      childKraSetEmpIds: new Set(['emp-1']),
+      relevantEmpIds: ['emp-1'],
+    })).toBe('entered');
+  });
+
+  it('propagated Org KPI with all children advanced returns "propagated"', () => {
+    expect(deriveOrgStatus({
+      okvStatus: 'propagated',
+      hasOkvValue: true,
+      childKraSetEmpIds: new Set(),
+      relevantEmpIds: ['emp-1', 'emp-2'],
+    })).toBe('propagated');
+  });
+
+  it('propagated Org KPI with at least one kra_set child returns "stuck"', () => {
+    expect(deriveOrgStatus({
+      okvStatus: 'propagated',
+      hasOkvValue: true,
+      childKraSetEmpIds: new Set(['emp-2']),
+      relevantEmpIds: ['emp-1', 'emp-2'],
+    })).toBe('stuck');
+  });
+
+  it('no OKV value returns "pending"', () => {
+    expect(deriveOrgStatus({
+      okvStatus: null,
+      hasOkvValue: false,
+      childKraSetEmpIds: new Set(),
+      relevantEmpIds: [],
+    })).toBe('pending');
+  });
+
+  it('sent_back OKV with kra_set children is "entered", never "stuck"', () => {
+    expect(deriveOrgStatus({
+      okvStatus: 'sent_back',
+      hasOkvValue: true,
+      childKraSetEmpIds: new Set(['emp-1', 'emp-2']),
+      relevantEmpIds: ['emp-1', 'emp-2'],
+    })).toBe('entered');
+  });
+});
