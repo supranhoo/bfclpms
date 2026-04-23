@@ -503,6 +503,7 @@ export function EmployeeSelectorGrid({
         badge3: inPipeline,
         total: empKpis.length,
         clearedKraSet,
+        scoreReviewed: empKpis.filter(k => (k as any).management_score !== null && (k as any).management_score !== undefined).length,
         orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
         nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
       };
