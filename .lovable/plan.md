@@ -1,44 +1,62 @@
 
-## Plan — Add Refresh Button to Reviewer Dashboard Grid
+## Plan — Fix "HR PMS Reviewed = 0" (and Audit/Management equivalents) on Reviewer Dashboard
 
-### Goal
-Add a manual **Refresh** button to the reviewer dashboards (HR PMS, Audit, Management, Team Reviews, Pending Review buckets) so users can force-refetch employee, KPI, and submission-score data without a full page reload.
+### Root Cause (Confirmed via DB + Code Audit)
 
-### Placement
-Inside `EmployeeSelectorGrid.tsx`, in the header row next to the period/view controls (left of or beside the "Show only Reviewed" toggle). Visible across all reviewer modes that use this grid.
+For March 2026, the database has **504 KPIs with `hr_pms_score`** belonging to **48 employees**, yet the dashboard shows **HR PMS Reviewed = 0** while **Total Employees = 42**.
 
-### Behavior
-- Icon button (`RefreshCw` from lucide-react) with tooltip "Refresh data".
-- On click: invalidates the relevant React Query caches so all underlying hooks refetch:
-  - `useProfilesByWorkflowStage` (employees in stage)
-  - `useKpisByPeriodRanges` (KPI rows)
-  - `useReviewSubmissionScoresByKpiIds` (per-stage scores)
-  - any related count/eligibility queries used by stat cards
-- Spinner animation (`animate-spin`) while any of these queries are fetching; button disabled during fetch to prevent spam.
-- Toast confirmation ("Data refreshed") on completion.
+Two compounding bugs in `EmployeeSelectorGrid.tsx` + `useOrganization.ts`:
 
-### Implementation Approach
-1. In `src/components/review/EmployeeSelectorGrid.tsx`:
-   - Import `useQueryClient` and `RefreshCw`.
-   - Add a `handleRefresh` that calls `queryClient.invalidateQueries` for the query keys used by the grid hooks (scoped by predicate matching `['profiles-by-workflow-stage', ...]`, `['kpis-by-period-ranges', ...]`, `['review-submission-scores', ...]`).
-   - Track combined `isFetching` from those hooks (or via `useIsFetching` with matching keys) to drive spinner + disabled state.
-   - Render the button in the existing header toolbar.
-2. No changes to hooks themselves — they already expose standard React Query keys.
+**Bug A — Roster excludes already-reviewed employees (primary cause).**
+The HR PMS / Audit / Management roster is built by `useProfilesByWorkflowStage('hr_pms_review', ...)`. Its "stage-presence seed" only seeds employees with KPIs **currently** at `status='hr_pms_review'`. Once HR PMS reviews a KPI and it advances to `audit` / `management_review` / `approved`, that employee is no longer seeded. They only stay in the roster if the resilient workflow-resolver branch (`stagesMap.get(p.id)?.includes('hr_pms_review')`) catches them — which it does inconsistently for older periods, employees with template overrides, or RPC chunk failures.
+Result: KPIs counted in the "Reviewed" stat live on employees who have been silently filtered OUT of `demographicFilteredMembers`, so `relevantKpis` (intersected with `memberIds`) drops them and the count collapses to 0.
+
+**Bug B — Fragile React Query cache key.**
+`useReviewSubmissionScoresByKpiIds` uses `stableKey = ${kpiIds.length}:${kpiIds[0]}`. Two different periods with the same KPI count and the same first id will share a stale cache. Not the cause of today's 0, but a latent regression vector that worsens once Bug A is fixed.
+
+Same logic powers Audit (`auditor_score`) and Management (`management_score`) reviewed counts — both currently under-report for the same reason.
+
+### The Fix
+
+**1. Seed roster from review_submissions score-signature (definitive fix for Bug A).**
+In `useProfilesByWorkflowStage`, extend the stage-presence seed to also include employees whose `review_submissions` row for the period carries the **completed-stage score signature**:
+- `hr_pms_review` stage → seed employees whose period KPIs have `hr_pms_score IS NOT NULL`
+- `audit` stage → seed employees with `auditor_score IS NOT NULL`
+- `management_review` stage → seed employees with `management_score IS NOT NULL`
+
+This guarantees: *if a reviewer has ever scored a KPI for this period, that employee is in the roster*, regardless of where the KPI has since moved.
+
+Implementation: one extra paged query against `review_submissions JOIN kpis` filtered by `review_period`, `review_year`, and the relevant score column being non-null. Wrapped in try/catch with the same diagnostic breadcrumb pattern already in the hook.
+
+**2. Stabilise the submission-score cache key (fix Bug B).**
+In `useReviewSubmissionScoresByKpiIds`, replace `${kpiIds.length}:${kpiIds[0]}` with a deterministic hash of the sorted id list (e.g., FNV-1a or simple sum-of-charcodes accumulator over sorted ids, truncated). Keeps the key short while eliminating false cache hits.
+
+**3. Diagnostic breadcrumb update.**
+Extend the `[useProfilesByWorkflowStage]` `console.info` to log `seededFromScoreSignature` so future regressions of this class are immediately visible.
+
+**4. Regression coverage.**
+Add `BUG-022` in `src/test/bugBountyFixes.test.ts` asserting:
+- The seed source code includes a `review_submissions` lookup keyed off the stage-to-score-column map.
+- The cache key is no longer the `length:firstId` form (string match against the new helper name).
 
 ### Risk & Impact Report
-- **Data impact:** None — read-only refetch, no writes.
-- **Workflow impact:** None.
-- **UI/UX:** Minor addition to header; matches existing button styling (`variant="outline"`, `size="sm"`).
-- **Regression risk:** Low. Only adds a manual invalidation path; existing auto-fetching behavior unchanged.
-- **Mitigation:** Disable button while fetching to avoid request storms; scope invalidation by query-key predicate so unrelated caches aren't dropped.
+- **Data impact:** None — read-only seed expansion. No writes, no schema change.
+- **Workflow impact:** None — does not change who CAN review, only who is COUNTED as already reviewed.
+- **UI/UX:** "HR PMS Reviewed", "Auditor Reviewed", "Management Reviewed" stat cards become accurate. `Total Employees` may rise slightly (+5–10 in the March example) as historically-scored employees re-enter the visible roster — this is the correct behaviour and matches the existing tooltip ("KPIs with an HR PMS score recorded for this period, regardless of current stage").
+- **Performance:** One additional paged `review_submissions` query per reviewer-stage roster load (~500 rows for a typical period). Cached by React Query under existing `profiles-by-workflow-stage` key. Negligible.
+- **Regression risk:** Low. The expansion is additive (union of seed sets); no employee currently in the roster will be removed.
+- **Mitigation:** Diagnostic breadcrumb + new BUG-022 test + the existing manual Refresh button (v2.66.7.23) lets users re-validate after the fix ships.
 
 ### Files to Change
 | File | Change |
 |---|---|
-| `src/components/review/EmployeeSelectorGrid.tsx` | Add Refresh button + invalidation handler + fetching state |
-| `DOCUMENTATION.md` | v2.66.7.23 — manual refresh control on reviewer grid |
-| `POLICY.md` | §94 — reviewer dashboards must expose a manual refresh that invalidates employee, KPI, and submission-score caches together |
+| `src/hooks/useOrganization.ts` | Add score-signature seed branch in `useProfilesByWorkflowStage` for `hr_pms_review` / `audit` / `management_review` stages; extend diagnostic breadcrumb |
+| `src/hooks/useKpis.ts` | Replace fragile `length:firstId` cache key in `useReviewSubmissionScoresByKpiIds` with a deterministic hash of sorted ids |
+| `src/test/bugBountyFixes.test.ts` | Add `BUG-022` covering both fixes |
+| `DOCUMENTATION.md` | v2.66.7.24 changelog entry |
+| `POLICY.md` | §95 — reviewer rosters MUST include employees with completed-stage score signatures, not only those currently AT the stage |
 
 ### Out of Scope
-- No auto-refresh / polling interval (kept manual to control Cloud load).
-- No refresh button inside `UnifiedScorecard` (separate surface; can be added later if requested).
+- No change to the workflow engine, RPC `get_bulk_employee_workflows`, or scoring engine.
+- No change to the `manager_check` / `skip_level_check` rosters (they use `_score` columns on `review_submissions` correctly via a different code path; verified during investigation).
+- The unrelated `AuditAssignmentDialog` ref warning visible in console is cosmetic and untouched.
