@@ -1,124 +1,44 @@
 
-## Plan — Fix False “Stuck” Status on Org KPI Cards
+## Plan — Add Refresh Button to Reviewer Dashboard Grid
 
-### Exact Problem
+### Goal
+Add a manual **Refresh** button to the reviewer dashboards (HR PMS, Audit, Management, Team Reviews, Pending Review buckets) so users can force-refetch employee, KPI, and submission-score data without a full page reload.
 
-The Org KPI page is marking KPIs as **Stuck** far too early.
+### Placement
+Inside `EmployeeSelectorGrid.tsx`, in the header row next to the period/view controls (left of or beside the "Show only Reviewed" toggle). Visible across all reviewer modes that use this grid.
 
-For scoped Org KPIs, the current logic treats **any underlying employee KPI still in `kra_set`** as “stuck”. That is wrong because `kra_set` is the normal state **before** propagation. So as soon as a Data Owner enters values, the UI can show a red **Stuck** badge even though nothing is broken yet.
+### Behavior
+- Icon button (`RefreshCw` from lucide-react) with tooltip "Refresh data".
+- On click: invalidates the relevant React Query caches so all underlying hooks refetch:
+  - `useProfilesByWorkflowStage` (employees in stage)
+  - `useKpisByPeriodRanges` (KPI rows)
+  - `useReviewSubmissionScoresByKpiIds` (per-stage scores)
+  - any related count/eligibility queries used by stat cards
+- Spinner animation (`animate-spin`) while any of these queries are fetching; button disabled during fetch to prevent spam.
+- Toast confirmation ("Data refreshed") on completion.
 
-This is happening because:
-
-- `src/hooks/useOrgLevelKpis.ts` builds `kraSetKpiRowsByKey` from any child KPI in `kra_set`
-- `src/pages/admin/OrgKpiDataEntry.tsx` turns that into `stuckDefinitionKeys`
-- `getKpiStatus()` then returns `stuck` for entered scoped KPIs **without checking the Org KPI value status**
-- the Pending Report reuses the same bad assumption, so both the card and report can mislabel normal “entered but not propagated yet” rows as failures
-
-### Root Cause
-
-The UI is conflating two different states:
-
-- **Normal entered state**: Org KPI value exists, but propagation has not been completed yet
-- **Real stuck state**: the Org KPI already claims to be propagated/approved, but one or more child KPI rows are still at `kra_set`
-
-Only the second case is truly “stuck”.
+### Implementation Approach
+1. In `src/components/review/EmployeeSelectorGrid.tsx`:
+   - Import `useQueryClient` and `RefreshCw`.
+   - Add a `handleRefresh` that calls `queryClient.invalidateQueries` for the query keys used by the grid hooks (scoped by predicate matching `['profiles-by-workflow-stage', ...]`, `['kpis-by-period-ranges', ...]`, `['review-submission-scores', ...]`).
+   - Track combined `isFetching` from those hooks (or via `useIsFetching` with matching keys) to drive spinner + disabled state.
+   - Render the button in the existing header toolbar.
+2. No changes to hooks themselves — they already expose standard React Query keys.
 
 ### Risk & Impact Report
-
-- **Data impact:** None. No schema, RLS, or historical data changes required.
-- **Workflow impact:** None. Propagation, approval, send-back, and repair flows stay unchanged.
-- **UI/UX consistency:** Improves accuracy by showing `Entered` until propagation actually occurs, and reserving `Stuck` for genuine integrity problems.
-- **Regression risk:** Medium. This status logic feeds card badges, filters, progress tiles, and the Pending Report.
-- **Mitigation plan:** Centralize Org KPI entry-status derivation into one helper and add regression tests for entered/propagated/stuck cases across scopes.
-
-### Implementation
-
-#### 1) Replace the current “any `kra_set` means stuck” rule
-In `src/pages/admin/OrgKpiDataEntry.tsx`, remove the current dependency on `stuckDefinitionKeys` as the primary classifier.
-
-New status contract:
-
-- **Pending**
-  - no Org KPI value entered for that scope
-- **Entered**
-  - Org KPI value exists, but its status is still draft/entered/sent_back (not propagated/approved)
-- **Propagated**
-  - Org KPI value status is `propagated`/`approved` and all relevant child KPI rows have advanced past `kra_set`
-- **Stuck**
-  - Org KPI value status is `propagated`/`approved`, but one or more relevant child KPI rows are still in `kra_set`
-
-This preserves genuine Bucket C/F visibility while removing false red badges before propagation.
-
-#### 2) Make the status calculation scope-aware
-The current stuck map is definition-wide. That is too coarse.
-
-Refactor status derivation so it evaluates the correct child set for each scope:
-
-- **organization** → all mapped employee KPI rows under that definition
-- **department** → only employees in that mapped department slice
-- **employee** → only that employee’s KPI row
-
-This avoids one incomplete branch incorrectly painting the whole definition red.
-
-#### 3) Extract the logic into a reusable helper
-Create a small Org KPI status utility/helper so the same rules are used by:
-
-- KPI cards
-- status filter chips
-- progress tiles
-- Pending Report rows
-
-This prevents the card and report from drifting again.
-
-#### 4) Update the Pending Report to use the corrected status
-In `src/pages/admin/OrgKpiDataEntry.tsx`, the Pending Report row builder currently repeats the same false-positive logic. Rewire it to use the same centralized status helper so:
-
-- “Entered” rows stay entered
-- only truly propagated-but-not-advanced rows show as “Stuck”
-
-#### 5) Preserve repair visibility for real failures
-Do not remove stuck detection entirely. Keep it for actual propagation integrity problems so existing repair workflows remain meaningful:
-
-- partial/failed propagation after OKV says propagated
-- status-stuck rows repaired by Data Repair
-- reviewer revision/send-back scenarios that intentionally revert OKV back to non-propagated states should show non-stuck statuses again
-
-### Regression Tests
-
-Add tests covering the exact failure mode:
-
-1. **Entered employee-scoped Org KPI + child KPI still `kra_set` => `entered`, not `stuck`**
-2. **Entered department-scoped Org KPI + all children still `kra_set` => `entered`**
-3. **Propagated Org KPI + all children advanced => `propagated`**
-4. **Propagated Org KPI + some children still `kra_set` => `stuck`**
-5. **Pending Report uses the same derived status as the card**
-
-Recommended files:
-- `src/test/bugBountyFixes.test.ts`
-- optionally a focused helper test if the status logic is extracted into its own module
-
-### Documentation / Policy Sync
-
-Update both required SSOT files in the same change:
-
-- `DOCUMENTATION.md`
-  - note that Org KPI “Stuck” is now reserved for **post-propagation integrity failures**, not pre-propagation entered rows
-- `POLICY.md`
-  - add a rule that Org KPI entry surfaces must derive status from **OKV lifecycle + child KPI workflow state together**
-  - forbid using raw child `kra_set` presence alone as a stuck signal
+- **Data impact:** None — read-only refetch, no writes.
+- **Workflow impact:** None.
+- **UI/UX:** Minor addition to header; matches existing button styling (`variant="outline"`, `size="sm"`).
+- **Regression risk:** Low. Only adds a manual invalidation path; existing auto-fetching behavior unchanged.
+- **Mitigation:** Disable button while fetching to avoid request storms; scope invalidation by query-key predicate so unrelated caches aren't dropped.
 
 ### Files to Change
-
 | File | Change |
 |---|---|
-| `src/pages/admin/OrgKpiDataEntry.tsx` | Replace false-positive stuck logic; use centralized scope-aware status derivation for cards, filters, progress, and report |
-| `src/hooks/useOrgLevelKpis.ts` | If needed, return richer per-scope child-status metadata instead of only definition-level `kraSet` flags |
-| `src/test/bugBountyFixes.test.ts` | Add regression coverage for entered vs propagated vs stuck states |
-| `DOCUMENTATION.md` | Record the corrected Org KPI status contract |
-| `POLICY.md` | Add policy that “stuck” requires propagated/approved OKV plus incomplete child advancement |
+| `src/components/review/EmployeeSelectorGrid.tsx` | Add Refresh button + invalidation handler + fetching state |
+| `DOCUMENTATION.md` | v2.66.7.23 — manual refresh control on reviewer grid |
+| `POLICY.md` | §94 — reviewer dashboards must expose a manual refresh that invalidates employee, KPI, and submission-score caches together |
 
 ### Out of Scope
-
-- No change to the propagation RPC itself
-- No change to repair tools unless a separate real propagation failure is later confirmed
-- No workflow-template or reviewer-queue changes
+- No auto-refresh / polling interval (kept manual to control Cloud load).
+- No refresh button inside `UnifiedScorecard` (separate surface; can be added later if requested).
