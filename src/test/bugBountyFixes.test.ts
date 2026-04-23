@@ -102,3 +102,40 @@ describe('BUG-019: Role-string safety in triggers and edge code', () => {
     expect((ALL_APP_ROLES as readonly string[]).includes('audit_lead')).toBe(false);
   });
 });
+
+// BUG-020: Reviewer-dashboard "Reviewed" counters and per-employee progress bar
+// silently showed 0 / dark bars because the slim KPI select used by
+// useKpisByPeriodRanges (the dashboard's data source) did not include the
+// stage-score signature columns (hr_pms_score, audit_score, management_score,
+// manager_score, skip_level_score). The stat-card logic and the progress bar
+// both rely on those fields to mark a KPI as "reviewed at this stage", so
+// trimming any of them out reduces visible review activity to zero.
+// This test pins the slim-select contract so a future trim doesn't recreate
+// the regression.
+import fs from 'node:fs';
+import path from 'node:path';
+
+describe('BUG-020: Slim KPI select retains stage-score signature columns', () => {
+  const REQUIRED_SCORE_COLUMNS = [
+    'manager_score',
+    'skip_level_score',
+    'hr_pms_score',
+    'audit_score',
+    'management_score',
+  ];
+
+  const slimSelectSource = fs.readFileSync(
+    path.resolve(__dirname, '../hooks/useKpis.ts'),
+    'utf8',
+  );
+
+  for (const col of REQUIRED_SCORE_COLUMNS) {
+    it(`SLIM_KPI_SELECT includes ${col}`, () => {
+      const slimBlock = slimSelectSource.match(/const SLIM_KPI_SELECT[\s\S]*?`;/)?.[0] ?? '';
+      expect(
+        slimBlock.includes(col),
+        `SLIM_KPI_SELECT must include ${col} so reviewer dashboards can detect "reviewed at this stage"`,
+      ).toBe(true);
+    });
+  }
+});
