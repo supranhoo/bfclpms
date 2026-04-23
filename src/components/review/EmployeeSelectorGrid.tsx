@@ -1177,16 +1177,23 @@ export function EmployeeSelectorGrid({
   };
 
   // Compute progress bar segments from kpiStats based on view level
-  const getProgressSegments = (kpiStats: { badge1: number; badge2: number; badge3: number; total: number; clearedKraSet: number }) => {
-    // badge1 = pending, badge2 = in-progress or done (depends on level), badge3 = done (for 3-tier levels)
+  const getProgressSegments = (kpiStats: { badge1: number; badge2: number; badge3: number; total: number; clearedKraSet: number; scoreReviewed?: number }) => {
+    // For reviewer-stage views (hr_pms / audit / management), "done" = KPIs that
+    // carry this stage's score signature (matches the top stat-card semantics).
+    // This way the per-employee bar agrees with "HR PMS Reviewed / Auditor Reviewed
+    // / Management Reviewed" totals and stays consistent regardless of whether a
+    // KPI is currently sitting AT the stage or has already moved past it.
     if (viewLevel === 'hr_pms' || viewLevel === 'audit') {
-      // 3-tier: badge3=done, badge2=in-progress, badge1=pending
-      return { done: kpiStats.badge3, inProgress: kpiStats.badge2, total: kpiStats.total, clearedKraSet: kpiStats.clearedKraSet };
+      const done = kpiStats.scoreReviewed ?? kpiStats.badge3;
+      // In-progress = KPIs at the stage but not yet scored (avoid double-counting).
+      const inProgress = Math.max(0, kpiStats.badge2 - Math.max(0, done - kpiStats.badge3));
+      return { done, inProgress, total: kpiStats.total, clearedKraSet: kpiStats.clearedKraSet };
     }
     if (viewLevel === 'management') {
-      return { done: kpiStats.badge2, inProgress: kpiStats.badge3, total: kpiStats.total, clearedKraSet: kpiStats.clearedKraSet };
+      const done = kpiStats.scoreReviewed ?? kpiStats.badge2;
+      return { done, inProgress: kpiStats.badge3, total: kpiStats.total, clearedKraSet: kpiStats.clearedKraSet };
     }
-    // 2-tier: badge2=done, badge1=pending
+    // 2-tier (team / skip_level): badge2=done, badge1=pending
     return { done: kpiStats.badge2, inProgress: 0, total: kpiStats.total, clearedKraSet: kpiStats.clearedKraSet };
   };
 
