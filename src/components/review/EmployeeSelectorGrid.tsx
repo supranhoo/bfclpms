@@ -1398,7 +1398,17 @@ export function EmployeeSelectorGrid({
 
     return (
       <div className="space-y-2 mt-2 w-full">
-        <EmployeeProgressBar done={segments.done} inProgress={segments.inProgress} total={segments.total} clearedKraSet={segments.clearedKraSet} />
+        <EmployeeProgressBar
+          done={segments.done}
+          inProgress={segments.inProgress}
+          total={segments.total}
+          clearedKraSet={segments.clearedKraSet}
+          labelMode={
+            viewLevel === 'hr_pms' || viewLevel === 'audit' || viewLevel === 'management'
+              ? 'done'
+              : 'cleared'
+          }
+        />
         <div className="flex items-center gap-2 flex-wrap">
           {renderBadges()}
         </div>
