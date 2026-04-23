@@ -205,27 +205,43 @@ export default function OrgKpiDataEntry() {
     return categories.filter(c => categoryIds.has(c.id));
   }, [frequencyFilteredKpis, categories]);
 
-  // Helper: get KPI status from existingValuesMap.
-  // 'stuck' = value entered but at least one underlying kpis row is still 'kra_set' (half-propagation / status-stuck bug).
+  // Per-definition set of employee_ids whose child kpis row is still 'kra_set'.
+  // Used together with OKV.status to compute genuine "stuck" rows.
+  const kraSetEmpIdsByKey = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    const raw = (orgLevelData as any)?.kraSetEmpIdsByKey || {};
+    Object.entries(raw).forEach(([k, ids]) => {
+      map.set(k, new Set(ids as string[]));
+    });
+    return map;
+  }, [orgLevelData]);
+
+  // Helper: derive KPI status from OKV (existingValuesMap) + child kpis state.
+  // CONTRACT (v2.66.7.22):
+  //   pending    — no OKV value entered for this scope
+  //   entered    — OKV exists but its status is NOT propagated/approved (still draft/sent_back/etc.)
+  //   propagated — OKV.status is propagated/approved AND no relevant child KPI is still 'kra_set'
+  //   stuck      — OKV.status is propagated/approved BUT at least one relevant child KPI is still 'kra_set'
+  // Pre-propagation entered rows are NEVER 'stuck'. 'kra_set' alone is the normal starting state.
   const getKpiStatus = useCallback((kpi: typeof frequencyFilteredKpis[0]): 'pending' | 'entered' | 'propagated' | 'stuck' => {
     const scope = (kpi as any).org_level_scope || 'employee';
     const defKey = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
-    const isStuckCandidate = stuckDefinitionKeys.has(defKey);
+    const kraSetEmpIds = kraSetEmpIdsByKey.get(defKey) || new Set<string>();
+
+    const isPropagatedOrApproved = (status: string | null | undefined) =>
+      status === 'propagated' || status === 'approved';
+
     if (scope === 'organization') {
       const key = `${defKey}||null||null`;
       const val = existingValuesMap.get(key);
-      if ((val?.achieved_value !== null && val?.achieved_value !== undefined) || val?.is_na) {
-        if (isStuckCandidate) return 'stuck';
-        return (val?.status === 'propagated' || val?.status === 'approved') ? 'propagated' : 'entered';
-      }
-      return 'pending';
+      const hasValue = (val?.achieved_value !== null && val?.achieved_value !== undefined) || val?.is_na;
+      if (!hasValue) return 'pending';
+      if (!isPropagatedOrApproved(val?.status)) return 'entered';
+      // OKV claims propagated — only now does a kra_set child mean stuck.
+      return kraSetEmpIds.size > 0 ? 'stuck' : 'propagated';
     }
+
     const prefix = `${defKey}||`;
-    // Scope-aware: key format is `${kpiKey}||${deptId|'null'}||${empId|'null'}`.
-    // Ignore orphan rows from a different scope (e.g. legacy org-scope rows with
-    // both ids 'null' when current scope is employee/department).
-    // Also ignore rows for employees/departments no longer in the KPI's current
-    // assignment set (stale ghosts left after scope changes — v2.65.5).
     const currentEmpIds = mappedEmployeesMap.get(defKey);
     const currentDeptIds = mappedDepartmentsMap.get(defKey);
     const matching = Array.from(existingValuesMap.entries()).filter(([k, v]) => {
@@ -246,12 +262,36 @@ export default function OrgKpiDataEntry() {
       }
       return true;
     });
-    if (matching.length > 0) {
-      if (isStuckCandidate) return 'stuck';
-      return matching.every(([, v]) => v.status === 'propagated' || v.status === 'approved') ? 'propagated' : 'entered';
+    if (matching.length === 0) return 'pending';
+
+    const allPropagated = matching.every(([, v]) => isPropagatedOrApproved(v.status));
+    if (!allPropagated) return 'entered';
+
+    // Scope-aware stuck check: only the relevant child kpis rows matter.
+    if (scope === 'employee') {
+      // Stuck iff at least one entered+propagated employee still has child status='kra_set'.
+      const stuckHit = matching.some(([k]) => {
+        const parts = k.split('||');
+        const empId = parts[parts.length - 1];
+        return kraSetEmpIds.has(empId);
+      });
+      return stuckHit ? 'stuck' : 'propagated';
     }
-    return 'pending';
-  }, [existingValuesMap, mappedEmployeesMap, mappedDepartmentsMap, stuckDefinitionKeys]);
+    if (scope === 'department') {
+      // Stuck iff any kra_set child belongs to a propagated department in this definition.
+      const propagatedDeptIds = new Set(
+        matching.map(([k]) => k.split('||')[k.split('||').length - 2]).filter(d => d && d !== 'null')
+      );
+      const empToDept = new Map<string, string | null>();
+      (allProfiles || []).forEach(p => empToDept.set(p.id, p.department_id ?? null));
+      const stuckHit = Array.from(kraSetEmpIds).some(empId => {
+        const d = empToDept.get(empId);
+        return d ? propagatedDeptIds.has(d) : false;
+      });
+      return stuckHit ? 'stuck' : 'propagated';
+    }
+    return kraSetEmpIds.size > 0 ? 'stuck' : 'propagated';
+  }, [existingValuesMap, mappedEmployeesMap, mappedDepartmentsMap, kraSetEmpIdsByKey, allProfiles]);
 
   // Filter by category, search, and status
   const filteredKpis = useMemo(() => {
