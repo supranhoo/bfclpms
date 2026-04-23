@@ -1961,10 +1961,11 @@ const StatCard = React.forwardRef<HTMLDivElement, StatCardProps>(function StatCa
 });
 
 // Mini progress bar for employee cards
-function EmployeeProgressBar({ done, inProgress, total, clearedKraSet }: { done: number; inProgress: number; total: number; clearedKraSet: number }) {
+function EmployeeProgressBar({ done, inProgress, total, clearedKraSet, labelMode = 'cleared' }: { done: number; inProgress: number; total: number; clearedKraSet: number; labelMode?: 'cleared' | 'done' }) {
   if (total === 0) return null;
   const donePct = (done / total) * 100;
   const inProgressPct = (inProgress / total) * 100;
+  const labelLeft = labelMode === 'done' ? done : clearedKraSet;
   return (
     <div className="flex items-center gap-2 w-full">
       <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden flex flex-row">
@@ -1976,7 +1977,7 @@ function EmployeeProgressBar({ done, inProgress, total, clearedKraSet }: { done:
         )}
       </div>
       <span className="text-xs text-muted-foreground whitespace-nowrap font-medium">
-        {clearedKraSet}/{total}
+        {labelLeft}/{total}
       </span>
     </div>
   );
