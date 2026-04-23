@@ -1,6 +1,8 @@
 # PMS — Business Policy Document
 
 > **Last Updated:** 2026-04-23  
+> **Version:** 2.21.5 — **§93 Org KPI "Stuck" classification rule.** An Org KPI card / Pending Report row may be classified **Stuck** ONLY when BOTH conditions hold: (a) the `org_kpi_values` row's `status` is `propagated` or `approved`, AND (b) at least one in-scope child `kpis` row is still in `kra_set`. The presence of `kra_set` child rows alone is NEVER sufficient — that is the normal pre-propagation state and must surface as **Entered** (or **Pending** if no OKV value exists yet). The check must be scope-aware: organization scope considers all mapped employees, department scope considers only employees in that department, employee scope considers only that employee.
+>
 > **Version:** 2.21.4 — **§91 Reviewer dashboard data contract.** The slim KPI column projection used by reviewer dashboards (`SLIM_KPI_SELECT` in `src/hooks/useKpis.ts`) MUST include all five stage-score signature columns: `manager_score`, `skip_level_score`, `hr_pms_score`, `audit_score`, `management_score`. Reviewer-stage progress bars (HR PMS, Audit, Management) MUST derive their "done" segment from the relevant score signature so they remain consistent with the corresponding "Reviewed" stat-card counter, and their numeric label MUST display `done/total` for those views (not `clearedKraSet/total`).
 >
 > **Version:** 2.21.1 — User Management list (`/admin/users`) shows **all** users by default (active + inactive). The Status filter (All / Active / Inactive) governs the view; inactive rows are visually muted with a red **Inactive** badge so admins can discover and reactivate deactivated accounts without DB access. Other employee pickers/selectors continue to filter by `is_active=true` for assignment integrity.

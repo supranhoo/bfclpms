@@ -85,8 +85,13 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
       const employeeKpiIdsMap = new Map<string, string[]>();
       const countMap = new Map<string, Set<string>>();
       // Track per-kpi-definition the set of underlying kpis.id rows still in 'kra_set' status.
-      // Used by OrgKpiDataEntry to detect "Stuck" rows (value entered but workflow never advanced).
+      // NOTE: 'kra_set' alone does NOT mean "stuck" — that is the normal pre-propagation state.
+      // Genuine "stuck" requires the OKV to already claim propagated/approved while the child
+      // kpis row is still 'kra_set'. The OrgKpiDataEntry page combines this map with OKV.status.
       const stuckKpiRowsMap = new Map<string, string[]>();
+      // Per-definition set of employee_ids whose child kpis row is still 'kra_set'.
+      // Allows scope-aware stuck detection (employee/department/organization).
+      const kraSetEmpIdsMap = new Map<string, Set<string>>();
       allOrgKpis?.forEach(k => {
         const key = mkKey(k.category_id, k.kra_name, k.kpi_name);
         const s = countMap.get(key) || new Set<string>();
@@ -108,6 +113,9 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
           const arr = stuckKpiRowsMap.get(key) || [];
           arr.push(k.id);
           stuckKpiRowsMap.set(key, arr);
+          const empSet = kraSetEmpIdsMap.get(key) || new Set<string>();
+          if (k.employee_id) empSet.add(k.employee_id);
+          kraSetEmpIdsMap.set(key, empSet);
         }
       });
 
@@ -172,7 +180,18 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
       const kraSetKpiRowsByKey: Record<string, string[]> = {};
       stuckKpiRowsMap.forEach((val, key) => { kraSetKpiRowsByKey[key] = val; });
 
-      return { kpis: result, unmappedCount, totalOrgKpis: uniqueMap.size, perEmployeeTargetMap: perEmployeeTargets, employeeKpiIdsMap: employeeKpiIds, kraSetKpiRowsByKey };
+      const kraSetEmpIdsByKey: Record<string, string[]> = {};
+      kraSetEmpIdsMap.forEach((val, key) => { kraSetEmpIdsByKey[key] = Array.from(val); });
+
+      return {
+        kpis: result,
+        unmappedCount,
+        totalOrgKpis: uniqueMap.size,
+        perEmployeeTargetMap: perEmployeeTargets,
+        employeeKpiIdsMap: employeeKpiIds,
+        kraSetKpiRowsByKey,
+        kraSetEmpIdsByKey,
+      };
     },
     enabled: !!reviewPeriod && !!reviewYear,
   });
