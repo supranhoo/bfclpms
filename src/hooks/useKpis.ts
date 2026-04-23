@@ -162,7 +162,6 @@ const SLIM_KPI_SELECT = `
   sub_frequency, frequency_cycle_start, source_template_id, threshold_mode,
   source_of_data, qualitative_options, is_issued, ref_code,
   is_frequency_locked, require_resubmit_reason, day_count_type, created_at, updated_at,
-  manager_score, skip_level_score, hr_pms_score, audit_score, management_score,
   kra_categories (id, name, color, weightage),
   profiles:employee_id (id, full_name, email, employee_code, department_id, reporting_manager_id)
 `;
@@ -309,6 +308,58 @@ export function useKpisByPeriodRanges(periodRanges: Array<{ month: string; year:
 
       return allKpis;
     },
+  });
+}
+
+/**
+ * BUG-020 (v2.66.7.21): Reviewer-stage scores live on `review_submissions`,
+ * NOT on `kpis`. Fetch a slim slice of submission rows keyed by KPI id so
+ * reviewer dashboards (HR PMS, Audit, Management) can detect "reviewed at
+ * this stage" via score-signature columns.
+ *
+ * Returns Map<kpi_id, { manager_score, skip_level_score, hr_pms_score,
+ * auditor_score, management_score, final_score }>.
+ */
+export function useReviewSubmissionScoresByKpiIds(kpiIds: string[]) {
+  const stableKey = kpiIds.length > 0 ? `${kpiIds.length}:${kpiIds[0]}` : '';
+  return useQuery({
+    queryKey: ['review-submission-scores-by-kpi-ids', stableKey],
+    enabled: kpiIds.length > 0,
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
+      const map = new Map<string, {
+        manager_score: number | null;
+        skip_level_score: number | null;
+        hr_pms_score: number | null;
+        auditor_score: number | null;
+        management_score: number | null;
+        final_score: number | null;
+      }>();
+      const BATCH_SIZE = 500;
+      for (let i = 0; i < kpiIds.length; i += BATCH_SIZE) {
+        const batch = kpiIds.slice(i, i + BATCH_SIZE);
+        const { data, error } = await supabase
+          .from('review_submissions')
+          .select('kpi_id, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score')
+          .in('kpi_id', batch);
+        if (error) {
+          console.error('[useReviewSubmissionScoresByKpiIds] batch failed:', error);
+          continue;
+        }
+        (data || []).forEach((r: any) => {
+          map.set(r.kpi_id, {
+            manager_score: r.manager_score,
+            skip_level_score: r.skip_level_score,
+            hr_pms_score: r.hr_pms_score,
+            auditor_score: r.auditor_score,
+            management_score: r.management_score,
+            final_score: r.final_score,
+          });
+        });
+      }
+      return map;
+    },
+    staleTime: 60_000,
   });
 }
 

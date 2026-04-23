@@ -7,7 +7,7 @@ import { useAuditorWorkloadSummary } from '@/hooks/useAuditorWorkloadSummary';
 import { AuditAssignmentDialog } from '@/components/admin/AuditAssignmentDialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTeamMembers, useProfiles, useSkipLevelTeamMembers, useProfilesByWorkflowStage } from '@/hooks/useOrganization';
-import { useKpisByPeriodRanges, KPI } from '@/hooks/useKpis';
+import { useKpisByPeriodRanges, useReviewSubmissionScoresByKpiIds, KPI } from '@/hooks/useKpis';
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
 import { useEmployeeScoresForPeriod } from '@/hooks/useEmployeeScoresForPeriod';
@@ -244,6 +244,12 @@ export function EmployeeSelectorGrid({
   // Fix 1 & 3: Use multi-period hook so YTD/QTD/custom modes fetch ALL relevant months
   const { data: periodKpis } = useKpisByPeriodRanges(periodSelection.periodRanges);
 
+  // BUG-020 (v2.66.7.21): reviewer-stage scores live on review_submissions,
+  // not on kpis. Fetch a slim score-signature map keyed by kpi_id so HR PMS /
+  // Audit / Management dashboards can detect "reviewed at this stage".
+  const periodKpiIds = useMemo(() => (periodKpis || []).map(k => k.id), [periodKpis]);
+  const { data: submissionScoreMap } = useReviewSubmissionScoresByKpiIds(periodKpiIds);
+
   // Compute overall weighted scores per employee for this period
   const employeeScoreMap = useEmployeeScoresForPeriod(periodKpis);
 
@@ -434,7 +440,10 @@ export function EmployeeSelectorGrid({
         badge3: empKpis.filter(k => doneStatuses.includes(k.status || '')).length,
         total: empKpis.length,
         clearedKraSet,
-        scoreReviewed: empKpis.filter(k => (k as any).hr_pms_score !== null && (k as any).hr_pms_score !== undefined).length,
+        scoreReviewed: empKpis.filter(k => {
+          const s = submissionScoreMap?.get(k.id);
+          return s != null && s.hr_pms_score != null;
+        }).length,
         orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
         nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
       };
@@ -447,7 +456,10 @@ export function EmployeeSelectorGrid({
         badge3: empKpis.filter(k => ['management_review', 'approved'].includes(k.status || '')).length,
         total: empKpis.length,
         clearedKraSet,
-        scoreReviewed: empKpis.filter(k => (k as any).audit_score !== null && (k as any).audit_score !== undefined).length,
+        scoreReviewed: empKpis.filter(k => {
+          const s = submissionScoreMap?.get(k.id);
+          return s != null && s.auditor_score != null;
+        }).length,
         orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
         nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
       };
@@ -503,7 +515,10 @@ export function EmployeeSelectorGrid({
         badge3: inPipeline,
         total: empKpis.length,
         clearedKraSet,
-        scoreReviewed: empKpis.filter(k => (k as any).management_score !== null && (k as any).management_score !== undefined).length,
+        scoreReviewed: empKpis.filter(k => {
+          const s = submissionScoreMap?.get(k.id);
+          return s != null && s.management_score != null;
+        }).length,
         orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
         nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
       };
@@ -885,7 +900,8 @@ export function EmployeeSelectorGrid({
           }
         }
         // v2.64.11: "Reviewed by me" = KPIs with audit signature for this period.
-        if ((k as any).audit_score !== null && (k as any).audit_score !== undefined) reviewed++;
+        const auditSub = submissionScoreMap?.get(k.id);
+        if (auditSub && auditSub.auditor_score != null) reviewed++;
       });
       // v2.64.11: Total Employees = unique employees with any KPI in period
       // (workflow-filtered roster); reviewed counted via audit_score signature.
@@ -924,7 +940,8 @@ export function EmployeeSelectorGrid({
           if (afterHr.includes(k.status || '')) { forwarded++; }
         }
         // v2.64.11: "HR PMS Reviewed" = KPIs with hr_pms_score signature.
-        if ((k as any).hr_pms_score !== null && (k as any).hr_pms_score !== undefined) reviewed++;
+        const hrSub = submissionScoreMap?.get(k.id);
+        if (hrSub && hrSub.hr_pms_score != null) reviewed++;
       });
       // v2.64.11: Total Employees = unique employees with any KPI in period
       // (workflow-filtered roster). Stat3 = reviewed via hr_pms_score signature.
@@ -956,7 +973,8 @@ export function EmployeeSelectorGrid({
       let reviewed = 0;
       relevantKpis.forEach(k => {
         periodEmployeeIds.add(k.employee_id);
-        if ((k as any).management_score !== null && (k as any).management_score !== undefined) reviewed++;
+        const mgmtSub = submissionScoreMap?.get(k.id);
+        if (mgmtSub && mgmtSub.management_score != null) reviewed++;
       });
       return {
         totalEmployees: periodEmployeeIds.size,
@@ -968,7 +986,7 @@ export function EmployeeSelectorGrid({
         totalKpis: relevantKpis.length,
       };
     }
-  }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipLevelMembers, teamMembers]);
+  }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipLevelMembers, teamMembers, submissionScoreMap]);
 
 
 

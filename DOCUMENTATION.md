@@ -5308,3 +5308,20 @@ This section records architectural patterns that have been audited and intention
 - *Workflow Impact*: Restores manager Approve. Auditor "ready for audit" notifications continue to fire.
 - *UI/UX*: None.
 - *Regression Risk*: Very low — surgical fix; new test prevents recurrence.
+
+### v2.66.7.21 — Reviewer Dashboard "All Zeros" Regression Fix (2026-04-23)
+
+**Root Cause.** v2.66.7.20 added `manager_score, skip_level_score, hr_pms_score, audit_score, management_score` to `SLIM_KPI_SELECT` in `src/hooks/useKpis.ts`. None of those columns exist on the `kpis` table — they live on `review_submissions`, and the auditor column is named `auditor_score` (not `audit_score`). Every PostgREST request using the slim select 400'd silently; React Query's `keepPreviousData` masked the failure visually. Result: HR PMS / Audit / Management dashboards showed Total Employees = 0, Pending = 0, Reviewed = 0, Total KPIs = 0.
+
+**Fix.**
+1. Removed the non-existent score columns from `SLIM_KPI_SELECT`.
+2. Added a new hook `useReviewSubmissionScoresByKpiIds(kpiIds)` that fetches `manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score` from `review_submissions` in 500-row batches and returns a `Map<kpi_id, scores>`.
+3. `EmployeeSelectorGrid` now consumes the score map for `scoreReviewed` counts in `getEmployeeKpiStats` and for the "Reviewed" stat-card counters across HR PMS / Audit / Management views. Corrected `audit_score` → `auditor_score` everywhere it leaked.
+
+**Regression Coverage.** `bugBountyFixes.test.ts` BUG-020 rewritten to pin the inverse contract: `SLIM_KPI_SELECT` must NOT contain any reviewer-stage score column, the companion hook must source from `review_submissions`, and the auditor field must be the canonical `auditor_score`.
+
+**Risk & Impact.**
+- *Data Impact*: None — additive read-only query on `review_submissions`.
+- *Workflow Impact*: None.
+- *UI/UX*: Restores correct stat counts and progress bars on every reviewer dashboard.
+- *Regression Risk*: Low — reverts an invalid column list and adds a scoped companion query covered by tests.
