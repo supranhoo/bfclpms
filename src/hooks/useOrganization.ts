@@ -441,14 +441,14 @@ export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: 
             const batch = kpiIds.slice(i, i + BATCH);
             const { data, error } = await supabase
               .from('review_submissions')
-              .select(`kpi_id, ${scoreColumn}`)
+              .select(`kpi_id, ${scoreColumn}` as any)
               .in('kpi_id', batch)
-              .not(scoreColumn, 'is', null);
+              .not(scoreColumn as any, 'is', null);
             if (error) {
               console.warn('useProfilesByWorkflowStage: score-signature seed batch failed', error);
               continue;
             }
-            for (const r of (data || []) as Array<{ kpi_id: string }>) {
+            for (const r of ((data || []) as unknown as Array<{ kpi_id: string }>)) {
               const empId = kpiToEmp.get(r.kpi_id);
               if (empId) scoreSigSeededIds.add(empId);
             }
