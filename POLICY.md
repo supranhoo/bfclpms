@@ -1696,3 +1696,14 @@ PostgREST silently caps unranged `select(...)` queries at 1000 rows. With the ac
 
 **Regression Coverage.** `src/components/admin/__tests__/employeePickerPaging.test.ts` locks in the contract by simulating a roster larger than 1000 rows and asserting target employees beyond the cap remain discoverable.
 
+
+## §90 — Role-String Safety in SQL and Edge Code (v2.66.7.19)
+
+**Rule.** Every role-name string literal used in (a) database triggers/functions, (b) RPCs, (c) edge functions, or (d) RLS policies MUST exist in the `app_role` enum AND in `ALL_APP_ROLES` (`src/lib/roles.ts`, the single source of truth).
+
+**Rationale.** `app_role` is a strict Postgres enum. An unknown literal (e.g. `'audit_lead'`) raises `invalid input value for enum app_role` at execution time, aborting the surrounding transaction — which has already corrupted user-facing flows (manager Approve, v2.66.7.19 incident).
+
+**Enforcement.**
+1. Adding a new role requires (a) `ALTER TYPE app_role ADD VALUE`, (b) update `ALL_APP_ROLES` in `src/lib/roles.ts`, in the same change set.
+2. `src/test/bugBountyFixes.test.ts::BUG-019` asserts every code-referenced role exists in `ALL_APP_ROLES` and that `audit_lead` is rejected.
+3. Code review must reject any new role literal not present in `ALL_APP_ROLES`.

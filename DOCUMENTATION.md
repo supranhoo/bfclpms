@@ -5294,3 +5294,17 @@ This section records architectural patterns that have been audited and intention
 - *Performance*: Each affected picker now issues ~3 paged requests (~2.5k rows total) instead of 1 capped request (~1k). React Query caches across components; dialogs remain `enabled`-gated so the cost is paid only on open.
 - *Regression Risk*: Very low. Single well-trodden helper, no schema or business-logic changes.
 
+
+### v2.66.7.19 — Manager Approve Crash Fix: `audit_lead` Enum Typo (2026-04-23)
+
+**Root Cause.** Migration `20260422062449_…` redeployed `public.notify_on_kpi_status_change()`. The `self_review → manager_check` branch queried `WHERE ur.role IN ('auditor', 'audit_lead')`. The `app_role` enum contains no `audit_lead` value (canonical roles are defined in `src/lib/roles.ts::ALL_APP_ROLES` — `admin, manager, employee, auditor, management, hr_pms, skip_level`). Postgres aborted the trigger with `invalid input value for enum app_role: "audit_lead"`, which rolled back the entire manager Approve transaction and surfaced as a red toast in the UI.
+
+**Fix.** New migration recreates `notify_on_kpi_status_change()` with `WHERE ur.role = 'auditor'`. All other branches are byte-identical. No schema/data changes.
+
+**Regression Coverage.** `src/test/bugBountyFixes.test.ts` adds **BUG-019** — pins the contract that every role string referenced in SQL or edge-function code must exist in `ALL_APP_ROLES`, and explicitly rejects the historical `audit_lead` typo.
+
+**Risk & Impact.**
+- *Data Impact*: None — trigger function only.
+- *Workflow Impact*: Restores manager Approve. Auditor "ready for audit" notifications continue to fire.
+- *UI/UX*: None.
+- *Regression Risk*: Very low — surgical fix; new test prevents recurrence.
