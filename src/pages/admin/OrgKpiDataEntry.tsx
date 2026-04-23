@@ -1029,9 +1029,10 @@ export default function OrgKpiDataEntry() {
         const valKey = `${kk}||null||null`;
         const val = existingValuesMap.get(valKey);
         const hasValue = val?.achieved_value !== null && val?.achieved_value !== undefined;
-        const isStuck = hasValue && stuckDefinitionKeys.has(kk);
+        const isPropagated = val?.status === 'propagated' || val?.status === 'approved';
+        const isStuck = hasValue && isPropagated && (kraSetEmpIdsByKey.get(kk)?.size ?? 0) > 0;
         const status = hasValue
-          ? (isStuck ? 'Stuck' : ((val?.status === 'propagated' || val?.status === 'approved') ? 'Propagated' : 'Entered'))
+          ? (isStuck ? 'Stuck' : (isPropagated ? 'Propagated' : 'Entered'))
           : 'Pending';
         rows.push({
           ...baseRow,
@@ -1053,9 +1054,15 @@ export default function OrgKpiDataEntry() {
           const valKey = `${kk}||${dept.id}||null`;
           const val = existingValuesMap.get(valKey);
           const hasValue = val?.achieved_value !== null && val?.achieved_value !== undefined;
-          const isStuck = hasValue && stuckDefinitionKeys.has(kk);
+          const isPropagated = val?.status === 'propagated' || val?.status === 'approved';
+          // Department-stuck: any kra_set employee in this department.
+          const kraSetEmps = kraSetEmpIdsByKey.get(kk);
+          const hasDeptStuckEmp = !!kraSetEmps && (allProfiles || []).some(
+            p => p.department_id === dept.id && kraSetEmps.has(p.id)
+          );
+          const isStuck = hasValue && isPropagated && hasDeptStuckEmp;
           const status = hasValue
-            ? (isStuck ? 'Stuck' : ((val?.status === 'propagated' || val?.status === 'approved') ? 'Propagated' : 'Entered'))
+            ? (isStuck ? 'Stuck' : (isPropagated ? 'Propagated' : 'Entered'))
             : 'Pending';
           rows.push({
             ...baseRow,
@@ -1079,9 +1086,11 @@ export default function OrgKpiDataEntry() {
           const valKey = `${kk}||null||${emp.id}`;
           const val = existingValuesMap.get(valKey);
           const hasValue = val?.achieved_value !== null && val?.achieved_value !== undefined;
-          const isStuck = hasValue && stuckDefinitionKeys.has(kk);
+          const isPropagated = val?.status === 'propagated' || val?.status === 'approved';
+          // Employee-stuck: only this employee's child KPI being kra_set counts.
+          const isStuck = hasValue && isPropagated && !!kraSetEmpIdsByKey.get(kk)?.has(emp.id);
           const status = hasValue
-            ? (isStuck ? 'Stuck' : ((val?.status === 'propagated' || val?.status === 'approved') ? 'Propagated' : 'Entered'))
+            ? (isStuck ? 'Stuck' : (isPropagated ? 'Propagated' : 'Entered'))
             : 'Pending';
           rows.push({
             ...baseRow,
@@ -1099,7 +1108,7 @@ export default function OrgKpiDataEntry() {
     });
 
     return rows;
-  }, [frequencyFilteredKpis, existingValuesMap, ownershipMap, prevValuesMap, employeeCountMap, departments, allProfiles, mappedDepartmentsMap, mappedEmployeesMap, selectedPeriod, selectedYear, stuckDefinitionKeys]);
+  }, [frequencyFilteredKpis, existingValuesMap, ownershipMap, prevValuesMap, employeeCountMap, departments, allProfiles, mappedDepartmentsMap, mappedEmployeesMap, selectedPeriod, selectedYear, kraSetEmpIdsByKey]);
   if (kpisLoading) {
     return <TableSkeleton rows={5} columns={5} />;
   }
