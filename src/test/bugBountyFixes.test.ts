@@ -103,24 +103,26 @@ describe('BUG-019: Role-string safety in triggers and edge code', () => {
   });
 });
 
-// BUG-020: Reviewer-dashboard "Reviewed" counters and per-employee progress bar
-// silently showed 0 / dark bars because the slim KPI select used by
-// useKpisByPeriodRanges (the dashboard's data source) did not include the
-// stage-score signature columns (hr_pms_score, audit_score, management_score,
-// manager_score, skip_level_score). The stat-card logic and the progress bar
-// both rely on those fields to mark a KPI as "reviewed at this stage", so
-// trimming any of them out reduces visible review activity to zero.
-// This test pins the slim-select contract so a future trim doesn't recreate
-// the regression.
+// BUG-020 (v2.66.7.21): Reviewer-stage scores live on `review_submissions`,
+// NOT on `kpis`. A previous fix mistakenly added `manager_score`,
+// `skip_level_score`, `hr_pms_score`, `audit_score`, `management_score` to
+// SLIM_KPI_SELECT. Those columns do not exist on the `kpis` table, so every
+// PostgREST request 400'd silently and the entire reviewer dashboard
+// (HR PMS / Audit / Management / Total KPIs / Total Employees) collapsed to 0.
+// Additionally, `audit_score` is a typo — the auditor column on
+// `review_submissions` is named `auditor_score`.
+// This test pins the contract from the opposite direction: SLIM_KPI_SELECT
+// must NOT reference any of these reviewer-stage score columns.
 import fs from 'node:fs';
 import path from 'node:path';
 
-describe('BUG-020: Slim KPI select retains stage-score signature columns', () => {
-  const REQUIRED_SCORE_COLUMNS = [
+describe('BUG-020: Slim KPI select must not reference review_submissions score columns', () => {
+  const FORBIDDEN_SCORE_COLUMNS = [
     'manager_score',
     'skip_level_score',
     'hr_pms_score',
     'audit_score',
+    'auditor_score',
     'management_score',
   ];
 
@@ -128,14 +130,26 @@ describe('BUG-020: Slim KPI select retains stage-score signature columns', () =>
     path.resolve(__dirname, '../hooks/useKpis.ts'),
     'utf8',
   );
+  const slimBlock = slimSelectSource.match(/const SLIM_KPI_SELECT[\s\S]*?`;/)?.[0] ?? '';
 
-  for (const col of REQUIRED_SCORE_COLUMNS) {
-    it(`SLIM_KPI_SELECT includes ${col}`, () => {
-      const slimBlock = slimSelectSource.match(/const SLIM_KPI_SELECT[\s\S]*?`;/)?.[0] ?? '';
+  for (const col of FORBIDDEN_SCORE_COLUMNS) {
+    it(`SLIM_KPI_SELECT does NOT include ${col} (lives on review_submissions)`, () => {
       expect(
         slimBlock.includes(col),
-        `SLIM_KPI_SELECT must include ${col} so reviewer dashboards can detect "reviewed at this stage"`,
-      ).toBe(true);
+        `SLIM_KPI_SELECT must NOT include ${col}: this column does not exist on the kpis table — it lives on review_submissions and adding it makes every dashboard query 400.`,
+      ).toBe(false);
     });
   }
+
+  it('exposes a companion hook for fetching reviewer-stage scores from review_submissions', () => {
+    expect(slimSelectSource).toContain('useReviewSubmissionScoresByKpiIds');
+    expect(slimSelectSource).toContain("from('review_submissions')");
+  });
+
+  it('uses the canonical column name `auditor_score` (not the historical `audit_score` typo)', () => {
+    const hookBlock = slimSelectSource.match(/useReviewSubmissionScoresByKpiIds[\s\S]*?^}/m)?.[0] ?? '';
+    expect(hookBlock).toContain('auditor_score');
+    // The typo must not appear in the new hook
+    expect(hookBlock.includes('audit_score,') || hookBlock.includes(' audit_score ')).toBe(false);
+  });
 });
