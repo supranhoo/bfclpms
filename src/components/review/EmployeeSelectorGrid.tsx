@@ -244,6 +244,12 @@ export function EmployeeSelectorGrid({
   // Fix 1 & 3: Use multi-period hook so YTD/QTD/custom modes fetch ALL relevant months
   const { data: periodKpis } = useKpisByPeriodRanges(periodSelection.periodRanges);
 
+  // BUG-020 (v2.66.7.21): reviewer-stage scores live on review_submissions,
+  // not on kpis. Fetch a slim score-signature map keyed by kpi_id so HR PMS /
+  // Audit / Management dashboards can detect "reviewed at this stage".
+  const periodKpiIds = useMemo(() => (periodKpis || []).map(k => k.id), [periodKpis]);
+  const { data: submissionScoreMap } = useReviewSubmissionScoresByKpiIds(periodKpiIds);
+
   // Compute overall weighted scores per employee for this period
   const employeeScoreMap = useEmployeeScoresForPeriod(periodKpis);
 
