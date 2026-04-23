@@ -321,7 +321,20 @@ export function useKpisByPeriodRanges(periodRanges: Array<{ month: string; year:
  * auditor_score, management_score, final_score }>.
  */
 export function useReviewSubmissionScoresByKpiIds(kpiIds: string[]) {
-  const stableKey = kpiIds.length > 0 ? `${kpiIds.length}:${kpiIds[0]}` : '';
+  // v2.66.7.24 (BUG-022): deterministic hash of sorted ids prevents stale cache hits
+  // when two periods happen to share `length` and `firstId`. FNV-1a 32-bit on the
+  // sorted, joined id list — short string, no collisions in practice for our scale.
+  const stableKey = (() => {
+    if (kpiIds.length === 0) return '';
+    const sorted = [...kpiIds].sort();
+    const joined = sorted.join('|');
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < joined.length; i++) {
+      hash ^= joined.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    return `${kpiIds.length}:${hash.toString(16)}`;
+  })();
   return useQuery({
     queryKey: ['review-submission-scores-by-kpi-ids', stableKey],
     enabled: kpiIds.length > 0,
