@@ -159,6 +159,38 @@ export function EmployeeSelectorGrid({
   onSelectEmployee,
 }: EmployeeSelectorGridProps) {
   const { user, effectiveRole: role } = useAuth();
+  const queryClient = useQueryClient();
+  // Track in-flight fetches for the data this grid depends on so the refresh
+  // button can show a spinner and stay disabled until refetches settle.
+  const fetchingProfiles = useIsFetching({ queryKey: ['profiles-by-workflow-stage'] });
+  const fetchingKpis = useIsFetching({ queryKey: ['kpis-by-period-ranges'] });
+  const fetchingSubmissionScores = useIsFetching({ queryKey: ['review-submission-scores'] });
+  const fetchingProfilesAll = useIsFetching({ queryKey: ['profiles'] });
+  const fetchingTeam = useIsFetching({ queryKey: ['team-members'] });
+  const fetchingSkip = useIsFetching({ queryKey: ['skip-level-team-members'] });
+  const isRefreshing =
+    fetchingProfiles + fetchingKpis + fetchingSubmissionScores +
+    fetchingProfilesAll + fetchingTeam + fetchingSkip > 0;
+
+  const handleRefresh = useCallback(() => {
+    // Invalidate every dataset feeding the reviewer grid: employee lists,
+    // KPI rows for the period, and per-stage submission scores. Scoped by
+    // queryKey prefix so unrelated caches stay warm.
+    [
+      'profiles-by-workflow-stage',
+      'kpis-by-period-ranges',
+      'review-submission-scores',
+      'profiles',
+      'team-members',
+      'skip-level-team-members',
+      'employee-scores-for-period',
+      'bulk-employee-workflows',
+      'employee-filter-options',
+      'auditor-workload-summary',
+      'my-audit-assignments',
+    ].forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
+  }, [queryClient]);
+
   const { data: teamMembers, isLoading: teamLoading } = useTeamMembers(user?.id);
   const { data: allProfiles, isLoading: profilesLoading } = useProfiles();
   // Fetch skip-level members for team view (merged) or standalone skip_level view
