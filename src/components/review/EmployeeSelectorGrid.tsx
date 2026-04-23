@@ -440,7 +440,10 @@ export function EmployeeSelectorGrid({
         badge3: empKpis.filter(k => doneStatuses.includes(k.status || '')).length,
         total: empKpis.length,
         clearedKraSet,
-        scoreReviewed: empKpis.filter(k => (k as any).hr_pms_score !== null && (k as any).hr_pms_score !== undefined).length,
+        scoreReviewed: empKpis.filter(k => {
+          const s = submissionScoreMap?.get(k.id);
+          return s != null && s.hr_pms_score != null;
+        }).length,
         orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
         nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
       };
@@ -453,7 +456,10 @@ export function EmployeeSelectorGrid({
         badge3: empKpis.filter(k => ['management_review', 'approved'].includes(k.status || '')).length,
         total: empKpis.length,
         clearedKraSet,
-        scoreReviewed: empKpis.filter(k => (k as any).audit_score !== null && (k as any).audit_score !== undefined).length,
+        scoreReviewed: empKpis.filter(k => {
+          const s = submissionScoreMap?.get(k.id);
+          return s != null && s.auditor_score != null;
+        }).length,
         orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
         nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
       };
