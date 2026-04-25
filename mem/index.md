@@ -1,11 +1,10 @@
 # Project Memory
 
 ## Core
-Profiles list queries MUST use fetchAllPaged() — PostgREST caps unranged reads at 1000 rows; EmployeeCombobox and similar pickers cannot recover from truncated input. See mem://architecture/profiles-query-policy.
+Always sync DOCUMENTATION.md + POLICY.md in the same step as code changes; append to Version History.
+Every bug fix needs a regression test in src/test/bugBountyFixes.test.ts.
+Use semantic design tokens (HSL) — never raw colors in components, except inside isolated brand SVG art.
+User-initiated refreshes on primary data views must show the centered RefreshOverlay, not just an inline spinner.
 
 ## Memories
-- [Profiles query policy](mem://architecture/profiles-query-policy) — Mandatory paged fetch contract for all profile list/search/distinct-value queries
-- [Copy KRAs Org KPI integrity](mem://features/admin/copy-kras-org-kpi-integrity) — Org KPI inheritance + paged employee picker
-- [Org KPI management suite](mem://features/admin/org-kpi-management-suite) — Centralized data entry, inheritance, and governance
-- [Data repair engine](mem://features/admin/data-repair-engine) — Three-phase managed data repair workflows
-- [Universal scoring logic](mem://architecture/pms/universal-scoring-logic) — 8-stage scoring fallback chain
+- [Refresh overlay pattern](mem://design/refresh-overlay-pattern) — Centered RefreshOverlay, user-click gating, rocket+chart art

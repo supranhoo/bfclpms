@@ -1,0 +1,6 @@
+---
+name: refresh-overlay-pattern
+description: Centered RefreshOverlay component for user-initiated refresh actions on primary data views — rocket + green growth chart, gated to user clicks
+type: design
+---
+For any user-initiated refresh on a primary data view (reviewer grids, dashboards, large tables), mount `<RefreshOverlay open={...} />` (`src/components/ui/RefreshOverlay.tsx`) and gate `open` to a `userRefreshing` flag set inside the refresh handler and cleared by a `useEffect` once tracked queries settle. Do NOT bind `open` directly to `useIsFetching` — that fires on initial loads and looks intrusive. Inline button spinners stay for button state. Visual: rocket launching along a rising green growth chart (brand: navy `#0E2A47` + green `#22C55E`). Honors `prefers-reduced-motion` via `rg-*` keyframes in `src/index.css`. Reference wiring: `EmployeeSelectorGrid.tsx`. Policy: POLICY.md §103.
