@@ -328,15 +328,16 @@ export function useDetectTrainingNeeds() {
       });
 
       if (error) throw error;
-      return data as number;
+      return { total: data as number, period: reviewPeriod, year: reviewYear };
     },
-    onSuccess: (count) => {
+    onSuccess: ({ total }) => {
       queryClient.invalidateQueries({ queryKey: ['training-needs'] });
       queryClient.invalidateQueries({ queryKey: ['tni-by-category'] });
       queryClient.invalidateQueries({ queryKey: ['tni-by-department'] });
+      queryClient.invalidateQueries({ queryKey: ['tni-summary'] });
       toast({ 
         title: 'Training needs detection complete', 
-        description: `Identified ${count} new training need${count !== 1 ? 's' : ''}.` 
+        description: `Identified ${total} new record${total !== 1 ? 's' : ''} (skill gaps + compliance flags). See cards for breakdown.`
       });
     },
     onError: (error: any) => {
