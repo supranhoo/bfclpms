@@ -1,92 +1,65 @@
-## RCA — "Assigned Workflow" column is wrong
+# Simplify Loading Art — Rocket-only "Please wait"
 
-### What you'll see vs what's true
+## What you'll see
 
-The Excel export shows **the same chain** (`Self → L1 → Skip → HR PMS → Auditor → Mgmt`) for **every row**, regardless of the employee's actual workflow template. Live database confirms employees are on **at least 5 distinct workflow chains** in the current period (e.g., `Self → L1 → Auditor`, `Self → HR PMS`, `Self → L1 → HR PMS`, `Self → Audit → Mgmt`, `Self → L1 → Skip → HR PMS`). The export ignores all of this.
+The centered page-loading overlay (used during page navigation and initial data fetches) will be redesigned. The X/Y axes, the green growth-chart arrows and the soft green ellipse will all be **removed**. In their place, a single **rocket** will animate **upward** with a small flame trail. The caption stays: **"Please wait"** with sub-caption **"Loading…"**.
 
-### Root cause
+## Visual mock (ASCII)
 
-In the `get_kpi_journey_report` RPC (current production version, migration `20260425115401_*.sql`), the `emp_workflow` CTE hardcodes a constant array for every employee instead of resolving the per-employee template:
-
-```sql
--- WRONG (current)
-emp_workflow AS (
-  SELECT DISTINCT
-    pg.employee_id,
-    ARRAY['self_review','manager_check','skip_level_check',
-          'hr_pms_review','audit','management_review']::text[] AS stages
-  FROM page pg
-)
+```text
+ ┌─────────────────────────────┐
+ │                             │
+ │              🚀  ← rises    │
+ │             ╱               │
+ │            ╱  (motion       │
+ │           ╱    trail,       │
+ │          ✦     subtle)      │
+ │                             │
+ │       Please wait           │
+ │         Loading…            │
+ └─────────────────────────────┘
 ```
 
-Because the array is a constant, `workflow_chain` joins always produce the maximal six-stage label. The RPC never calls `get_bulk_employee_workflows` (the canonical resolver used everywhere else in the app — reviewer grids, bottleneck report, admin data entry) which honours `workflow_config` overrides, period scope, and the `kra_set / approved` framing stages.
+- Rocket: navy body (`#0E2A47`), green fins (`#22C55E`), tinted window (`#86EFAC`), orange flame (`#FB923C`).
+- Motion: rocket translates upward in a gentle loop (≈40px travel, 1.6s ease-in-out, infinite). Flame flickers. A faint dotted trail fades in below the rocket as it rises, then resets.
+- Honors `prefers-reduced-motion`: animation pauses, rocket sits centered.
+- Container (rounded card, border, shadow, blur backdrop) and "Please wait / Loading…" typography are unchanged.
 
-This is the same class of defect as BUG-031 (RPC built in isolation, ignoring the canonical helper), and the existing test BUG-024 only checks that the column exists in the export — it does not check correctness against per-employee config. That is why the regression slipped through.
+## Where it appears
 
-### Other reports — RCA scope check
+No change to gating logic — same two triggers as today:
+1. `Suspense` fallback for route lazy-loading (`DashboardLayout.tsx`).
+2. `RouteDataLoadingGate` while `useIsFetching() > 0` after a `pathname` change.
 
-I scanned all server-side report functions for the same anti-pattern (hardcoded stage arrays bypassing `get_bulk_employee_workflows` / `get_employee_workflow`):
+Refresh button behavior unchanged (inline spinner only, per POLICY.md §103).
 
-- `useBottleneckReport`, reviewer grids, `useAdminDataEntry`, `usePendingSelfReviews`, `useOrgKpiAuditReview` — all already use `get_employee_workflow` / `get_bulk_employee_workflows`. **Correct.**
-- `get_kpi_journey_report` — **only offender** (the `emp_workflow` CTE).
+## Technical changes
 
-So the bug is isolated to the KPI Journey export.
-
-## Fix
-
-### 1. Database migration — redefine `get_kpi_journey_report`
-
-Replace the hardcoded `emp_workflow` CTE with a real per-employee resolution by joining to `get_bulk_employee_workflows(...)` over the `page` employee set, scoped to the report's `(p_period, p_year)`:
-
-```sql
-emp_workflow AS (
-  SELECT bw.employee_id, bw.stages
-  FROM get_bulk_employee_workflows(
-    ARRAY(SELECT DISTINCT employee_id FROM page),
-    p_period, p_year
-  ) AS bw
-)
-```
-
-Then `workflow_chain` keeps its existing label mapping (`self_review→Self`, `manager_check→L1`, `skip_level_check→Skip`, `hr_pms_review→HR PMS`, `audit→Auditor`, `management_review→Mgmt`) but explicitly **filters out framing stages** (`kra_set`, `approved`) since those are not user-facing review steps. Order is preserved via `WITH ORDINALITY`. If an employee has no resolved template, fall back to the previous default.
-
-Everything else in the RPC stays unchanged.
-
-### 2. Regression test — `BUG-033` in `src/test/bugBountyFixes.test.ts`
-
-Pin the new migration text against three contracts:
-- Calls `get_bulk_employee_workflows` with `(p_period, p_year)`.
-- Excludes `kra_set` and `approved` from the rendered chain.
-- The wrong-form constant `ARRAY['self_review','manager_check','skip_level_check','hr_pms_review','audit','management_review']` is no longer present.
-
-(BUG-024 is left in place; it still asserts the export carries the column.)
-
-### 3. Documentation & policy
-
-- `DOCUMENTATION.md` v2.66.7.35 — describe the RCA and fix.
-- `POLICY.md` — append a rule under §104 (or a new §105): any RPC that emits a per-employee workflow chain MUST resolve it via `get_bulk_employee_workflows` / `get_employee_workflow`. Hardcoded stage arrays in report RPCs are forbidden.
-- Memory: add a small architecture note pointing future RPC authors at the canonical resolver.
+| File | Change |
+|---|---|
+| `src/components/ui/RocketGrowthArt.tsx` | Rename internals / rewrite SVG: remove axes (`<line>` x/y, arrowheads), remove ellipse, remove all three `rg-arrow` groups. Keep only the rocket + flame. Reposition rocket to center of a tighter `viewBox` (e.g. 120×140). Rename component to `RocketLaunchArt` and re-export old name as alias for backwards compatibility. |
+| `src/index.css` | Remove unused `rg-arrow-rise` keyframe and `.rg-arrow*` classes. Replace `rg-rocket-launch` keyframe with an upward-travel loop (translateY from +20px → −20px with fade reset, or continuous loop with opacity dip at top). Keep `rg-flame-flicker` and `prefers-reduced-motion` guard. |
+| `src/components/ui/PageLoadingOverlay.tsx` | No structural change; just consumes the simplified art. |
+| `src/components/ui/RefreshOverlay.tsx` | Already deprecated; will pick up the new art automatically via the shared component (no edit needed). |
+| `src/test/bugBountyFixes.test.ts` | Add **BUG-034**: assert `RocketGrowthArt.tsx` no longer references axes / arrow markup (`rg-arrow`, the polygon arrowheads, the growth-chart `<line>` strokes) and that the rocket+flame remain. |
+| `DOCUMENTATION.md` | v2.66.7.36 entry describing the simplified art. |
+| `POLICY.md` | Minor note under §103 — loading indicator art is "rocket ascending"; growth-chart arrows removed for clarity. |
+| `mem/design/page-loading-overlay-pattern` | Update description to reflect rocket-only art. |
 
 ## Risk & Impact Report
 
 | Area | Impact |
 |---|---|
-| Data | None (read-only RPC; output now matches the per-employee template that the rest of the app already uses) |
+| Data | None (purely presentational SVG + CSS) |
 | Workflow | None |
-| UI/UX | Excel "Assigned Workflow" column becomes accurate and varies per employee |
-| Performance | One extra set-returning function call per export page; `get_bulk_employee_workflows` is the same call the reviewer grid already makes for hundreds of employees, so cost is acceptable |
-| Regression | Low. Other reports already use the canonical resolver, so this aligns the journey RPC with established patterns. The new test pins the contract |
-| Mitigation | New BUG-033 test + policy rule prevent the hardcoded-array anti-pattern from returning |
-
-## Files to change
-
-- `supabase/migrations/<new>_fix_kpi_journey_per_employee_workflow.sql`
-- `src/test/bugBountyFixes.test.ts` (add BUG-033)
-- `DOCUMENTATION.md` (v2.66.7.35 entry)
-- `POLICY.md` (workflow-chain resolution rule)
-- `mem/architecture/database/...` (small memory note) and `mem/index.md`
+| UI/UX | Cleaner, less busy loading state; identical placement, container, and copy |
+| Accessibility | Maintained — `role="status"`, `aria-live`, `prefers-reduced-motion` |
+| Performance | Slightly lighter SVG and fewer animated nodes |
+| Regression | Low. Both overlays import the same shared component; new test pins the markup contract |
+| Mitigation | BUG-034 regression test + memory/doc/policy updates |
 
 ## Out of scope
 
-- Changing the on-screen KPI Journey table (export-only column, per BUG-024).
-- Re-labelling the stage tokens (Self/L1/Skip/HR PMS/Auditor/Mgmt are kept).
+- Changing the caption text, container chrome, or gating logic.
+- Touching the refresh button's inline spinner.
+
