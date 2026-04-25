@@ -452,3 +452,24 @@ describe('BUG-026: TNI multi-period & AY filtering', () => {
     expect(src).toMatch(/and\(review_period\.eq\.\$\{r\.month\},review_year\.eq\.\$\{r\.year\}\)/);
   });
 });
+
+// BUG-027: Org KPI ↔ Normal KPI scope toggle failed with
+// "column rp.month_name does not exist". The trigger and cascading RPC
+// referenced wrong review_periods column names. Lock canonical names.
+describe('BUG-027: review_periods column names in org-kpi scope functions', () => {
+  it('latest fix migration uses rp.period_name and rp.review_year (not month_name/year)', async () => {
+    const fs = await import('node:fs');
+    const path = 'supabase/migrations/20260425064651_ece950e9-bb5a-422f-9d0f-a22a9ed1ae26.sql';
+    const sql = fs.readFileSync(path, 'utf-8');
+    // Both functions present
+    expect(sql).toMatch(/CREATE OR REPLACE FUNCTION public\.fn_sync_org_status_to_future_open_periods/);
+    expect(sql).toMatch(/CREATE OR REPLACE FUNCTION public\.change_org_kpi_scope_cascading/);
+    // Correct column names used
+    expect(sql).toMatch(/rp\.period_name\s*=/);
+    expect(sql).toMatch(/rp\.review_year\s*=/);
+    // Bad names absent (outside of comments — we strip line comments first)
+    const noComments = sql.replace(/--.*$/gm, '');
+    expect(noComments).not.toMatch(/rp\.month_name/);
+    expect(noComments).not.toMatch(/rp\.year\s*=/);
+  });
+});
