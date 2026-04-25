@@ -1,0 +1,6 @@
+---
+name: page-loading-overlay-pattern
+description: Centered PageLoadingOverlay for page navigation and initial data loads — rocket+growth-chart art, "Please wait" caption, gated by Suspense + useIsFetching after route change
+type: design
+---
+For page-level loading feedback, mount `<PageLoadingOverlay open={...} label="Please wait" />` (`src/components/ui/PageLoadingOverlay.tsx`). It is wired globally in `src/components/layout/DashboardLayout.tsx` via (a) the `Suspense` fallback for route lazy-loading and (b) `RouteDataLoadingGate`, which arms on `useLocation()` `pathname` change and shows the overlay while `useIsFetching() > 0`, auto-disarming when the fetch count returns to 0 (15s safety timeout). Do NOT mount this overlay for user-initiated refresh clicks or background refetches — refresh actions use inline button feedback only (per POLICY.md §103). Brand art lives in `src/components/ui/RocketGrowthArt.tsx` (navy `#0E2A47` + green `#22C55E`); `rg-*` keyframes in `src/index.css` honor `prefers-reduced-motion`. The legacy `RefreshOverlay` is `@deprecated` and must not be mounted by new call sites.
