@@ -1,77 +1,79 @@
-## Plan — Add "Assigned Workflow" column to KPI Journey Excel export only
+## Plan — Fix TNI Detection Logic (align with KPI definition)
 
 ### Goal
-Add an **Assigned Workflow** column to the **Excel export** of the KPI Journey Timeline report. The on-screen table is **unchanged** (kept dense by request).
+Make `detect_training_needs_for_period` (and the TNI Report) accurately reflect *real* skill/knowledge gaps from PMS data, by separating **compliance failures** (auto-zero non-submissions) from **training needs**. Training delivery tracking stays out of scope (handled by LMS).
 
-The cell value is a **compact stage-chain string per employee**, e.g.:
-- `Self → L1 → HR PMS → Audit → Mgmt`
-- `Self → L1 → Skip → HR PMS → Audit → Mgmt`
-- `Self → L1` (short workflow)
+---
 
-### How the chain is resolved
-Per **employee + period**, using the same hierarchy as the existing `get_bulk_employee_workflows` RPC:
+### Root cause
+Current detection treats *every* `final_score < threshold` (including auto-zero compliance penalties) as a skill gap. This pollutes the TNI Report — HR can't tell whether a low score means "needs training" or "didn't submit on time."
 
-```text
-period-specific employee → ongoing employee
-  → period-specific department → ongoing department
-    → period-specific pms_grade → ongoing pms_grade
-      → global employee → global department → global pms_grade
-        → system default workflow_template (is_default = true)
-```
-
-The resolved template's `stages` array is mapped to compact labels:
-
-| DB stage             | Compact label |
-|----------------------|---------------|
-| `self_review`        | Self          |
-| `manager_check`      | L1            |
-| `skip_level_check`   | Skip          |
-| `hr_pms_review`      | HR PMS        |
-| `audit`              | Audit         |
-| `management_review`  | Mgmt          |
-| `approved`           | *(omitted — terminal)* |
-
-Joined with `→`. Falls back to `'—'` when no workflow resolves.
+---
 
 ### Changes
 
-**1. Database — extend `get_kpi_journey_report` RPC (migration)**
-- Add a `resolved_workflow` CTE that, for the **paged** KPIs only, joins through the hierarchy and returns the `stages` array per `employee_id`.
-- Each output row gains `'workflowChain': text` — the pre-formatted compact chain string built in SQL using the label map above.
-- Backward-compatible: existing fields untouched, RPC signature unchanged.
+**1. Schema — `training_needs` table (migration)**
+Extend the `tni_gap_type` enum:
+```
+'skill' | 'knowledge' | 'behavior' | 'compliance'   ← NEW
+```
+No new columns. The `gap_type = 'compliance'` value is the discriminator.
 
-**2. Hook — `src/hooks/useKpiJourneyReport.ts`**
-- Extend `KpiJourneyRow` with `workflowChain: string`.
-- `fetchKpiJourneyExportData` already paginates the same RPC in 500-row batches — no signature change.
+**2. RPC — `detect_training_needs_for_period` (migration)**
+Two-pass insert in one function:
 
-**3. UI — `src/pages/reports/KpiJourneyReport.tsx`**
-- **No table changes.** No new `<TableHead>` / `<TableCell>`.
-- In `handleExport`, insert one new field into the export object, immediately after `'Frequency'` and before `'Month'`:
-  ```ts
-  'Assigned Workflow': r.workflowChain,
-  ```
+- **Pass A — Compliance gaps**: rows where the low score came from auto-zero / non-submission. Detect via:
+  - `submissions.self_score IS NULL` AND `final_score = 0`, OR
+  - `audit_logs` shows `auto_advance_overdue` / `bulk_zero_score` performer for that KPI.
+  → insert with `gap_type='compliance'`, `priority='high'`, `training_recommendation='Auto-flagged: non-submission / compliance penalty. No training required.'`
 
-**4. Tests — `src/test/bugBountyFixes.test.ts`**
-- Add **BUG-024** asserting:
-  - `KpiJourneyRow` type carries `workflowChain`.
-  - `KpiJourneyReport.tsx` source includes the `'Assigned Workflow'` export key.
-  - On-screen `<TableHeader>` block does **not** contain "Assigned Workflow" (regression guard so the column stays export-only).
+- **Pass B — Genuine skill gaps**: low score *with* a self-submission present (employee tried, scored low).
+  → insert with `gap_type='skill'`, priority by score band (existing logic).
 
-**5. Documentation**
-- `DOCUMENTATION.md` → bump to **v2.66.7.26**, document the new export-only column and the stage-label mapping.
-- `POLICY.md` → add **§97**: *"The KPI Journey Timeline Excel export must surface the resolved workflow as a compact stage chain (e.g. `Self → L1 → HR PMS → Audit → Mgmt`) per employee, using the same workflow-resolution hierarchy as the workflow engine. The on-screen table remains unchanged to preserve column density."*
+Both passes keep the existing dedup guard (`NOT EXISTS … kpi_id`).
+
+**3. Hook — `src/hooks/useTNI.ts`**
+- Add `'compliance'` to `TNIGapType` union.
+- `useTNISummary` returns extra fields: `complianceGaps`, `genuineTrainingNeeds`.
+- `useTrainingNeeds` accepts an optional `gapType` filter.
+
+**4. UI — `src/pages/reports/TNIReport.tsx`**
+- New summary card: **Compliance Gaps** (separate from Total Training Needs).
+- "Total Training Needs" card now excludes compliance rows.
+- Add a **Gap Type filter** (All / Training / Compliance) above the Individual tab.
+- Individual table: add "Gap Type" badge column (skill = blue, compliance = amber).
+- Excel export: existing `Gap Type` column already present — values will now reflect the split.
+
+**5. Detection trigger UI**
+In the "Detect TNI" button toast, show: *"Identified X training needs and Y compliance gaps."*
+
+**6. Tests — `src/test/bugBountyFixes.test.ts`**
+Add **BUG-025** — `detectTrainingNeedsCompliance.test.ts`:
+- Auto-zero KPI (no self-submission) → inserted with `gap_type='compliance'`.
+- Self-submitted low score (1.5) → inserted with `gap_type='skill'`.
+- Already-detected KPI → not re-inserted.
+- Summary hook splits totals correctly.
+
+**7. Docs**
+- `DOCUMENTATION.md` → bump to **v2.66.7.27**, document the compliance/skill split and detection rules.
+- `POLICY.md` → add **§98**: *"TNI detection must distinguish discipline failures (auto-zero / non-submission) from genuine skill gaps. Compliance gaps are tracked for HR visibility but are not eligible for training plans; training delivery and effectiveness are tracked in the LMS module (out of PMS scope)."*
+
+---
 
 ### Risk & Impact
 | Area | Impact |
 |------|--------|
-| Data | Read-only RPC extension; no schema, no RLS, no column changes. |
-| Workflow | None — resolution mirrors `get_bulk_employee_workflows`. |
-| UI/UX | None — on-screen table unchanged. |
-| Performance | Resolution runs on paged subsets only (≤500 per export batch); negligible cost. Payload gains one short string per row. |
-| Regression | Low — RPC remains backward-compatible; no rendering paths altered. |
+| Data | New enum value (additive); existing rows unchanged. Re-running detection is idempotent. |
+| Workflow | None — TNI is read-only consolidation. |
+| UI/UX | One new card + one filter. Existing layout preserved. |
+| LMS integration | Clean handoff — TNI exposes `gap_type='skill'` rows as training-eligible. |
+| Regression | Low — RPC stays backward-compatible (same signature, same return). |
 
 ### Out of Scope
-- No on-screen column.
-- No filter on workflow.
-- No change to the workflow engine or `get_bulk_employee_workflows`.
-- No changes to other reports.
+- Training delivery / attendance / effectiveness (LMS).
+- Auto-scoring the HR person's KPI (user declined).
+- New training_records table.
+- Changes to PIP workflow.
+
+### Optional follow-up (not in this build)
+A "Re-classify existing rows" admin action that retroactively converts already-detected auto-zero rows to `gap_type='compliance'` — flag for after this lands if HR wants historical cleanup.
