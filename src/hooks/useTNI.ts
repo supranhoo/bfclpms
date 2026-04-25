@@ -385,6 +385,57 @@ export function useDetectTrainingNeeds() {
   });
 }
 
+// Backfill training needs across a range of (month, year) periods
+export function useBackfillTrainingNeeds() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ ranges, threshold = 3.0, onProgress }: {
+      ranges: PeriodRange[];
+      threshold?: number;
+      onProgress?: (done: number, total: number, currentLabel: string) => void;
+    }) => {
+      let totalDetected = 0;
+      const perPeriod: { period: string; year: number; detected: number; error?: string }[] = [];
+      for (let i = 0; i < ranges.length; i++) {
+        const r = ranges[i];
+        onProgress?.(i, ranges.length, `${r.month.slice(0,3)} ${r.year}`);
+        try {
+          const { data, error } = await supabase.rpc('detect_training_needs_for_period', {
+            p_review_period: r.month,
+            p_review_year: r.year,
+            p_threshold: threshold,
+          });
+          if (error) throw error;
+          const n = (data as number) ?? 0;
+          totalDetected += n;
+          perPeriod.push({ period: r.month, year: r.year, detected: n });
+        } catch (e: any) {
+          perPeriod.push({ period: r.month, year: r.year, detected: 0, error: e?.message || String(e) });
+        }
+      }
+      onProgress?.(ranges.length, ranges.length, 'done');
+      return { totalDetected, perPeriod };
+    },
+    onSuccess: ({ totalDetected, perPeriod }) => {
+      queryClient.invalidateQueries({ queryKey: ['training-needs'] });
+      queryClient.invalidateQueries({ queryKey: ['tni-by-category'] });
+      queryClient.invalidateQueries({ queryKey: ['tni-by-department'] });
+      queryClient.invalidateQueries({ queryKey: ['tni-summary'] });
+      const errors = perPeriod.filter(p => p.error);
+      toast({
+        title: 'Backfill complete',
+        description: `Detected ${totalDetected} record${totalDetected !== 1 ? 's' : ''} across ${perPeriod.length} month${perPeriod.length !== 1 ? 's' : ''}.${errors.length ? ` ${errors.length} failed.` : ''}`,
+        variant: errors.length ? 'destructive' : 'default',
+      });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Backfill failed', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
 // Get TNI summary stats
 export function useTNISummary(reviewPeriod?: string, reviewYear?: number, periodRanges?: PeriodRange[]) {
   return useQuery({
