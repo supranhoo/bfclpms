@@ -605,6 +605,14 @@ export function KpiDetailsTable({
                   
                   // Show N/A if: (1) stage completed with no score, OR (2) KPI is marked N/A, no score, and stage has been reached
                   const showNA = score === null && (stageCompleted || (submission?.is_na && stageReached));
+                  // Org KPI Self-bypass: Self-review is not collected for Org KPIs (the achieved
+                  // value is provided by the Data Owner via org_kpi_values). Show a tooltipped
+                  // em-dash instead of a misleading amber "N/A" badge. Genuine N/A still wins.
+                  const isOrgKpiSelfBypass =
+                    col.key === 'self_score' &&
+                    kpi.is_org_level === true &&
+                    score === null &&
+                    !submission?.is_na;
                    // Show "Re-review" indicator ONLY when score is null, KPI is AT that stage,
                    // AND a later stage already has a score (evidence of rollback per POLICY §33).
                    // Without a downstream score, the null simply means the stage is pending.
@@ -619,7 +627,16 @@ export function KpiDetailsTable({
                    const showReReview = score === null && isAtCurrentStage && !showNA && col.key !== 'self_score' && hasDownstreamScore;
                   return (
                     <TableCell key={col.key} className="text-center">
-                      {showNA ? (
+                      {isOrgKpiSelfBypass ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="text-muted-foreground cursor-help">—</span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs">
+                            Self-review is not collected for Org KPIs. The achieved value is provided by the Data Owner.
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : showNA ? (
                         <Badge variant="outline" className="bg-muted/50 text-muted-foreground text-xs">N/A</Badge>
                       ) : showReReview ? (
                         <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-700 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-300 text-xs">
