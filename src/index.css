@@ -158,3 +158,49 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* =====================================================================
+ * RefreshOverlay animations (rocket + rising growth-chart arrows).
+ * Scoped class names (rg-*) avoid collisions with other components.
+ * Honors prefers-reduced-motion: animations are paused for accessibility.
+ * ===================================================================== */
+@keyframes rg-arrow-rise {
+  0%   { opacity: 0; transform: translateY(8px) scale(0.92); }
+  60%  { opacity: 1; transform: translateY(0) scale(1.04); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes rg-rocket-launch {
+  0%   { transform: translate(0, 4px) rotate(0deg); }
+  50%  { transform: translate(2px, -3px) rotate(2deg); }
+  100% { transform: translate(0, 4px) rotate(0deg); }
+}
+
+@keyframes rg-flame-flicker {
+  0%, 100% { opacity: 0.85; transform: scaleY(1); }
+  50%      { opacity: 1;    transform: scaleY(1.25); }
+}
+
+.rg-arrow {
+  transform-origin: left bottom;
+  animation: rg-arrow-rise 1.6s ease-out infinite;
+}
+.rg-arrow-1 { animation-delay: 0s; }
+.rg-arrow-2 { animation-delay: 0.25s; }
+.rg-arrow-3 { animation-delay: 0.5s; }
+
+.rg-rocket {
+  transform-origin: center;
+  animation: rg-rocket-launch 1.8s ease-in-out infinite;
+}
+
+.rg-flame {
+  transform-origin: center top;
+  animation: rg-flame-flicker 0.45s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rg-arrow,
+  .rg-rocket,
+  .rg-flame { animation: none; }
+}
