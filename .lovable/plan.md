@@ -1,61 +1,59 @@
-## Goal
+## Root Cause
 
-Make the **Training Needs Identification (TNI) Report** support viewing data across **multiple assessment months** — including the full **Assessment Year (July → June)** — instead of only one month at a time. This lets HR/Management monitor the Training & Development KPI across the entire fiscal cycle.
+Toggling a KPI from **Organization-Level → Normal** (or vice-versa) fails system-wide with:
 
-## What you'll see in the UI
+> `Failed to update KPI — column rp.month_name does not exist`
 
-A new **Period Mode** selector at the top of the TNI Report, replacing the current single Year + Period dropdowns:
+This is **not** specific to Jitendra Dwivedi — it blocks **every user**. The error comes from a database trigger that fires automatically whenever `kpis.is_org_level` or `kpis.org_level_scope` changes.
 
-| Mode | Behaviour |
+### What's broken
+
+Two database functions reference `public.review_periods` columns that don't exist on that table:
+
+| Function uses | Actual column |
 |---|---|
-| **Single Month** | Current behaviour — pick one month (e.g. April 2026) |
-| **QTD** | Quarter-to-date ending at selected month |
-| **YTD** | Calendar year-to-date (Jan → selected month) |
-| **AY (Jul–Jun)** ⭐ new | Full Assessment Year — auto-loads Jul of prior year through Jun of selected year (or current cycle if mid-year) |
-| **Custom** | Pick any From → To range, even cross-year |
+| `rp.month_name` | `rp.period_name` |
+| `rp.year` | `rp.review_year` |
 
-Below the selector, a small badge shows e.g. *"12 months · Jul 2025 → Jun 2026"* so users always know the active scope.
+Affected functions (both introduced/last-edited on 2026-04-21):
 
-The **Detect TNI** button stays month-scoped (detection always runs on a single month — running it across 12 months in one click is unsafe). When a multi-month range is active, the button changes to a small dropdown: *"Detect for → [month]"*, defaulting to the latest month in the range.
+1. **`fn_sync_org_status_to_future_open_periods`** — the AFTER UPDATE trigger on `kpis` that propagates Org→Normal flips to future open periods. **This is what's blowing up the toggle.**
+2. **`change_org_kpi_scope_cascading`** — the cascading scope-change RPC (used by Org KPI Management's "Apply scope to future months").
 
-## What changes under the hood
+Verified against live schema: `review_periods` has only `period_name` and `review_year` — no `month_name` or `year` column.
 
-All four data hooks (`useTNISummary`, `useTrainingNeeds`, `useTNIByCategory`, `useTNIByDepartment`) currently take a single `reviewPeriod` + `reviewYear`. They will be extended to accept a `periodRanges: Array<{month, year}>` (the same shape already used by `ReviewPeriodSelectorEnhanced` elsewhere in the app — Multi-Period Aggregation pattern).
+## Fix
 
-Queries switch from:
+A single migration that **redefines both functions** with the correct column names. Bodies are byte-equivalent to the existing versions except for the two-column rename — no logic, no signature, no behavioural change.
+
+```sql
+-- inside both functions, replace
+JOIN public.review_periods rp ON rp.id = rpl.review_period_id
+WHERE rp.month_name = ...
+  AND rp.year       = ...
+-- with
+JOIN public.review_periods rp ON rp.id = rpl.review_period_id
+WHERE rp.period_name = ...
+  AND rp.review_year = ...
 ```
-.eq('review_period', month).eq('review_year', year)
-```
-to:
-```
-.or( ranges.map(r => `and(review_period.eq.${r.month},review_year.eq.${r.year})`).join(',') )
-```
-
-Aggregations (category, department, summary cards) sum across all selected months. Duplicate (employee + KPI) rows across months are kept as separate records — each month's gap is a distinct identification, which matches how TNI is recorded today.
-
-## Excel export
-
-Export filename becomes `TNI_Report_<Mode>_<Range>.xlsx` (e.g. `TNI_Report_AY_Jul2025-Jun2026.xlsx`). Two sheets:
-1. **Detail** — existing columns + already-present *Period* / *Year* columns (so AY exports show which month each gap came from).
-2. **Monthly Summary** ⭐ new — pivot of Skill Gaps / Compliance Gaps / High Priority / Employees Affected per month, so you can see the trend across the AY at a glance.
-
-## Files to change
-
-- `src/hooks/useTNI.ts` — extend 4 hooks to accept `periodRanges`; build OR-filter
-- `src/pages/reports/TNIReport.tsx` — swap single-month picker for new mode selector; wire ranges; update Detect button to month-picker dropdown when multi-month; add Monthly Summary sheet to export
-- `src/components/reports/TNIPeriodSelector.tsx` ⭐ new — small wrapper around the existing pattern that adds the **AY (Jul–Jun)** preset on top of Single/QTD/YTD/Custom
-- `src/test/bugBountyFixes.test.ts` — add `BUG-026`: multi-period filter returns union of months; AY preset spans Jul→Jun correctly across year boundary
-- `DOCUMENTATION.md` — bump to v2.66.7.28, document AY preset and multi-period TNI
-- `POLICY.md` — §99: TNI monitoring scope — single month is operational, AY is for KPI evaluation
 
 ## Risk & Impact
 
-- **Data**: Read-only change. No schema or RLS changes. Detection RPC stays single-month (safe).
-- **Workflow**: Default mode on first load = **Single Month / current month** → existing users see no change unless they switch modes.
-- **Performance**: Worst case AY = 12 months × ~rows per month. Existing TNI tables are small (one row per low-score KPI per employee per month); single SELECT with OR-filter is fine. We add a `staleTime` of 2 min to avoid refetches when toggling tabs.
-- **Regression**: Single-month path is preserved as a special case (`periodRanges.length === 1`). Existing tests stay green.
+- **Data**: None. Pure function redefinition; no rows touched, no schema/RLS change.
+- **Workflow**: Restores the broken Org↔Normal toggle to working order. The lock-check inside both functions starts working correctly (today it always errors before reaching the check, so locked-period protection is currently *non-functional* — this fix actually re-enables it).
+- **UI**: None.
+- **Regression risk**: Very low. Function signatures unchanged; trigger binding unchanged. Existing migrations stay in history (we only redefine via `CREATE OR REPLACE`).
+- **Mitigation**: Add `BUG-027` to `src/test/bugBountyFixes.test.ts` that pins the corrected column names by reading the latest migration file — prevents the typo from sneaking back in if either function is ever rewritten.
 
-## Out of scope (will not be done)
+## Files
 
-- Bulk multi-month detection — kept single-month for safety. If you want one-click "Detect AY", say so and we'll add a confirmation dialog that loops month-by-month.
-- Changing how TNI rows are stored (still one row per month per gap).
+- `supabase/migrations/<timestamp>_fix_org_kpi_scope_toggle_column_names.sql` ⭐ new
+- `src/test/bugBountyFixes.test.ts` — add BUG-027
+- `DOCUMENTATION.md` — append v2.66.7.29 entry under Version History
+- `POLICY.md` — append §100 codifying the canonical `review_periods` column names so future migrations don't repeat the typo
+
+## Verification after deploy
+
+1. Open Jitendra Dwivedi's KPI in *View KPI Details* → toggle **Organization-Level KPI** off → Save. Should succeed.
+2. Spot-check an Org KPI demotion in a later month to confirm the forward-sync trigger now executes silently.
+3. Run the new test: `bunx vitest run src/test/bugBountyFixes.test.ts`.
