@@ -1806,3 +1806,17 @@ PostgREST silently caps unranged `select(...)` queries at 1000 rows. With the ac
 3. **Reporting transparency.** TNI dashboards and exports MUST distinguish "detected with zero gaps" from "not yet detected." Silent zeros are forbidden.
 4. **Idempotency contract.** The detection RPC is safe to re-run; consumers of the RPC (single-month detect, range backfill) MUST NOT duplicate rows on re-execution.
 
+
+---
+
+## §103 — Refresh Indicator Visibility Policy
+
+When a user explicitly triggers a data refresh on a primary data view (e.g., reviewer grids, dashboards, large tables), the system MUST surface acknowledgment via a **centered, screen-level indicator** (`RefreshOverlay`), not solely via a small inline icon spinner. Inline button spinners remain mandatory for button state feedback but are insufficient as the sole signal because users frequently miss them.
+
+Rules:
+1. The centered indicator is shown only for **user-initiated** refresh actions, not background refetches or initial page loads (those use skeletons/inline pills).
+2. The indicator must auto-dismiss when all tracked queries settle.
+3. The indicator must respect `prefers-reduced-motion`.
+4. Branding: rocket + rising green growth chart, conveying "data is being refreshed and improved".
+
+Currently applied to: Reviewer Grid (`EmployeeSelectorGrid`). Roll-out to other primary data views is tracked separately.

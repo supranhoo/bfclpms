@@ -5411,3 +5411,21 @@ TNI records in `public.training_needs` are generated **on demand** by the `detec
 ### Operational Note
 Run TNI backfill before closing a reporting cycle. The RPC is idempotent — re-running it for an already-detected month does not create duplicates.
 
+
+---
+
+## v2.66.7.32 — Centered Refresh Overlay (Reviewer Grid)
+
+**Component**: `src/components/ui/RefreshOverlay.tsx`
+A fixed-position, screen-centered overlay shown while the reviewer grid is refetching after a **user-initiated** Refresh. Displays an animated rocket-on-growth-chart SVG (brand palette: navy + green) with caption "Refreshing data…".
+
+**Wiring**: `src/components/review/EmployeeSelectorGrid.tsx`
+- Adds `userRefreshing` state, set to `true` inside `handleRefresh` and cleared via `useEffect` once all tracked queries settle.
+- The existing inline button spinner is preserved for button-level feedback.
+- The pre-existing top-right "Updating…" pill (background fetch indicator) is unchanged.
+
+**Animations**: `src/index.css` — scoped `rg-*` keyframes (`rg-arrow-rise`, `rg-rocket-launch`, `rg-flame-flicker`). Honors `prefers-reduced-motion`.
+
+**Why gated to user clicks**: showing a full-screen overlay on every initial page load would be intrusive. Initial loads already render skeletons/empty states; the overlay is reserved for explicit refresh actions where the user expects acknowledgment.
+
+**Test**: `src/test/bugBountyFixes.test.ts` → `BUG-030`.
