@@ -556,3 +556,41 @@ describe('BUG-030: RefreshOverlay (centered refresh indicator)', () => {
     expect(src).toMatch(/if\s*\(userRefreshing\s*&&\s*!isRefreshing\)\s*setUserRefreshing\(false\)/);
   });
 });
+
+// BUG-031: KPI Journey Timeline blank — get_kpi_journey_report referenced
+// non-existent `audit_logs` table and used wrong status literals
+// (`l1_review`, `auditor_review`, `skip_level_review`) instead of the
+// project's canonical vocabulary. RPC threw -> page fell back to empty state.
+// This test pins the corrected migration so the regression cannot return.
+describe('BUG-031: KPI Journey RPC uses canonical audit table & status vocabulary', () => {
+  it('migration reads from kpi_audit_logs (not audit_logs) via kpi_id join', async () => {
+    const fs = await import('node:fs');
+    const sql = fs.readFileSync(
+      'supabase/migrations/20260425115401_ebf2ad72-5962-4347-a8fd-d3deec4921fe.sql',
+      'utf-8'
+    );
+    // canonical table
+    expect(sql).toMatch(/FROM\s+kpi_audit_logs\s+al/);
+    // canonical join column
+    expect(sql).toMatch(/al\.kpi_id\s+IN\s*\(SELECT\s+id\s+FROM\s+page\)/);
+    // wrong table must NOT appear in the new function body
+    const fnBody = sql.split('CREATE OR REPLACE FUNCTION public.get_kpi_journey_report')[1] ?? '';
+    expect(fnBody).not.toMatch(/FROM\s+audit_logs\b/);
+    expect(fnBody).not.toContain("entity_type = 'kpi'");
+  });
+
+  it('migration uses canonical status literals (manager_check / skip_level_check / audit)', async () => {
+    const fs = await import('node:fs');
+    const sql = fs.readFileSync(
+      'supabase/migrations/20260425115401_ebf2ad72-5962-4347-a8fd-d3deec4921fe.sql',
+      'utf-8'
+    );
+    expect(sql).toMatch(/'status'\)\s*=\s*'manager_check'/);
+    expect(sql).toMatch(/'status'\)\s*=\s*'skip_level_check'/);
+    expect(sql).toMatch(/'status'\)\s*=\s*'audit'/);
+    // forbidden non-canonical literals
+    expect(sql).not.toMatch(/'status'\)\s*=\s*'l1_review'/);
+    expect(sql).not.toMatch(/'status'\)\s*=\s*'auditor_review'/);
+    expect(sql).not.toMatch(/'status'\)\s*=\s*'skip_level_review'/);
+  });
+});

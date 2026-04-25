@@ -1,0 +1,6 @@
+---
+name: kpi-audit-logs-canonical
+description: Canonical audit table and workflow-status vocabulary for all KPI status-transition aggregations (RPCs, edge functions, migrations)
+type: constraint
+---
+All per-KPI workflow timestamp / status-transition aggregations MUST read from `public.kpi_audit_logs` joined by the `kpi_id uuid` column. There is NO `public.audit_logs` table — using it is the BUG-031 defect that blanked the KPI Journey Timeline. Status literal filters on `(new_value->>'status')` MUST use the canonical vocabulary EXACTLY: `self_review`, `manager_check`, `skip_level_check`, `hr_pms_review`, `audit`, `management_review`, `kra_set`, `approved`. The deprecated literals `l1_review`, `auditor_review`, `skip_level_review` are forbidden. Why: trigger `log_kpi_status_transition` (migration 20251224061849_*) writes the canonical names into `kpi_audit_logs`, and `kpis.status` only ever holds those values. How to apply: when redefining any report RPC, grep the migration file for `FROM audit_logs` (must be 0 hits) and for the forbidden literals (must be 0 hits) before approval. Anchor: POLICY.md §104, DOCUMENTATION.md v2.66.7.33, src/test/bugBountyFixes.test.ts BUG-031.
