@@ -653,3 +653,38 @@ describe('BUG-033: KPI Journey workflow chain resolved per employee', () => {
     );
   });
 });
+
+// BUG-034 (v2.66.7.36): The page loading overlay art was simplified to show
+// only an ascending rocket. The X/Y axes, growth-chart arrows, and ellipse
+// were removed. Pin the markup contract so future edits don't silently
+// reintroduce the old busy art.
+describe('BUG-034: Loading art is rocket-only (no axes, no arrows)', () => {
+  const ART_PATH = 'src/components/ui/RocketGrowthArt.tsx';
+
+  it('SVG no longer contains the rg-arrow growth-chart groups', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync(ART_PATH, 'utf-8');
+    expect(src).not.toMatch(/className="rg-arrow/);
+    expect(src).not.toMatch(/rg-arrow-1|rg-arrow-2|rg-arrow-3/);
+  });
+
+  it('SVG no longer renders the X/Y axes or their arrowhead polygons', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync(ART_PATH, 'utf-8');
+    // Old axes used these exact endpoints.
+    expect(src).not.toMatch(/x1="20"\s+y1="100"\s+x2="170"/);
+    expect(src).not.toMatch(/x1="20"\s+y1="100"\s+x2="20"/);
+    // Old arrowhead polygons.
+    expect(src).not.toMatch(/points="20,8 16,18 24,18"/);
+    expect(src).not.toMatch(/points="178,100 168,96 168,104"/);
+  });
+
+  it('rocket + flame remain and component exports both names', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync(ART_PATH, 'utf-8');
+    expect(src).toMatch(/className="rg-rocket"/);
+    expect(src).toMatch(/className="rg-flame"/);
+    // Backwards-compatible alias preserves existing imports.
+    expect(src).toMatch(/export\s+const\s+RocketGrowthArt\s*=\s*RocketLaunchArt/);
+  });
+});
