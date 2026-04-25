@@ -1,26 +1,31 @@
 /**
- * RefreshOverlay
- * --------------
- * @deprecated Use `PageLoadingOverlay` instead. Per POLICY.md §103, centered
- * overlays are reserved for page navigation and initial data loads. Refresh
- * actions should rely on inline button feedback only. Kept exported for
- * backwards compatibility; new call sites must NOT mount this.
+ * PageLoadingOverlay
+ * ------------------
+ * Centered, branded full-screen indicator shown during page navigation
+ * (Suspense lazy-load) and the initial data fetch burst on a route change.
+ *
+ * Uses the shared `RocketGrowthArt` SVG and `rg-*` keyframes from
+ * `src/index.css`. Honors `prefers-reduced-motion`. Pure presentation.
+ *
+ * Policy: POLICY.md §103 — centered overlay reserved for page navigation
+ * and initial data loads. Refresh actions use inline button feedback only.
  */
 import { memo } from 'react';
 import { RocketGrowthArt } from './RocketGrowthArt';
 
-interface RefreshOverlayProps {
+interface PageLoadingOverlayProps {
   open: boolean;
   label?: string;
   sublabel?: string;
 }
 
-function RefreshOverlayImpl({
+function PageLoadingOverlayImpl({
   open,
-  label = 'Refreshing data…',
-  sublabel = 'Fetching the latest scores and assignments',
-}: RefreshOverlayProps) {
+  label = 'Please wait',
+  sublabel = 'Loading…',
+}: PageLoadingOverlayProps) {
   if (!open) return null;
+
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-background/70 backdrop-blur-sm animate-in fade-in duration-150"
@@ -39,4 +44,4 @@ function RefreshOverlayImpl({
   );
 }
 
-export const RefreshOverlay = memo(RefreshOverlayImpl);
+export const PageLoadingOverlay = memo(PageLoadingOverlayImpl);

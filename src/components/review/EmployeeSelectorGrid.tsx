@@ -30,7 +30,6 @@ import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, Pagi
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient, useIsFetching } from '@tanstack/react-query';
-import { RefreshOverlay } from '@/components/ui/RefreshOverlay';
 
 interface EmployeeProfile {
   id: string;
@@ -173,17 +172,10 @@ export function EmployeeSelectorGrid({
     fetchingProfiles + fetchingKpis + fetchingSubmissionScores +
     fetchingProfilesAll + fetchingTeam + fetchingSkip > 0;
 
-  // Track user-initiated refresh so the centered overlay only appears when the
-  // user clicks "Refresh" — NOT on initial page load or background refetches
-  // (those already have inline indicators). Cleared once all tracked queries
-  // settle.
-  const [userRefreshing, setUserRefreshing] = useState(false);
-  useEffect(() => {
-    if (userRefreshing && !isRefreshing) setUserRefreshing(false);
-  }, [userRefreshing, isRefreshing]);
-
+  // Refresh handler — invalidates every dataset feeding the reviewer grid.
+  // Per POLICY.md §103, refresh actions rely on the inline button spinner only;
+  // the centered overlay is reserved for page navigation / initial loads.
   const handleRefresh = useCallback(() => {
-    setUserRefreshing(true);
     // Invalidate every dataset feeding the reviewer grid: employee lists,
     // KPI rows for the period, and per-stage submission scores. Scoped by
     // queryKey prefix so unrelated caches stay warm.
@@ -1581,7 +1573,6 @@ export function EmployeeSelectorGrid({
 
   return (
     <div className="space-y-6 min-h-[600px] relative">
-      <RefreshOverlay open={userRefreshing} />
       {isBackgroundFetching && (
         <div
           className="absolute top-0 right-0 z-10 flex items-center gap-2 text-xs text-muted-foreground bg-background/80 backdrop-blur-sm px-2 py-1 rounded-md border"
