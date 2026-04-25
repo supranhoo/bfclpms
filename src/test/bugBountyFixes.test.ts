@@ -296,3 +296,31 @@ describe('BUG-023: Org KPI Self column shows tooltipped dash instead of N/A', ()
     expect(tableSource).toContain('Self-review is not collected for Org KPIs');
   });
 });
+
+// BUG-024 (v2.66.7.26): The KPI Journey Timeline Excel export must include an
+// "Assigned Workflow" column showing the resolved per-employee workflow chain
+// (e.g. "Self → L1 → HR PMS → Audit → Mgmt"). The on-screen table is
+// intentionally unchanged to preserve column density.
+describe('BUG-024: KPI Journey export carries Assigned Workflow chain', () => {
+  const hookSource = fs.readFileSync(
+    path.resolve(__dirname, '../hooks/useKpiJourneyReport.ts'),
+    'utf8',
+  );
+  const pageSource = fs.readFileSync(
+    path.resolve(__dirname, '../pages/reports/KpiJourneyReport.tsx'),
+    'utf8',
+  );
+
+  it('KpiJourneyRow type carries workflowChain', () => {
+    expect(hookSource).toMatch(/workflowChain:\s*string/);
+  });
+
+  it('handleExport injects an Assigned Workflow column from workflowChain', () => {
+    expect(pageSource).toMatch(/'Assigned Workflow':\s*r\.workflowChain/);
+  });
+
+  it('on-screen TableHeader does NOT include an Assigned Workflow column (export-only)', () => {
+    const headerBlock = pageSource.match(/<TableHeader>[\s\S]*?<\/TableHeader>/)?.[0] ?? '';
+    expect(headerBlock).not.toContain('Assigned Workflow');
+  });
+});
