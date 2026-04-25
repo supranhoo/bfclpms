@@ -1784,3 +1784,15 @@ PostgREST silently caps unranged `select(...)` queries at 1000 rows. With the ac
 1. Authors of any new function/migration touching `review_periods` MUST verify columns against `information_schema.columns` (or `psql \d public.review_periods`) before merging — this is the same audit pattern §92 codified for slim PostgREST selects.
 2. `src/test/bugBountyFixes.test.ts::BUG-027` pins the canonical names against the fix migration; future migrations that touch the same functions must keep the test green (or extend it with their own anchor).
 3. Code review checklist: any diff containing `review_periods` is auto-flagged for the column-name check.
+
+## §101 — Report RPC JSONB Field-Mapping Contract (v2.66.7.30)
+
+**Rule.** Server-side report RPCs that build response rows via `jsonb_build_object(...)` MUST map each frontend field key to its **semantically correct** database column. It is forbidden to wire two semantically distinct keys (e.g., `reviewPeriod` and `status`) to the same source column "by mistake of refactor".
+
+**Background.** The `get_kpi_journey_report` RPC mapped `'reviewPeriod' → pg.status` for ~7 days. Because the frontend Excel exporter writes `r.reviewPeriod` into the **Month** column of the KPI Journey Timeline export, every export silently displayed workflow status (`self_review`, `kra_set`, `manager_check`, …) under "Month". The dedicated **Status** column rendered correctly, masking the bug as "duplicated data" rather than a field swap. The compounding cause was that the upstream `filtered_kpis` CTE never selected `k.review_period`, so even a one-line key fix would have failed silently.
+
+**Enforcement.**
+1. Every report RPC redefinition that emits a JSONB row builder MUST be accompanied by a regression test in `src/test/bugBountyFixes.test.ts` that pins the field-to-column mapping against the migration file (pattern: `expect(sql).toMatch(/'<frontendKey>',\s*<source>/)`).
+2. CTEs feeding JSONB row builders MUST `SELECT` every column referenced by a `jsonb_build_object` value expression. Reviewers should grep the JSONB block against the CTE's SELECT list before approval.
+3. When a report column appears to "show the same data as another column", treat it as a field-mapping defect first — not a frontend bug — and audit the RPC's JSONB keys.
+4. `BUG-028` is the canonical anchor for this rule.

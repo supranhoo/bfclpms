@@ -473,3 +473,26 @@ describe('BUG-027: review_periods column names in org-kpi scope functions', () =
     expect(noComments).not.toMatch(/rp\.year\s*=/);
   });
 });
+
+// BUG-028: KPI Journey Timeline Excel export — "Month" column displayed
+// workflow status (e.g., self_review, kra_set) because the RPC
+// `get_kpi_journey_report` mapped jsonb key `reviewPeriod` to `pg.status`
+// instead of `pg.review_period`. Lock the canonical mapping so the Month
+// column always shows the assessment month.
+describe('BUG-028: get_kpi_journey_report maps reviewPeriod to review_period (not status)', () => {
+  it('latest fix migration wires reviewPeriod to pg.review_period', async () => {
+    const fs = await import('node:fs');
+    const path = 'supabase/migrations/20260425073216_31d04874-9cfa-41e3-8a3b-12bf6d9333d8.sql';
+    const sql = fs.readFileSync(path, 'utf-8');
+    // The RPC is redefined
+    expect(sql).toMatch(/CREATE OR REPLACE FUNCTION public\.get_kpi_journey_report/);
+    // CTE must expose review_period and review_year
+    expect(sql).toMatch(/k\.review_period\b/);
+    expect(sql).toMatch(/k\.review_year\b/);
+    // Canonical jsonb mapping
+    expect(sql).toMatch(/'reviewPeriod',\s*pg\.review_period/);
+    // Bug pattern is gone
+    const noComments = sql.replace(/--.*$/gm, '');
+    expect(noComments).not.toMatch(/'reviewPeriod',\s*pg\.status/);
+  });
+});
