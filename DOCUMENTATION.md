@@ -5426,18 +5426,28 @@ Run TNI backfill before closing a reporting cycle. The RPC is idempotent — re-
 
 ---
 
-## v2.66.7.32 — Centered Refresh Overlay (Reviewer Grid)
+## v2.66.7.32 — Centered Refresh Overlay (Reviewer Grid) [SUPERSEDED by v2.66.7.34]
 
-**Component**: `src/components/ui/RefreshOverlay.tsx`
-A fixed-position, screen-centered overlay shown while the reviewer grid is refetching after a **user-initiated** Refresh. Displays an animated rocket-on-growth-chart SVG (brand palette: navy + green) with caption "Refreshing data…".
+Initially shipped a centered overlay tied to user-initiated Refresh clicks on the reviewer grid. **Superseded** by v2.66.7.34, which moves the centered overlay to page navigation / initial data loads and reverts the Refresh button to inline-only feedback.
 
-**Wiring**: `src/components/review/EmployeeSelectorGrid.tsx`
-- Adds `userRefreshing` state, set to `true` inside `handleRefresh` and cleared via `useEffect` once all tracked queries settle.
-- The existing inline button spinner is preserved for button-level feedback.
-- The pre-existing top-right "Updating…" pill (background fetch indicator) is unchanged.
+---
 
-**Animations**: `src/index.css` — scoped `rg-*` keyframes (`rg-arrow-rise`, `rg-rocket-launch`, `rg-flame-flicker`). Honors `prefers-reduced-motion`.
+## v2.66.7.34 — Page Loading Overlay (PageLoadingOverlay)
 
-**Why gated to user clicks**: showing a full-screen overlay on every initial page load would be intrusive. Initial loads already render skeletons/empty states; the overlay is reserved for explicit refresh actions where the user expects acknowledgment.
+**Component**: `src/components/ui/PageLoadingOverlay.tsx` (new). Shared brand SVG extracted to `src/components/ui/RocketGrowthArt.tsx` so both `PageLoadingOverlay` (active) and the deprecated `RefreshOverlay` reuse the same art without duplication.
 
-**Test**: `src/test/bugBountyFixes.test.ts` → `BUG-030`.
+**What changed**:
+- The centered overlay (rocket + rising green growth chart, caption **"Please wait"** / **"Loading…"**) now indicates **page loading**, not user-initiated refresh.
+- `src/components/layout/DashboardLayout.tsx` mounts the overlay in two places:
+  1. `Suspense` fallback for route lazy-loading (was a small `Loader2`).
+  2. New `RouteDataLoadingGate` — uses `useLocation()` + `useIsFetching()` to show the overlay during the first fetch burst after a route change, then auto-dismisses when the fetch count returns to zero. 15s safety auto-disarm.
+- `src/components/review/EmployeeSelectorGrid.tsx` no longer mounts `RefreshOverlay`. The `userRefreshing` state and its `useEffect` are removed. The Refresh button keeps its inline spinner + `disabled={isRefreshing}` state.
+- `RefreshOverlay` is marked `@deprecated`; backwards-compatible export retained.
+
+**Animations**: unchanged — `rg-*` keyframes in `src/index.css` honor `prefers-reduced-motion`.
+
+**Why**: A full-screen overlay on every Refresh click was intrusive and didn't address the actual visibility gap, which was on initial page loads. Users could not tell whether a slow page was loading. The gated route-change indicator covers that case while leaving Refresh feedback inline.
+
+**Policy**: POLICY.md §103 (rewritten).
+
+**Tests**: `src/test/bugBountyFixes.test.ts` → `BUG-030` (revised) and `BUG-032` (new).
