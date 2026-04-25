@@ -528,3 +528,31 @@ describe('BUG-029: TNI empty-period guidance & range backfill', () => {
     expect(src).toMatch(/Not detected — run TNI detection/);
   });
 });
+
+// BUG-030: Centered RefreshOverlay must be wired into EmployeeSelectorGrid and
+// gated to user-initiated refreshes so it doesn't appear on initial page load.
+describe('BUG-030: RefreshOverlay (centered refresh indicator)', () => {
+  it('RefreshOverlay component exists with required props and a11y attributes', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/components/ui/RefreshOverlay.tsx', 'utf-8');
+    expect(src).toMatch(/export const RefreshOverlay/);
+    // Centered + fixed positioning
+    expect(src).toMatch(/fixed inset-0/);
+    expect(src).toMatch(/items-center justify-center/);
+    // Accessibility
+    expect(src).toMatch(/role="status"/);
+    expect(src).toMatch(/aria-live="polite"/);
+    // Branded art
+    expect(src).toMatch(/RocketGrowthArt/);
+  });
+
+  it('EmployeeSelectorGrid mounts RefreshOverlay and gates it to user clicks', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/components/review/EmployeeSelectorGrid.tsx', 'utf-8');
+    expect(src).toMatch(/from '@\/components\/ui\/RefreshOverlay'/);
+    expect(src).toMatch(/<RefreshOverlay open=\{userRefreshing\}/);
+    // Gate: handleRefresh sets the flag; effect clears once fetches settle
+    expect(src).toMatch(/setUserRefreshing\(true\)/);
+    expect(src).toMatch(/if\s*\(userRefreshing\s*&&\s*!isRefreshing\)\s*setUserRefreshing\(false\)/);
+  });
+});
