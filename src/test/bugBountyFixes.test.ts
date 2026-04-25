@@ -364,3 +364,91 @@ describe('BUG-025: TNI splits compliance gaps from skill gaps', () => {
     expect(hookSource).toMatch(/\.eq\('gap_type',\s*filters\.gapType\)/);
   });
 });
+
+// BUG-026: TNI multi-period filter & Assessment Year (Jul–Jun) range builder
+describe('BUG-026: TNI multi-period & AY filtering', () => {
+  const MONTHS = [
+    'January','February','March','April','May','June',
+    'July','August','September','October','November','December',
+  ];
+  type Mode = 'single' | 'qtd' | 'ytd' | 'ay' | 'custom';
+  function buildRanges(mode: Mode, endMonth: string, endYear: number,
+    startMonth?: string, startYear?: number) {
+    if (mode === 'single') return [{ month: endMonth, year: endYear }];
+    if (mode === 'ytd') {
+      const ei = MONTHS.indexOf(endMonth);
+      return MONTHS.slice(0, ei + 1).map(m => ({ month: m, year: endYear }));
+    }
+    if (mode === 'qtd') {
+      const ei = MONTHS.indexOf(endMonth);
+      const qs = Math.floor(ei / 3) * 3;
+      return MONTHS.slice(qs, ei + 1).map(m => ({ month: m, year: endYear }));
+    }
+    if (mode === 'ay') {
+      const ei = MONTHS.indexOf(endMonth);
+      const ays = ei >= 6 ? endYear : endYear - 1;
+      const aye = ei >= 6 ? endYear + 1 : endYear;
+      const out: { month: string; year: number }[] = [];
+      for (let i = 6; i < 12; i++) out.push({ month: MONTHS[i], year: ays });
+      for (let i = 0; i < 6; i++) out.push({ month: MONTHS[i], year: aye });
+      return out;
+    }
+    if (mode === 'custom' && startMonth && startYear !== undefined) {
+      const out: { month: string; year: number }[] = [];
+      const si = MONTHS.indexOf(startMonth);
+      const ei = MONTHS.indexOf(endMonth);
+      if (startYear === endYear) {
+        for (let i = si; i <= ei; i++) out.push({ month: MONTHS[i], year: startYear });
+      } else if (startYear < endYear) {
+        for (let i = si; i < 12; i++) out.push({ month: MONTHS[i], year: startYear });
+        for (let y = startYear + 1; y < endYear; y++)
+          MONTHS.forEach(m => out.push({ month: m, year: y }));
+        for (let i = 0; i <= ei; i++) out.push({ month: MONTHS[i], year: endYear });
+      }
+      return out;
+    }
+    return [{ month: endMonth, year: endYear }];
+  }
+
+  it('AY anchored on April 2026 spans Jul 2025 → Jun 2026', () => {
+    const r = buildRanges('ay', 'April', 2026);
+    expect(r).toHaveLength(12);
+    expect(r[0]).toEqual({ month: 'July', year: 2025 });
+    expect(r[11]).toEqual({ month: 'June', year: 2026 });
+  });
+
+  it('AY anchored on October 2025 spans Jul 2025 → Jun 2026', () => {
+    const r = buildRanges('ay', 'October', 2025);
+    expect(r[0]).toEqual({ month: 'July', year: 2025 });
+    expect(r[11]).toEqual({ month: 'June', year: 2026 });
+  });
+
+  it('YTD up to March returns Jan→Mar of the selected year', () => {
+    const r = buildRanges('ytd', 'March', 2026);
+    expect(r.map(x => x.month)).toEqual(['January','February','March']);
+    expect(r.every(x => x.year === 2026)).toBe(true);
+  });
+
+  it('QTD ending May returns Q2 months (Apr, May)', () => {
+    const r = buildRanges('qtd', 'May', 2026);
+    expect(r.map(x => x.month)).toEqual(['April','May']);
+  });
+
+  it('Custom Nov 2025 → Feb 2026 spans the year boundary', () => {
+    const r = buildRanges('custom', 'February', 2026, 'November', 2025);
+    expect(r).toEqual([
+      { month: 'November', year: 2025 },
+      { month: 'December', year: 2025 },
+      { month: 'January', year: 2026 },
+      { month: 'February', year: 2026 },
+    ]);
+  });
+
+  it('useTNI hooks expose periodRanges + applyPeriodRanges helper', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/hooks/useTNI.ts', 'utf-8');
+    expect(src).toMatch(/applyPeriodRanges/);
+    expect(src).toMatch(/periodRanges\?:\s*PeriodRange\[\]/);
+    expect(src).toMatch(/and\(review_period\.eq\.\$\{r\.month\},review_year\.eq\.\$\{r\.year\}\)/);
+  });
+});

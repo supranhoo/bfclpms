@@ -59,6 +59,29 @@ export interface DepartmentTNI {
   categories: TNIAggregation[];
 }
 
+export interface PeriodRange {
+  month: string;
+  year: number;
+}
+
+/**
+ * Apply a (month, year) range filter to a supabase query against training_needs.
+ * - 0 ranges → no filter (all periods)
+ * - 1 range  → uses .eq for both columns (single-month fast path, preserves prior behaviour)
+ * - 2+ ranges → uses .or with composite and(...) clauses
+ */
+function applyPeriodRanges<T>(query: T, ranges?: PeriodRange[]): T {
+  if (!ranges || ranges.length === 0) return query;
+  const q = query as any;
+  if (ranges.length === 1) {
+    return q.eq('review_period', ranges[0].month).eq('review_year', ranges[0].year);
+  }
+  const orClause = ranges
+    .map(r => `and(review_period.eq.${r.month},review_year.eq.${r.year})`)
+    .join(',');
+  return q.or(orClause);
+}
+
 // Fetch all training needs with filters
 export function useTrainingNeeds(filters?: {
   reviewPeriod?: string;
@@ -68,6 +91,7 @@ export function useTrainingNeeds(filters?: {
   employeeId?: string;
   departmentId?: string;
   gapType?: TNIGapType;
+  periodRanges?: PeriodRange[];
 }) {
   return useQuery({
     queryKey: ['training-needs', filters],
@@ -85,11 +109,15 @@ export function useTrainingNeeds(filters?: {
         .order('priority', { ascending: true })
         .order('created_at', { ascending: false });
 
-      if (filters?.reviewPeriod) {
-        query = query.eq('review_period', filters.reviewPeriod);
-      }
-      if (filters?.reviewYear) {
-        query = query.eq('review_year', filters.reviewYear);
+      if (filters?.periodRanges && filters.periodRanges.length > 0) {
+        query = applyPeriodRanges(query, filters.periodRanges);
+      } else {
+        if (filters?.reviewPeriod) {
+          query = query.eq('review_period', filters.reviewPeriod);
+        }
+        if (filters?.reviewYear) {
+          query = query.eq('review_year', filters.reviewYear);
+        }
       }
       if (filters?.status) {
         query = query.eq('status', filters.status);
@@ -116,13 +144,14 @@ export function useTrainingNeeds(filters?: {
 
       return result;
     },
+    staleTime: 2 * 60 * 1000,
   });
 }
 
 // Get TNI aggregation by category
-export function useTNIByCategory(reviewPeriod?: string, reviewYear?: number) {
+export function useTNIByCategory(reviewPeriod?: string, reviewYear?: number, periodRanges?: PeriodRange[]) {
   return useQuery({
-    queryKey: ['tni-by-category', reviewPeriod, reviewYear],
+    queryKey: ['tni-by-category', reviewPeriod, reviewYear, periodRanges],
     queryFn: async () => {
       let query = supabase
         .from('training_needs')
@@ -133,8 +162,12 @@ export function useTNIByCategory(reviewPeriod?: string, reviewYear?: number) {
           category:kra_categories(id, name)
         `);
 
-      if (reviewPeriod) query = query.eq('review_period', reviewPeriod);
-      if (reviewYear) query = query.eq('review_year', reviewYear);
+      if (periodRanges && periodRanges.length > 0) {
+        query = applyPeriodRanges(query, periodRanges);
+      } else {
+        if (reviewPeriod) query = query.eq('review_period', reviewPeriod);
+        if (reviewYear) query = query.eq('review_year', reviewYear);
+      }
 
       const { data, error } = await query;
       if (error) throw error;
@@ -182,13 +215,14 @@ export function useTNIByCategory(reviewPeriod?: string, reviewYear?: number) {
 
       return Array.from(categoryMap.values()).sort((a, b) => b.total_count - a.total_count);
     },
+    staleTime: 2 * 60 * 1000,
   });
 }
 
 // Get TNI aggregation by department
-export function useTNIByDepartment(reviewPeriod?: string, reviewYear?: number) {
+export function useTNIByDepartment(reviewPeriod?: string, reviewYear?: number, periodRanges?: PeriodRange[]) {
   return useQuery({
-    queryKey: ['tni-by-department', reviewPeriod, reviewYear],
+    queryKey: ['tni-by-department', reviewPeriod, reviewYear, periodRanges],
     queryFn: async () => {
       let query = supabase
         .from('training_needs')
@@ -204,8 +238,12 @@ export function useTNIByDepartment(reviewPeriod?: string, reviewYear?: number) {
           category:kra_categories(id, name)
         `);
 
-      if (reviewPeriod) query = query.eq('review_period', reviewPeriod);
-      if (reviewYear) query = query.eq('review_year', reviewYear);
+      if (periodRanges && periodRanges.length > 0) {
+        query = applyPeriodRanges(query, periodRanges);
+      } else {
+        if (reviewPeriod) query = query.eq('review_period', reviewPeriod);
+        if (reviewYear) query = query.eq('review_year', reviewYear);
+      }
 
       const { data, error } = await query;
       if (error) throw error;
@@ -250,6 +288,7 @@ export function useTNIByDepartment(reviewPeriod?: string, reviewYear?: number) {
 
       return Array.from(deptMap.values()).sort((a, b) => b.total_needs - a.total_needs);
     },
+    staleTime: 2 * 60 * 1000,
   });
 }
 
@@ -347,16 +386,20 @@ export function useDetectTrainingNeeds() {
 }
 
 // Get TNI summary stats
-export function useTNISummary(reviewPeriod?: string, reviewYear?: number) {
+export function useTNISummary(reviewPeriod?: string, reviewYear?: number, periodRanges?: PeriodRange[]) {
   return useQuery({
-    queryKey: ['tni-summary', reviewPeriod, reviewYear],
+    queryKey: ['tni-summary', reviewPeriod, reviewYear, periodRanges],
     queryFn: async () => {
       let query = supabase
         .from('training_needs')
-        .select('id, priority, status, employee_id, gap_type');
+        .select('id, priority, status, employee_id, gap_type, review_period, review_year');
 
-      if (reviewPeriod) query = query.eq('review_period', reviewPeriod);
-      if (reviewYear) query = query.eq('review_year', reviewYear);
+      if (periodRanges && periodRanges.length > 0) {
+        query = applyPeriodRanges(query, periodRanges);
+      } else {
+        if (reviewPeriod) query = query.eq('review_period', reviewPeriod);
+        if (reviewYear) query = query.eq('review_year', reviewYear);
+      }
 
       const { data, error } = await query;
       if (error) throw error;
@@ -378,5 +421,6 @@ export function useTNISummary(reviewPeriod?: string, reviewYear?: number) {
         employeesAffected: uniqueEmployees.size,
       };
     },
+    staleTime: 2 * 60 * 1000,
   });
 }

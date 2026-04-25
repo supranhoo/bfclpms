@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { 
   useTrainingNeeds, 
   useTNIByCategory, 
@@ -18,7 +19,8 @@ import {
   useDetectTrainingNeeds,
   TNIPriority,
   TNIStatus,
-  TNIGapType
+  TNIGapType,
+  PeriodRange
 } from '@/hooks/useTNI';
 import { useReviewPeriods } from '@/hooks/useKpis';
 import { 
@@ -56,25 +58,107 @@ const STATUS_BADGE: Record<TNIStatus, 'destructive' | 'outline' | 'secondary' | 
   completed: 'secondary',
 };
 
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+type PeriodMode = 'single' | 'qtd' | 'ytd' | 'ay' | 'custom';
+
+/** Build the (month, year) ranges for a given mode. */
+function buildRanges(
+  mode: PeriodMode,
+  endMonth: string,
+  endYear: number,
+  startMonth?: string,
+  startYear?: number,
+): PeriodRange[] {
+  if (mode === 'single') {
+    return [{ month: endMonth, year: endYear }];
+  }
+  if (mode === 'ytd') {
+    const endIdx = MONTHS.indexOf(endMonth);
+    return MONTHS.slice(0, endIdx + 1).map(m => ({ month: m, year: endYear }));
+  }
+  if (mode === 'qtd') {
+    const endIdx = MONTHS.indexOf(endMonth);
+    const qStart = Math.floor(endIdx / 3) * 3;
+    return MONTHS.slice(qStart, endIdx + 1).map(m => ({ month: m, year: endYear }));
+  }
+  if (mode === 'ay') {
+    // Assessment Year: Jul (endYear-1) .. Jun (endYear). If endMonth is Jul..Dec,
+    // anchor AY to (endYear .. endYear+1). We use endMonth to disambiguate.
+    const endIdx = MONTHS.indexOf(endMonth);
+    let ayStartYear: number;
+    let ayEndYear: number;
+    if (endIdx >= 6) {
+      // Jul-Dec → AY starts this year
+      ayStartYear = endYear;
+      ayEndYear = endYear + 1;
+    } else {
+      // Jan-Jun → AY started last year
+      ayStartYear = endYear - 1;
+      ayEndYear = endYear;
+    }
+    const out: PeriodRange[] = [];
+    for (let i = 6; i < 12; i++) out.push({ month: MONTHS[i], year: ayStartYear });
+    for (let i = 0; i < 6; i++) out.push({ month: MONTHS[i], year: ayEndYear });
+    return out;
+  }
+  if (mode === 'custom' && startMonth && startYear !== undefined) {
+    const out: PeriodRange[] = [];
+    const sIdx = MONTHS.indexOf(startMonth);
+    const eIdx = MONTHS.indexOf(endMonth);
+    if (startYear === endYear) {
+      for (let i = sIdx; i <= eIdx; i++) out.push({ month: MONTHS[i], year: startYear });
+    } else if (startYear < endYear) {
+      for (let i = sIdx; i < 12; i++) out.push({ month: MONTHS[i], year: startYear });
+      for (let y = startYear + 1; y < endYear; y++) {
+        MONTHS.forEach(m => out.push({ month: m, year: y }));
+      }
+      for (let i = 0; i <= eIdx; i++) out.push({ month: MONTHS[i], year: endYear });
+    }
+    return out;
+  }
+  return [{ month: endMonth, year: endYear }];
+}
+
+function rangeLabel(ranges: PeriodRange[]): string {
+  if (ranges.length === 0) return '';
+  if (ranges.length === 1) return `${ranges[0].month} ${ranges[0].year}`;
+  const first = ranges[0];
+  const last = ranges[ranges.length - 1];
+  return `${first.month.slice(0,3)} ${first.year} → ${last.month.slice(0,3)} ${last.year}`;
+}
+
 export default function TNIReport() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('tni');
   const { getCompanyCode } = useCompanyFilter();
   const currentYear = new Date().getFullYear();
+  const currentMonth = MONTHS[new Date().getMonth()];
+  const [periodMode, setPeriodMode] = useState<PeriodMode>('single');
   const [selectedYear, setSelectedYear] = useState(currentYear);
-  const [selectedPeriod, setSelectedPeriod] = useState<string>('');
+  const [selectedPeriod, setSelectedPeriod] = useState<string>(currentMonth);
+  const [customStartMonth, setCustomStartMonth] = useState<string>(currentMonth);
+  const [customStartYear, setCustomStartYear] = useState<number>(currentYear);
+  const [detectMonth, setDetectMonth] = useState<string>(currentMonth);
   const [searchTerm, setSearchTerm] = useState('');
   const [gapTypeFilter, setGapTypeFilter] = useState<'all' | 'training' | 'compliance'>('all');
   const [activeTab, setActiveTab] = useState('overview');
 
   const { data: periods } = useReviewPeriods();
-  const { data: summary, isLoading: summaryLoading } = useTNISummary(selectedPeriod || undefined, selectedYear);
-  const { data: categoryData, isLoading: categoryLoading } = useTNIByCategory(selectedPeriod || undefined, selectedYear);
-  const { data: departmentData, isLoading: departmentLoading } = useTNIByDepartment(selectedPeriod || undefined, selectedYear);
-  const { data: trainingNeeds, isLoading: needsLoading } = useTrainingNeeds({
-    reviewPeriod: selectedPeriod || undefined,
-    reviewYear: selectedYear,
-  });
+
+  const periodRanges = useMemo(
+    () => buildRanges(periodMode, selectedPeriod, selectedYear, customStartMonth, customStartYear),
+    [periodMode, selectedPeriod, selectedYear, customStartMonth, customStartYear],
+  );
+  const isMulti = periodRanges.length > 1;
+
+  const { data: summary, isLoading: summaryLoading } = useTNISummary(undefined, undefined, periodRanges);
+  const { data: categoryData, isLoading: categoryLoading } = useTNIByCategory(undefined, undefined, periodRanges);
+  const { data: departmentData, isLoading: departmentLoading } = useTNIByDepartment(undefined, undefined, periodRanges);
+  const { data: trainingNeeds, isLoading: needsLoading } = useTrainingNeeds({ periodRanges });
   const detectMutation = useDetectTrainingNeeds();
 
   const filteredPeriods = useMemo(() => {
@@ -85,6 +169,7 @@ export default function TNIReport() {
   const uniqueYears = useMemo(() => {
     if (!periods) return [currentYear];
     const years = [...new Set(periods.map(p => p.review_year))];
+    if (!years.includes(currentYear)) years.push(currentYear);
     return years.sort((a, b) => b - a);
   }, [periods, currentYear]);
 
@@ -116,8 +201,15 @@ export default function TNIReport() {
   }, [summary]);
 
   const handleDetect = () => {
-    if (!selectedPeriod) return;
-    detectMutation.mutate({ reviewPeriod: selectedPeriod, reviewYear: selectedYear });
+    // Single-month mode: detect on the selected period.
+    // Multi-month mode: detect on the user-chosen month from the dropdown (defaults to latest in range).
+    if (isMulti) {
+      const target = periodRanges.find(r => r.month === detectMonth) ?? periodRanges[periodRanges.length - 1];
+      detectMutation.mutate({ reviewPeriod: target.month, reviewYear: target.year });
+    } else {
+      if (!selectedPeriod) return;
+      detectMutation.mutate({ reviewPeriod: selectedPeriod, reviewYear: selectedYear });
+    }
   };
 
   const handleExport = () => {
@@ -139,10 +231,45 @@ export default function TNIReport() {
       'Year': tn.review_year,
     }));
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'TNI Report');
-    XLSX.writeFile(wb, `TNI_Report_${selectedYear}_${selectedPeriod || 'All'}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(exportData), 'Detail');
+
+    // Monthly Summary sheet — pivot by (Year, Month)
+    const buckets = new Map<string, {
+      Year: number; Month: string; SkillGaps: number; ComplianceGaps: number;
+      HighPriority: number; Employees: Set<string>;
+    }>();
+    trainingNeeds.forEach(tn => {
+      const key = `${tn.review_year}|${tn.review_period}`;
+      if (!buckets.has(key)) {
+        buckets.set(key, {
+          Year: tn.review_year, Month: tn.review_period,
+          SkillGaps: 0, ComplianceGaps: 0, HighPriority: 0, Employees: new Set(),
+        });
+      }
+      const b = buckets.get(key)!;
+      if (tn.gap_type === 'compliance') b.ComplianceGaps++;
+      else b.SkillGaps++;
+      if (tn.priority === 'high' && tn.gap_type !== 'compliance') b.HighPriority++;
+      if (tn.employee_id) b.Employees.add(tn.employee_id);
+    });
+    const monthlyRows = periodRanges.map(r => {
+      const b = buckets.get(`${r.year}|${r.month}`);
+      return {
+        'Year': r.year,
+        'Month': r.month,
+        'Skill Gaps': b?.SkillGaps ?? 0,
+        'Compliance Gaps': b?.ComplianceGaps ?? 0,
+        'High Priority (Skill)': b?.HighPriority ?? 0,
+        'Employees Affected': b?.Employees.size ?? 0,
+      };
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(monthlyRows), 'Monthly Summary');
+
+    const rangeTag = isMulti
+      ? `${periodMode.toUpperCase()}_${periodRanges[0].month.slice(0,3)}${periodRanges[0].year}-${periodRanges[periodRanges.length-1].month.slice(0,3)}${periodRanges[periodRanges.length-1].year}`
+      : `${selectedPeriod}_${selectedYear}`;
+    XLSX.writeFile(wb, `TNI_Report_${rangeTag}.xlsx`);
   };
 
   const isLoading = summaryLoading || categoryLoading || departmentLoading;
@@ -161,13 +288,27 @@ export default function TNIReport() {
                 Export
               </Button>
             )}
-            <Button 
-              size="sm" 
-              onClick={handleDetect} 
-              disabled={!selectedPeriod || detectMutation.isPending}
+            {isMulti && (
+              <Select value={detectMonth} onValueChange={setDetectMonth}>
+                <SelectTrigger className="w-36 h-9">
+                  <SelectValue placeholder="Detect month" />
+                </SelectTrigger>
+                <SelectContent>
+                  {periodRanges.map(r => (
+                    <SelectItem key={`${r.month}-${r.year}`} value={r.month}>
+                      {r.month.slice(0,3)} {r.year}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Button
+              size="sm"
+              onClick={handleDetect}
+              disabled={detectMutation.isPending || (!isMulti && !selectedPeriod)}
             >
               <RefreshCw className={`h-4 w-4 mr-2 ${detectMutation.isPending ? 'animate-spin' : ''}`} />
-              Detect TNI
+              Detect TNI{isMulti ? ` (${detectMonth.slice(0,3)})` : ''}
             </Button>
           </div>
         }
@@ -176,29 +317,72 @@ export default function TNIReport() {
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex flex-wrap gap-4">
-            <Select value={String(selectedYear)} onValueChange={(v) => setSelectedYear(Number(v))}>
-              <SelectTrigger className="w-32">
-                <SelectValue placeholder="Year" />
-              </SelectTrigger>
-              <SelectContent>
-                {uniqueYears.map(year => (
-                  <SelectItem key={year} value={String(year)}>{year}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex flex-wrap items-center gap-3">
+            <ToggleGroup
+              type="single"
+              value={periodMode}
+              onValueChange={(v) => { if (v) setPeriodMode(v as PeriodMode); }}
+              className="h-9"
+            >
+              <ToggleGroupItem value="single" size="sm" className="text-xs px-3 h-9">Month</ToggleGroupItem>
+              <ToggleGroupItem value="qtd" size="sm" className="text-xs px-3 h-9">QTD</ToggleGroupItem>
+              <ToggleGroupItem value="ytd" size="sm" className="text-xs px-3 h-9">YTD</ToggleGroupItem>
+              <ToggleGroupItem value="ay" size="sm" className="text-xs px-3 h-9" title="Assessment Year (Jul–Jun)">
+                AY (Jul–Jun)
+              </ToggleGroupItem>
+              <ToggleGroupItem value="custom" size="sm" className="text-xs px-3 h-9">Custom</ToggleGroupItem>
+            </ToggleGroup>
 
-            <Select value={selectedPeriod || 'all'} onValueChange={(v) => setSelectedPeriod(v === 'all' ? '' : v)}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="All Periods" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Periods</SelectItem>
-                {filteredPeriods.map(p => (
-                  <SelectItem key={p.id} value={p.period_name}>{p.period_name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="h-6 w-px bg-border hidden sm:block" />
+
+            {periodMode === 'custom' && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">From</span>
+                <Select value={customStartMonth} onValueChange={setCustomStartMonth}>
+                  <SelectTrigger className="w-28 h-9 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {MONTHS.map(m => <SelectItem key={m} value={m} className="text-xs">{m.slice(0,3)}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={String(customStartYear)} onValueChange={(v) => setCustomStartYear(Number(v))}>
+                  <SelectTrigger className="w-20 h-9 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {uniqueYears.map(y => <SelectItem key={y} value={String(y)} className="text-xs">{y}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <span className="text-muted-foreground text-xs">→</span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2">
+              {periodMode !== 'ay' && (
+                <span className="text-xs text-muted-foreground">
+                  {periodMode === 'single' ? 'Month' : 'Up to'}
+                </span>
+              )}
+              <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                <SelectTrigger className="w-32 h-9 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {MONTHS.map(m => <SelectItem key={m} value={m} className="text-xs">{m}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={String(selectedYear)} onValueChange={(v) => setSelectedYear(Number(v))}>
+                <SelectTrigger className="w-20 h-9 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {uniqueYears.map(y => <SelectItem key={y} value={String(y)} className="text-xs">{y}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Badge variant="secondary" className="text-xs h-7 px-2.5">
+              {periodRanges.length} {periodRanges.length === 1 ? 'month' : 'months'} · {rangeLabel(periodRanges)}
+            </Badge>
+
+            {filteredPeriods.length > 0 && (
+              <span className="text-[11px] text-muted-foreground ml-auto hidden md:inline">
+                {filteredPeriods.length} configured period{filteredPeriods.length !== 1 ? 's' : ''} in {selectedYear}
+              </span>
+            )}
           </div>
         </CardContent>
       </Card>

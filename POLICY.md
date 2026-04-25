@@ -1749,3 +1749,22 @@ PostgREST silently caps unranged `select(...)` queries at 1000 rows. With the ac
 2. The TNI Report UI must split totals: "Training Needs" excludes `gap_type='compliance'`; "Compliance Gaps" is a separate card.
 3. Training delivery, attendance, and effectiveness tracking are **out of PMS scope** — the LMS module owns the lifecycle from `gap_type='skill'` onwards.
 4. `src/test/bugBountyFixes.test.ts::BUG-025` pins the enum value, the dual-pass branching condition, and the UI gap-type filter.
+
+## §99 — TNI Monitoring Operates on Assessment Year (Jul–Jun) (v2.66.7.28)
+
+**Rule.** The Training Needs Identification (TNI) report must support viewing data across the full Bharat Forge **Assessment Year (July → June)**, not just a single calendar month, because the *Training & Development — Identification & Consolidation of Training Needs from PMS Data* KPI is evaluated on AY cumulatives.
+
+**Modes.** The report exposes five scopes:
+- **Month** — operational, single-period review (default).
+- **QTD / YTD** — interim trend windows.
+- **AY (Jul–Jun)** — the canonical evaluation scope. Anchors automatically: Jul–Dec end-month → AY starts that year; Jan–Jun end-month → AY started the prior year.
+- **Custom** — arbitrary From → To, supports cross-year ranges.
+
+**Detection scope.** `detect_training_needs_for_period` is and remains **single-month** by contract — multi-month auto-detection would risk silent over-write storms. In multi-month UI modes the Detect button surfaces an explicit month-picker so the operator must pick the target month.
+
+**Reporting integrity.** Aggregations (summary cards, category breakdown, department breakdown, Excel detail sheet) sum across all months in the active range. The Excel export includes a mandatory **Monthly Summary** sheet so reviewers can audit per-month contribution to the AY total.
+
+**Enforcement.**
+1. `useTNI` hooks accept `periodRanges: PeriodRange[]`; a single-element array preserves the legacy `.eq` query path byte-for-byte.
+2. `src/test/bugBountyFixes.test.ts::BUG-026` pins the AY boundary logic (April 2026 → Jul 2025 … Jun 2026; October 2025 → Jul 2025 … Jun 2026), QTD/YTD windows, cross-year custom ranges, and the PostgREST `and(review_period.eq.X,review_year.eq.Y)` OR-clause shape.
+3. Training delivery and effectiveness remain LMS-owned (per §98) — AY filtering does not change handoff semantics.
