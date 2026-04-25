@@ -616,3 +616,40 @@ describe('BUG-031: KPI Journey RPC uses canonical audit table & status vocabular
     expect(sql).not.toMatch(/'status'\)\s*=\s*'skip_level_review'/);
   });
 });
+
+// BUG-033 (v2.66.7.35): The KPI Journey export's "Assigned Workflow" column
+// hardcoded the maximal 6-stage chain for every employee, ignoring the
+// per-employee workflow_config. Fix routes the chain through the canonical
+// `get_bulk_employee_workflows` resolver and excludes framing stages
+// (`kra_set`, `approved`) from the rendered chain.
+describe('BUG-033: KPI Journey workflow chain resolved per employee', () => {
+  const SQL_PATH =
+    'supabase/migrations/20260425120922_50e76309-ed88-4f3d-b48e-3dd5ff9542ac.sql';
+
+  it('migration redefines get_kpi_journey_report and calls the canonical resolver', async () => {
+    const fs = await import('node:fs');
+    const sql = fs.readFileSync(SQL_PATH, 'utf-8');
+    expect(sql).toMatch(/CREATE OR REPLACE FUNCTION public\.get_kpi_journey_report/);
+    // Per-employee resolution via the canonical helper, scoped to the report period.
+    expect(sql).toMatch(/get_bulk_employee_workflows\s*\(/);
+    expect(sql).toMatch(/p_period[\s\S]{0,40}p_year/);
+  });
+
+  it('migration excludes framing stages (kra_set, approved) from the rendered chain', async () => {
+    const fs = await import('node:fs');
+    const sql = fs.readFileSync(SQL_PATH, 'utf-8');
+    // Filter must reference both framing literals.
+    expect(sql).toMatch(/NOT IN\s*\(\s*'kra_set'\s*,\s*'approved'\s*\)/);
+  });
+
+  it('migration removes the hardcoded 6-stage constant array (anti-pattern)', async () => {
+    const fs = await import('node:fs');
+    const sql = fs.readFileSync(SQL_PATH, 'utf-8');
+    // Strip line comments so the historical pattern documented in comments
+    // does not falsely trip the assertion.
+    const noComments = sql.replace(/--.*$/gm, '');
+    expect(noComments).not.toMatch(
+      /ARRAY\[\s*'self_review'\s*,\s*'manager_check'\s*,\s*'skip_level_check'\s*,\s*'hr_pms_review'\s*,\s*'audit'\s*,\s*'management_review'\s*\]/
+    );
+  });
+});
