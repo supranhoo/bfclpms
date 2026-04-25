@@ -1724,3 +1724,14 @@ PostgREST silently caps unranged `select(...)` queries at 1000 rows. With the ac
 1. When extending a slim select, the change set must reference the migration or schema source that defines each new column on the target table.
 2. `src/test/bugBountyFixes.test.ts::BUG-020` pins that `SLIM_KPI_SELECT` must NOT contain any reviewer-stage score column and that the `auditor_score` canonical name is used in the companion hook.
 3. Reviewer-stage score signatures must be sourced from `review_submissions` via `useReviewSubmissionScoresByKpiIds` (or an equivalent map-based hook), never from a join inside the kpis query.
+
+## §97 — KPI Journey Export Must Surface the Resolved Workflow Chain (v2.66.7.26)
+
+**Rule.** The KPI Journey Timeline Excel export must include an **Assigned Workflow** column for every row, expressed as a compact per-employee stage chain (e.g. `Self → L1 → HR PMS → Audit → Mgmt`). The chain must be resolved using the same workflow hierarchy as the workflow engine (`get_bulk_employee_workflows`): period-specific employee → ongoing employee → period-specific department → ongoing department → period-specific pms_grade → ongoing pms_grade → globals → system default.
+
+**Rationale.** Auditors and HR need to know *which* workflow a KPI traversed (or will traverse) to interpret the timeline columns; without this, a "missing Skip-Level" cell is ambiguous (no skip-level reviewer vs. skipped step). Embedding the resolved chain in the export — without polluting the dense on-screen grid — preserves both clarity and information density.
+
+**Enforcement.**
+1. The on-screen table must NOT render the Assigned Workflow column (export-only by design).
+2. `src/test/bugBountyFixes.test.ts::BUG-024` pins (a) `KpiJourneyRow.workflowChain` exists, (b) `handleExport` includes the `'Assigned Workflow'` key sourced from `r.workflowChain`, (c) the on-screen `<TableHeader>` does not include this column.
+3. Stage-label mapping must remain stable: `self_review`→Self, `manager_check`→L1, `skip_level_check`→Skip, `hr_pms_review`→HR PMS, `audit`→Audit, `management_review`→Mgmt; `approved` is omitted as terminal.
