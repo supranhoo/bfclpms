@@ -1809,17 +1809,18 @@ PostgREST silently caps unranged `select(...)` queries at 1000 rows. With the ac
 
 ---
 
-## §103 — Refresh Indicator Visibility Policy
+## §103 — Page Loading Indicator Visibility Policy (revised v2.66.7.34)
 
-When a user explicitly triggers a data refresh on a primary data view (e.g., reviewer grids, dashboards, large tables), the system MUST surface acknowledgment via a **centered, screen-level indicator** (`RefreshOverlay`), not solely via a small inline icon spinner. Inline button spinners remain mandatory for button state feedback but are insufficient as the sole signal because users frequently miss them.
+The system MUST surface a **centered, screen-level page-loading indicator** (`PageLoadingOverlay`) for **page navigation and initial data loads** — not for user-initiated refresh clicks or background refetches. Inline button spinners remain mandatory for button-state feedback on Refresh actions and are the sole signal for those actions.
 
 Rules:
-1. The centered indicator is shown only for **user-initiated** refresh actions, not background refetches or initial page loads (those use skeletons/inline pills).
-2. The indicator must auto-dismiss when all tracked queries settle.
-3. The indicator must respect `prefers-reduced-motion`.
-4. Branding: rocket + rising green growth chart, conveying "data is being refreshed and improved".
+1. Show the centered overlay during (a) `Suspense` fallback while a route chunk lazy-loads and (b) the FIRST fetch burst that follows a route change (gated via `useIsFetching()` + `useLocation()`). Auto-dismiss as soon as the fetch count returns to zero.
+2. Do NOT show the centered overlay for user-initiated refresh actions (e.g. the Refresh button on the reviewer grid). Use the inline button spinner + `disabled` state only.
+3. Do NOT show the centered overlay for background refetches (window focus, realtime sync). Those stay silent or use a small inline pill.
+4. The overlay MUST respect `prefers-reduced-motion`.
+5. Caption defaults to **"Please wait"** / **"Loading…"**. Branding: rocket + rising green growth chart.
 
-Currently applied to: Reviewer Grid (`EmployeeSelectorGrid`). Roll-out to other primary data views is tracked separately.
+Wiring: `src/components/layout/DashboardLayout.tsx` mounts both the `Suspense` fallback and `RouteDataLoadingGate`. The deprecated `RefreshOverlay` component is retained for backwards compatibility only and MUST NOT be mounted by new call sites.
 
 ---
 
