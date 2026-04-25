@@ -160,20 +160,15 @@ All colors MUST be HSL.
 }
 
 /* =====================================================================
- * RefreshOverlay animations (rocket + rising growth-chart arrows).
+ * Page loading overlay animations (ascending rocket + flame + trail).
  * Scoped class names (rg-*) avoid collisions with other components.
  * Honors prefers-reduced-motion: animations are paused for accessibility.
  * ===================================================================== */
-@keyframes rg-arrow-rise {
-  0%   { opacity: 0; transform: translateY(8px) scale(0.92); }
-  60%  { opacity: 1; transform: translateY(0) scale(1.04); }
-  100% { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-@keyframes rg-rocket-launch {
-  0%   { transform: translate(0, 4px) rotate(0deg); }
-  50%  { transform: translate(2px, -3px) rotate(2deg); }
-  100% { transform: translate(0, 4px) rotate(0deg); }
+@keyframes rg-rocket-ascend {
+  0%   { transform: translateY(20px); opacity: 0.2; }
+  15%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { transform: translateY(-20px); opacity: 0; }
 }
 
 @keyframes rg-flame-flicker {
@@ -181,17 +176,14 @@ All colors MUST be HSL.
   50%      { opacity: 1;    transform: scaleY(1.25); }
 }
 
-.rg-arrow {
-  transform-origin: left bottom;
-  animation: rg-arrow-rise 1.6s ease-out infinite;
+@keyframes rg-trail-fade {
+  0%, 100% { opacity: 0; }
+  50%      { opacity: 0.7; }
 }
-.rg-arrow-1 { animation-delay: 0s; }
-.rg-arrow-2 { animation-delay: 0.25s; }
-.rg-arrow-3 { animation-delay: 0.5s; }
 
 .rg-rocket {
   transform-origin: center;
-  animation: rg-rocket-launch 1.8s ease-in-out infinite;
+  animation: rg-rocket-ascend 1.8s ease-in-out infinite;
 }
 
 .rg-flame {
@@ -199,8 +191,14 @@ All colors MUST be HSL.
   animation: rg-flame-flicker 0.45s ease-in-out infinite;
 }
 
+.rg-trail-dot { opacity: 0; animation: rg-trail-fade 1.8s ease-in-out infinite; }
+.rg-trail-1 { animation-delay: 0.15s; }
+.rg-trail-2 { animation-delay: 0.35s; }
+.rg-trail-3 { animation-delay: 0.55s; }
+
 @media (prefers-reduced-motion: reduce) {
-  .rg-arrow,
   .rg-rocket,
-  .rg-flame { animation: none; }
+  .rg-flame,
+  .rg-trail-dot { animation: none; }
+  .rg-trail-dot { opacity: 0.4; }
 }

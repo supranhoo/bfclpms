@@ -1818,7 +1818,7 @@ Rules:
 2. Do NOT show the centered overlay for user-initiated refresh actions (e.g. the Refresh button on the reviewer grid). Use the inline button spinner + `disabled` state only.
 3. Do NOT show the centered overlay for background refetches (window focus, realtime sync). Those stay silent or use a small inline pill.
 4. The overlay MUST respect `prefers-reduced-motion`.
-5. Caption defaults to **"Please wait"** / **"Loading…"**. Branding: rocket + rising green growth chart.
+5. Caption defaults to **"Please wait"** / **"Loading…"**. Branding: a single navy rocket ascending vertically with a flickering orange flame and a faint green motion-trail. The earlier growth-chart axes / arrows MUST NOT be reintroduced (see BUG-034, v2.66.7.36).
 
 Wiring: `src/components/layout/DashboardLayout.tsx` mounts both the `Suspense` fallback and `RouteDataLoadingGate`. The deprecated `RefreshOverlay` component is retained for backwards compatibility only and MUST NOT be mounted by new call sites.
 

@@ -5471,3 +5471,21 @@ Initially shipped a centered overlay tied to user-initiated Refresh clicks on th
 
 **Policy**: see POLICY.md §104 (extended).
 **Test**: `src/test/bugBountyFixes.test.ts` → `BUG-033`.
+
+---
+
+## v2.66.7.36 — Loading Art Simplified to Ascending Rocket (BUG-034)
+
+**Change**: The centered `PageLoadingOverlay` art was simplified. The X/Y axes, three green growth-chart arrows, soft green ellipse, and arrowhead polygons have been **removed**. The art now shows a single navy rocket with green fins and a flickering orange flame **ascending vertically**, accompanied by a faint three-dot motion trail beneath. The container chrome ("Please wait" / "Loading…", rounded card, blur backdrop) is unchanged.
+
+**Rationale**: User feedback — the chart axes added visual noise without communicating progress. A single ascending rocket reads as "moving forward, please wait" with less cognitive load.
+
+**Scope**:
+- `src/components/ui/RocketGrowthArt.tsx` — SVG rewritten; viewBox tightened to 120×140; component renamed `RocketLaunchArt` with backwards-compatible `RocketGrowthArt` alias so existing imports keep working.
+- `src/index.css` — replaced `rg-arrow-rise` and `rg-rocket-launch` keyframes with `rg-rocket-ascend` (translateY +20 → −20 with fade) and added `rg-trail-fade`. `prefers-reduced-motion` guard preserved.
+- Both `PageLoadingOverlay` and the deprecated `RefreshOverlay` automatically pick up the new art via the shared component.
+- Gating logic (Suspense fallback + `RouteDataLoadingGate` via `useIsFetching`) is unchanged.
+
+**Policy**: POLICY.md §103 — note added that the loading art is "rocket ascending"; growth-chart arrows are forbidden from re-entering this component.
+
+**Test**: `src/test/bugBountyFixes.test.ts` → `BUG-034` pins the markup contract (no `rg-arrow*`, no axis lines, no arrowhead polygons; rocket + flame retained; alias export intact).
