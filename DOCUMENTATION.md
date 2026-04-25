@@ -5451,3 +5451,23 @@ Initially shipped a centered overlay tied to user-initiated Refresh clicks on th
 **Policy**: POLICY.md §103 (rewritten).
 
 **Tests**: `src/test/bugBountyFixes.test.ts` → `BUG-030` (revised) and `BUG-032` (new).
+
+---
+
+## v2.66.7.35 — KPI Journey "Assigned Workflow" Resolved Per Employee (BUG-033)
+
+**Symptom**: The KPI Journey Excel export rendered the same chain — `Self → L1 → Skip → HR PMS → Auditor → Mgmt` — for every row, regardless of the employee's actual workflow template.
+
+**RCA**: The `get_kpi_journey_report` RPC's `emp_workflow` CTE hardcoded a six-element string array as `stages` for every employee. The chain join then always produced the maximal label. The RPC bypassed `get_bulk_employee_workflows`, the canonical resolver already used by reviewer grids, the bottleneck report, admin data entry, pending self-reviews, and Org KPI audit. Live data confirms employees in the same period are on at least 5 distinct chains (`Self → L1 → Auditor`, `Self → HR PMS`, `Self → L1 → HR PMS`, `Self → Audit → Mgmt`, `Self → L1 → Skip → HR PMS`, …) — none of which surfaced in the export.
+
+**Scope check**: Codebase-wide scan confirmed this anti-pattern was isolated to the journey RPC. All other reports/hooks already call `get_employee_workflow` / `get_bulk_employee_workflows`.
+
+**Fix** (migration `20260425120922_*.sql`):
+- The `emp_workflow` CTE now calls `get_bulk_employee_workflows(ARRAY(SELECT DISTINCT employee_id FROM page), p_period, p_year)` — exact same resolver the reviewer grid uses.
+- `workflow_chain` excludes the framing stages `kra_set` and `approved` (they are not user-facing review steps).
+- Display labels (`Self`, `L1`, `Skip`, `HR PMS`, `Auditor`, `Mgmt`) and ordering are unchanged.
+
+**Verified live**: a 500-row sample for March 2026 now returns 5 distinct chains in proportions matching the underlying `workflow_config` distribution.
+
+**Policy**: see POLICY.md §104 (extended).
+**Test**: `src/test/bugBountyFixes.test.ts` → `BUG-033`.
