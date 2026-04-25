@@ -1,0 +1,6 @@
+---
+name: per-employee-workflow-resolution
+description: Reports emitting a per-employee workflow chain MUST resolve via get_bulk_employee_workflows / get_employee_workflow — never hardcode the maximal stage array
+type: architecture
+---
+Any RPC, view, edge function, or report that emits a per-employee workflow chain MUST resolve it via the canonical helpers `get_bulk_employee_workflows(employee_ids uuid[], p_review_period text, p_review_year integer)` (set-based) or `get_employee_workflow(employee_uuid uuid, p_review_period text, p_review_year integer)` (single-row). Hardcoded stage arrays in report SQL — especially the maximal `ARRAY['self_review','manager_check','skip_level_check','hr_pms_review','audit','management_review']` form — are forbidden because employees are on heterogeneous `workflow_config` templates (`self_l1_audit`, `self_hr_pms`, `self_l1_mgmt`, `self_audit_mgmt`, etc.). Display rules: filter framing stages `kra_set` and `approved`, preserve template ordering via `WITH ORDINALITY`, use canonical short labels (`Self`, `L1`, `Skip`, `HR PMS`, `Auditor`, `Mgmt`), fall back to `'—'`. Reference fix: BUG-033 (`get_kpi_journey_report`, migration `20260425120922_*.sql`). Policy: POLICY.md §105.
