@@ -5455,7 +5455,7 @@ export type Database = {
         | "management_review"
         | "skip_level_check"
         | "hr_pms_review"
-      tni_gap_type: "skill" | "knowledge" | "behavior"
+      tni_gap_type: "skill" | "knowledge" | "behavior" | "compliance"
       tni_priority: "high" | "medium" | "low"
       tni_status:
         | "identified"
@@ -5623,7 +5623,7 @@ export const Constants = {
         "skip_level_check",
         "hr_pms_review",
       ],
-      tni_gap_type: ["skill", "knowledge", "behavior"],
+      tni_gap_type: ["skill", "knowledge", "behavior", "compliance"],
       tni_priority: ["high", "medium", "low"],
       tni_status: [
         "identified",
