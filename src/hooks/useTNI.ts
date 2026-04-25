@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-export type TNIGapType = 'skill' | 'knowledge' | 'behavior';
+export type TNIGapType = 'skill' | 'knowledge' | 'behavior' | 'compliance';
 export type TNIPriority = 'high' | 'medium' | 'low';
 export type TNIStatus = 'identified' | 'training_planned' | 'in_progress' | 'completed';
 
@@ -67,6 +67,7 @@ export function useTrainingNeeds(filters?: {
   priority?: TNIPriority;
   employeeId?: string;
   departmentId?: string;
+  gapType?: TNIGapType;
 }) {
   return useQuery({
     queryKey: ['training-needs', filters],
@@ -98,6 +99,9 @@ export function useTrainingNeeds(filters?: {
       }
       if (filters?.employeeId) {
         query = query.eq('employee_id', filters.employeeId);
+      }
+      if (filters?.gapType) {
+        query = query.eq('gap_type', filters.gapType);
       }
 
       const { data, error } = await query;
@@ -324,15 +328,16 @@ export function useDetectTrainingNeeds() {
       });
 
       if (error) throw error;
-      return data as number;
+      return { total: data as number, period: reviewPeriod, year: reviewYear };
     },
-    onSuccess: (count) => {
+    onSuccess: ({ total }) => {
       queryClient.invalidateQueries({ queryKey: ['training-needs'] });
       queryClient.invalidateQueries({ queryKey: ['tni-by-category'] });
       queryClient.invalidateQueries({ queryKey: ['tni-by-department'] });
+      queryClient.invalidateQueries({ queryKey: ['tni-summary'] });
       toast({ 
         title: 'Training needs detection complete', 
-        description: `Identified ${count} new training need${count !== 1 ? 's' : ''}.` 
+        description: `Identified ${total} new record${total !== 1 ? 's' : ''} (skill gaps + compliance flags). See cards for breakdown.`
       });
     },
     onError: (error: any) => {
@@ -348,7 +353,7 @@ export function useTNISummary(reviewPeriod?: string, reviewYear?: number) {
     queryFn: async () => {
       let query = supabase
         .from('training_needs')
-        .select('id, priority, status, employee_id');
+        .select('id, priority, status, employee_id, gap_type');
 
       if (reviewPeriod) query = query.eq('review_period', reviewPeriod);
       if (reviewYear) query = query.eq('review_year', reviewYear);
@@ -357,12 +362,16 @@ export function useTNISummary(reviewPeriod?: string, reviewYear?: number) {
       if (error) throw error;
 
       const uniqueEmployees = new Set(data.map(d => d.employee_id));
+      const compliance = data.filter(d => (d as any).gap_type === 'compliance');
+      const training = data.filter(d => (d as any).gap_type !== 'compliance');
 
       return {
-        total: data.length,
-        highPriority: data.filter(d => d.priority === 'high').length,
-        mediumPriority: data.filter(d => d.priority === 'medium').length,
-        lowPriority: data.filter(d => d.priority === 'low').length,
+        total: training.length,
+        complianceGaps: compliance.length,
+        grandTotal: data.length,
+        highPriority: training.filter(d => d.priority === 'high').length,
+        mediumPriority: training.filter(d => d.priority === 'medium').length,
+        lowPriority: training.filter(d => d.priority === 'low').length,
         identified: data.filter(d => d.status === 'identified').length,
         inProgress: data.filter(d => d.status === 'in_progress').length,
         completed: data.filter(d => d.status === 'completed').length,

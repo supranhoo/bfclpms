@@ -324,3 +324,43 @@ describe('BUG-024: KPI Journey export carries Assigned Workflow chain', () => {
     expect(headerBlock).not.toContain('Assigned Workflow');
   });
 });
+
+// BUG-025 (v2.66.7.27): TNI detection must distinguish compliance failures
+// (auto-zero / non-submission) from genuine skill gaps. Compliance rows are
+// surfaced for HR visibility but are not eligible for training plans.
+describe('BUG-025: TNI splits compliance gaps from skill gaps', () => {
+  const hookSource = fs.readFileSync(
+    path.resolve(__dirname, '../hooks/useTNI.ts'),
+    'utf8',
+  );
+  const reportSource = fs.readFileSync(
+    path.resolve(__dirname, '../pages/reports/TNIReport.tsx'),
+    'utf8',
+  );
+
+  it('TNIGapType union includes "compliance"', () => {
+    expect(hookSource).toMatch(/TNIGapType\s*=\s*[^;]*'compliance'/);
+  });
+
+  it('useTNISummary exposes a complianceGaps count separate from total', () => {
+    expect(hookSource).toMatch(/complianceGaps:/);
+    // total should reflect training-only (compliance excluded)
+    expect(hookSource).toMatch(/total:\s*training\.length/);
+  });
+
+  it('TNI Report renders a Compliance Gaps summary card', () => {
+    expect(reportSource).toContain('Compliance Gaps');
+    expect(reportSource).toMatch(/summary\?\.complianceGaps/);
+  });
+
+  it('TNI Report exposes a Gap Type filter on the Individual tab', () => {
+    expect(reportSource).toMatch(/gapTypeFilter/);
+    expect(reportSource).toContain('Compliance Gaps Only');
+    expect(reportSource).toContain('Training Needs Only');
+  });
+
+  it('useTrainingNeeds accepts a gapType filter', () => {
+    expect(hookSource).toMatch(/gapType\?:\s*TNIGapType/);
+    expect(hookSource).toMatch(/\.eq\('gap_type',\s*filters\.gapType\)/);
+  });
+});

@@ -5352,3 +5352,15 @@ This section records architectural patterns that have been audited and intention
 - **Scope:** Excel export only — the on-screen table is intentionally unchanged to preserve column density.
 - **Files:** `supabase/migrations/*` (extended `get_kpi_journey_report`), `src/hooks/useKpiJourneyReport.ts`, `src/pages/reports/KpiJourneyReport.tsx`, `src/test/bugBountyFixes.test.ts` (BUG-024).
 - *Data Impact*: None — additive read-only RPC field, no schema changes. *Workflow Impact*: None. *UI Impact*: None on screen; one new column in exported XLSX. *Regression Risk*: Low — RPC remains backward-compatible.
+
+### v2.66.7.27 — TNI Detection Splits Skill Gaps from Compliance Failures (BUG-025) (2026-04-25)
+- **Bug:** `detect_training_needs_for_period` was flagging *every* `final_score < threshold` as a skill gap, including KPIs that scored 0 only because the employee never submitted (auto-zero / overdue auto-advance). HR could not distinguish "needs training" from "didn't submit" — polluting the TNI Report and breaking alignment with the HR KPI definition (*Identification & Consolidation of Training Needs from PMS Data*).
+- **Fix:** Detection now runs in two passes:
+  - **Pass A (Compliance):** rows where `review_submissions.self_score IS NULL` OR `auto_advance_reason IS NOT NULL` → tagged `gap_type='compliance'`, priority `high`, fixed recommendation: *"Auto-flagged: non-submission / compliance penalty. No training required."*
+  - **Pass B (Skill):** rows where the employee submitted but still scored low → tagged `gap_type='skill'` with priority by score band (existing behavior).
+  Detection remains idempotent (`NOT EXISTS` dedup on `kpi_id`).
+- **Enum:** Added `'compliance'` to `tni_gap_type` (additive — no impact on existing rows).
+- **UI:** TNI Report now shows a dedicated **Compliance Gaps** summary card, a **Gap Type** filter (All / Training / Compliance) on the Individual tab, and a **Gap Type** badge column. The "Training Needs" total card now excludes compliance rows.
+- **Out of scope:** Training delivery, attendance, and effectiveness tracking — handled by the LMS module (per user direction).
+- **Files:** `supabase/migrations/*` (enum + RPC), `src/hooks/useTNI.ts`, `src/pages/reports/TNIReport.tsx`, `src/test/bugBountyFixes.test.ts` (BUG-025).
+- *Data Impact*: Additive enum value; existing rows unchanged. *Workflow Impact*: None — TNI is read-only consolidation. *UI Impact*: One new card + one filter + one column. *Regression Risk*: Low — RPC signature unchanged; LMS handoff via `gap_type='skill'` rows.
