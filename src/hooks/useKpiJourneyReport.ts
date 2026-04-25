@@ -17,6 +17,7 @@ export interface KpiJourneyRow {
   kraName: string;
   kpiName: string;
   frequency: string;
+  workflowChain: string;
   reviewPeriod: string;
   status: string;
   kraAssignedAt: string | null;
