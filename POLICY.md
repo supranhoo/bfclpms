@@ -1847,3 +1847,22 @@ The non-canonical literals `l1_review`, `auditor_review`, and `skip_level_review
 1. Every migration that touches a report or audit-driven RPC MUST be paired with a regression test in `src/test/bugBountyFixes.test.ts` that pins the migration text against `kpi_audit_logs`, the `kpi_id` join, and the canonical status table above.
 2. Code review SHOULD reject any new reference to `audit_logs` (without the `kpi_` / `system_` / `pip_` / `review_period_` prefix) or to non-canonical stage literals.
 3. `BUG-031` is the canonical anchor for this rule.
+
+---
+
+## §105 — Per-Employee Workflow Resolution in Reports (v2.66.7.35)
+
+**Rule.** Any RPC, view, edge function, or report that emits a per-employee workflow chain or per-employee workflow stage list MUST resolve it via the canonical helpers `get_bulk_employee_workflows(employee_ids uuid[], p_review_period text, p_review_year integer)` (set-based) or `get_employee_workflow(employee_uuid uuid, p_review_period text, p_review_year integer)` (single-row). Hardcoded stage arrays — including the maximal `ARRAY['self_review','manager_check','skip_level_check','hr_pms_review','audit','management_review']` form — are forbidden in report output.
+
+**Why.** Employees are assigned heterogeneous templates via `workflow_config` (e.g. `self_l1_audit`, `self_hr_pms`, `self_l1_mgmt`, `self_audit_mgmt`, …). A hardcoded array silently produces the same maximal chain for every row, which is wrong for the majority of employees. This was the root cause of BUG-033 (KPI Journey "Assigned Workflow" column showed the same six-stage chain for every employee).
+
+**Display rules for rendered chains.**
+1. Filter out the framing stages `kra_set` and `approved` — they are not user-facing review steps.
+2. Preserve template ordering (use `WITH ORDINALITY` on `unnest`).
+3. Use the project's canonical short labels: `Self`, `L1`, `Skip`, `HR PMS`, `Auditor`, `Mgmt`.
+4. Fall back to `'—'` when a template cannot be resolved.
+
+**Enforcement.**
+1. Every migration that adds or modifies an RPC emitting a workflow chain MUST be paired with a regression test in `src/test/bugBountyFixes.test.ts` that pins the call to `get_bulk_employee_workflows`/`get_employee_workflow` and forbids the hardcoded six-stage array.
+2. Code review SHOULD reject any new in-RPC `ARRAY[...stages...]` literal used as a per-employee chain source.
+3. `BUG-033` is the canonical anchor for this rule.
