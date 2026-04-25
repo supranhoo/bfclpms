@@ -17,7 +17,8 @@ import {
   useTNISummary,
   useDetectTrainingNeeds,
   TNIPriority,
-  TNIStatus
+  TNIStatus,
+  TNIGapType
 } from '@/hooks/useTNI';
 import { useReviewPeriods } from '@/hooks/useKpis';
 import { 
@@ -29,7 +30,8 @@ import {
   Search, 
   TrendingDown, 
   User, 
-  Users 
+  Users,
+  ShieldAlert
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
@@ -62,6 +64,7 @@ export default function TNIReport() {
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedPeriod, setSelectedPeriod] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [gapTypeFilter, setGapTypeFilter] = useState<'all' | 'training' | 'compliance'>('all');
   const [activeTab, setActiveTab] = useState('overview');
 
   const { data: periods } = useReviewPeriods();
@@ -87,15 +90,21 @@ export default function TNIReport() {
 
   const filteredNeeds = useMemo(() => {
     if (!trainingNeeds) return [];
-    if (!searchTerm) return trainingNeeds;
+    let rows = trainingNeeds;
+    if (gapTypeFilter === 'compliance') {
+      rows = rows.filter(tn => tn.gap_type === 'compliance');
+    } else if (gapTypeFilter === 'training') {
+      rows = rows.filter(tn => tn.gap_type !== 'compliance');
+    }
+    if (!searchTerm) return rows;
     const term = searchTerm.toLowerCase();
-    return trainingNeeds.filter(tn => 
+    return rows.filter(tn =>
       tn.employee?.full_name?.toLowerCase().includes(term) ||
       tn.employee?.employee_code?.toLowerCase().includes(term) ||
       tn.kpi?.kpi_name?.toLowerCase().includes(term) ||
       tn.category?.name?.toLowerCase().includes(term)
     );
-  }, [trainingNeeds, searchTerm]);
+  }, [trainingNeeds, searchTerm, gapTypeFilter]);
 
   const pieChartData = useMemo(() => {
     if (!summary) return [];
@@ -203,25 +212,36 @@ export default function TNIReport() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Total Training Needs</CardTitle>
+              <CardTitle className="text-sm font-medium">Training Needs (Skill Gaps)</CardTitle>
               <BookOpen className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{summary?.total || 0}</div>
               <p className="text-xs text-muted-foreground">
-                {summary?.identified || 0} pending action
+                Excludes non-submission penalties
               </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">High Priority</CardTitle>
+              <CardTitle className="text-sm font-medium">Compliance Gaps</CardTitle>
+              <ShieldAlert className="h-4 w-4 text-warning" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-warning">{summary?.complianceGaps || 0}</div>
+              <p className="text-xs text-muted-foreground">Auto-zero / non-submission</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">High Priority (Skill)</CardTitle>
               <AlertTriangle className="h-4 w-4 text-destructive" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-destructive">{summary?.highPriority || 0}</div>
-              <p className="text-xs text-muted-foreground">Requires immediate attention</p>
+              <p className="text-xs text-muted-foreground">Requires immediate training</p>
             </CardContent>
           </Card>
 
@@ -232,19 +252,8 @@ export default function TNIReport() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{summary?.employeesAffected || 0}</div>
-              <p className="text-xs text-muted-foreground">With identified gaps</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">In Progress</CardTitle>
-              <TrendingDown className="h-4 w-4 text-primary" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{summary?.inProgress || 0}</div>
               <p className="text-xs text-muted-foreground">
-                {summary?.completed || 0} completed
+                {summary?.inProgress || 0} in progress · {summary?.completed || 0} done
               </p>
             </CardContent>
           </Card>
@@ -474,6 +483,16 @@ export default function TNIReport() {
                     className="pl-10"
                   />
                 </div>
+                <Select value={gapTypeFilter} onValueChange={(v) => setGapTypeFilter(v as any)}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Gap Types</SelectItem>
+                    <SelectItem value="training">Training Needs Only</SelectItem>
+                    <SelectItem value="compliance">Compliance Gaps Only</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               {needsLoading ? (
@@ -486,6 +505,7 @@ export default function TNIReport() {
                     <TableRow>
                       <TableHead>Employee</TableHead>
                       <TableHead>KPI/Category</TableHead>
+                      <TableHead>Gap Type</TableHead>
                       <TableHead className="text-center">Score</TableHead>
                       <TableHead>Priority</TableHead>
                       <TableHead>Status</TableHead>
@@ -509,6 +529,12 @@ export default function TNIReport() {
                             <div className="text-xs text-muted-foreground">{tn.category?.name || '-'}</div>
                           </div>
                         </TableCell>
+                        <TableCell>
+                          <Badge variant={tn.gap_type === 'compliance' ? 'outline' : 'secondary'}
+                                 className={tn.gap_type === 'compliance' ? 'border-warning text-warning' : ''}>
+                            {tn.gap_type === 'compliance' ? 'Compliance' : 'Training'}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="text-center">
                           <Badge variant={tn.score && tn.score < 2 ? 'destructive' : 'outline'}>
                             {tn.score?.toFixed(1) || '-'}
@@ -531,7 +557,7 @@ export default function TNIReport() {
                     ))}
                     {filteredNeeds.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                           {searchTerm ? 'No matching results' : 'No training needs identified'}
                         </TableCell>
                       </TableRow>
