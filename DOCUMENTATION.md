@@ -5393,6 +5393,18 @@ This section records architectural patterns that have been audited and intention
 
 ---
 
+### v2.66.7.33 — KPI Journey Timeline Showed Blank: Wrong Audit Table & Status Vocabulary (BUG-031) (2026-04-25)
+- **Symptom:** `/reports/kpi-journey` rendered "No KPIs found for this period." with all summary cards reading **0**, even for periods with thousands of approved KPIs (e.g. March 2026 = 1,757 KPIs).
+- **Root cause:** The previous migration of `get_kpi_journey_report` (v2.66.7.30) introduced two breaking defects in the `transitions` CTE:
+  1. It read from a `audit_logs` table that does not exist in this project (canonical table is `public.kpi_audit_logs`). Every RPC call threw `42P01: relation "audit_logs" does not exist`, the React Query rejected, and the page silently fell through to its empty-state branch.
+  2. Even with the table fixed, the status-literal filters used outdated stage names (`l1_review`, `auditor_review`, `skip_level_review`) instead of the project's canonical workflow vocabulary (`manager_check`, `audit`, `skip_level_check`). All per-stage timestamp columns would have been silently `null` for every row.
+  3. The join used `audit_logs.entity_id::uuid` / `entity_type='kpi'`; `kpi_audit_logs` keys directly off `kpi_id uuid`.
+- **Why it appeared "report-wide":** A code/function scan confirmed the defect was isolated to `get_kpi_journey_report`. No other report function references `audit_logs`; every other client and server reference uses `kpi_audit_logs`. Other reports that look "blank" are unrelated and should be diagnosed individually (typically empty filter results, fiscal-year vs calendar-year mismatch, or RLS).
+- **Fix:** Single migration redefining `get_kpi_journey_report` with: (a) `FROM kpi_audit_logs al` joined by `al.kpi_id`, (b) canonical status literals across all six stage filters, and (c) the matching `workflow_chain` CASE. Function signature, security (`STABLE SECURITY DEFINER, search_path=public`), JSONB output shape, summary aggregation, and pagination all unchanged — so no client edit was required.
+- **Verification:** `SELECT get_kpi_journey_report('March', 2026, …)` now returns `totalCount: 1757`, `summary.pending: 819`, `summary.totalSendBacks: 132` and three populated rows for `LIMIT 3` (previously: error).
+- **Files:** `supabase/migrations/20260425115401_*.sql`, `src/test/bugBountyFixes.test.ts` (BUG-031), `POLICY.md` §104, `mem://architecture/database/kpi-audit-logs-canonical`.
+- *Data Impact*: None — read-only function replace. *Workflow Impact*: None. *UI Impact*: KPI Journey Timeline now renders rows + correct summary numbers + per-stage timestamps. *Regression Risk*: Very low — signature and JSONB shape preserved; BUG-031 pins the canonical table & status vocabulary against the migration file so the wrong identifiers cannot return.
+
 ## v2.66.7.31 — TNI Report: Empty-Period Guidance & Range Backfill (BUG-029)
 
 ### Symptom

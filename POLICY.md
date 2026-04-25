@@ -1820,3 +1820,29 @@ Rules:
 4. Branding: rocket + rising green growth chart, conveying "data is being refreshed and improved".
 
 Currently applied to: Reviewer Grid (`EmployeeSelectorGrid`). Roll-out to other primary data views is tracked separately.
+
+---
+
+## §104 — Canonical Audit Table & Workflow-Status Vocabulary (v2.66.7.33)
+
+**Rule.** Any server-side function, RPC, view, edge function, or migration that aggregates per-KPI workflow timestamps or status transitions MUST read from `public.kpi_audit_logs` and join via the `kpi_id uuid` column. Use of a `public.audit_logs` table (which does not exist in this project) is forbidden. Filters on `(new_value->>'status')` MUST use the project's canonical workflow vocabulary, exclusively:
+
+| Stage             | Canonical literal     |
+|-------------------|-----------------------|
+| Self review       | `self_review`         |
+| Manager review    | `manager_check`       |
+| Skip-level review | `skip_level_check`    |
+| HR-PMS review     | `hr_pms_review`       |
+| Auditor review    | `audit`               |
+| Management review | `management_review`   |
+| KRA assigned      | `kra_set`             |
+| Final approved    | `approved`            |
+
+The non-canonical literals `l1_review`, `auditor_review`, and `skip_level_review` are forbidden in any production SQL or application code.
+
+**Background.** The KPI Journey Timeline RPC was published with `FROM audit_logs` and the wrong status literals; the report rendered blank for ~1 day even though thousands of KPIs existed for the selected period. The defect was caught only when a user reported the empty screen. See `DOCUMENTATION.md` v2.66.7.33 (BUG-031).
+
+**Enforcement.**
+1. Every migration that touches a report or audit-driven RPC MUST be paired with a regression test in `src/test/bugBountyFixes.test.ts` that pins the migration text against `kpi_audit_logs`, the `kpi_id` join, and the canonical status table above.
+2. Code review SHOULD reject any new reference to `audit_logs` (without the `kpi_` / `system_` / `pip_` / `review_period_` prefix) or to non-canonical stage literals.
+3. `BUG-031` is the canonical anchor for this rule.
