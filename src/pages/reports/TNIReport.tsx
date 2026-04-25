@@ -226,10 +226,10 @@ export default function TNIReport() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Compliance Gaps</CardTitle>
-              <ShieldAlert className="h-4 w-4 text-warning" />
+              <ShieldAlert className="h-4 w-4 text-amber-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-warning">{summary?.complianceGaps || 0}</div>
+              <div className="text-2xl font-bold text-amber-600">{summary?.complianceGaps || 0}</div>
               <p className="text-xs text-muted-foreground">Auto-zero / non-submission</p>
             </CardContent>
           </Card>
@@ -531,7 +531,7 @@ export default function TNIReport() {
                         </TableCell>
                         <TableCell>
                           <Badge variant={tn.gap_type === 'compliance' ? 'outline' : 'secondary'}
-                                 className={tn.gap_type === 'compliance' ? 'border-warning text-warning' : ''}>
+                                 className={tn.gap_type === 'compliance' ? 'border-amber-500 text-amber-600' : ''}>
                             {tn.gap_type === 'compliance' ? 'Compliance' : 'Training'}
                           </Badge>
                         </TableCell>
