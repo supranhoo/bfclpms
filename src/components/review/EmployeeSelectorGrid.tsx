@@ -1573,7 +1573,6 @@ export function EmployeeSelectorGrid({
 
   return (
     <div className="space-y-6 min-h-[600px] relative">
-      <RefreshOverlay open={userRefreshing} />
       {isBackgroundFetching && (
         <div
           className="absolute top-0 right-0 z-10 flex items-center gap-2 text-xs text-muted-foreground bg-background/80 backdrop-blur-sm px-2 py-1 rounded-md border"
