@@ -1,65 +1,77 @@
-## Plan — Fix Misleading "N/A" in Self Column for Org KPIs
+## Plan — Add "Assigned Workflow" column to KPI Journey Excel export only
 
-### What the user is seeing
+### Goal
+Add an **Assigned Workflow** column to the **Excel export** of the KPI Journey Timeline report. The on-screen table is **unchanged** (kept dense by request).
 
-On Subhransu Sekhar Nayak's scorecard (Feb 2026), the KPI **"Proactive Safety Reporting (UA, UC, & Near Miss)"** — an **Org KPI — Employee** scoped, Data-Owner-fed — shows:
-- Achieved: **157** (correct, sourced from `org_kpi_values`)
-- Self column: **N/A** ← perceived as a bug
-- Manager: 5, Final/Status visible
+The cell value is a **compact stage-chain string per employee**, e.g.:
+- `Self → L1 → HR PMS → Audit → Mgmt`
+- `Self → L1 → Skip → HR PMS → Audit → Mgmt`
+- `Self → L1` (short workflow)
 
-### Root Cause (Confirmed)
+### How the chain is resolved
+Per **employee + period**, using the same hierarchy as the existing `get_bulk_employee_workflows` RPC:
 
-DB state for this row (`kpi_id 74069bc0-…`):
-- `is_org_level = true`
-- `review_submissions.self_score = NULL`
-- `review_submissions.achieved_value = NULL` (UI value 157 comes from `org_kpi_values` via `getOrgKpiValue` — by design per the Submission Snapshot Immutability policy + Org KPI propagation)
-- `manager_score = 5`, status `approved`
-
-In `src/components/review/KpiDetailsTable.tsx` (lines 606–607), the rendering rule is:
-```ts
-const showNA = score === null && (stageCompleted || (submission?.is_na && stageReached));
+```text
+period-specific employee → ongoing employee
+  → period-specific department → ongoing department
+    → period-specific pms_grade → ongoing pms_grade
+      → global employee → global department → global pms_grade
+        → system default workflow_template (is_default = true)
 ```
 
-For Org KPIs, the **`self_review` stage is bypassed** — the employee never enters a self-score; the achieved value comes from the Data Owner via `org_kpi_values`. So `self_score` is **legitimately NULL**, not "missing". But the table treats `self_review` as a normal completed stage with a missing score → renders the amber **N/A** badge.
+The resolved template's `stages` array is mapped to compact labels:
 
-This is consistent with the existing memory rule for Org KPI propagation (Data Owner → `org_kpi_values` → fallback for Achieved column) and with POLICY §88 (submission snapshots are frozen). The N/A pill is purely a UI mis-classification, not a data bug.
+| DB stage             | Compact label |
+|----------------------|---------------|
+| `self_review`        | Self          |
+| `manager_check`      | L1            |
+| `skip_level_check`   | Skip          |
+| `hr_pms_review`      | HR PMS        |
+| `audit`              | Audit         |
+| `management_review`  | Mgmt          |
+| `approved`           | *(omitted — terminal)* |
 
-(Note: the screenshot status badge "Manager Check" vs DB `approved` is a separate stale-cache effect already addressable via the v2.66.7.23 Refresh button — out of scope here.)
+Joined with `→`. Falls back to `'—'` when no workflow resolves.
 
-### The Fix
+### Changes
 
-In `src/components/review/KpiDetailsTable.tsx`, inside the score-column render branch:
+**1. Database — extend `get_kpi_journey_report` RPC (migration)**
+- Add a `resolved_workflow` CTE that, for the **paged** KPIs only, joins through the hierarchy and returns the `stages` array per `employee_id`.
+- Each output row gains `'workflowChain': text` — the pre-formatted compact chain string built in SQL using the label map above.
+- Backward-compatible: existing fields untouched, RPC signature unchanged.
 
-1. **Detect the bypass case** for the Self column on an Org KPI:
-   ```ts
-   const isOrgKpiSelfBypass =
-     col.key === 'self_score' &&
-     kpi.is_org_level === true &&
-     score === null &&
-     !submission?.is_na;        // genuine N/A still wins
-   ```
-2. **Render an em-dash with a tooltip** instead of the amber N/A badge:
-   - Visual: `—` in muted color (matches the existing `renderScoreCell(null)` styling).
-   - Tooltip: *"Self-review is not collected for Org KPIs. The achieved value is provided by the Data Owner."*
-3. Keep all other branches untouched — genuine N/A (`is_na=true`), Re-review (downstream score evidence), and stage-completed-with-missing-self-score for non-Org KPIs all behave as before.
-4. Same treatment will naturally apply to other `review_period`s where the Org KPI was approved without a self entry — no period-specific logic needed.
+**2. Hook — `src/hooks/useKpiJourneyReport.ts`**
+- Extend `KpiJourneyRow` with `workflowChain: string`.
+- `fetchKpiJourneyExportData` already paginates the same RPC in 500-row batches — no signature change.
 
-### Files to Change
-| File | Change |
-|---|---|
-| `src/components/review/KpiDetailsTable.tsx` | Add Org-KPI Self-bypass branch in the score-column renderer; wrap the muted dash in a `Tooltip` with the explanatory text |
-| `src/test/bugBountyFixes.test.ts` | Add **BUG-023** asserting: (a) Org KPI + null self_score does not produce the amber N/A badge; (b) non-Org KPI behaviour is unchanged; (c) `is_na=true` still wins |
-| `DOCUMENTATION.md` | v2.66.7.25 changelog entry — Self column for Org KPIs renders a tooltipped em-dash instead of N/A |
-| `POLICY.md` | §96 — Org KPIs do not collect self-reviews; UI surfaces this as an em-dash with explanatory tooltip, never as "N/A" |
+**3. UI — `src/pages/reports/KpiJourneyReport.tsx`**
+- **No table changes.** No new `<TableHead>` / `<TableCell>`.
+- In `handleExport`, insert one new field into the export object, immediately after `'Frequency'` and before `'Month'`:
+  ```ts
+  'Assigned Workflow': r.workflowChain,
+  ```
 
-### Risk & Impact Report
-- **Data impact:** None — UI-only change. No schema, RLS, or score data touched.
-- **Workflow impact:** None — does not alter who reviews or scores anything.
-- **UI/UX:** Org KPI rows lose the misleading amber "N/A" pill in the Self column (and gain a tooltip). All non-Org KPI rendering is byte-identical.
-- **Regression risk:** Low. Branch is gated on `kpi.is_org_level === true && col.key === 'self_score' && !submission?.is_na`, so it cannot affect other KPIs, other columns, or genuine N/A rows.
-- **Mitigation:** New BUG-023 test + the existing manual Refresh button (v2.66.7.23) lets users re-validate after the fix ships.
+**4. Tests — `src/test/bugBountyFixes.test.ts`**
+- Add **BUG-024** asserting:
+  - `KpiJourneyRow` type carries `workflowChain`.
+  - `KpiJourneyReport.tsx` source includes the `'Assigned Workflow'` export key.
+  - On-screen `<TableHeader>` block does **not** contain "Assigned Workflow" (regression guard so the column stays export-only).
+
+**5. Documentation**
+- `DOCUMENTATION.md` → bump to **v2.66.7.26**, document the new export-only column and the stage-label mapping.
+- `POLICY.md` → add **§97**: *"The KPI Journey Timeline Excel export must surface the resolved workflow as a compact stage chain (e.g. `Self → L1 → HR PMS → Audit → Mgmt`) per employee, using the same workflow-resolution hierarchy as the workflow engine. The on-screen table remains unchanged to preserve column density."*
+
+### Risk & Impact
+| Area | Impact |
+|------|--------|
+| Data | Read-only RPC extension; no schema, no RLS, no column changes. |
+| Workflow | None — resolution mirrors `get_bulk_employee_workflows`. |
+| UI/UX | None — on-screen table unchanged. |
+| Performance | Resolution runs on paged subsets only (≤500 per export batch); negligible cost. Payload gains one short string per row. |
+| Regression | Low — RPC remains backward-compatible; no rendering paths altered. |
 
 ### Out of Scope
-- The stale "Manager Check" status badge in the screenshot vs DB `approved` — this is a cache freshness issue solvable with the existing Refresh button; no logic change needed.
-- Any change to Org KPI propagation, `org_kpi_values`, or the Self-review submission engine.
-- The Self column behaviour for non-Org KPIs (genuine missing self-scores still surface as N/A — that is correct).
+- No on-screen column.
+- No filter on workflow.
+- No change to the workflow engine or `get_bulk_employee_workflows`.
+- No changes to other reports.
