@@ -529,31 +529,53 @@ describe('BUG-029: TNI empty-period guidance & range backfill', () => {
   });
 });
 
-// BUG-030: Centered RefreshOverlay must be wired into EmployeeSelectorGrid and
-// gated to user-initiated refreshes so it doesn't appear on initial page load.
-describe('BUG-030: RefreshOverlay (centered refresh indicator)', () => {
-  it('RefreshOverlay component exists with required props and a11y attributes', async () => {
+// BUG-030 (revised v2.66.7.34): Centered overlay is reserved for page
+// navigation and initial data loads — NOT for user-initiated refresh clicks.
+// PageLoadingOverlay is mounted by DashboardLayout (Suspense fallback +
+// RouteDataLoadingGate). The Refresh button keeps its inline spinner only.
+describe('BUG-030: PageLoadingOverlay wired into DashboardLayout', () => {
+  it('PageLoadingOverlay component exists with required a11y attributes and "Please wait" default', async () => {
     const fs = await import('node:fs');
-    const src = fs.readFileSync('src/components/ui/RefreshOverlay.tsx', 'utf-8');
-    expect(src).toMatch(/export const RefreshOverlay/);
-    // Centered + fixed positioning
+    const src = fs.readFileSync('src/components/ui/PageLoadingOverlay.tsx', 'utf-8');
+    expect(src).toMatch(/export const PageLoadingOverlay/);
     expect(src).toMatch(/fixed inset-0/);
     expect(src).toMatch(/items-center justify-center/);
-    // Accessibility
     expect(src).toMatch(/role="status"/);
     expect(src).toMatch(/aria-live="polite"/);
-    // Branded art
     expect(src).toMatch(/RocketGrowthArt/);
+    expect(src).toMatch(/label = 'Please wait'/);
+    expect(src).toMatch(/sublabel = 'Loading…'/);
   });
 
-  it('EmployeeSelectorGrid mounts RefreshOverlay and gates it to user clicks', async () => {
+  it('DashboardLayout uses PageLoadingOverlay as Suspense fallback and mounts RouteDataLoadingGate', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/components/layout/DashboardLayout.tsx', 'utf-8');
+    expect(src).toMatch(/from '@\/components\/ui\/PageLoadingOverlay'/);
+    expect(src).toMatch(/Suspense fallback=\{<PageLoadingOverlay open label="Please wait" \/>\}/);
+    expect(src).toMatch(/function RouteDataLoadingGate/);
+    expect(src).toMatch(/useIsFetching/);
+    expect(src).toMatch(/useLocation/);
+    expect(src).toMatch(/<RouteDataLoadingGate \/>/);
+  });
+});
+
+// BUG-032 (v2.66.7.34): Per POLICY.md §103, the reviewer grid Refresh button
+// must NOT mount a centered overlay. Inline button feedback only.
+describe('BUG-032: EmployeeSelectorGrid no longer mounts RefreshOverlay', () => {
+  it('grid source does not import or mount RefreshOverlay', async () => {
     const fs = await import('node:fs');
     const src = fs.readFileSync('src/components/review/EmployeeSelectorGrid.tsx', 'utf-8');
-    expect(src).toMatch(/from '@\/components\/ui\/RefreshOverlay'/);
-    expect(src).toMatch(/<RefreshOverlay open=\{userRefreshing\}/);
-    // Gate: handleRefresh sets the flag; effect clears once fetches settle
-    expect(src).toMatch(/setUserRefreshing\(true\)/);
-    expect(src).toMatch(/if\s*\(userRefreshing\s*&&\s*!isRefreshing\)\s*setUserRefreshing\(false\)/);
+    expect(src).not.toMatch(/from '@\/components\/ui\/RefreshOverlay'/);
+    expect(src).not.toMatch(/<RefreshOverlay\b/);
+    expect(src).not.toMatch(/setUserRefreshing/);
+    expect(src).not.toMatch(/userRefreshing/);
+  });
+
+  it('inline Refresh button still binds to isRefreshing for spinner + disabled state', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/components/review/EmployeeSelectorGrid.tsx', 'utf-8');
+    expect(src).toMatch(/disabled=\{isRefreshing\}/);
+    expect(src).toMatch(/isRefreshing\s*\?\s*'animate-spin'/);
   });
 });
 
