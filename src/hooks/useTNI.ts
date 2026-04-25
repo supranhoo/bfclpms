@@ -28,6 +28,7 @@ export interface TrainingNeed {
     employee_code: string | null;
     department_id: string | null;
     designation: string | null;
+    department?: { id: string; name: string } | null;
   };
   category?: {
     id: string;
@@ -101,7 +102,8 @@ export function useTrainingNeeds(filters?: {
         .select(`
           *,
           employee:profiles!training_needs_employee_id_fkey(
-            id, full_name, employee_code, department_id, designation
+            id, full_name, employee_code, department_id, designation,
+            department:departments(id, name)
           ),
           category:kra_categories(id, name),
           kpi:kpis(id, kra_name, kpi_name)
