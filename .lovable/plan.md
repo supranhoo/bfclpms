@@ -1,55 +1,67 @@
-# Why the TNI Report Shows Zeros
+# Plan — Visible, centered Refresh indicator (rocket + growth chart)
 
-## Root Cause (RCA)
+## Problem
+On the reviewer grid (`EmployeeSelectorGrid`), clicking **Refresh** only spins the small icon inside the top-right button. Users miss it and think nothing is happening. The user wants:
+1. A clearly visible refresh indicator
+2. Positioned in the **center of the screen**
+3. Styled like the uploaded image — a **rocket launching along a rising green growth chart** (success / "data being refreshed and improved" feel)
 
-The report itself is working correctly — the **database has no Training Needs records for Sep / Oct / Nov 2025**, which are the months your filter is currently covering.
+## Solution Overview
+Build a reusable centered overlay component `RefreshOverlay` that renders an animated rocket-on-growth-chart SVG with a "Refreshing data…" caption, and show it whenever the reviewer grid's tracked queries are refetching (`isRefreshing` already exists in `EmployeeSelectorGrid.tsx`).
 
-I verified the `training_needs` table directly. Detection has been run for these periods only:
+The small spinner in the Refresh button stays (gives button-level feedback + disabled state), but the heavy lifting of "is something happening?" moves to the centered overlay.
 
-| Period | Skill Gaps | Compliance | High Priority |
-|---|---|---|---|
-| Dec 2025 | 266 | 0 | 212 |
-| Jan 2026 | 341 | 0 | 282 |
-| Feb 2026 | 404 | 0 | 363 |
-| Mar 2026 | 168 | 121 | 239 |
-| **Jul–Nov 2025** | **0** | **0** | **0** |
+## What to Build
 
-So when your filter (single-month, QTD, YTD, AY, or custom) resolves to a window that includes **Jul–Nov 2025**, the Monthly Summary sheet correctly emits zero rows for those months — because nothing was ever detected for them.
+### 1. New component — `src/components/ui/RefreshOverlay.tsx`
+- Fixed-position overlay: `fixed inset-0 z-[60] flex items-center justify-center`
+- Semi-transparent backdrop (`bg-background/70 backdrop-blur-sm`) so the page is dimmed but still visible
+- Centered card with:
+  - Inline animated SVG: axes (X/Y), three rising green arrows of increasing height, and a rocket at the tip of the tallest arrow — matching the reference image's palette (deep navy axes/rocket body, vibrant green `#22c55e`-ish arrows, soft mint glow)
+  - Subtle motion: rocket gently translates up-right + small flame flicker, arrows fade-in sequentially (pure CSS keyframes via Tailwind `animate-*` utilities + a small `<style>`-less inline `@keyframes` in `index.css`)
+  - Caption: **"Refreshing data…"** + sub-line **"Fetching the latest scores and assignments"**
+- Props: `open: boolean`, optional `label?: string`
+- Accessibility: `role="status"`, `aria-live="polite"`, `aria-label="Refreshing data"`
+- Respects `prefers-reduced-motion` (disables transforms, keeps static icon)
 
-## Why this happens
+### 2. Add keyframes — `src/index.css`
+Add `@keyframes rocket-launch`, `rocket-flame`, and `arrow-rise` plus utility classes (`.animate-rocket-launch`, etc.) so the SVG animates without extra deps.
 
-TNI records are not generated automatically every month. They exist only for periods where someone clicked **"Detect TNI"** on this page (or the equivalent admin action). Earlier months in your AY (Jul–Nov 2025) were never detected, so the table is empty for them and every aggregation (cards, category, department, monthly export) reads as `0`.
+### 3. Wire into reviewer grid — `src/components/review/EmployeeSelectorGrid.tsx`
+- Import `RefreshOverlay`
+- Render `<RefreshOverlay open={isRefreshing} />` near the top of the returned JSX
+- Keep existing button spinner for inline feedback
+- Show the overlay **only when refresh was user-triggered or any tracked query is actively refetching** (current `isRefreshing` already covers this)
 
-## Two Things I Recommend Doing
+### 4. Documentation & policy sync (per project rules)
+- `DOCUMENTATION.md` — add entry under UI components: "RefreshOverlay — centered branded refresh indicator used by reviewer grid"
+- `POLICY.md` — add a short UX policy: "All long-running refresh actions affecting the primary data view must surface a centered overlay indicator, not just an inline spinner"
+- Append to Version History
+- Add a memory file `mem://design/refresh-overlay-pattern` describing when to use it
 
-### A. Immediate (you, no code change)
-Click **"Detect TNI"** once for each missing month (Jul, Aug, Sep, Oct, Nov 2025). The page already supports this — switch period mode to **Month**, pick the month, click Detect. Data will populate.
+### 5. Regression test
+Add `BUG-030` to `src/test/bugBountyFixes.test.ts`:
+- Renders `RefreshOverlay open={true}` → overlay visible with `role="status"` and label
+- Renders `RefreshOverlay open={false}` → not in DOM
 
-### B. Code improvements I will ship
+## Risk & Impact Report
 
-1. **Empty-period banner** on the report: when the selected range contains months with zero TNI records but those months *do* have submitted KPIs, show an inline alert:
-   *"No TNI data detected for Jul, Aug, Sep, Oct, Nov 2025. Click 'Detect TNI' for each month, or use 'Backfill Range' below to run detection in bulk."*
+| Area | Impact |
+|---|---|
+| Data | None — purely presentational |
+| Workflow | None — refresh behavior unchanged |
+| UI/UX | New overlay appears during refetch; dims page briefly. Mitigated by translucent backdrop + auto-dismiss when fetches settle |
+| Regression | Low. Only `EmployeeSelectorGrid` is wired in this pass. Existing button spinner preserved |
+| Accessibility | Improved — adds `role="status"` + reduced-motion support |
+| Mitigation | New unit test, scoped CSS keyframes (prefixed), component is opt-in per page |
 
-2. **Backfill Range button** (visible only in multi-month modes — QTD, YTD, AY, Custom): a single action that loops through every month in the active range and runs `detect_training_needs_for_period` for each. Progress toast: *"Detecting 5 / 12 months…"*. This eliminates the manual month-by-month clicking.
+## Files to Change
+- **Add** `src/components/ui/RefreshOverlay.tsx`
+- **Edit** `src/index.css` (keyframes)
+- **Edit** `src/components/review/EmployeeSelectorGrid.tsx` (mount overlay)
+- **Edit** `src/test/bugBountyFixes.test.ts` (BUG-030)
+- **Edit** `DOCUMENTATION.md`, `POLICY.md`
+- **Add** `mem://design/refresh-overlay-pattern` + update `mem://index.md`
 
-3. **Monthly Summary sheet — annotate empty months**: in the Excel export, append a final column **"Detection Status"** with values `Detected` or `Not detected — run TNI detection`, so the zero rows are unambiguous and not mistaken for "no skill gaps".
-
-4. **Documentation & Policy sync**:
-   - `DOCUMENTATION.md` (v2.66.7.31): document that TNI is on-demand, list the detection contract, and add the new Backfill Range action.
-   - `POLICY.md`: add a clause requiring that any month with closed/approved KPIs SHOULD have TNI detection run before reporting cycles close.
-
-5. **Regression test** (`bugBountyFixes.test.ts`, `BUG-029`): assert that when `useTNISummary` is called for a period with no `training_needs` rows, totals are `0` and the UI surfaces the empty-state alert (not silently zeros).
-
-## Files to change
-
-- `src/pages/reports/TNIReport.tsx` — empty-state banner, Backfill Range button + handler, export annotation column
-- `src/hooks/useTNI.ts` — `useBackfillTrainingNeeds` mutation that iterates `periodRanges` and calls the existing RPC per month
-- `src/test/bugBountyFixes.test.ts` — BUG-029
-- `DOCUMENTATION.md`, `POLICY.md` — sync
-
-## Risk & Impact
-
-- **Data**: No schema changes. Backfill only inserts via the existing, idempotent `detect_training_needs_for_period` RPC.
-- **Workflow**: Adds one new admin action; existing single-month Detect button is unchanged.
-- **UI/UX**: One alert + one new button in multi-month modes only; no layout disruption.
-- **Regression**: Low. New code paths are gated behind `isMulti`.
+## Out of Scope (ask if you want them next)
+- Rolling out the same overlay to other pages (Reports, Admin grids, Inbox). Easy follow-up once the component exists — say the word.
