@@ -17,6 +17,7 @@ import {
   useTNIByDepartment, 
   useTNISummary,
   useDetectTrainingNeeds,
+  useBackfillTrainingNeeds,
   TNIPriority,
   TNIStatus,
   TNIGapType,
@@ -33,10 +34,12 @@ import {
   TrendingDown, 
   User, 
   Users,
-  ShieldAlert
+  ShieldAlert,
+  Layers
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import * as XLSX from 'xlsx';
 
 const PRIORITY_COLORS = {
@@ -160,6 +163,16 @@ export default function TNIReport() {
   const { data: departmentData, isLoading: departmentLoading } = useTNIByDepartment(undefined, undefined, periodRanges);
   const { data: trainingNeeds, isLoading: needsLoading } = useTrainingNeeds({ periodRanges });
   const detectMutation = useDetectTrainingNeeds();
+  const backfillMutation = useBackfillTrainingNeeds();
+
+  // Months in the active range that have ZERO TNI records.
+  const emptyMonths = useMemo<PeriodRange[]>(() => {
+    if (!trainingNeeds) return [];
+    const present = new Set(trainingNeeds.map(tn => `${tn.review_year}|${tn.review_period}`));
+    return periodRanges.filter(r => !present.has(`${r.year}|${r.month}`));
+  }, [trainingNeeds, periodRanges]);
+
+  const allEmpty = periodRanges.length > 0 && emptyMonths.length === periodRanges.length;
 
   const filteredPeriods = useMemo(() => {
     if (!periods) return [];
@@ -255,6 +268,7 @@ export default function TNIReport() {
     });
     const monthlyRows = periodRanges.map(r => {
       const b = buckets.get(`${r.year}|${r.month}`);
+      const detected = !!b;
       return {
         'Year': r.year,
         'Month': r.month,
@@ -262,6 +276,7 @@ export default function TNIReport() {
         'Compliance Gaps': b?.ComplianceGaps ?? 0,
         'High Priority (Skill)': b?.HighPriority ?? 0,
         'Employees Affected': b?.Employees.size ?? 0,
+        'Detection Status': detected ? 'Detected' : 'Not detected — run TNI detection',
       };
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(monthlyRows), 'Monthly Summary');
@@ -273,6 +288,11 @@ export default function TNIReport() {
   };
 
   const isLoading = summaryLoading || categoryLoading || departmentLoading;
+
+  const handleBackfill = () => {
+    if (!isMulti) return;
+    backfillMutation.mutate({ ranges: periodRanges });
+  };
 
   return (
     <div className="space-y-6">
@@ -286,6 +306,18 @@ export default function TNIReport() {
               <Button variant="outline" size="sm" onClick={handleExport} disabled={!trainingNeeds?.length}>
                 <Download className="h-4 w-4 mr-2" />
                 Export
+              </Button>
+            )}
+            {isMulti && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleBackfill}
+                disabled={backfillMutation.isPending}
+                title="Run TNI detection for every month in the selected range"
+              >
+                <Layers className={`h-4 w-4 mr-2 ${backfillMutation.isPending ? 'animate-pulse' : ''}`} />
+                Backfill Range ({periodRanges.length})
               </Button>
             )}
             {isMulti && (
@@ -313,6 +345,32 @@ export default function TNIReport() {
           </div>
         }
       />
+
+      {/* Empty-period guidance */}
+      {!needsLoading && emptyMonths.length > 0 && (
+        <Alert variant={allEmpty ? 'destructive' : 'default'}>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>
+            {allEmpty
+              ? 'No TNI data detected for the selected range'
+              : `${emptyMonths.length} month${emptyMonths.length !== 1 ? 's' : ''} in this range have no TNI data`}
+          </AlertTitle>
+          <AlertDescription>
+            <div className="mb-2">
+              Training Needs are generated on demand. The following month{emptyMonths.length !== 1 ? 's have' : ' has'} not been detected yet:{' '}
+              <span className="font-medium">
+                {emptyMonths.map(m => `${m.month.slice(0,3)} ${m.year}`).join(', ')}
+              </span>
+              .
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {isMulti
+                ? 'Click "Backfill Range" above to run detection for every month in the selected range, or pick "Month" mode and detect one month at a time.'
+                : 'Click "Detect TNI" above to generate training needs for this month.'}
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Filters */}
       <Card>

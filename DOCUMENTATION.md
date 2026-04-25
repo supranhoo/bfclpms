@@ -5390,3 +5390,24 @@ This section records architectural patterns that have been audited and intention
 - **Field Mapping Contract:** Report RPCs that return JSONB rows must map each frontend field to its semantically correct DB column. Sharing the same column between two semantically distinct keys (e.g., `reviewPeriod` and `status`) is forbidden.
 - **Files:** `supabase/migrations/20260425073216_*.sql`, `src/test/bugBountyFixes.test.ts` (BUG-028), `POLICY.md` §101.
 - *Data Impact*: None — read-only RPC redefinition. *Workflow Impact*: None — only the exported Month cell now shows the correct period name. *UI Impact*: The on-screen KPI Journey table also benefits where it surfaces `reviewPeriod`. *Regression Risk*: Very low — change isolated to one CTE SELECT list and two JSONB keys; BUG-028 pins the canonical mapping against the migration file.
+
+---
+
+## v2.66.7.31 — TNI Report: Empty-Period Guidance & Range Backfill (BUG-029)
+
+### Symptom
+On `/reports/tni`, the **Monthly Summary** export sheet showed all zeros for months like Sep / Oct / Nov 2025 even though scoring data existed elsewhere in the system.
+
+### RCA
+TNI records in `public.training_needs` are generated **on demand** by the `detect_training_needs_for_period(p_review_period, p_review_year, p_threshold)` RPC. They are NOT auto-created when KPIs are scored. When a user selects a multi-month range (QTD / YTD / AY / Custom) that includes months for which the RPC has never been run, every aggregation (cards, category, department, monthly export) correctly returns `0` — but the UI gave no signal that the months were *undetected* rather than *gap-free*.
+
+### Fix
+1. **`useBackfillTrainingNeeds`** (`src/hooks/useTNI.ts`) — new mutation that iterates the active `periodRanges`, calls the existing `detect_training_needs_for_period` RPC per month, and reports per-period success/failure. Cache invalidation is identical to single-month detect.
+2. **TNIReport empty-state alert** — when one or more months in the selected range have zero TNI rows, the report shows an inline alert listing the undetected months and pointing to either the **Backfill Range** action (multi-month modes) or the existing **Detect TNI** button (single-month mode).
+3. **Backfill Range action** — visible only in multi-month modes, runs detection across the entire active range in one click.
+4. **Monthly Summary export** — added a `Detection Status` column with values `Detected` or `Not detected — run TNI detection`, so zero rows are unambiguous.
+5. **Regression test** — `BUG-029` in `src/test/bugBountyFixes.test.ts` pins the contract.
+
+### Operational Note
+Run TNI backfill before closing a reporting cycle. The RPC is idempotent — re-running it for an already-detected month does not create duplicates.
+

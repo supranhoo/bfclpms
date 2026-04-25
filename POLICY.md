@@ -1796,3 +1796,13 @@ PostgREST silently caps unranged `select(...)` queries at 1000 rows. With the ac
 2. CTEs feeding JSONB row builders MUST `SELECT` every column referenced by a `jsonb_build_object` value expression. Reviewers should grep the JSONB block against the CTE's SELECT list before approval.
 3. When a report column appears to "show the same data as another column", treat it as a field-mapping defect first — not a frontend bug — and audit the RPC's JSONB keys.
 4. `BUG-028` is the canonical anchor for this rule.
+
+---
+
+## §102 — Training Needs Detection Lifecycle
+
+1. **On-demand generation.** `public.training_needs` rows are produced exclusively by `detect_training_needs_for_period(...)`. KPI scoring does not create TNI rows automatically.
+2. **Pre-close obligation.** Before any reporting cycle (monthly, quarterly, fiscal-year) is treated as closed, TNI detection MUST have been run for every month in the cycle that has approved KPI scores.
+3. **Reporting transparency.** TNI dashboards and exports MUST distinguish "detected with zero gaps" from "not yet detected." Silent zeros are forbidden.
+4. **Idempotency contract.** The detection RPC is safe to re-run; consumers of the RPC (single-month detect, range backfill) MUST NOT duplicate rows on re-execution.
+

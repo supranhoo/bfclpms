@@ -1,59 +1,55 @@
-## Root Cause Analysis — KPI Journey Timeline: "Month" column shows status
+# Why the TNI Report Shows Zeros
 
-### Bug
-In the exported "KPI Journey Timeline" Excel, the **Month** column displays workflow status values (`self_review`, `kra_set`, `manager_check`, `approved`, …) instead of the assessment month (e.g., `April`).
+## Root Cause (RCA)
 
-### RCA — exact source
+The report itself is working correctly — the **database has no Training Needs records for Sep / Oct / Nov 2025**, which are the months your filter is currently covering.
 
-The RPC `get_kpi_journey_report` (migration `20260425051150_f6fa5e76-f4ff-4e8d-9eb3-50ed4f4204a0.sql`) builds each row as JSONB. At line **197**:
+I verified the `training_needs` table directly. Detection has been run for these periods only:
 
-```sql
-'reviewPeriod', pg.status,        -- ❌ wrong: aliases status into the Month field
-'status',       COALESCE(pg.status, 'kra_set'),
-```
+| Period | Skill Gaps | Compliance | High Priority |
+|---|---|---|---|
+| Dec 2025 | 266 | 0 | 212 |
+| Jan 2026 | 341 | 0 | 282 |
+| Feb 2026 | 404 | 0 | 363 |
+| Mar 2026 | 168 | 121 | 239 |
+| **Jul–Nov 2025** | **0** | **0** | **0** |
 
-Both `reviewPeriod` and `status` are wired to the same column (`pg.status`). The frontend export then writes `r.reviewPeriod` into the **Month** Excel column (`src/pages/reports/KpiJourneyReport.tsx:148`), so the Month column inherits status text.
+So when your filter (single-month, QTD, YTD, AY, or custom) resolves to a window that includes **Jul–Nov 2025**, the Monthly Summary sheet correctly emits zero rows for those months — because nothing was ever detected for them.
 
-Compounding issue: the upstream `filtered_kpis` CTE (lines 22–49) never selects `k.review_period` or `k.review_year`, so even if the JSON key were corrected, the column would not be available — it must be added to the CTE first.
+## Why this happens
 
-This is a pure SQL field-mapping defect introduced when this RPC was last refactored. UI/export code is correct.
+TNI records are not generated automatically every month. They exist only for periods where someone clicked **"Detect TNI"** on this page (or the equivalent admin action). Earlier months in your AY (Jul–Nov 2025) were never detected, so the table is empty for them and every aggregation (cards, category, department, monthly export) reads as `0`.
 
-### Fix Plan
+## Two Things I Recommend Doing
 
-1. **New migration** redefining `get_kpi_journey_report`:
-   - In `filtered_kpis` CTE, add `k.review_period` and `k.review_year` to the SELECT list.
-   - In the `rows_data` JSONB builder, change:
-     ```sql
-     'reviewPeriod', pg.review_period,
-     'reviewYear',   pg.review_year,
-     'status',       COALESCE(pg.status, 'kra_set'),
-     ```
-   - Keep all other fields, filters, summary, and pagination logic identical (no behavior change elsewhere).
+### A. Immediate (you, no code change)
+Click **"Detect TNI"** once for each missing month (Jul, Aug, Sep, Oct, Nov 2025). The page already supports this — switch period mode to **Month**, pick the month, click Detect. Data will populate.
 
-2. **Frontend (no logic change, optional polish)** in `src/pages/reports/KpiJourneyReport.tsx`:
-   - Confirm `'Month': r.reviewPeriod` now renders the period name (e.g., `April`).
-   - Filename already uses `selectedPeriod` — unchanged.
+### B. Code improvements I will ship
 
-3. **Regression test** — add `BUG-028` to `src/test/bugBountyFixes.test.ts`:
-   - Pin the canonical mapping: `reviewPeriod` must come from `k.review_period`, NOT from `k.status`. Test reads the latest migration file and asserts the substring `'reviewPeriod', pg.review_period` exists and `'reviewPeriod', pg.status` does NOT.
+1. **Empty-period banner** on the report: when the selected range contains months with zero TNI records but those months *do* have submitted KPIs, show an inline alert:
+   *"No TNI data detected for Jul, Aug, Sep, Oct, Nov 2025. Click 'Detect TNI' for each month, or use 'Backfill Range' below to run detection in bulk."*
 
-4. **Docs / Policy sync (SSOT)**:
-   - `DOCUMENTATION.md` → bump version, add note under KPI Journey Report describing the field mapping contract.
-   - `POLICY.md` → add a clause requiring JSONB row builders in report RPCs to map each frontend field to its semantically correct DB column (no shared aliases between `reviewPeriod`, `status`, etc.).
+2. **Backfill Range button** (visible only in multi-month modes — QTD, YTD, AY, Custom): a single action that loops through every month in the active range and runs `detect_training_needs_for_period` for each. Progress toast: *"Detecting 5 / 12 months…"*. This eliminates the manual month-by-month clicking.
 
-### Risk & Impact
+3. **Monthly Summary sheet — annotate empty months**: in the Excel export, append a final column **"Detection Status"** with values `Detected` or `Not detected — run TNI detection`, so the zero rows are unambiguous and not mistaken for "no skill gaps".
 
-| Area | Impact |
-|---|---|
-| Data | Read-only RPC change. No schema migration, no row mutation. |
-| Workflow | None — only the exported Month cell value changes (status column already shows the same value and remains correct). |
-| UI | The on-screen KPI Journey table (if it surfaces `reviewPeriod`) will start showing the proper month. Verified table currently relies on the same hook field, so the UI also benefits. |
-| Regression | Very low. The change is isolated to two JSON keys and one CTE SELECT list; all other CTEs, filters, and aggregations are untouched. |
-| Mitigation | New BUG-028 regression test pins the mapping; existing journey-report tests continue to validate row counts and structure. |
+4. **Documentation & Policy sync**:
+   - `DOCUMENTATION.md` (v2.66.7.31): document that TNI is on-demand, list the detection contract, and add the new Backfill Range action.
+   - `POLICY.md`: add a clause requiring that any month with closed/approved KPIs SHOULD have TNI detection run before reporting cycles close.
 
-### Files to be edited (next step, after approval)
+5. **Regression test** (`bugBountyFixes.test.ts`, `BUG-029`): assert that when `useTNISummary` is called for a period with no `training_needs` rows, totals are `0` and the UI surfaces the empty-state alert (not silently zeros).
 
-- **new** `supabase/migrations/<timestamp>_fix_kpi_journey_review_period.sql`
-- `src/test/bugBountyFixes.test.ts` (add BUG-028)
-- `DOCUMENTATION.md` (version bump + section update)
-- `POLICY.md` (new clause on report RPC field mapping)
+## Files to change
+
+- `src/pages/reports/TNIReport.tsx` — empty-state banner, Backfill Range button + handler, export annotation column
+- `src/hooks/useTNI.ts` — `useBackfillTrainingNeeds` mutation that iterates `periodRanges` and calls the existing RPC per month
+- `src/test/bugBountyFixes.test.ts` — BUG-029
+- `DOCUMENTATION.md`, `POLICY.md` — sync
+
+## Risk & Impact
+
+- **Data**: No schema changes. Backfill only inserts via the existing, idempotent `detect_training_needs_for_period` RPC.
+- **Workflow**: Adds one new admin action; existing single-month Detect button is unchanged.
+- **UI/UX**: One alert + one new button in multi-month modes only; no layout disruption.
+- **Regression**: Low. New code paths are gated behind `isMulti`.
