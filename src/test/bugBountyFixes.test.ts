@@ -267,3 +267,32 @@ describe('BUG-022: Reviewer roster includes score-signature seed', () => {
     expect(hookBlock).toMatch(/0x811c9dc5|hash/);
   });
 });
+
+// BUG-023 (v2.66.7.25): The Self column in KpiDetailsTable was rendering an amber
+// "N/A" badge for Org KPIs because the self_review stage is bypassed (the achieved
+// value flows from the Data Owner via org_kpi_values, not from a self-entered score).
+// The bypass case must render a tooltipped em-dash, not "N/A". Genuine N/A rows
+// (review_submissions.is_na = true) must still surface as N/A.
+describe('BUG-023: Org KPI Self column shows tooltipped dash instead of N/A', () => {
+  const tableSource = fs.readFileSync(
+    path.resolve(__dirname, '../components/review/KpiDetailsTable.tsx'),
+    'utf8',
+  );
+
+  it('detects the Org KPI Self-bypass case', () => {
+    expect(tableSource).toContain('isOrgKpiSelfBypass');
+    expect(tableSource).toMatch(/col\.key === 'self_score'/);
+    expect(tableSource).toMatch(/kpi\.is_org_level === true/);
+  });
+
+  it('genuine N/A submissions still win over the Org KPI bypass', () => {
+    // The bypass guard must include `!submission?.is_na` so that explicit N/A
+    // rows continue to render the amber "N/A" badge.
+    expect(tableSource).toMatch(/isOrgKpiSelfBypass[\s\S]{0,200}!submission\?\.is_na/);
+  });
+
+  it('renders a tooltipped explanatory em-dash for the bypass case', () => {
+    expect(tableSource).toMatch(/isOrgKpiSelfBypass\s*\?[\s\S]{0,400}<Tooltip>/);
+    expect(tableSource).toContain('Self-review is not collected for Org KPIs');
+  });
+});
