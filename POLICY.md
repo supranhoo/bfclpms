@@ -1735,3 +1735,17 @@ PostgREST silently caps unranged `select(...)` queries at 1000 rows. With the ac
 1. The on-screen table must NOT render the Assigned Workflow column (export-only by design).
 2. `src/test/bugBountyFixes.test.ts::BUG-024` pins (a) `KpiJourneyRow.workflowChain` exists, (b) `handleExport` includes the `'Assigned Workflow'` key sourced from `r.workflowChain`, (c) the on-screen `<TableHeader>` does not include this column.
 3. Stage-label mapping must remain stable: `self_review`→Self, `manager_check`→L1, `skip_level_check`→Skip, `hr_pms_review`→HR PMS, `audit`→Audit, `management_review`→Mgmt; `approved` is omitted as terminal.
+
+## §98 — TNI Must Distinguish Compliance Failures from Skill Gaps (v2.66.7.27)
+
+**Rule.** Training Needs Identification (TNI) detection must classify each low-scoring KPI into exactly one of:
+- **`gap_type='compliance'`** — KPI scored low because the employee did not submit (`review_submissions.self_score IS NULL` OR `auto_advance_reason IS NOT NULL`). These are discipline / process failures, NOT training needs. They are surfaced for HR visibility but are **not eligible** for training plans or LMS handoff.
+- **`gap_type='skill'`** — KPI scored low despite a self-submission. These are genuine training candidates and feed the LMS module.
+
+**Rationale.** The HR KPI *"Identification & Consolidation of Training Needs from PMS Data"* measures *real* skill gaps. Mixing auto-zero non-submissions into the same bucket inflates the count, misdirects training spend, and unfairly tags compliant low-scorers alongside non-submitters.
+
+**Enforcement.**
+1. `detect_training_needs_for_period` runs Pass A (compliance) and Pass B (skill) separately, both guarded by the existing `NOT EXISTS` dedup on `kpi_id`.
+2. The TNI Report UI must split totals: "Training Needs" excludes `gap_type='compliance'`; "Compliance Gaps" is a separate card.
+3. Training delivery, attendance, and effectiveness tracking are **out of PMS scope** — the LMS module owns the lifecycle from `gap_type='skill'` onwards.
+4. `src/test/bugBountyFixes.test.ts::BUG-025` pins the enum value, the dual-pass branching condition, and the UI gap-type filter.
