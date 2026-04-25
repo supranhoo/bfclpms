@@ -1768,3 +1768,19 @@ PostgREST silently caps unranged `select(...)` queries at 1000 rows. With the ac
 1. `useTNI` hooks accept `periodRanges: PeriodRange[]`; a single-element array preserves the legacy `.eq` query path byte-for-byte.
 2. `src/test/bugBountyFixes.test.ts::BUG-026` pins the AY boundary logic (April 2026 → Jul 2025 … Jun 2026; October 2025 → Jul 2025 … Jun 2026), QTD/YTD windows, cross-year custom ranges, and the PostgREST `and(review_period.eq.X,review_year.eq.Y)` OR-clause shape.
 3. Training delivery and effectiveness remain LMS-owned (per §98) — AY filtering does not change handoff semantics.
+
+## §100 — Canonical `review_periods` Column Names (v2.66.7.29)
+
+**Rule.** All SQL — migrations, functions, triggers, RPCs, edge function queries — MUST reference the `public.review_periods` table using its actual column names:
+
+| Use this | Not this |
+|---|---|
+| `period_name` | ~~`month_name`~~ |
+| `review_year` | ~~`year`~~ |
+
+**Background.** Two functions shipped on 2026-04-21 (`fn_sync_org_status_to_future_open_periods`, `change_org_kpi_scope_cascading`) used the non-existent `month_name` / `year` columns. This silently broke every Org↔Normal KPI toggle for four days because the trigger fires after the UPDATE and rolls back the whole transaction with `column rp.month_name does not exist`. The locked-period guard inside both functions was simultaneously unreachable, leaving locked periods unprotected from forward-sync until the fix landed.
+
+**Enforcement.**
+1. Authors of any new function/migration touching `review_periods` MUST verify columns against `information_schema.columns` (or `psql \d public.review_periods`) before merging — this is the same audit pattern §92 codified for slim PostgREST selects.
+2. `src/test/bugBountyFixes.test.ts::BUG-027` pins the canonical names against the fix migration; future migrations that touch the same functions must keep the test green (or extend it with their own anchor).
+3. Code review checklist: any diff containing `review_periods` is auto-flagged for the column-name check.
