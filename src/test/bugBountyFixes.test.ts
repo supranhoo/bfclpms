@@ -496,3 +496,35 @@ describe('BUG-028: get_kpi_journey_report maps reviewPeriod to review_period (no
     expect(noComments).not.toMatch(/'reviewPeriod',\s*pg\.status/);
   });
 });
+
+// BUG-029: TNI report silently shows zeros when training_needs is empty
+// for months in the selected range. Two contracts must hold:
+//   1) `useBackfillTrainingNeeds` exists and iterates ranges via the existing
+//      `detect_training_needs_for_period` RPC.
+//   2) `TNIReport` surfaces an empty-period alert and an "Export Detection
+//      Status" column so empty months are not mistaken for "no skill gaps".
+describe('BUG-029: TNI empty-period guidance & range backfill', () => {
+  it('useTNI exposes useBackfillTrainingNeeds calling detect_training_needs_for_period', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/hooks/useTNI.ts', 'utf-8');
+    expect(src).toMatch(/export function useBackfillTrainingNeeds/);
+    expect(src).toMatch(/supabase\.rpc\(\s*['"]detect_training_needs_for_period['"]/);
+    // It must iterate through the ranges, not be a single-shot call.
+    expect(src).toMatch(/for\s*\(\s*let\s+i\s*=\s*0;\s*i\s*<\s*ranges\.length/);
+  });
+
+  it('TNIReport renders empty-period alert and Detection Status export column', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/pages/reports/TNIReport.tsx', 'utf-8');
+    // Empty-state computation
+    expect(src).toMatch(/emptyMonths/);
+    // Alert UI
+    expect(src).toMatch(/No TNI data detected/);
+    // Backfill action wired to the new mutation
+    expect(src).toMatch(/useBackfillTrainingNeeds/);
+    expect(src).toMatch(/Backfill Range/);
+    // Export annotation column
+    expect(src).toMatch(/'Detection Status'/);
+    expect(src).toMatch(/Not detected — run TNI detection/);
+  });
+});
