@@ -231,6 +231,7 @@ export default function TNIReport() {
       'Company': getCompanyCode(tn.employee_id || ''),
       'Employee Name': tn.employee?.full_name || '',
       'Employee Code': tn.employee?.employee_code || '',
+      'Department': (tn.employee as any)?.department?.name || '',
       'Designation': tn.employee?.designation || '',
       'KPI': tn.kpi?.kpi_name || '',
       'KRA': tn.kpi?.kra_name || '',
