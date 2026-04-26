@@ -99,9 +99,18 @@ export function MobileSelfReviewCard({
             {kpi.kra_categories?.name || 'Uncategorized'}
           </span>
         </div>
-        <Badge className={cn(statusColors[kpi.status || 'kra_set'], "text-xs shrink-0")}>
-          {statusLabels[kpi.status || 'kra_set']}
-        </Badge>
+        {kpi.status ? (
+          <Badge className={cn(statusColors[kpi.status], "text-xs shrink-0")}>
+            {statusLabels[kpi.status]}
+          </Badge>
+        ) : (
+          <Badge
+            className="text-xs shrink-0 bg-amber-100 text-amber-800 border border-amber-300"
+            title="POLICY §106 — kpis.status is NULL."
+          >
+            Status Missing
+          </Badge>
+        )}
       </div>
 
       {/* Row 1.5: Employee info (admin only) */}
