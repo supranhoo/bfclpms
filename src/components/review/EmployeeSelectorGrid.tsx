@@ -358,35 +358,48 @@ export function EmployeeSelectorGrid({
         ? stageFilteredLoading
         : (isFullAccess ? profilesLoading : teamLoading);
 
-  // Build merged base members with relationship tags for team view
+  // Build merged base members with relationship tags for team view.
+  //
+  // BUG-036 / POLICY §107 — Reviewer Self-Exclusion.
+  // No reviewer panel (Team, Audit, HR PMS, Management, Skip-Level, Pending-*,
+  // cross-check) may surface the viewer's own profile. Self-assessment lives
+  // exclusively under the Self tab. We strip the viewer (`user.id`) from the
+  // resolved member list at the very last step so every branch is covered
+  // (including admin / management / hr_pms / auditor running through Team).
   const baseMembers: EmployeeProfile[] | undefined = useMemo(() => {
+    let resolved: EmployeeProfile[] | undefined;
     if (viewLevel === 'team') {
       if (isFullAccess) {
         // Admin/auditor/management see all profiles; tag based on reporting chain
         const skipIds = new Set(skipLevelMembers?.map(m => m.id) || []);
         const directIds = new Set(teamMembers?.map(m => m.id) || []);
-        return allProfiles?.map(p => ({
+        resolved = allProfiles?.map(p => ({
           ...p,
           relationship: (skipIds.has(p.id) ? 'indirect' : directIds.has(p.id) ? 'direct' : undefined) as 'direct' | 'indirect' | undefined,
         }));
+      } else {
+        // Manager: merge direct + indirect
+        const directSet = new Set(teamMembers?.map(m => m.id) || []);
+        const directTagged = (teamMembers || []).map(m => ({ ...m, relationship: 'direct' as const }));
+        const indirectTagged = (skipLevelMembers || []).filter(m => !directSet.has(m.id)).map(m => ({ ...m, relationship: 'indirect' as const }));
+        resolved = [...directTagged, ...indirectTagged];
       }
-      // Manager: merge direct + indirect
-      const directSet = new Set(teamMembers?.map(m => m.id) || []);
-      const directTagged = (teamMembers || []).map(m => ({ ...m, relationship: 'direct' as const }));
-      const indirectTagged = (skipLevelMembers || []).filter(m => !directSet.has(m.id)).map(m => ({ ...m, relationship: 'indirect' as const }));
-      return [...directTagged, ...indirectTagged];
+    } else if ((viewLevel === 'audit' || viewLevel === 'management') && statusFilter === 'cross_check') {
+      // Cross-check mode: bypass workflow stage filter, show ALL employees
+      resolved = (allProfiles as EmployeeProfile[] | undefined) || [];
+    } else if (requiredStage) {
+      // For reviewer panels (hr_pms, audit, management, skip_level):
+      // Only show employees whose resolved workflow template includes the required stage.
+      resolved = (stageFilteredProfiles as EmployeeProfile[] | undefined) || [];
+    } else if (isFullAccess) {
+      resolved = allProfiles;
+    } else {
+      resolved = teamMembers;
     }
-    // Cross-check mode: bypass workflow stage filter, show ALL employees
-    if ((viewLevel === 'audit' || viewLevel === 'management') && statusFilter === 'cross_check') {
-      return (allProfiles as EmployeeProfile[] | undefined) || [];
-    }
-    // For reviewer panels (hr_pms, audit, management, skip_level):
-    // Only show employees whose resolved workflow template includes the required stage.
-    if (requiredStage) return (stageFilteredProfiles as EmployeeProfile[] | undefined) || [];
-    // Fallback for any other full-access panel
-    if (isFullAccess) return allProfiles;
-    return teamMembers;
-  }, [viewLevel, teamMembers, skipLevelMembers, allProfiles, isFullAccess, requiredStage, stageFilteredProfiles]);
+    // POLICY §107 — strip the viewer from every reviewer panel.
+    if (!resolved || !user?.id) return resolved;
+    return resolved.filter(m => m.id !== user.id);
+  }, [viewLevel, teamMembers, skipLevelMembers, allProfiles, isFullAccess, requiredStage, stageFilteredProfiles, statusFilter, user?.id]);
 
   // Auto-open KPI from URL
   useEffect(() => {
