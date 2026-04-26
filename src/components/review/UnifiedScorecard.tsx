@@ -700,6 +700,7 @@ export function UnifiedScorecard({
       }
 
       const newStatus = approve ? config.forwardStatus : config.activeReviewStage;
+      assertResolvableStatus(newStatus, viewLevel);
       const { data: kpiUpdateData, error: kpiError } = await supabase
         .from('kpis')
         .update({ status: newStatus as any })
