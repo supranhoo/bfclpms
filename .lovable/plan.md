@@ -1,144 +1,91 @@
+## RCA: NULL-status fix + "Self appears in Manager's Team tab"
 
-# Bug RCA — "Compliance to contract shipment/delivery date" (Dippendu Das, Mar-2026)
+### Part 1 — Is BUG-035 (NULL status) fully fixed?
 
-## What the screenshot shows
-- Header badge: **KRA Set · March 2026 · 8%**
-- Review Journey: Self = Rating 5, Auditor = Pending, Management = Pending
-- KPI History: Apr-26 row also shows **0/100, score 0, KRA SET**
-- Past months (Jan/Feb/Nov-25/Dec-25) properly **APPROVED** with score 5
+**Yes — landed and verified:**
+- `UnifiedScorecard.tsx` has `assertResolvableStatus()` blocking NULL writes (line 703).
+- `MobileKpiCard.tsx` (dashboard + review), `MobileSelfReviewCard`, `SelfReviewSheet`, `KpiDetailsTable` all render the amber **"Status Missing"** badge instead of silently falling back to "KRA Set".
+- Repair migration ran for the 8 affected March 2026 KPIs.
+- Regression tests `BUG-035` present in `bugBountyFixes.test.ts` (68/68 passing).
+- POLICY §106 (No-NULL-Status Invariant) and DOCUMENTATION v2.66.7.37 in place.
 
-The user expects this KPI to be at "Auditor / Pending" since Self is done and the workflow chain is Self → Auditor → Management. Instead it appears stuck at "KRA Set".
+**However**, the protective UI gate has one remaining gap: `EmployeeSelectorGrid` does not yet block reviewers from *opening* employees whose workflow excludes the reviewer's stage — the runtime guard only fires when the reviewer tries to forward. We should harden this to prevent the toast appearing in the first place. (Tracked below as part of Part 2's fix because both share the same view-gating logic.)
 
-## Root cause (verified against DB + code + audit log)
+---
 
-The KPI's `status` in the database is **literally `NULL`** (8 KPIs project-wide affected, all in March 2026, all touched by manager `876f255c…`).
+### Part 2 — Why does **Self** show in the **Manager / Team** tab?
 
-The audit trail for this KPI proves the corruption sequence:
+**Root Cause (code-level, confirmed):**
 
-```text
-1. STATUS_TRANSITION  old=kra_set     → new=self_review   (employee submitted)
-2. SUBMISSION_SCORE_CHANGED  manager_score: null→5        (manager entered score)
-3. STATUS_TRANSITION  old=self_review → new=NULL          ← BUG
-4. MANAGER_FORWARDED  manager_score=5, manager_rating=blue
-```
-
-### Why status became NULL
-
-Dippendu's effective workflow chain (verified via `get_employee_workflow_info`) is:
-
-```text
-[kra_set, self_review, audit, management_review, approved]
-```
-
-Notice — **`manager_check` is NOT in this chain.** Yet the reporting manager opened the Manager Scorecard for this employee and forwarded the KPI.
-
-Inside `src/components/review/UnifiedScorecard.tsx` (line 681):
+In `src/components/review/EmployeeSelectorGrid.tsx` (lines 363–388), the `team` view branches on `isFullAccess`:
 
 ```ts
-const newStatus = approve ? config.forwardStatus : config.activeReviewStage;
-await supabase.from('kpis').update({ status: newStatus as any })...
-```
+const isFullAccess = role === 'admin' || role === 'auditor' || role === 'management' || role === 'hr_pms';
 
-`config.forwardStatus` is computed by `resolveForwardStatus('manager', stages)` in `src/lib/workflowEngine.ts` (line 165). When `manager_check` is absent from the chain, the guard at lines 182–184 returns **`null`**:
-
-```ts
-if (ownedStage && !workflowStages.includes(ownedStage)) {
-  return null;   // ← returned for Dippendu
+if (viewLevel === 'team') {
+  if (isFullAccess) {
+    // returns ALL profiles, tagged direct/indirect/undefined
+    return allProfiles?.map(...);
+  }
+  // managers: direct + skip-level merged
+  return [...directTagged, ...indirectTagged];
 }
 ```
 
-`null as any` is then written into `kpis.status`, which is a nullable `review_status` enum column → DB happily stores **NULL**, and the audit trigger logs `new_value: status=null`.
+Findings:
+1. **Full-access roles (admin/management/hr_pms/auditor)** acting through the Team tab see the **entire `allProfiles` list**, which includes their own profile — there is no `p.id !== profile.id` filter.
+2. **Pure managers** go through `useTeamMembers` (`reporting_manager_id = managerId`) — DB query confirmed no self-reporting loops exist (`SELECT … WHERE reporting_manager_id = id` returned 0 rows). So a regular manager only sees self if they are *also* admin/management (which matches the current session: admin acting as manager on `/dashboard?view=team`).
+3. The skip-level branch (`useSkipLevelMembers`) also does not explicitly exclude the viewer — a 2-hop reporting chain that loops back would surface self, but no such loops exist today.
 
-### Why the UI then says "KRA Set"
-
-`src/components/dashboard/MobileKpiCard.tsx` line 85:
-
-```tsx
-<Badge className={statusColors[kpi.status || 'kra_set']}>
-  {statusLabels[kpi.status || 'kra_set']}
-</Badge>
-```
-
-The `|| 'kra_set'` fallback **silently mislabels NULL status as "KRA Set"**, hiding the data corruption from users and reviewers.
-
-### Why the manager could act at all
-
-`EmployeeSelectorGrid` / `useProfilesByWorkflowStage` exposes any employee with KPIs at `self_review` to the reporting manager, regardless of whether `manager_check` exists in that employee's pipeline. The Manager scorecard should not even be reachable for employees whose chain skips `manager_check`.
-
-## Affected data (DB-verified)
-
-8 KPIs across 2 employees, all March 2026, all status = NULL:
-- Dippendu Das — 3 KPIs (incl. the one in the screenshot)
-- Love Sahrawat — 5 KPIs
-
-All have a `manager_score` populated and the audit log shows `STATUS_TRANSITION → null` performed by the same manager UID.
-
-The "Apr-26 / KRA SET" row is a separate, **legitimate** record (April KPI is genuinely in `kra_set` — newly rolled-over, not yet self-submitted). That one is fine.
+**Conclusion:** The bug is real for any user with a full-access role (admin, management, hr_pms, auditor) viewing the Team tab. It is also a latent risk for pure managers if a self-reporting loop is ever introduced.
 
 ---
 
-# Fix plan
+### Fix Plan
 
-## 1. Stop the bleed (UI gate)
+**1. Universal self-exclusion in `EmployeeSelectorGrid`**
+- After computing `baseMembers`, filter out the current viewer: `members.filter(m => m.id !== profile.id)`.
+- Apply unconditionally across all view levels (`team`, `audit`, `management`, `hr_pms`, `skip_level`, `pending_*`, and cross-check) — a reviewer should never review themselves through a reviewer panel; the `Self` tab is the canonical surface for that.
+- Adjust `stats.totalEmployees` / `Team Size` counters so the excluded self is not double-counted.
 
-In `UnifiedScorecard.tsx` `submitReview` mutation (and the two sibling mutations that contain the same `newStatus = approve ? config.forwardStatus : …` pattern at lines 1024, 1094, 1160):
+**2. Hook-level safety net**
+- In `useTeamMembers` and `useSkipLevelMembers` (`src/hooks/useOrganization.ts`), add `.neq('id', managerId)` so even a corrupt self-loop in `reporting_manager_id` cannot leak self into team lists.
 
-- Before any `update({ status })`, **assert** `config.forwardStatus !== null && config.activeReviewStage !== null`.
-- If null, throw a friendly error: *"This employee's workflow does not include the {viewLevel} stage. Please contact admin to fix the workflow configuration."*
-- This guarantees `kpis.status` can never be set to NULL again from any reviewer flow.
+**3. Tighten reviewer-stage gating (closes BUG-035 residual gap)**
+- In `EmployeeSelectorGrid`, when `requiredStage` is set, ensure `stageFilteredProfiles` is the SOLE source for non-cross-check reviewer tabs (already true). Add an assertion in `handleSelectEmployee` that the selected employee's resolved workflow contains the reviewer's stage; otherwise show a toast: *"This employee's workflow does not include your review stage."*
 
-## 2. Hide the Manager view when the chain has no `manager_check`
+**4. DB integrity check (defensive)**
+- Add a CHECK-style validation **trigger** on `profiles` (per workspace policy: triggers, not CHECK constraints) preventing `reporting_manager_id = id`. Raises descriptive error.
 
-In `EmployeeSelectorGrid` / `useProfilesByWorkflowStage` (the selector that surfaces employees to the Manager view):
-
-- Filter out employees whose effective workflow chain (per period) does not contain the role's stage.
-- The same guard already exists for skip_level / hr_pms / audit via `resolveReviewableStatuses`; extend the manager case to honour the per-employee chain instead of treating "self_review" as universally manager-reviewable.
-
-## 3. Remove the misleading UI fallback
-
-In `MobileKpiCard.tsx` (line 85-86) and any sibling renderer:
-
-- Replace `kpi.status || 'kra_set'` with explicit handling:
-  - If `kpi.status == null` → render an amber **"Status Missing"** badge (not "KRA Set").
-- This makes any future regression visible immediately.
-
-## 4. Data repair migration
-
-A one-shot SQL migration that, for each affected KPI:
-
-- Re-computes the correct status by replaying the audit log:
-  - If `MANAGER_FORWARDED` exists and the chain has no `manager_check`, the manager action was illegitimate → **clear** `manager_*` fields on `review_submissions` and reset `kpis.status` to `'self_review'` so the auditor (the actual next stage) can pick it up.
-  - If the chain DOES include `manager_check`, set status to the next stage after `manager_check` from the chain.
-- Insert a `RECONCILE_STATUS` audit entry with reason `'null_status_repair_v1'` for traceability.
-- Dry-run output first; user-approved before commit.
-
-## 5. Regression test (BUG-035)
-
+**5. Regression Tests — `BUG-036`**
 Add to `src/test/bugBountyFixes.test.ts`:
+- `EmployeeSelectorGrid` source must contain a self-exclusion filter (`m.id !== profile.id`) covering Team/Audit/HR PMS/Management views.
+- `useTeamMembers` and `useSkipLevelMembers` must include `.neq('id', managerId)`.
+- Trigger migration creates `prevent_self_reporting_manager()` and rejects `UPDATE profiles SET reporting_manager_id = id`.
 
-- `resolveForwardStatus('manager', ['kra_set','self_review','audit','management_review','approved'])` must return `null`.
-- `submitReview` must throw when `config.forwardStatus` is null (mock the supabase client).
-- `MobileKpiCard` rendering `kpi.status = null` must show "Status Missing" — never "KRA Set".
-
-## 6. POLICY + DOCUMENTATION
-
-- New §106 in `POLICY.md`: **No-NULL-Status Invariant** — `kpis.status` MUST NEVER be set to NULL by any application code path. All workflow advancement must resolve to a concrete enum value or fail loudly.
-- Update `mem/architecture/pms/workflow-status-convention` with the per-employee guard and the UI-gating rule.
-- Bump DOCUMENTATION.md version, record fix in change log.
+**6. Policy & Documentation Sync**
+- POLICY.md **§107 — Reviewer Self-Exclusion**: "No reviewer panel (Team, Audit, HR PMS, Management, Skip-Level, Pending-*) may surface the viewer's own profile. Self-assessment lives exclusively under the Self tab."
+- DOCUMENTATION.md → bump version (v2.66.7.38) with changelog entry.
+- New mem entry: `mem://features/review/reviewer-self-exclusion`.
+- Update `mem://index.md` Core line: "Reviewers never see themselves in any reviewer grid."
 
 ---
 
-## Risk & Impact
+### Risk & Impact Report
 
-| Area | Impact |
-|------|--------|
-| Data | 8 historical KPIs corrected; rest of system unaffected |
-| Workflow | Managers can no longer act on employees whose chain skips them — correct behaviour |
-| UI/UX | "Status Missing" badge appears only for already-corrupt rows (zero after repair) |
-| Regression | Three new unit tests + the runtime guard make recurrence impossible |
-| Mitigation | Dry-run repair report shown before commit; client-side guard before DB write |
+| Area | Impact | Mitigation |
+|---|---|---|
+| Data | None — UI-only filter + a defensive trigger. No historical KPI data altered. | Trigger only blocks future invalid writes. |
+| Workflow | Admins/management/HR PMS lose the ability to "review themselves via Team tab" — intentional; they still use the Self tab. | POLICY §107 documents this. |
+| UI/UX | `Team Size` count drops by 1 for full-access viewers. | Recompute counters; label remains accurate ("Team Size" excludes self). |
+| Regression | Low — change is additive `.filter(...)` + `.neq(...)`. | BUG-036 tests cover both paths. |
 
-## Out of scope
+---
 
-- Auditing whether the manager intentionally bypassed workflow vs UI bug (audit log already captures user). 
-- Refactoring the four duplicated `newStatus = approve ? …` blocks in UnifiedScorecard into a shared helper (separate clean-up PR).
+### Files to be edited
+
+- `src/components/review/EmployeeSelectorGrid.tsx` — self-exclusion filter, stat recompute, stage-gate assertion.
+- `src/hooks/useOrganization.ts` — `.neq('id', managerId)` in team/skip-level hooks.
+- `supabase/migrations/<ts>_prevent_self_reporting_manager.sql` — validation trigger.
+- `src/test/bugBountyFixes.test.ts` — BUG-036 suite.
+- `POLICY.md`, `DOCUMENTATION.md`, `mem/index.md`, `mem/features/review/reviewer-self-exclusion` (new).
