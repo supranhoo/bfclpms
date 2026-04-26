@@ -1044,6 +1044,14 @@ export function UnifiedScorecard({
       
       // Advance status
       const newStatus = approve ? config.forwardStatus : config.activeReviewStage;
+      if (newStatus == null) {
+        toast({
+          title: 'Workflow misconfigured',
+          description: `This employee's workflow does not include the "${viewLevel}" stage. Please contact an admin.`,
+          variant: 'destructive',
+        });
+        return;
+      }
       const { error: kpiError } = await supabase
         .from('kpis')
         .update({ status: newStatus as any })
