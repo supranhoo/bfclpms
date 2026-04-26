@@ -653,9 +653,18 @@ export function KpiDetailsTable({
                 <TableCell>
                   <div className="flex items-center gap-1 flex-wrap">
                     {locked && <Lock className="h-3 w-3 text-muted-foreground" />}
-                    <Badge className={statusColors[kpi.status || 'kra_set']}>
-                      {statusLabels[kpi.status || 'kra_set']}
-                    </Badge>
+                    {kpi.status ? (
+                      <Badge className={statusColors[kpi.status]}>
+                        {statusLabels[kpi.status]}
+                      </Badge>
+                    ) : (
+                      <Badge
+                        className="bg-amber-100 text-amber-800 border border-amber-300"
+                        title="POLICY §106 — kpis.status is NULL."
+                      >
+                        Status Missing
+                      </Badge>
+                    )}
                     {openQueries.length > 0 && (
                       <Badge variant="destructive" className="ml-1">
                         {openQueries.length} query
