@@ -45,6 +45,27 @@ import { calculateRating } from '@/lib/ratingCalculation';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+
+/**
+ * BUG-035 / POLICY §106 — Workflow status NULL-safety guard.
+ *
+ * Throws a friendly error when the workflow resolver could not produce a
+ * concrete next status (i.e. the reviewer's owned stage is absent from the
+ * employee's effective workflow chain). Without this guard a `null` value
+ * was being written to `kpis.status`, silently corrupting the row and the UI
+ * fallback re-rendered it as "KRA Set" hiding the data corruption.
+ */
+function assertResolvableStatus(
+  newStatus: string | null | undefined,
+  viewLevel: string,
+): asserts newStatus is string {
+  if (newStatus == null) {
+    throw new Error(
+      `This employee's workflow does not include the "${viewLevel}" stage. ` +
+      `Status cannot be advanced. Please contact an administrator to fix the workflow configuration.`
+    );
+  }
+}
 import { 
   ArrowLeft, Target, CheckCircle2, Clock, 
   Info, Lock, MessageSquare, Undo2, Check, Eye, ChevronDown, ChevronUp, History, Edit2, Send, Shield, Briefcase, User, CalendarDays, UserCheck, ClipboardCheck, AlertTriangle, X, Ban
