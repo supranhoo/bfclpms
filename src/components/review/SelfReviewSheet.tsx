@@ -598,9 +598,18 @@ export function SelfReviewSheet({
                   reviewYear={selectedYear}
                   frequencyCycleStart={selectedKpi?.frequency_cycle_start}
                 />
-                <Badge className={`${statusColors[selectedKpi?.status || 'kra_set']} text-xs`}>
-                  {statusLabels[selectedKpi?.status || 'kra_set']}
-                </Badge>
+                {selectedKpi?.status ? (
+                  <Badge className={`${statusColors[selectedKpi.status]} text-xs`}>
+                    {statusLabels[selectedKpi.status]}
+                  </Badge>
+                ) : (
+                  <Badge
+                    className="text-xs bg-amber-100 text-amber-800 border border-amber-300"
+                    title="POLICY §106 — kpis.status is NULL."
+                  >
+                    Status Missing
+                  </Badge>
+                )}
               </div>
             </div>
           </SheetHeader>
