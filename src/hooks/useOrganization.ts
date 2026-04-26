@@ -295,6 +295,10 @@ export function useTeamMembers(managerId: string | undefined) {
           departments (id, name, code)
         `)
         .eq('reporting_manager_id', managerId!)
+        // BUG-036 / POLICY §107 — defense-in-depth: even a corrupt
+        // self-reporting loop must never leak the manager into their own
+        // direct-reports list.
+        .neq('id', managerId!)
         .eq('is_active', true)
         .order('full_name');
 
@@ -521,6 +525,9 @@ export function useSkipLevelTeamMembers(userId: string | undefined) {
           departments (id, name, code)
         `)
         .in('reporting_manager_id', directReportIds)
+        // BUG-036 / POLICY §107 — never include the viewer themselves in
+        // their own skip-level team list, even if a reporting cycle exists.
+        .neq('id', userId!)
         .eq('is_active', true)
         .order('full_name');
 

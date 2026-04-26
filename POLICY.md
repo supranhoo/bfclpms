@@ -1886,3 +1886,19 @@ The non-canonical literals `l1_review`, `auditor_review`, and `skip_level_review
 4. **Regression coverage.** `BUG-035` in `src/test/bugBountyFixes.test.ts` pins the resolver semantics, the presence of the application guards, and the "Status Missing" UI fallback in all four reviewer-facing badge sites.
 
 `BUG-035` is the canonical anchor for this rule.
+
+## §107 — Reviewer Self-Exclusion (v2.66.7.38)
+
+**Rule.** No reviewer panel — Team, Audit, HR PMS, Management, Skip-Level, Pending-Self / Pending-Manager / Pending-Skip, or any cross-check (Explorer) mode — may surface the viewer's own profile as a selectable employee. Self-assessment is permitted exclusively through the **Self** tab and the standard `self_review` workflow stage.
+
+**Background — BUG-036.** A reporting manager (also holding `admin` access) opened `/dashboard?view=team` and saw their own profile listed alongside their direct reports. RCA traced this to `EmployeeSelectorGrid.baseMembers`: when the viewer's `effectiveRole` matched any of `admin | management | hr_pms | auditor` (`isFullAccess`), the grid returned the entire `useProfiles()` set without filtering out the current `user.id`. Pure managers were unaffected today only because the DB had no self-reporting loops — a latent risk if `profiles.reporting_manager_id = profiles.id` was ever introduced.
+
+**Enforcement.**
+1. **UI exclusion (primary).** `EmployeeSelectorGrid` MUST strip the viewer (`m.id !== user.id`) from `baseMembers` for *every* view level and *every* role bucket (full-access, manager, cross-check / Explorer). Stat counters (`Team Size`, `Total Employees`) derive from this filtered list and therefore do not double-count the viewer.
+2. **Defense-in-depth click guard.** `handleEmployeeClick` MUST refuse to open the viewer's own profile (toast: *"Self-review not allowed here — Use the Self tab to view or score your own KPIs."*).
+3. **Hook safety net.** `useTeamMembers` and `useSkipLevelTeamMembers` MUST chain `.neq('id', managerId|userId)` so a corrupt self-loop in `reporting_manager_id` cannot leak the viewer into their own team list.
+4. **Database invariant.** A `BEFORE INSERT OR UPDATE` trigger on `public.profiles` (`prevent_self_reporting_manager`) MUST raise `check_violation` whenever `reporting_manager_id = id`, blocking the data condition that would otherwise re-introduce this bug.
+5. **Stage-gate side-effect (closes BUG-035 residual).** When a reviewer clicks an employee whose resolved workflow does not include the reviewer's `requiredStage`, the click is rejected with a *"Workflow stage missing"* toast — preventing the NULL-status forward attempt from ever being initiated.
+6. **Regression coverage.** `BUG-036` in `src/test/bugBountyFixes.test.ts` pins the UI filter, both click guards, both hook `.neq` clauses, and the migration installing the trigger.
+
+`BUG-036` is the canonical anchor for this rule.
