@@ -1040,6 +1040,30 @@ export function EmployeeSelectorGrid({
 
 
   const handleEmployeeClick = async (member: EmployeeProfile) => {
+    // POLICY §107 — defense in depth. baseMembers already strips the viewer,
+    // but if any future regression slips self into the list we still refuse.
+    if (user?.id && member.id === user.id) {
+      toast({
+        title: 'Self-review not allowed here',
+        description: 'Use the Self tab to view or score your own KPIs.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    // BUG-035 / POLICY §106 — stage-gate guard. Block opening employees whose
+    // resolved workflow does not include the reviewer's required stage so the
+    // forward-action toast never has to fire.
+    if (requiredStage && !isCrossCheckMode && workflowMap?.has(member.id)) {
+      const stages = workflowMap.get(member.id) || [];
+      if (!stages.includes(requiredStage)) {
+        toast({
+          title: 'Workflow stage missing',
+          description: `${member.full_name || 'This employee'}'s workflow does not include the "${requiredStage}" stage.`,
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
     const empKpis = periodKpis?.filter(k => k.employee_id === member.id) || [];
     
     if (empKpis.length > 0) {
