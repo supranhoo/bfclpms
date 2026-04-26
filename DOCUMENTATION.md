@@ -5514,3 +5514,22 @@ Initially shipped a centered overlay tied to user-initiated Refresh clicks on th
 **Policy**: POLICY.md §106 — "No-NULL-Status Invariant".
 
 **Test**: `src/test/bugBountyFixes.test.ts` → `BUG-035` (5 assertions covering resolver semantics, presence of guards in `UnifiedScorecard`, and "Status Missing" fallback in all four reviewer-facing badge sites). Full suite: 68/68 passing.
+
+## v2.66.7.38 — Reviewer Self-Exclusion + Stage-Gate (BUG-036) (2026-04-26)
+
+**Defect**: A user (admin acting as reporting manager) reported seeing their own profile listed inside the **Manager / Team** tab on `/dashboard?view=team` alongside their direct reports.
+
+**RCA**:
+1. `EmployeeSelectorGrid.baseMembers` (line 362) branches on `isFullAccess = role ∈ {admin, auditor, management, hr_pms}`. For full-access roles in the Team view it returned `allProfiles?.map(...)` — the entire `useProfiles()` set — without excluding the current `user.id`. The user therefore appeared as their own teammate.
+2. The non-full-access (pure manager) path went through `useTeamMembers(reporting_manager_id = managerId)`. A direct DB query (`SELECT … FROM profiles WHERE reporting_manager_id = id AND is_active`) confirmed zero self-reporting loops today, so pure managers were not affected — but the path had no safeguard against future corruption.
+3. The `EmployeeSelectorGrid` click handler also did not assert that the selected employee's resolved workflow included the reviewer's `requiredStage`, leaving the NULL-status forward path (BUG-035) reachable for any reviewer who clicked an out-of-chain employee.
+
+**Fix**:
+1. **UI exclusion** — `baseMembers` was refactored to compute the candidate list per branch and then `resolved.filter(m => m.id !== user.id)` in a single tail step that applies uniformly to Team / Audit / HR PMS / Management / Skip-Level / Pending-* / cross-check. Stat counters automatically inherit the exclusion because they derive from `baseMembers → demographicFilteredMembers`.
+2. **Click guards** — `handleEmployeeClick` now (a) rejects clicks on the viewer's own row with a *"Self-review not allowed here"* toast and (b) when `requiredStage` is set and `workflowMap` has the employee's resolved chain, rejects clicks with a *"Workflow stage missing"* toast if `requiredStage ∉ chain` — closing the residual BUG-035 surface.
+3. **Hook safety net** — `useTeamMembers` and `useSkipLevelTeamMembers` (`src/hooks/useOrganization.ts`) chain `.neq('id', managerId|userId)` so even a corrupt `reporting_manager_id = id` row cannot leak self into team lists.
+4. **Database invariant** — A `BEFORE INSERT OR UPDATE OF reporting_manager_id` trigger (`prevent_self_reporting_manager` / `trg_prevent_self_reporting_manager`) raises `check_violation` whenever `NEW.reporting_manager_id = NEW.id`, blocking the data condition at the source. Per workspace policy this is a validation **trigger**, not a CHECK constraint.
+
+**Policy**: POLICY.md §107 — "Reviewer Self-Exclusion".
+
+**Test**: `src/test/bugBountyFixes.test.ts` → `BUG-036` (5 assertions covering the UI filter, both click guards, the dual `.neq` chain in hooks, and the trigger migration). Full suite: 73/73 passing.
