@@ -5489,3 +5489,28 @@ Initially shipped a centered overlay tied to user-initiated Refresh clicks on th
 **Policy**: POLICY.md §103 — note added that the loading art is "rocket ascending"; growth-chart arrows are forbidden from re-entering this component.
 
 **Test**: `src/test/bugBountyFixes.test.ts` → `BUG-034` pins the markup contract (no `rg-arrow*`, no axis lines, no arrowhead polygons; rocket + flame retained; alias export intact).
+
+---
+
+## v2.66.7.37 — NULL kpi.status Corruption Fix (BUG-035)
+
+**Defect**: A user reported that the "Compliance to contract shipment/delivery date" KPI for Dippendu Das (March 2026) was showing as **"KRA Set"** in the View KPI Details modal even though Self had been submitted with rating 5 and the workflow chain Self → Auditor → Management should have advanced it to "Auditor / Pending".
+
+**RCA (chain confirmed via DB + audit log)**:
+1. Dippendu's workflow chain (resolved by `get_employee_workflow_info`) is `[kra_set, self_review, audit, management_review, approved]` — **manager_check is absent**.
+2. The reporting manager landed on the Manager Scorecard for this employee because `useProfilesByWorkflowStage` includes employees by **score-signature seed** (intended for read-only roster completeness post-stage-advance — see v2.66.7.24 / BUG-022).
+3. Manager entered a score and clicked Forward. In `UnifiedScorecard.tsx` line 681, `config.forwardStatus` was computed by `resolveForwardStatus('manager', stages)` which **correctly returned `null`** because `manager_check` is not in the chain (see workflowEngine.ts line 182 guard).
+4. The component then executed `update({ status: null as any })` against `kpis` — Postgres allowed it because `kpis.status` is nullable, producing a row with `status = NULL`.
+5. The audit trigger faithfully recorded `STATUS_TRANSITION old=self_review → new=null`.
+6. The UI then re-rendered the row with `kpi.status || 'kra_set'` fallbacks in **MobileKpiCard, KpiDetailsTable, MobileSelfReviewCard, SelfReviewSheet** — silently mislabelling the corruption as "KRA Set".
+
+**Blast radius**: 8 KPIs project-wide were affected (3 for Dippendu Das, 5 for Love Sahrawat) — all March 2026, all on the `self_audit_mgmt` template, all touched by the same manager UID.
+
+**Fix**:
+1. **Application guard** — `UnifiedScorecard.tsx` now defines `assertResolvableStatus(newStatus, viewLevel)` and calls it before the `submitReview` mutation's `kpis` update; the three inline `handleSubmitReview` branches (NA mark, NA override, NA confirmation) check `if (newStatus == null)` and toast "Workflow misconfigured" before short-circuiting. No more silent NULL writes possible from any reviewer flow.
+2. **UI honesty** — Replaced `kpi.status || 'kra_set'` display fallbacks in **MobileKpiCard (dashboard)**, **MobileKpiCard (review)**, **MobileSelfReviewCard**, **SelfReviewSheet**, and **KpiDetailsTable** with an explicit amber **"Status Missing"** badge. Defaults-when-creating in admin tools were left intact (those represent legitimately new KPIs, not corruption).
+3. **Data repair** — All 8 affected KPIs were repaired in a single transaction: illegitimate `manager_*` fields cleared on `review_submissions`, `kpis.status` set to `audit` (legitimate next stage in their chain), and a `RECONCILE_STATUS` audit entry inserted on each KPI with reason `'null_status_repair_v1'`. Verified `SELECT count(*) FROM kpis WHERE status IS NULL = 0` post-repair.
+
+**Policy**: POLICY.md §106 — "No-NULL-Status Invariant".
+
+**Test**: `src/test/bugBountyFixes.test.ts` → `BUG-035` (5 assertions covering resolver semantics, presence of guards in `UnifiedScorecard`, and "Status Missing" fallback in all four reviewer-facing badge sites). Full suite: 68/68 passing.

@@ -1,0 +1,16 @@
+---
+name: No-NULL kpi.status invariant
+description: kpis.status must never be written as NULL; guard reviewer mutations + render Status Missing badge for null
+type: constraint
+---
+`kpis.status` must NEVER be set to NULL by application code, RPCs, triggers, or migrations. All workflow advancement must resolve to a concrete `review_status` enum or fail loudly.
+
+**Why.** BUG-035: Manager forwarded a KPI whose chain (`self_audit_mgmt`) lacked `manager_check`. `resolveForwardStatus('manager', stages)` correctly returned `null`; `UnifiedScorecard.tsx` then wrote `update({ status: null })` — corrupting 8 KPIs. UI fallbacks (`kpi.status || 'kra_set'`) silently re-rendered NULL as "KRA Set", hiding the corruption.
+
+**How to apply.**
+1. In `UnifiedScorecard.tsx`, the helper `assertResolvableStatus(newStatus, viewLevel)` must run before every `kpis.status` write in `submitReview`; the three inline `handleSubmitReview` branches must `if (newStatus == null) { toast(...); return; }`.
+2. Display badges for `kpi.status` must render an amber **"Status Missing"** badge when null — never `|| 'kra_set'`. Affected files: `src/components/dashboard/MobileKpiCard.tsx`, `src/components/review/MobileKpiCard.tsx`, `src/components/review/MobileSelfReviewCard.tsx`, `src/components/review/SelfReviewSheet.tsx`, `src/components/review/KpiDetailsTable.tsx`.
+3. Default-on-create initialisers (admin tools) may keep `|| 'kra_set'` — that represents a fresh KRA, not corruption.
+4. Repair tool: `RECONCILE_STATUS` audit action with `metadata.reason = 'null_status_repair_v1'`.
+
+See POLICY.md §106; regression test `BUG-035` in `src/test/bugBountyFixes.test.ts`.

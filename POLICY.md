@@ -1866,3 +1866,23 @@ The non-canonical literals `l1_review`, `auditor_review`, and `skip_level_review
 1. Every migration that adds or modifies an RPC emitting a workflow chain MUST be paired with a regression test in `src/test/bugBountyFixes.test.ts` that pins the call to `get_bulk_employee_workflows`/`get_employee_workflow` and forbids the hardcoded six-stage array.
 2. Code review SHOULD reject any new in-RPC `ARRAY[...stages...]` literal used as a per-employee chain source.
 3. `BUG-033` is the canonical anchor for this rule.
+
+---
+
+## §106 — No-NULL-Status Invariant (v2.66.7.37)
+
+**Rule.** `kpis.status` MUST NEVER be set to `NULL` by any application code path, RPC, edge function, trigger, or migration. Every workflow advancement MUST resolve to a concrete `review_status` enum value (`kra_set`, `self_review`, `manager_check`, `skip_level_check`, `hr_pms_review`, `audit`, `management_review`, or `approved`). If the next status cannot be resolved (e.g. the reviewer's owned stage is absent from the employee's effective workflow chain), the operation MUST fail loudly with a user-facing error rather than silently writing `NULL`.
+
+**Background — BUG-035.** Eight KPIs in March 2026 (Dippendu Das, Love Sahrawat — both on the `self_audit_mgmt` template, which contains no `manager_check` stage) were corrupted to `status = NULL` when the reporting manager opened the Manager Scorecard and forwarded them. The corruption sequence was:
+1. Manager landed on the scorecard via the score-signature seed in `useProfilesByWorkflowStage` (the seed is intended for read-only roster completeness but inadvertently unlocks Manager actions on employees whose chain skips `manager_check`).
+2. Inside `UnifiedScorecard.tsx`, `config.forwardStatus = resolveForwardStatus('manager', stages)` returned `null` because `manager_check` is not in the chain (correct guard behaviour in `workflowEngine.ts`).
+3. The component then wrote `update({ status: null as any })` to `kpis`, producing the NULL row.
+4. UI fallbacks (`kpi.status || 'kra_set'`) re-rendered NULL as **"KRA Set"**, hiding the corruption from users and the audit trail.
+
+**Enforcement.**
+1. **Application guard.** `UnifiedScorecard.tsx` MUST call `assertResolvableStatus(newStatus, viewLevel)` (or the equivalent toast-and-return guard) immediately before every `kpis.status` write. The submit-mutation must throw; the inline N/A handlers may toast and return.
+2. **UI honesty.** Every `kpi.status` display badge MUST render a distinct **"Status Missing"** badge (amber) when `kpi.status == null`. The previous `|| 'kra_set'` fallback for *display* is forbidden. (The fallback remains acceptable for default-when-creating-a-new-KPI initialisers in admin tools, where the absent value is genuinely a fresh KRA, never a corruption.)
+3. **Database invariant.** The `kpis.status` column SHOULD eventually be made `NOT NULL` after a sweep proves zero NULLs project-wide; until then, the `RECONCILE_STATUS` audit action with reason `'null_status_repair_v1'` is the canonical repair tool.
+4. **Regression coverage.** `BUG-035` in `src/test/bugBountyFixes.test.ts` pins the resolver semantics, the presence of the application guards, and the "Status Missing" UI fallback in all four reviewer-facing badge sites.
+
+`BUG-035` is the canonical anchor for this rule.

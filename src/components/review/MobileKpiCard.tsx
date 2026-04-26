@@ -251,9 +251,18 @@ export function MobileKpiCard({
             </Badge>
           )}
         </div>
-        <Badge className={cn(statusColors[kpi.status || 'kra_set'], "text-[10px] shrink-0 ml-1.5")}>
-          {statusLabels[kpi.status || 'kra_set']}
-        </Badge>
+        {kpi.status ? (
+          <Badge className={cn(statusColors[kpi.status], "text-[10px] shrink-0 ml-1.5")}>
+            {statusLabels[kpi.status]}
+          </Badge>
+        ) : (
+          <Badge
+            className="text-[10px] shrink-0 ml-1.5 bg-amber-100 text-amber-800 border border-amber-300"
+            title="POLICY §106 — kpis.status is NULL."
+          >
+            Status Missing
+          </Badge>
+        )}
         {(observationCount ?? 0) > 0 && (
           <span className="ml-1 inline-flex items-center gap-0.5 text-[10px] text-amber-600 dark:text-amber-400 shrink-0">
             <Eye className="h-3 w-3" />{observationCount}

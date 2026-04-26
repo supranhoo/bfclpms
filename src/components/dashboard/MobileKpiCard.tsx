@@ -82,9 +82,18 @@ export function MobileKpiCard({
               Quarterly
             </Badge>
           )}
-          <Badge className={`text-xs ${statusColors[kpi.status || 'kra_set']}`}>
-            {statusLabels[kpi.status || 'kra_set']}
-          </Badge>
+          {kpi.status ? (
+            <Badge className={`text-xs ${statusColors[kpi.status]}`}>
+              {statusLabels[kpi.status]}
+            </Badge>
+          ) : (
+            <Badge
+              className="text-xs bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950 dark:text-amber-200"
+              title="POLICY §106 — kpis.status is NULL. Workflow advancement failed silently. Please contact admin."
+            >
+              Status Missing
+            </Badge>
+          )}
           {isAuditCapable && (
             <AuditKpiAssignPopover
               kpiId={kpi.id}
