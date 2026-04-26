@@ -688,3 +688,56 @@ describe('BUG-034: Loading art is rocket-only (no axes, no arrows)', () => {
     expect(src).toMatch(/export\s+const\s+RocketGrowthArt\s*=\s*RocketLaunchArt/);
   });
 });
+
+// BUG-035: Workflow status NULL-safety guard
+// "Compliance to contract shipment/delivery date" KPI showed as "KRA Set"
+// after Manager forwarded it. RCA: kpi.status was literally NULL because
+// resolveForwardStatus('manager', stages) returned null when manager_check
+// was absent from the employee's workflow chain. The UI then re-rendered
+// NULL as "KRA Set" via a `|| 'kra_set'` fallback.
+describe('BUG-035: NULL kpi.status prevention', () => {
+  it('resolveForwardStatus returns null when manager_check is absent from chain', async () => {
+    const { resolveForwardStatus } = await import('@/lib/workflowEngine');
+    const chain = ['kra_set', 'self_review', 'audit', 'management_review', 'approved'];
+    expect(resolveForwardStatus('manager', chain)).toBeNull();
+  });
+
+  it('resolveForwardStatus returns concrete status when chain includes manager_check', async () => {
+    const { resolveForwardStatus } = await import('@/lib/workflowEngine');
+    const chain = ['kra_set', 'self_review', 'manager_check', 'audit', 'approved'];
+    expect(resolveForwardStatus('manager', chain)).toBe('manager_check');
+  });
+
+  it('UnifiedScorecard contains an assertResolvableStatus guard before status writes', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/components/review/UnifiedScorecard.tsx', 'utf-8');
+    // The named guard must exist
+    expect(src).toMatch(/function assertResolvableStatus/);
+    // The submitReview mutation must call it before its kpis update
+    expect(src).toMatch(/assertResolvableStatus\(newStatus, viewLevel\)/);
+    // The 3 handleSubmitReview branches must short-circuit on null with a toast
+    const toastGuards = src.match(/if \(newStatus == null\)\s*\{\s*toast\(\{[\s\S]*?Workflow misconfigured/g);
+    expect(toastGuards?.length ?? 0).toBeGreaterThanOrEqual(3);
+  });
+
+  it('MobileKpiCard (dashboard) no longer falls back to "kra_set" when status is null', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/components/dashboard/MobileKpiCard.tsx', 'utf-8');
+    expect(src).not.toMatch(/statusLabels\[kpi\.status \|\| 'kra_set'\]/);
+    expect(src).toMatch(/Status Missing/);
+  });
+
+  it('Reviewer status badges show "Status Missing" for null status', async () => {
+    const fs = await import('node:fs');
+    const files = [
+      'src/components/review/MobileKpiCard.tsx',
+      'src/components/review/MobileSelfReviewCard.tsx',
+      'src/components/review/SelfReviewSheet.tsx',
+      'src/components/review/KpiDetailsTable.tsx',
+    ];
+    for (const f of files) {
+      const src = fs.readFileSync(f, 'utf-8');
+      expect(src, `${f} should render Status Missing fallback`).toMatch(/Status Missing/);
+    }
+  });
+});
