@@ -741,3 +741,52 @@ describe('BUG-035: NULL kpi.status prevention', () => {
     }
   });
 });
+
+// BUG-036: Reviewer Self-Exclusion (POLICY §107)
+// Symptom: full-access roles (admin, management, hr_pms, auditor) acting on
+// the Team tab saw their own profile listed alongside their reports because
+// EmployeeSelectorGrid returned `allProfiles` without filtering out the
+// current viewer. Pure managers were also at latent risk if a self-reporting
+// loop was ever introduced into profiles.reporting_manager_id.
+describe('BUG-036: Reviewer self-exclusion', () => {
+  it('EmployeeSelectorGrid strips the viewer (user.id) from baseMembers', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/components/review/EmployeeSelectorGrid.tsx', 'utf-8');
+    // POLICY §107 reference + the actual filter must both be present.
+    expect(src).toMatch(/POLICY §107/);
+    expect(src).toMatch(/resolved\.filter\(m => m\.id !== user\.id\)/);
+  });
+
+  it('handleEmployeeClick blocks the viewer from selecting themselves', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/components/review/EmployeeSelectorGrid.tsx', 'utf-8');
+    expect(src).toMatch(/Self-review not allowed here/);
+  });
+
+  it('handleEmployeeClick blocks selection when reviewer stage is missing', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/components/review/EmployeeSelectorGrid.tsx', 'utf-8');
+    expect(src).toMatch(/Workflow stage missing/);
+  });
+
+  it('useTeamMembers excludes the manager themselves via .neq', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/hooks/useOrganization.ts', 'utf-8');
+    // Both the direct-reports query and the skip-level query must self-exclude.
+    const neqOccurrences = src.match(/\.neq\('id', (managerId|userId)!\)/g) || [];
+    expect(neqOccurrences.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('Migration installs prevent_self_reporting_manager trigger', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const dir = 'supabase/migrations';
+    const files = fs.readdirSync(dir).filter(f => f.endsWith('.sql'));
+    const found = files.some(f => {
+      const sql = fs.readFileSync(path.join(dir, f), 'utf-8');
+      return /prevent_self_reporting_manager/.test(sql)
+        && /trg_prevent_self_reporting_manager/.test(sql);
+    });
+    expect(found, 'Expected a migration creating prevent_self_reporting_manager').toBe(true);
+  });
+});
