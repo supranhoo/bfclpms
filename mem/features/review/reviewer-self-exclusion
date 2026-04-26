@@ -1,0 +1,18 @@
+---
+name: Reviewer self-exclusion
+description: No reviewer panel may surface the viewer in their own team/audit/HR PMS/management/skip-level grids; Self tab is the only self-assessment surface
+type: feature
+---
+**POLICY §107 / BUG-036.** Every reviewer surface must exclude `user.id` from its employee list.
+
+**Where it is enforced**
+1. **`src/components/review/EmployeeSelectorGrid.tsx`** — `baseMembers` resolves per branch then runs `resolved.filter(m => m.id !== user.id)` as a tail step. Stat counters (`Team Size`, `Total Employees`) inherit the filter via `demographicFilteredMembers`.
+2. **`handleEmployeeClick`** — defense-in-depth: blocks self-clicks ("Self-review not allowed here") and stage-out-of-chain clicks ("Workflow stage missing"), the latter closing the residual BUG-035 surface.
+3. **`src/hooks/useOrganization.ts`** — both `useTeamMembers` and `useSkipLevelTeamMembers` chain `.neq('id', managerId|userId)` so a corrupt self-loop cannot leak self into team lists.
+4. **DB trigger** — `prevent_self_reporting_manager` (`trg_prevent_self_reporting_manager`) on `public.profiles` raises `check_violation` when `reporting_manager_id = id`.
+
+**Why it matters**
+- Full-access roles (admin, management, hr_pms, auditor) acting through Team previously saw their own profile because the grid returned `allProfiles` unfiltered.
+- Self-assessment must remain on the Self tab + `self_review` workflow stage to keep audit trails clean and avoid reviewer/reviewee role conflation.
+
+**Tests** — `BUG-036` in `src/test/bugBountyFixes.test.ts` pins the UI filter, both click guards, both hook `.neq` clauses, and the migration installing the trigger.
