@@ -933,3 +933,39 @@ describe('BUG-040: Data Entry sidebar gate respects DataOwnerRoute', () => {
     expect(src).toMatch(/isDataOwner/);
   });
 });
+
+// BUG-041: DataOwnerRoute ignored per-user menu overrides and profile-based
+// view rights, so users granted access via those layers were redirected to
+// /dashboard while the sidebar (post-BUG-040) correctly showed the link.
+// Fix: align DataOwnerRoute admit policy with the sidebar — admin OR data
+// owner OR per-user override OR profile view right on 'data-entry'.
+describe('BUG-041: DataOwnerRoute admit policy mirrors AppSidebar', () => {
+  it('DataOwnerRoute consults useMenuAccess for overrides and profile rights', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/components/layout/DataOwnerRoute.tsx', 'utf-8');
+
+    // Pulls the menu-access hook in addition to the ownership hook.
+    expect(src).toMatch(/from\s+['"]@\/hooks\/useMenuAccess['"]/);
+    expect(src).toMatch(/useMenuAccess\s*\(/);
+
+    // Matches the canonical menu key.
+    expect(src).toMatch(/['"]data-entry['"]/);
+
+    // Admits per-user overrides and profile-based view rights.
+    expect(src).toMatch(/userOverrides[\s\S]*?\.some\(/);
+    expect(src).toMatch(/canPerform\(\s*['"]?[A-Z_]*data-entry['"]?[\s\S]*?,\s*['"]view['"]\s*\)/);
+
+    // Loading guard waits on menu-access too (prevents premature redirect).
+    expect(src).toMatch(/menuLoading|isLoading:\s*menuLoading/);
+
+    // Original admit branches still intact.
+    expect(src).toMatch(/effectiveRole\s*===\s*['"]admin['"]/);
+    expect(src).toMatch(/isDataOwner/);
+  });
+
+  it('AppSidebar Data Entry filter also admits profile view rights (parity)', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/components/layout/AppSidebar.tsx', 'utf-8');
+    expect(src).toMatch(/canPerform\(item\.menuKey,\s*['"]view['"]\)/);
+  });
+});
