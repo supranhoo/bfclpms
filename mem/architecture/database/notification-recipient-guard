@@ -1,0 +1,14 @@
+---
+name: notification-recipient-guard
+description: Notification triggers must guard against non-login users (no auth.users row) — pre-check + EXCEPTION wrapper, never abort business transactions
+type: constraint
+---
+`notifications.user_id` is `FK → auth.users(id)`. Non-login profiles (active in `public.profiles`, no row in `auth.users`) are a supported class. Any notification INSERT targeting a non-login recipient triggers `foreign_key_violation` and aborts the parent transaction (e.g., Copy KRAs lost all 12 KPIs in BUG-037).
+
+**Rules** (POLICY §108):
+1. Single-recipient triggers SHOULD pre-check: `IF EXISTS (SELECT 1 FROM auth.users WHERE id = <recipient>) THEN ... END IF;`
+2. Every `INSERT INTO public.notifications` inside a trigger MUST be wrapped in `BEGIN ... EXCEPTION WHEN foreign_key_violation THEN NULL; END;` — notification delivery is best-effort.
+3. Set-based fan-outs (e.g., auditor role) MUST filter `WHERE EXISTS (SELECT 1 FROM auth.users au WHERE au.id = ur.user_id)`.
+4. Schema FK stays as-is — guard lives in trigger layer.
+
+Anchor: `BUG-037`. Affected functions: `notify_on_kpi_created`, `notify_on_kpi_status_change`. Regression test: `src/test/bugBountyFixes.test.ts` → BUG-037.
