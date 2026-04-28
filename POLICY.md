@@ -1917,3 +1917,22 @@ The non-canonical literals `l1_review`, `auditor_review`, and `skip_level_review
 5. **Regression coverage.** `BUG-037` in `src/test/bugBountyFixes.test.ts` pins (a) the `auth.users` pre-check inside `notify_on_kpi_created`, (b) parity between the count of `INSERT INTO public.notifications` and `WHEN foreign_key_violation THEN` handlers in `notify_on_kpi_status_change`, and (c) the `auth.users` filter on the auditor fan-out.
 
 `BUG-037` is the canonical anchor for this rule.
+
+## §109 — Large-Table Export Pagination (v2.66.7.40)
+
+**Rule.** Any client-side export that walks a table of more than ~1k rows MUST (a) paginate via `fetchAllPaged()` from `src/lib/fetchAll.ts`, (b) include an explicit `.order(<indexed_column>)` before every `.range(from, to)`, and (c) resolve foreign-key descriptions via separate `.in('id', [...])` lookups instead of nested PostgREST joins on the paged select.
+
+**Background — BUG-038.** The PMS Scorecard **Export Current Data** button on `/admin/import` failed with `canceling statement due to statement timeout`. Root cause: `exportKpiData()` paged 9,526 KPI rows with a 4-level nested join (`kra_categories`, `profiles → departments → business_units → divisions`) **and no ORDER BY**. Without ordering, Postgres had to materialise the full join on every page request to compute the `OFFSET`, and the first page already exceeded `statement_timeout`.
+
+**Why this matters.** PostgREST translates `.range(offset, end)` into `OFFSET / LIMIT`. With no `ORDER BY`, the planner cannot use an index seek; it must scan + sort the full join, every page. Adding `.order('id')` on a primary-key index makes each page an O(log n) seek + O(page_size) read. The same query without ordering is effectively O(n) per page = O(n²) total.
+
+**Enforcement.**
+1. **Pagination helper.** Use `fetchAllPaged()`. Manual `while (true)` loops are forbidden in new code.
+2. **Order before range.** Every paged select MUST chain `.order(...)` before `.range(...)`. Prefer the table's primary key.
+3. **Decoupled lookups.** Do NOT embed `parentTable(childCols, grandchildTable(...))` joins in a query that you then page. Fetch the parent rows with own columns only, collect the foreign-key id sets, then issue one `.in('id', [...])` call per lookup table.
+4. **Page size.** Default 1000 (the helper's default). For wide rows or queries that join even one heavy related table inside `fetchAllPaged`, drop to 500.
+5. **§94 alignment.** This rule extends §94 (Profiles Query Policy) from rosters/pickers to exports.
+
+**Regression coverage.** `BUG-038` in `src/test/bugBountyFixes.test.ts` pins the absence of nested joins and the presence of `.order()` + `.in()` lookups in both `exportKpiData` and `exportEmployeeData`.
+
+`BUG-038` is the canonical anchor for this rule.
