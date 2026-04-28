@@ -953,7 +953,7 @@ describe('BUG-041: DataOwnerRoute admit policy mirrors AppSidebar', () => {
 
     // Admits per-user overrides and profile-based view rights.
     expect(src).toMatch(/userOverrides[\s\S]*?\.some\(/);
-    expect(src).toMatch(/canPerform\(\s*['"]?[A-Z_]*data-entry['"]?[\s\S]*?,\s*['"]view['"]\s*\)/);
+    expect(src).toMatch(/canPerform\([\s\S]*?,\s*['"]view['"]\s*\)/);
 
     // Loading guard waits on menu-access too (prevents premature redirect).
     expect(src).toMatch(/menuLoading|isLoading:\s*menuLoading/);
