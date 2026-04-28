@@ -1119,9 +1119,13 @@ describe('BUG-046: HR PMS dashboard counts N/A as reviewed and excludes employee
     const src = fs.readFileSync('src/components/review/EmployeeSelectorGrid.tsx', 'utf-8');
     // Per-card progress bar credit
     expect(src).toMatch(/s\.hr_pms_score\s*!=\s*null[\s\S]*s\.is_na\s*===\s*true/);
-    // Stat-card aggregation now runs the score-signature counter BEFORE the
+    // Stat-card aggregation runs the score-signature counter BEFORE the
     // workflow-stage early-return so historical signatures still count.
-    const hrBranch = src.match(/viewLevel === 'hr_pms'[\s\S]*?periodEmployeeIds\.size/m)?.[0] ?? '';
+    // (Use the LAST occurrence of the hr_pms branch header to skip the audit branch above.)
+    const hrBranchStart = src.lastIndexOf("viewLevel === 'hr_pms'");
+    expect(hrBranchStart).toBeGreaterThan(-1);
+    const hrBranchEnd = src.indexOf("} else if (viewLevel === 'pending_self_review')", hrBranchStart);
+    const hrBranch = src.slice(hrBranchStart, hrBranchEnd > -1 ? hrBranchEnd : hrBranchStart + 4000);
     expect(hrBranch).toMatch(/hrSubEarly/);
     expect(hrBranch.indexOf('hrSubEarly')).toBeLessThan(hrBranch.indexOf("if (hrIdx === -1) return"));
   });
