@@ -1702,6 +1702,16 @@ PostgREST silently caps unranged `select(...)` queries at 1000 rows. With the ac
 
 **Regression Coverage.** `src/components/admin/__tests__/employeePickerPaging.test.ts` locks in the contract by simulating a roster larger than 1000 rows and asserting target employees beyond the cap remain discoverable.
 
+**§94 Addendum (v2.66.7.45) — Enumerated paged sites.** The following hooks/components are confirmed to comply with §94 and MUST stay paged. New entries must be appended whenever a profile-list reader is added:
+- `src/components/admin/CopyKrasDialog.tsx` (source + target pickers)
+- `src/components/admin/OrgKpiAddEmployeeDialog.tsx`
+- `src/components/admin/CompetencyManagerTab.tsx`
+- `src/components/admin/ReportAccessTab.tsx`
+- `src/components/admin/AccessProfilesManager` AssignmentTab
+- `src/hooks/useAdminReports.ts` → `useKpiMappingMatrix` (added v2.66.7.45 — BUG-043; previously truncated the KPI Mapping Matrix denominator to ~996 of ~2,533 active employees)
+
+**Regression Coverage (BUG-043).** `src/test/bugBountyFixes.test.ts::BUG-043` pins (a) `useAdminReports.ts` imports `fetchAllPaged`, (b) the `kpi-mapping-profiles` queryFn block uses `fetchAllPaged` and `.range(...)`.
+
 
 ## §90 — Role-String Safety in SQL and Edge Code (v2.66.7.19)
 

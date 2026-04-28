@@ -1011,3 +1011,27 @@ describe('BUG-042: PMS Policy menu honors pms_policy_visible_roles', () => {
     expect(src).toMatch(/canAccess\(\s*['"]pms-policy['"]\s*\)/);
   });
 });
+
+// BUG-043: KPI Mapping Matrix was capped at ~996 employees because
+// useKpiMappingMatrix fetched profiles via a single unranged supabase select.
+// PostgREST silently caps unranged reads at 1000 rows; with ~2,533 active
+// employees the matrix saw only the first 1000 alphabetical profiles. Fix:
+// wrap the profiles query in fetchAllPaged per POLICY §94.
+describe('BUG-043: KPI Mapping Matrix uses paged profiles fetch', () => {
+  it('useAdminReports imports fetchAllPaged', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/hooks/useAdminReports.ts', 'utf-8');
+    expect(src).toMatch(/from\s+['"]@\/lib\/fetchAll['"]/);
+    expect(src).toMatch(/fetchAllPaged/);
+  });
+
+  it('kpi-mapping-profiles query uses .range() (no unranged profiles list read)', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/hooks/useAdminReports.ts', 'utf-8');
+    // Locate the kpi-mapping-profiles queryFn block.
+    const block = src.split("queryKey: ['kpi-mapping-profiles']")[1]?.split('useQuery({')[0] ?? '';
+    expect(block, 'kpi-mapping-profiles query block not found').toBeTruthy();
+    expect(block).toMatch(/fetchAllPaged/);
+    expect(block).toMatch(/\.range\(/);
+  });
+});

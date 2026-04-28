@@ -1,7 +1,9 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-23  
-> **Version:** 2.66.7.41 — **BUG-039 fix: Export Current Data no longer times out on review_submissions.** After the §109 / BUG-038 fix, `exportKpiData()` on `/admin/import` continued to fail with `canceling statement due to statement timeout (57014)` because it still ran a broad `fetchAllPaged()` over `review_submissions` (7,550 rows). The table's RLS SELECT policies join back to `kpis`/`profiles` for every candidate row, so even an ordered, slim, paginated query exceeded the statement timeout on the first page. Fix: after fetching `kpis`, the export now walks the resulting KPI ids in batches of 100 and pulls submissions via `.in('kpi_id', batch)` — index-backed (`idx_review_submissions_kpi_id`) and per-statement bounded. New POLICY §110 codifies the rule for any RLS-heavy child table. Regression covered by `BUG-039` in `src/test/bugBountyFixes.test.ts`.
+> **Version:** 2.66.7.45 — **BUG-043 fix: KPI Mapping Matrix denominator restored to full active roster.** `useKpiMappingMatrix` (`src/hooks/useAdminReports.ts`) fetched the profiles list with a single unranged `supabase.from('profiles').select(...).order('full_name')`. PostgREST silently caps unranged reads at 1000 rows, so the matrix at `/admin/kpi-mapping` only ever saw the first ~1000 alphabetical profiles (~996 active after the in-memory `is_active` filter) of a ~2,533-employee roster — every grade/designation/department filter cascaded off this truncated set and the Coverage % reported against an under-counted denominator. Fix: wrap the profiles query in `fetchAllPaged()` per POLICY §94. KPI fetch in the same hook was already batched. Regression: `BUG-043` in `src/test/bugBountyFixes.test.ts` pins (a) `fetchAllPaged` import, (b) the `kpi-mapping-profiles` queryFn block uses both `fetchAllPaged` and `.range(...)`. POLICY §94 Addendum updated with the enumerated paged-sites list.
+>
+> **Previous Version:** 2.66.7.41 — **BUG-039 fix: Export Current Data no longer times out on review_submissions.** After the §109 / BUG-038 fix, `exportKpiData()` on `/admin/import` continued to fail with `canceling statement due to statement timeout (57014)` because it still ran a broad `fetchAllPaged()` over `review_submissions` (7,550 rows). The table's RLS SELECT policies join back to `kpis`/`profiles` for every candidate row, so even an ordered, slim, paginated query exceeded the statement timeout on the first page. Fix: after fetching `kpis`, the export now walks the resulting KPI ids in batches of 100 and pulls submissions via `.in('kpi_id', batch)` — index-backed (`idx_review_submissions_kpi_id`) and per-statement bounded. New POLICY §110 codifies the rule for any RLS-heavy child table. Regression covered by `BUG-039` in `src/test/bugBountyFixes.test.ts`.
 >
 > **Previous Version:** 2.66.7.23 — **Manual Refresh button on reviewer dashboards.** `EmployeeSelectorGrid` (used by HR PMS, Audit, Management, Team Reviews, Skip-Level, and the Pending bucket views) now exposes a **Refresh** button in the header toolbar. Clicking it invalidates every dataset feeding the grid — `profiles-by-workflow-stage`, `kpis-by-period-ranges`, `review-submission-scores`, `profiles`, `team-members`, `skip-level-team-members`, `employee-scores-for-period`, `bulk-employee-workflows`, `employee-filter-options`, `auditor-workload-summary`, `my-audit-assignments` — so stat cards, per-employee progress bars, and reviewed-count badges immediately re-pull from the server without a full page reload. The button shows a spinning `RefreshCw` icon and stays disabled while any of those queries are in-flight (tracked via `useIsFetching`) to prevent request storms.
 >
@@ -5308,6 +5310,21 @@ This section records architectural patterns that have been audited and intention
 **Fix.** New migration recreates `notify_on_kpi_status_change()` with `WHERE ur.role = 'auditor'`. All other branches are byte-identical. No schema/data changes.
 
 **Regression Coverage.** `src/test/bugBountyFixes.test.ts` adds **BUG-019** — pins the contract that every role string referenced in SQL or edge-function code must exist in `ALL_APP_ROLES`, and explicitly rejects the historical `audit_lead` typo.
+
+### v2.66.7.45 — KPI Mapping Matrix Coverage Truncation (BUG-043) (2026-04-28)
+
+**Root Cause.** `src/hooks/useAdminReports.ts::useKpiMappingMatrix` issued an unranged `supabase.from('profiles').select(...).order('full_name')` to load the employee roster for `/admin/kpi-mapping`. PostgREST silently caps unranged reads at 1000 rows; the active roster is ~2,533 profiles. The matrix only saw the first ~996 active employees alphabetically, every cascading filter operated on a truncated denominator, and the Coverage % stat was systematically under-reported. The sibling KPI fetch in the same hook was already batched manually — only the profiles query was missed when POLICY §94 was rolled out.
+
+**Fix.** Wrapped the profiles query in `fetchAllPaged()` from `src/lib/fetchAll.ts` (the project-standard helper used by every other §94-compliant picker). Same SELECT shape; same in-memory `is_active !== false` filter; the only behavioural change is that all ~2,533 active rows are now visible to the matrix.
+
+**Regression Coverage.** `src/test/bugBountyFixes.test.ts::BUG-043` pins (a) `useAdminReports.ts` imports `fetchAllPaged`, (b) the `kpi-mapping-profiles` queryFn block uses both `fetchAllPaged` and `.range(...)`. POLICY §94 Addendum extended with an enumerated list of compliant paged-fetch sites so future hooks reading `profiles` as a list cannot silently regress.
+
+**Risk & Impact.**
+- *Data Impact*: None. Read-only query, identical SELECT shape, RLS unchanged.
+- *Workflow Impact*: Coverage %, "mapped employees", and grade/designation cascades on `/admin/kpi-mapping` now reflect the full active roster.
+- *UI/UX*: No visual change. Existing pagination spans the real dataset.
+- *Performance*: ~3 paged requests instead of 1 (≈2.5k rows). React Query caches across mounts.
+- *Regression Risk*: Very low — single helper swap, no schema or business-logic changes.
 
 **Risk & Impact.**
 - *Data Impact*: None — trigger function only.
