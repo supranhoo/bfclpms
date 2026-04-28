@@ -890,3 +890,27 @@ describe('BUG-038: PMS Export uses ordered, lookup-decoupled pagination', () => 
     expect(fn).toMatch(/\.from\(['"]departments['"]\)[\s\S]*?\.in\(['"]id['"]/);
   });
 });
+
+// BUG-039: PMS Scorecard "Export Current Data" still timed out after BUG-038
+// because `review_submissions` was fetched via a broad paged scan whose RLS
+// policies join kpis + profiles per row. Fix: fetch submissions by KPI id
+// batches using `.in('kpi_id', batch)` so the index-backed lookup avoids
+// the statement timeout.
+describe('BUG-039: Review submissions export uses kpi_id batching', () => {
+  it('exportKpiData fetches review_submissions via .in("kpi_id", batch), not a broad paged scan', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/pages/admin/ImportData.tsx', 'utf-8');
+    const fnMatch = src.match(/const exportKpiData = async[\s\S]*?XLSX\.writeFile\(wb, `kpis_export_/);
+    expect(fnMatch, 'exportKpiData not found').toBeTruthy();
+    const fn = fnMatch![0];
+
+    // Must NOT call fetchAllPaged on review_submissions anymore.
+    expect(fn).not.toMatch(/fetchAllPaged[\s\S]{0,200}from\(['"]review_submissions['"]\)/);
+
+    // Must fetch review_submissions via .in('kpi_id', ...) batches.
+    expect(fn).toMatch(/\.from\(['"]review_submissions['"]\)[\s\S]*?\.in\(['"]kpi_id['"]/);
+
+    // Must define a bounded batch size constant.
+    expect(fn).toMatch(/SUBMISSION_BATCH\s*=\s*\d+/);
+  });
+});

@@ -1,53 +1,79 @@
-# BUG-038 — "Export Current Data" Statement Timeout (PMS Scorecard Import)
+# BUG-039 Plan — Remaining Export Current Data Timeout
 
-## Symptom
-On `/admin/import` → **Import PMS Data** tab, clicking **Export Current Data** shows:
-> Export Failed — canceling statement due to statement timeout
+## Confirmed current failure
+The previous BUG-038 fix removed the heavy nested KPI join, and KPI pages now succeed. The remaining failure is a different query in the same export flow:
 
-## Root Cause Analysis
-`exportKpiData()` in `src/pages/admin/ImportData.tsx` (line 1749) makes paginated calls but each call is **expensive enough to hit Postgres' statement timeout** (~8s on PostgREST):
+```text
+GET /review_submissions?...&order=kpi_id.asc&offset=0&limit=1000
+Status 500
+message: canceling statement due to statement timeout
+```
 
-1. **Heavy nested join on `kpis`** — every page pulls a 4-level join:
-   `kra_categories(name), profiles!kpis_employee_id_fkey(employee_code, full_name, department_id, departments(name, business_units(name, divisions(name))))`
-   With **9,526 KPIs**, the planner serializes this for each 1000-row page.
-2. **No `ORDER BY`** on `.range()` — PostgREST/Postgres cannot use a stable index scan; it materialises the full set repeatedly. This is the proximate cause of the timeout (`canceling statement due to statement timeout`).
-3. **`review_submissions` page is also unordered** (7,550 rows) — currently fine but at risk.
-4. `performance_reviews` returns 0 rows; not a concern.
+So the export still fails when fetching `review_submissions`, not while fetching `kpis`.
 
-The 1st page itself (1000 KPIs × 4-level join, unordered) exceeds the timeout → entire export aborts.
+## Root cause
+`review_submissions` has 7,550 rows and its SELECT policies contain role/relationship checks that repeatedly consult `kpis`/`profiles` for each row. Even though the query is ordered by `kpi_id`, asking for all submissions through normal client RLS still exceeds the backend statement timeout on the first page.
 
-## Fix Plan
+The earlier test covered KPI nested joins but did not protect the `review_submissions` page size / RLS-heavy export path.
 
-### 1. Decouple the heavy joins from the paginated KPI fetch
-Fetch `kpis` with **only its own columns** (no nested joins), then resolve `kra_categories`, `profiles`, `departments`, `business_units`, `divisions`, and `sub_branches` in a few lookup queries using `.in('id', [...])`. This is the same pattern already used in `IncentiveDataExport.tsx`.
+## Fix approach
 
-### 2. Add stable `ORDER BY` + paginate via `fetchAllPaged`
-Replace the manual `while(true)` loops with `fetchAllPaged()` from `src/lib/fetchAll.ts` (already mandated by `mem://architecture/profiles-query-policy`), and add `.order('id')` to every paginated query so each range scan is index-backed and bounded.
+### 1. Stop exporting all submissions directly
+Change `exportKpiData()` so it does not run a broad paged query on `review_submissions`.
 
-### 3. Reduce page size for the KPI query
-Drop from 1000 → 500 rows per page to stay comfortably under the statement timeout even on cold caches.
+Instead, after the KPI rows are fetched, fetch submissions in small `kpi_id IN (...)` batches:
 
-### 4. Apply the same pattern to `exportEmployeeData` (defensive)
-The employee export uses similar joins; add ordering + `fetchAllPaged` to prevent the same regression as the roster grows.
+```ts
+for (const batch of chunk(allKpiIds, 100)) {
+  await supabase
+    .from('review_submissions')
+    .select('...needed columns...')
+    .in('kpi_id', batch)
+    .order('kpi_id');
+}
+```
 
-### 5. Regression test
-Add **BUG-038** to `src/test/bugBountyFixes.test.ts` asserting:
-- Paginated queries include `.order(...)` before `.range(...)`.
-- Lookup tables (`profiles`, `departments`, `business_units`, `divisions`, `kra_categories`, `sub_branches`) are fetched as separate `.in('id', [...])` queries, not nested in the main KPI select.
+This keeps every statement bounded and uses the existing `review_submissions.kpi_id` index.
 
-### 6. Docs & memory
-- `DOCUMENTATION.md`: add v2.66.7.39 changelog entry.
-- `POLICY.md` §94 (profiles paging): extend to "any export over a large table must use lookup-decoupled fetches with ordered pagination".
-- New memory: `mem/architecture/database/large-export-pagination-policy` — codify the pattern.
+### 2. Reduce risky page sizes
+Use a smaller export-safe page size for KPI and submission-related reads where needed:
+- KPI pages: keep 500 or reduce to 250 if testing shows it is safer.
+- Submission lookup batches: start with 100 KPI IDs per query.
 
-## Risk & Impact
-- **Data Impact**: None. Read-only; output Excel structure unchanged.
-- **Workflow Impact**: None. Same button, same file, just succeeds.
-- **UI/UX**: Identical UI; export now completes in one pass.
-- **Regression Risk**: Low — the join decoupling is a behaviour-preserving refactor. Existing column mapping is kept verbatim.
-- **Mitigation**: New unit test + manual verification on the 9,526-KPI dataset.
+### 3. Preserve the same Excel output
+Keep the current exported columns and rating fallback logic unchanged. Only the data-fetch strategy changes.
 
-## Files to Edit
-- `src/pages/admin/ImportData.tsx` — refactor `exportKpiData`, harden `exportEmployeeData`.
-- `src/test/bugBountyFixes.test.ts` — add BUG-038 suite.
-- `DOCUMENTATION.md`, `POLICY.md`, `mem/index.md`, and new `mem/architecture/database/large-export-pagination-policy`.
+### 4. Improve user feedback during export
+Update the button/loading text/toast so admins can see progress such as:
+- Loading KPI data
+- Loading review scores
+- Building Excel file
+
+This avoids the impression that the export is frozen.
+
+### 5. Regression coverage
+Add BUG-039 tests to `src/test/bugBountyFixes.test.ts` asserting:
+- `exportKpiData()` no longer calls `fetchAllPaged` over `review_submissions`.
+- `review_submissions` is fetched by `.in('kpi_id', batch)`.
+- batch size is capped, to avoid reintroducing a large RLS-heavy query.
+
+### 6. Policy, documentation, and memory sync
+Update:
+- `POLICY.md` with a new rule extending large-export policy: RLS-heavy child tables like `review_submissions` must be fetched by parent-ID batches, not broad table scans.
+- `DOCUMENTATION.md` version history with BUG-039.
+- `mem/architecture/database/large-export-pagination-policy` to include the `review_submissions` exception.
+
+## Risk & Impact Report
+
+- **Data Impact:** Read-only; no schema/data changes required.
+- **Workflow Impact:** No permission changes; export remains admin-facing and keeps the same file format.
+- **UI/UX Impact:** Minimal; same button and Excel output, with clearer progress feedback.
+- **Regression Risk:** Low-to-medium. The main risk is missing submissions if batching is implemented incorrectly.
+- **Mitigation:** Use deterministic KPI-ID batching, map by `kpi_id`, and add regression tests to prevent broad `review_submissions` scans from returning.
+
+## Files to edit after approval
+- `src/pages/admin/ImportData.tsx`
+- `src/test/bugBountyFixes.test.ts`
+- `POLICY.md`
+- `DOCUMENTATION.md`
+- `mem/architecture/database/large-export-pagination-policy`

@@ -1,6 +1,6 @@
 ---
 name: large-export-pagination-policy
-description: Client-side exports over large tables (kpis, profiles, review_submissions) MUST use ordered fetchAllPaged + .in() lookup decoupling — never nested PostgREST joins on the paged select
+description: Client-side exports over large tables MUST use ordered fetchAllPaged + .in() lookup decoupling for parents; RLS-heavy children like review_submissions MUST be fetched via .in('parent_fk', batch) batches
 type: constraint
 ---
 Any client-side export that walks a table over ~1k rows MUST:
@@ -9,7 +9,11 @@ Any client-side export that walks a table over ~1k rows MUST:
 3. Resolve FK descriptions via separate `.in('id', [...])` lookups. Do NOT embed `parentTable(childCols, grandchildTable(...))` joins in a query that is then paged — the planner expands the wide join on every page.
 4. Drop page size to 500 if the paged select still includes any join.
 
-Why: BUG-038 — `exportKpiData()` on `/admin/import` failed with `canceling statement due to statement timeout` on 9,526 KPIs because it combined a 4-level nested join with unordered `.range()`. Pattern reused in `exportEmployeeData` for defence-in-depth. Reference implementation: `src/components/incentive/IncentiveDataExport.tsx` (lookup-decoupled).
+Additionally — RLS-heavy CHILD tables (e.g. `review_submissions`, whose SELECT policies join back to `kpis`/`profiles`):
+5. Do NOT use `fetchAllPaged()` even with `.order()`. The per-row RLS evaluation across paged offsets exceeds `statement_timeout` on the very first page.
+6. After fetching the parent rows, walk the parent ids in batches of ≤100 and pull child rows via `.in('<parent_fk>', batch)` (index-backed, bounded statement cost).
 
-Codified: POLICY.md §109. Extends §94 (paged profiles policy) from pickers to exports.
-Regression test: `src/test/bugBountyFixes.test.ts` → `BUG-038` (2 assertions).
+Why: BUG-038 — `exportKpiData()` on `/admin/import` failed with `canceling statement due to statement timeout` on 9,526 KPIs because of a 4-level nested join with unordered `.range()`. BUG-039 — after that fix, the same export still timed out on the broad `review_submissions` paged scan because of RLS join overhead; resolved by switching to `.in('kpi_id', batch)` lookups. Reference implementation: `src/components/incentive/IncentiveDataExport.tsx` (lookup-decoupled).
+
+Codified: POLICY.md §109 (parent pagination) + §110 (RLS-heavy child batching). Extends §94 (paged profiles policy) from pickers to exports.
+Regression tests: `src/test/bugBountyFixes.test.ts` → `BUG-038` (parent pagination) + `BUG-039` (review_submissions kpi_id batching).
