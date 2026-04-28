@@ -1,99 +1,60 @@
-# Fix: PMS Policy Menu Visibility Honors `pms_policy_visible_roles` (BUG-042)
+# BUG-043 — KPI Mapping Matrix shows only 996 employees
 
-## Problem (Confirmed)
+## Root Cause
+`src/hooks/useAdminReports.ts` (line ~134, `useKpiMappingMatrix`) calls `supabase.from('profiles').select(...).order('full_name')` **without `.range()` or `fetchAllPaged`**. PostgREST silently caps unranged reads at 1000 rows. With ~2,533 active employees in the roster, the matrix only ever sees the first 1000 alphabetical profiles (~996 active after filtering), regardless of filters or pagination UI.
 
-The PMS Policy access chain has two competing sources of truth and the menu picks the wrong one:
+The sibling KPI fetch in the same hook is correctly batched — only profiles was missed. This is the **exact** rule codified in `POLICY.md §94` and `mem://architecture/profiles-query-policy`, which lists every picker/list `profiles.select(...)` site that must use `fetchAllPaged`. The matrix hook was overlooked when §94 was rolled out.
 
-| Layer | File / Source | Behavior |
-|---|---|---|
-| Page guard (canonical) | `src/pages/PMSPolicy.tsx` line 35 | Redirects to `/dashboard` when `role !== 'admin'` and `role` is not in `app_settings.pms_policy_visible_roles`. |
-| Sidebar menu (broken) | `src/components/layout/AppSidebar.tsx` line 177–186 + `src/hooks/useMenuAccess.ts` line 47 | Uses `canAccess('pms-policy')`. `useMenuAccess` returns **true unconditionally for every signed-in user** because `'pms-policy'` is in `EMPLOYEE_DEFAULT_MENUS` (Layer 1, applied **before** any role/config check). The hardcoded fallback (Layer 7) also lists every role, and the DB row in `menu_access_config` (`allowed_roles = {admin,manager,employee,auditor,management,hr_pms}`) covers all roles too. |
-| Static menu `roles` field (dead) | `AppSidebar.tsx` line 63 | `roles: [...new Set(['admin', ...policyVisibleRoles])]` — wired up dynamically but never consulted because `filterByRole` short-circuits to `canAccess(menuKey)` whenever `menuKey` exists. |
-
-Net effect: an admin removes "Auditor" from PMS Policy visibility on the page UI; auditors still see "PMS Policy" in the sidebar; clicking it bounces them to `/dashboard`.
-
-## Decision: Single Source of Truth
-
-`app_settings.pms_policy_visible_roles` is canonical. It is the field the admin toggles from the PMS Policy page (line 39–45 with checkboxes). The page guard already uses it. The sidebar must use it too. The `menu_access_config` row for `pms-policy` and the `EMPLOYEE_DEFAULT_MENUS` entry are the bugs.
+## Risk & Impact Report
+- **Data Impact**: None to schema/RLS. Read-only query. Fix returns the *correct* full roster instead of a silently-truncated one.
+- **Workflow Impact**: Coverage % and "mapped employees" KPI in the matrix become accurate; previously under-reported because denominator was capped at ~996.
+- **UI/UX**: No visual change. Pagination already exists and will now span the real dataset.
+- **Regression Risk**: Low. `fetchAllPaged` is the project-standard helper used by every other picker. One extra page request (~3 pages for ~2.5k rows) — negligible.
+- **Mitigation**: Add a regression test asserting the hook uses `fetchAllPaged` for profiles, and update §94's enumerated list to include this hook.
 
 ## Fix
 
-Three coordinated edits in `src/hooks/useMenuAccess.ts` plus matching tests/docs:
-
-### 1. Remove `'pms-policy'` from `EMPLOYEE_DEFAULT_MENUS`
+**`src/hooks/useAdminReports.ts`** — wrap the profiles query in `fetchAllPaged`:
 
 ```ts
-// Before
-const EMPLOYEE_DEFAULT_MENUS = ['dashboard', 'inbox', 'pms-policy'];
-// After
-const EMPLOYEE_DEFAULT_MENUS = ['dashboard', 'inbox'];
+import { fetchAllPaged } from '@/lib/fetchAll';
+
+// inside useQuery({ queryKey: ['kpi-mapping-profiles'], queryFn: ... })
+const data = await fetchAllPaged<any>((from, to) =>
+  supabase
+    .from('profiles')
+    .select(`
+      id, full_name, employee_code, pms_grade, designation, department_id, is_active,
+      departments (id, name, business_units (id, name, divisions (id, name)))
+    `)
+    .order('full_name')
+    .range(from, to)
+);
+return data;
 ```
 
-PMS Policy is not a universal default; it is a configurable, role-gated page.
+(Active-only filtering stays in the in-memory step where it already lives — `p.is_active !== false` — to keep coverage math consistent with how counts were computed before.)
 
-### 2. Add a special-case branch in `canAccess` that defers to `pms_policy_visible_roles`
+## Audit for Sibling Leaks
+While here, grep `src/hooks/useKpiEmployeeMatrix.ts` and other admin/report hooks for the same anti-pattern. The KPI Employee Matrix hook joins profiles via the `kpis` foreign-key embed (not a separate `from('profiles')` list), so it's exempt — but I'll verify no other unranged `from('profiles').select(...)` list queries exist in admin/report hooks and patch any I find in the same change.
 
-Inject `useAppSettings` into `useMenuAccess`. Inside `canAccess`:
+## Regression Test
+Add **BUG-043** to `src/test/bugBountyFixes.test.ts`:
+- Assert `useAdminReports.ts` source contains `fetchAllPaged` in proximity to `from('profiles')`.
+- Assert no bare unranged `.from('profiles').select(...).order(...)` chain remains in the file (string check).
 
-```ts
-// PMS Policy: canonical source is app_settings.pms_policy_visible_roles.
-// Admin always sees it; everyone else only if their effective role is in the configured list.
-if (menuKey === 'pms-policy') {
-  if (effectiveRole === 'admin') return true;
-  if (!effectiveRole) return false;
-  const visible = appSettings?.pms_policy_visible_roles
-    ?? ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms'];
-  return visible.includes(effectiveRole);
-}
-```
+## Documentation & Memory
+- `POLICY.md §94`: append `useAdminReports.ts → useKpiMappingMatrix` to the enumerated list of paged sites.
+- `DOCUMENTATION.md`: bump version (v2.66.7.45), entry under "Bug Fixes — KPI Mapping Matrix coverage truncation".
+- `mem/architecture/profiles-query-policy`: add hook to the codified list.
+- `mem/features/admin/kpi-mapping-matrix-dashboard`: note the paging requirement.
 
-This branch runs **before** the EMPLOYEE_DEFAULT_MENUS / profile / override / role-default cascade, so it cannot be bypassed by Layer 1 or by stale DB rows.
+## Files to Edit
+- `src/hooks/useAdminReports.ts`
+- `src/test/bugBountyFixes.test.ts`
+- `POLICY.md`
+- `DOCUMENTATION.md`
+- `mem/architecture/profiles-query-policy`
+- `mem/features/admin/kpi-mapping-matrix-dashboard`
 
-Per-user overrides (`menu_access_user_overrides` row for `pms-policy`) intentionally still grant access — that's a deliberate admin escape hatch consistent with §111 design.
-
-### 3. Remove `'pms-policy'` from the `DEFAULT_MENU_ROLES` hardcoded fallback
-
-Otherwise Layer 7 would re-introduce the bug if `appSettings` is unavailable. Removing the entry forces the special-case branch to be the only authority.
-
-### 4. (Optional cleanup) Drop the `roles:` derivation in `getStaticMenuItems`
-
-`AppSidebar.tsx` line 63 currently weaves `policyVisibleRoles` into the menu item's `roles` array but it is dead code. Leave it as-is — it does no harm and serves as a hint. Will note this in the policy.
-
-### 5. Page guard wait-for-loading hardening
-
-`PMSPolicy.tsx` line 35 already gates on `!isLoading`, so it won't false-bounce. No change needed.
-
-## Risk & Impact Report
-
-- **Data Impact**: None. UI/policy alignment only. `app_settings.pms_policy_visible_roles` already exists and is the canonical column.
-- **Workflow Impact**:
-  - Admins: unchanged (always see PMS Policy).
-  - Roles in `pms_policy_visible_roles`: unchanged (see and access).
-  - Roles **not** in `pms_policy_visible_roles`: no longer see the menu item. Previously they saw it and got redirected.
-  - Per-user overrides on `pms-policy` continue to grant access — same escape hatch as Data Entry.
-- **UI/UX Consistency**: Eliminates the menu→redirect bounce for excluded roles. Sidebar matches page reality.
-- **Regression Risk**: Low. `useMenuAccess` already returns `useAppSettings`-backed data elsewhere in the layout via `AppSidebar.tsx` line 143; we'll subscribe again from inside the hook. React Query dedupes the fetch, so no extra network cost.
-- **Mitigation**: Regression test (BUG-042) below pins the special-case branch and the EMPLOYEE_DEFAULT_MENUS removal.
-
-## SSOT / Documentation Sync
-
-- `DOCUMENTATION.md` — `v2.66.7.44` Version History entry describing BUG-042 and the canonical source.
-- `POLICY.md` — extend §111 (or add §112) with: "When a page has its own role-visibility config (e.g., `pms_policy_visible_roles`), `useMenuAccess.canAccess` MUST defer to that config in a dedicated branch. The menu key MUST NOT appear in `EMPLOYEE_DEFAULT_MENUS` or `MANAGER_DEFAULT_MENUS`, and the `DEFAULT_MENU_ROLES` fallback for that key MUST be removed."
-- `mem://features/admin/pms-policy-management` — add a one-liner cross-referencing the canonical column.
-- `mem://features/admin/menu-access-rights` — add a "config-backed pages" note pointing to PMS Policy as the precedent.
-
-## Tests
-
-Add to `src/test/bugBountyFixes.test.ts` (BUG-042):
-
-- `useMenuAccess.ts` source no longer contains `'pms-policy'` inside `EMPLOYEE_DEFAULT_MENUS`.
-- `useMenuAccess.ts` source contains a dedicated `if (menuKey === 'pms-policy')` branch that references `pms_policy_visible_roles`.
-- `useMenuAccess.ts` source no longer lists `'pms-policy'` in `DEFAULT_MENU_ROLES`.
-- (Optionally) `AppSidebar.tsx` still renders the item with `menuKey: 'pms-policy'` so the special-case branch is exercised.
-
-## Files Touched
-
-- `src/hooks/useMenuAccess.ts` (logic fix — three edits)
-- `src/test/bugBountyFixes.test.ts` (BUG-042 regression test)
-- `DOCUMENTATION.md`, `POLICY.md` (SSOT sync)
-- `mem://features/admin/pms-policy-management`, `mem://features/admin/menu-access-rights` (cross-reference notes)
+Approve to implement.
