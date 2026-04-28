@@ -5742,3 +5742,24 @@ For a backfilled employee the `profiles` row already exists (master HR import). 
 **Policy**: POLICY.md §115 (new) — current resolved workflow is the authoritative roster filter; "Approved as N/A" is a completed reviewer action and counts toward stage-reviewed totals.
 
 **Files**: `src/hooks/useOrganization.ts`, `src/hooks/useKpis.ts`, `src/components/review/EmployeeSelectorGrid.tsx`, `src/test/bugBountyFixes.test.ts`, `POLICY.md`, `DOCUMENTATION.md`, `mem/features/review/unified-scorecard-component`, `.lovable/plan.md`.
+
+## v2.66.7.49 — HR PMS On-Behalf Score-or-N/A Guardrail + Lekh Raj Repair (BUG-047) (2026-04-28)
+
+**Symptom**: HR PMS Reviewed dashboard showed `592 / 595` for March 2026, off by exactly 3.
+
+**Root cause**: An admin used "Score on behalf of HR PMS" on 3 KPIs for Lekh Raj (employee 101959) and advanced them to `approved` without writing `hr_pms_score` and without setting `is_na = true`. The submission was technically valid against schema constraints but invisible to the dashboard's reviewed-signature predicate (BUG-046's `hr_pms_score IS NOT NULL OR is_na = true`).
+
+**Fix (defence in depth)**:
+
+1. **Data repair migration** — backfilled the 3 affected `review_submissions` rows with `is_na = true`, `na_marked_by_role = 'admin'`, and a clear `auto_advance_reason` referencing BUG-047. Reconciled HR PMS Reviewed to `595 / 595`. Insert is idempotent and scoped to the broken signature.
+2. **Audit trail** — every repaired KPI got a `BUG_047_DATA_REPAIR` row in `kpi_audit_logs` with `performed_by = NULL` (system-attributed per `mem://architecture/system-performer-attribution`).
+3. **DB trigger `enforce_on_behalf_score_or_na`** — BEFORE INSERT/UPDATE on `review_submissions`. Detects on-behalf writes via `auto_advance_reason ILIKE '%on behalf of <stage>%'` for all reviewer stages (manager / skip_level / hr_pms / auditor / management) and rejects writes that lack both a stage score / rating and `is_na = true`. Repair migrations and fast-track writes are exempt by reason prefix.
+4. **Client guard** — `AdminDataEntryDialog` now disables the Submit button (and shows an inline POLICY §116 hint) unless either a numeric score / rating is provided or the `Mark as N/A` toggle is on. Self-stage submissions are exempt because final aggregation does not depend on a self-stage signature.
+5. **POLICY.md §116** added; **regression test** `BUG-047` added to `src/test/bugBountyFixes.test.ts` pinning the dialog predicate, the trigger contract, and the targeted repair scope.
+
+**Files**:
+- `supabase/migrations/<ts>_*.sql` (new)
+- `src/components/admin/AdminDataEntryDialog.tsx`
+- `src/test/bugBountyFixes.test.ts`
+- `POLICY.md` (§116)
+- `mem/features/admin/admin-data-entry-workflow-controls`
