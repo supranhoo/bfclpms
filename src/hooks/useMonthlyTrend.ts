@@ -9,9 +9,7 @@ const MONTHS = [
 export interface MonthKey {
   month: string;
   year: number;
-  /** Display label e.g. "Apr 2026" */
   label: string;
-  /** Stable key e.g. "April-2026" */
   key: string;
 }
 
@@ -22,11 +20,8 @@ export interface TrendEmployee {
   designation: string;
   departmentName: string;
   isActive: boolean;
-  /** key (e.g. "April-2026") -> weighted score (0-5) or null */
   monthlyScores: Record<string, number | null>;
-  /** Average across non-null months */
   avg: number | null;
-  /** Trend last vs first non-null month */
   trend: 'up' | 'down' | 'flat' | 'na';
 }
 
@@ -37,6 +32,8 @@ export interface MonthlyTrendFilters {
   toYear: number;
   search?: string;
   includeInactive?: boolean;
+  /** Only fetch when explicitly enabled (load button click) */
+  enabled?: boolean;
 }
 
 export interface MonthlyTrendResult {
@@ -58,7 +55,6 @@ function bestScore(s: any): number | null {
     ?? null;
 }
 
-/** Build inclusive month list from (fromMonth, fromYear) → (toMonth, toYear). */
 export function buildMonthRange(
   fromMonth: string,
   fromYear: number,
@@ -68,23 +64,22 @@ export function buildMonthRange(
   const fromIdx = MONTHS.indexOf(fromMonth);
   const toIdx = MONTHS.indexOf(toMonth);
   if (fromIdx === -1 || toIdx === -1) return [];
+  // Compute total months between; bail if negative
+  const total = (toYear - fromYear) * 12 + (toIdx - fromIdx);
+  if (total < 0) return [];
 
+  const out: MonthKey[] = [];
   let y = fromYear;
   let m = fromIdx;
-  const out: MonthKey[] = [];
-  // Safety stop at 24 iterations
-  for (let i = 0; i < 24; i++) {
+  for (let i = 0; i <= total && i < 24; i++) {
     out.push({
       month: MONTHS[m],
       year: y,
       label: `${MONTHS[m].slice(0, 3)} ${y}`,
       key: `${MONTHS[m]}-${y}`,
     });
-    if (m === toIdx && y === toYear) break;
     m += 1;
     if (m > 11) { m = 0; y += 1; }
-    // If we passed the to date (invalid range), stop
-    if (y > toYear || (y === toYear && m > toIdx + 12)) break;
   }
   return out;
 }
@@ -95,7 +90,6 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
       'monthly-trend',
       filters.fromMonth, filters.fromYear,
       filters.toMonth, filters.toYear,
-      filters.search ?? '',
       filters.includeInactive ?? false,
     ],
     queryFn: async (): Promise<MonthlyTrendResult> => {
@@ -111,101 +105,104 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
 
       const PAGE = 1000;
 
-      // Build OR clause for kpis: (review_period=X AND review_year=Y) OR ...
-      // Simpler: fetch each month sequentially (small number ≤12).
+      // Group months by year so we can batch fetch with .in() on review_period
+      const monthsByYear = new Map<number, string[]>();
+      months.forEach(mk => {
+        if (!monthsByYear.has(mk.year)) monthsByYear.set(mk.year, []);
+        monthsByYear.get(mk.year)!.push(mk.month);
+      });
+
+      // 1. Fetch all KPIs across the range (batched per year, paginated)
       type KpiRow = {
         id: string;
         employee_id: string;
         weightage: number | null;
         review_period: string;
         review_year: number;
-        profiles: any;
       };
 
       const allKpis: KpiRow[] = [];
-      for (const mk of months) {
-        let page = 0;
-        let more = true;
-        while (more) {
-          const { data, error } = await supabase
-            .from('kpis')
-            .select(`
-              id,
-              employee_id,
-              weightage,
-              review_period,
-              review_year,
-              profiles!kpis_employee_id_fkey(
-                full_name, employee_code, designation, department_id, is_active,
-                departments(name)
-              )
-            `)
-            .eq('review_period', mk.month)
-            .eq('review_year', mk.year)
-            .range(page * PAGE, (page + 1) * PAGE - 1);
-          if (error) throw error;
-          allKpis.push(...((data ?? []) as any));
-          more = (data?.length ?? 0) === PAGE;
-          page++;
-        }
+      // Fetch each year in parallel
+      await Promise.all(
+        Array.from(monthsByYear.entries()).map(async ([year, monthList]) => {
+          let page = 0;
+          let more = true;
+          while (more) {
+            const { data, error } = await supabase
+              .from('kpis')
+              .select('id, employee_id, weightage, review_period, review_year')
+              .eq('review_year', year)
+              .in('review_period', monthList)
+              .range(page * PAGE, (page + 1) * PAGE - 1);
+            if (error) throw error;
+            allKpis.push(...((data ?? []) as KpiRow[]));
+            more = (data?.length ?? 0) === PAGE;
+            page++;
+          }
+        })
+      );
+
+      if (allKpis.length === 0) {
+        return { months, employees: [], capped };
       }
 
-      // Fetch submissions in batches
+      // 2. Fetch employee profiles only for the involved employees (in parallel with subs)
+      const empIds = Array.from(new Set(allKpis.map(k => k.employee_id)));
+      const profileMap = new Map<string, any>();
       const subMap = new Map<string, any>();
-      const ids = allKpis.map(k => k.id);
-      for (let i = 0; i < ids.length; i += 500) {
-        const batch = ids.slice(i, i + 500);
-        const { data } = await supabase
-          .from('review_submissions')
-          .select('kpi_id, final_score, management_score, auditor_score, hr_pms_score, skip_level_score, manager_score, self_score, is_na')
-          .in('kpi_id', batch);
-        (data ?? []).forEach(s => subMap.set(s.kpi_id, s));
-      }
 
-      // Aggregate per employee per month
+      const profilePromise = (async () => {
+        for (let i = 0; i < empIds.length; i += 500) {
+          const batch = empIds.slice(i, i + 500);
+          const { data } = await supabase
+            .from('profiles')
+            .select('id, full_name, employee_code, designation, department_id, is_active, departments(name)')
+            .in('id', batch);
+          (data ?? []).forEach((p: any) => profileMap.set(p.id, p));
+        }
+      })();
+
+      const subsPromise = (async () => {
+        const ids = allKpis.map(k => k.id);
+        // Larger batch — submissions are cheap by id
+        const SUB_BATCH = 800;
+        const batches: string[][] = [];
+        for (let i = 0; i < ids.length; i += SUB_BATCH) {
+          batches.push(ids.slice(i, i + SUB_BATCH));
+        }
+        // Run batches in parallel (cap concurrency at 4)
+        const CONC = 4;
+        for (let i = 0; i < batches.length; i += CONC) {
+          const slice = batches.slice(i, i + CONC);
+          const results = await Promise.all(slice.map(b =>
+            supabase
+              .from('review_submissions')
+              .select('kpi_id, final_score, management_score, auditor_score, hr_pms_score, skip_level_score, manager_score, self_score, is_na')
+              .in('kpi_id', b)
+          ));
+          results.forEach(r => (r.data ?? []).forEach((s: any) => subMap.set(s.kpi_id, s)));
+        }
+      })();
+
+      await Promise.all([profilePromise, subsPromise]);
+
+      // 3. Aggregate per employee per month
       type Bucket = { weighted: number; weight: number; any: boolean };
-      const empMap = new Map<string, {
-        meta: TrendEmployee;
-        buckets: Record<string, Bucket>;
-      }>();
+      const empAgg = new Map<string, Record<string, Bucket>>();
 
       for (const kpi of allKpis) {
-        const profile = kpi.profiles;
+        const profile = profileMap.get(kpi.employee_id);
         if (!profile) continue;
+        if (!filters.includeInactive && profile.is_active === false) continue;
 
-        const isActive = profile.is_active !== false;
-        if (!filters.includeInactive && !isActive) continue;
-
-        if (filters.search) {
-          const s = filters.search.toLowerCase();
-          const name = (profile.full_name || '').toLowerCase();
-          const code = (profile.employee_code || '').toLowerCase();
-          const dept = (profile.departments?.name || '').toLowerCase();
-          if (!name.includes(s) && !code.includes(s) && !dept.includes(s)) continue;
-        }
-
-        const empId = kpi.employee_id;
-        if (!empMap.has(empId)) {
+        if (!empAgg.has(kpi.employee_id)) {
           const buckets: Record<string, Bucket> = {};
           months.forEach(m => { buckets[m.key] = { weighted: 0, weight: 0, any: false }; });
-          empMap.set(empId, {
-            meta: {
-              id: empId,
-              fullName: profile.full_name || 'Unknown',
-              employeeCode: profile.employee_code || '',
-              designation: profile.designation || '',
-              departmentName: profile.departments?.name || '',
-              isActive,
-              monthlyScores: {},
-              avg: null,
-              trend: 'na',
-            },
-            buckets,
-          });
+          empAgg.set(kpi.employee_id, buckets);
         }
 
         const monthKey = `${kpi.review_period}-${kpi.review_year}`;
-        const bucket = empMap.get(empId)!.buckets[monthKey];
+        const bucket = empAgg.get(kpi.employee_id)![monthKey];
         if (!bucket) continue;
 
         const sub = subMap.get(kpi.id);
@@ -213,57 +210,65 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
         const sc = bestScore(sub);
         if (sc === null) continue;
         const w = Number(kpi.weightage) || 0;
-        if (w <= 0) continue; // skip zero-weight
+        if (w <= 0) continue;
 
         bucket.weighted += sc * w;
         bucket.weight += w;
         bucket.any = true;
       }
 
+      // 4. Build employee rows
       const employees: TrendEmployee[] = [];
-      for (const { meta, buckets } of empMap.values()) {
+      for (const [empId, buckets] of empAgg.entries()) {
+        const profile = profileMap.get(empId);
+        if (!profile) continue;
+
         const monthlyScores: Record<string, number | null> = {};
-        const valid: number[] = [];
+        const orderedVals: number[] = [];
         months.forEach(mk => {
           const b = buckets[mk.key];
           if (b && b.any && b.weight > 0) {
             const v = Math.round((b.weighted / b.weight) * 100) / 100;
             monthlyScores[mk.key] = v;
-            valid.push(v);
+            orderedVals.push(v);
           } else {
             monthlyScores[mk.key] = null;
           }
         });
 
-        const avg = valid.length > 0
-          ? Math.round((valid.reduce((a, b) => a + b, 0) / valid.length) * 100) / 100
+        const avg = orderedVals.length > 0
+          ? Math.round((orderedVals.reduce((a, b) => a + b, 0) / orderedVals.length) * 100) / 100
           : null;
 
-        // Trend: first vs last non-null in chronological order
         let trend: TrendEmployee['trend'] = 'na';
-        const orderedVals: number[] = [];
-        months.forEach(mk => {
-          const v = monthlyScores[mk.key];
-          if (v !== null) orderedVals.push(v);
-        });
         if (orderedVals.length >= 2) {
-          const first = orderedVals[0];
-          const last = orderedVals[orderedVals.length - 1];
-          const delta = last - first;
+          const delta = orderedVals[orderedVals.length - 1] - orderedVals[0];
           if (Math.abs(delta) < 0.05) trend = 'flat';
           else trend = delta > 0 ? 'up' : 'down';
         } else if (orderedVals.length === 1) {
           trend = 'flat';
         }
 
-        employees.push({ ...meta, monthlyScores, avg, trend });
+        employees.push({
+          id: empId,
+          fullName: profile.full_name || 'Unknown',
+          employeeCode: profile.employee_code || '',
+          designation: profile.designation || '',
+          departmentName: profile.departments?.name || '',
+          isActive: profile.is_active !== false,
+          monthlyScores,
+          avg,
+          trend,
+        });
       }
 
       employees.sort((a, b) => a.fullName.localeCompare(b.fullName));
 
       return { months, employees, capped };
     },
-    enabled: !!filters.fromMonth && !!filters.toMonth,
+    enabled: filters.enabled !== false && !!filters.fromMonth && !!filters.toMonth,
     staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    retry: 1,
   });
 }
