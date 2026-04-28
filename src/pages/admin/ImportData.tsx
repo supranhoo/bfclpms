@@ -23,6 +23,7 @@ import { ClearAllKpiDataDialog } from '@/components/admin/ClearAllKpiDataDialog'
 import * as XLSX from 'xlsx';
 import { validateFileSize, IMPORT_LIMITS, sanitizeText, normalizeRole, VALID_ROLES } from '@/lib/importValidation';
 import { scoreToRatingLevel } from '@/lib/reviewConstants';
+import { fetchAllPaged } from '@/lib/fetchAll';
 
 /** Map technical DB/edge-function errors to admin-friendly messages */
 function friendlyImportError(msg: string): string {
@@ -1658,50 +1659,48 @@ export default function ImportData() {
   const exportEmployeeData = async () => {
     setIsExportingEmployees(true);
     try {
-      // Fetch all profiles with department info
-      const { data: allProfiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select(`
-          id,
-          employee_code,
-          full_name,
-          email,
-          designation,
-          company_id,
-          pms_grade,
-          level,
-          department_id,
-          reporting_manager_id,
-          departments!profiles_department_fk(
-            id,
-            name,
-            business_unit_id,
-            business_units(
-              id,
-              name,
-              division_id,
-              divisions(id, name)
-            )
-          )
-        `);
-      
-      if (profilesError) throw profilesError;
+      // BUG-038: Decouple joins + ordered pagination to avoid statement timeout.
+      // Fetch profiles with only own columns, paged & ordered for index-backed range scans.
+      const allProfiles = await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('profiles')
+          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, department_id, reporting_manager_id')
+          .order('id')
+          .range(from, to)
+      );
 
-      // Fetch user roles
+      // Lookup tables resolved separately via .in() — cheap and bounded.
+      const deptIds = [...new Set(allProfiles.map(p => p.department_id).filter(Boolean))];
+      const { data: deptRows } = deptIds.length
+        ? await supabase.from('departments').select('id, name, business_unit_id').in('id', deptIds)
+        : { data: [] as any[] };
+
+      const buIds = [...new Set((deptRows || []).map((d: any) => d.business_unit_id).filter(Boolean))];
+      const { data: buRows } = buIds.length
+        ? await supabase.from('business_units').select('id, name, division_id').in('id', buIds)
+        : { data: [] as any[] };
+
+      const divIds = [...new Set((buRows || []).map((b: any) => b.division_id).filter(Boolean))];
+      const { data: divRows } = divIds.length
+        ? await supabase.from('divisions').select('id, name').in('id', divIds)
+        : { data: [] as any[] };
+
       const { data: userRoles, error: rolesError } = await supabase
         .from('user_roles')
         .select('user_id, role');
-      
       if (rolesError) throw rolesError;
 
+      const deptMap = new Map((deptRows || []).map((d: any) => [d.id, d]));
+      const buMap = new Map((buRows || []).map((b: any) => [b.id, b]));
+      const divMap = new Map((divRows || []).map((d: any) => [d.id, d]));
       const roleMap = new Map(userRoles?.map(r => [r.user_id, r.role]) || []);
-      const profileMap = new Map(allProfiles?.map(p => [p.id, p]) || []);
+      const profileMap = new Map(allProfiles.map(p => [p.id, p]));
 
-      const exportData = (allProfiles || []).map(profile => {
-        const dept = profile.departments as any;
-        const bu = dept?.business_units;
-        const div = bu?.divisions;
-        const manager = profile.reporting_manager_id ? profileMap.get(profile.reporting_manager_id) : null;
+      const exportData = allProfiles.map(profile => {
+        const dept: any = profile.department_id ? deptMap.get(profile.department_id) : null;
+        const bu: any = dept?.business_unit_id ? buMap.get(dept.business_unit_id) : null;
+        const div: any = bu?.division_id ? divMap.get(bu.division_id) : null;
+        const manager: any = profile.reporting_manager_id ? profileMap.get(profile.reporting_manager_id) : null;
         
         // Resolve company name from company_id
         const companyId = (profile as any).company_id;
@@ -1749,105 +1748,102 @@ export default function ImportData() {
   const exportKpiData = async () => {
     setIsExportingKpis(true);
     try {
-      // Fetch all KPIs with related data - handle pagination
-      let allKpis: any[] = [];
-      let offset = 0;
-      const batchSize = 1000;
-      
-      while (true) {
-        const { data: kpiBatch, error: kpisError } = await supabase
+      // BUG-038 — Statement timeout fix.
+      // Root cause: nested 4-level join on kpis + unordered .range() exceeded
+      // PostgREST's statement_timeout for the very first page on the 9k+ kpis table.
+      // Fix: fetch kpis with own columns only, ordered + paged via fetchAllPaged;
+      // resolve categories/profiles/departments/BUs/divisions via cheap .in() lookups.
+      const KPI_PAGE = 500; // smaller pages = bounded planner cost
+
+      const allKpis = await fetchAllPaged<any>((from, to) =>
+        supabase
           .from('kpis')
           .select(`
-            id,
-            kpi_name,
-            kra_name,
-            employee_id,
-            category_id,
-            target_value,
-            uom,
-            uom_type,
-            qualitative_options,
-            frequency,
-            frequency_cycle_start,
-            weightage,
-            criteria,
+            id, kpi_name, kra_name, employee_id, category_id,
+            target_value, uom, uom_type, qualitative_options,
+            frequency, frequency_cycle_start, weightage, criteria,
             r5, r4, r3, r2, r1, r0,
-            ref_code,
-            review_period,
-            review_year,
-            source_of_data,
-            status,
-            is_org_level,
-            kra_categories(name),
-            profiles!kpis_employee_id_fkey(employee_code, full_name, department_id, departments(name, business_units(name, divisions(name))))
+            ref_code, review_period, review_year, source_of_data,
+            status, is_org_level
           `)
-          .range(offset, offset + batchSize - 1);
-        
-        if (kpisError) throw kpisError;
-        if (!kpiBatch || kpiBatch.length === 0) break;
-        
-        allKpis = [...allKpis, ...kpiBatch];
-        if (kpiBatch.length < batchSize) break;
-        offset += batchSize;
-      }
+          .order('id')
+          .range(from, to)
+      , KPI_PAGE);
 
-      // Fetch all review submissions (including per-level achieved values)
-      let allSubmissions: any[] = [];
-      offset = 0;
-      
-      while (true) {
-        const { data: submissionBatch, error: submissionsError } = await supabase
+      const allSubmissions = await fetchAllPaged<any>((from, to) =>
+        supabase
           .from('review_submissions')
           .select('kpi_id, achieved_value, self_score, self_remarks, manager_achieved_value, manager_score, manager_remarks, auditor_achieved_value, auditor_score, auditor_remarks, management_score, management_remarks, final_score')
-          .range(offset, offset + batchSize - 1);
-        
-        if (submissionsError) throw submissionsError;
-        if (!submissionBatch || submissionBatch.length === 0) break;
-        
-        allSubmissions = [...allSubmissions, ...submissionBatch];
-        if (submissionBatch.length < batchSize) break;
-        offset += batchSize;
-      }
+          .order('kpi_id')
+          .range(from, to)
+      );
 
-      // Fetch performance reviews for reviewStatus column
-      let allReviews: any[] = [];
-      offset = 0;
-      
-      while (true) {
-        const { data: reviewBatch, error: reviewsError } = await supabase
+      const allReviews = await fetchAllPaged<any>((from, to) =>
+        supabase
           .from('performance_reviews')
           .select('employee_id, review_period, review_year, status')
-          .range(offset, offset + batchSize - 1);
-        
-        if (reviewsError) throw reviewsError;
-        if (!reviewBatch || reviewBatch.length === 0) break;
-        
-        allReviews = [...allReviews, ...reviewBatch];
-        if (reviewBatch.length < batchSize) break;
-        offset += batchSize;
-      }
+          .order('employee_id')
+          .range(from, to)
+      );
 
-      // Fetch sub-branches for employees
-      let allSubBranches: any[] = [];
+      // Lookup tables — bounded sets resolved via .in()
+      const employeeIds = [...new Set(allKpis.map(k => k.employee_id).filter(Boolean))];
+      const categoryIds = [...new Set(allKpis.map(k => k.category_id).filter(Boolean))];
+
+      const profileRows: any[] = employeeIds.length
+        ? await fetchAllPaged<any>((from, to) =>
+            supabase
+              .from('profiles')
+              .select('id, employee_code, full_name, department_id')
+              .in('id', employeeIds)
+              .order('id')
+              .range(from, to)
+          )
+        : [];
+
+      const deptIds = [...new Set(profileRows.map((p: any) => p.department_id).filter(Boolean))];
+      const { data: deptRows } = deptIds.length
+        ? await supabase.from('departments').select('id, name, business_unit_id').in('id', deptIds)
+        : { data: [] as any[] };
+
+      const buIds = [...new Set((deptRows || []).map((d: any) => d.business_unit_id).filter(Boolean))];
+      const { data: buRows } = buIds.length
+        ? await supabase.from('business_units').select('id, name, division_id').in('id', buIds)
+        : { data: [] as any[] };
+
+      const divIds = [...new Set((buRows || []).map((b: any) => b.division_id).filter(Boolean))];
+      const { data: divRows } = divIds.length
+        ? await supabase.from('divisions').select('id, name').in('id', divIds)
+        : { data: [] as any[] };
+
+      const { data: catRows } = categoryIds.length
+        ? await supabase.from('kra_categories').select('id, name').in('id', categoryIds)
+        : { data: [] as any[] };
+
       const { data: subBranchData } = await supabase
         .from('sub_branches')
         .select('id, name, department_id');
-      if (subBranchData) allSubBranches = subBranchData;
+      const allSubBranches = subBranchData || [];
 
-      const submissionMap = new Map(allSubmissions.map(s => [s.kpi_id, s]));
-      const reviewMap = new Map(allReviews.map(r => [`${r.employee_id}_${r.review_period}_${r.review_year}`, r]));
+      const submissionMap = new Map(allSubmissions.map((s: any) => [s.kpi_id, s]));
+      const reviewMap = new Map(allReviews.map((r: any) => [`${r.employee_id}_${r.review_period}_${r.review_year}`, r]));
+      const profileMap = new Map(profileRows.map((p: any) => [p.id, p]));
+      const deptMap = new Map((deptRows || []).map((d: any) => [d.id, d]));
+      const buMap = new Map((buRows || []).map((b: any) => [b.id, b]));
+      const divMap = new Map((divRows || []).map((d: any) => [d.id, d]));
+      const categoryMap = new Map((catRows || []).map((c: any) => [c.id, c]));
 
       const exportData = allKpis.map((kpi, index) => {
         const submission = submissionMap.get(kpi.id);
-        const profile = kpi.profiles as any;
-        const category = kpi.kra_categories as any;
-        const dept = profile?.departments as any;
-        const bu = dept?.business_units as any;
-        const div = bu?.divisions as any;
+        const profile: any = kpi.employee_id ? profileMap.get(kpi.employee_id) : null;
+        const category: any = kpi.category_id ? categoryMap.get(kpi.category_id) : null;
+        const dept: any = profile?.department_id ? deptMap.get(profile.department_id) : null;
+        const bu: any = dept?.business_unit_id ? buMap.get(dept.business_unit_id) : null;
+        const div: any = bu?.division_id ? divMap.get(bu.division_id) : null;
         const reviewKey = `${kpi.employee_id}_${kpi.review_period}_${kpi.review_year}`;
         const review = reviewMap.get(reviewKey);
         // Find sub-branch by matching department_id
-        const subBranch = allSubBranches.find(sb => sb.department_id === profile?.department_id);
+        const subBranch = allSubBranches.find((sb: any) => sb.department_id === profile?.department_id);
         
         return {
           sNo: index + 1,

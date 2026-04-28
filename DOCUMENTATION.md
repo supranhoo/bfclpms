@@ -5557,3 +5557,26 @@ Initially shipped a centered overlay tied to user-initiated Refresh clicks on th
 **Test**: `src/test/bugBountyFixes.test.ts` → `BUG-037` (3 assertions: `notify_on_kpi_created` pre-check, INSERT/handler parity in `notify_on_kpi_status_change`, and auditor fan-out auth filter).
 
 **Migration**: `supabase/migrations/20260428044137_3bb989f3-5465-47fc-ad96-2aa0fef12c9e.sql`.
+
+## v2.66.7.40 — PMS Scorecard Export Statement-Timeout Fix (BUG-038) (2026-04-28)
+
+**Defect**: On `/admin/import` → **Import PMS Data**, clicking **Export Current Data** failed with `Export Failed — canceling statement due to statement timeout`. Reproducible at `kpis ≈ 9,526 rows`.
+
+**RCA**:
+1. `exportKpiData()` paged the `kpis` table with a 4-level nested join (`kra_categories(name), profiles!kpis_employee_id_fkey(employee_code, full_name, department_id, departments(name, business_units(name, divisions(name))))`). Each 1000-row page therefore expanded into a wide multi-table join in PostgREST.
+2. The `.range(offset, offset + 999)` calls had **no `ORDER BY`**. Without an index-backed ordering, PostgreSQL must materialise the full join set on every page request to compute the offset window — the very first page exceeded `statement_timeout`.
+3. `review_submissions` (7,550 rows) was also paged unordered; a latent timeout risk as the table grows.
+4. `performance_reviews` returns 0 rows today; not implicated but on the same fragile pattern.
+
+**Fix**:
+1. **Decoupled lookups.** `kpis` is now fetched with **own columns only**, then `profiles` / `departments` / `business_units` / `divisions` / `kra_categories` / `sub_branches` are resolved via cheap `.in('id', [...])` lookups (the same pattern used in `IncentiveDataExport.tsx`).
+2. **Ordered, paged via `fetchAllPaged`.** Every paginated read now uses `src/lib/fetchAll.ts` and includes `.order('id')` (or `.order('kpi_id')` / `.order('employee_id')`) so each `.range(from, to)` is an index-backed bounded scan.
+3. **Smaller KPI page size (500).** Halves planner cost per page on cold caches; total round-trips remain O(n / 500).
+4. **Defensive harden of `exportEmployeeData`.** Same lookup-decoupled + ordered-paging refactor applied so the employee export does not regress as the roster grows.
+5. **Output unchanged.** Excel column names, ordering, and per-row formulas are byte-identical to the prior export.
+
+**Verification**: `bunx vitest run src/test/bugBountyFixes.test.ts` → **78 / 78 pass** (BUG-038 adds 2 assertions: (a) `exportKpiData` no longer contains the nested join and uses ordered, decoupled lookups; (b) `exportEmployeeData` paginates `profiles` ordered and resolves `departments` via `.in()`).
+
+**Policy**: POLICY.md §94 extended — paginated exports over large tables MUST decouple joins into `.in()` lookups and MUST order before `.range()`.
+
+**Files**: `src/pages/admin/ImportData.tsx`, `src/test/bugBountyFixes.test.ts`, `mem/architecture/database/large-export-pagination-policy` (new).
