@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAppSettings } from '@/hooks/useAppSettings';
 import type { AppRole } from '@/lib/roles';
 
 export interface MenuAccessConfig {
@@ -30,11 +31,13 @@ export interface ProfileMenuRight {
   can_delete: boolean;
 }
 
-// Hardcoded fallback matching AppSidebar defaults
+// Hardcoded fallback matching AppSidebar defaults.
+// NOTE: 'pms-policy' intentionally omitted — see BUG-042. Visibility is
+// driven exclusively by `app_settings.pms_policy_visible_roles` via the
+// dedicated branch in canAccess() below.
 const DEFAULT_MENU_ROLES: Record<string, AppRole[]> = {
   'dashboard': ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms', 'skip_level'],
   'inbox': ['employee', 'manager', 'admin', 'auditor', 'management', 'hr_pms', 'skip_level'],
-  'pms-policy': ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms'],
   'team-reviews': ['manager', 'admin', 'management', 'skip_level'],
   'hr-pms-review': ['hr_pms', 'admin'],
   'management-dashboard': ['management', 'admin'],
@@ -43,8 +46,9 @@ const DEFAULT_MENU_ROLES: Record<string, AppRole[]> = {
   'admin-settings': ['admin'],
 };
 
-// Layer 1: Implicit default menus every employee can always view
-const EMPLOYEE_DEFAULT_MENUS = ['dashboard', 'inbox', 'pms-policy'];
+// Layer 1: Implicit default menus every employee can always view.
+// NOTE: 'pms-policy' intentionally omitted — see BUG-042.
+const EMPLOYEE_DEFAULT_MENUS = ['dashboard', 'inbox'];
 
 // Layer 1: Implicit default menus for reporting managers
 const MANAGER_DEFAULT_MENUS = ['team-reviews'];
@@ -52,6 +56,7 @@ const MANAGER_DEFAULT_MENUS = ['team-reviews'];
 export function useMenuAccess() {
   const { user, effectiveRole, profile } = useAuth();
   const queryClient = useQueryClient();
+  const { data: appSettings } = useAppSettings();
 
   const { data: configs = [], isLoading } = useQuery({
     queryKey: ['menu-access-config'],
@@ -121,6 +126,28 @@ export function useMenuAccess() {
 
     // Priority 1: Admin always has System Settings access
     if (menuKey === 'admin-settings' && effectiveRole === 'admin') return true;
+
+    // Priority 1b (BUG-042): PMS Policy visibility is canonically driven by
+    // `app_settings.pms_policy_visible_roles`. Admin always sees it; everyone
+    // else only when their effective role is in the configured list. Per-user
+    // overrides below still grant access (intentional escape hatch).
+    if (menuKey === 'pms-policy') {
+      if (effectiveRole === 'admin') return true;
+      if (!effectiveRole) return false;
+      const visible =
+        appSettings?.pms_policy_visible_roles ??
+        ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms'];
+      if (visible.includes(effectiveRole)) return true;
+      // Fall through to user-override check (Priority 5) — do NOT short-circuit
+      // false here, otherwise admin-granted overrides would be ignored.
+      if (user) {
+        const hasOverride = userOverrides.some(
+          o => o.menu_key === 'pms-policy' && o.user_id === user.id,
+        );
+        if (hasOverride) return true;
+      }
+      return false;
+    }
 
     // Priority 2: Employee implicit defaults (Layer 1)
     if (user && EMPLOYEE_DEFAULT_MENUS.includes(menuKey)) return true;

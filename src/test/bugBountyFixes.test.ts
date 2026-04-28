@@ -969,3 +969,45 @@ describe('BUG-041: DataOwnerRoute admit policy mirrors AppSidebar', () => {
     expect(src).toMatch(/canPerform\(item\.menuKey,\s*['"]view['"]\)/);
   });
 });
+
+// BUG-042: PMS Policy menu visibility ignored app_settings.pms_policy_visible_roles
+// because useMenuAccess.canAccess('pms-policy') short-circuited true via
+// EMPLOYEE_DEFAULT_MENUS (Layer 1) and the hardcoded fallback. Excluded roles saw
+// the nav item and were then redirected by PMSPolicy.tsx. Fix: dedicated branch
+// in canAccess that defers to pms_policy_visible_roles, and removal of pms-policy
+// from EMPLOYEE_DEFAULT_MENUS and DEFAULT_MENU_ROLES so no other layer can leak it.
+describe('BUG-042: PMS Policy menu honors pms_policy_visible_roles', () => {
+  it('useMenuAccess no longer lists pms-policy in EMPLOYEE_DEFAULT_MENUS', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/hooks/useMenuAccess.ts', 'utf-8');
+    const empMatch = src.match(/EMPLOYEE_DEFAULT_MENUS\s*=\s*\[([^\]]*)\]/);
+    expect(empMatch, 'EMPLOYEE_DEFAULT_MENUS not found').toBeTruthy();
+    expect(empMatch![1]).not.toMatch(/pms-policy/);
+  });
+
+  it('useMenuAccess no longer lists pms-policy in DEFAULT_MENU_ROLES', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/hooks/useMenuAccess.ts', 'utf-8');
+    const tableMatch = src.match(/DEFAULT_MENU_ROLES[\s\S]*?\{([\s\S]*?)\};/);
+    expect(tableMatch, 'DEFAULT_MENU_ROLES not found').toBeTruthy();
+    expect(tableMatch![1]).not.toMatch(/['"]pms-policy['"]\s*:/);
+  });
+
+  it('useMenuAccess.canAccess has a pms-policy branch that consults pms_policy_visible_roles', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/hooks/useMenuAccess.ts', 'utf-8');
+    // Imports useAppSettings.
+    expect(src).toMatch(/from\s+['"]@\/hooks\/useAppSettings['"]/);
+    // Has a dedicated branch keyed on the menu key.
+    expect(src).toMatch(/menuKey\s*===\s*['"]pms-policy['"]/);
+    // The branch references the canonical config field.
+    expect(src).toMatch(/pms_policy_visible_roles/);
+  });
+
+  it('PMSPolicy page guard delegates to useMenuAccess.canAccess', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/pages/PMSPolicy.tsx', 'utf-8');
+    expect(src).toMatch(/from\s+['"]@\/hooks\/useMenuAccess['"]/);
+    expect(src).toMatch(/canAccess\(\s*['"]pms-policy['"]\s*\)/);
+  });
+});

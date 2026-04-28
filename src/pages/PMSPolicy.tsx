@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Navigate } from 'react-router-dom';
+import { useMenuAccess } from '@/hooks/useMenuAccess';
 
 const ALL_ROLES = [
   { value: 'admin', label: 'Admin' },
@@ -24,6 +25,7 @@ const ALL_ROLES = [
 export default function PMSPolicy() {
   const { data: appSettings, isLoading } = useAppSettings();
   const { effectiveRole: role } = useAuth();
+  const { canAccess, isLoading: menuLoading } = useMenuAccess();
   const [editorOpen, setEditorOpen] = useState(false);
   const updateSettings = useUpdateAppSettings();
 
@@ -31,8 +33,10 @@ export default function PMSPolicy() {
   const policyUrl = appSettings?.pms_policy_url;
   const visibleRoles = appSettings?.pms_policy_visible_roles || ALL_ROLES.map(r => r.value);
 
-  // Route guard: if user's role is not in visible roles and not admin, redirect
-  if (!isLoading && role && role !== 'admin' && !visibleRoles.includes(role)) {
+  // Route guard (BUG-042): defer to useMenuAccess so the page and the sidebar
+  // share a single admit policy. canAccess('pms-policy') checks
+  // app_settings.pms_policy_visible_roles + per-user overrides.
+  if (!isLoading && !menuLoading && role && !canAccess('pms-policy')) {
     return <Navigate to="/dashboard" replace />;
   }
 
