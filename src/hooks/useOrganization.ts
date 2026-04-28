@@ -462,15 +462,20 @@ export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: 
         }
       }
 
-      // 5. Filter: include employee if (a) seeded by KPI presence, OR
-      //    (b) seeded by completed-stage score signature (v2.66.7.24), OR
-      //    (c) resolved workflow contains the stage, OR
-      //    (d) RPC failed for them AND fallback union contains the stage.
+      // 5. Filter (v2.66.7.48 / BUG-046 / POLICY §115):
+      //    The CURRENT resolved workflow is the SSOT for roster inclusion.
+      //    Score-signature / KPI-presence seeds are only honored when RPC
+      //    resolution actually failed for that employee — they no longer
+      //    override an authoritative workflow that excludes the stage.
+      //    Why: prior logic admitted employees with stale historical
+      //    `hr_pms_score` rows even when their reassigned workflow no
+      //    longer contains HR PMS (e.g. VPs scored under an earlier template).
       const filtered = profiles.filter(p => {
-        if (seededIds.has(p.id)) return true;
-        if (scoreSigSeededIds.has(p.id)) return true;
         const empStages = stagesMap.get(p.id);
         if (empStages) return empStages.includes(stage);
+        // RPC failed for this employee — fall back to seeds + template union.
+        if (seededIds.has(p.id)) return true;
+        if (scoreSigSeededIds.has(p.id)) return true;
         return fallbackStages.includes(stage);
       });
 
