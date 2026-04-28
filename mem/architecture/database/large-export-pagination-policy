@@ -1,0 +1,15 @@
+---
+name: large-export-pagination-policy
+description: Client-side exports over large tables (kpis, profiles, review_submissions) MUST use ordered fetchAllPaged + .in() lookup decoupling — never nested PostgREST joins on the paged select
+type: constraint
+---
+Any client-side export that walks a table over ~1k rows MUST:
+1. Paginate via `fetchAllPaged()` from `src/lib/fetchAll.ts` — no manual `while (true)` loops.
+2. Chain `.order(<indexed_column>)` BEFORE `.range(from, to)`. Without ORDER BY, PostgREST cannot use an index seek and the first page itself can exceed `statement_timeout` on tables of 5k+ rows.
+3. Resolve FK descriptions via separate `.in('id', [...])` lookups. Do NOT embed `parentTable(childCols, grandchildTable(...))` joins in a query that is then paged — the planner expands the wide join on every page.
+4. Drop page size to 500 if the paged select still includes any join.
+
+Why: BUG-038 — `exportKpiData()` on `/admin/import` failed with `canceling statement due to statement timeout` on 9,526 KPIs because it combined a 4-level nested join with unordered `.range()`. Pattern reused in `exportEmployeeData` for defence-in-depth. Reference implementation: `src/components/incentive/IncentiveDataExport.tsx` (lookup-decoupled).
+
+Codified: POLICY.md §109. Extends §94 (paged profiles policy) from pickers to exports.
+Regression test: `src/test/bugBountyFixes.test.ts` → `BUG-038` (2 assertions).
