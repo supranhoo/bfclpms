@@ -5720,3 +5720,25 @@ For a backfilled employee the `profiles` row already exists (master HR import). 
 **Policy**: POLICY.md §114 (new) — any trigger on `auth.users` that touches `public.profiles` or `public.user_roles` MUST be idempotent (`ON CONFLICT DO NOTHING`) so admin tools that auto-provision missing auth users (Password Rollout, future equivalents) succeed for backfilled employees and never overwrite HR master data.
 
 **Files**: new migration replacing `public.handle_new_user()`, `supabase/functions/password-rollout/index.ts`, `src/test/bugBountyFixes.test.ts`, `DOCUMENTATION.md`, `POLICY.md`, `mem/features/admin/non-login-user-provisioning`, `.lovable/plan.md`.
+
+## v2.66.7.48 — HR PMS Roster Authority + N/A Reviewed Credit (BUG-046) (2026-04-28)
+
+**Reported by**: User (HR PMS dashboard, March 2026): (1) "HR PMS Reviewed = 184" looked too low, (2) "Total KPIs = 798" looked inflated, (3) Anant Shankar Shet (200208, VP) appeared in HR PMS even though VPs no longer go through HR PMS, (4) Devendra Kumar Yadav (100707) — all 22 KPIs approved as N/A — rendered as a blank card with no "reviewed" indicator.
+
+**RCA** (verified by direct DB query for `review_period='March', review_year=2026`):
+
+- **Anant** (`21d539de-…959`) — `get_bulk_employee_workflows` returns `[kra_set, self_review, audit, management_review, approved]` (no HR PMS). 36 KPIs. 5 carry a stale `hr_pms_score` set 2026-04-22 under a previous workflow template. The score-signature seed in `useProfilesByWorkflowStage` admitted him into the HR PMS roster on the strength of those 5 stale rows, inflating Total Employees (54 vs ~42), Total KPIs (798 vs ~595), and surfacing his card.
+- **Devendra** (`799f3256-…992`) — 22 KPIs all `status='approved'`, all `review_submissions.is_na=true`, all stage scores NULL. The progress-bar "reviewed" predicate counted only `hr_pms_score IS NOT NULL`, so N/A approvals were treated as un-reviewed → empty `0/22` bar. The overall rating badge correctly returned blank because `useEmployeeScoresForPeriod` excludes N/A from the weighted average — combined, the card looked entirely empty despite a fully completed HR PMS review.
+- **HR PMS Reviewed = 184** — the stat-card aggregation early-returned at `if (hrIdx === -1) return;` BEFORE the score-signature counter, so KPIs belonging to score-seed-only employees did not contribute. Combined with the N/A exclusion this collapsed the total far below the true 470–518 range.
+
+**Fix**:
+
+1. **`src/hooks/useOrganization.ts`** — `useProfilesByWorkflowStage` now treats the resolved workflow as the SSOT. `seededIds` and `scoreSigSeededIds` are honored ONLY when bulk RPC failed for that employee. Net effect: stale historical signatures no longer admit employees whose current workflow excludes the stage.
+2. **`src/hooks/useKpis.ts`** — `useReviewSubmissionScoresByKpiIds` now selects and returns `is_na` so reviewer panels can credit N/A approvals.
+3. **`src/components/review/EmployeeSelectorGrid.tsx`** — six "reviewed" predicates updated (HR PMS / Audit / Management × per-card progress bar + stat card) to credit `(stage_score != null) OR (is_na && status at-or-past stage)`. The HR PMS / Audit stat-card aggregations now run the score-signature counter BEFORE the workflow early-return so score-seeded employees still contribute totals when the seed admits them.
+
+**Verification**: New `BUG-046` regression block in `src/test/bugBountyFixes.test.ts`: (a) `useReviewSubmissionScoresByKpiIds` selects `is_na`, (b) HR PMS reviewed predicate credits N/A approvals, (c) `useProfilesByWorkflowStage` resolved-workflow check precedes the seed shortcuts. Devendra now renders `22/22` with a green "22 reviewed" pill; Anant disappears from the HR PMS panel; HR PMS Reviewed and Total KPIs realign with the workflow-true denominator.
+
+**Policy**: POLICY.md §115 (new) — current resolved workflow is the authoritative roster filter; "Approved as N/A" is a completed reviewer action and counts toward stage-reviewed totals.
+
+**Files**: `src/hooks/useOrganization.ts`, `src/hooks/useKpis.ts`, `src/components/review/EmployeeSelectorGrid.tsx`, `src/test/bugBountyFixes.test.ts`, `POLICY.md`, `DOCUMENTATION.md`, `mem/features/review/unified-scorecard-component`, `.lovable/plan.md`.

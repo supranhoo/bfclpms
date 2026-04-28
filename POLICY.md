@@ -2051,3 +2051,17 @@ ON CONFLICT (user_id, role) DO NOTHING;
 - Adding a new `auth.users` trigger that writes to `public.profiles` without the same `ON CONFLICT DO NOTHING` guard.
 
 **Regression coverage**: `BUG-045` in `src/test/bugBountyFixes.test.ts` pins the trigger contract by scanning the latest `handle_new_user` migration for both `ON CONFLICT` clauses and verifies the password-rollout edge function maps the trigger DB error to an actionable message.
+
+## §115 — HR PMS Roster Authority & N/A as a Reviewed Action (v2.66.7.48, BUG-046)
+
+Reviewer panels (HR PMS, Audit, Management) MUST treat the **current resolved workflow** as the single source of truth for roster inclusion. Historical score signatures (e.g. an `hr_pms_score` set under a previous template) MUST NOT cause an employee to appear in a reviewer panel whose stage is no longer part of that employee's current workflow.
+
+- `useProfilesByWorkflowStage` (`src/hooks/useOrganization.ts`): the `scoreSigSeededIds` and `seededIds` shortcuts are honored ONLY when bulk RPC resolution failed for that employee. Otherwise the resolved stages list authoritatively decides inclusion.
+- "Approved as N/A" is a **completed reviewer action** for the stage that approved it. Stat cards and per-employee progress bars (HR PMS Reviewed, Auditor Reviewed, Management Reviewed) MUST credit `(stage_score IS NOT NULL) OR (is_na = true AND status is at-or-past the stage)`. Without this, employees whose KPIs were entirely N/A-approved render as empty cards with a `0/N` bar despite the review being formally completed.
+- The "reviewed" counter inside the stat aggregations (`EmployeeSelectorGrid.tsx` HR PMS / Audit / Management branches) MUST run BEFORE any workflow-stage early-return so historical signatures still contribute to the totals when the seed admits the employee.
+
+**Forbidden**:
+- Reintroducing a `scoreSigSeededIds.has(p.id) ⇒ true` shortcut that bypasses `empStages.includes(stage)`.
+- Counting "reviewed" only via `score IS NOT NULL` while excluding `is_na` rows.
+
+**Regression coverage**: `BUG-046` in `src/test/bugBountyFixes.test.ts` pins (a) `useReviewSubmissionScoresByKpiIds` selecting `is_na`, (b) the HR PMS reviewed predicate crediting `is_na`, and (c) the workflow-first ordering inside `useProfilesByWorkflowStage`.

@@ -347,13 +347,14 @@ export function useReviewSubmissionScoresByKpiIds(kpiIds: string[]) {
         auditor_score: number | null;
         management_score: number | null;
         final_score: number | null;
+        is_na: boolean | null;
       }>();
       const BATCH_SIZE = 500;
       for (let i = 0; i < kpiIds.length; i += BATCH_SIZE) {
         const batch = kpiIds.slice(i, i + BATCH_SIZE);
         const { data, error } = await supabase
           .from('review_submissions')
-          .select('kpi_id, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score')
+          .select('kpi_id, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score, is_na')
           .in('kpi_id', batch);
         if (error) {
           console.error('[useReviewSubmissionScoresByKpiIds] batch failed:', error);
@@ -367,6 +368,7 @@ export function useReviewSubmissionScoresByKpiIds(kpiIds: string[]) {
             auditor_score: r.auditor_score,
             management_score: r.management_score,
             final_score: r.final_score,
+            is_na: r.is_na,
           });
         });
       }
