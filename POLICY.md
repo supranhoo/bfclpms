@@ -1968,3 +1968,16 @@ The non-canonical literals `l1_review`, `auditor_review`, and `skip_level_review
 **Regression coverage.** `BUG-040` in `src/test/bugBountyFixes.test.ts` pins the absence of `isDataOwner || true` in `AppSidebar.tsx` and the presence of both `isDataOwner` and `userOverrides` references.
 
 `BUG-040` is the canonical anchor for this rule.
+
+### §111 Addendum — Sidebar and Route Admit Sets Must Be Equal (v2.66.7.43, BUG-041)
+
+**Rule.** For any route protected by an ownership/assignment guard, the set of users admitted by the sidebar filter MUST equal the set admitted by the route guard. Any admit predicate added to one MUST be added to the other in the same change.
+
+**Background.** After BUG-040 added per-user override admit to the **Data Entry** sidebar gate, `DataOwnerRoute` still admitted only `admin` and `isDataOwner`, so override-only users were redirected to `/dashboard`. Sidebar showed the link, route bounced — a half-implemented admit path.
+
+**Enforcement.**
+1. Both layers MUST source admit signals from the same hook (`useMenuAccess` for override / profile rights, `useIsAnyOrg…Owner` for ownership). No bespoke duplicates.
+2. The route guard's loading gate MUST include `useMenuAccess.isLoading` so override/profile data has settled before the redirect decision; otherwise valid users hit a flash redirect.
+3. The four canonical admit predicates for ownership-gated routes are: `admin` → `isOwner` → `userOverride[menu_key]` → `profileRight.can_view[menu_key]`. Role-default `canAccess` is excluded (see §111 base).
+
+**Regression coverage.** `BUG-041` in `src/test/bugBountyFixes.test.ts` pins (a) `DataOwnerRoute` imports `useMenuAccess`, calls `canPerform(..., 'view')`, walks `userOverrides`, and waits on `menuLoading`; (b) `AppSidebar` Data Entry filter mirrors with `canPerform(item.menuKey, 'view')`.
