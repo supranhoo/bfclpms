@@ -1035,3 +1035,31 @@ describe('BUG-043: KPI Mapping Matrix uses paged profiles fetch', () => {
     expect(block).toMatch(/\.range\(/);
   });
 });
+
+// BUG-044: password-rollout edge function called auth.admin.updateUserById on
+// profiles whose corresponding auth.users record did not yet exist (typical for
+// employees imported via master backfill before first login). The Supabase
+// admin API responded with "User not found" and the rollout failed. Fix:
+// detect the missing auth user and auto-provision via createUser with the
+// profile id preserved (so all FKs keyed on profile.id stay intact).
+describe('BUG-044: password-rollout auto-provisions missing auth users', () => {
+  it('edge function checks for existing auth user via getUserById', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('supabase/functions/password-rollout/index.ts', 'utf-8');
+    expect(src).toMatch(/auth\.admin\.getUserById\(/);
+  });
+
+  it('edge function calls createUser with id passthrough and email_confirm', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('supabase/functions/password-rollout/index.ts', 'utf-8');
+    expect(src).toMatch(/auth\.admin\.createUser\(/);
+    expect(src).toMatch(/id:\s*profile\.id/);
+    expect(src).toMatch(/email_confirm:\s*true/);
+  });
+
+  it('edge function surfaces auth_action (created vs updated) in result payload', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('supabase/functions/password-rollout/index.ts', 'utf-8');
+    expect(src).toMatch(/auth_action/);
+  });
+});
