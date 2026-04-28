@@ -1981,3 +1981,22 @@ The non-canonical literals `l1_review`, `auditor_review`, and `skip_level_review
 3. The four canonical admit predicates for ownership-gated routes are: `admin` → `isOwner` → `userOverride[menu_key]` → `profileRight.can_view[menu_key]`. Role-default `canAccess` is excluded (see §111 base).
 
 **Regression coverage.** `BUG-041` in `src/test/bugBountyFixes.test.ts` pins (a) `DataOwnerRoute` imports `useMenuAccess`, calls `canPerform(..., 'view')`, walks `userOverrides`, and waits on `menuLoading`; (b) `AppSidebar` Data Entry filter mirrors with `canPerform(item.menuKey, 'view')`.
+
+## §112 — Page-Configured Role Visibility Lives in `useMenuAccess` (v2.66.7.44, BUG-042)
+
+**Rule.** When a page has its own role-visibility config column (e.g., `app_settings.pms_policy_visible_roles`), the menu key for that page MUST:
+1. Have a dedicated branch at the top of `useMenuAccess.canAccess` that reads the canonical column and admits accordingly. Admin always passes; other roles only when in the configured list; per-user overrides on the same key still grant access.
+2. NOT appear in `EMPLOYEE_DEFAULT_MENUS` or `MANAGER_DEFAULT_MENUS` (Layer 1 would short-circuit true and bypass the config).
+3. NOT appear in `DEFAULT_MENU_ROLES` (Layer 7 fallback would re-introduce the bug if `appSettings` is briefly unavailable).
+4. Have a page guard that DELEGATES to `useMenuAccess.canAccess(menuKey)` rather than re-implementing the role-list check, so the sidebar admit set strictly equals the route admit set (per §111 addendum).
+
+**Background — BUG-042.** `pms-policy` was admitted by Layer 1 (`EMPLOYEE_DEFAULT_MENUS`) and by Layer 7 (`DEFAULT_MENU_ROLES` for all roles) and by Layer 6 (`menu_access_config` for all roles), so removing a role from `app_settings.pms_policy_visible_roles` had no effect on sidebar visibility — only on the page redirect. Result: every excluded role saw the nav item and got bounced.
+
+**Enforcement.**
+1. Code review checklist for any new page with its own visibility config: search `useMenuAccess.ts` for the menu key in `EMPLOYEE_DEFAULT_MENUS`, `MANAGER_DEFAULT_MENUS`, `DEFAULT_MENU_ROLES`. All three MUST be empty for that key.
+2. The dedicated branch MUST run before the Layer 1–7 cascade.
+3. The page guard MUST call `canAccess(menuKey)`; never duplicate the role-list predicate.
+
+**Regression coverage.** `BUG-042` in `src/test/bugBountyFixes.test.ts` pins (a) `pms-policy` absent from `EMPLOYEE_DEFAULT_MENUS`; (b) `pms-policy` absent from `DEFAULT_MENU_ROLES`; (c) `useMenuAccess` imports `useAppSettings` and has a `menuKey === 'pms-policy'` branch referencing `pms_policy_visible_roles`; (d) `PMSPolicy.tsx` delegates to `useMenuAccess.canAccess('pms-policy')`.
+
+`BUG-042` is the canonical anchor for this rule.
