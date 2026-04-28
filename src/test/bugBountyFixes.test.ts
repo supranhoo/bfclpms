@@ -914,3 +914,22 @@ describe('BUG-039: Review submissions export uses kpi_id batching', () => {
     expect(fn).toMatch(/SUBMISSION_BATCH\s*=\s*\d+/);
   });
 });
+
+// BUG-040: Data Entry sidebar gate in AppSidebar.tsx had `isDataOwner || true`
+// which short-circuited the owner check, so every non-admin role saw the menu
+// and was then redirected by DataOwnerRoute. Fix: gate on isDataOwner OR an
+// explicit per-user override; role-default access is intentionally insufficient.
+describe('BUG-040: Data Entry sidebar gate respects DataOwnerRoute', () => {
+  it('AppSidebar Data Entry filter no longer uses `isDataOwner || true`', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/components/layout/AppSidebar.tsx', 'utf-8');
+
+    // Dead-code short-circuit must be gone.
+    expect(src).not.toMatch(/isDataOwner\s*\|\|\s*true/);
+
+    // The Data Entry group must still consult both the ownership signal
+    // and the user override list so the menu mirrors DataOwnerRoute.
+    expect(src).toMatch(/userOverrides/);
+    expect(src).toMatch(/isDataOwner/);
+  });
+});

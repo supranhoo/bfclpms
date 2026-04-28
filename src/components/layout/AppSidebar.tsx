@@ -142,7 +142,7 @@ export function AppSidebar() {
   const { data: unreadNotificationCount } = useUnreadNotificationCount();
   const { data: appSettings } = useAppSettings();
   const { data: isDataOwner } = useIsAnyOrgKpiDataOwner();
-  const { canAccess } = useMenuAccess();
+  const { canAccess, userOverrides } = useMenuAccess();
 
   const policyVisibleRoles = appSettings?.pms_policy_visible_roles || ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms'];
   const menuItems = getStaticMenuItems(policyVisibleRoles);
@@ -307,12 +307,19 @@ export function AppSidebar() {
           isOpen={openSections.has('dataEntry')}
           onToggle={() => toggleSection('dataEntry')}
           filterByRole={(items) => {
-            // For data entry, also require isDataOwner OR have a user override
+            // BUG-040: Show Data Entry only when the user is a designated org KPI
+            // data owner OR has an explicit per-user menu override. Role-default
+            // access is intentionally NOT sufficient because DataOwnerRoute
+            // (App.tsx) will redirect non-owners away — showing the menu in
+            // that case creates a confusing menu→redirect loop.
             return items.filter(item => {
               if (!effectiveRole) return false;
               if (effectiveRole === 'admin') return false; // admins see it in Administration
-              if (item.menuKey && canAccess(item.menuKey)) return isDataOwner || true;
-              return false;
+              if (!item.menuKey) return false;
+              const hasUserOverride = !!profile?.id && userOverrides.some(
+                o => o.menu_key === item.menuKey && o.user_id === profile.id
+              );
+              return Boolean(isDataOwner) || hasUserOverride;
             });
           }}
           currentPath={location.pathname + location.search}

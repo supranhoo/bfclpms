@@ -5582,3 +5582,23 @@ Initially shipped a centered overlay tied to user-initiated Refresh clicks on th
 **Policy**: POLICY.md §94 extended — paginated exports over large tables MUST decouple joins into `.in()` lookups and MUST order before `.range()`.
 
 **Files**: `src/pages/admin/ImportData.tsx`, `src/test/bugBountyFixes.test.ts`, `mem/architecture/database/large-export-pagination-policy` (new).
+
+## v2.66.7.42 — Data Entry Sidebar Gate Fix (BUG-040) (2026-04-28)
+
+**Reported by**: Vivek.
+
+**Problem**: The Data Entry sidebar group in `src/components/layout/AppSidebar.tsx` (line 309) was supposed to show only to admins (under Administration) and to designated org KPI data owners or users with explicit menu overrides. The actual gate was `return isDataOwner || true`, which always evaluated to `true` whenever `canAccess(menuKey)` passed. Since the menu's role-default list includes `employee, manager, auditor, management, hr_pms`, every non-admin user saw the **Data Entry → Org KPI Data Entry** item, then got redirected to `/dashboard` by `DataOwnerRoute` (`src/components/layout/DataOwnerRoute.tsx` line 13, wired from `App.tsx` line 213). Result: a misleading menu→redirect bounce.
+
+**RCA**: Logic typo (dead-code short-circuit `|| true`) bypassing the intended ownership check. Comment described correct intent; implementation did not.
+
+**Fix**: Replaced the filter so the Data Entry group renders only when:
+- the user is an org KPI data owner (`useIsAnyOrgKpiDataOwner`), OR
+- the user has an explicit per-user menu override (`menu_access_user_overrides` row for `data-entry`).
+
+Role-default access is intentionally insufficient because `DataOwnerRoute` will reject those users at the route level. `userOverrides` is now pulled from `useMenuAccess()` and matched against `profile.id` (= `auth.users.id`).
+
+**Verification**: `bunx vitest run src/test/bugBountyFixes.test.ts` → **80 / 80 pass** (BUG-040 adds an assertion that `isDataOwner || true` no longer appears and that the file references both `isDataOwner` and `userOverrides`).
+
+**Policy**: POLICY.md §111 — sidebar visibility for ownership-gated routes MUST mirror the route guard; never rely on role-default `canAccess` when a stricter route-level guard exists.
+
+**Files**: `src/components/layout/AppSidebar.tsx`, `src/test/bugBountyFixes.test.ts`.
