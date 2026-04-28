@@ -1936,3 +1936,19 @@ The non-canonical literals `l1_review`, `auditor_review`, and `skip_level_review
 **Regression coverage.** `BUG-038` in `src/test/bugBountyFixes.test.ts` pins the absence of nested joins and the presence of `.order()` + `.in()` lookups in both `exportKpiData` and `exportEmployeeData`.
 
 `BUG-038` is the canonical anchor for this rule.
+
+## §110 — RLS-Heavy Child-Table Exports Use Parent-ID Batching (v2.66.7.41)
+
+**Rule.** Any client-side export that reads a child table whose RLS policies join back to a heavily protected parent (e.g., `review_submissions → kpis → profiles`) MUST fetch the child rows in **bounded `.in('<parent_fk>', batch)` calls**, NOT in a broad `fetchAllPaged()` over the whole child table. Default batch size: 100 parent ids. Each batch must still chain `.order(<indexed_column>)`.
+
+**Background — BUG-039.** After §109 fixed the `kpis` portion of **Export Current Data**, the same flow continued to fail with `canceling statement due to statement timeout (57014)` on the very first `review_submissions` page (`offset=0&limit=1000`). The `review_submissions` SELECT policies re-evaluate `kpis`/`profiles` checks for every candidate row, so even an ordered, slim, paged query exceeded the statement timeout.
+
+**Enforcement.**
+1. Identify any child table whose RLS policy contains `EXISTS (SELECT … FROM kpis k JOIN profiles p …)` or similar multi-table joins. `review_submissions` is the canonical example.
+2. After fetching the parent rows (e.g. `kpis`), collect their primary-key ids and walk them in batches of ≤100 via `.in('<parent_fk>', batch)`.
+3. Do NOT use `fetchAllPaged()` on those tables for an export. The combination of `OFFSET` + per-row RLS evaluation is what blows past the statement timeout, regardless of `ORDER BY`.
+4. §109 still applies to the parent fetch (ordered + decoupled).
+
+**Regression coverage.** `BUG-039` in `src/test/bugBountyFixes.test.ts` pins (a) the removal of `fetchAllPaged` over `review_submissions` inside `exportKpiData`, (b) the presence of `.in('kpi_id', batch)` calls, and (c) a bounded `SUBMISSION_BATCH` constant.
+
+`BUG-039` is the canonical anchor for this rule.
