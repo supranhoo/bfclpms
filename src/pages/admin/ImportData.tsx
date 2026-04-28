@@ -1659,50 +1659,48 @@ export default function ImportData() {
   const exportEmployeeData = async () => {
     setIsExportingEmployees(true);
     try {
-      // Fetch all profiles with department info
-      const { data: allProfiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select(`
-          id,
-          employee_code,
-          full_name,
-          email,
-          designation,
-          company_id,
-          pms_grade,
-          level,
-          department_id,
-          reporting_manager_id,
-          departments!profiles_department_fk(
-            id,
-            name,
-            business_unit_id,
-            business_units(
-              id,
-              name,
-              division_id,
-              divisions(id, name)
-            )
-          )
-        `);
-      
-      if (profilesError) throw profilesError;
+      // BUG-038: Decouple joins + ordered pagination to avoid statement timeout.
+      // Fetch profiles with only own columns, paged & ordered for index-backed range scans.
+      const allProfiles = await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('profiles')
+          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, department_id, reporting_manager_id')
+          .order('id')
+          .range(from, to)
+      );
 
-      // Fetch user roles
+      // Lookup tables resolved separately via .in() — cheap and bounded.
+      const deptIds = [...new Set(allProfiles.map(p => p.department_id).filter(Boolean))];
+      const { data: deptRows } = deptIds.length
+        ? await supabase.from('departments').select('id, name, business_unit_id').in('id', deptIds)
+        : { data: [] as any[] };
+
+      const buIds = [...new Set((deptRows || []).map((d: any) => d.business_unit_id).filter(Boolean))];
+      const { data: buRows } = buIds.length
+        ? await supabase.from('business_units').select('id, name, division_id').in('id', buIds)
+        : { data: [] as any[] };
+
+      const divIds = [...new Set((buRows || []).map((b: any) => b.division_id).filter(Boolean))];
+      const { data: divRows } = divIds.length
+        ? await supabase.from('divisions').select('id, name').in('id', divIds)
+        : { data: [] as any[] };
+
       const { data: userRoles, error: rolesError } = await supabase
         .from('user_roles')
         .select('user_id, role');
-      
       if (rolesError) throw rolesError;
 
+      const deptMap = new Map((deptRows || []).map((d: any) => [d.id, d]));
+      const buMap = new Map((buRows || []).map((b: any) => [b.id, b]));
+      const divMap = new Map((divRows || []).map((d: any) => [d.id, d]));
       const roleMap = new Map(userRoles?.map(r => [r.user_id, r.role]) || []);
-      const profileMap = new Map(allProfiles?.map(p => [p.id, p]) || []);
+      const profileMap = new Map(allProfiles.map(p => [p.id, p]));
 
-      const exportData = (allProfiles || []).map(profile => {
-        const dept = profile.departments as any;
-        const bu = dept?.business_units;
-        const div = bu?.divisions;
-        const manager = profile.reporting_manager_id ? profileMap.get(profile.reporting_manager_id) : null;
+      const exportData = allProfiles.map(profile => {
+        const dept: any = profile.department_id ? deptMap.get(profile.department_id) : null;
+        const bu: any = dept?.business_unit_id ? buMap.get(dept.business_unit_id) : null;
+        const div: any = bu?.division_id ? divMap.get(bu.division_id) : null;
+        const manager: any = profile.reporting_manager_id ? profileMap.get(profile.reporting_manager_id) : null;
         
         // Resolve company name from company_id
         const companyId = (profile as any).company_id;
