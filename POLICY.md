@@ -1902,3 +1902,18 @@ The non-canonical literals `l1_review`, `auditor_review`, and `skip_level_review
 6. **Regression coverage.** `BUG-036` in `src/test/bugBountyFixes.test.ts` pins the UI filter, both click guards, both hook `.neq` clauses, and the migration installing the trigger.
 
 `BUG-036` is the canonical anchor for this rule.
+
+## §108 — Notification Recipient Resolution / Non-Login Guard (v2.66.7.39)
+
+**Rule.** Notification dispatch is **best-effort** and MUST never abort the originating business transaction. Every code path that writes to `public.notifications` from inside a database trigger or function MUST treat a missing `auth.users` recipient as a **silent no-op**, not a failure.
+
+**Background — BUG-037.** The Copy KRAs admin tool failed with `insert or update on table "notifications" violates foreign key constraint "notifications_user_id_fkey"` whenever the target employee was a **non-login user** (an `is_active` profile with no corresponding `auth.users` row — a fully supported class per `mem://features/admin/non-login-user-provisioning`). The trigger chain was: `INSERT INTO kpis` → `trigger_notify_kpi_created` → `notify_on_kpi_created()` → `INSERT INTO notifications (user_id = NEW.employee_id, ...)` → FK violation against `auth.users(id)` → entire `kpis` insert rolled back → all 12 KPIs lost. The same class of bug latently affected every notification path (status change, send-back, manager approval, auditor fan-out, finalisation, KRA assignment) for any non-login recipient.
+
+**Enforcement.**
+1. **Pre-check (preferred).** When a single recipient is known, the trigger SHOULD wrap the `INSERT` in `IF EXISTS (SELECT 1 FROM auth.users WHERE id = <recipient>) THEN ... END IF;` so the no-op is explicit and observable.
+2. **Defensive handler (mandatory).** Every `INSERT INTO public.notifications` inside a trigger function MUST be wrapped in `BEGIN ... EXCEPTION WHEN foreign_key_violation THEN NULL; END;`. This is the catch-all for race conditions (recipient deactivated between row read and insert), set-based fan-outs, and any future trigger introduced without the §108 pre-check.
+3. **Fan-out filtering.** Set-based recipient queries (e.g., the `auditor` role fan-out in `notify_on_kpi_status_change`) MUST filter via `EXISTS (SELECT 1 FROM auth.users au WHERE au.id = ur.user_id)` so non-login role-holders do not poison the batch.
+4. **Schema invariant.** `notifications.user_id` REMAINS `REFERENCES auth.users(id) ON DELETE CASCADE`. The FK is correct — the policy lives in the trigger layer, not in the table definition. Application code (edge functions, RLS-bound RPCs) writing to `notifications` directly MUST apply the same pre-check before the insert.
+5. **Regression coverage.** `BUG-037` in `src/test/bugBountyFixes.test.ts` pins (a) the `auth.users` pre-check inside `notify_on_kpi_created`, (b) parity between the count of `INSERT INTO public.notifications` and `WHEN foreign_key_violation THEN` handlers in `notify_on_kpi_status_change`, and (c) the `auth.users` filter on the auditor fan-out.
+
+`BUG-037` is the canonical anchor for this rule.

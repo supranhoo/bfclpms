@@ -9,9 +9,11 @@ Per-KPI status-transition aggregations MUST read from `public.kpi_audit_logs` (j
 Per-employee workflow chains in reports MUST resolve via `get_bulk_employee_workflows` / `get_employee_workflow` — never hardcode the stage array (POLICY.md §105).
 `kpis.status` must NEVER be written as NULL — guard reviewer mutations and render "Status Missing" for null in display badges (POLICY.md §106 / BUG-035).
 No reviewer panel (Team/Audit/HR PMS/Management/Skip-Level/Pending-*/cross-check) may surface the viewer's own profile — Self tab is the only self-assessment surface (POLICY.md §107 / BUG-036).
+Notification triggers must guard non-login recipients (no auth.users row) — pre-check + EXCEPTION wrapper, never abort business txn (POLICY.md §108 / BUG-037).
 
 ## Memories
 - [Page loading overlay pattern](mem://design/page-loading-overlay-pattern) — Centered PageLoadingOverlay wired in DashboardLayout (Suspense + RouteDataLoadingGate), rocket+chart art
+- [Notification recipient guard](mem://architecture/database/notification-recipient-guard) — Non-login user FK guard for notification trigger inserts (BUG-037 / POLICY §108)
 - [KPI audit logs canonical](mem://architecture/database/kpi-audit-logs-canonical) — Canonical table & status vocabulary for workflow-transition aggregations (BUG-031)
 - [Per-employee workflow resolution](mem://architecture/database/per-employee-workflow-resolution) — Use canonical resolver in reports; never hardcode stage arrays (BUG-033)
 - [No-NULL kpi.status invariant](mem://architecture/database/no-null-kpi-status) — Guard reviewer writes + Status Missing UI badge (BUG-035 / POLICY §106)

@@ -1,91 +1,78 @@
-## RCA: NULL-status fix + "Self appears in Manager's Team tab"
+# BUG-037: Copy KRAs Fails for Non-Login Users
 
-### Part 1 — Is BUG-035 (NULL status) fully fixed?
+## Root Cause Analysis
 
-**Yes — landed and verified:**
-- `UnifiedScorecard.tsx` has `assertResolvableStatus()` blocking NULL writes (line 703).
-- `MobileKpiCard.tsx` (dashboard + review), `MobileSelfReviewCard`, `SelfReviewSheet`, `KpiDetailsTable` all render the amber **"Status Missing"** badge instead of silently falling back to "KRA Set".
-- Repair migration ran for the 8 affected March 2026 KPIs.
-- Regression tests `BUG-035` present in `bugBountyFixes.test.ts` (68/68 passing).
-- POLICY §106 (No-NULL-Status Invariant) and DOCUMENTATION v2.66.7.37 in place.
+**Error:** `insert or update on table "notifications" violates foreign key constraint "notifications_user_id_fkey"`
 
-**However**, the protective UI gate has one remaining gap: `EmployeeSelectorGrid` does not yet block reviewers from *opening* employees whose workflow excludes the reviewer's stage — the runtime guard only fires when the reviewer tries to forward. We should harden this to prevent the toast appearing in the first place. (Tracked below as part of Part 2's fix because both share the same view-gating logic.)
+**Trigger chain:**
+1. Admin uses Copy KRAs to assign 12 KPIs to **Rahul Kumar Prasad (101941)**.
+2. `INSERT INTO public.kpis ...` fires the `trigger_notify_kpi_created` trigger.
+3. Trigger function `notify_on_kpi_created()` inserts into `public.notifications` with `user_id = NEW.employee_id`.
+4. `notifications.user_id` is `FOREIGN KEY ... REFERENCES auth.users(id)`.
+5. Rahul is a **non-login user** (`profiles` row exists, but no `auth.users` row — `auth_email IS NULL`).
+6. FK violation aborts the entire transaction → all 12 KPIs roll back → "Copy Failed" toast.
 
----
+**Verified via DB:**
+- Rahul's profile id `fa29fcb0-...` has no matching `auth.users` row.
+- Per memory `mem://features/admin/non-login-user-provisioning`, non-login users are an explicitly supported class — but our notification triggers don't account for them.
 
-### Part 2 — Why does **Self** show in the **Manager / Team** tab?
+**Scope of impact:** Every code path that inserts a KPI (or any other row whose AFTER INSERT trigger writes to `notifications`) for a non-login user is broken. This includes Copy KRAs, Smart KRA Assignment, Bundle Assignment, manual KRA creation, KRA Library propagation, and rollover.
 
-**Root Cause (code-level, confirmed):**
+## Fix
 
-In `src/components/review/EmployeeSelectorGrid.tsx` (lines 363–388), the `team` view branches on `isFullAccess`:
+### 1. Database — Guard all notification triggers (primary fix)
 
-```ts
-const isFullAccess = role === 'admin' || role === 'auditor' || role === 'management' || role === 'hr_pms';
+Add a one-line existence check at the top of every notification-emitting trigger function so non-login recipients are silently skipped instead of aborting the transaction.
 
-if (viewLevel === 'team') {
-  if (isFullAccess) {
-    // returns ALL profiles, tagged direct/indirect/undefined
-    return allProfiles?.map(...);
-  }
-  // managers: direct + skip-level merged
-  return [...directTagged, ...indirectTagged];
-}
+Affected functions (latest definition for each):
+- `notify_on_kpi_created` — guard `NEW.employee_id`
+- `notify_on_kpi_status_change` — guard each computed recipient (`v_recipient_id`) before INSERT
+- Any other `INSERT INTO public.notifications` inside a trigger function (audit during migration; e.g., observation/query notification helpers)
+
+Pattern:
+```sql
+IF NOT EXISTS (SELECT 1 FROM auth.users WHERE id = v_recipient_id) THEN
+  -- non-login user; skip notification, do not abort the parent transaction
+  RETURN NEW;  -- or CONTINUE in loops
+END IF;
 ```
 
-Findings:
-1. **Full-access roles (admin/management/hr_pms/auditor)** acting through the Team tab see the **entire `allProfiles` list**, which includes their own profile — there is no `p.id !== profile.id` filter.
-2. **Pure managers** go through `useTeamMembers` (`reporting_manager_id = managerId`) — DB query confirmed no self-reporting loops exist (`SELECT … WHERE reporting_manager_id = id` returned 0 rows). So a regular manager only sees self if they are *also* admin/management (which matches the current session: admin acting as manager on `/dashboard?view=team`).
-3. The skip-level branch (`useSkipLevelMembers`) also does not explicitly exclude the viewer — a 2-hop reporting chain that loops back would surface self, but no such loops exist today.
+For loops over multiple recipients, wrap each INSERT individually so one non-login recipient doesn't block notifications to login peers.
 
-**Conclusion:** The bug is real for any user with a full-access role (admin, management, hr_pms, auditor) viewing the Team tab. It is also a latent risk for pure managers if a self-reporting loop is ever introduced.
+### 2. Defense-in-depth — Wrap notification INSERT in `BEGIN ... EXCEPTION`
 
----
+Inside each trigger, wrap the `INSERT INTO notifications` in a `BEGIN ... EXCEPTION WHEN foreign_key_violation THEN NULL; END;` block. This ensures any *future* FK regression (or race where the user was just deactivated) never aborts the originating business transaction. Notification delivery is best-effort by policy.
 
-### Fix Plan
+### 3. Repair audit log
 
-**1. Universal self-exclusion in `EmployeeSelectorGrid`**
-- After computing `baseMembers`, filter out the current viewer: `members.filter(m => m.id !== profile.id)`.
-- Apply unconditionally across all view levels (`team`, `audit`, `management`, `hr_pms`, `skip_level`, `pending_*`, and cross-check) — a reviewer should never review themselves through a reviewer panel; the `Self` tab is the canonical surface for that.
-- Adjust `stats.totalEmployees` / `Team Size` counters so the excluded self is not double-counted.
+Insert a `RECONCILE_NOTIFICATION_TRIGGER` audit row documenting the fix and listing the bypass condition, per POLICY §106-style invariant pattern.
 
-**2. Hook-level safety net**
-- In `useTeamMembers` and `useSkipLevelMembers` (`src/hooks/useOrganization.ts`), add `.neq('id', managerId)` so even a corrupt self-loop in `reporting_manager_id` cannot leak self into team lists.
+### 4. Regression tests (`src/test/bugBountyFixes.test.ts`)
 
-**3. Tighten reviewer-stage gating (closes BUG-035 residual gap)**
-- In `EmployeeSelectorGrid`, when `requiredStage` is set, ensure `stageFilteredProfiles` is the SOLE source for non-cross-check reviewer tabs (already true). Add an assertion in `handleSelectEmployee` that the selected employee's resolved workflow contains the reviewer's stage; otherwise show a toast: *"This employee's workflow does not include your review stage."*
+Add **BUG-037** suite:
+- Copying KRAs to a non-login profile succeeds and creates all KPIs.
+- A non-login user receives 0 notifications (silent skip).
+- A login peer copied in the same batch still receives notifications.
+- KPI status transitions for a non-login employee no longer raise FK errors.
 
-**4. DB integrity check (defensive)**
-- Add a CHECK-style validation **trigger** on `profiles` (per workspace policy: triggers, not CHECK constraints) preventing `reporting_manager_id = id`. Raises descriptive error.
+### 5. Policy & docs
 
-**5. Regression Tests — `BUG-036`**
-Add to `src/test/bugBountyFixes.test.ts`:
-- `EmployeeSelectorGrid` source must contain a self-exclusion filter (`m.id !== profile.id`) covering Team/Audit/HR PMS/Management views.
-- `useTeamMembers` and `useSkipLevelMembers` must include `.neq('id', managerId)`.
-- Trigger migration creates `prevent_self_reporting_manager()` and rejects `UPDATE profiles SET reporting_manager_id = id`.
+- **POLICY.md §108** — "Notification Recipient Resolution": notification triggers MUST verify the recipient exists in `auth.users` before insert. Non-login users are valid notification *no-ops*, never failures.
+- **DOCUMENTATION.md** — bump to v2.66.7.39 with BUG-037 entry under Bug Fixes & Architecture.
+- **mem/architecture/database/notification-recipient-guard** (new) — codify the auth-existence guard pattern.
+- **mem/index.md** — append reference.
 
-**6. Policy & Documentation Sync**
-- POLICY.md **§107 — Reviewer Self-Exclusion**: "No reviewer panel (Team, Audit, HR PMS, Management, Skip-Level, Pending-*) may surface the viewer's own profile. Self-assessment lives exclusively under the Self tab."
-- DOCUMENTATION.md → bump version (v2.66.7.38) with changelog entry.
-- New mem entry: `mem://features/review/reviewer-self-exclusion`.
-- Update `mem://index.md` Core line: "Reviewers never see themselves in any reviewer grid."
+## Risk & Impact Report
 
----
+- **Data Impact:** None. Trigger logic only; no schema, RLS, or historical data changes.
+- **Workflow Impact:** Notifications for non-login users are silently dropped (correct — they have no inbox). All other notification flows preserved.
+- **UI/UX:** None. The Copy KRAs dialog will now succeed for non-login targets.
+- **Regression Risk:** Low. The guard is additive (`IF NOT EXISTS ... RETURN`); the EXCEPTION wrapper only catches FK violations on the notifications table.
+- **Mitigation:** New regression tests + audit log row + POLICY §108 to prevent re-introduction.
 
-### Risk & Impact Report
+## Files to change
 
-| Area | Impact | Mitigation |
-|---|---|---|
-| Data | None — UI-only filter + a defensive trigger. No historical KPI data altered. | Trigger only blocks future invalid writes. |
-| Workflow | Admins/management/HR PMS lose the ability to "review themselves via Team tab" — intentional; they still use the Self tab. | POLICY §107 documents this. |
-| UI/UX | `Team Size` count drops by 1 for full-access viewers. | Recompute counters; label remains accurate ("Team Size" excludes self). |
-| Regression | Low — change is additive `.filter(...)` + `.neq(...)`. | BUG-036 tests cover both paths. |
-
----
-
-### Files to be edited
-
-- `src/components/review/EmployeeSelectorGrid.tsx` — self-exclusion filter, stat recompute, stage-gate assertion.
-- `src/hooks/useOrganization.ts` — `.neq('id', managerId)` in team/skip-level hooks.
-- `supabase/migrations/<ts>_prevent_self_reporting_manager.sql` — validation trigger.
-- `src/test/bugBountyFixes.test.ts` — BUG-036 suite.
-- `POLICY.md`, `DOCUMENTATION.md`, `mem/index.md`, `mem/features/review/reviewer-self-exclusion` (new).
+- `supabase/migrations/<timestamp>_guard_notification_triggers_for_non_login_users.sql` (new)
+- `src/test/bugBountyFixes.test.ts`
+- `POLICY.md`, `DOCUMENTATION.md`
+- `mem/index.md`, `mem/architecture/database/notification-recipient-guard` (new)
