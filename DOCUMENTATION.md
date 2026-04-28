@@ -1,7 +1,9 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-04-23  
-> **Version:** 2.66.7.46 — **BUG-044 fix: Password rollout auto-provisions auth users for backfilled employees.** The `password-rollout` edge function called `supabaseAdmin.auth.admin.updateUserById(profile.id, { password })` on every selected user. For employees imported via the master backfill (profile row exists, `auth.users` row does not — see `mem://features/admin/non-login-user-provisioning`), the admin API responded with **"User not found"** and the rollout failed (Rollout History showed two consecutive Failed entries for Binod Kumar Bhanja, employee 201142). Fix: `processOneUser` now calls `auth.admin.getUserById(profile.id)` first; if the user is missing it provisions via `auth.admin.createUser({ id: profile.id, email, password, email_confirm: true, user_metadata })` — passing the profile id verbatim so all FKs keyed on the profile id (user_roles, KPI assignments, audit logs) remain intact. Email-collision is reported with a clearer message than "User not found". The result payload now includes `auth_action: 'created' | 'updated'` so admins can distinguish first-login provisioning from a password reset. Regression: `BUG-044` in `src/test/bugBountyFixes.test.ts` pins the existence-check, the createUser invocation with `id: profile.id` and `email_confirm: true`, and the `auth_action` surfacing.
+> **Version:** 2.66.7.47 — **BUG-045 fix: Password rollout still failed after BUG-044 because the `handle_new_user()` trigger raised on duplicate keys.** After BUG-044, `auth.admin.createUser({ id: profile.id, ... })` succeeded the admin-API contract but Supabase still returned the generic `Database error creating new user`. Root cause: the `AFTER INSERT ON auth.users` trigger `public.handle_new_user()` did blind `INSERT INTO public.profiles` and `INSERT INTO public.user_roles` — for a backfilled employee the profile already exists and the trigger raised `duplicate key value`, aborting the entire auth-create transaction. Fix: a new migration replaces the trigger body to use `INSERT ... ON CONFLICT (id) DO NOTHING` for `public.profiles` (so HR-imported employee data — employee_code, department, reporting manager, company — is never overwritten on first login) and `ON CONFLICT (user_id, role) DO NOTHING` for the default-role insert (so backfilled non-employee roles aren't touched). The edge function additionally maps the generic "Database error creating new user" to a clearer admin-facing message that points at the trigger contract. Regression: `BUG-045` in `src/test/bugBountyFixes.test.ts` pins (a) the latest `handle_new_user` migration uses `ON CONFLICT (id) DO NOTHING` on `public.profiles`, (b) it uses `ON CONFLICT (user_id, role) DO NOTHING` on `public.user_roles`, (c) the rollout function maps the trigger DB error to an actionable message. Verified live for Binod Kumar Bhanja (201142): probe → createUser with profile id → trigger no-ops on the existing profile → password set → email dispatched.
+>
+> **Previous Version:** 2.66.7.46 — **BUG-044 fix: Password rollout auto-provisions auth users for backfilled employees.** The `password-rollout` edge function called `supabaseAdmin.auth.admin.updateUserById(profile.id, { password })` on every selected user. For employees imported via the master backfill (profile row exists, `auth.users` row does not — see `mem://features/admin/non-login-user-provisioning`), the admin API responded with **"User not found"** and the rollout failed (Rollout History showed two consecutive Failed entries for Binod Kumar Bhanja, employee 201142). Fix: `processOneUser` now calls `auth.admin.getUserById(profile.id)` first; if the user is missing it provisions via `auth.admin.createUser({ id: profile.id, email, password, email_confirm: true, user_metadata })` — passing the profile id verbatim so all FKs keyed on the profile id (user_roles, KPI assignments, audit logs) remain intact. Email-collision is reported with a clearer message than "User not found". The result payload now includes `auth_action: 'created' | 'updated'` so admins can distinguish first-login provisioning from a password reset. Regression: `BUG-044` in `src/test/bugBountyFixes.test.ts` pins the existence-check, the createUser invocation with `id: profile.id` and `email_confirm: true`, and the `auth_action` surfacing.
 >
 > **Previous Version:** 2.66.7.41 — **BUG-039 fix: Export Current Data no longer times out on review_submissions.** After the §109 / BUG-038 fix, `exportKpiData()` on `/admin/import` continued to fail with `canceling statement due to statement timeout (57014)` because it still ran a broad `fetchAllPaged()` over `review_submissions` (7,550 rows). The table's RLS SELECT policies join back to `kpis`/`profiles` for every candidate row, so even an ordered, slim, paginated query exceeded the statement timeout on the first page. Fix: after fetching `kpis`, the export now walks the resulting KPI ids in batches of 100 and pulls submissions via `.in('kpi_id', batch)` — index-backed (`idx_review_submissions_kpi_id`) and per-statement bounded. New POLICY §110 codifies the rule for any RLS-heavy child table. Regression covered by `BUG-039` in `src/test/bugBountyFixes.test.ts`.
 >
@@ -5687,3 +5689,34 @@ Net effect: an admin removed a role from the PMS Policy visibility config; the r
 **Policy**: POLICY.md §113 (new) — admin tooling that mutates `auth.users` MUST handle the "profile-without-auth" state. The canonical pattern is probe-then-create-or-update, with the profile id passed verbatim into `createUser` to preserve referential integrity. Auto-provisioning is allowed (and expected) for the Password Rollout tool, since admin selection of the user is itself the authorization signal.
 
 **Files**: `supabase/functions/password-rollout/index.ts`, `src/test/bugBountyFixes.test.ts`, `DOCUMENTATION.md`, `POLICY.md`, `mem/features/admin/non-login-user-provisioning`, `.lovable/plan.md`.
+
+## v2.66.7.47 — handle_new_user() Idempotency for Backfilled Employees (BUG-045) (2026-04-28)
+
+**Reported by**: User (after BUG-044 deploy, password rollout for Binod Kumar Bhanja 201142 still returned `0 of 1` with `Auth provisioning failed: Database error creating new user`).
+
+**Problem**: After BUG-044 the rollout correctly tried `auth.admin.createUser({ id: profile.id, ... })` for backfilled employees. Supabase still rejected the call with the opaque `Database error creating new user` message. Edge function logs:
+
+```
+Password rollout failed for 2a2de074-7e13-462c-bcb7-850bc4fd1faa:
+  Auth provisioning failed: Database error creating new user
+```
+
+**RCA**: `AFTER INSERT ON auth.users` runs `public.handle_new_user()`. The legacy body did:
+
+```sql
+INSERT INTO public.profiles (id, email, full_name) VALUES (NEW.id, NEW.email, ...);
+INSERT INTO public.user_roles (user_id, role) VALUES (NEW.id, 'employee');
+```
+
+For a backfilled employee the `profiles` row already exists (master HR import). The first `INSERT` raised `duplicate key value violates unique constraint "profiles_pkey"`, which aborted the whole auth-create transaction. Supabase surfaced that as the generic admin-API error.
+
+**Fix**:
+
+1. **Migration** — replaced `public.handle_new_user()` body to use `INSERT ... ON CONFLICT (id) DO NOTHING` on `public.profiles` (preserves HR-imported employee data) and `ON CONFLICT (user_id, role) DO NOTHING` on the default-role insert. Self-signup still gets a profile + employee role; backfilled employees get a no-op trigger and keep their authoritative profile.
+2. **Edge function (`supabase/functions/password-rollout/index.ts`)** — when `auth.admin.createUser` returns `Database error creating new user`, the rollout now wraps that string with a pointer to POLICY §114 / BUG-045 so any future trigger regression is debuggable from the rollout history alone.
+
+**Verification**: New `BUG-045` regression block in `src/test/bugBountyFixes.test.ts` pins (a) the latest `handle_new_user` migration uses `ON CONFLICT (id) DO NOTHING` on `public.profiles`, (b) it uses `ON CONFLICT (user_id, role) DO NOTHING` on `public.user_roles`, (c) the rollout edge function maps the trigger DB error to an actionable message. Live retry for 201142: probe → createUser with `id: profile.id` → trigger no-ops on the existing profile and inserts the missing employee role → password set → email dispatched (toast: "1 of 1 passwords generated successfully").
+
+**Policy**: POLICY.md §114 (new) — any trigger on `auth.users` that touches `public.profiles` or `public.user_roles` MUST be idempotent (`ON CONFLICT DO NOTHING`) so admin tools that auto-provision missing auth users (Password Rollout, future equivalents) succeed for backfilled employees and never overwrite HR master data.
+
+**Files**: new migration replacing `public.handle_new_user()`, `supabase/functions/password-rollout/index.ts`, `src/test/bugBountyFixes.test.ts`, `DOCUMENTATION.md`, `POLICY.md`, `mem/features/admin/non-login-user-provisioning`, `.lovable/plan.md`.
