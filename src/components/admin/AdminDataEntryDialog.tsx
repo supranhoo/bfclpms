@@ -1003,6 +1003,11 @@ export function AdminDataEntryDialog({
         )}
 
         <DialogFooter>
+          {requiresScoreOrNa && !onBehalfPayloadValid && reason.trim().length > 0 && (
+            <p className="text-xs text-destructive mr-auto self-center">
+              Provide a score/rating or toggle <strong>Mark as N/A</strong> before submitting (POLICY §116).
+            </p>
+          )}
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
