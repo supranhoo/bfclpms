@@ -36,11 +36,20 @@ export function RocketLaunchArt() {
       </g>
       {/* Rocket ascends vertically */}
       <g className="rg-rocket">
-        <g className="rg-flame" transform="translate(60 86)">
-          <path
-            d="M-6 0 Q-3 10 0 2 Q2 9 5 1 Q3 -2 0 -3 Q-3 -2 -6 0 Z"
-            fill={flame}
-          />
+        {/*
+          Position the flame via the outer <g transform=...> and animate the
+          inner <g class="rg-flame"> with CSS. Combining an SVG transform
+          attribute with a CSS `transform` animation on the same node makes
+          the CSS value win and resets the translate to (0,0) -- that drove
+          the flame into the top-left of the viewBox during loading.
+        */}
+        <g transform="translate(60 84)">
+          <g className="rg-flame">
+            <path
+              d="M-6 0 Q-3 10 0 2 Q2 9 5 1 Q3 -2 0 -3 Q-3 -2 -6 0 Z"
+              fill={flame}
+            />
+          </g>
         </g>
         {/* Rocket body — pointed nose, rounded tube */}
         <path
