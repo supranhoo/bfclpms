@@ -573,7 +573,10 @@ export function EmployeeSelectorGrid({
         clearedKraSet,
         scoreReviewed: empKpis.filter(k => {
           const s = submissionScoreMap?.get(k.id);
-          return s != null && s.management_score != null;
+          if (!s) return false;
+          if (s.management_score != null) return true;
+          // BUG-046: N/A KPIs already approved count as a completed Management action.
+          return s.is_na === true && k.status === 'approved';
         }).length,
         orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
         nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
