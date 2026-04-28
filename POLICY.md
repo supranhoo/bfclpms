@@ -2010,3 +2010,18 @@ The non-canonical literals `l1_review`, `auditor_review`, and `skip_level_review
 **Regression coverage.** `BUG-042` in `src/test/bugBountyFixes.test.ts` pins (a) `pms-policy` absent from `EMPLOYEE_DEFAULT_MENUS`; (b) `pms-policy` absent from `DEFAULT_MENU_ROLES`; (c) `useMenuAccess` imports `useAppSettings` and has a `menuKey === 'pms-policy'` branch referencing `pms_policy_visible_roles`; (d) `PMSPolicy.tsx` delegates to `useMenuAccess.canAccess('pms-policy')`.
 
 `BUG-042` is the canonical anchor for this rule.
+
+## §113 — Password Rollout Auto-Provisions Missing Auth Users (v2.66.7.46, BUG-044)
+
+Admin tooling that mutates `auth.users` (the `password-rollout` edge function and any future equivalent) MUST handle the "profile-without-auth" state — i.e. a profile row exists but no `auth.users` row matches `profile.id`. This is the steady-state for employees imported via the master backfill (see `mem://features/admin/non-login-user-provisioning`).
+
+**Required pattern (probe → create-or-update):**
+1. Call `supabaseAdmin.auth.admin.getUserById(profile.id)` first.
+2. If the user is missing, call `supabaseAdmin.auth.admin.createUser({ id: profile.id, email, password, email_confirm: true, user_metadata })`. The profile id MUST be passed verbatim into `createUser` so every foreign key keyed on the profile id (user_roles, kpi_assignments, audit logs, KRA records) stays intact. Never mint a new id.
+3. If the user exists, call `auth.admin.updateUserById(profile.id, { password })` as before.
+4. Surface a friendlier error than "User not found" when the email is already linked to a different auth account.
+5. Surface `auth_action: 'created' | 'updated'` in the per-user result payload so admins can distinguish first-login provisioning from a password reset.
+
+**Authorization rationale**: admin selection of the target user inside an admin-only edge function (gated by `requireAdminUser`) is itself the authorization signal for first-login provisioning. No separate provisioning step is required.
+
+**Forbidden**: skipping the probe, minting a fresh auth id, or relying on a separate "create login" tool to backfill missing auth users — these patterns leave the Password Rollout UI silently failing for the most common new-employee case.
