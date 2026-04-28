@@ -213,7 +213,7 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
         const sc = bestScore(sub);
         if (sc === null) continue;
         const w = Number(kpi.weightage) || 0;
-        if (w <= 0) return; // skip zero-weight
+        if (w <= 0) continue; // skip zero-weight
 
         bucket.weighted += sc * w;
         bucket.weight += w;
