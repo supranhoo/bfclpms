@@ -1104,3 +1104,37 @@ describe('BUG-045: handle_new_user trigger is idempotent for backfilled employee
     expect(src).toMatch(/DB trigger error/i);
   });
 });
+
+describe('BUG-046: HR PMS dashboard counts N/A as reviewed and excludes employees outside workflow', () => {
+  it('useReviewSubmissionScoresByKpiIds selects and returns is_na', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/hooks/useKpis.ts', 'utf-8');
+    const block = src.match(/useReviewSubmissionScoresByKpiIds[\s\S]*?^}/m)?.[0] ?? '';
+    expect(block).toMatch(/select\([^)]*is_na/);
+    expect(block).toMatch(/is_na:\s*r\.is_na/);
+  });
+
+  it('EmployeeSelectorGrid HR PMS reviewed predicate credits N/A approvals', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/components/review/EmployeeSelectorGrid.tsx', 'utf-8');
+    // Per-card progress bar credit
+    expect(src).toMatch(/s\.hr_pms_score\s*!=\s*null[\s\S]*s\.is_na\s*===\s*true/);
+    // Stat-card aggregation now runs the score-signature counter BEFORE the
+    // workflow-stage early-return so historical signatures still count.
+    const hrBranch = src.match(/viewLevel === 'hr_pms'[\s\S]*?periodEmployeeIds\.size/m)?.[0] ?? '';
+    expect(hrBranch).toMatch(/hrSubEarly/);
+    expect(hrBranch.indexOf('hrSubEarly')).toBeLessThan(hrBranch.indexOf("if (hrIdx === -1) return"));
+  });
+
+  it('useProfilesByWorkflowStage filter prefers resolved workflow over score signature', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/hooks/useOrganization.ts', 'utf-8');
+    const block = src.match(/const filtered = profiles\.filter[\s\S]*?\}\);/m)?.[0] ?? '';
+    // Resolved workflow check must come BEFORE the seed shortcuts.
+    const idxStages = block.indexOf('empStages.includes(stage)');
+    const idxScoreSeed = block.indexOf('scoreSigSeededIds.has');
+    expect(idxStages).toBeGreaterThan(-1);
+    expect(idxScoreSeed).toBeGreaterThan(-1);
+    expect(idxStages).toBeLessThan(idxScoreSeed);
+  });
+});
