@@ -1123,8 +1123,11 @@ describe('BUG-046: HR PMS dashboard counts N/A as reviewed and excludes employee
     // workflow-stage early-return so historical signatures still count.
     expect(src).toContain('hrSubEarly');
     expect(src).toContain('auditSubEarly');
-    expect(src.indexOf('hrSubEarly')).toBeLessThan(src.indexOf("if (hrIdx === -1) return"));
-    expect(src.indexOf('auditSubEarly')).toBeLessThan(src.indexOf("if (auditIdx === -1) return"));
+    // Use lastIndexOf for the early-return because the file has multiple
+    // `if (auditIdx === -1) return` and `if (hrIdx === -1) return` sites;
+    // the stat-aggregation guard is the LAST one in source order.
+    expect(src.indexOf('hrSubEarly')).toBeLessThan(src.lastIndexOf("if (hrIdx === -1) return"));
+    expect(src.indexOf('auditSubEarly')).toBeLessThan(src.lastIndexOf("if (auditIdx === -1) return"));
   });
 
   it('useProfilesByWorkflowStage filter prefers resolved workflow over score signature', async () => {
