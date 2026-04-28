@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useMemo, useState } from 'react';
 import { getCycleOptionsForFrequency } from '@/lib/frequencyCycleOptions';
 import { normalizeFrequency } from '@/lib/frequencyUtils';
+import { fetchAllPaged } from '@/lib/fetchAll';
 
 // Calendar-order month names (used for DB review_period values)
 export const MONTH_NAMES = [
@@ -130,15 +131,18 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number, so
   const { data: profiles, isLoading: profilesLoading } = useQuery({
     queryKey: ['kpi-mapping-profiles'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select(`
-          id, full_name, employee_code, pms_grade, designation, department_id, is_active,
-          departments (id, name, business_units (id, name, divisions (id, name)))
-        `)
-        .order('full_name');
-      if (error) throw error;
-      return data;
+      // POLICY §94: profiles list reads MUST be paged — PostgREST silently caps at 1000 rows.
+      // Without this, the matrix denominator was truncated to ~996 of ~2,533 active employees.
+      return await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('profiles')
+          .select(`
+            id, full_name, employee_code, pms_grade, designation, department_id, is_active,
+            departments (id, name, business_units (id, name, divisions (id, name)))
+          `)
+          .order('full_name')
+          .range(from, to)
+      );
     },
   });
 
