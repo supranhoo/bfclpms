@@ -15,3 +15,5 @@ Why: PostgREST default cap is 1000 rows. EmployeeCombobox and similar pickers fi
 How to apply: Wrap with `fetchAllPaged<RowType>((from, to) => supabase.from('profiles').select(...).order(...).range(from, to))`. Always include `eq('is_active', true)` for picker contexts.
 
 Codified in POLICY.md §94. Regression test: src/components/admin/__tests__/employeePickerPaging.test.ts.
+
+Compliant sites (extend when adding new ones): CopyKrasDialog, OrgKpiAddEmployeeDialog, CompetencyManagerTab, ReportAccessTab, AccessProfilesManager AssignmentTab, useEmployeeFilterOptions (distinct-designations/grades), useAdminReports.useKpiMappingMatrix (added v2.66.7.45 / BUG-043 — previously truncated KPI Mapping Matrix to ~996 of ~2,533 employees).
