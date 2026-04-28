@@ -790,3 +790,59 @@ describe('BUG-036: Reviewer self-exclusion', () => {
     expect(found, 'Expected a migration creating prevent_self_reporting_manager').toBe(true);
   });
 });
+
+// BUG-037: Notification Recipient Guard for Non-Login Users (POLICY §108)
+// Symptom: Copy KRAs (and any KPI INSERT or status transition) targeting a
+// non-login profile (no auth.users row) failed with
+// `notifications_user_id_fkey` FK violation, aborting the entire transaction.
+// Fix: every `INSERT INTO public.notifications` inside a trigger function is
+// wrapped in `BEGIN ... EXCEPTION WHEN foreign_key_violation THEN NULL; END`,
+// and notify_on_kpi_created additionally pre-checks auth.users existence.
+// Notification delivery is best-effort and must never block a business write.
+describe('BUG-037: Notification recipient guard for non-login users', () => {
+  it('Migration guards notify_on_kpi_created with auth.users existence check', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const dir = 'supabase/migrations';
+    const files = fs.readdirSync(dir).filter(f => f.endsWith('.sql')).sort();
+    const found = files.some(f => {
+      const sql = fs.readFileSync(path.join(dir, f), 'utf-8');
+      return /CREATE OR REPLACE FUNCTION public\.notify_on_kpi_created/.test(sql)
+        && /EXISTS \(SELECT 1 FROM auth\.users WHERE id = NEW\.employee_id\)/.test(sql)
+        && /WHEN foreign_key_violation THEN/.test(sql);
+    });
+    expect(found, 'Expected migration guarding notify_on_kpi_created').toBe(true);
+  });
+
+  it('Migration wraps every notify_on_kpi_status_change INSERT in foreign_key_violation handler', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const dir = 'supabase/migrations';
+    const files = fs.readdirSync(dir).filter(f => f.endsWith('.sql')).sort();
+    // Find the latest file containing notify_on_kpi_status_change definition
+    const latest = files.reverse().find(f => {
+      const sql = fs.readFileSync(path.join(dir, f), 'utf-8');
+      return /CREATE OR REPLACE FUNCTION public\.notify_on_kpi_status_change/.test(sql);
+    });
+    expect(latest, 'Expected a migration redefining notify_on_kpi_status_change').toBeTruthy();
+    const sql = fs.readFileSync(path.join(dir, latest!), 'utf-8');
+    // Count INSERTs into notifications and EXCEPTION handlers — every notif
+    // INSERT must have its own handler to satisfy POLICY §108.
+    const inserts = (sql.match(/INSERT INTO public\.notifications/g) || []).length;
+    const handlers = (sql.match(/WHEN foreign_key_violation THEN/g) || []).length;
+    expect(inserts).toBeGreaterThanOrEqual(5);
+    expect(handlers).toBeGreaterThanOrEqual(inserts);
+  });
+
+  it('Auditor fan-out filters to roles with an auth.users row', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const dir = 'supabase/migrations';
+    const files = fs.readdirSync(dir).filter(f => f.endsWith('.sql')).sort().reverse();
+    const latest = files.find(f =>
+      /notify_on_kpi_status_change/.test(fs.readFileSync(path.join(dir, f), 'utf-8'))
+    );
+    const sql = fs.readFileSync(path.join(dir, latest!), 'utf-8');
+    expect(sql).toMatch(/EXISTS \(SELECT 1 FROM auth\.users au WHERE au\.id = ur\.user_id\)/);
+  });
+});
