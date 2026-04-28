@@ -52,6 +52,7 @@ interface UserResult {
   error_message?: string;
   email_sent: boolean;
   email_error?: string;
+  auth_action?: "updated" | "created";
 }
 
 async function processOneUser(
@@ -67,17 +68,56 @@ async function processOneUser(
   let errorMessage: string | undefined;
   let emailSent = false;
   let emailError: string | undefined;
+  let authAction: "updated" | "created" = "updated";
 
   try {
     const password = generateSecurePassword(14);
 
-    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-      profile.id,
-      { password }
-    );
+    // Check if auth user exists for this profile id
+    const { data: existing, error: getErr } =
+      await supabaseAdmin.auth.admin.getUserById(profile.id);
 
-    if (updateError) {
-      throw new Error(`Auth update failed: ${updateError.message}`);
+    const userMissing =
+      !existing?.user ||
+      (getErr && /not.?found/i.test(getErr.message || ""));
+
+    if (userMissing) {
+      // Auto-provision: profile exists but auth.users record is missing
+      // (typical for employees imported via master backfill before first login).
+      if (!profile.email) {
+        throw new Error(
+          "Cannot provision auth account: profile has no email address."
+        );
+      }
+
+      const { error: createErr } = await supabaseAdmin.auth.admin.createUser({
+        id: profile.id,
+        email: profile.email,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: profile.full_name,
+          employee_code: profile.employee_code,
+        },
+      });
+
+      if (createErr) {
+        const msg = createErr.message || "";
+        if (/already.*registered|already.*exist|duplicate/i.test(msg)) {
+          throw new Error(
+            `Email already linked to a different auth account: ${msg}`
+          );
+        }
+        throw new Error(`Auth provisioning failed: ${msg}`);
+      }
+      authAction = "created";
+    } else {
+      const { error: updateError } =
+        await supabaseAdmin.auth.admin.updateUserById(profile.id, { password });
+      if (updateError) {
+        throw new Error(`Auth update failed: ${updateError.message}`);
+      }
+      authAction = "updated";
     }
 
     if (sendEmail && profile.email) {
@@ -145,6 +185,7 @@ async function processOneUser(
     error_message: errorMessage,
     email_sent: emailSent,
     email_error: emailError,
+    auth_action: status === "success" ? authAction : undefined,
   };
 }
 
