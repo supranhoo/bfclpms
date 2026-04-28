@@ -5667,3 +5667,23 @@ Net effect: an admin removed a role from the PMS Policy visibility config; the r
 **Policy**: POLICY.md §112 (new) — when a page has its own role-visibility configuration column, `useMenuAccess.canAccess` MUST defer to that column in a dedicated branch and the menu key MUST be removed from `EMPLOYEE_DEFAULT_MENUS`, `MANAGER_DEFAULT_MENUS`, and `DEFAULT_MENU_ROLES`. The page guard MUST delegate to `canAccess`, not duplicate the predicate.
 
 **Files**: `src/hooks/useMenuAccess.ts`, `src/pages/PMSPolicy.tsx`, `src/test/bugBountyFixes.test.ts`.
+
+## v2.66.7.46 — Password Rollout Auto-Provisions Missing Auth Users (BUG-044) (2026-04-28)
+
+**Reported by**: User (screenshot of "0 of 1 passwords generated successfully. 1 failed." for Binod Kumar Bhanja, 201142).
+
+**Problem**: The Password Rollout admin tool failed for any employee who had a `profiles` row but no corresponding `auth.users` row. Edge function logs showed `Auth update failed: User not found`. This is the standard state for employees imported via the master backfill (per `mem://features/admin/non-login-user-provisioning`) — they live in `profiles` from day one but only get an `auth.users` record when they first log in. The Password Rollout tool was the natural place to provision that first login, but the implementation only knew how to **update** existing auth users, not **create** missing ones.
+
+**RCA**: `processOneUser` in `supabase/functions/password-rollout/index.ts` unconditionally called `supabaseAdmin.auth.admin.updateUserById(profile.id, { password })`. The Supabase admin API returns `User not found` when no `auth.users` row matches the supplied id. There was no fallback to `createUser`.
+
+**Fix** (`supabase/functions/password-rollout/index.ts`):
+1. Probe `auth.admin.getUserById(profile.id)` before mutating.
+2. If the user is missing, call `auth.admin.createUser({ id: profile.id, email, password, email_confirm: true, user_metadata: { full_name, employee_code } })`. **Critically**, the profile id is passed through as the auth user id so every FK keyed on the profile id (user_roles, KPI assignments, audit logs, KRA records) remains intact — no orphan rows, no rebinding.
+3. Surface a friendlier error when the email is already linked to a different auth account ("Email already linked to a different auth account: …") rather than a generic admin-API string.
+4. Add `auth_action: 'created' | 'updated'` to the per-user result payload so admins can distinguish first-login provisioning from a password reset (UI badging is a future enhancement; the audit table already captures status).
+
+**Verification**: `bunx vitest run src/test/bugBountyFixes.test.ts -t "BUG-044"` → **3 / 3 pass**. BUG-044 pins (a) the `getUserById` probe exists, (b) `createUser` is invoked with `id: profile.id` and `email_confirm: true`, (c) the `auth_action` field is surfaced.
+
+**Policy**: POLICY.md §113 (new) — admin tooling that mutates `auth.users` MUST handle the "profile-without-auth" state. The canonical pattern is probe-then-create-or-update, with the profile id passed verbatim into `createUser` to preserve referential integrity. Auto-provisioning is allowed (and expected) for the Password Rollout tool, since admin selection of the user is itself the authorization signal.
+
+**Files**: `supabase/functions/password-rollout/index.ts`, `src/test/bugBountyFixes.test.ts`, `DOCUMENTATION.md`, `POLICY.md`, `mem/features/admin/non-login-user-provisioning`, `.lovable/plan.md`.
