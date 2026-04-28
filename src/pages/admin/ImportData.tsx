@@ -1748,12 +1748,14 @@ export default function ImportData() {
   const exportKpiData = async () => {
     setIsExportingKpis(true);
     try {
-      // BUG-038 — Statement timeout fix.
-      // Root cause: nested 4-level join on kpis + unordered .range() exceeded
-      // PostgREST's statement_timeout for the very first page on the 9k+ kpis table.
-      // Fix: fetch kpis with own columns only, ordered + paged via fetchAllPaged;
-      // resolve categories/profiles/departments/BUs/divisions via cheap .in() lookups.
+      // BUG-038 / BUG-039 — Statement timeout fix.
+      // BUG-038: kpis paged fetch must avoid nested joins + use ordered .range().
+      // BUG-039: a broad `review_submissions` paged scan still timed out because the
+      //          table's RLS policies re-evaluate per row against kpis/profiles.
+      //          Fix: fetch submissions in small `kpi_id IN (...)` batches that
+      //          ride the existing `idx_review_submissions_kpi_id` index.
       const KPI_PAGE = 500; // smaller pages = bounded planner cost
+      const SUBMISSION_BATCH = 100; // RLS-heavy table — keep IN() lists short
 
       const allKpis = await fetchAllPaged<any>((from, to) =>
         supabase
@@ -1770,13 +1772,21 @@ export default function ImportData() {
           .range(from, to)
       , KPI_PAGE);
 
-      const allSubmissions = await fetchAllPaged<any>((from, to) =>
-        supabase
+      // BUG-039 — Fetch review_submissions by KPI id batches instead of a broad
+      // paged scan. The previous broad query hit `statement timeout` (57014)
+      // because the RLS policy joins kpis + profiles for every row.
+      const allKpiIds = allKpis.map(k => k.id).filter(Boolean) as string[];
+      const allSubmissions: any[] = [];
+      for (let i = 0; i < allKpiIds.length; i += SUBMISSION_BATCH) {
+        const batch = allKpiIds.slice(i, i + SUBMISSION_BATCH);
+        const { data: subRows, error: subErr } = await supabase
           .from('review_submissions')
           .select('kpi_id, achieved_value, self_score, self_remarks, manager_achieved_value, manager_score, manager_remarks, auditor_achieved_value, auditor_score, auditor_remarks, management_score, management_remarks, final_score')
-          .order('kpi_id')
-          .range(from, to)
-      );
+          .in('kpi_id', batch)
+          .order('kpi_id');
+        if (subErr) throw subErr;
+        if (subRows?.length) allSubmissions.push(...subRows);
+      }
 
       const allReviews = await fetchAllPaged<any>((from, to) =>
         supabase
