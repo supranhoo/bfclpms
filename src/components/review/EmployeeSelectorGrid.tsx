@@ -945,6 +945,13 @@ export function EmployeeSelectorGrid({
         // v2.64.11: Total Employees = ANY employee with KPIs in this period
         // whose workflow includes the audit stage (not just those at/before audit).
         periodEmployeeIds.add(k.employee_id);
+        // BUG-046: count audit-signature BEFORE workflow guards so historical
+        // signatures still contribute to "Auditor Reviewed".
+        const auditSubEarly = submissionScoreMap?.get(k.id);
+        if (auditSubEarly) {
+          if (auditSubEarly.auditor_score != null) reviewed++;
+          else if (auditSubEarly.is_na === true && ['management_review', 'approved'].includes(k.status || '')) reviewed++;
+        }
         // Guard: skip employees without resolved workflows to avoid DEFAULT_WORKFLOW_STAGES fallback overcounting
         if (!hasResolvedWorkflow(k.employee_id)) return;
         const stages = getStages(k.employee_id);
@@ -958,9 +965,6 @@ export function EmployeeSelectorGrid({
             pending++;
           }
         }
-        // v2.64.11: "Reviewed by me" = KPIs with audit signature for this period.
-        const auditSub = submissionScoreMap?.get(k.id);
-        if (auditSub && auditSub.auditor_score != null) reviewed++;
       });
       // v2.64.11: Total Employees = unique employees with any KPI in period
       // (workflow-filtered roster); reviewed counted via audit_score signature.
@@ -986,6 +990,20 @@ export function EmployeeSelectorGrid({
       relevantKpis.forEach(k => {
         // v2.64.11: Count any employee with at least one KPI in period.
         periodEmployeeIds.add(k.employee_id);
+        // BUG-046: count HR PMS reviewed signatures (incl. N/A approvals)
+        // BEFORE workflow guards so historically-scored KPIs still contribute.
+        const hrSubEarly = submissionScoreMap?.get(k.id);
+        if (hrSubEarly) {
+          if (hrSubEarly.hr_pms_score != null) reviewed++;
+          else if (hrSubEarly.is_na === true) {
+            const stagesForK = getStages(k.employee_id);
+            const hrIdxK = stagesForK.indexOf('hr_pms_review');
+            // Treat N/A as reviewed once the KPI has moved past the HR PMS stage,
+            // OR if the KPI is already terminal (approved) on a workflow without HR PMS.
+            const past = hrIdxK >= 0 && stagesForK.slice(hrIdxK + 1).includes(k.status || '');
+            if (past || k.status === 'approved') reviewed++;
+          }
+        }
         const stages = getStages(k.employee_id);
         const hrIdx = stages.indexOf('hr_pms_review');
         if (hrIdx === -1) return;
@@ -998,9 +1016,6 @@ export function EmployeeSelectorGrid({
           const afterHr = stages.slice(hrIdx + 1);
           if (afterHr.includes(k.status || '')) { forwarded++; }
         }
-        // v2.64.11: "HR PMS Reviewed" = KPIs with hr_pms_score signature.
-        const hrSub = submissionScoreMap?.get(k.id);
-        if (hrSub && hrSub.hr_pms_score != null) reviewed++;
       });
       // v2.64.11: Total Employees = unique employees with any KPI in period
       // (workflow-filtered roster). Stat3 = reviewed via hr_pms_score signature.
@@ -1033,7 +1048,10 @@ export function EmployeeSelectorGrid({
       relevantKpis.forEach(k => {
         periodEmployeeIds.add(k.employee_id);
         const mgmtSub = submissionScoreMap?.get(k.id);
-        if (mgmtSub && mgmtSub.management_score != null) reviewed++;
+        if (mgmtSub) {
+          if (mgmtSub.management_score != null) reviewed++;
+          else if (mgmtSub.is_na === true && k.status === 'approved') reviewed++;
+        }
       });
       return {
         totalEmployees: periodEmployeeIds.size,
