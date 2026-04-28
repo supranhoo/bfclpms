@@ -17,6 +17,8 @@ import { Search, FileSpreadsheet, Users, Target, TrendingUp, FileText, Eye, Down
 import * as XLSX from 'xlsx';
 import { generateBulkScorecardPdf, generateDetailedScorecardPdf, generateDetailedScorecardPdfBlob, EmployeeScorecard, KpiDetail } from '@/lib/pdfExport';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { MonthlyTrendView } from '@/components/reports/MonthlyTrendView';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -42,6 +44,7 @@ export default function MonthlyScorecardReport() {
   const [searchTerm, setSearchTerm] = useState('');
   const [previewScorecard, setPreviewScorecard] = useState<EmployeeScorecard | null>(null);
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'single' | 'range'>('single');
   
   const { data: systemSettings } = useSystemSettings();
   const companyName = useMemo(() => {
@@ -459,26 +462,20 @@ export default function MonthlyScorecardReport() {
     return score.toFixed(2);
   };
 
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-64" />
-        <div className="grid gap-4 md:grid-cols-4">
-          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-24" />)}
-        </div>
-        <Skeleton className="h-96" />
-      </div>
-    );
-  }
+  const singleMonthLoading = isLoading;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Monthly Scorecard Report"
-        description={`Employee performance scorecards for ${selectedPeriod} ${selectedYear}`}
+        description={
+          viewMode === 'single'
+            ? `Employee performance scorecards for ${selectedPeriod} ${selectedYear}`
+            : 'Multi-month score trend per employee'
+        }
         backTo="/reports"
         actions={
-          canExport ? (
+          canExport && viewMode === 'single' ? (
             <div className="flex items-center gap-2">
               <Button variant="outline" className="gap-2" onClick={handleExportExcel}>
                 <FileSpreadsheet className="h-4 w-4" />
@@ -493,6 +490,23 @@ export default function MonthlyScorecardReport() {
         }
       />
 
+      <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'single' | 'range')}>
+        <TabsList>
+          <TabsTrigger value="single">Single Month</TabsTrigger>
+          <TabsTrigger value="range">Date Range (Trend)</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="single" className="space-y-6 mt-4">
+          {singleMonthLoading ? (
+            <div className="space-y-6">
+              <Skeleton className="h-24 w-full" />
+              <div className="grid gap-4 md:grid-cols-4">
+                {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-24" />)}
+              </div>
+              <Skeleton className="h-96" />
+            </div>
+          ) : (
+            <>
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
@@ -707,6 +721,14 @@ export default function MonthlyScorecardReport() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+            </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="range" className="mt-4">
+          <MonthlyTrendView canExport={canExport} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
