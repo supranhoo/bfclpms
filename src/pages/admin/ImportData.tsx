@@ -23,6 +23,7 @@ import { ClearAllKpiDataDialog } from '@/components/admin/ClearAllKpiDataDialog'
 import * as XLSX from 'xlsx';
 import { validateFileSize, IMPORT_LIMITS, sanitizeText, normalizeRole, VALID_ROLES } from '@/lib/importValidation';
 import { scoreToRatingLevel } from '@/lib/reviewConstants';
+import { fetchAllPaged } from '@/lib/fetchAll';
 
 /** Map technical DB/edge-function errors to admin-friendly messages */
 function friendlyImportError(msg: string): string {
