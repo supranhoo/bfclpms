@@ -2025,3 +2025,29 @@ Admin tooling that mutates `auth.users` (the `password-rollout` edge function an
 **Authorization rationale**: admin selection of the target user inside an admin-only edge function (gated by `requireAdminUser`) is itself the authorization signal for first-login provisioning. No separate provisioning step is required.
 
 **Forbidden**: skipping the probe, minting a fresh auth id, or relying on a separate "create login" tool to backfill missing auth users — these patterns leave the Password Rollout UI silently failing for the most common new-employee case.
+
+## §114 — Auth Triggers Must Be Idempotent for Backfilled Employees (v2.66.7.47, BUG-045)
+
+Any `AFTER INSERT ON auth.users` trigger that writes to `public.profiles` or `public.user_roles` (today: `public.handle_new_user()`) MUST be idempotent. Backfilled employees (master HR import, see `mem://features/admin/non-login-user-provisioning`) already have a `public.profiles` row before the matching `auth.users` row exists, so a blind `INSERT` raises `duplicate key value violates unique constraint` inside the auth-create transaction and Supabase surfaces it as the generic `Database error creating new user`. This is what blocked Password Rollout in BUG-045 even after BUG-044's probe→create flow was correct.
+
+**Required pattern**:
+
+```sql
+INSERT INTO public.profiles (id, email, full_name)
+VALUES (NEW.id, NEW.email, NEW.raw_user_meta_data ->> 'full_name')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.user_roles (user_id, role)
+VALUES (NEW.id, 'employee')
+ON CONFLICT (user_id, role) DO NOTHING;
+```
+
+**Rationale**:
+- `ON CONFLICT (id) DO NOTHING` preserves HR-imported employee data (employee code, department, reporting manager, company, level, designation, active state). The auth signup must not overwrite the authoritative profile.
+- `ON CONFLICT (user_id, role) DO NOTHING` prevents accidentally re-asserting the default `employee` role over a backfilled employee whose role already exists (or who already has a higher role). It also keeps self-signup behavior correct — first-time signups still get the default role.
+
+**Forbidden**:
+- Replacing the `INSERT` with `INSERT ... ON CONFLICT (id) DO UPDATE SET ...` — this overwrites HR master data.
+- Adding a new `auth.users` trigger that writes to `public.profiles` without the same `ON CONFLICT DO NOTHING` guard.
+
+**Regression coverage**: `BUG-045` in `src/test/bugBountyFixes.test.ts` pins the trigger contract by scanning the latest `handle_new_user` migration for both `ON CONFLICT` clauses and verifies the password-rollout edge function maps the trigger DB error to an actionable message.
