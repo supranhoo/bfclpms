@@ -108,6 +108,16 @@ async function processOneUser(
             `Email already linked to a different auth account: ${msg}`
           );
         }
+        if (/database error creating new user/i.test(msg)) {
+          // Almost always caused by a side-effect trigger on auth.users
+          // (e.g. handle_new_user) raising on duplicate keys when the
+          // profile already exists. See POLICY §114 / BUG-045.
+          throw new Error(
+            `Auth provisioning failed (DB trigger error): ${msg}. ` +
+              `If this is a backfilled employee, ensure handle_new_user() ` +
+              `uses ON CONFLICT DO NOTHING for profiles and user_roles.`
+          );
+        }
         throw new Error(`Auth provisioning failed: ${msg}`);
       }
       authAction = "created";

@@ -1063,3 +1063,44 @@ describe('BUG-044: password-rollout auto-provisions missing auth users', () => {
     expect(src).toMatch(/auth_action/);
   });
 });
+
+// BUG-045: After BUG-044, auth.admin.createUser still failed with the generic
+// "Database error creating new user" because the handle_new_user() trigger
+// did blind INSERTs into public.profiles / public.user_roles and raised a
+// duplicate-key error for backfilled employees (profile already exists).
+// Fix: trigger must be idempotent (ON CONFLICT DO NOTHING) and the edge
+// function must surface a clearer error if the same DB-trigger failure
+// reappears in the future.
+describe('BUG-045: handle_new_user trigger is idempotent for backfilled employees', () => {
+  it('Migration uses ON CONFLICT DO NOTHING for profiles insert in handle_new_user', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const dir = 'supabase/migrations';
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.sql'));
+    const hits = files
+      .map((f) => fs.readFileSync(path.join(dir, f), 'utf-8'))
+      .filter((src) => /CREATE OR REPLACE FUNCTION public\.handle_new_user/i.test(src));
+    expect(hits.length, 'handle_new_user migration not found').toBeGreaterThan(0);
+    const latest = hits[hits.length - 1];
+    expect(latest).toMatch(/INSERT INTO public\.profiles[\s\S]*?ON CONFLICT \(id\) DO NOTHING/i);
+  });
+
+  it('Migration uses ON CONFLICT DO NOTHING for user_roles default-role insert', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const dir = 'supabase/migrations';
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.sql'));
+    const hits = files
+      .map((f) => fs.readFileSync(path.join(dir, f), 'utf-8'))
+      .filter((src) => /CREATE OR REPLACE FUNCTION public\.handle_new_user/i.test(src));
+    const latest = hits[hits.length - 1];
+    expect(latest).toMatch(/INSERT INTO public\.user_roles[\s\S]*?ON CONFLICT \(user_id, role\) DO NOTHING/i);
+  });
+
+  it('password-rollout surfaces an actionable message for the trigger DB error', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('supabase/functions/password-rollout/index.ts', 'utf-8');
+    expect(src).toMatch(/database error creating new user/i);
+    expect(src).toMatch(/DB trigger error/i);
+  });
+});

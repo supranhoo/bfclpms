@@ -22,6 +22,7 @@ For the `password-rollout` edge function (and any future equivalent):
 - Calling `updateUserById` blindly (fails with "User not found" for backfilled employees — BUG-044).
 - Minting a new auth id (orphans every FK keyed on profile.id).
 - Relying on a separate "create login" tool — Password Rollout is the canonical first-login provisioning path.
+- Writing the `handle_new_user()` trigger with blind `INSERT` into `public.profiles` / `public.user_roles` — for backfilled employees this raises a duplicate key inside the auth transaction, which Supabase surfaces as the generic "Database error creating new user" (BUG-045). The trigger MUST use `ON CONFLICT (id) DO NOTHING` for `public.profiles` and `ON CONFLICT (user_id, role) DO NOTHING` for `public.user_roles` so backfilled HR data is never overwritten and createUser stays idempotent.
 
 ## Eligibility
 
