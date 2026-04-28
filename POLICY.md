@@ -1952,3 +1952,19 @@ The non-canonical literals `l1_review`, `auditor_review`, and `skip_level_review
 **Regression coverage.** `BUG-039` in `src/test/bugBountyFixes.test.ts` pins (a) the removal of `fetchAllPaged` over `review_submissions` inside `exportKpiData`, (b) the presence of `.in('kpi_id', batch)` calls, and (c) a bounded `SUBMISSION_BATCH` constant.
 
 `BUG-039` is the canonical anchor for this rule.
+
+## §111 — Sidebar Visibility Mirrors Route Guards for Ownership-Gated Pages (v2.66.7.42)
+
+**Rule.** When a route is protected by a stricter guard than role membership (e.g., `DataOwnerRoute`, `ReportRoute`, or any guard that validates per-row ownership/assignment), the sidebar entry for that route MUST apply the same predicate. It MUST NOT rely solely on `useMenuAccess.canAccess()`, because role-default `allowed_roles` will admit users who are then immediately redirected away.
+
+**Background — BUG-040.** `AppSidebar.tsx` gated the Data Entry group with `return isDataOwner || true`, a dead short-circuit. Every non-admin role in the menu's `allowed_roles` saw the item and was bounced by `DataOwnerRoute`.
+
+**Enforcement.**
+1. Identify any route wrapped in a guard stricter than `ProtectedRoute(roles=...)` — e.g. `DataOwnerRoute`, custom data-scope guards.
+2. The sidebar's `filterByRole` for that item MUST AND-combine `canAccess(menuKey)` with the same ownership/assignment predicate the guard uses (or a cheap proxy such as the `useIsAnyOrg…Owner` hook).
+3. Per-user overrides from `menu_access_user_overrides` are an acceptable secondary admit path and SHOULD be honored.
+4. Code review checklist: any expression of the form `<ownerSignal> || true` or `<ownerSignal> ?? true` is forbidden.
+
+**Regression coverage.** `BUG-040` in `src/test/bugBountyFixes.test.ts` pins the absence of `isDataOwner || true` in `AppSidebar.tsx` and the presence of both `isDataOwner` and `userOverrides` references.
+
+`BUG-040` is the canonical anchor for this rule.
