@@ -846,3 +846,47 @@ describe('BUG-037: Notification recipient guard for non-login users', () => {
     expect(sql).toMatch(/EXISTS \(SELECT 1 FROM auth\.users au WHERE au\.id = ur\.user_id\)/);
   });
 });
+
+// BUG-038: PMS Scorecard "Export Current Data" statement timeout fix.
+// Refactor must keep paginated queries ordered + decouple lookup tables
+// from the heavy nested join that previously timed out on 9k+ KPIs.
+describe('BUG-038: PMS Export uses ordered, lookup-decoupled pagination', () => {
+  it('exportKpiData paginates kpis with .order() and no nested profiles join', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/pages/admin/ImportData.tsx', 'utf-8');
+
+    // Locate the exportKpiData function body.
+    const fnMatch = src.match(/const exportKpiData = async[\s\S]*?XLSX\.writeFile\(wb, `kpis_export_/);
+    expect(fnMatch, 'exportKpiData not found').toBeTruthy();
+    const fn = fnMatch![0];
+
+    // Heavy nested join must be gone (this is the timeout cause).
+    expect(fn).not.toMatch(/profiles!kpis_employee_id_fkey\s*\(/);
+    expect(fn).not.toMatch(/kra_categories\s*\(\s*name\s*\)/);
+
+    // Must use fetchAllPaged + .order(...) for kpis pagination.
+    expect(fn).toMatch(/fetchAllPaged/);
+    expect(fn).toMatch(/\.from\(['"]kpis['"]\)[\s\S]*?\.order\(/);
+
+    // Lookup tables resolved via .in() instead of nested joins.
+    expect(fn).toMatch(/\.from\(['"]profiles['"]\)[\s\S]*?\.in\(['"]id['"]/);
+    expect(fn).toMatch(/\.from\(['"]departments['"]\)[\s\S]*?\.in\(['"]id['"]/);
+    expect(fn).toMatch(/\.from\(['"]business_units['"]\)[\s\S]*?\.in\(['"]id['"]/);
+    expect(fn).toMatch(/\.from\(['"]divisions['"]\)[\s\S]*?\.in\(['"]id['"]/);
+    expect(fn).toMatch(/\.from\(['"]kra_categories['"]\)[\s\S]*?\.in\(['"]id['"]/);
+  });
+
+  it('exportEmployeeData paginates profiles with .order() and decouples department joins', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/pages/admin/ImportData.tsx', 'utf-8');
+
+    const fnMatch = src.match(/const exportEmployeeData = async[\s\S]*?XLSX\.writeFile\(wb, `employees_export_/);
+    expect(fnMatch, 'exportEmployeeData not found').toBeTruthy();
+    const fn = fnMatch![0];
+
+    expect(fn).not.toMatch(/departments!profiles_department_fk\s*\(/);
+    expect(fn).toMatch(/fetchAllPaged/);
+    expect(fn).toMatch(/\.from\(['"]profiles['"]\)[\s\S]*?\.order\(/);
+    expect(fn).toMatch(/\.from\(['"]departments['"]\)[\s\S]*?\.in\(['"]id['"]/);
+  });
+});
