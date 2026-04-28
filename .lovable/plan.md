@@ -1,53 +1,95 @@
-## Investigation result
+## Goal
 
-The gap of **3 KPIs (595 − 592)** in the HR PMS dashboard for **March 2026** is fully isolated to one employee:
+You're right — the **Monthly Scorecard Report** currently only supports a single month (e.g. "April 2026"). To view the **monthly score trend per employee**, we'll add a **range mode** so you can pick a "From" and "To" period and see one row per employee with a column for each month in between.
 
-**Lekh Raj — Employee Code 101959**
+## Risk & Impact Report
 
-| # | KRA | KPI | Status | hr_pms_score | is_na | auto_advance_reason |
-|---|---|---|---|---|---|---|
-| 1 | Employee Wellness & Health Promotion | Health Education Program Outreach | `approved` | NULL | false | "Scored by Admin on behalf of hr_pms" |
-| 2 | Statutory Compliance | On-Time Submission of Accident/Occupational Disease Reports | `approved` | NULL | false | "Scored by Admin on behalf of hr_pms" |
-| 3 | Training & Development | Continuing Medical Education (CME) for Medical Staff | `approved` | NULL | false | "Scored by Admin on behalf of hr_pms" |
+- **Data Impact**: None. Read-only — just queries `kpis` + `review_submissions` for the extra months.
+- **Workflow Impact**: None. No changes to permissions or review processes.
+- **UI/UX**: Adds a "View Mode" toggle (Single Month / Date Range). Default stays **Single Month** — existing users see no change unless they pick Range.
+- **Regression Risk**: Low. Range mode runs in a separate code path; single-month rendering, exports, and PDF preview remain untouched.
+- **Mitigation**: Range mode is gated behind the toggle; existing Excel/PDF export logic is preserved for single-month; range mode gets its own simpler Excel export.
 
-### Root cause
+## What Will Change
 
-An Admin used "score on behalf of HR PMS" on these 3 KPIs and advanced them through to `approved` **without writing an `hr_pms_score` value and without setting `is_na = true`**. Lekh Raj's other 19 March-2026 KPIs were correctly N/A-stamped by the same code path (those rows credit toward the 592 reviewed). Counter logic is correct — the data itself is incomplete for these 3.
+### 1. New "View Mode" toggle
+At the top of `MonthlyScorecardReport.tsx`, add a Tabs control:
+- **Single Month** (current behavior — preserved 100%)
+- **Date Range (Trend View)** — new
 
-This is a write-side gap in the admin-on-behalf flow that lets a KPI exit the `hr_pms_review` stage with neither score nor N/A flag.
+### 2. Range mode UI
+When Range is selected:
+- **From Month / Year** + **To Month / Year** dropdowns (replaces the single Month/Year row)
+- Default range = last 6 months ending at current month
+- Quick presets: **Last 3 / 6 / 12 Months**
+- Search box and Company filter remain
 
-## Risk & impact report
+### 3. Range mode grid
+A new `<MonthlyTrendTable>` rendering:
 
-- **Data impact**: 3 `review_submissions` rows need backfill; one workflow `kpis` row each may need a status review. No schema change.
-- **Workflow impact**: KPIs are already `approved` — repair must not regress them. Final-score immutability (POLICY §72/§80) must be respected. No `final_score` is set on these rows, so no immutable value is at risk.
-- **UI impact**: After repair, "HR PMS Reviewed" rises from 592 → 595, matching "Total KPIs" for the period.
-- **Regression risk**: Low if repair is scoped to these 3 kpi_ids. Higher if we change the on-behalf write path without tests.
+```text
+Employee          Dept          Jan  Feb  Mar  Apr  May  Jun   Avg   Trend
+Sanjay K. Dubey   3X100 TPD    3.8  4.0  4.1  4.2  4.0  4.3   4.07   ↑
+Chandan Pandit    BFCL-BE      3.5  3.4  3.2  3.0  3.1  2.9   3.18   ↓
+...
+```
 
-## Two arms — your choice required
+- Each cell shows the weighted **Final score** for that employee in that month (using the canonical 8-stage fallback chain — same `getBestScore` used in `PreviousMonthsScoreMini.tsx` and `useKpiEmployeeMatrix.ts`).
+- **Avg** column = average of available months.
+- **Trend arrow**: compares last vs first available month (↑ green / ↓ red / → gray).
+- Empty months render as `-`.
+- Color-coded cells (green ≥80%, yellow ≥60%, red <60% — matches existing convention).
 
-### Arm A: Data repair only (fast, surgical)
+### 4. Range mode Excel export
+Single sheet with columns: Employee Code, Name, Designation, Department, Company, then one column per month in range, then Avg + Trend direction. Filename: `Monthly_Trend_<FromMon>-<ToMon>_<Year>.xlsx`.
 
-1. **Migration `repair_lekh_raj_march_2026_hr_pms_gap.sql`** — set `is_na = true`, `na_marked_by_role = 'admin'`, refresh `auto_advance_reason` to `"Repaired: admin advanced past HR PMS without scoring (BUG-047)"` for the 3 specific kpi_ids. Idempotent (only updates rows still matching the broken signature).
-2. **Insert audit rows** into `kpi_audit_logs` with `performed_by = NULL` (per memory: automated actions = system-attributed).
-3. **DOCUMENTATION.md** bump to v2.66.7.49; **POLICY.md** §116 — "Admin-on-Behalf must write a score or N/A flag".
+### 5. Range mode PDF
+Out of scope for this iteration (single-month detailed PDF stays as-is). A simple "Export Excel" is enough for trend analysis. We can add a landscape PDF later if needed.
 
-### Arm B: Repair + permanent guardrail (recommended)
+## Technical Implementation
 
-Everything in Arm A, plus:
+### New hook: `useMonthlyTrend.ts`
+```typescript
+useMonthlyTrend({ fromMonth, fromYear, toMonth, toYear, companyFilter })
+  → { employees: Array<{ id, name, code, dept, designation,
+                         monthlyScores: Record<"Jan 2026", number|null>,
+                         avg, trend: 'up'|'down'|'flat' }> }
+```
+- Builds the list of `(month, year)` tuples between From and To.
+- For each tuple, fetches `kpis` (paged 1000) + `review_submissions` (batched 500) — same pattern as `useKpiEmployeeMatrix.ts`.
+- Computes the weighted score per employee per month (excludes `is_na`, weight ≤ 0, null scores) — per `mem://features/review/weighted-score-calculation-logic`.
+- Returns sorted by employee name.
 
-4. **DB trigger `enforce_on_behalf_score_or_na`** on `review_submissions` — when a KPI advances past `hr_pms_review` (or any reviewer stage) via the on-behalf path, raise an exception unless the corresponding stage score column OR `is_na = true` is set. Mirrors the `manager_score / auditor_score / management_score` stages too.
-5. **Client guard** in the admin "Score on behalf of" dialog — disable Submit until a score, rating, or N/A toggle is provided; show inline validation.
-6. **Memory update** — extend `mem/features/admin/admin-data-entry-workflow-controls` with this rule.
-7. **Regression test** in `src/test/bugBountyFixes.test.ts` (BUG-047) — assert the repaired rows credit toward `reviewed`, and assert the trigger rejects empty on-behalf submissions.
+### Component changes
+- `src/pages/reports/MonthlyScorecardReport.tsx` — add view mode state, conditionally render existing UI vs new `<MonthlyTrendView>`.
+- `src/components/reports/MonthlyTrendView.tsx` (new) — range pickers, presets, table, Excel export.
+- `src/components/reports/MonthlyTrendTable.tsx` (new) — the grid + trend arrows.
+- `src/hooks/useMonthlyTrend.ts` (new) — data hook.
 
-## Files touched (Arm B)
+### Performance
+- Reuses 5-min staleTime React Query cache.
+- Range capped at **12 months** to keep payload reasonable.
+- Uses paginated fetch (1000 rows/page) for `kpis` table.
 
-- new migration `supabase/migrations/<ts>_bug047_hr_pms_onbehalf_guardrail.sql`
-- `src/components/admin/...` (the on-behalf dialog component — to be located during implementation)
-- `src/test/bugBountyFixes.test.ts`
-- `POLICY.md`, `DOCUMENTATION.md`
-- `mem/features/admin/admin-data-entry-workflow-controls`
+### Consistency with existing code
+- Score fallback uses the same `getBestScore` chain already in `PreviousMonthsScoreMini.tsx` and `useKpiEmployeeMatrix.ts`.
+- Excludes `is_na` submissions per universal scoring rules.
+- Color thresholds match `PreviousMonthsScoreMini.tsx` (80% / 60%).
 
-## Decision needed
+## Documentation & Tests
 
-Reply with **A** (data repair only), **B** (repair + permanent guardrail — recommended), or describe a different preference. Once approved I'll implement in default mode.
+- **DOCUMENTATION.md** — add a "Monthly Trend View" section under Monthly Scorecard Report (v2.66.7.50).
+- **POLICY.md** — no policy change required (read-only view following existing scoring rules).
+- **Unit tests** — `src/test/monthlyTrend.test.ts`:
+  - Builds correct month list for cross-fiscal-year ranges (e.g. Oct 2025 → Mar 2026).
+  - Excludes N/A KPIs from weighted average.
+  - Trend arrow correct for up/down/flat.
+  - Caps range at 12 months.
+
+## Out of Scope (for now)
+
+- Trend line chart (sparkline) — can be a follow-up if you want a visual line per employee.
+- Department/Category drill-down inside the trend grid.
+- Range PDF export.
+
+If this looks right, approve and I'll implement it. If you'd also like a **mini sparkline chart per employee row** in the trend grid, say so and I'll add it.
