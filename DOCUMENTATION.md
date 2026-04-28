@@ -5602,3 +5602,27 @@ Role-default access is intentionally insufficient because `DataOwnerRoute` will 
 **Policy**: POLICY.md §111 — sidebar visibility for ownership-gated routes MUST mirror the route guard; never rely on role-default `canAccess` when a stricter route-level guard exists.
 
 **Files**: `src/components/layout/AppSidebar.tsx`, `src/test/bugBountyFixes.test.ts`.
+
+## v2.66.7.43 — DataOwnerRoute Honors Per-User Overrides & Profile Rights (BUG-041) (2026-04-28)
+
+**Reported by**: Vivek.
+
+**Problem**: After BUG-040 fixed the **Data Entry** sidebar gate (admit on data ownership OR per-user override), the route guard at `src/components/layout/DataOwnerRoute.tsx` was still the pre-override version: it admitted only `effectiveRole === 'admin'` or `isDataOwner`. An admin could grant a non-owner explicit access through `menu_access_user_overrides` (or via an access profile with `can_view = true` on `data-entry`), the sidebar would correctly show the Org KPI Data Entry link, but clicking it bounced the user to `/dashboard`. The override path was half-implemented across two files.
+
+**RCA**: Single-source-of-truth violation. The admit policy was duplicated between sidebar filter and route guard, and the route guard was never updated when the user-override and profile-rights layers were added to `useMenuAccess`.
+
+**Fix**: Expanded `DataOwnerRoute` to consult `useMenuAccess` and admit any of:
+1. `effectiveRole === 'admin'`
+2. `isDataOwner` (existing)
+3. Per-user override row for `(menu_key='data-entry', user_id=current)` in `menu_access_user_overrides`
+4. Profile-based `can_view = true` on `data-entry` (`canPerform('data-entry', 'view')`)
+
+The loading guard now also waits on `useMenuAccess.isLoading` to avoid a premature redirect on first paint while overrides/profile-rights are still loading. For symmetry, `AppSidebar.tsx` also admits Layer-2 profile view rights so the sidebar set strictly equals the route set.
+
+Role-default `canAccess` admit is intentionally still excluded — that is what caused BUG-040, and the same policy applies here (POLICY.md §111).
+
+**Verification**: `bunx vitest run src/test/bugBountyFixes.test.ts` → **82 / 82 pass**. BUG-041 adds two assertions: (a) `DataOwnerRoute.tsx` imports `useMenuAccess`, references the `'data-entry'` key, calls `canPerform(..., 'view')`, walks `userOverrides.some(...)`, and waits on `menuLoading`; (b) `AppSidebar.tsx` Data Entry filter also calls `canPerform(item.menuKey, 'view')`.
+
+**Policy**: POLICY.md §111 extended — sidebar admit set and route admit set MUST be equal for ownership-gated routes. Any admit predicate added to one MUST be added to the other in the same change.
+
+**Files**: `src/components/layout/DataOwnerRoute.tsx`, `src/components/layout/AppSidebar.tsx`, `src/test/bugBountyFixes.test.ts`.

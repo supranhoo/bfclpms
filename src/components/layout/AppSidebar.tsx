@@ -142,7 +142,7 @@ export function AppSidebar() {
   const { data: unreadNotificationCount } = useUnreadNotificationCount();
   const { data: appSettings } = useAppSettings();
   const { data: isDataOwner } = useIsAnyOrgKpiDataOwner();
-  const { canAccess, userOverrides } = useMenuAccess();
+  const { canAccess, canPerform, userOverrides } = useMenuAccess();
 
   const policyVisibleRoles = appSettings?.pms_policy_visible_roles || ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms'];
   const menuItems = getStaticMenuItems(policyVisibleRoles);
@@ -319,7 +319,9 @@ export function AppSidebar() {
               const hasUserOverride = !!profile?.id && userOverrides.some(
                 o => o.menu_key === item.menuKey && o.user_id === profile.id
               );
-              return Boolean(isDataOwner) || hasUserOverride;
+              // BUG-041: parity with DataOwnerRoute — also admit profile-based view rights.
+              const hasProfileViewRight = canPerform(item.menuKey, 'view');
+              return Boolean(isDataOwner) || hasUserOverride || hasProfileViewRight;
             });
           }}
           currentPath={location.pathname + location.search}
