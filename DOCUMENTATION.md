@@ -5311,6 +5311,21 @@ This section records architectural patterns that have been audited and intention
 
 **Regression Coverage.** `src/test/bugBountyFixes.test.ts` adds **BUG-019** — pins the contract that every role string referenced in SQL or edge-function code must exist in `ALL_APP_ROLES`, and explicitly rejects the historical `audit_lead` typo.
 
+### v2.66.7.45 — KPI Mapping Matrix Coverage Truncation (BUG-043) (2026-04-28)
+
+**Root Cause.** `src/hooks/useAdminReports.ts::useKpiMappingMatrix` issued an unranged `supabase.from('profiles').select(...).order('full_name')` to load the employee roster for `/admin/kpi-mapping`. PostgREST silently caps unranged reads at 1000 rows; the active roster is ~2,533 profiles. The matrix only saw the first ~996 active employees alphabetically, every cascading filter operated on a truncated denominator, and the Coverage % stat was systematically under-reported. The sibling KPI fetch in the same hook was already batched manually — only the profiles query was missed when POLICY §94 was rolled out.
+
+**Fix.** Wrapped the profiles query in `fetchAllPaged()` from `src/lib/fetchAll.ts` (the project-standard helper used by every other §94-compliant picker). Same SELECT shape; same in-memory `is_active !== false` filter; the only behavioural change is that all ~2,533 active rows are now visible to the matrix.
+
+**Regression Coverage.** `src/test/bugBountyFixes.test.ts::BUG-043` pins (a) `useAdminReports.ts` imports `fetchAllPaged`, (b) the `kpi-mapping-profiles` queryFn block uses both `fetchAllPaged` and `.range(...)`. POLICY §94 Addendum extended with an enumerated list of compliant paged-fetch sites so future hooks reading `profiles` as a list cannot silently regress.
+
+**Risk & Impact.**
+- *Data Impact*: None. Read-only query, identical SELECT shape, RLS unchanged.
+- *Workflow Impact*: Coverage %, "mapped employees", and grade/designation cascades on `/admin/kpi-mapping` now reflect the full active roster.
+- *UI/UX*: No visual change. Existing pagination spans the real dataset.
+- *Performance*: ~3 paged requests instead of 1 (≈2.5k rows). React Query caches across mounts.
+- *Regression Risk*: Very low — single helper swap, no schema or business-logic changes.
+
 **Risk & Impact.**
 - *Data Impact*: None — trigger function only.
 - *Workflow Impact*: Restores manager Approve. Auditor "ready for audit" notifications continue to fire.
