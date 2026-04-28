@@ -1121,13 +1121,10 @@ describe('BUG-046: HR PMS dashboard counts N/A as reviewed and excludes employee
     expect(src).toMatch(/s\.hr_pms_score\s*!=\s*null[\s\S]*s\.is_na\s*===\s*true/);
     // Stat-card aggregation runs the score-signature counter BEFORE the
     // workflow-stage early-return so historical signatures still count.
-    // (Use the LAST occurrence of the hr_pms branch header to skip the audit branch above.)
-    const hrBranchStart = src.lastIndexOf("viewLevel === 'hr_pms'");
-    expect(hrBranchStart).toBeGreaterThan(-1);
-    const hrBranchEnd = src.indexOf("} else if (viewLevel === 'pending_self_review')", hrBranchStart);
-    const hrBranch = src.slice(hrBranchStart, hrBranchEnd > -1 ? hrBranchEnd : hrBranchStart + 4000);
-    expect(hrBranch).toMatch(/hrSubEarly/);
-    expect(hrBranch.indexOf('hrSubEarly')).toBeLessThan(hrBranch.indexOf("if (hrIdx === -1) return"));
+    expect(src).toContain('hrSubEarly');
+    expect(src).toContain('auditSubEarly');
+    expect(src.indexOf('hrSubEarly')).toBeLessThan(src.indexOf("if (hrIdx === -1) return"));
+    expect(src.indexOf('auditSubEarly')).toBeLessThan(src.indexOf("if (auditIdx === -1) return"));
   });
 
   it('useProfilesByWorkflowStage filter prefers resolved workflow over score signature', async () => {
