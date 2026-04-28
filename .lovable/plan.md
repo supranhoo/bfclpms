@@ -1,85 +1,116 @@
-# Fix: Data Entry Sidebar Gate (AppSidebar.tsx)
+# Fix: DataOwnerRoute Honors Per-User Menu Overrides (BUG-041)
 
 ## Problem (Confirmed)
 
-`src/components/layout/AppSidebar.tsx` line 314:
+Three pieces of the Org KPI Data Entry access chain disagree:
 
-```ts
-if (item.menuKey && canAccess(item.menuKey)) return isDataOwner || true;
-```
+| Layer | File | Behavior |
+|---|---|---|
+| Override storage | `src/hooks/useMenuAccess.ts` | Loads `menu_access_user_overrides` keyed by `(menu_key, user_id)`. |
+| Sidebar (just fixed in BUG-040) | `src/components/layout/AppSidebar.tsx` line 309 | Shows **Data Entry** when `isDataOwner` OR a per-user override on `menuKey="data-entry"` exists. |
+| Route guard | `src/components/layout/DataOwnerRoute.tsx` line 25 | Only admits `admin` or `isDataOwner`. **Ignores overrides.** Redirects everyone else to `/dashboard`. |
 
-The `|| true` short-circuits the `isDataOwner` check, making it dead code. Result: every non-admin role listed in `roles: ['employee', 'manager', 'auditor', 'management', 'hr_pms']` (line 108) sees the **Data Entry → Org KPI Data Entry** menu item, but `DataOwnerRoute` (`src/components/layout/DataOwnerRoute.tsx` line 13, wired in `App.tsx` line 213) immediately redirects non-owners to `/dashboard`. Broken UX: menu visible → click → bounce.
+Net effect: an admin can grant a non-owner explicit access via the user-override table, the sidebar dutifully shows the link, but clicking it bounces the user to `/dashboard`. The override path is half-implemented.
 
 ## Root Cause
 
-A logic typo (`|| true`) bypassing the intended guard. The comment ("require isDataOwner OR have a user override") describes the correct intent.
+`DataOwnerRoute` was written before the user-override layer existed and was not revisited when overrides became part of the Data Entry admit policy. Single-source-of-truth violation between sidebar gate and route guard.
 
 ## Fix
 
-Replace the dead check so the menu shows only when the user can actually use the page:
+Make `DataOwnerRoute` consult the same admit signals the sidebar uses, so a user is admitted iff:
 
-- They are an org KPI data owner (`isDataOwner`), **OR**
-- They have an explicit per-user override or profile-based grant for the `data-entry` menu key.
+1. `effectiveRole === 'admin'`, OR
+2. `isDataOwner` is true, OR
+3. The user has an explicit per-user override on the `data-entry` menu key, OR
+4. The user has profile-based view rights on `data-entry` (Layer 2 of `useMenuAccess`).
 
-Note: `useMenuAccess.canAccess()` returns `true` for any role listed in the menu's `allowed_roles` (DB config or hardcoded fallback), which is exactly why the current short-circuit lets everyone in. We need a stricter signal that the user was *individually* granted access, independent of role-default. We'll source that from the same hook by checking `userOverrides` and `profileRights` directly (both already returned by the existing `useMenuAccess` query layer).
+Conditions 3 and 4 are already exposed by `useMenuAccess` via `canPerform('data-entry', 'view')`, which returns true for: admin, profile-rights `can_view`, or any `canAccess` admit. To stay strict (we don't want role-default admit to leak in here, mirroring BUG-040 reasoning), we'll directly check (a) `userOverrides` for a row matching `(menu_key='data-entry', user_id=user.id)` and (b) the profile-rights map. Both are already loaded by the same hook.
 
-### Code change (single file)
+### Code change (single file, `src/components/layout/DataOwnerRoute.tsx`)
 
-**`src/components/layout/AppSidebar.tsx`** (~line 144 + 309–317)
+```tsx
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { useIsAnyOrgKpiDataOwner } from '@/hooks/useOrgKpiDataOwner';
+import { useMenuAccess } from '@/hooks/useMenuAccess';
+import { Loader2 } from 'lucide-react';
 
-1. Pull `userOverrides` and (optionally) `canPerform` out of `useMenuAccess()`:
-   ```ts
-   const { canAccess, userOverrides } = useMenuAccess();
-   ```
-   Also pull the current `user` from `useAuth()` (already imported via `useAuth()` — `user` field).
+const DATA_ENTRY_MENU_KEY = 'data-entry';
 
-2. Replace the `filterByRole` for the Data Entry group:
-   ```tsx
-   filterByRole={(items) =>
-     items.filter((item) => {
-       if (!effectiveRole) return false;
-       if (effectiveRole === 'admin') return false; // admins see it under Administration
-       if (!item.menuKey) return false;
+export function DataOwnerRoute({ children }: { children: React.ReactNode }) {
+  const { user, effectiveRole, loading: authLoading } = useAuth();
+  const { data: isDataOwner, isLoading: ownerLoading } = useIsAnyOrgKpiDataOwner();
+  const { userOverrides, canPerform, isLoading: menuLoading } = useMenuAccess();
 
-       const hasUserOverride = !!user && userOverrides.some(
-         (o) => o.menu_key === item.menuKey && o.user_id === user.id
-       );
+  if (authLoading || ownerLoading || menuLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
-       // Show only if user is a data owner OR has an explicit per-user override.
-       // Role-default access is intentionally NOT sufficient here, because
-       // DataOwnerRoute will redirect non-owners away.
-       return Boolean(isDataOwner) || hasUserOverride;
-     })
-   }
-   ```
+  if (effectiveRole === 'admin') return <>{children}</>;
+  if (isDataOwner) return <>{children}</>;
 
-3. Leave `DataOwnerRoute` and `useIsAnyOrgKpiDataOwner` unchanged — they remain the authoritative server-side guard.
+  // Per-user explicit override (admin granted this user access)
+  const hasUserOverride = !!user?.id && userOverrides.some(
+    o => o.menu_key === DATA_ENTRY_MENU_KEY && o.user_id === user.id
+  );
+  if (hasUserOverride) return <>{children}</>;
+
+  // Profile-based view right (admin granted via access profile)
+  if (canPerform(DATA_ENTRY_MENU_KEY, 'view')) return <>{children}</>;
+
+  return <Navigate to="/dashboard" replace />;
+}
+```
+
+Notes:
+- We add `menuLoading` to the loader gate so we don't redirect prematurely while `userOverrides` / `profileRights` are still fetching (otherwise overridden users would briefly fail the check on first paint).
+- `canPerform` for non-admins only returns true when the profile right's `can_view` is true (it does NOT fall through to role-default for actions other than `view` admit). We accept that profile-`view`=true grants route access — same policy as the sidebar after BUG-040.
+
+### Sidebar parity tweak (consistency)
+
+`AppSidebar.tsx` Data Entry filter (post-BUG-040) currently checks only `isDataOwner || hasUserOverride`. To keep the sidebar and route admit policies symmetric, also admit when the profile grants `can_view` on `data-entry`:
+
+```ts
+return Boolean(isDataOwner) || hasUserOverride || canPerform('data-entry', 'view');
+```
+
+(`canPerform` is already returned by `useMenuAccess`; just destructure it.)
 
 ## Risk & Impact Report
 
-- **Data Impact**: None. UI-only filter change.
-- **Workflow Impact**: Non-owner users (employee/manager/auditor/management/hr_pms) will no longer see the Data Entry sidebar item. This matches existing route behavior (they were already being redirected). True data owners and admins are unaffected.
-- **UI/UX Consistency**: Eliminates the misleading menu → redirect loop. Sidebar now reflects reality.
-- **Regression Risk**: Low. The change is scoped to one `filterByRole` callback. Admins keep their entry under Administration (line 87). Per-user overrides continue to work.
-- **Mitigation**: Add a unit test (below) and verify both paths (owner shown, non-owner hidden, override-granted shown).
+- **Data Impact**: None. UI-only access policy alignment.
+- **Workflow Impact**: Users who were granted explicit overrides or profile-based view rights on `data-entry` can now actually reach `/admin/org-kpi-data` (previously bounced). No new users gain access beyond what an admin already explicitly configured. RLS at the database remains the authoritative server-side guard for what they can read/write on the page.
+- **UI/UX Consistency**: Sidebar and route now share one admit policy — no more menu-shows-but-redirects loop in the override direction.
+- **Regression Risk**: Low.
+  - Admins: unchanged (early return).
+  - Data owners: unchanged.
+  - Non-owners with no override / no profile view right: unchanged (still redirected).
+  - Loading: now waits for `useMenuAccess` to settle (one extra short query already fired by the sidebar layout, so it's typically cached and adds no measurable delay).
+- **Mitigation**: Regression test (BUG-041) below pins the new admit predicates.
 
 ## SSOT / Documentation Sync
 
-- `DOCUMENTATION.md` — bump version, add entry under Version History describing the fix.
-- `POLICY.md` — under the menu access / data ownership section, add a one-liner: "Sidebar visibility for Data Entry mirrors `DataOwnerRoute`: data owners OR explicit per-user overrides only; role-default is insufficient."
-- `mem/features/admin/menu-access-rights` — append note that Data Entry group is governed by ownership, not role defaults.
+- `DOCUMENTATION.md` — new `v2.66.7.43` entry under Version History describing BUG-041 and the symmetric admit policy.
+- `POLICY.md` §111 — extend the rule statement: "When a route is gated by ownership, the route guard MUST admit the same set the sidebar admits (data owner OR explicit per-user override OR profile-based view right). Admit predicates must live in a single shared helper or the same hook (`useMenuAccess`) and never drift between sidebar and route."
+- `mem/index.md` — the existing **Profile-Based Menu Access** entry already covers Layer 2; no new memory file needed.
 
 ## Tests
 
-Add to `src/test/bugBountyFixes.test.ts` (BUG-040):
+Add to `src/test/bugBountyFixes.test.ts` (BUG-041) — keep the static-source assertion style consistent with BUG-038 / 039 / 040:
 
-- Assert the source of `AppSidebar.tsx` no longer contains `isDataOwner || true`.
-- Assert it references both `isDataOwner` and `userOverrides` inside the Data Entry filter block.
-
-(A behavioral RTL test for the sidebar would require mounting providers; the static guard above is the cheapest regression net consistent with the existing bugBountyFixes pattern.)
+- Source of `DataOwnerRoute.tsx` references `useMenuAccess`, `userOverrides`, and the literal `'data-entry'` menu key.
+- It calls `canPerform('data-entry', 'view')`.
+- It still includes the `isDataOwner` and `effectiveRole === 'admin'` admit branches.
+- Loading guard includes `menuLoading` (or equivalent destructured `isLoading` from `useMenuAccess`).
 
 ## Files Touched
 
-- `src/components/layout/AppSidebar.tsx` (logic fix)
-- `src/test/bugBountyFixes.test.ts` (regression test)
-- `DOCUMENTATION.md`, `POLICY.md`, `mem/index.md`, `mem/features/admin/menu-access-rights` (SSOT sync)
+- `src/components/layout/DataOwnerRoute.tsx` (admit policy expansion)
+- `src/components/layout/AppSidebar.tsx` (one-line parity tweak: also admit on profile view right)
+- `src/test/bugBountyFixes.test.ts` (BUG-041 regression test)
+- `DOCUMENTATION.md`, `POLICY.md` (SSOT sync)
