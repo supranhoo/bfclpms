@@ -5626,3 +5626,27 @@ Role-default `canAccess` admit is intentionally still excluded — that is what 
 **Policy**: POLICY.md §111 extended — sidebar admit set and route admit set MUST be equal for ownership-gated routes. Any admit predicate added to one MUST be added to the other in the same change.
 
 **Files**: `src/components/layout/DataOwnerRoute.tsx`, `src/components/layout/AppSidebar.tsx`, `src/test/bugBountyFixes.test.ts`.
+
+## v2.66.7.44 — PMS Policy Menu Honors `pms_policy_visible_roles` (BUG-042) (2026-04-28)
+
+**Reported by**: Vivek.
+
+**Problem**: PMS Policy visibility had two competing sources of truth:
+1. `app_settings.pms_policy_visible_roles` — the canonical column the admin toggles from the PMS Policy page (checkboxes at line 39–45) and the field the page guard already consulted at `src/pages/PMSPolicy.tsx` line 35.
+2. `useMenuAccess.canAccess('pms-policy')` — used by the sidebar (`AppSidebar.tsx` line 177–186), which returned **true unconditionally for every signed-in user** because `'pms-policy'` was in `EMPLOYEE_DEFAULT_MENUS` (Layer 1, applied before any role/config check), in `DEFAULT_MENU_ROLES` for all roles (Layer 7 fallback), and in `menu_access_config.allowed_roles` for all roles (Layer 6 DB).
+
+Net effect: an admin removed a role from the PMS Policy visibility config; the role still saw the nav item; clicking bounced them to `/dashboard`.
+
+**RCA**: Single-source-of-truth violation — `useMenuAccess` was unaware of the PMS-Policy-specific `pms_policy_visible_roles` config and instead admitted every authenticated user via the implicit-default Layer 1.
+
+**Fix** (in `src/hooks/useMenuAccess.ts`):
+1. Removed `'pms-policy'` from `EMPLOYEE_DEFAULT_MENUS` (was Layer 1 leak).
+2. Removed the `'pms-policy'` row from `DEFAULT_MENU_ROLES` (was Layer 7 leak).
+3. Added a dedicated branch in `canAccess` that runs **before** the Layer 1–7 cascade: admin always passes; other roles pass only if `effectiveRole ∈ appSettings.pms_policy_visible_roles`; per-user overrides on `pms-policy` are still honored as an admin-granted escape hatch (parity with §111).
+4. Aligned `src/pages/PMSPolicy.tsx` to delegate to `useMenuAccess.canAccess('pms-policy')` instead of repeating the role-list check, so the page guard and sidebar share one admit policy.
+
+**Verification**: `bunx vitest run src/test/bugBountyFixes.test.ts` → **86 / 86 pass**. BUG-042 adds four assertions: (a) `EMPLOYEE_DEFAULT_MENUS` no longer contains `pms-policy`; (b) `DEFAULT_MENU_ROLES` no longer contains `pms-policy`; (c) `useMenuAccess` imports `useAppSettings` and has a dedicated branch keyed on `menuKey === 'pms-policy'` referencing `pms_policy_visible_roles`; (d) `PMSPolicy.tsx` delegates to `useMenuAccess.canAccess('pms-policy')`.
+
+**Policy**: POLICY.md §112 (new) — when a page has its own role-visibility configuration column, `useMenuAccess.canAccess` MUST defer to that column in a dedicated branch and the menu key MUST be removed from `EMPLOYEE_DEFAULT_MENUS`, `MANAGER_DEFAULT_MENUS`, and `DEFAULT_MENU_ROLES`. The page guard MUST delegate to `canAccess`, not duplicate the predicate.
+
+**Files**: `src/hooks/useMenuAccess.ts`, `src/pages/PMSPolicy.tsx`, `src/test/bugBountyFixes.test.ts`.
