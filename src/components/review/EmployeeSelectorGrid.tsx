@@ -491,7 +491,10 @@ export function EmployeeSelectorGrid({
         clearedKraSet,
         scoreReviewed: empKpis.filter(k => {
           const s = submissionScoreMap?.get(k.id);
-          return s != null && s.hr_pms_score != null;
+          // BUG-046 (POLICY §115): N/A approvals at-or-past HR PMS count as reviewed.
+          if (!s) return false;
+          if (s.hr_pms_score != null) return true;
+          return s.is_na === true && doneStatuses.includes(k.status || '');
         }).length,
         orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
         nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
@@ -499,6 +502,8 @@ export function EmployeeSelectorGrid({
     } else if (viewLevel === 'audit') {
       const reviewable = resolveReviewableStatuses('auditor', stages);
       const pendingKpis = [...empKpis.filter(k => reviewable.includes(k.status || '') && k.status !== 'audit'), ...empKpis.filter(k => k.status === 'audit')];
+      const auditIdxLocal = stages.indexOf('audit');
+      const auditDone = auditIdxLocal >= 0 ? stages.slice(auditIdxLocal + 1) : [];
       return {
         badge1: empKpis.filter(k => reviewable.includes(k.status || '') && k.status !== 'audit').length,
         badge2: empKpis.filter(k => k.status === 'audit').length,
@@ -507,7 +512,9 @@ export function EmployeeSelectorGrid({
         clearedKraSet,
         scoreReviewed: empKpis.filter(k => {
           const s = submissionScoreMap?.get(k.id);
-          return s != null && s.auditor_score != null;
+          if (!s) return false;
+          if (s.auditor_score != null) return true;
+          return s.is_na === true && auditDone.includes(k.status || '');
         }).length,
         orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
         nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
