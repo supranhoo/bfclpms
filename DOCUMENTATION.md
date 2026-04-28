@@ -5533,3 +5533,27 @@ Initially shipped a centered overlay tied to user-initiated Refresh clicks on th
 **Policy**: POLICY.md §107 — "Reviewer Self-Exclusion".
 
 **Test**: `src/test/bugBountyFixes.test.ts` → `BUG-036` (5 assertions covering the UI filter, both click guards, the dual `.neq` chain in hooks, and the trigger migration). Full suite: 73/73 passing.
+
+## v2.66.7.39 — Notification Recipient Guard for Non-Login Users (BUG-037) (2026-04-28)
+
+**Defect**: Vivek reported that **Copy KRAs** failed with toast `Copy Failed — insert or update on table "notifications" violates foreign key constraint "notifications_user_id_fkey"` when copying 12 KPIs from `Deepak Ranjan (100739)` to `Rahul Kumar Prasad (101941)` for April 2026.
+
+**RCA**:
+1. Direct DB query confirmed `Rahul Kumar Prasad (id=fa29fcb0-9b45-44b0-88d2-f48ef6104fe6)` has an active `profiles` row but **no `auth.users` row** — i.e., a non-login user (a supported class for offline data tracking; see `mem://features/admin/non-login-user-provisioning`).
+2. The Copy KRAs flow inserts into `public.kpis`, which fires `trigger_notify_kpi_created → notify_on_kpi_created()`, which in turn inserts into `public.notifications` with `user_id = NEW.employee_id`.
+3. `notifications.user_id` is `FOREIGN KEY ... REFERENCES auth.users(id) ON DELETE CASCADE` (verified via `pg_get_constraintdef`). The recipient row does not exist in `auth.users`, so PostgreSQL raised `foreign_key_violation` and rolled back the entire transaction — all 12 KPIs lost.
+4. The same class of failure was latent in `notify_on_kpi_status_change` (send-back to non-login employee, self-review submission by non-login employee, manager approval, auditor fan-out where any auditor lacked an auth row, and finalisation) — every status transition that landed on a non-login user would have aborted the calling write.
+
+**Fix**:
+1. **Pre-check in `notify_on_kpi_created`** — the body now wraps the notification INSERT in `IF EXISTS (SELECT 1 FROM auth.users WHERE id = NEW.employee_id) THEN ... END IF;`, making the no-op explicit for the common single-recipient case.
+2. **Defensive handlers everywhere** — every one of the **5** distinct `INSERT INTO public.notifications` blocks inside `notify_on_kpi_status_change` (send-back, self-review-submitted-to-manager, manager-approval-to-employee, auditor-fan-out, finalisation) is now wrapped in `BEGIN ... EXCEPTION WHEN foreign_key_violation THEN NULL; END;`. Notification delivery is therefore best-effort by construction; no business write can ever be aborted by a missing recipient.
+3. **Auditor fan-out filtering** — the set-based `INSERT ... SELECT ur.user_id FROM user_roles ur WHERE ur.role = 'auditor'` now also requires `EXISTS (SELECT 1 FROM auth.users au WHERE au.id = ur.user_id)`, preventing a single non-login auditor from poisoning the entire audit batch.
+4. **Schema unchanged** — `notifications.user_id` keeps its FK to `auth.users(id) ON DELETE CASCADE`. The policy lives in the trigger layer.
+
+**Verification**: `pg_proc` shows both functions now contain the guards. The Copy KRAs flow that failed is now expected to succeed; the non-login recipient simply receives zero notifications (correct — they have no inbox to read them).
+
+**Policy**: POLICY.md §108 — "Notification Recipient Resolution / Non-Login Guard".
+
+**Test**: `src/test/bugBountyFixes.test.ts` → `BUG-037` (3 assertions: `notify_on_kpi_created` pre-check, INSERT/handler parity in `notify_on_kpi_status_change`, and auditor fan-out auth filter).
+
+**Migration**: `supabase/migrations/20260428044137_3bb989f3-5465-47fc-ad96-2aa0fef12c9e.sql`.
