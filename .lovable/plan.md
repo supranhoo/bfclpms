@@ -1,79 +1,85 @@
-# BUG-039 Plan — Remaining Export Current Data Timeout
+# Fix: Data Entry Sidebar Gate (AppSidebar.tsx)
 
-## Confirmed current failure
-The previous BUG-038 fix removed the heavy nested KPI join, and KPI pages now succeed. The remaining failure is a different query in the same export flow:
+## Problem (Confirmed)
 
-```text
-GET /review_submissions?...&order=kpi_id.asc&offset=0&limit=1000
-Status 500
-message: canceling statement due to statement timeout
-```
-
-So the export still fails when fetching `review_submissions`, not while fetching `kpis`.
-
-## Root cause
-`review_submissions` has 7,550 rows and its SELECT policies contain role/relationship checks that repeatedly consult `kpis`/`profiles` for each row. Even though the query is ordered by `kpi_id`, asking for all submissions through normal client RLS still exceeds the backend statement timeout on the first page.
-
-The earlier test covered KPI nested joins but did not protect the `review_submissions` page size / RLS-heavy export path.
-
-## Fix approach
-
-### 1. Stop exporting all submissions directly
-Change `exportKpiData()` so it does not run a broad paged query on `review_submissions`.
-
-Instead, after the KPI rows are fetched, fetch submissions in small `kpi_id IN (...)` batches:
+`src/components/layout/AppSidebar.tsx` line 314:
 
 ```ts
-for (const batch of chunk(allKpiIds, 100)) {
-  await supabase
-    .from('review_submissions')
-    .select('...needed columns...')
-    .in('kpi_id', batch)
-    .order('kpi_id');
-}
+if (item.menuKey && canAccess(item.menuKey)) return isDataOwner || true;
 ```
 
-This keeps every statement bounded and uses the existing `review_submissions.kpi_id` index.
+The `|| true` short-circuits the `isDataOwner` check, making it dead code. Result: every non-admin role listed in `roles: ['employee', 'manager', 'auditor', 'management', 'hr_pms']` (line 108) sees the **Data Entry → Org KPI Data Entry** menu item, but `DataOwnerRoute` (`src/components/layout/DataOwnerRoute.tsx` line 13, wired in `App.tsx` line 213) immediately redirects non-owners to `/dashboard`. Broken UX: menu visible → click → bounce.
 
-### 2. Reduce risky page sizes
-Use a smaller export-safe page size for KPI and submission-related reads where needed:
-- KPI pages: keep 500 or reduce to 250 if testing shows it is safer.
-- Submission lookup batches: start with 100 KPI IDs per query.
+## Root Cause
 
-### 3. Preserve the same Excel output
-Keep the current exported columns and rating fallback logic unchanged. Only the data-fetch strategy changes.
+A logic typo (`|| true`) bypassing the intended guard. The comment ("require isDataOwner OR have a user override") describes the correct intent.
 
-### 4. Improve user feedback during export
-Update the button/loading text/toast so admins can see progress such as:
-- Loading KPI data
-- Loading review scores
-- Building Excel file
+## Fix
 
-This avoids the impression that the export is frozen.
+Replace the dead check so the menu shows only when the user can actually use the page:
 
-### 5. Regression coverage
-Add BUG-039 tests to `src/test/bugBountyFixes.test.ts` asserting:
-- `exportKpiData()` no longer calls `fetchAllPaged` over `review_submissions`.
-- `review_submissions` is fetched by `.in('kpi_id', batch)`.
-- batch size is capped, to avoid reintroducing a large RLS-heavy query.
+- They are an org KPI data owner (`isDataOwner`), **OR**
+- They have an explicit per-user override or profile-based grant for the `data-entry` menu key.
 
-### 6. Policy, documentation, and memory sync
-Update:
-- `POLICY.md` with a new rule extending large-export policy: RLS-heavy child tables like `review_submissions` must be fetched by parent-ID batches, not broad table scans.
-- `DOCUMENTATION.md` version history with BUG-039.
-- `mem/architecture/database/large-export-pagination-policy` to include the `review_submissions` exception.
+Note: `useMenuAccess.canAccess()` returns `true` for any role listed in the menu's `allowed_roles` (DB config or hardcoded fallback), which is exactly why the current short-circuit lets everyone in. We need a stricter signal that the user was *individually* granted access, independent of role-default. We'll source that from the same hook by checking `userOverrides` and `profileRights` directly (both already returned by the existing `useMenuAccess` query layer).
+
+### Code change (single file)
+
+**`src/components/layout/AppSidebar.tsx`** (~line 144 + 309–317)
+
+1. Pull `userOverrides` and (optionally) `canPerform` out of `useMenuAccess()`:
+   ```ts
+   const { canAccess, userOverrides } = useMenuAccess();
+   ```
+   Also pull the current `user` from `useAuth()` (already imported via `useAuth()` — `user` field).
+
+2. Replace the `filterByRole` for the Data Entry group:
+   ```tsx
+   filterByRole={(items) =>
+     items.filter((item) => {
+       if (!effectiveRole) return false;
+       if (effectiveRole === 'admin') return false; // admins see it under Administration
+       if (!item.menuKey) return false;
+
+       const hasUserOverride = !!user && userOverrides.some(
+         (o) => o.menu_key === item.menuKey && o.user_id === user.id
+       );
+
+       // Show only if user is a data owner OR has an explicit per-user override.
+       // Role-default access is intentionally NOT sufficient here, because
+       // DataOwnerRoute will redirect non-owners away.
+       return Boolean(isDataOwner) || hasUserOverride;
+     })
+   }
+   ```
+
+3. Leave `DataOwnerRoute` and `useIsAnyOrgKpiDataOwner` unchanged — they remain the authoritative server-side guard.
 
 ## Risk & Impact Report
 
-- **Data Impact:** Read-only; no schema/data changes required.
-- **Workflow Impact:** No permission changes; export remains admin-facing and keeps the same file format.
-- **UI/UX Impact:** Minimal; same button and Excel output, with clearer progress feedback.
-- **Regression Risk:** Low-to-medium. The main risk is missing submissions if batching is implemented incorrectly.
-- **Mitigation:** Use deterministic KPI-ID batching, map by `kpi_id`, and add regression tests to prevent broad `review_submissions` scans from returning.
+- **Data Impact**: None. UI-only filter change.
+- **Workflow Impact**: Non-owner users (employee/manager/auditor/management/hr_pms) will no longer see the Data Entry sidebar item. This matches existing route behavior (they were already being redirected). True data owners and admins are unaffected.
+- **UI/UX Consistency**: Eliminates the misleading menu → redirect loop. Sidebar now reflects reality.
+- **Regression Risk**: Low. The change is scoped to one `filterByRole` callback. Admins keep their entry under Administration (line 87). Per-user overrides continue to work.
+- **Mitigation**: Add a unit test (below) and verify both paths (owner shown, non-owner hidden, override-granted shown).
 
-## Files to edit after approval
-- `src/pages/admin/ImportData.tsx`
-- `src/test/bugBountyFixes.test.ts`
-- `POLICY.md`
-- `DOCUMENTATION.md`
-- `mem/architecture/database/large-export-pagination-policy`
+## SSOT / Documentation Sync
+
+- `DOCUMENTATION.md` — bump version, add entry under Version History describing the fix.
+- `POLICY.md` — under the menu access / data ownership section, add a one-liner: "Sidebar visibility for Data Entry mirrors `DataOwnerRoute`: data owners OR explicit per-user overrides only; role-default is insufficient."
+- `mem/features/admin/menu-access-rights` — append note that Data Entry group is governed by ownership, not role defaults.
+
+## Tests
+
+Add to `src/test/bugBountyFixes.test.ts` (BUG-040):
+
+- Assert the source of `AppSidebar.tsx` no longer contains `isDataOwner || true`.
+- Assert it references both `isDataOwner` and `userOverrides` inside the Data Entry filter block.
+
+(A behavioral RTL test for the sidebar would require mounting providers; the static guard above is the cheapest regression net consistent with the existing bugBountyFixes pattern.)
+
+## Files Touched
+
+- `src/components/layout/AppSidebar.tsx` (logic fix)
+- `src/test/bugBountyFixes.test.ts` (regression test)
+- `DOCUMENTATION.md`, `POLICY.md`, `mem/index.md`, `mem/features/admin/menu-access-rights` (SSOT sync)
