@@ -548,7 +548,21 @@ export function AdminDataEntryDialog({
     onClose();
   };
 
-  const isValid = reason.trim().length > 0 && (!isFrequencyLocked || adminOverrideConfirmed);
+  // BUG-047 / POLICY §116 — On-behalf submissions for any reviewer stage
+  // (manager, skip_level, hr_pms, auditor, management) MUST carry either a
+  // numeric score / rating OR the explicit N/A flag. Otherwise the KPI
+  // would advance past that stage with no audit-grade signature, which
+  // breaks "<stage> Reviewed" dashboard counters (BUG-047 root cause).
+  const requiresScoreOrNa = roleLevel !== 'self';
+  const hasScoreSignature =
+    isNa ||
+    (calculatedScore !== null && !Number.isNaN(calculatedScore)) ||
+    (score !== '' && !Number.isNaN(parseFloat(score)));
+  const onBehalfPayloadValid = !requiresScoreOrNa || hasScoreSignature;
+  const isValid =
+    reason.trim().length > 0 &&
+    onBehalfPayloadValid &&
+    (!isFrequencyLocked || adminOverrideConfirmed);
   const anyMutationPending = submitMutation.isPending || fastTrackMutation.isPending;
 
   // For DateCalendarInput — reviewPeriodParsed already computed above
@@ -989,6 +1003,11 @@ export function AdminDataEntryDialog({
         )}
 
         <DialogFooter>
+          {requiresScoreOrNa && !onBehalfPayloadValid && reason.trim().length > 0 && (
+            <p className="text-xs text-destructive mr-auto self-center">
+              Provide a score/rating or toggle <strong>Mark as N/A</strong> before submitting (POLICY §116).
+            </p>
+          )}
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>

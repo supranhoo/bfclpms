@@ -1,0 +1,18 @@
+---
+name: admin-data-entry-workflow-controls
+description: Admin on-behalf review submissions, N/A field clearing, and the POLICY §116 score-or-N/A guardrail
+type: feature
+---
+Admin override path (`useAdminSubmitReviewData` + `AdminDataEntryDialog`) writes `review_submissions` rows on behalf of any role and stamps `auto_advance_reason = 'Scored by Admin on behalf of <role_level>'`. Two non-negotiable rules:
+
+1. **Role-scoped N/A clearing** — when toggling `is_na = true`, only clear the CURRENT role's score / rating / remarks / achieved_value fields. Never wipe other stages' signatures (regression risk: BUG-022). When `is_na` flips back to false, leave history intact and let the user re-enter values.
+
+2. **Score-or-N/A guardrail (POLICY §116, BUG-047)** — for any reviewer stage (`manager`, `skip_level`, `hr_pms`, `auditor`, `management`) the submission MUST carry a stage score / rating OR `is_na = true`. Enforced at two layers:
+   - **Client**: `AdminDataEntryDialog.isValid` requires `roleLevel === 'self'` OR (`isNa` || numeric score / rating present). Submit shows a POLICY §116 inline error otherwise.
+   - **DB**: trigger `enforce_on_behalf_score_or_na` (BEFORE INSERT/UPDATE on `review_submissions`) raises an exception when an on-behalf write for any reviewer stage carries neither score, rating, nor `is_na = true`. Repair migrations (`'Repaired%'`) and fast-track writes (`'Fast-tracked%'`) are exempt by reason prefix.
+
+Why both layers: the client guard gives instant UX; the DB trigger blocks any new code path or direct SQL that would silently break the "<stage> Reviewed" dashboard counter (which credits via `score IS NOT NULL OR is_na = true`). Without this, KPIs end up `approved` with no stage signature — exactly the BUG-047 shape (Lekh Raj 101959, March 2026, 3 KPIs stuck at 592/595).
+
+Audit: every admin write inserts a `kpi_audit_logs` row with `performed_by = current admin`, `on_behalf_of = employee_id`, `on_behalf_role = role_level`. Automated repairs use `performed_by = NULL` per `mem://architecture/system-performer-attribution`.
+
+Regression coverage: `BUG-046` and `BUG-047` blocks in `src/test/bugBountyFixes.test.ts`.

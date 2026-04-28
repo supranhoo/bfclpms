@@ -2065,3 +2065,26 @@ Reviewer panels (HR PMS, Audit, Management) MUST treat the **current resolved wo
 - Counting "reviewed" only via `score IS NOT NULL` while excluding `is_na` rows.
 
 **Regression coverage**: `BUG-046` in `src/test/bugBountyFixes.test.ts` pins (a) `useReviewSubmissionScoresByKpiIds` selecting `is_na`, (b) the HR PMS reviewed predicate crediting `is_na`, and (c) the workflow-first ordering inside `useProfilesByWorkflowStage`.
+
+## §116 — Admin On-Behalf Submissions Must Carry a Score or N/A (v2.66.7.49, BUG-047)
+
+Any "score on behalf of" submission written by an admin (via `useAdminSubmitReviewData` or any future equivalent path) MUST, for reviewer stages (`manager`, `skip_level`, `hr_pms`, `auditor`, `management`), include either:
+
+- a numeric score and/or rating for that stage, OR
+- the explicit `is_na = true` flag with `na_marked_by_role = 'admin'`.
+
+A submission that advances the KPI past the reviewer stage with neither signature is forbidden because:
+
+- The "<stage> Reviewed" dashboard counter (HR PMS Reviewed, Auditor Reviewed, Management Reviewed) credits a KPI only when its `review_submissions` row carries the stage score OR `is_na = true`. A KPI advanced without either signature appears as "Total = N, Reviewed = N − 1" with no visible owner — exactly the BUG-047 pattern that surfaced on Lekh Raj (employee 101959, March 2026, 3 KPIs).
+- The audit timeline loses the "who scored / who N/A'd this stage" provenance.
+
+**Required enforcement (defence in depth)**:
+
+1. **Client guard** — `AdminDataEntryDialog` MUST disable Submit unless `roleLevel === 'self'` OR a score / rating is provided OR the `Mark as N/A` toggle is on. Inline error MUST cite POLICY §116.
+2. **DB trigger** — `enforce_on_behalf_score_or_na` (BEFORE INSERT OR UPDATE on `review_submissions`) MUST raise an exception when `auto_advance_reason ILIKE '%on behalf of <stage>%'` AND the stage's score AND rating columns are both NULL AND `is_na <> true`. Repair migrations and fast-track writes are exempt by `auto_advance_reason` prefix.
+
+**Forbidden**:
+- Removing or weakening either guard.
+- Advancing a KPI's `kpis.status` past `<stage>` from any new code path without writing the corresponding `review_submissions` signature.
+
+**Regression coverage**: `BUG-047` in `src/test/bugBountyFixes.test.ts` pins the dialog validation predicate, the migration's trigger function and reviewer-stage coverage, and the targeted Lekh Raj data repair.

@@ -1142,3 +1142,55 @@ describe('BUG-046: HR PMS dashboard counts N/A as reviewed and excludes employee
     expect(idxStages).toBeLessThan(idxScoreSeed);
   });
 });
+
+// BUG-047: HR PMS On-Behalf score-or-N/A guardrail
+// Root cause: admin advanced 3 KPIs past hr_pms_review without writing
+// hr_pms_score and without setting is_na = true, leaving the dashboard
+// counter stuck at 592/595. We added a client-side guard in the admin
+// data-entry dialog and a DB trigger that blocks the same shape going
+// forward.
+describe('BUG-047: HR PMS on-behalf score-or-N/A guardrail', () => {
+  it('AdminDataEntryDialog blocks submit unless score/rating is set or N/A is toggled', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/components/admin/AdminDataEntryDialog.tsx', 'utf-8');
+    // Validation predicate exists and is wired into isValid
+    expect(src).toContain('onBehalfPayloadValid');
+    expect(src).toContain('requiresScoreOrNa');
+    // Self stage is exempt; reviewer stages require a signature
+    expect(src).toMatch(/requiresScoreOrNa\s*=\s*roleLevel\s*!==\s*'self'/);
+    // hasScoreSignature considers explicit N/A, calculatedScore, and raw score
+    expect(src).toContain('isNa ||');
+    expect(src).toContain('calculatedScore !== null');
+    // Inline policy reference for reviewers
+    expect(src).toContain('POLICY §116');
+  });
+
+  it('migration installs enforce_on_behalf_score_or_na trigger covering all reviewer stages', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const dir = 'supabase/migrations';
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.sql'));
+    const guardrailSql = files
+      .map((f) => fs.readFileSync(path.join(dir, f), 'utf-8'))
+      .find((sql) => sql.includes('enforce_on_behalf_score_or_na'));
+    expect(guardrailSql, 'BUG-047 guardrail migration must exist').toBeTruthy();
+    const sql = guardrailSql!;
+    // Trigger function + binding to review_submissions
+    expect(sql).toContain('CREATE OR REPLACE FUNCTION public.enforce_on_behalf_score_or_na');
+    expect(sql).toContain('trg_enforce_on_behalf_score_or_na');
+    expect(sql).toMatch(/BEFORE INSERT OR UPDATE ON public\.review_submissions/);
+    // Each reviewer stage is enforced
+    for (const stage of ['manager', 'skip_level', 'hr_pms', 'auditor', 'management']) {
+      expect(sql, `stage check missing: ${stage}`).toContain(`on behalf of ${stage}`);
+    }
+    // is_na bypass is honored
+    expect(sql).toMatch(/NEW\.is_na\s*=\s*true/);
+    // Repair backfill is scoped to the affected employee + period
+    expect(sql).toContain("p.employee_code = '101959'");
+    expect(sql).toContain("k.review_period = 'March'");
+    expect(sql).toContain('k.review_year = 2026');
+    // System-attributed audit row (per memory rule)
+    expect(sql).toContain("'BUG_047_DATA_REPAIR'");
+    expect(sql).toMatch(/NULL,\s*--\s*system-attributed/);
+  });
+});
