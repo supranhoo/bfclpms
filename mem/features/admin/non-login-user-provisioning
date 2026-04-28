@@ -1,0 +1,28 @@
+---
+name: Non-Login User Provisioning
+description: Profiles imported via master backfill exist before any auth.users row; admin tools must auto-provision on first password rollout.
+type: feature
+---
+
+# Non-Login User Provisioning
+
+Employees imported via the master backfill exist in `public.profiles` from day one but only get an `auth.users` row when first provisioned for login. Admin tools that mutate `auth.users` MUST handle this "profile-without-auth" state.
+
+## Canonical pattern (POLICY §113)
+
+For the `password-rollout` edge function (and any future equivalent):
+
+1. Probe `supabaseAdmin.auth.admin.getUserById(profile.id)`.
+2. **Missing** → call `auth.admin.createUser({ id: profile.id, email, password, email_confirm: true, user_metadata: { full_name, employee_code } })`. The profile id MUST be passed verbatim so all FKs keyed on the profile id (user_roles, kpi assignments, audit logs, KRA records) remain intact.
+3. **Present** → call `auth.admin.updateUserById(profile.id, { password })`.
+4. Surface `auth_action: 'created' | 'updated'` in the result payload so admins can distinguish first-login provisioning from a password reset.
+
+## Forbidden
+
+- Calling `updateUserById` blindly (fails with "User not found" for backfilled employees — BUG-044).
+- Minting a new auth id (orphans every FK keyed on profile.id).
+- Relying on a separate "create login" tool — Password Rollout is the canonical first-login provisioning path.
+
+## Eligibility
+
+A backfilled employee shows up in the Password Rollout "Eligible Users" view via the `eligible_login_users` view as soon as they have KRAs assigned, manage someone with KRAs, or are an auditor. Admin selection inside an admin-only edge function (gated by `requireAdminUser`) is itself the authorization signal for provisioning.
