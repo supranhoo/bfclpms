@@ -16,7 +16,7 @@
 | 1     | Incident Management (1.A – 1.L)      | ✅ done      |
 | A1    | Image Compression (client + server)  | ✅ done (bonus) |
 | 2     | Permit to Work                       | ✅ done (2-A schema/RPCs, 2-B UI, 2-C tests — 16/16) |
-| 3     | Training & SOP                       | ⏳ todo      |
+| 3     | Training & SOP                       | ✅ done (3-A schema/RPCs + cron, 3-B UI worker+admin, 3-C tests 14/14) |
 | 4     | Asset & Calibration                  | ⏳ todo      |
 | 5     | Audit & Compliance Checklists        | ⏳ todo      |
 | 6     | Emergency Response                   | ⏳ todo      |
@@ -315,3 +315,7 @@ works, exports succeed, only authorised roles see global view.
 - 2026-04-29 — Initial roadmap created. Phases 0, 1, A1 marked done.
   Phase 2 recommended as the next build (self-contained, unlocks Phase 4
   asset link).
+- 2026-04-29 — Phase 2 (PTW) completed end-to-end (schema/RPCs/UI/tests).
+- 2026-04-29 — Phase 3 (Training & SOP) completed: 5 tables, 4 RPCs,
+  scroll-locked reader, server-scored randomized quiz, daily overdue
+  sweep cron, worker + admin UIs, 14/14 SSOT tests passing.

@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/sidebar';
 import {
   Home, AlertTriangle, Settings, ArrowLeft, Users, Timer, ScrollText,
-  FileSignature, ShieldCheck,
+  FileSignature, ShieldCheck, GraduationCap, BookOpen,
 } from 'lucide-react';
 
 /**
@@ -28,6 +28,8 @@ const items = [
   { title: 'Safety Home', url: '/safety', icon: Home, end: true },
   { title: 'Incidents', url: '/safety/incidents', icon: AlertTriangle },
   { title: 'Permits to Work', url: '/safety/permits', icon: FileSignature },
+  { title: 'My Training', url: '/safety/training', icon: GraduationCap, end: true },
+  { title: 'Training Admin', url: '/safety/training/admin', icon: BookOpen },
   { title: 'Permit Types', url: '/safety/settings/permit-types', icon: ShieldCheck },
   { title: 'SLA Monitor', url: '/safety/settings/sla', icon: Timer },
   { title: 'Users & Roles', url: '/safety/settings/users', icon: Users },
