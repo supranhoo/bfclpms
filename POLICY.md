@@ -2132,3 +2132,32 @@ When a profile (`public.profiles`) row is inserted, updated, or deleted — thro
 - Calling `UPDATE kpis SET status = …` on a non-terminal sibling without first setting `app.percolation_bypass = 'true'` in a SECURITY DEFINER context.
 
 **Related**: ADR-047 (third amendment), `mem://architecture/pms/multimonth-percolation`.
+
+
+## §110 — Safety Module Shell Isolation (Phase 0)
+**Date:** 2026-04-29 · **Status:** Active
+
+The Safety module is the second module mounted on the Module Hub (after PMS). It ships as a **fully decoupled application shell** at `/safety/*`, composed of:
+- `SafetyLayout` (`src/components/safety/SafetyLayout.tsx`)
+- `SafetySidebar` (`src/components/safety/SafetySidebar.tsx`)
+- `SafetyHeader` (`src/components/safety/SafetyHeader.tsx`)
+
+**Forbidden imports (enforced by `src/test/safetyShellIsolation.test.tsx`):**
+- Safety shell components MUST NOT import `AppSidebar`, `DashboardLayout`, or `MinimalHeader`.
+- `DashboardLayout` MUST NOT import anything from `src/components/safety/`.
+
+**Visibility — two independent gates, both required:**
+1. **Global kill-switch:** `public.modules.is_enabled = true` for `code='safety'`. Toggled by PMS admins from `/admin/module-hub` (`ModuleHubSettings`). Defaults to `false`.
+2. **Per-user grant:** A row in `public.safety_module_access` with `can_view = true`, **OR** the user holds the PMS `admin` role (auto-granted via `public.has_safety_module_access(uuid)` SECURITY DEFINER function).
+
+**Realtime revocation:** `useModules()` subscribes to `safety_module_access` filtered by `user_id=auth.uid()`. Revoking a grant hides the Safety card on the Hub within one realtime tick.
+
+**Route guard:** Every `/safety/*` route is wrapped by `SafetyModuleRoute`, which re-checks both gates before any Safety chrome renders. Failure redirects to `/home`.
+
+**Forbidden:**
+- Adding Safety pages outside `src/pages/safety/` or `src/components/safety/`.
+- Mounting Safety routes inside the `<Route element={<DashboardLayout />}>` tree.
+- Introducing any `safety_*` table without RLS that routes through a SECURITY DEFINER helper (mirrors PMS `has_role` pattern to prevent recursion).
+- Storing Safety-specific roles on `profiles` or in `app_role` — Safety roles will live in a separate `safety_app_role` enum + `safety_user_roles` table (Phase 1.A).
+
+**Related:** `mem://architecture/safety/module-shell-isolation`.

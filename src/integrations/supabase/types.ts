@@ -4462,6 +4462,36 @@ export type Database = {
           },
         ]
       }
+      safety_module_access: {
+        Row: {
+          can_edit: boolean
+          can_view: boolean
+          created_at: string
+          granted_at: string
+          granted_by: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          can_edit?: boolean
+          can_view?: boolean
+          created_at?: string
+          granted_at?: string
+          granted_by?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          can_edit?: boolean
+          can_view?: boolean
+          created_at?: string
+          granted_at?: string
+          granted_by?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       skill_competencies: {
         Row: {
           assessed_at: string | null
@@ -5347,6 +5377,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      has_safety_module_access: { Args: { _user_id: string }; Returns: boolean }
       is_data_owner_for_employee: {
         Args: { p_employee_id: string; p_owner_id: string }
         Returns: boolean

@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
 export interface Module {
   id: string;
@@ -17,11 +19,37 @@ export interface Module {
 
 export function useModules() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  // Realtime: when admin grants/revokes Safety access for the current user,
+  // refetch so the Hub card appears/disappears within one tick.
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`modules-access-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'safety_module_access',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['modules'] });
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, queryClient]);
 
   return useQuery({
-    queryKey: ['modules'],
+    queryKey: ['modules', user?.id ?? 'anon'],
     queryFn: async (): Promise<Module[]> => {
-      const { data, error } = await supabase
+      // 1. Fetch globally enabled modules.
+      const { data: enabled, error } = await supabase
         .from('modules')
         .select('*')
         .eq('is_enabled', true)
@@ -32,7 +60,25 @@ export function useModules() {
         throw error;
       }
 
-      return (data || []) as Module[];
+      const all = (enabled || []) as Module[];
+      if (all.length === 0 || !user) return all;
+
+      // 2. Filter Safety by per-user grant. PMS admins are auto-granted via
+      //    the has_safety_module_access RPC, so we ask the DB directly.
+      const safetyIdx = all.findIndex((m) => m.code === 'safety');
+      if (safetyIdx === -1) return all;
+
+      const { data: hasAccess, error: accessErr } = await supabase.rpc(
+        'has_safety_module_access',
+        { _user_id: user.id }
+      );
+      if (accessErr) {
+        console.error('Error checking safety access:', accessErr);
+        // Fail closed: hide Safety on access-check error.
+        return all.filter((m) => m.code !== 'safety');
+      }
+
+      return hasAccess ? all : all.filter((m) => m.code !== 'safety');
     },
     enabled: !!user, // Only fetch when authenticated to avoid RLS empty-result caching
     staleTime: 1000 * 60 * 5, // Cache for 5 minutes

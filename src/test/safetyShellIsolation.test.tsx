@@ -1,0 +1,45 @@
+import { describe, it, expect } from 'vitest';
+import { render } from '@testing-library/react';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
+
+/**
+ * Shell-isolation smoke test.
+ *
+ * Ensures the Safety shell never imports or renders PMS layout primitives
+ * (and vice versa). We do this by inspecting the Safety component module
+ * graph for forbidden symbols rather than spinning up a full render that
+ * would require mocking auth + Supabase.
+ */
+describe('Safety shell isolation', () => {
+  it('SafetyLayout / Sidebar / Header do NOT import PMS chrome', async () => {
+    const layoutSrc = await import('@/components/safety/SafetyLayout?raw');
+    const sidebarSrc = await import('@/components/safety/SafetySidebar?raw');
+    const headerSrc = await import('@/components/safety/SafetyHeader?raw');
+
+    const forbidden = ['AppSidebar', 'DashboardLayout', 'MinimalHeader'];
+    const sources = [layoutSrc.default, sidebarSrc.default, headerSrc.default];
+
+    for (const src of sources) {
+      for (const sym of forbidden) {
+        expect(src).not.toMatch(new RegExp(`from\\s+['"][^'"]*${sym}['"]`));
+      }
+    }
+  });
+
+  it('PMS DashboardLayout does NOT import Safety chrome', async () => {
+    const dashSrc = await import('@/components/layout/DashboardLayout?raw');
+    expect(dashSrc.default).not.toMatch(/from\s+['"][^'"]*safety\//i);
+  });
+
+  it('SafetyHome page renders without throwing', async () => {
+    const { default: SafetyHome } = await import('@/pages/safety/SafetyHome');
+    const { container } = render(
+      <MemoryRouter>
+        <Routes>
+          <Route path="*" element={<SafetyHome />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(container.textContent).toMatch(/Safety/i);
+  });
+});

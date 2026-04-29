@@ -53,6 +53,13 @@ const IncentiveDataEntry = lazy(() => import("./pages/admin/IncentiveDataEntry")
 const EmployeeDevelopment = lazy(() => import("./pages/admin/EmployeeDevelopment"));
 const OrgKpiAuditReview = lazy(() => import("./pages/admin/OrgKpiAuditReview"));
 const EmployeeMasterBackfill = lazy(() => import("./pages/admin/EmployeeMasterBackfill"));
+const ModuleHubSettings = lazy(() => import("./pages/admin/ModuleHubSettings"));
+
+// Safety module shell + pages
+const SafetyLayout = lazy(() =>
+  import("./components/safety/SafetyLayout").then((m) => ({ default: m.SafetyLayout }))
+);
+const SafetyHome = lazy(() => import("./pages/safety/SafetyHome"));
 
 // Report pages
 const PerformanceReport = lazy(() => import("./pages/reports/PerformanceReport"));
@@ -120,6 +127,13 @@ const App = () => (
               <Route path="/reset-password" element={<Suspense fallback={<PageFallback />}><ResetPassword /></Suspense>} />
               <Route path="/home" element={<Suspense fallback={<PageFallback />}><ModuleHub /></Suspense>} />
               <Route path="/" element={<Navigate to="/home" replace />} />
+              {/* Safety module — fully decoupled shell. Sibling of /home so PMS chrome never renders here. */}
+              <Route
+                path="/safety"
+                element={<Suspense fallback={<PageFallback />}><SafetyLayout /></Suspense>}
+              >
+                <Route index element={<Suspense fallback={<PageFallback />}><SafetyHome /></Suspense>} />
+              </Route>
               <Route element={<DashboardLayout />}>
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/my-kpis" element={<Suspense fallback={<PageFallback />}><MyKpis /></Suspense>} /> {/* Redirects to /dashboard */}
@@ -200,6 +214,11 @@ const App = () => (
                     <EmployeeMasterBackfill />
                   </ProtectedRoute>
                 } />
+              <Route path="/admin/module-hub" element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <Suspense fallback={<PageFallback />}><ModuleHubSettings /></Suspense>
+                </ProtectedRoute>
+              } />
                 <Route path="/admin/settings" element={
                   <ProtectedRoute allowedRoles={['admin']} menuKey="admin-settings">
                     <SystemSettings />

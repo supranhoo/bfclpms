@@ -93,6 +93,7 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
     { title: 'Review Periods', icon: Calendar, path: '/admin/review-periods', menuKey: 'admin-review-periods', roles: ['admin'] },
     { title: 'Import Data', icon: Upload, path: '/admin/import', menuKey: 'admin-import', roles: ['admin'] },
     { title: 'System Settings', icon: Settings, path: '/admin/settings', menuKey: 'admin-settings', roles: ['admin'] },
+    { title: 'Module Hub', icon: Settings, path: '/admin/module-hub', menuKey: 'admin-settings', roles: ['admin'] },
     { title: 'Audit Logs', icon: History, path: '/audit-logs', menuKey: 'admin-audit-logs', roles: ['admin'] },
     { title: 'Observations', icon: Eye, path: '/admin/observations', menuKey: 'admin-observations', roles: ['admin'] },
     { title: 'Rollback Requests', icon: Undo2, path: '/admin/rollback-requests', menuKey: 'admin-rollback', roles: ['admin'] },
