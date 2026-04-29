@@ -6004,6 +6004,30 @@ export type Database = {
           },
         ]
       }
+      safety_settings: {
+        Row: {
+          description: string | null
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: Json
+        }
+        Insert: {
+          description?: string | null
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value: Json
+        }
+        Update: {
+          description?: string | null
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json
+        }
+        Relationships: []
+      }
       safety_severity_sla: {
         Row: {
           acknowledge_hours: number
@@ -7390,6 +7414,7 @@ export type Database = {
           id: string
         }[]
       }
+      get_safety_setting: { Args: { p_key: string }; Returns: Json }
       get_skip_level_manager: {
         Args: { employee_uuid: string }
         Returns: string
@@ -7550,6 +7575,10 @@ export type Database = {
         Returns: Json
       }
       run_safety_sla_escalations: { Args: never; Returns: Json }
+      set_safety_setting: {
+        Args: { p_description?: string; p_key: string; p_value: Json }
+        Returns: Json
+      }
       start_drill: { Args: { p_drill_id: string }; Returns: Json }
       start_training_attempt: {
         Args: { _assignment_id: string }
