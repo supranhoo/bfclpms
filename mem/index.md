@@ -10,6 +10,7 @@ Per-employee workflow chains in reports MUST resolve via `get_bulk_employee_work
 `kpis.status` must NEVER be written as NULL — guard reviewer mutations and render "Status Missing" for null in display badges (POLICY.md §106 / BUG-035).
 No reviewer panel (Team/Audit/HR PMS/Management/Skip-Level/Pending-*/cross-check) may surface the viewer's own profile — Self tab is the only self-assessment surface (POLICY.md §107 / BUG-036).
 Notification triggers must guard non-login recipients (no auth.users row) — pre-check + EXCEPTION wrapper, never abort business txn (POLICY.md §108 / BUG-037).
+Safety lists: no auto-fetch — Search button triggers query; every table paginates server-side via `useManualQuery` + `<SafetyFilterBar>` + `<SafetyDataTable>` (POLICY §113 / ADR-050).
 
 ## Memories
 - [Page loading overlay pattern](mem://design/page-loading-overlay-pattern) — Centered PageLoadingOverlay wired in DashboardLayout (Suspense + RouteDataLoadingGate), rocket+chart art
@@ -28,6 +29,7 @@ Notification triggers must guard non-login recipients (no auth.users row) — pr
 - [Safety Audit & Dashboard](mem://features/safety/audit-and-dashboard) — Phase 1.F audit log surface and HSE KPI dashboard
 - [Safety Realtime Sync](mem://features/safety/realtime-sync) — Phase 1.G module-scoped realtime invalidator mounted by SafetyLayout; never touches PMS caches
 - [Safety Test Gate](mem://features/safety/test-gate) — Phase 1.H pure-logic suite locking FSM, SLA classifier, shell isolation, offline queue (21/21 passing)
+- [Safety Manual-Fetch & Pagination](mem://architecture/safety/manual-fetch-and-pagination) — Filters-first, click-to-load, paginated tables; sanctioned primitives (POLICY §113 / ADR-050)
 - [Image Compression Policy](mem://features/image-compression-policy) — Phase A client-side compression for Safety + PMS evidence; system_settings flags, skip rules, severity overrides
 - [Server-side Image Compression (Phase B)](mem://features/image-compression-server) — WebP re-encoder edge function, queue table, pg_cron, PMS rewrite safety flag
 - [Safety Roadmap Phases 2-7](mem://features/safety/roadmap-phase2-7) — Pointer to docs/safety-roadmap-phase2-7.md with Status Tracker for PTW, Training, Assets, Audits, Emergency, Analytics

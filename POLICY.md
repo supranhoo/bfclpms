@@ -2230,3 +2230,29 @@ The Safety incident workflow is a **server-enforced 7-stage FSM**. The frontend 
 - Hardcoding stage labels, severities, or types in components — import from `src/lib/safetyIncidents.ts`.
 
 **Related:** `mem://architecture/safety/incident-fsm`.
+
+---
+
+## §113 — Safety Manual-Fetch & Pagination
+
+The Safety module follows a strict **filters-first → click-to-load → paginated** model on every list/query surface. This eliminates wasteful cold-load queries and enforces a scalable UX for large datasets.
+
+### Rules
+1. **No auto-fetch on list/query screens.** A list page must mount with the filter bar visible and an `awaiting-search` empty state. The query fires **only** when the user clicks the **Search** button (or presses Enter inside any filter input).
+2. **Server-side pagination is mandatory.** Default page size 25; user-selectable from {25, 50, 100}. No tabular surface may render more than one page of rows. Queries use `.range(from, to)` with `count: 'exact'`.
+3. **Cache key is the *submitted* filters + page + pageSize.** Typing in a filter input does not refetch; only Search does. Mutations re-run the **last submitted** query — never silently change filters.
+4. **Exempt surfaces:** detail pages (`/safety/.../:id`), single-aggregate dashboard tiles (`SafetyHome` tiles, `SafetyAnalytics` KPI cards), and `New`/`Edit` forms. Any embedded *table* inside a dashboard is **not** exempt.
+5. **Sanctioned primitives** — every Safety list MUST use:
+   - `useManualQuery` (from `src/hooks/useManualQuery.ts`)
+   - `<SafetyFilterBar>` (from `src/components/safety/SafetyFilterBar.tsx`)
+   - `<SafetyDataTable>` (from `src/components/safety/SafetyDataTable.tsx`)
+   - `<SafetyEmptyState>` (from `src/components/safety/SafetyEmptyState.tsx`)
+6. **Naming:** primary trigger button is labelled **Search** (filter screens) or **Load** (parameterless screens). Secondary is **Reset**. No other verbs.
+
+### Forbidden
+- React Query `useQuery({ enabled: true })` returning a list on a Safety list page.
+- `.select('*')` without `.range()` on any Safety list query.
+- Client-side filtering of an unbounded result set.
+- Hardcoded page-size constants outside the primitives.
+
+**Related:** `mem://architecture/safety/manual-fetch-and-pagination`, `docs/adr/ADR-050.md`.
