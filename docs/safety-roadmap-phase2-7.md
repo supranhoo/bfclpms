@@ -15,7 +15,7 @@
 | 0     | Hub & Shell                          | ✅ done      |
 | 1     | Incident Management (1.A – 1.L)      | ✅ done      |
 | A1    | Image Compression (client + server)  | ✅ done (bonus) |
-| 2     | Permit to Work                       | 🟡 in progress (2-A schema/RPCs ✅, 2-B UI ✅, 2-C tests ⏳) |
+| 2     | Permit to Work                       | ✅ done (2-A schema/RPCs, 2-B UI, 2-C tests — 16/16) |
 | 3     | Training & SOP                       | ⏳ todo      |
 | 4     | Asset & Calibration                  | ⏳ todo      |
 | 5     | Audit & Compliance Checklists        | ⏳ todo      |
