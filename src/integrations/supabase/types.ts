@@ -4712,6 +4712,222 @@ export type Database = {
         }
         Relationships: []
       }
+      safety_audit_run_responses: {
+        Row: {
+          answer: Database["public"]["Enums"]["safety_audit_answer"]
+          auto_incident_id: string | null
+          created_at: string
+          created_by: string | null
+          evidence_path: string | null
+          id: string
+          item_id: string
+          notes: string | null
+          run_id: string
+          score: number
+          updated_at: string
+        }
+        Insert: {
+          answer: Database["public"]["Enums"]["safety_audit_answer"]
+          auto_incident_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          evidence_path?: string | null
+          id?: string
+          item_id: string
+          notes?: string | null
+          run_id: string
+          score?: number
+          updated_at?: string
+        }
+        Update: {
+          answer?: Database["public"]["Enums"]["safety_audit_answer"]
+          auto_incident_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          evidence_path?: string | null
+          id?: string
+          item_id?: string
+          notes?: string | null
+          run_id?: string
+          score?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_audit_run_responses_auto_incident_id_fkey"
+            columns: ["auto_incident_id"]
+            isOneToOne: false
+            referencedRelation: "safety_incidents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_audit_run_responses_auto_incident_id_fkey"
+            columns: ["auto_incident_id"]
+            isOneToOne: false
+            referencedRelation: "safety_incidents_with_sla"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_audit_run_responses_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "safety_audit_template_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_audit_run_responses_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "safety_audit_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      safety_audit_runs: {
+        Row: {
+          business_unit_id: string | null
+          conducted_at: string
+          conducted_by: string | null
+          created_at: string
+          critical_failures: number
+          department_id: string | null
+          id: string
+          location: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          score: number | null
+          status: Database["public"]["Enums"]["safety_audit_run_status"]
+          summary: string | null
+          template_id: string
+          updated_at: string
+        }
+        Insert: {
+          business_unit_id?: string | null
+          conducted_at?: string
+          conducted_by?: string | null
+          created_at?: string
+          critical_failures?: number
+          department_id?: string | null
+          id?: string
+          location?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          score?: number | null
+          status?: Database["public"]["Enums"]["safety_audit_run_status"]
+          summary?: string | null
+          template_id: string
+          updated_at?: string
+        }
+        Update: {
+          business_unit_id?: string | null
+          conducted_at?: string
+          conducted_by?: string | null
+          created_at?: string
+          critical_failures?: number
+          department_id?: string | null
+          id?: string
+          location?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          score?: number | null
+          status?: Database["public"]["Enums"]["safety_audit_run_status"]
+          summary?: string | null
+          template_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_audit_runs_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "safety_audit_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      safety_audit_template_items: {
+        Row: {
+          created_at: string
+          evidence_required: boolean
+          id: string
+          is_critical: boolean
+          prompt: string
+          section: string
+          sort_order: number
+          template_id: string
+          weight: number
+        }
+        Insert: {
+          created_at?: string
+          evidence_required?: boolean
+          id?: string
+          is_critical?: boolean
+          prompt: string
+          section?: string
+          sort_order?: number
+          template_id: string
+          weight?: number
+        }
+        Update: {
+          created_at?: string
+          evidence_required?: boolean
+          id?: string
+          is_critical?: boolean
+          prompt?: string
+          section?: string
+          sort_order?: number
+          template_id?: string
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_audit_template_items_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "safety_audit_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      safety_audit_templates: {
+        Row: {
+          category: string
+          code: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean
+          title: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          category?: string
+          code: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          title: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          category?: string
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          title?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: []
+      }
       safety_incident_evidence: {
         Row: {
           compressed_at: string | null
@@ -6897,6 +7113,10 @@ export type Database = {
         Args: { _permit_id: string; _uid: string }
         Returns: boolean
       }
+      mark_audit_reviewed: {
+        Args: { p_run_id: string; p_summary?: string }
+        Returns: Json
+      }
       mark_overdue_assets: { Args: never; Returns: Json }
       mark_overdue_training_assignments: { Args: never; Returns: Json }
       migrate_okv_on_scope_change: {
@@ -6981,6 +7201,7 @@ export type Database = {
         Args: { _assignment_id: string }
         Returns: Json
       }
+      submit_audit_run: { Args: { p_run_id: string }; Returns: Json }
       submit_permit: { Args: { p_permit_id: string }; Returns: Json }
       submit_training_attempt: {
         Args: { _answers: Json; _attempt_id: string; _reading_seconds?: number }
@@ -7042,6 +7263,8 @@ export type Database = {
         | "worker"
         | "auditor"
       safety_asset_status: "active" | "under_maintenance" | "retired"
+      safety_audit_answer: "yes" | "no" | "na"
+      safety_audit_run_status: "draft" | "submitted" | "reviewed"
       safety_evidence_stage:
         | "report"
         | "assignment"
@@ -7269,6 +7492,8 @@ export const Constants = {
         "auditor",
       ],
       safety_asset_status: ["active", "under_maintenance", "retired"],
+      safety_audit_answer: ["yes", "no", "na"],
+      safety_audit_run_status: ["draft", "submitted", "reviewed"],
       safety_evidence_stage: [
         "report",
         "assignment",
