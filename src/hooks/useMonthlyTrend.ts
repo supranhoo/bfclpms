@@ -185,7 +185,15 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
               .select('kpi_id, final_score, management_score, auditor_score, hr_pms_score, skip_level_score, manager_score, self_score, is_na')
               .in('kpi_id', b)
           ));
-          results.forEach(r => (r.data ?? []).forEach((s: any) => subMap.set(s.kpi_id, s)));
+          results.forEach((r) => {
+            if (r.error) {
+              // Surface partial-fetch failures (e.g. URL-length / 414) instead
+              // of silently rendering all dashes.
+              console.error('[useMonthlyTrend] submissions batch failed:', r.error);
+              throw r.error;
+            }
+            (r.data ?? []).forEach((s: any) => subMap.set(s.kpi_id, s));
+          });
         }
       })();
 
