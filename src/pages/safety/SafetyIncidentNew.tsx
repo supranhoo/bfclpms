@@ -27,6 +27,7 @@ import { useSafetyOfflineSync } from '@/hooks/useSafetyOfflineSync';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { useImageCompressionSettings } from '@/hooks/useImageCompressionSettings';
 
 /**
  * Incident report form (Phase 1.C).
@@ -46,6 +47,8 @@ export default function SafetyIncidentNew() {
   const qc = useQueryClient();
   const { isOnline } = useSafetyOfflineSync();
   const { data: businessUnits = [] } = useBusinessUnits();
+  const { enabled: compressionEnabled, policy: compressionPolicy } =
+    useImageCompressionSettings();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -144,6 +147,11 @@ export default function SafetyIncidentNew() {
         reporterId: user.id,
         payload,
         files: files.map((f) => ({ name: f.name, type: f.type, size: f.size, blob: f })),
+        compression: {
+          enabled: compressionEnabled,
+          policy: compressionPolicy,
+          severityHint: severity as SafetyIncidentSeverity,
+        },
       });
       toast.success(`Incident ${created.incident_number} reported`);
       qc.invalidateQueries({ queryKey: ['safety'] });

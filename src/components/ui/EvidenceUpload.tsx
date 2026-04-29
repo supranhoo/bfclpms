@@ -6,6 +6,13 @@ import { useToast } from '@/hooks/use-toast';
 import { Upload, X, FileText, Image, FileSpreadsheet, Loader2 } from 'lucide-react';
 import { openStorageFile } from '@/lib/storageDownload';
 import { useUploadLimits } from '@/hooks/useUploadLimits';
+import { useImageCompressionSettings } from '@/hooks/useImageCompressionSettings';
+import {
+  compressImageFile,
+  formatSavings,
+  shouldShowSavingsToast,
+} from '@/lib/imageCompression';
+import { toast as sonnerToast } from 'sonner';
 
 interface EvidenceUploadProps {
   userId: string;
@@ -27,11 +34,14 @@ const ACCEPTED_EXTENSIONS = '.jpg,.jpeg,.png,.pdf,.xls,.xlsx';
 
 export function EvidenceUpload({ userId, kpiId, onUploadComplete, existingUrl }: EvidenceUploadProps) {
   const [uploading, setUploading] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
   const [uploadedUrl, setUploadedUrl] = useState<string | null>(existingUrl || null);
   const [fileName, setFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { maxFileSizeMb, maxFileSizeBytes } = useUploadLimits();
+  const { enabled: compressionEnabled, policy: compressionPolicy } =
+    useImageCompressionSettings();
 
   const getFileIcon = (url: string) => {
     if (url.includes('.pdf')) return FileText;
@@ -67,13 +77,27 @@ export function EvidenceUpload({ userId, kpiId, onUploadComplete, existingUrl }:
     setFileName(file.name);
 
     try {
-      const fileExt = ACCEPTED_TYPES[file.type as keyof typeof ACCEPTED_TYPES]?.ext || 'file';
-      const sanitizedName = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').substring(0, 40);
+      // Phase A — client-side image compression. Returns the original
+      // file untouched for non-images, small files, GIFs, or on error.
+      // Show "Optimizing…" only for slow compressions (>250 ms).
+      const optimizingTimer = window.setTimeout(() => setOptimizing(true), 250);
+      const compResult = await compressImageFile(file, {
+        enabled: compressionEnabled,
+        policy: compressionPolicy,
+      });
+      window.clearTimeout(optimizingTimer);
+      setOptimizing(false);
+      const outFile = compResult.file;
+
+      const fileExt = ACCEPTED_TYPES[outFile.type as keyof typeof ACCEPTED_TYPES]?.ext
+        ?? ACCEPTED_TYPES[file.type as keyof typeof ACCEPTED_TYPES]?.ext
+        ?? 'file';
+      const sanitizedName = outFile.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').substring(0, 40);
       const filePath = `${userId}/${kpiId}/${Date.now()}_${sanitizedName}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from('review-evidence')
-        .upload(filePath, file, { upsert: true });
+        .upload(filePath, outFile, { upsert: true });
 
       if (uploadError) throw uploadError;
 
@@ -88,6 +112,9 @@ export function EvidenceUpload({ userId, kpiId, onUploadComplete, existingUrl }:
         title: 'File uploaded',
         description: 'Evidence file uploaded successfully.',
       });
+      if (shouldShowSavingsToast(compResult)) {
+        sonnerToast.message(formatSavings(compResult));
+      }
     } catch (error: any) {
       toast({
         title: 'Upload failed',
@@ -96,6 +123,7 @@ export function EvidenceUpload({ userId, kpiId, onUploadComplete, existingUrl }:
       });
       setFileName(null);
     } finally {
+      setOptimizing(false);
       setUploading(false);
     }
   };
@@ -131,10 +159,17 @@ export function EvidenceUpload({ userId, kpiId, onUploadComplete, existingUrl }:
       e.preventDefault();
       setUploading(true);
       setFileName(file.name);
-      const fileExt = ACCEPTED_TYPES[file.type as keyof typeof ACCEPTED_TYPES]?.ext || 'file';
-      const sanitizedName = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').substring(0, 40);
-      const filePath = `${userId}/${kpiId}/${Date.now()}_${sanitizedName}.${fileExt}`;
-      supabase.storage.from('review-evidence').upload(filePath, file, { upsert: true }).then(({ error: uploadError }) => {
+      const optimizingTimer = window.setTimeout(() => setOptimizing(true), 250);
+      compressImageFile(file, { enabled: compressionEnabled, policy: compressionPolicy }).then((compResult) => {
+        window.clearTimeout(optimizingTimer);
+        setOptimizing(false);
+        const outFile = compResult.file;
+        const fileExt = ACCEPTED_TYPES[outFile.type as keyof typeof ACCEPTED_TYPES]?.ext
+          ?? ACCEPTED_TYPES[file.type as keyof typeof ACCEPTED_TYPES]?.ext
+          ?? 'file';
+        const sanitizedName = outFile.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').substring(0, 40);
+        const filePath = `${userId}/${kpiId}/${Date.now()}_${sanitizedName}.${fileExt}`;
+        supabase.storage.from('review-evidence').upload(filePath, outFile, { upsert: true }).then(({ error: uploadError }) => {
         if (uploadError) {
           toast({ title: 'Upload failed', description: uploadError.message, variant: 'destructive' });
           setFileName(null);
@@ -145,12 +180,16 @@ export function EvidenceUpload({ userId, kpiId, onUploadComplete, existingUrl }:
         setUploadedUrl(publicUrl);
         onUploadComplete(publicUrl);
         toast({ title: 'File uploaded', description: 'Evidence file uploaded successfully.' });
+        if (shouldShowSavingsToast(compResult)) {
+          sonnerToast.message(formatSavings(compResult));
+        }
         setUploading(false);
+        });
       });
     };
     target.addEventListener('paste', handler);
     return () => target.removeEventListener('paste', handler);
-  }, [uploading, uploadedUrl, maxFileSizeBytes, maxFileSizeMb, userId, kpiId, onUploadComplete, toast]);
+  }, [uploading, uploadedUrl, maxFileSizeBytes, maxFileSizeMb, userId, kpiId, onUploadComplete, toast, compressionEnabled, compressionPolicy]);
 
   const FileIcon = uploadedUrl ? getFileIcon(uploadedUrl) : Upload;
 
@@ -201,7 +240,7 @@ export function EvidenceUpload({ userId, kpiId, onUploadComplete, existingUrl }:
           {uploading ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Uploading...
+              {optimizing ? 'Optimizing…' : 'Uploading...'}
             </>
           ) : (
             <>

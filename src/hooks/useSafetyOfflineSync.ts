@@ -10,6 +10,7 @@ import {
   recordPendingFailure,
 } from '@/lib/safetyOfflineQueue';
 import { adaptPendingFiles, submitSafetyIncident } from '@/lib/safetyIncidentSubmit';
+import { useImageCompressionSettings } from '@/hooks/useImageCompressionSettings';
 
 /**
  * useSafetyOfflineSync
@@ -29,6 +30,8 @@ import { adaptPendingFiles, submitSafetyIncident } from '@/lib/safetyIncidentSub
 export function useSafetyOfflineSync() {
   const { user } = useAuth();
   const qc = useQueryClient();
+  const { enabled: compressionEnabled, policy: compressionPolicy } =
+    useImageCompressionSettings();
   const [pendingCount, setPendingCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(
@@ -64,6 +67,11 @@ export function useSafetyOfflineSync() {
             reporterId: user.id,
             payload: it.payload,
             files: adaptPendingFiles(it.files),
+            compression: {
+              enabled: compressionEnabled,
+              policy: compressionPolicy,
+              severityHint: it.payload?.severity ?? null,
+            },
           });
           await deletePendingIncident(it.id);
           sent += 1;
@@ -85,7 +93,7 @@ export function useSafetyOfflineSync() {
       await refreshCount();
     }
     return { sent, failed };
-  }, [user, isSyncing, qc, refreshCount]);
+  }, [user, isSyncing, qc, refreshCount, compressionEnabled, compressionPolicy]);
 
   // Online/offline listeners + initial flush attempt.
   useEffect(() => {

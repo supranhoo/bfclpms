@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Save, Upload, FileText, Shield, Lock, GripVertical, Download, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Save, Upload, FileText, Shield, Lock, GripVertical, Download, ChevronLeft, ChevronRight, ImageDown } from 'lucide-react';
 import { useSystemSetting, useUpdateSystemSetting } from '@/hooks/useSystemSettings';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -232,6 +232,8 @@ export function UploadSettingsTab() {
   const { data: pasteData, isLoading: l12 } = useSystemSetting('evidence_allow_paste');
   const { data: kpiColData, isLoading: l13 } = useSystemSetting('kpi_import_column_order');
   const { data: empColData, isLoading: l14 } = useSystemSetting('employee_import_column_order');
+  const { data: compEnabledData } = useSystemSetting('image_compression_enabled');
+  const { data: compPolicyData } = useSystemSetting('image_compression_policy');
 
   const isLoading = l1||l2||l3||l4||l5||l6||l7||l8||l9||l10||l11||l12||l13||l14;
 
@@ -250,6 +252,8 @@ export function UploadSettingsTab() {
   const [allowPaste, setAllowPaste] = useState(true);
   const [kpiColumns, setKpiColumns] = useState<string[]>([]);
   const [empColumns, setEmpColumns] = useState<string[]>([]);
+  const [compEnabled, setCompEnabled] = useState(true);
+  const [compQuality, setCompQuality] = useState(82); // 0–100 scale
 
   // Dirty tracking
   const [dirtyKeys, setDirtyKeys] = useState<Set<string>>(new Set());
@@ -271,6 +275,13 @@ export function UploadSettingsTab() {
   useEffect(() => { if (pasteData?.setting_value != null) setAllowPaste(parseBool(pasteData.setting_value, true)); }, [pasteData]);
   useEffect(() => { if (kpiColData?.setting_value != null) setKpiColumns(parseSetting<string[]>(kpiColData.setting_value, [])); }, [kpiColData]);
   useEffect(() => { if (empColData?.setting_value != null) setEmpColumns(parseSetting<string[]>(empColData.setting_value, [])); }, [empColData]);
+  useEffect(() => { if (compEnabledData?.setting_value != null) setCompEnabled(parseBool(compEnabledData.setting_value, true)); }, [compEnabledData]);
+  useEffect(() => {
+    if (compPolicyData?.setting_value != null) {
+      const p = parseSetting<{ quality?: number }>(compPolicyData.setting_value, {});
+      if (typeof p?.quality === 'number') setCompQuality(Math.round(p.quality * 100));
+    }
+  }, [compPolicyData]);
 
   // --- Save handlers ---
   const saveSetting = (key: string, value: string, dirtyGroup: string) => {
@@ -554,6 +565,54 @@ export function UploadSettingsTab() {
               labels={EMP_COLUMN_LABELS}
               onChange={(cols) => { setEmpColumns(cols); markDirty('columns'); }}
             />
+          </div>
+        </div>
+      </SettingCard>
+
+      {/* Image Compression (Phase A) */}
+      <SettingCard
+        title="Image Compression"
+        description="Automatically shrink large evidence photos before upload. Visually lossless, runs in a background worker, and never blocks the form. Skipped for non-images, files under 300 KB, animated GIFs, and PNGs with transparency."
+        icon={<ImageDown className="h-5 w-5" />}
+        onSave={() => {
+          saveSetting('image_compression_enabled', String(compEnabled), 'compression');
+          const policy = {
+            maxSizeMB: 1.5,
+            maxWidthOrHeight: 2560,
+            quality: Math.min(0.95, Math.max(0.6, compQuality / 100)),
+            severeQuality: 0.92,
+          };
+          saveSetting('image_compression_policy', JSON.stringify(policy), 'compression');
+        }}
+        saving={updateSetting.isPending}
+        dirty={dirtyKeys.has('compression')}
+      >
+        <div className="space-y-4">
+          <div className="flex items-center justify-between p-3 rounded-lg border">
+            <div className="space-y-1">
+              <Label className="text-sm font-medium">Auto-compress images on upload</Label>
+              <p className="text-xs text-muted-foreground">
+                Applies to Safety incident evidence and PMS review evidence. High and critical Safety severity automatically use a higher quality preset.
+              </p>
+            </div>
+            <Switch
+              checked={compEnabled}
+              onCheckedChange={(c) => { setCompEnabled(c); markDirty('compression'); }}
+            />
+          </div>
+          <div className="p-3 rounded-lg border space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Quality target</Label>
+              <Badge variant="outline">{compQuality}</Badge>
+            </div>
+            <Input
+              type="range" min={60} max={95} step={1} value={compQuality}
+              onChange={(e) => { setCompQuality(Number(e.target.value)); markDirty('compression'); }}
+              disabled={!compEnabled}
+            />
+            <p className="text-xs text-muted-foreground">
+              60 = aggressive savings, 95 = near-original quality. Default 82 is visually lossless for evidence photos.
+            </p>
           </div>
         </div>
       </SettingCard>

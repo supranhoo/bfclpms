@@ -3,6 +3,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import type { SafetyIncidentStatus } from '@/lib/safetyIncidents';
+import {
+  compressImageFile,
+  formatSavings,
+  shouldShowSavingsToast,
+} from '@/lib/imageCompression';
+import { useImageCompressionSettings } from '@/hooks/useImageCompressionSettings';
+import { useSafetyIncident } from '@/hooks/useSafetyIncidents';
 
 export interface TimelineRow {
   id: string;
@@ -113,30 +120,46 @@ export function useIncidentEvidence(incidentId: string | undefined) {
 export function useUploadEvidence(incidentId: string) {
   const qc = useQueryClient();
   const { user } = useAuth();
+  const { enabled: compressionEnabled, policy: compressionPolicy } =
+    useImageCompressionSettings();
+  const { data: incident } = useSafetyIncident(incidentId);
   return useMutation({
     mutationFn: async ({ file, stage }: { file: File; stage: EvidenceStage }) => {
       if (!user) throw new Error('Not authenticated');
       if (file.size > MAX_BYTES) throw new Error('File exceeds 20 MB limit');
       if (!ALLOWED_MIME.test(file.type)) throw new Error('Only images, MP4, or PDF files are allowed');
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+      // Phase A — best-effort client-side compression.
+      const compResult = await compressImageFile(file, {
+        enabled: compressionEnabled,
+        policy: compressionPolicy,
+        severityHint: incident?.severity ?? null,
+      });
+      const out = compResult.file;
+
+      const safeName = out.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       const path = `${user.id}/${incidentId}/${stage}/${Date.now()}_${safeName}`;
       const { error: upErr } = await supabase.storage
         .from('safety-media')
-        .upload(path, file, { contentType: file.type });
+        .upload(path, out, { contentType: out.type });
       if (upErr) throw upErr;
       const { error: insErr } = await supabase.from('safety_incident_evidence').insert({
         incident_id: incidentId,
         stage,
         file_path: path,
-        file_name: file.name,
-        mime_type: file.type,
-        size_bytes: file.size,
+        file_name: out.name,
+        mime_type: out.type,
+        size_bytes: out.size,
         uploaded_by: user.id,
       } as never);
       if (insErr) throw insErr;
+      return compResult;
     },
-    onSuccess: () => {
+    onSuccess: (compResult) => {
       toast.success('Evidence uploaded');
+      if (compResult && shouldShowSavingsToast(compResult)) {
+        toast.message(formatSavings(compResult));
+      }
       qc.invalidateQueries({ queryKey: ['safety', 'incident', incidentId] });
     },
     onError: (err: Error) => toast.error(err.message ?? 'Upload failed'),
