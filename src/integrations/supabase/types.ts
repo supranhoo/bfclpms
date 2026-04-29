@@ -5168,6 +5168,13 @@ export type Database = {
         Args: { p_dry_run?: boolean }
         Returns: Json
       }
+      backfill_multimonth_percolation: {
+        Args: never
+        Returns: {
+          processed_count: number
+          sibling_count: number
+        }[]
+      }
       change_org_kpi_scope_cascading: {
         Args: {
           p_base_period: string
