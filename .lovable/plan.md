@@ -191,3 +191,34 @@ Once you answer these, I will switch to build mode and ship Phase 0 + 1.A in the
 - Memory + POLICY synced: `mem/architecture/safety/rbac.md`, POLICY §111.
 
 **Next:** Phase 1.B — incident schema (enums + master data + core tables + FSM guards), in three migrations.
+---
+
+## ✅ Status — Phase 1.B delivered
+
+- **Schema:** enums (`safety_incident_status/severity/type`, `safety_evidence_stage`), `safety_severity_sla` master data, `safety_incident_number_seq`, `safety_incidents` (with `client_submission_id` UNIQUE for offline dedup), `safety_incident_timeline`, `safety_incident_evidence`, `safety_incident_progress_logs`.
+- **SLA exposure:** `safety_incidents_with_sla` view (`security_invoker=true`) replaces the originally-planned generated column (Postgres immutability constraint on `now()`).
+- **FSM guard:** `safety_incident_fsm_guard` BEFORE UPDATE trigger blocks direct `status` writes; only `transition_safety_incident()` RPC can advance stages.
+- **RPC:** sequential-only, per-stage preconditions (assignee on `→ assigned`; notes + ≥1 progress log + ≥1 verification evidence on `→ closed`); returns `{ok,error?}` envelope.
+- **Insert hooks:** auto `INC-YYYY-######` numbering under advisory lock, severity-driven SLA deadlines.
+- **RLS:** `can_view_safety_incident()` SECURITY DEFINER helper drives SELECT for incidents/timeline/evidence/progress; only `admin` deletes incidents.
+- **Storage:** private `safety-media` bucket with folder-scoped writes, officer-or-above reads, admin-or-uploader deletes.
+- **Frontend SSOT:** `src/lib/safetyIncidents.ts`. Hooks: `src/hooks/useSafetyIncidents.ts`. List page: `/safety/incidents`.
+- **Docs:** POLICY §112, `mem/architecture/safety/incident-fsm.md`.
+
+---
+
+## ✅ Status — Phase 1.C delivered
+
+- **Form:** `/safety/incidents/new` — title/description/location/type/severity required, BU→Dept cascade, "Involved person" mandatory for `unsafe_act`/`accident`, ≥1 evidence file at submit (max 5 × 20 MB, allow-list `image/* | video/mp4 | application/pdf`), submit creates incident then uploads files into `safety-media/<uid>/<incidentId>/report/...` and redirects to detail.
+- **Detail:** `/safety/incidents/:id` — header card with status + SLA badges, four-card grid (Stage Actions, Status Timeline, Evidence, Progress Log).
+- **Stage Action Panel** — single, opinionated UI per stage:
+  - `reported` → mandatory assignee picker.
+  - `rca` / `corrective_action` / `verification` → editable text field saved before transition (so the FSM closure check sees `verification_notes`).
+  - Stage-aware evidence uploader (one button per stage, mapped via `STAGE_TO_EVIDENCE`).
+  - Always-on progress note input (⌘/Ctrl+Enter to save).
+  - Single "Advance to N+1" button — never a free-form status picker. All transitions go through `useTransitionSafetyIncident()` (RPC).
+- **Hooks:** `useSafetyOrg.ts`, `useSafetyIncidentDetail.ts` (timeline, progress, evidence, signed-URL helper, notes patch).
+- **Sub-components:** `StatusBadge`, `SlaBadge`, `IncidentTimeline`, `ProgressLogList`, `EvidenceList` (signed-URL on click).
+- **Policy invariant maintained:** UI never calls `update({ status })` and never inserts into `safety_incident_timeline`. Only the RPC moves stages. All cache invalidation stays under `['safety',...]`.
+
+**Next:** Phase 1.D — SLA escalation cron + notifications (`check-safety-sla` edge fn). Phase 1.E — offline IndexedDB queue keyed by `client_submission_id`.
