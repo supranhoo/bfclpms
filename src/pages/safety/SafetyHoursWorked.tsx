@@ -7,13 +7,19 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Plus, Trash2, ArrowLeft, Activity } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 import {
-  useSafetyHoursWorked,
   useUpsertSafetyHours,
   useDeleteSafetyHours,
 } from '@/hooks/useSafetyAnalytics';
 import { useBusinessUnits } from '@/hooks/useSafetyOrg';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
+import { useManualQuery, type ManualQueryFetcherArgs } from '@/hooks/useManualQuery';
+import { SafetyFilterBar } from '@/components/safety/SafetyFilterBar';
+import { SafetyDataTable } from '@/components/safety/SafetyDataTable';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
 
 /**
  * SafetyHoursWorked
@@ -23,8 +29,40 @@ import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDial
  */
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
+interface HoursRow {
+  id: string;
+  business_unit_id: string | null;
+  business_units?: { name?: string } | null;
+  period_year: number;
+  period_month: number;
+  hours_worked: number;
+  headcount: number | null;
+}
+
+interface HoursFilters {
+  businessUnitId: string; // 'all' or BU id
+  year: string;           // 'all' or numeric string
+}
+
+const INITIAL_FILTERS: HoursFilters = { businessUnitId: 'all', year: 'all' };
+
+async function fetchHoursPage({
+  filters, range,
+}: ManualQueryFetcherArgs<HoursFilters>): Promise<{ rows: HoursRow[]; total: number }> {
+  let q = supabase
+    .from('safety_hours_worked')
+    .select('*, business_units(name)', { count: 'exact' })
+    .order('period_year', { ascending: false })
+    .order('period_month', { ascending: false })
+    .range(range[0], range[1]);
+  if (filters.businessUnitId !== 'all') q = q.eq('business_unit_id', filters.businessUnitId);
+  if (filters.year !== 'all') q = q.eq('period_year', Number(filters.year));
+  const { data, error, count } = await q;
+  if (error) throw error;
+  return { rows: (data ?? []) as unknown as HoursRow[], total: count ?? 0 };
+}
+
 export default function SafetyHoursWorked() {
-  const { data: rows = [], isLoading } = useSafetyHoursWorked();
   const { data: bus = [] } = useBusinessUnits();
   const upsert = useUpsertSafetyHours();
   const del = useDeleteSafetyHours();
@@ -36,6 +74,23 @@ export default function SafetyHoursWorked() {
   const [hours, setHours] = useState<string>('');
   const [headcount, setHeadcount] = useState<string>('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [draft, setDraft] = useState<HoursFilters>(INITIAL_FILTERS);
+
+  const {
+    rows, total, page, pageSize, totalPages,
+    hasSubmitted, isLoading, isFetching,
+    submit, reset, setPage, setPageSize, refetchLast,
+  } = useManualQuery<HoursRow, HoursFilters>(
+    ['safety', 'hours-worked', 'list'],
+    fetchHoursPage,
+  );
+
+  const handleSubmit = () => submit(draft);
+  const handleReset = () => { setDraft(INITIAL_FILTERS); reset(); };
+
+  // Year options: current year ± 5
+  const years: number[] = [];
+  for (let y = now.getFullYear() + 1; y >= now.getFullYear() - 5; y--) years.push(y);
 
   function handleAdd() {
     if (!bu || !hours) {
@@ -60,6 +115,7 @@ export default function SafetyHoursWorked() {
           toast.success('Hours saved');
           setHours('');
           setHeadcount('');
+          refetchLast();
         },
         onError: (e: unknown) =>
           toast.error((e as Error).message ?? 'Failed to save hours'),
@@ -68,7 +124,7 @@ export default function SafetyHoursWorked() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6 p-6">
       <div className="flex flex-wrap items-start gap-4">
         <div className="p-3 rounded-xl bg-primary/10 text-primary">
           <Activity className="h-7 w-7" />
@@ -152,62 +208,80 @@ export default function SafetyHoursWorked() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Recorded entries</CardTitle>
-          <CardDescription>Most recent first.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex items-center py-6 text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading…
-            </div>
-          ) : rows.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              No entries yet. Add one above to start TRIR tracking.
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="py-2 pr-4">BU</th>
-                    <th className="py-2 pr-4">Period</th>
-                    <th className="py-2 pr-4 text-right">Hours</th>
-                    <th className="py-2 pr-4 text-right">Headcount</th>
-                    <th className="py-2 pr-4 w-10"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r: { id: string; business_unit_id: string | null; business_units?: { name?: string } | null; period_year: number; period_month: number; hours_worked: number; headcount: number | null }) => (
-                    <tr key={r.id} className="border-b last:border-0">
-                      <td className="py-2 pr-4">{r.business_units?.name ?? '(unassigned)'}</td>
-                      <td className="py-2 pr-4">
-                        {MONTHS[r.period_month - 1]} {r.period_year}
-                      </td>
-                      <td className="py-2 pr-4 text-right tabular-nums">
-                        {Number(r.hours_worked).toLocaleString()}
-                      </td>
-                      <td className="py-2 pr-4 text-right tabular-nums">
-                        {r.headcount ?? '—'}
-                      </td>
-                      <td className="py-2 pr-4 text-right">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setConfirmDelete(r.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <SafetyFilterBar
+        title="Browse recorded entries"
+        description="Filter by BU and/or year, then click Search to load."
+        onSubmit={handleSubmit}
+        onReset={handleReset}
+        isSubmitting={isFetching}
+      >
+        <Select value={draft.businessUnitId} onValueChange={(v) => setDraft((d) => ({ ...d, businessUnitId: v }))}>
+          <SelectTrigger><SelectValue placeholder="Business unit" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All business units</SelectItem>
+            {bus.map((b) => (
+              <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={draft.year} onValueChange={(v) => setDraft((d) => ({ ...d, year: v }))}>
+          <SelectTrigger><SelectValue placeholder="Year" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All years</SelectItem>
+            {years.map((y) => (
+              <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </SafetyFilterBar>
+
+      <SafetyDataTable
+        title="Recorded entries"
+        hasSubmitted={hasSubmitted}
+        isLoading={isLoading}
+        rowCount={rows.length}
+        total={total}
+        page={page}
+        pageSize={pageSize}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+      >
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>BU</TableHead>
+              <TableHead>Period</TableHead>
+              <TableHead className="text-right">Hours</TableHead>
+              <TableHead className="text-right">Headcount</TableHead>
+              <TableHead className="w-10"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r) => (
+              <TableRow key={r.id}>
+                <TableCell>{r.business_units?.name ?? '(unassigned)'}</TableCell>
+                <TableCell>{MONTHS[r.period_month - 1]} {r.period_year}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {Number(r.hours_worked).toLocaleString()}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {r.headcount ?? '—'}
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setConfirmDelete(r.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </SafetyDataTable>
 
       <ConfirmDestructiveDialog
         open={!!confirmDelete}
@@ -221,6 +295,7 @@ export default function SafetyHoursWorked() {
             onSuccess: () => {
               toast.success('Entry removed');
               setConfirmDelete(null);
+              refetchLast();
             },
             onError: (e: unknown) =>
               toast.error((e as Error).message ?? 'Failed to delete'),
