@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,6 +33,7 @@ export function MonthlyTrendView({ canExport }: Props) {
   const now = new Date();
   const currentMonth = MONTHS[now.getMonth()];
   const currentYear = now.getFullYear();
+  const queryClient = useQueryClient();
 
   // Default: last 6 months
   const initFrom = shiftMonth(currentMonth, currentYear, -5);
@@ -75,6 +77,10 @@ export function MonthlyTrendView({ canExport }: Props) {
     if (rangeInvalid) return;
     setRequestedRange({ fromMonth, fromYear, toMonth, toYear });
     setPage(1);
+    // Force a real refetch even when the range hasn't changed: an earlier
+    // failed run may have cached an empty (all-dashes) payload under the
+    // same query key, so toggling state alone won't re-issue the request.
+    queryClient.invalidateQueries({ queryKey: ['monthly-trend'] });
   };
 
   const { data, isLoading, isFetching, error, refetch } = useMonthlyTrend({

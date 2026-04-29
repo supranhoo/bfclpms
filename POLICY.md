@@ -2263,3 +2263,22 @@ The Safety module follows a strict **filters-first → click-to-load → paginat
 - **Phase 1 (2026-04-29):** SafetyAuditLog, SafetyIncidents, SafetyPermits, SafetyAudits.
 - **Phase 2 (2026-04-29):** SafetyAssets, SafetyHoursWorked, SafetySlaMonitor.
 - Static guard: `src/test/safetyManualFetchPages.test.ts` enforces every migrated page imports the sanctioned primitives.
+
+## §114 — Cached Reports Reload Contract
+
+Manual "Reload" / "Refresh" buttons on cached report screens MUST invalidate
+their query keys (`queryClient.invalidateQueries({ queryKey: [...] })`).
+Toggling local state alone is not sufficient: when filters are unchanged,
+React Query returns the cached payload without re-issuing the request, so
+a previously-failed (empty/all-null) result will keep showing.
+
+**Companion rule — submission batch URL safety:** any client-side fan-out
+over `kpi_id=in.(...)` (or any large `in.(...)` filter) MUST cap each batch
+so the resulting URL stays well under the PostgREST/CDN ~16 KB limit.
+200 UUIDs per batch (~7.6 KB) is the sanctioned ceiling; do not raise it
+without measuring the produced URL length.
+
+**Reference implementation:** `src/hooks/useMonthlyTrend.ts` +
+`src/components/reports/MonthlyTrendView.tsx`. Test:
+`src/test/monthlyTrendCacheBust.test.ts`. Memory:
+`mem://features/reports/monthly-scorecard-trend`.
