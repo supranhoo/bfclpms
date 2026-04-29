@@ -167,8 +167,10 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
 
       const subsPromise = (async () => {
         const ids = allKpis.map(k => k.id);
-        // Larger batch — submissions are cheap by id
-        const SUB_BATCH = 800;
+        // Keep batch small enough that the resulting `kpi_id=in.(...)` URL
+        // stays well under the ~16KB PostgREST/CDN limit (≈ 38 chars per UUID
+        // including the `%2C` separator). 200 IDs ≈ 7.6KB of querystring.
+        const SUB_BATCH = 200;
         const batches: string[][] = [];
         for (let i = 0; i < ids.length; i += SUB_BATCH) {
           batches.push(ids.slice(i, i + SUB_BATCH));
@@ -183,7 +185,15 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
               .select('kpi_id, final_score, management_score, auditor_score, hr_pms_score, skip_level_score, manager_score, self_score, is_na')
               .in('kpi_id', b)
           ));
-          results.forEach(r => (r.data ?? []).forEach((s: any) => subMap.set(s.kpi_id, s)));
+          results.forEach((r) => {
+            if (r.error) {
+              // Surface partial-fetch failures (e.g. URL-length / 414) instead
+              // of silently rendering all dashes.
+              console.error('[useMonthlyTrend] submissions batch failed:', r.error);
+              throw r.error;
+            }
+            (r.data ?? []).forEach((s: any) => subMap.set(s.kpi_id, s));
+          });
         }
       })();
 
