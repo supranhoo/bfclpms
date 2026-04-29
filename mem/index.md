@@ -21,3 +21,4 @@ Notification triggers must guard non-login recipients (no auth.users row) — pr
 - [Large-table export pagination](mem://architecture/database/large-export-pagination-policy) — Ordered fetchAllPaged + .in() lookup decoupling for exports >1k rows (BUG-038 / POLICY §109)
 - [Profile cache invalidation](mem://architecture/profile-cache-invalidation) — invalidateProfileCaches helper + useProfilesVersion realtime counter for hooks caching profile-derived data (POLICY §95)
 - [Safety module shell isolation](mem://architecture/safety/module-shell-isolation) — /safety/* uses a fully decoupled SafetyLayout/SafetySidebar/SafetyHeader; PMS chrome forbidden in either direction; visibility gated by modules.is_enabled + safety_module_access (POLICY §110)
+- [Safety RBAC](mem://architecture/safety/rbac) — safety_app_role enum + safety_user_roles table + has_safety_role() SECURITY DEFINER; granting any role implicitly grants Hub access; admin-managed via /safety/settings/users

@@ -2161,3 +2161,24 @@ The Safety module is the second module mounted on the Module Hub (after PMS). It
 - Storing Safety-specific roles on `profiles` or in `app_role` — Safety roles will live in a separate `safety_app_role` enum + `safety_user_roles` table (Phase 1.A).
 
 **Related:** `mem://architecture/safety/module-shell-isolation`.
+
+---
+
+## §111 — Safety RBAC (Phase 1.A)
+
+The Safety module has its own role system. **It does NOT reuse PMS `app_role`.**
+
+- **Enum:** `public.safety_app_role` (`admin, safety_head, safety_officer, bu_head, manager, supervisor, worker, auditor`).
+- **Table:** `public.safety_user_roles (user_id, role, business_unit_id?, department_id?, assigned_by, assigned_at)` — UNIQUE across the four-tuple, NULL-safe via COALESCE expression index.
+- **Authoritative check:** `public.has_safety_role(uid, role, bu?)` — `SECURITY DEFINER`. **All Safety RLS policies MUST use this helper** to avoid recursion (mirrors PMS `has_role`).
+- **Module access:** `has_safety_module_access(uid)` returns `true` if either an explicit `safety_module_access` row exists OR the user has any `safety_user_roles` row. Granting any Safety role therefore implicitly reveals the Hub card and unlocks `/safety/*`.
+- **Audit:** every grant/revoke is recorded in `public.safety_audit_log` via `AFTER INSERT/DELETE` trigger. Only Safety `admin` can read the log.
+- **Admin surface:** `/safety/settings/users` (`SafetyUsers` page). Lives inside the Safety shell — never duplicated under `/admin/*`.
+- **SSOT:** `src/lib/safetyRoles.ts` — keep in sync with the Postgres enum.
+
+**Forbidden:**
+- Storing Safety roles on `user_roles` or `profiles`.
+- Querying `safety_user_roles` directly inside an RLS policy on the same table without `has_safety_role()` indirection.
+- Inserting into `safety_audit_log` from app code (only the trigger is authorised).
+
+**Related:** `mem://architecture/safety/rbac`.

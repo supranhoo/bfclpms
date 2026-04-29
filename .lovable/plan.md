@@ -179,3 +179,15 @@ Port from your reference + add the chrome-isolation test:
 4. **Phase 0 scope** — do you want me to ship Phase 0 (Hub + shell + empty pages) as a standalone PR first, then Phase 1 in a second PR? Or one big drop? Answer One by One 
 
 Once you answer these, I will switch to build mode and ship Phase 0 + 1.A in the first turn (foundation: shell + RBAC + admin toggle + tests), then 1.B–1.L in subsequent turns so each is reviewable.
+
+---
+
+## ✅ Status — Phase 1.A delivered
+
+- Migration shipped: `safety_app_role` enum, `safety_user_roles` table (unique across user/role/BU/dept with NULL-safe index), `has_safety_role()` + `has_any_safety_role()` SECURITY DEFINER helpers, `safety_audit_log` table + trigger, `has_safety_module_access()` extended to include role-based grants.
+- SSOT: `src/lib/safetyRoles.ts` (8 roles + label/description maps).
+- Hooks: `src/hooks/useSafetyRoles.ts` (`useAllSafetyUserRoles`, `useMySafetyRoles`, `useGrantSafetyRole`, `useRevokeSafetyRole`).
+- UI: `/safety/settings/users` (`src/pages/safety/SafetyUsers.tsx`) — search + grant + revoke. Sidebar item live.
+- Memory + POLICY synced: `mem/architecture/safety/rbac.md`, POLICY §111.
+
+**Next:** Phase 1.B — incident schema (enums + master data + core tables + FSM guards), in three migrations.

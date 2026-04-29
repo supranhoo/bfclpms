@@ -60,6 +60,7 @@ const SafetyLayout = lazy(() =>
   import("./components/safety/SafetyLayout").then((m) => ({ default: m.SafetyLayout }))
 );
 const SafetyHome = lazy(() => import("./pages/safety/SafetyHome"));
+const SafetyUsers = lazy(() => import("./pages/safety/SafetyUsers"));
 
 // Report pages
 const PerformanceReport = lazy(() => import("./pages/reports/PerformanceReport"));
@@ -133,6 +134,7 @@ const App = () => (
                 element={<Suspense fallback={<PageFallback />}><SafetyLayout /></Suspense>}
               >
                 <Route index element={<Suspense fallback={<PageFallback />}><SafetyHome /></Suspense>} />
+                <Route path="settings/users" element={<Suspense fallback={<PageFallback />}><SafetyUsers /></Suspense>} />
               </Route>
               <Route element={<DashboardLayout />}>
                 <Route path="/dashboard" element={<Dashboard />} />
