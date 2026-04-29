@@ -17,12 +17,13 @@ import { UomType, QualitativeOption, BINARY_OPTIONS, BINARY_OPTIONS_INVERTED, is
 import { Badge } from '@/components/ui/badge';
 import { UOM_OPTIONS } from '@/lib/uomConstants';
 import { getCycleOptionsForFrequency, MULTI_MONTH_FREQUENCIES } from '@/lib/frequencyCycleOptions';
-import { getActiveMonthForCycle } from '@/lib/frequencyUtils';
+import { getActiveMonthForCycle, buildCycleScopeLabel } from '@/lib/frequencyUtils';
 import { useKpiTemplates } from '@/hooks/useKpiTemplates';
 import { useAllKpis } from '@/hooks/useKpis';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Check, ChevronsUpDown, ArrowLeft } from 'lucide-react';
+import { Check, ChevronsUpDown, ArrowLeft, Info } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { KraLibrarySearchPanel } from './KraLibrarySearchPanel';
 
@@ -279,6 +280,11 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
   }, [frequency, reviewPeriod, reviewYear, frequencyCycleStart]);
 
   const showResolvedPreview = resolvedPeriod !== reviewPeriod;
+
+  const cycleScope = useMemo(
+    () => buildCycleScopeLabel(frequency, reviewPeriod, reviewYear, frequencyCycleStart || null),
+    [frequency, reviewPeriod, reviewYear, frequencyCycleStart]
+  );
 
   const handleSubmit = async () => {
     if (!employeeId || !categoryId || !kraName || !kpiName) {
