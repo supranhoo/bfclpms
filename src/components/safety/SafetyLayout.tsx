@@ -9,6 +9,7 @@ import {
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { Loader2 } from 'lucide-react';
 import { useIdleTimeout } from '@/hooks/useIdleTimeout';
+import { useSafetyRealtimeSync } from '@/hooks/useSafetyRealtimeSync';
 import { SafetyHeader } from './SafetyHeader';
 import { SafetySidebar } from './SafetySidebar';
 import { SafetyModuleRoute } from './SafetyModuleRoute';
@@ -58,6 +59,7 @@ function SafetyContent() {
 
 export function SafetyLayout() {
   useIdleTimeout();
+  useSafetyRealtimeSync();
 
   return (
     <SafetyModuleRoute>
