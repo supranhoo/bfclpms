@@ -12,7 +12,7 @@ import {
   SAFETY_SEVERITY_LABELS,
   SAFETY_INCIDENT_STAGES,
 } from '@/lib/safetyIncidents';
-import { StatusBadge } from '@/components/safety/StatusBadge';
+import { SafetyStatusBadge } from '@/components/safety/StatusBadge';
 import { SlaBadge } from '@/components/safety/SlaBadge';
 import { format } from 'date-fns';
 
@@ -175,7 +175,7 @@ export default function SafetyHome() {
                         {inc.location} · {format(new Date(inc.created_at), 'dd MMM yyyy')}
                       </div>
                     </div>
-                    <StatusBadge status={inc.status} />
+                    <SafetyStatusBadge status={inc.status} />
                     <SlaBadge state={inc.sla_state} />
                   </Link>
                 ))
@@ -215,7 +215,7 @@ export default function SafetyHome() {
                         {SAFETY_SEVERITY_LABELS[inc.severity]} · {inc.location}
                       </div>
                     </div>
-                    <StatusBadge status={inc.status} />
+                    <SafetyStatusBadge status={inc.status} />
                     <SlaBadge state={inc.sla_state} />
                   </Link>
                 ))
