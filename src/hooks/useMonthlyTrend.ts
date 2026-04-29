@@ -167,8 +167,10 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
 
       const subsPromise = (async () => {
         const ids = allKpis.map(k => k.id);
-        // Larger batch — submissions are cheap by id
-        const SUB_BATCH = 800;
+        // Keep batch small enough that the resulting `kpi_id=in.(...)` URL
+        // stays well under the ~16KB PostgREST/CDN limit (≈ 38 chars per UUID
+        // including the `%2C` separator). 200 IDs ≈ 7.6KB of querystring.
+        const SUB_BATCH = 200;
         const batches: string[][] = [];
         for (let i = 0; i < ids.length; i += SUB_BATCH) {
           batches.push(ids.slice(i, i + SUB_BATCH));
