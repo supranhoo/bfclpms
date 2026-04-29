@@ -825,10 +825,34 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                       </Select>
                     </div>
                   </div>
-                  {showResolvedPreview && (
-                    <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 rounded-md px-3 py-2">
-                      {frequency} KPI selected in {reviewPeriod} {reviewYear} will be assigned to <strong>{resolvedPeriod} {reviewYear}</strong> (cycle end month).
-                    </p>
+                  {cycleScope.isMultiMonth && (
+                    <div className="text-xs text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-2 space-y-1">
+                      <p>
+                        <strong>{frequency}</strong> cycle covers{' '}
+                        <strong>{cycleScope.cycleMonths.join(', ')} {reviewYear}</strong>
+                        {cycleScope.wrapsYear && <> – {cycleScope.anchorYear}</>}.
+                      </p>
+                      <p className="flex items-center gap-1.5">
+                        <span>
+                          Reviewed once in{' '}
+                          <strong>{cycleScope.anchorMonth} {cycleScope.anchorYear}</strong> (cycle end);
+                          the approved score auto-applies to all months in the cycle.
+                        </span>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs text-xs">
+                              Multi-month KPIs (Bi-Monthly, Quarterly, Half-Yearly, Yearly) are scored
+                              once at the cycle's terminal month. The approved score is automatically
+                              percolated to every month in the cycle. This avoids duplicate reviews and
+                              keeps scores consistent across the period (POLICY §54 v3).
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </p>
+                    </div>
                   )}
                 </div>
               </div>
