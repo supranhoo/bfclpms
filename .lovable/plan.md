@@ -222,3 +222,17 @@ Once you answer these, I will switch to build mode and ship Phase 0 + 1.A in the
 - **Policy invariant maintained:** UI never calls `update({ status })` and never inserts into `safety_incident_timeline`. Only the RPC moves stages. All cache invalidation stays under `['safety',...]`.
 
 **Next:** Phase 1.D — SLA escalation cron + notifications (`check-safety-sla` edge fn). Phase 1.E — offline IndexedDB queue keyed by `client_submission_id`.
+
+---
+
+## ✅ Status — Phase 1.E delivered (Offline IndexedDB queue)
+
+- **Lib:** `src/lib/safetyOfflineQueue.ts` — native IndexedDB (no new deps), store `pending_incidents` keyed by `client_submission_id`, stores File blobs, attempts/last_error tracking, `pruneStalePending(10 attempts AND 7 days)` self-heal.
+- **Lib:** `src/lib/safetyIncidentSubmit.ts` — single canonical `submitSafetyIncident()` used by BOTH online happy-path and offline flush. Idempotent via lookup-then-insert on `client_submission_id` + per-file `(name,size)` evidence dedup.
+- **Hook:** `src/hooks/useSafetyOfflineSync.ts` — `online`/`offline` listeners + 15s poll + first-load opportunistic flush, sequential drain, invalidates `['safety']`.
+- **UI:** `SafetyOfflineBadge` in `SafetyHeader` (hidden when online+empty; red "Offline" chip; "N pending" manual-flush button).
+- **Form:** `SafetyIncidentNew` now generates a stable client_submission_id, calls `submitSafetyIncident`, falls back to `enqueuePendingIncident` on `navigator.onLine===false` or network errors. Banner in form when offline.
+- **Tests:** `src/test/safetyOfflineQueue.test.ts` — 3 graceful-degradation tests (passes in jsdom without IndexedDB).
+- **Memory + index synced.**
+
+**Next:** Phase 1.F — Audit log surface + admin "open incidents" dashboard widgets.

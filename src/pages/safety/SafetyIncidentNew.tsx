@@ -12,8 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, ArrowLeft, AlertTriangle, Upload, X } from 'lucide-react';
-import { useReportSafetyIncident } from '@/hooks/useSafetyIncidents';
+import { Loader2, ArrowLeft, AlertTriangle, Upload, X, WifiOff } from 'lucide-react';
 import { useBusinessUnits, useDepartments } from '@/hooks/useSafetyOrg';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -22,6 +21,12 @@ import {
   type SafetyIncidentType,
   type SafetyIncidentSeverity,
 } from '@/lib/safetyIncidents';
+import { submitSafetyIncident } from '@/lib/safetyIncidentSubmit';
+import { enqueuePendingIncident } from '@/lib/safetyOfflineQueue';
+import { useSafetyOfflineSync } from '@/hooks/useSafetyOfflineSync';
+import { useAuth } from '@/contexts/AuthContext';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 /**
  * Incident report form (Phase 1.C).
@@ -37,7 +42,9 @@ const REQUIRES_INVOLVED: SafetyIncidentType[] = ['unsafe_act', 'accident'];
 
 export default function SafetyIncidentNew() {
   const navigate = useNavigate();
-  const report = useReportSafetyIncident();
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const { isOnline } = useSafetyOfflineSync();
   const { data: businessUnits = [] } = useBusinessUnits();
 
   const [title, setTitle] = useState('');
@@ -76,43 +83,84 @@ export default function SafetyIncidentNew() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit || submitting) return;
+    if (!user) {
+      toast.error('Session lost — please sign in again.');
+      return;
+    }
     setSubmitting(true);
-    try {
-      const created = await report.mutateAsync({
-        title: title.trim(),
-        description: description.trim(),
-        location: location.trim(),
-        incident_type: type as SafetyIncidentType,
-        severity: severity as SafetyIncidentSeverity,
-        business_unit_id: businessUnitId || null,
-        department_id: departmentId || null,
-        involved_person_name: requiresInvolved ? involvedName.trim() : null,
-      });
-      // Upload evidence sequentially against the new id (FK + RLS clean).
-      const { data: authData } = await supabase.auth.getUser();
-      const user = authData.user;
-      if (!user) throw new Error('Session lost');
-      for (const f of files) {
-        const safeName = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const path = `${user.id}/${created.id}/report/${Date.now()}_${safeName}`;
-        const { error: upErr } = await supabase.storage
-          .from('safety-media')
-          .upload(path, f, { contentType: f.type });
-        if (upErr) throw upErr;
-        await supabase.from('safety_incident_evidence').insert({
-          incident_id: created.id,
-          stage: 'report',
-          file_path: path,
-          file_name: f.name,
-          mime_type: f.type,
-          size_bytes: f.size,
-          uploaded_by: user.id,
-        } as never);
+
+    // Stable client_submission_id for idempotent retries (online or offline).
+    const clientSubmissionId =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    const payload = {
+      title: title.trim(),
+      description: description.trim(),
+      location: location.trim(),
+      incident_type: type as SafetyIncidentType,
+      severity: severity as SafetyIncidentSeverity,
+      business_unit_id: businessUnitId || null,
+      department_id: departmentId || null,
+      involved_person_name: requiresInvolved ? involvedName.trim() : null,
+      client_submission_id: clientSubmissionId,
+    };
+
+    // Helper: stash to IndexedDB and tell the user.
+    const queueOffline = async (reason: string) => {
+      try {
+        await enqueuePendingIncident({
+          id: clientSubmissionId,
+          reporter_id: user.id,
+          payload,
+          files: files.map((f) => ({
+            name: f.name,
+            type: f.type,
+            size: f.size,
+            blob: f,
+          })),
+          created_at: Date.now(),
+        });
+        toast.success('Saved offline — will sync when you reconnect', {
+          description: reason,
+        });
+        navigate('/safety/incidents');
+      } catch (qErr) {
+        toast.error('Could not save offline either. Please try again.');
+        console.error('[SafetyIncidentNew] enqueue failed:', qErr);
       }
+    };
+
+    // Hard-offline shortcut: skip the network attempt entirely.
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      await queueOffline('You appear to be offline.');
+      setSubmitting(false);
+      return;
+    }
+
+    try {
+      const created = await submitSafetyIncident({
+        reporterId: user.id,
+        payload,
+        files: files.map((f) => ({ name: f.name, type: f.type, size: f.size, blob: f })),
+      });
+      toast.success(`Incident ${created.incident_number} reported`);
+      qc.invalidateQueries({ queryKey: ['safety'] });
       navigate(`/safety/incidents/${created.id}`);
-    } catch (err) {
-      // toast already shown by hook for the row; surface upload failure
-      console.error(err);
+    } catch (err: any) {
+      const msg = err?.message ?? String(err);
+      const isNetworkErr =
+        msg.includes('Failed to fetch') ||
+        msg.includes('NetworkError') ||
+        msg.includes('Load failed') ||
+        err?.name === 'TypeError';
+      if (isNetworkErr) {
+        await queueOffline('Network unavailable — your report is safe.');
+      } else {
+        toast.error(msg || 'Failed to submit incident');
+        console.error('[SafetyIncidentNew]', err);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -132,6 +180,14 @@ export default function SafetyIncidentNew() {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {!isOnline && (
+            <div className="mb-4 flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+              <WifiOff className="h-4 w-4" />
+              <span>
+                You're offline. Your report will be saved on this device and submitted automatically when you reconnect.
+              </span>
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
