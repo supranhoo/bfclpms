@@ -21,7 +21,7 @@ import {
   validateContactDraft,
 } from '@/lib/safetyEmergency';
 import { useToast } from '@/hooks/use-toast';
-import { ConfirmDestructiveDialog } from '@/components/ConfirmDestructiveDialog';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 export default function SafetyEmergencyContacts() {
   const { toast } = useToast();
@@ -192,11 +192,12 @@ export default function SafetyEmergencyContacts() {
 
       <ConfirmDestructiveDialog
         open={!!pendingDelete}
-        onOpenChange={(open) => { if (!open) setPendingDelete(null); }}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={confirmDelete}
         title="Remove contact?"
         description="This contact will be permanently removed from the emergency directory."
-        confirmText="Remove"
-        onConfirm={confirmDelete}
+        confirmLabel="Remove"
+        isLoading={del.isPending}
       />
     </div>
   );
