@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ShieldAlert, LogOut, ChevronDown, LayoutGrid } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { SafetyNotificationBell } from '@/components/safety/SafetyNotificationBell';
 
 /**
  * SafetyHeader
@@ -63,6 +64,7 @@ export function SafetyHeader() {
               <LayoutGrid className="h-4 w-4" />
               Hub
             </Button>
+            <SafetyNotificationBell />
             <ThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

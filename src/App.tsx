@@ -61,6 +61,10 @@ const SafetyLayout = lazy(() =>
 );
 const SafetyHome = lazy(() => import("./pages/safety/SafetyHome"));
 const SafetyUsers = lazy(() => import("./pages/safety/SafetyUsers"));
+const SafetyIncidents = lazy(() => import("./pages/safety/SafetyIncidents"));
+const SafetyIncidentNew = lazy(() => import("./pages/safety/SafetyIncidentNew"));
+const SafetyIncidentDetail = lazy(() => import("./pages/safety/SafetyIncidentDetail"));
+const SafetySlaMonitor = lazy(() => import("./pages/safety/SafetySlaMonitor"));
 
 // Report pages
 const PerformanceReport = lazy(() => import("./pages/reports/PerformanceReport"));
@@ -134,6 +138,10 @@ const App = () => (
                 element={<Suspense fallback={<PageFallback />}><SafetyLayout /></Suspense>}
               >
                 <Route index element={<Suspense fallback={<PageFallback />}><SafetyHome /></Suspense>} />
+                <Route path="incidents" element={<Suspense fallback={<PageFallback />}><SafetyIncidents /></Suspense>} />
+                <Route path="incidents/new" element={<Suspense fallback={<PageFallback />}><SafetyIncidentNew /></Suspense>} />
+                <Route path="incidents/:id" element={<Suspense fallback={<PageFallback />}><SafetyIncidentDetail /></Suspense>} />
+                <Route path="settings/sla" element={<Suspense fallback={<PageFallback />}><SafetySlaMonitor /></Suspense>} />
                 <Route path="settings/users" element={<Suspense fallback={<PageFallback />}><SafetyUsers /></Suspense>} />
               </Route>
               <Route element={<DashboardLayout />}>
