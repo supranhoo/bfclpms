@@ -2182,3 +2182,51 @@ The Safety module has its own role system. **It does NOT reuse PMS `app_role`.**
 - Inserting into `safety_audit_log` from app code (only the trigger is authorised).
 
 **Related:** `mem://architecture/safety/rbac`.
+
+---
+
+## §112 — Safety Incident Schema & FSM (Phase 1.B)
+
+The Safety incident workflow is a **server-enforced 7-stage FSM**. The frontend cannot bypass it.
+
+### Stages (strict order)
+`reported → assigned → investigation → rca → corrective_action → verification → closed`
+
+`orphaned` is the only out-of-band status (set when no responsible owner can be identified). Closure is only reachable via the linear path.
+
+### Tables
+- `safety_incidents` — core record. `incident_number` auto-generated as `INC-YYYY-######` from `safety_incident_number_seq` under an advisory transaction lock (offline replay safe).
+- `safety_incident_timeline` — append-only audit of every status change. Inserted only by the `transition_safety_incident` RPC.
+- `safety_incident_evidence` — single source of truth for files. Tagged with a `stage` enum (`report/assignment/investigation/rca/capa/verification`). **No `media_urls jsonb` on incidents.**
+- `safety_incident_progress_logs` — running notes per stage.
+- `safety_severity_sla` — admin-editable SLA matrix. Seeded with `low=48h ack/720h close`, `medium=24/336`, `high=8/168`, `critical=2/72`.
+
+### Enforcement
+- **`safety_incident_fsm_guard` BEFORE UPDATE trigger** — blocks any `status` change unless `current_setting('safety.fsm_transition','true') = 'on'`. The session flag is set only inside the RPC.
+- **`transition_safety_incident(p_incident_id, p_to_status, p_notes, p_assigned_to)` RPC** — `SECURITY DEFINER`, the **only** legal entry point for stage advancement.
+  - Rejects non-sequential transitions.
+  - `→ assigned` requires `p_assigned_to`.
+  - `→ closed` requires: ≥1 `verification`-stage evidence row, ≥1 progress log, non-empty `verification_notes`.
+  - Returns `{ ok: boolean, error?: string, from?, to? }` envelope. Never throws to callers.
+- **`safety_incident_before_insert` trigger** — assigns `incident_number` and SLA deadlines from the severity matrix.
+
+### SLA visibility
+- Live `sla_state` (`green/amber/red/closed`) is exposed via the `safety_incidents_with_sla` view (`security_invoker = true`). The view is the **only** source for displaying SLA state. Never recompute it client-side.
+- `now()` cannot live in a generated column (immutability rule), so the view replaces a stored generated column.
+
+### Offline idempotency
+- Every incident carries `client_submission_id uuid` with a DB UNIQUE constraint on `(reporter_id, client_submission_id)`. The frontend generates this via `crypto.randomUUID()` at form submission time; reconnect replays are deduplicated by the DB.
+
+### Cache scope
+- All Safety React Query keys live under `['safety', ...]`. `invalidateAllSafetyQueries(qc)` (in `src/hooks/useSafetyIncidents.ts`) invalidates only that prefix and **must never** invalidate PMS keys.
+
+### Storage
+- Bucket `safety-media` (private). Users can only write/read their own folder; `admin/safety_head/safety_officer/auditor` can read all. Only `admin` (or the uploader) can delete.
+
+### Forbidden
+- Direct `update({ status: ... })` calls from app code — will be rejected by the FSM guard.
+- Inserting into `safety_incident_timeline` from app code — only the RPC is authorised.
+- Adding a `media_urls` column or any duplicate file storage on `safety_incidents`.
+- Hardcoding stage labels, severities, or types in components — import from `src/lib/safetyIncidents.ts`.
+
+**Related:** `mem://architecture/safety/incident-fsm`.

@@ -4492,6 +4492,350 @@ export type Database = {
         }
         Relationships: []
       }
+      safety_incident_evidence: {
+        Row: {
+          file_name: string
+          file_path: string
+          id: string
+          incident_id: string
+          mime_type: string | null
+          size_bytes: number | null
+          stage: Database["public"]["Enums"]["safety_evidence_stage"]
+          uploaded_at: string
+          uploaded_by: string
+        }
+        Insert: {
+          file_name: string
+          file_path: string
+          id?: string
+          incident_id: string
+          mime_type?: string | null
+          size_bytes?: number | null
+          stage: Database["public"]["Enums"]["safety_evidence_stage"]
+          uploaded_at?: string
+          uploaded_by: string
+        }
+        Update: {
+          file_name?: string
+          file_path?: string
+          id?: string
+          incident_id?: string
+          mime_type?: string | null
+          size_bytes?: number | null
+          stage?: Database["public"]["Enums"]["safety_evidence_stage"]
+          uploaded_at?: string
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_incident_evidence_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "safety_incidents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_evidence_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "safety_incidents_with_sla"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_evidence_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_evidence_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      safety_incident_progress_logs: {
+        Row: {
+          created_at: string
+          id: string
+          incident_id: string
+          logged_by: string
+          note: string
+          stage: Database["public"]["Enums"]["safety_incident_status"]
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          incident_id: string
+          logged_by: string
+          note: string
+          stage: Database["public"]["Enums"]["safety_incident_status"]
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          incident_id?: string
+          logged_by?: string
+          note?: string
+          stage?: Database["public"]["Enums"]["safety_incident_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_incident_progress_logs_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "safety_incidents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_progress_logs_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "safety_incidents_with_sla"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_progress_logs_logged_by_fkey"
+            columns: ["logged_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_progress_logs_logged_by_fkey"
+            columns: ["logged_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      safety_incident_timeline: {
+        Row: {
+          changed_by: string | null
+          created_at: string
+          from_status:
+            | Database["public"]["Enums"]["safety_incident_status"]
+            | null
+          id: string
+          incident_id: string
+          notes: string | null
+          to_status: Database["public"]["Enums"]["safety_incident_status"]
+        }
+        Insert: {
+          changed_by?: string | null
+          created_at?: string
+          from_status?:
+            | Database["public"]["Enums"]["safety_incident_status"]
+            | null
+          id?: string
+          incident_id: string
+          notes?: string | null
+          to_status: Database["public"]["Enums"]["safety_incident_status"]
+        }
+        Update: {
+          changed_by?: string | null
+          created_at?: string
+          from_status?:
+            | Database["public"]["Enums"]["safety_incident_status"]
+            | null
+          id?: string
+          incident_id?: string
+          notes?: string | null
+          to_status?: Database["public"]["Enums"]["safety_incident_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_incident_timeline_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_timeline_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_timeline_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "safety_incidents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_timeline_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "safety_incidents_with_sla"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      safety_incidents: {
+        Row: {
+          acknowledge_due_at: string
+          assigned_at: string | null
+          assigned_to: string | null
+          business_unit_id: string | null
+          capa_summary: string | null
+          client_submission_id: string
+          close_due_at: string
+          closed_at: string | null
+          closed_by: string | null
+          created_at: string
+          department_id: string | null
+          description: string
+          id: string
+          incident_number: string | null
+          incident_type: Database["public"]["Enums"]["safety_incident_type"]
+          involved_person_id: string | null
+          involved_person_name: string | null
+          location: string
+          occurred_at: string
+          rca_summary: string | null
+          reporter_id: string
+          severity: Database["public"]["Enums"]["safety_incident_severity"]
+          status: Database["public"]["Enums"]["safety_incident_status"]
+          title: string
+          updated_at: string
+          verification_notes: string | null
+        }
+        Insert: {
+          acknowledge_due_at: string
+          assigned_at?: string | null
+          assigned_to?: string | null
+          business_unit_id?: string | null
+          capa_summary?: string | null
+          client_submission_id?: string
+          close_due_at: string
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string
+          department_id?: string | null
+          description: string
+          id?: string
+          incident_number?: string | null
+          incident_type: Database["public"]["Enums"]["safety_incident_type"]
+          involved_person_id?: string | null
+          involved_person_name?: string | null
+          location: string
+          occurred_at?: string
+          rca_summary?: string | null
+          reporter_id: string
+          severity: Database["public"]["Enums"]["safety_incident_severity"]
+          status?: Database["public"]["Enums"]["safety_incident_status"]
+          title: string
+          updated_at?: string
+          verification_notes?: string | null
+        }
+        Update: {
+          acknowledge_due_at?: string
+          assigned_at?: string | null
+          assigned_to?: string | null
+          business_unit_id?: string | null
+          capa_summary?: string | null
+          client_submission_id?: string
+          close_due_at?: string
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string
+          department_id?: string | null
+          description?: string
+          id?: string
+          incident_number?: string | null
+          incident_type?: Database["public"]["Enums"]["safety_incident_type"]
+          involved_person_id?: string | null
+          involved_person_name?: string | null
+          location?: string
+          occurred_at?: string
+          rca_summary?: string | null
+          reporter_id?: string
+          severity?: Database["public"]["Enums"]["safety_incident_severity"]
+          status?: Database["public"]["Enums"]["safety_incident_status"]
+          title?: string
+          updated_at?: string
+          verification_notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_incidents_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_business_unit_id_fkey"
+            columns: ["business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_closed_by_fkey"
+            columns: ["closed_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_closed_by_fkey"
+            columns: ["closed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_involved_person_id_fkey"
+            columns: ["involved_person_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_involved_person_id_fkey"
+            columns: ["involved_person_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_reporter_id_fkey"
+            columns: ["reporter_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_reporter_id_fkey"
+            columns: ["reporter_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       safety_module_access: {
         Row: {
           can_edit: boolean
@@ -4519,6 +4863,30 @@ export type Database = {
           granted_by?: string | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      safety_severity_sla: {
+        Row: {
+          acknowledge_hours: number
+          amber_threshold_pct: number
+          close_hours: number
+          severity: Database["public"]["Enums"]["safety_incident_severity"]
+          updated_at: string
+        }
+        Insert: {
+          acknowledge_hours: number
+          amber_threshold_pct?: number
+          close_hours: number
+          severity: Database["public"]["Enums"]["safety_incident_severity"]
+          updated_at?: string
+        }
+        Update: {
+          acknowledge_hours?: number
+          amber_threshold_pct?: number
+          close_hours?: number
+          severity?: Database["public"]["Enums"]["safety_incident_severity"]
+          updated_at?: string
         }
         Relationships: []
       }
@@ -5248,6 +5616,179 @@ export type Database = {
           },
         ]
       }
+      safety_incidents_with_sla: {
+        Row: {
+          acknowledge_due_at: string | null
+          assigned_at: string | null
+          assigned_to: string | null
+          business_unit_id: string | null
+          capa_summary: string | null
+          client_submission_id: string | null
+          close_due_at: string | null
+          closed_at: string | null
+          closed_by: string | null
+          created_at: string | null
+          department_id: string | null
+          description: string | null
+          id: string | null
+          incident_number: string | null
+          incident_type:
+            | Database["public"]["Enums"]["safety_incident_type"]
+            | null
+          involved_person_id: string | null
+          involved_person_name: string | null
+          location: string | null
+          occurred_at: string | null
+          rca_summary: string | null
+          reporter_id: string | null
+          severity:
+            | Database["public"]["Enums"]["safety_incident_severity"]
+            | null
+          sla_state: string | null
+          status: Database["public"]["Enums"]["safety_incident_status"] | null
+          title: string | null
+          updated_at: string | null
+          verification_notes: string | null
+        }
+        Insert: {
+          acknowledge_due_at?: string | null
+          assigned_at?: string | null
+          assigned_to?: string | null
+          business_unit_id?: string | null
+          capa_summary?: string | null
+          client_submission_id?: string | null
+          close_due_at?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string | null
+          department_id?: string | null
+          description?: string | null
+          id?: string | null
+          incident_number?: string | null
+          incident_type?:
+            | Database["public"]["Enums"]["safety_incident_type"]
+            | null
+          involved_person_id?: string | null
+          involved_person_name?: string | null
+          location?: string | null
+          occurred_at?: string | null
+          rca_summary?: string | null
+          reporter_id?: string | null
+          severity?:
+            | Database["public"]["Enums"]["safety_incident_severity"]
+            | null
+          sla_state?: never
+          status?: Database["public"]["Enums"]["safety_incident_status"] | null
+          title?: string | null
+          updated_at?: string | null
+          verification_notes?: string | null
+        }
+        Update: {
+          acknowledge_due_at?: string | null
+          assigned_at?: string | null
+          assigned_to?: string | null
+          business_unit_id?: string | null
+          capa_summary?: string | null
+          client_submission_id?: string | null
+          close_due_at?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string | null
+          department_id?: string | null
+          description?: string | null
+          id?: string | null
+          incident_number?: string | null
+          incident_type?:
+            | Database["public"]["Enums"]["safety_incident_type"]
+            | null
+          involved_person_id?: string | null
+          involved_person_name?: string | null
+          location?: string | null
+          occurred_at?: string | null
+          rca_summary?: string | null
+          reporter_id?: string | null
+          severity?:
+            | Database["public"]["Enums"]["safety_incident_severity"]
+            | null
+          sla_state?: never
+          status?: Database["public"]["Enums"]["safety_incident_status"] | null
+          title?: string | null
+          updated_at?: string | null
+          verification_notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_incidents_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_business_unit_id_fkey"
+            columns: ["business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_closed_by_fkey"
+            columns: ["closed_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_closed_by_fkey"
+            columns: ["closed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_involved_person_id_fkey"
+            columns: ["involved_person_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_involved_person_id_fkey"
+            columns: ["involved_person_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_reporter_id_fkey"
+            columns: ["reporter_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_reporter_id_fkey"
+            columns: ["reporter_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       aggregate_sub_period_scores: {
@@ -5264,6 +5805,10 @@ export type Database = {
           processed_count: number
           sibling_count: number
         }[]
+      }
+      can_view_safety_incident: {
+        Args: { _incident_id: string }
+        Returns: boolean
       }
       change_org_kpi_scope_cascading: {
         Args: {
@@ -5529,6 +6074,15 @@ export type Database = {
           terminal_year: number
         }[]
       }
+      transition_safety_incident: {
+        Args: {
+          p_assigned_to?: string
+          p_incident_id: string
+          p_notes?: string
+          p_to_status: Database["public"]["Enums"]["safety_incident_status"]
+        }
+        Returns: Json
+      }
     }
     Enums: {
       app_role:
@@ -5571,6 +6125,30 @@ export type Database = {
         | "supervisor"
         | "worker"
         | "auditor"
+      safety_evidence_stage:
+        | "report"
+        | "assignment"
+        | "investigation"
+        | "rca"
+        | "capa"
+        | "verification"
+      safety_incident_severity: "low" | "medium" | "high" | "critical"
+      safety_incident_status:
+        | "reported"
+        | "assigned"
+        | "investigation"
+        | "rca"
+        | "corrective_action"
+        | "verification"
+        | "closed"
+        | "orphaned"
+      safety_incident_type:
+        | "near_miss"
+        | "unsafe_act"
+        | "unsafe_condition"
+        | "accident"
+        | "property_damage"
+        | "environmental"
       tni_gap_type: "skill" | "knowledge" | "behavior" | "compliance"
       tni_priority: "high" | "medium" | "low"
       tni_status:
@@ -5748,6 +6326,33 @@ export const Constants = {
         "supervisor",
         "worker",
         "auditor",
+      ],
+      safety_evidence_stage: [
+        "report",
+        "assignment",
+        "investigation",
+        "rca",
+        "capa",
+        "verification",
+      ],
+      safety_incident_severity: ["low", "medium", "high", "critical"],
+      safety_incident_status: [
+        "reported",
+        "assigned",
+        "investigation",
+        "rca",
+        "corrective_action",
+        "verification",
+        "closed",
+        "orphaned",
+      ],
+      safety_incident_type: [
+        "near_miss",
+        "unsafe_act",
+        "unsafe_condition",
+        "accident",
+        "property_damage",
+        "environmental",
       ],
       tni_gap_type: ["skill", "knowledge", "behavior", "compliance"],
       tni_priority: ["high", "medium", "low"],
