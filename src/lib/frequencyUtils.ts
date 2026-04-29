@@ -728,3 +728,59 @@ export function getAllPeriodsForMonth(monthName: string): string[] {
 
   return [...new Set(periods)];
 }
+
+/**
+ * Build a UX descriptor for the multi-month cycle scope shown in admin KPI dialogs.
+ *
+ * Returns the full cycle months, the review (anchor) month, and the year for the
+ * anchor month — accounting for cycles that wrap year-end (e.g. Quarterly Nov →
+ * Nov, Dec, Jan-of-next-year).
+ *
+ * Pure function — safe for unit testing and reuse across create/edit dialogs.
+ */
+export function buildCycleScopeLabel(
+  rawFrequency: FrequencyType | string | null,
+  reviewMonth: string,
+  reviewYear: number,
+  frequencyCycleStart?: string | null,
+  config?: FrequencyConfig | null
+): {
+  isMultiMonth: boolean;
+  cycleMonths: string[];
+  anchorMonth: string;
+  anchorYear: number;
+  wrapsYear: boolean;
+} {
+  const frequency = normalizeFrequency(rawFrequency);
+  const cycleMonths = getCycleMonths(frequency, reviewMonth, reviewYear, frequencyCycleStart, config);
+  const anchorMonth = getActiveMonthForCycle(frequency, reviewMonth, reviewYear, frequencyCycleStart, config);
+
+  // Multi-month frequencies are those that produce a cycle span > 1 month.
+  const isMultiMonth = cycleMonths.length > 1;
+
+  // Detect whether the cycle wraps the calendar year. Strategy: if the anchor
+  // month index is numerically less than the selected review month index AND
+  // the review month is also part of the cycle, the anchor lives in the next
+  // calendar year.
+  const reviewMonthNum = getMonthNumber(reviewMonth);
+  const anchorMonthNum = getMonthNumber(anchorMonth);
+  let wrapsYear = false;
+  if (isMultiMonth) {
+    const cycleNums = cycleMonths.map(getMonthNumber);
+    const min = Math.min(...cycleNums);
+    const max = Math.max(...cycleNums);
+    // A wrapping cycle has a non-contiguous numeric range (e.g. [11,12,1])
+    const isContiguous = max - min + 1 === cycleNums.length;
+    wrapsYear = !isContiguous && anchorMonthNum < reviewMonthNum;
+  }
+
+  const anchorYear = wrapsYear ? reviewYear + 1 : reviewYear;
+
+  return {
+    isMultiMonth,
+    cycleMonths,
+    anchorMonth,
+    anchorYear,
+    wrapsYear,
+  };
+}

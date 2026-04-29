@@ -1121,6 +1121,8 @@ All architectural decisions documented as invariants in this policy are also mai
 
 **Related ADR:** [ADR-047](docs/adr/ADR-047.md)
 
+**UX Clause (added 2026-04-29):** All admin-facing KPI creation and edit dialogs MUST display, for any KPI with `frequency ∈ {Bi-Monthly, Quarterly, Half-Yearly, Yearly}`, an information banner that surfaces (a) the **full cycle month range** the KPI covers and (b) the **review anchor month** (cycle terminal). The banner MUST also expose a tooltip that explains the percolation contract so users do not perceive the cycle-end anchor behavior as a defect. Use the canonical helper `buildCycleScopeLabel()` in `src/lib/frequencyUtils.ts` — never recompute cycle months ad-hoc. Reference: `mem://features/admin/multi-month-kpi-cycle-ux`, tests in `src/test/multiMonthBannerCopy.test.ts`.
+
 ---
 
 ### §55 — System Audit Log Performer Attribution Invariant

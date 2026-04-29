@@ -3981,6 +3981,8 @@ All Inbox access gaps for `hr_pms` and `skip_level` roles have been closed:
 
 **Frequency Auto-Resolution:** For multi-month KPIs (Quarterly, Bi-Monthly, etc.), the selected month is auto-resolved to the cycle's terminal month via `getActiveMonthForCycle` before insert, preventing DB trigger rejections.
 
+**Admin UX — Multi-month KPI Cycle Banner (v2.x, 2026-04-29):** When the selected frequency is Bi-Monthly, Quarterly, Half-Yearly, or Yearly, the create/edit dialog now renders a richer banner that lists the **full cycle months** (e.g. *"Quarterly cycle covers April, May, June 2026"*) and the **review anchor month** (*"Reviewed once in June 2026 (cycle end); the approved score auto-applies to all months in the cycle"*). An info tooltip explains the percolation contract (POLICY §54 v3) so the cycle-end anchor is not perceived as a defect. Cycle math is provided by the pure helper `buildCycleScopeLabel()` in `src/lib/frequencyUtils.ts` (year-wrap aware, e.g. Quarterly Nov 2026 → anchor Jan 2027). Tests: `src/test/multiMonthBannerCopy.test.ts`.
+
 ---
 
 ### 4.23 Review Period Governance System (v1.51.0)

@@ -40,3 +40,4 @@ Safety lists: no auto-fetch — Search button triggers query; every table pagina
 - [Safety Emergency Response (Phase 6)](mem://features/safety/emergency-response) — Drill lifecycle (RPC-only), mustering, findings, emergency contact directory (16/16 tests)
 - [Safety Analytics (Phase 7)](mem://features/safety/analytics) — TRIR materialized views, hours-worked entry, refresh RPC + 30-min cron, dashboard with CSV export (16/16 tests)
 - [Safety Settings Hub (Phase X)](mem://features/safety/settings-hub) — safety_settings key/value table, get/set RPCs, admin-only writes, JSON editor at /safety/settings, six seeded business-variable keys (8/8 tests)
+- [Multi-month KPI Cycle UX](mem://features/admin/multi-month-kpi-cycle-ux) — Banner contract for showing full cycle months + anchor month in admin KPI dialogs
