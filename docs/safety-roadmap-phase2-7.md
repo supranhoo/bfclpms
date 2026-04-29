@@ -15,7 +15,7 @@
 | 0     | Hub & Shell                          | ✅ done      |
 | 1     | Incident Management (1.A – 1.L)      | ✅ done      |
 | A1    | Image Compression (client + server)  | ✅ done (bonus) |
-| 2     | Permit to Work                       | ⏳ todo      |
+| 2     | Permit to Work                       | 🟡 in progress (2-A schema/RPCs ✅, 2-B UI ✅, 2-C tests ⏳) |
 | 3     | Training & SOP                       | ⏳ todo      |
 | 4     | Asset & Calibration                  | ⏳ todo      |
 | 5     | Audit & Compliance Checklists        | ⏳ todo      |
@@ -59,8 +59,10 @@ LOTO + HIRA + 4-step approval. Soft dependency on Phase 4 (asset expiry blocks P
 - Enums:
   - `safety_permit_type`: hot_work, confined_space, work_at_height,
     electrical, excavation, lifting, general.
-  - `safety_permit_status`: draft, submitted, approved_l1, approved_l2,
-    approved_l3, active, suspended, closed, rejected, expired.
+  - `safety_permit_status` (final, configurable ladders): draft, submitted,
+    in_approval, approved, active, suspended, closed, rejected, expired.
+    Multi-level approvals are tracked via `current_level`/`total_levels`
+    on `safety_permits` instead of one status per level.
 - Tables:
   - `safety_permits` — permit_number (`PTW-YYYY-NNNN`), type, status,
     requested_by, business_unit_id, location, scope, start_at, end_at,
@@ -72,14 +74,24 @@ LOTO + HIRA + 4-step approval. Soft dependency on Phase 4 (asset expiry blocks P
   - `safety_permit_hira` — hazard, risk_before, controls, risk_after.
   - `safety_permit_evidence` — same shape as `safety_incident_evidence`.
 
-### RPCs / edge fns
+### RPCs / edge fns (✅ shipped in 2-A)
 - `submit_permit`, `decide_permit_level`, `activate_permit`,
-  `suspend_permit`, `close_permit`.
-- BEFORE UPDATE trigger blocks direct status writes.
-- Edge fn `permit-expiry-sweep` (pg_cron every 15 min) auto-expires PTWs
-  past `end_at` and notifies requester + L1 approver.
-- `activate_permit` checks `linked_asset_ids` against
-  `safety_assets.calibration_expires_at`; expired → `{ok:false, error:"asset_expired:<id>"}`.
+  `suspend_permit`, `close_permit`, `expire_overdue_permits`.
+- BEFORE UPDATE trigger blocks direct status writes (RPC sets
+  `safety.permit_fsm` session flag).
+- Edge fn `permit-expiry-sweep` + pg_cron every 15 min (job
+  `permit-expiry-sweep-15min`).
+- Asset-expiry check inside `activate_permit` is a soft no-op until
+  Phase 4 ships `safety_assets`.
+
+### UI (✅ shipped in 2-B)
+- `/safety/permits` — list + status/type/text filters, live vs history split
+- `/safety/permits/new` — wizard (Save Draft / Submit for Approval) with
+  inline HIRA + LOTO editors; no default duration.
+- `/safety/permits/:id` — detail with approval ladder, action dialogs for
+  approve/reject/suspend/close, role-gated buttons via `useMySafetyRoles`.
+- `/safety/settings/permit-types` — admin per-type ladder editor with
+  add/remove level + role picker + active toggle.
 
 ### RLS
 - SELECT: admin OR safety_head OR requester OR approver OR same-BU manager.
