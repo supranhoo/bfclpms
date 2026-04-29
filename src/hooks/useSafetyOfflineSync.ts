@@ -93,7 +93,7 @@ export function useSafetyOfflineSync() {
       await refreshCount();
     }
     return { sent, failed };
-  }, [user, isSyncing, qc, refreshCount]);
+  }, [user, isSyncing, qc, refreshCount, compressionEnabled, compressionPolicy]);
 
   // Online/offline listeners + initial flush attempt.
   useEffect(() => {
