@@ -2088,3 +2088,23 @@ A submission that advances the KPI past the reviewer stage with neither signatur
 - Advancing a KPI's `kpis.status` past `<stage>` from any new code path without writing the corresponding `review_submissions` signature.
 
 **Regression coverage**: `BUG-047` in `src/test/bugBountyFixes.test.ts` pins the dialog validation predicate, the migration's trigger function and reviewer-stage coverage, and the targeted Lekh Raj data repair.
+
+---
+
+## §95 — Profile Cache Invalidation Contract
+
+When a profile (`public.profiles`) row is inserted, updated, or deleted — through any code path (User Management UI, bulk imports, edge functions, direct DB) — the React Query caches that derive from profile fields (`employee_code`, `full_name`, `designation`, `department_id`, `company_id`, `is_active`, `reporting_manager_id`) MUST be invalidated immediately.
+
+**Why**: Hooks such as `useCompanyFilter` (10 min staleTime), `useProfilesWithHierarchy`, `useEmployeeFilterOptions` and `useMonthlyTrend` (5 min) cache employee → company / hierarchy / picker maps. Without invalidation, an admin who renames an employee or changes their `employee_code` will not see the update reflected in pickers, filter cascades or report grids until the staleTime elapses, making the employee appear "missing" (root cause behind the *Chandra Bhan Singh / 101964* report on 29 Apr 2026).
+
+**Required enforcement (defence in depth)**:
+
+1. **Mutation handlers** — every `onSuccess` that writes to `profiles` or `user_roles` MUST call `invalidateProfileCaches(queryClient)` from `src/lib/profileCacheKeys.ts`. Bare `queryClient.invalidateQueries({ queryKey: ['profiles'] })` is NOT sufficient.
+2. **Hook keys** — any hook that caches profile-derived data (filters, pickers, employee maps, trend reports) MUST append `useProfilesVersion()` to its React Query key. The hook subscribes to a single shared Postgres realtime channel on `profiles` and increments a counter on any change, catching mutations made outside the UI.
+3. **Registry** — every new profile-dependent cache key MUST be added to `PROFILE_DEPENDENT_QUERY_KEYS` in `src/lib/profileCacheKeys.ts` and pinned in `src/test/profileCacheInvalidation.test.ts`.
+
+**Forbidden**:
+- Caching profile-derived data with `staleTime > 0` without `useProfilesVersion()` keying.
+- Bypassing `invalidateProfileCaches` in profile-mutation success handlers.
+
+**Regression coverage**: `src/test/profileCacheInvalidation.test.ts`.

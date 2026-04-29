@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useProfilesVersion } from '@/hooks/useProfilesVersion';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -85,12 +86,14 @@ export function buildMonthRange(
 }
 
 export function useMonthlyTrend(filters: MonthlyTrendFilters) {
+  const profilesVersion = useProfilesVersion();
   return useQuery({
     queryKey: [
       'monthly-trend',
       filters.fromMonth, filters.fromYear,
       filters.toMonth, filters.toYear,
       filters.includeInactive ?? false,
+      profilesVersion,
     ],
     queryFn: async (): Promise<MonthlyTrendResult> => {
       const fullRange = buildMonthRange(
