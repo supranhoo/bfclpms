@@ -211,10 +211,10 @@ export default function SafetyHoursWorked() {
 
       <ConfirmDestructiveDialog
         open={!!confirmDelete}
-        onOpenChange={(o) => !o && setConfirmDelete(null)}
+        onCancel={() => setConfirmDelete(null)}
         title="Delete hours entry?"
         description="This will affect TRIR computation for the affected period."
-        confirmText="Delete"
+        confirmLabel="Delete"
         onConfirm={() => {
           if (!confirmDelete) return;
           del.mutate(confirmDelete, {
