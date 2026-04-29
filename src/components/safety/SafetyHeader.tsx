@@ -14,6 +14,7 @@ import {
 import { ShieldAlert, LogOut, ChevronDown, LayoutGrid } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { SafetyNotificationBell } from '@/components/safety/SafetyNotificationBell';
+import { SafetyOfflineBadge } from '@/components/safety/SafetyOfflineBadge';
 
 /**
  * SafetyHeader
@@ -64,6 +65,7 @@ export function SafetyHeader() {
               <LayoutGrid className="h-4 w-4" />
               Hub
             </Button>
+            <SafetyOfflineBadge />
             <SafetyNotificationBell />
             <ThemeToggle />
             <DropdownMenu>
