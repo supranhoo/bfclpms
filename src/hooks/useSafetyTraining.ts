@@ -232,7 +232,7 @@ export function useUpsertSop() {
       min_read_seconds?: number;
       is_active?: boolean;
     }) => {
-      const payload: Record<string, unknown> = {
+      const base = {
         code: input.code,
         title: input.title,
         version: input.version ?? 1,
@@ -241,10 +241,13 @@ export function useUpsertSop() {
         min_read_seconds: input.min_read_seconds ?? 60,
         is_active: input.is_active ?? true,
       };
-      if (!input.id) payload.created_by = user?.id ?? null;
       const q = input.id
-        ? supabase.from('safety_sops').update(payload).eq('id', input.id).select('*').single()
-        : supabase.from('safety_sops').insert(payload).select('*').single();
+        ? supabase.from('safety_sops').update(base).eq('id', input.id).select('*').single()
+        : supabase
+            .from('safety_sops')
+            .insert({ ...base, created_by: user?.id ?? null })
+            .select('*')
+            .single();
       const { data, error } = await q;
       if (error) throw error;
       return data as SafetySopRow;
@@ -276,7 +279,7 @@ export function useUpsertQuiz() {
       randomize?: boolean;
       is_active?: boolean;
     }) => {
-      const payload: Record<string, unknown> = {
+      const payload = {
         sop_id: input.sop_id,
         pass_threshold: input.pass_threshold ?? 80,
         time_limit_seconds: input.time_limit_seconds ?? null,
@@ -307,10 +310,10 @@ export function useUpsertQuestion() {
       weight?: number;
       sort_order?: number;
     }) => {
-      const payload: Record<string, unknown> = {
+      const payload = {
         quiz_id: input.quiz_id,
         prompt: input.prompt,
-        options: input.options,
+        options: input.options as unknown as never,
         correct_index: input.correct_index,
         weight: input.weight ?? 1,
         sort_order: input.sort_order ?? 0,
@@ -376,7 +379,7 @@ export function useStartTrainingAttempt() {
         _assignment_id: assignmentId,
       });
       if (error) throw error;
-      const env = data as { ok: boolean; error?: string; result?: AttemptRuntime };
+      const env = data as unknown as { ok: boolean; error?: string; result?: AttemptRuntime };
       if (!env?.ok || !env.result) throw new Error(env?.error ?? 'Could not start attempt');
       return env.result;
     },
@@ -398,7 +401,7 @@ export function useSubmitTrainingAttempt() {
         _reading_seconds: input.readingSeconds,
       });
       if (error) throw error;
-      const env = data as {
+      const env = data as unknown as {
         ok: boolean;
         error?: string;
         result?: { score: number; passed: boolean; pass_threshold: number };
