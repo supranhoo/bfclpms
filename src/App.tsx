@@ -53,6 +53,13 @@ const IncentiveDataEntry = lazy(() => import("./pages/admin/IncentiveDataEntry")
 const EmployeeDevelopment = lazy(() => import("./pages/admin/EmployeeDevelopment"));
 const OrgKpiAuditReview = lazy(() => import("./pages/admin/OrgKpiAuditReview"));
 const EmployeeMasterBackfill = lazy(() => import("./pages/admin/EmployeeMasterBackfill"));
+const ModuleHubSettings = lazy(() => import("./pages/admin/ModuleHubSettings"));
+
+// Safety module shell + pages
+const SafetyLayout = lazy(() =>
+  import("./components/safety/SafetyLayout").then((m) => ({ default: m.SafetyLayout }))
+);
+const SafetyHome = lazy(() => import("./pages/safety/SafetyHome"));
 
 // Report pages
 const PerformanceReport = lazy(() => import("./pages/reports/PerformanceReport"));
@@ -200,6 +207,11 @@ const App = () => (
                     <EmployeeMasterBackfill />
                   </ProtectedRoute>
                 } />
+              <Route path="/admin/module-hub" element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <Suspense fallback={<PageFallback />}><ModuleHubSettings /></Suspense>
+                </ProtectedRoute>
+              } />
                 <Route path="/admin/settings" element={
                   <ProtectedRoute allowedRoles={['admin']} menuKey="admin-settings">
                     <SystemSettings />
@@ -410,6 +422,7 @@ const App = () => (
               </Route>
               <Route path="*" element={<Suspense fallback={<PageFallback />}><NotFound /></Suspense>} />
             </Routes>
+              {/* Safety module — fully decoupled shell, NOT wrapped in DashboardLayout. */}
           </BrowserRouter>
         </TooltipProvider>
       </AuthProvider>
