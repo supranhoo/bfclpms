@@ -1,14 +1,18 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Plus, ClipboardCheck, Loader2, Search, ArrowRight, BarChart3, FileText } from 'lucide-react';
-import { useAuditRuns, useAuditTemplates } from '@/hooks/useSafetyAudits';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
+import { Plus, ClipboardCheck, ArrowRight, BarChart3, FileText } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useManualQuery, type ManualQueryFetcherArgs } from '@/hooks/useManualQuery';
+import { SafetyFilterBar } from '@/components/safety/SafetyFilterBar';
+import { SafetyDataTable } from '@/components/safety/SafetyDataTable';
 import {
   SAFETY_AUDIT_RUN_STATUSES,
   SAFETY_AUDIT_RUN_STATUS_LABEL,
@@ -21,13 +25,63 @@ import { AuditRunStatusBadge } from '@/components/safety/AuditRunStatusBadge';
 import { format } from 'date-fns';
 
 /**
- * Audit hub: tabs of Runs and Templates with quick filters.
+ * Audit hub — POLICY §113 / ADR-050.
+ * Filters first → Search → paginated runs list.
  */
+
+interface RunFilters {
+  status: SafetyAuditRunStatus | 'all';
+}
+
+const INITIAL: RunFilters = { status: 'all' };
+
+interface RunRow {
+  id: string;
+  template_id: string;
+  template_title: string | null;
+  status: SafetyAuditRunStatus;
+  conducted_at: string;
+  location: string | null;
+  score: number | null;
+  critical_failures: number;
+}
+
+async function fetchRunsPage({
+  filters, range,
+}: ManualQueryFetcherArgs<RunFilters>): Promise<{ rows: RunRow[]; total: number }> {
+  let q = supabase
+    .from('safety_audit_runs' as never)
+    .select(
+      'id, template_id, status, conducted_at, location, score, critical_failures, safety_audit_templates(title)',
+      { count: 'exact' },
+    )
+    .order('conducted_at', { ascending: false })
+    .range(range[0], range[1]);
+
+  if (filters.status !== 'all') q = q.eq('status', filters.status);
+
+  const { data, error, count } = await q;
+  if (error) throw error;
+  const rows: RunRow[] = (data ?? []).map((r: any) => ({
+    id: r.id,
+    template_id: r.template_id,
+    template_title: r.safety_audit_templates?.title ?? null,
+    status: r.status,
+    conducted_at: r.conducted_at,
+    location: r.location,
+    score: r.score,
+    critical_failures: r.critical_failures ?? 0,
+  }));
+  return { rows, total: count ?? 0 };
+}
+
 export default function SafetyAudits() {
-  const [status, setStatus] = useState<SafetyAuditRunStatus | 'all'>('all');
-  const [search, setSearch] = useState('');
-  const { data: runs = [], isLoading } = useAuditRuns({ status });
-  const { data: templates = [] } = useAuditTemplates({ activeOnly: true, search });
+  const [draft, setDraft] = useState<RunFilters>(INITIAL);
+  const {
+    rows, total, page, pageSize, totalPages,
+    hasSubmitted, isLoading, isFetching,
+    submit, reset, setPage, setPageSize,
+  } = useManualQuery<RunRow, RunFilters>(['safety', 'audits', 'runs', 'list'], fetchRunsPage);
 
   return (
     <div className="max-w-6xl mx-auto space-y-4">
@@ -52,75 +106,76 @@ export default function SafetyAudits() {
         </Button>
       </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Recent Runs</CardTitle>
-          <CardDescription>{runs.length} run(s) match the filters.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                {SAFETY_AUDIT_RUN_STATUSES.map((s) => (
-                  <SelectItem key={s} value={s}>{SAFETY_AUDIT_RUN_STATUS_LABEL[s]}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <div className="relative md:col-span-2">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search templates by title or code…"
-                className="pl-8"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-          </div>
+      <SafetyFilterBar
+        onSubmit={() => submit(draft)}
+        onReset={() => { setDraft(INITIAL); reset(); }}
+        isSubmitting={isFetching}
+      >
+        <Select value={draft.status} onValueChange={(v) => setDraft({ status: v as RunFilters['status'] })}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            {SAFETY_AUDIT_RUN_STATUSES.map((s) => (
+              <SelectItem key={s} value={s}>{SAFETY_AUDIT_RUN_STATUS_LABEL[s]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </SafetyFilterBar>
 
-          {isLoading && (
-            <div className="flex items-center justify-center py-10 text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading runs…
-            </div>
-          )}
-
-          {!isLoading && runs.length === 0 && (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              No audit runs yet. Start one above.
-            </div>
-          )}
-
-          {runs.map((r) => {
-            const band = complianceBand(r.score);
-            const tpl = templates.find((t) => t.id === r.template_id);
-            return (
-              <Link
-                key={r.id}
-                to={`/safety/audits/runs/${r.id}`}
-                className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm truncate">
-                    {tpl?.title ?? 'Audit Run'} · {format(new Date(r.conducted_at), 'dd MMM yyyy HH:mm')}
-                  </div>
-                  <div className="text-xs text-muted-foreground truncate">
-                    {r.location ?? '—'}
-                    {r.critical_failures > 0 ? ` · ${r.critical_failures} critical NO` : ''}
-                  </div>
-                </div>
-                {r.score !== null && (
-                  <Badge variant={COMPLIANCE_BAND_TONE[band]} className="text-[11px]">
-                    {r.score.toFixed(1)} · {COMPLIANCE_BAND_LABEL[band].split(' ')[0]}
-                  </Badge>
-                )}
-                <AuditRunStatusBadge status={r.status} />
-                <ArrowRight className="h-4 w-4 text-muted-foreground" />
-              </Link>
-            );
-          })}
-        </CardContent>
-      </Card>
+      <SafetyDataTable
+        title="Audit runs"
+        hasSubmitted={hasSubmitted}
+        isLoading={isLoading}
+        rowCount={rows.length}
+        total={total}
+        page={page}
+        pageSize={pageSize}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+      >
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Template</TableHead>
+              <TableHead>Conducted</TableHead>
+              <TableHead>Location</TableHead>
+              <TableHead>Critical NO</TableHead>
+              <TableHead>Score</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="w-[40px]"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r) => {
+              const band = complianceBand(r.score);
+              return (
+                <TableRow key={r.id} className="cursor-pointer hover:bg-muted/40">
+                  <TableCell className="text-xs">
+                    <Link to={`/safety/audits/runs/${r.id}`} className="hover:underline font-medium">
+                      {r.template_title ?? 'Audit Run'}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-xs whitespace-nowrap">
+                    {format(new Date(r.conducted_at), 'dd MMM yyyy HH:mm')}
+                  </TableCell>
+                  <TableCell className="text-xs max-w-[180px] truncate">{r.location ?? '—'}</TableCell>
+                  <TableCell className="text-xs">{r.critical_failures || '—'}</TableCell>
+                  <TableCell className="text-xs">
+                    {r.score !== null ? (
+                      <Badge variant={COMPLIANCE_BAND_TONE[band]} className="text-[11px]">
+                        {r.score.toFixed(1)} · {COMPLIANCE_BAND_LABEL[band].split(' ')[0]}
+                      </Badge>
+                    ) : '—'}
+                  </TableCell>
+                  <TableCell><AuditRunStatusBadge status={r.status} /></TableCell>
+                  <TableCell><ArrowRight className="h-4 w-4 text-muted-foreground" /></TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </SafetyDataTable>
     </div>
   );
 }
