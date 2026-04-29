@@ -4528,6 +4528,160 @@ export type Database = {
           },
         ]
       }
+      safety_asset_calibrations: {
+        Row: {
+          asset_id: string
+          certificate_url: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          next_due_at: string
+          notes: string | null
+          performed_at: string
+          performed_by: string | null
+          performed_by_name: string | null
+        }
+        Insert: {
+          asset_id: string
+          certificate_url?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          next_due_at: string
+          notes?: string | null
+          performed_at: string
+          performed_by?: string | null
+          performed_by_name?: string | null
+        }
+        Update: {
+          asset_id?: string
+          certificate_url?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          next_due_at?: string
+          notes?: string | null
+          performed_at?: string
+          performed_by?: string | null
+          performed_by_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_asset_calibrations_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "safety_assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      safety_asset_evidence: {
+        Row: {
+          asset_id: string
+          caption: string | null
+          file_path: string
+          id: string
+          kind: string
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          asset_id: string
+          caption?: string | null
+          file_path: string
+          id?: string
+          kind: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          asset_id?: string
+          caption?: string | null
+          file_path?: string
+          id?: string
+          kind?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_asset_evidence_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "safety_assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      safety_assets: {
+        Row: {
+          asset_code: string
+          business_unit_id: string | null
+          calibration_expires_at: string | null
+          calibration_interval_days: number | null
+          calibration_required: boolean
+          category: string
+          created_at: string
+          created_by: string | null
+          department_id: string | null
+          id: string
+          install_date: string | null
+          last_calibration_at: string | null
+          location: string | null
+          manufacturer: string | null
+          model: string | null
+          name: string
+          notes: string | null
+          serial_no: string | null
+          status: Database["public"]["Enums"]["safety_asset_status"]
+          updated_at: string
+        }
+        Insert: {
+          asset_code: string
+          business_unit_id?: string | null
+          calibration_expires_at?: string | null
+          calibration_interval_days?: number | null
+          calibration_required?: boolean
+          category: string
+          created_at?: string
+          created_by?: string | null
+          department_id?: string | null
+          id?: string
+          install_date?: string | null
+          last_calibration_at?: string | null
+          location?: string | null
+          manufacturer?: string | null
+          model?: string | null
+          name: string
+          notes?: string | null
+          serial_no?: string | null
+          status?: Database["public"]["Enums"]["safety_asset_status"]
+          updated_at?: string
+        }
+        Update: {
+          asset_code?: string
+          business_unit_id?: string | null
+          calibration_expires_at?: string | null
+          calibration_interval_days?: number | null
+          calibration_required?: boolean
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          department_id?: string | null
+          id?: string
+          install_date?: string | null
+          last_calibration_at?: string | null
+          location?: string | null
+          manufacturer?: string | null
+          model?: string | null
+          name?: string
+          notes?: string | null
+          serial_no?: string | null
+          status?: Database["public"]["Enums"]["safety_asset_status"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       safety_audit_log: {
         Row: {
           created_at: string
@@ -6743,6 +6897,7 @@ export type Database = {
         Args: { _permit_id: string; _uid: string }
         Returns: boolean
       }
+      mark_overdue_assets: { Args: never; Returns: Json }
       mark_overdue_training_assignments: { Args: never; Returns: Json }
       migrate_okv_on_scope_change: {
         Args: {
@@ -6779,6 +6934,17 @@ export type Database = {
           p_performed_by?: string
           p_review_period?: string
           p_review_year?: number
+        }
+        Returns: Json
+      }
+      record_calibration: {
+        Args: {
+          p_asset_id: string
+          p_certificate_url?: string
+          p_next_due_at: string
+          p_notes?: string
+          p_performed_at: string
+          p_performed_by_name?: string
         }
         Returns: Json
       }
@@ -6875,6 +7041,7 @@ export type Database = {
         | "supervisor"
         | "worker"
         | "auditor"
+      safety_asset_status: "active" | "under_maintenance" | "retired"
       safety_evidence_stage:
         | "report"
         | "assignment"
@@ -7101,6 +7268,7 @@ export const Constants = {
         "worker",
         "auditor",
       ],
+      safety_asset_status: ["active", "under_maintenance", "retired"],
       safety_evidence_stage: [
         "report",
         "assignment",
