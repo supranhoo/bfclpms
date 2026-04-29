@@ -19,3 +19,4 @@ Notification triggers must guard non-login recipients (no auth.users row) — pr
 - [No-NULL kpi.status invariant](mem://architecture/database/no-null-kpi-status) — Guard reviewer writes + Status Missing UI badge (BUG-035 / POLICY §106)
 - [Reviewer self-exclusion](mem://features/review/reviewer-self-exclusion) — Strip viewer from every reviewer grid + DB trigger blocking self-reporting (BUG-036 / POLICY §107)
 - [Large-table export pagination](mem://architecture/database/large-export-pagination-policy) — Ordered fetchAllPaged + .in() lookup decoupling for exports >1k rows (BUG-038 / POLICY §109)
+- [Profile cache invalidation](mem://architecture/profile-cache-invalidation) — invalidateProfileCaches helper + useProfilesVersion realtime counter for hooks caching profile-derived data (POLICY §95)
