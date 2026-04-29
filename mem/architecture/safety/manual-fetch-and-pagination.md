@@ -11,7 +11,7 @@ Every `/safety/*` list/query screen MUST follow this contract. New Safety pages 
 1. **No auto-fetch on mount** for list/query screens. Page renders the filter bar + an "awaiting search" empty state. The first query fires only on **Search** click or Enter inside a filter input.
 2. **Server-side pagination is mandatory.** Default page size 25, options {25, 50, 100}. Use `.range(from, to)` with `count: 'exact'`.
 3. **Cache key = submitted filters + page + pageSize.** Typing does not refetch. Mutations re-run the *last submitted* query unchanged.
-4. **Exempt:** detail pages (`/:id`), single-aggregate dashboard tiles (SafetyHome tiles, SafetyAnalytics KPI cards), New/Edit forms. Tables embedded inside dashboards are NOT exempt.
+4. **Exempt:** detail pages (`/:id`), single-aggregate dashboard tiles (SafetyHome tiles, SafetyAnalytics KPI cards), New/Edit forms, master-detail editor list panes (e.g. AuditTemplates left pane, PermitTypeConfig, TrainingAdmin), and **life-safety reference data** (SafetyEmergency dashboard + SafetyEmergencyContacts directory — must be instantly viewable in a crisis). Tables embedded inside ordinary dashboards are NOT exempt.
 5. **Naming:** primary = `Search` (filter screens) or `Load` (parameterless). Secondary = `Reset`. No other verbs.
 
 ## Sanctioned primitives (the only legal way to build a Safety list)
@@ -29,6 +29,13 @@ Every `/safety/*` list/query screen MUST follow this contract. New Safety pages 
 ## Tests
 - `src/test/safetyManualFetch.test.tsx` — asserts no fetch on mount, Search triggers exactly one ranged query, pagination advances `range`.
 - `src/test/safetyPagination.test.ts` — pure logic for `useManualQuery` (range math, page bounds, pageSize change resets to page 1).
+- `src/test/safetyManualFetchPages.test.ts` — static guard: every migrated page imports `useManualQuery` + `SafetyFilterBar` + `SafetyDataTable` and does NOT import `useQuery` directly.
+
+## Migrated pages (Phase 1 + 2)
+- SafetyAuditLog, SafetyIncidents, SafetyPermits, SafetyAudits (Phase 1)
+- SafetyAssets, SafetyHoursWorked, SafetySlaMonitor (Phase 2)
+
+New Safety list pages MUST be migrated before merge.
 
 ## Related
 - POLICY.md §113
