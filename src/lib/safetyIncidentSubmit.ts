@@ -1,0 +1,105 @@
+/**
+ * Phase 1.E — Single canonical "submit incident" routine.
+ *
+ * Used by:
+ *   - SafetyIncidentNew (online happy path).
+ *   - useSafetyOfflineSync (queue flush after reconnect).
+ *
+ * Always idempotent on the server side via `client_submission_id` UNIQUE.
+ * If the row already exists from an earlier attempt, the server returns it
+ * (handled below) and we proceed to upload any not-yet-stored evidence files.
+ */
+
+import { supabase } from '@/integrations/supabase/client';
+import type { ReportIncidentInput } from '@/hooks/useSafetyIncidents';
+import type { PendingIncidentFile } from '@/lib/safetyOfflineQueue';
+
+export interface SubmitIncidentArgs {
+  reporterId: string;
+  payload: ReportIncidentInput; // must include client_submission_id when retrying offline
+  files: { name: string; type: string; size: number; blob: Blob | File }[];
+}
+
+export interface SubmitIncidentResult {
+  id: string;
+  incident_number: string;
+  reused: boolean; // true if the row was found via client_submission_id (idempotent retry)
+}
+
+export async function submitSafetyIncident(
+  args: SubmitIncidentArgs,
+): Promise<SubmitIncidentResult> {
+  const { reporterId, payload, files } = args;
+
+  if (!payload.client_submission_id) {
+    throw new Error('client_submission_id is required for safe submission');
+  }
+
+  // 1) Try to find an already-created row for this client_submission_id.
+  //    This handles "row inserted but client never got the response" case.
+  const { data: existing, error: lookupErr } = await supabase
+    .from('safety_incidents')
+    .select('id, incident_number')
+    .eq('reporter_id', reporterId)
+    .eq('client_submission_id', payload.client_submission_id)
+    .maybeSingle();
+
+  if (lookupErr) throw lookupErr;
+
+  let row: { id: string; incident_number: string };
+  let reused = false;
+
+  if (existing) {
+    row = existing as { id: string; incident_number: string };
+    reused = true;
+  } else {
+    const { data: created, error: insertErr } = await supabase
+      .from('safety_incidents')
+      .insert({ ...payload, reporter_id: reporterId } as never)
+      .select('id, incident_number')
+      .single();
+    if (insertErr) throw insertErr;
+    row = created as { id: string; incident_number: string };
+  }
+
+  // 2) Upload evidence — skip files whose path already exists in the table.
+  const { data: existingEvidence } = await supabase
+    .from('safety_incident_evidence')
+    .select('file_name, size_bytes')
+    .eq('incident_id', row.id)
+    .eq('stage', 'report');
+
+  const alreadyUploaded = new Set(
+    (existingEvidence ?? []).map((e: any) => `${e.file_name}::${e.size_bytes}`),
+  );
+
+  for (const f of files) {
+    const dedupKey = `${f.name}::${f.size}`;
+    if (alreadyUploaded.has(dedupKey)) continue;
+
+    const safeName = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `${reporterId}/${row.id}/report/${Date.now()}_${safeName}`;
+    const { error: upErr } = await supabase.storage
+      .from('safety-media')
+      .upload(path, f.blob, { contentType: f.type });
+    if (upErr) throw upErr;
+    const { error: evErr } = await supabase
+      .from('safety_incident_evidence')
+      .insert({
+        incident_id: row.id,
+        stage: 'report',
+        file_path: path,
+        file_name: f.name,
+        mime_type: f.type,
+        size_bytes: f.size,
+        uploaded_by: reporterId,
+      } as never);
+    if (evErr) throw evErr;
+  }
+
+  return { ...row, reused };
+}
+
+export function adaptPendingFiles(files: PendingIncidentFile[]) {
+  return files.map((f) => ({ name: f.name, type: f.type, size: f.size, blob: f.blob }));
+}
