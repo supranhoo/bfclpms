@@ -36,3 +36,4 @@ Notification triggers must guard non-login recipients (no auth.users row) — pr
 - [Safety Assets & Calibration (Phase 4)](mem://features/safety/assets-and-calibration) — Asset register, record_calibration RPC + history, T-7/T-1/overdue daily sweep, PTW expiry block (23/23 tests)
 - [Safety Audit Checklists (Phase 5)](mem://features/safety/audit-checklists) — Templated audits with weighted scoring, critical-fail auto-incidents, RPC-only lifecycle, BU scoreboard (11/11 tests)
 - [Safety Emergency Response (Phase 6)](mem://features/safety/emergency-response) — Drill lifecycle (RPC-only), mustering, findings, emergency contact directory (16/16 tests)
+- [Safety Analytics (Phase 7)](mem://features/safety/analytics) — TRIR materialized views, hours-worked entry, refresh RPC + 30-min cron, dashboard with CSV export (16/16 tests)

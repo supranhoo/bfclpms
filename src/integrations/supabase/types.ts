@@ -5139,6 +5139,53 @@ export type Database = {
         }
         Relationships: []
       }
+      safety_hours_worked: {
+        Row: {
+          business_unit_id: string | null
+          created_at: string
+          created_by: string | null
+          headcount: number | null
+          hours_worked: number
+          id: string
+          notes: string | null
+          period_month: number
+          period_year: number
+          updated_at: string
+        }
+        Insert: {
+          business_unit_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          headcount?: number | null
+          hours_worked: number
+          id?: string
+          notes?: string | null
+          period_month: number
+          period_year: number
+          updated_at?: string
+        }
+        Update: {
+          business_unit_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          headcount?: number | null
+          hours_worked?: number
+          id?: string
+          notes?: string | null
+          period_month?: number
+          period_year?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_hours_worked_business_unit_id_fkey"
+            columns: ["business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       safety_incident_evidence: {
         Row: {
           compressed_at: string | null
@@ -6897,6 +6944,88 @@ export type Database = {
           },
         ]
       }
+      mv_safety_audit_scoreboard: {
+        Row: {
+          avg_score: number | null
+          business_unit_id: string | null
+          excellent_count: number | null
+          good_count: number | null
+          poor_count: number | null
+          refreshed_at: string | null
+          run_count: number | null
+        }
+        Relationships: []
+      }
+      mv_safety_incidents_open_vs_closed: {
+        Row: {
+          business_unit_id: string | null
+          closed_count: number | null
+          open_count: number | null
+          orphaned_count: number | null
+          refreshed_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_incidents_business_unit_id_fkey"
+            columns: ["business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mv_safety_permit_throughput: {
+        Row: {
+          active_count: number | null
+          approved_count: number | null
+          business_unit_id: string | null
+          expired_count: number | null
+          refreshed_at: string | null
+          rejected_count: number | null
+          total_permits: number | null
+        }
+        Relationships: []
+      }
+      mv_safety_severity_rate: {
+        Row: {
+          business_unit_id: string | null
+          critical_count: number | null
+          high_count: number | null
+          low_count: number | null
+          medium_count: number | null
+          refreshed_at: string | null
+          total_count: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_incidents_business_unit_id_fkey"
+            columns: ["business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mv_safety_training_compliance: {
+        Row: {
+          compliance_pct: number | null
+          overdue_count: number | null
+          passed_count: number | null
+          refreshed_at: string | null
+          total_assignments: number | null
+        }
+        Relationships: []
+      }
+      mv_safety_trir: {
+        Row: {
+          business_unit_id: string | null
+          hours_worked: number | null
+          recordable_cases: number | null
+          refreshed_at: string | null
+          trir: number | null
+        }
+        Relationships: []
+      }
       safety_incidents_with_sla: {
         Row: {
           acknowledge_due_at: string | null
@@ -7391,6 +7520,7 @@ export type Database = {
         Args: { p_reason: string }
         Returns: undefined
       }
+      refresh_safety_analytics: { Args: never; Returns: Json }
       repair_org_kpi_cycle_anchors: {
         Args: { p_dry_run?: boolean }
         Returns: Json
