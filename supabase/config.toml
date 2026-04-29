@@ -74,3 +74,6 @@ verify_jwt = false
 
 [functions.rescore-backfilled-submissions]
 verify_jwt = false
+
+[functions.compress-evidence]
+verify_jwt = false

@@ -29,3 +29,4 @@ Notification triggers must guard non-login recipients (no auth.users row) — pr
 - [Safety Realtime Sync](mem://features/safety/realtime-sync) — Phase 1.G module-scoped realtime invalidator mounted by SafetyLayout; never touches PMS caches
 - [Safety Test Gate](mem://features/safety/test-gate) — Phase 1.H pure-logic suite locking FSM, SLA classifier, shell isolation, offline queue (21/21 passing)
 - [Image Compression Policy](mem://features/image-compression-policy) — Phase A client-side compression for Safety + PMS evidence; system_settings flags, skip rules, severity overrides
+- [Server-side Image Compression (Phase B)](mem://features/image-compression-server) — WebP re-encoder edge function, queue table, pg_cron, PMS rewrite safety flag

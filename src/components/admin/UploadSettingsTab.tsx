@@ -10,6 +10,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Save, Upload, FileText, Shield, Lock, GripVertical, Download, ChevronLeft, ChevronRight, ImageDown } from 'lucide-react';
 import { useSystemSetting, useUpdateSystemSetting } from '@/hooks/useSystemSettings';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ServerCompressionPanel } from './ServerCompressionPanel';
 
 // --- Helpers ---
 function parseSetting<T>(raw: unknown, fallback: T): T {
@@ -616,6 +617,9 @@ export function UploadSettingsTab() {
           </div>
         </div>
       </SettingCard>
+
+      {/* Server-side WebP re-encoder (Phase B) */}
+      <ServerCompressionPanel />
     </div>
   );
 }
