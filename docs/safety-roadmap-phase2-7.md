@@ -19,7 +19,7 @@
 | 3     | Training & SOP                       | ✅ done (3-A schema/RPCs + cron, 3-B UI worker+admin, 3-C tests 14/14) |
 | 4     | Asset & Calibration                  | ✅ done (4-A schema/RPCs + cron, 4-B UI register/detail/new, 4-C tests 23/23) |
 | 5     | Audit & Compliance Checklists        | ✅ done (5-A schema/RPCs, 5-B UI templates+runner+scoreboard, 5-C tests 11/11) |
-| 6     | Emergency Response                   | ⏳ todo      |
+| 6     | Emergency Response                   | ✅ done (6-A schema/RPCs, 6-B UI hub+drill+contacts, 6-C tests 16/16) |
 | 7     | Analytics                            | ⏳ todo      |
 | X     | Cross-cutting Settings hub           | ⏳ todo      |
 

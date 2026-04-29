@@ -4928,6 +4928,217 @@ export type Database = {
         }
         Relationships: []
       }
+      safety_drill_findings: {
+        Row: {
+          corrective_action: string | null
+          created_at: string
+          created_by: string | null
+          drill_id: string
+          due_date: string | null
+          id: string
+          observation: string
+          owner_id: string | null
+          resolved_at: string | null
+          severity: string
+          updated_at: string
+        }
+        Insert: {
+          corrective_action?: string | null
+          created_at?: string
+          created_by?: string | null
+          drill_id: string
+          due_date?: string | null
+          id?: string
+          observation: string
+          owner_id?: string | null
+          resolved_at?: string | null
+          severity?: string
+          updated_at?: string
+        }
+        Update: {
+          corrective_action?: string | null
+          created_at?: string
+          created_by?: string | null
+          drill_id?: string
+          due_date?: string | null
+          id?: string
+          observation?: string
+          owner_id?: string | null
+          resolved_at?: string | null
+          severity?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_drill_findings_drill_id_fkey"
+            columns: ["drill_id"]
+            isOneToOne: false
+            referencedRelation: "safety_emergency_drills"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      safety_drill_participants: {
+        Row: {
+          accounted_for: boolean
+          created_at: string
+          drill_id: string
+          id: string
+          mustered_at: string | null
+          notes: string | null
+          role: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accounted_for?: boolean
+          created_at?: string
+          drill_id: string
+          id?: string
+          mustered_at?: string | null
+          notes?: string | null
+          role?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          accounted_for?: boolean
+          created_at?: string
+          drill_id?: string
+          id?: string
+          mustered_at?: string | null
+          notes?: string | null
+          role?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_drill_participants_drill_id_fkey"
+            columns: ["drill_id"]
+            isOneToOne: false
+            referencedRelation: "safety_emergency_drills"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      safety_emergency_contacts: {
+        Row: {
+          business_unit_id: string | null
+          contact_type: Database["public"]["Enums"]["safety_emergency_contact_type"]
+          created_at: string
+          created_by: string | null
+          email: string | null
+          id: string
+          is_active: boolean
+          location: string | null
+          name: string
+          phone_alt: string | null
+          phone_primary: string
+          role_title: string | null
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          business_unit_id?: string | null
+          contact_type?: Database["public"]["Enums"]["safety_emergency_contact_type"]
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          location?: string | null
+          name: string
+          phone_alt?: string | null
+          phone_primary: string
+          role_title?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          business_unit_id?: string | null
+          contact_type?: Database["public"]["Enums"]["safety_emergency_contact_type"]
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          location?: string | null
+          name?: string
+          phone_alt?: string | null
+          phone_primary?: string
+          role_title?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      safety_emergency_drills: {
+        Row: {
+          business_unit_id: string | null
+          completed_at: string | null
+          conducted_by: string | null
+          created_at: string
+          created_by: string | null
+          drill_code: string
+          evacuation_seconds: number | null
+          id: string
+          location: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          scenario: string
+          scheduled_at: string
+          score: number | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["safety_drill_status"]
+          summary: string | null
+          type: Database["public"]["Enums"]["safety_drill_type"]
+          updated_at: string
+        }
+        Insert: {
+          business_unit_id?: string | null
+          completed_at?: string | null
+          conducted_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          drill_code: string
+          evacuation_seconds?: number | null
+          id?: string
+          location?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          scenario: string
+          scheduled_at: string
+          score?: number | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["safety_drill_status"]
+          summary?: string | null
+          type: Database["public"]["Enums"]["safety_drill_type"]
+          updated_at?: string
+        }
+        Update: {
+          business_unit_id?: string | null
+          completed_at?: string | null
+          conducted_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          drill_code?: string
+          evacuation_seconds?: number | null
+          id?: string
+          location?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          scenario?: string
+          scheduled_at?: string
+          score?: number | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["safety_drill_status"]
+          summary?: string | null
+          type?: Database["public"]["Enums"]["safety_drill_type"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       safety_incident_evidence: {
         Row: {
           compressed_at: string | null
@@ -6921,6 +7132,14 @@ export type Database = {
         Args: { p_notes?: string; p_permit_id: string }
         Returns: Json
       }
+      complete_drill: {
+        Args: {
+          p_drill_id: string
+          p_evacuation_seconds?: number
+          p_score?: number
+        }
+        Returns: Json
+      }
       compute_org_kpi_score_for_kpi: {
         Args: { p_achieved: number; p_kpi_id: string }
         Returns: {
@@ -7196,7 +7415,12 @@ export type Database = {
           terminal_year: number
         }[]
       }
+      review_drill: {
+        Args: { p_drill_id: string; p_summary?: string }
+        Returns: Json
+      }
       run_safety_sla_escalations: { Args: never; Returns: Json }
+      start_drill: { Args: { p_drill_id: string }; Returns: Json }
       start_training_attempt: {
         Args: { _assignment_id: string }
         Returns: Json
@@ -7265,6 +7489,29 @@ export type Database = {
       safety_asset_status: "active" | "under_maintenance" | "retired"
       safety_audit_answer: "yes" | "no" | "na"
       safety_audit_run_status: "draft" | "submitted" | "reviewed"
+      safety_drill_status:
+        | "scheduled"
+        | "in_progress"
+        | "completed"
+        | "reviewed"
+        | "cancelled"
+      safety_drill_type:
+        | "fire"
+        | "evacuation"
+        | "spill"
+        | "medical"
+        | "chemical"
+        | "security"
+        | "earthquake"
+        | "other"
+      safety_emergency_contact_type:
+        | "internal"
+        | "external_agency"
+        | "hospital"
+        | "fire_brigade"
+        | "police"
+        | "environmental"
+        | "other"
       safety_evidence_stage:
         | "report"
         | "assignment"
@@ -7494,6 +7741,32 @@ export const Constants = {
       safety_asset_status: ["active", "under_maintenance", "retired"],
       safety_audit_answer: ["yes", "no", "na"],
       safety_audit_run_status: ["draft", "submitted", "reviewed"],
+      safety_drill_status: [
+        "scheduled",
+        "in_progress",
+        "completed",
+        "reviewed",
+        "cancelled",
+      ],
+      safety_drill_type: [
+        "fire",
+        "evacuation",
+        "spill",
+        "medical",
+        "chemical",
+        "security",
+        "earthquake",
+        "other",
+      ],
+      safety_emergency_contact_type: [
+        "internal",
+        "external_agency",
+        "hospital",
+        "fire_brigade",
+        "police",
+        "environmental",
+        "other",
+      ],
       safety_evidence_stage: [
         "report",
         "assignment",
