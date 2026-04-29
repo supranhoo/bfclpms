@@ -2108,3 +2108,27 @@ When a profile (`public.profiles`) row is inserted, updated, or deleted — thro
 - Bypassing `invalidateProfileCaches` in profile-mutation success handlers.
 
 **Regression coverage**: `src/test/profileCacheInvalidation.test.ts`.
+
+---
+
+## §54 v3 — Multi-Month KPI Score Inheritance (Apr 29, 2026 amendment)
+
+**Reverses the §54 stage-guard added on 2026-04-05.** For multi-month KPIs (`Bi-Monthly`, `Quarterly`, `Half-Yearly`, `Yearly`), only the chronologically terminal month of each cycle traverses the workflow (Self → … → Management → Approved). All non-terminal sibling months are placeholders.
+
+**The instant** the terminal month transitions to `approved`, the `percolate_multimonth_score` trigger force-applies the terminal month's full submission snapshot (all stage scores, ratings, achieved values, remarks, evidence) to every sibling in the cycle and sets `kpis.status = 'approved'`, regardless of the sibling's prior workflow stage. Audit action: `SCORE_PERCOLATED` with `metadata.policy = 'POLICY_54_v3'`.
+
+**Compensating controls** (replacing the old auditor-bypass concern):
+1. The existing `enforce_frequency_lock_on_submission` trigger already prevents any non-Admin user from submitting/transitioning a non-terminal sibling. Only the terminal-month auditor signs off; sibling approval is a derivative artifact.
+2. The percolation trigger temporarily sets `app.percolation_bypass = 'true'` (transaction-local) so its own legitimate writes are not blocked by the lock trigger.
+3. The terminal-month guard inside the trigger ensures that approving an earlier month (e.g. Feb in a Feb-Mar cycle) does NOT overwrite the later month — only the chronological terminal can be the source of truth.
+
+**Workflow-template changes**: `workflow_change_step_back` skips non-terminal multi-month siblings — their scores follow the terminal month, not the local workflow.
+
+**Backfill**: The one-shot `backfill_multimonth_percolation()` function applied this rule retroactively on 2026-04-29, propagating 23 sibling KPIs across 142 approved terminal cycles. Each backfill row is audit-logged with action `BACKFILL_MULTIMONTH_PERCOLATION` and `performed_by = NULL` (system action).
+
+**Forbidden**:
+- Re-introducing the `PERCOLATION_DEFERRED` path or any sibling-stage guard inside `percolate_multimonth_score`.
+- Allowing UI surfaces to accept submissions on non-terminal sibling months for non-Admin roles.
+- Calling `UPDATE kpis SET status = …` on a non-terminal sibling without first setting `app.percolation_bypass = 'true'` in a SECURITY DEFINER context.
+
+**Related**: ADR-047 (third amendment), `mem://architecture/pms/multimonth-percolation`.
