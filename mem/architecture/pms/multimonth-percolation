@@ -1,0 +1,25 @@
+---
+name: Multi-month KPI score inheritance
+description: Terminal month auto-percolates scores to all sibling months on approval; siblings are placeholders, never independently reviewed
+type: feature
+---
+For multi-month KPIs (Bi-Monthly, Quarterly, Half-Yearly, Yearly), only the chronologically terminal month of each cycle goes through the workflow. Sibling months are placeholders.
+
+When the terminal month transitions to `approved`, the `percolate_multimonth_score` trigger force-copies the full submission snapshot (all stage scores, ratings, achieved values, remarks, evidence) to every sibling AND sets `kpis.status = 'approved'`, regardless of the sibling's prior stage. The trigger sets `app.percolation_bypass = 'true'` (transaction-local) so the existing `enforce_frequency_lock_on_submission` trigger does not block its own legitimate writes.
+
+**Cycle terminal resolution**: use `get_cycle_months(frequency, period, year, frequency_cycle_start)`. The terminal month is the highest calendar index in the array, EXCEPT when the cycle wraps Dec→Jan, in which case trust the array's last element. Client-side mirror: `getActiveMonthForCycle()` in `src/lib/frequencyUtils.ts`.
+
+**Guards**:
+- Trigger only fires when `NEW.review_period == terminal_month`. Approving an earlier month (e.g. Feb in a Feb-Mar cycle) MUST NOT overwrite the later one.
+- `workflow_change_step_back` skips non-terminal siblings — scores follow the terminal, not the local workflow.
+- Non-Admin UI submissions on siblings are blocked by `enforce_frequency_lock_on_submission`. Admins bypass via the existing has_role check.
+
+**Forbidden**:
+- Do NOT re-introduce a sibling-stage guard or `PERCOLATION_DEFERRED` audit action inside `percolate_multimonth_score` — that was the bug fixed on 2026-04-29.
+- Do NOT call `UPDATE kpis SET status = …` on a sibling from a SECURITY DEFINER context without first `PERFORM set_config('app.percolation_bypass','true',true)`.
+
+**Audit actions**:
+- `SCORE_PERCOLATED` (metadata.policy = 'POLICY_54_v3', forced=true) — runtime trigger
+- `BACKFILL_MULTIMONTH_PERCOLATION` (performed_by = NULL) — one-shot historical repair on 2026-04-29 (142 terminals → 23 siblings)
+
+See POLICY.md §54 v3 and ADR-047.
