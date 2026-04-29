@@ -26,6 +26,7 @@ export function isKnownSettingKey(key: string): key is SafetySettingKey {
 
 /** Coerce a raw jsonb value to a number with default fallback. */
 export function asNumber(value: SettingValue, fallback: number): number {
+  if (value == null) return fallback;
   const n = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(n) ? n : fallback;
 }
