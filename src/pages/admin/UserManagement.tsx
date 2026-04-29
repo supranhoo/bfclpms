@@ -20,6 +20,7 @@ import { Switch } from '@/components/ui/switch';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { invalidateProfileCaches } from '@/lib/profileCacheKeys';
 import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus, KeyRound, Copy, Check, Trash2, Package, Calendar, Phone, UserX, UserCheck } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { SmartAssignmentDialog } from '@/components/admin/SmartAssignmentDialog';
@@ -270,7 +271,7 @@ export default function UserManagement() {
       if (roleError) throw roleError;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      invalidateProfileCaches(queryClient);
       toast({ title: 'User updated successfully' });
       setEditDialogOpen(false);
     },
@@ -324,7 +325,7 @@ export default function UserManagement() {
       return response.data;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      invalidateProfileCaches(queryClient);
       toast({ title: 'User created successfully' });
       setCreateDialogOpen(false);
       
@@ -367,7 +368,7 @@ export default function UserManagement() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      invalidateProfileCaches(queryClient);
       toast({ title: `Updated ${selectedUserIds.size} users successfully` });
       setBulkDialogOpen(false);
       setSelectedUserIds(new Set());
@@ -434,7 +435,7 @@ export default function UserManagement() {
       if (profileError) throw profileError;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      invalidateProfileCaches(queryClient);
       toast({ title: 'Employee removed successfully' });
       setDeleteDialogOpen(false);
       setDeleteTarget(null);
