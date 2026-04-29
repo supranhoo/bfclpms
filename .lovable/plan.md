@@ -1,76 +1,55 @@
-## Goal
+## Risk & Impact Report
 
-Keep the existing (correct) behavior — multi-month KPIs (Bi-Monthly, Quarterly, Half-Yearly, Yearly) anchor on the cycle's terminal month, and scores auto-percolate back to sibling months — but make the UI **clearly explain why** so admins don't perceive it as a bug.
+**Symptom:** Date Range (Trend) tab shows "93 of 93 employees" but every monthly cell is "—".
 
-## Background (no behavior change)
+**Root Cause (RCA):**
+Two compounding problems, only one of which the previous patch addressed.
 
-Per `mem://architecture/pms/multimonth-percolation` and POLICY §54 v3:
-- Only the terminal month of a cycle is reviewed (workflow runs once).
-- The `percolate_multimonth_score` DB trigger copies the approved score to all sibling months.
-- This prevents triple-reviewing the same Quarterly KPI and keeps scores consistent.
+1. **Original silent failure (already patched).** `useMonthlyTrend` was issuing submission batches of **800 KPI IDs** per `kpi_id=in.(...)` URL (~30 KB). PostgREST rejected those URLs with 414 / connection-reset, and the old code did `r.data ?? []` with no `r.error` check, so every submission silently came back empty → all dashes. We reduced `SUB_BATCH` to 200 and now throw on `r.error`.
 
-The current banner only says *"will be assigned to June 2026 (cycle end month)"* — accurate, but doesn't explain the *why*, which causes confusion.
+2. **Stale cached result is still being shown (the live problem).** React Query already cached the *broken* result (`{employees: 93 rows of all-null scores}`) under key `['monthly-trend', fromMonth, fromYear, toMonth, toYear, includeInactive, profilesVersion]` with `staleTime: 5 * 60_000` and `gcTime: 10 * 60_000`. The user’s "Reload" click only sets `requestedRange` to the same values → same query key → React Query returns the cached payload without refetching. Network snapshot confirms zero `review_period=in.(...)` calls fired this session — only unrelated single-employee fetches.
 
-## Changes
+**Data Impact:** None. Read-only report; no schema/RLS changes.
+**Workflow Impact:** None.
+**UI/UX Impact:** Reload now actually reloads. No visual changes.
+**Regression Risk:** Low. Change is scoped to `useMonthlyTrend` + `MonthlyTrendView`’s reload handler. Existing tests (`multiMonthBannerCopy`, `frequencyUtils`) untouched.
+**Mitigation:** Add a unit test asserting that `handleLoad` invalidates/refetches even when filters are unchanged. Add a console.warn when a fetched batch comes back empty so future regressions are visible.
 
-### 1. `src/components/admin/AdminKpiCreateDialog.tsx` (~line 820)
+---
 
-Replace the single-line banner with a richer info block that:
-- Lists **all months in the cycle** (e.g., "covers April, May, June 2026").
-- States the **review month** ("reviewed once in June 2026").
-- Adds a small `Info` icon with a tooltip: *"Multi-month KPIs are scored once at cycle end. The approved score automatically applies to every month in the cycle. This avoids duplicate reviews and ensures consistency."*
-- Uses existing `getCycleMonths()` helper from `src/lib/frequencyUtils.ts` to compute the cycle months dynamically (respects `frequency_cycle_start` overrides).
+## Plan
 
-Visual: keep amber/info styling, add a 2-line layout — line 1 = cycle scope, line 2 = review anchor + tooltip.
+### 1. `src/components/reports/MonthlyTrendView.tsx` — make Reload always refetch
+- Pull `queryClient` from `useQueryClient()`.
+- In `handleLoad()`, after `setRequestedRange(...)`, call:
+  ```ts
+  queryClient.invalidateQueries({ queryKey: ['monthly-trend'] });
+  ```
+  This forces React Query to refetch the trend even when the filter values are identical to the cached run (which is exactly what's happening now after the hot-fix).
+- No change to any other tab or hook.
 
-### 2. `src/components/admin/AdminKpiEditorForm.tsx` (if it has the same banner)
+### 2. `src/hooks/useMonthlyTrend.ts` — diagnostics + cache safety
+- Lower `staleTime` from `5 * 60_000` → `30_000` so users naturally get fresh data after navigating away and back. Keep `gcTime` at 5 min.
+- Already throws on `r.error`. Add a one-line `console.warn` if `allKpis.length > 0 && subMap.size === 0` (KPIs returned but submissions came back empty) so any future regression of this exact bug is loud.
+- Confirm `SUB_BATCH = 200` and `PAGE = 1000` are still in place (already patched).
 
-Apply the same enhanced banner for edit-mode parity. Verify first via `code--view`.
+### 3. Test — `src/test/monthlyTrendCacheBust.test.ts`
+- Render `MonthlyTrendView` with a stubbed `useMonthlyTrend`. Assert that clicking Reload triggers `queryClient.invalidateQueries` for `['monthly-trend']`. Also cover the “no-op when range invalid” path.
 
-### 3. `mem/features/admin/multi-month-kpi-cycle-ux.md` (new memory)
+### 4. Documentation sync (mandatory per project SSOT rule)
+- `POLICY.md` — under reporting policies, add a sentence: *"Manual-reload buttons on cached reports MUST invalidate their query keys; toggling state alone is not sufficient because React Query returns cached data when the key is unchanged."*
+- `DOCUMENTATION.md` — version-history entry: "Fixed Monthly Scorecard Date-Range trend showing stale all-null rows after a failed first fetch."
+- `mem/index.md` + new `mem/features/reports/monthly-scorecard-trend.md` — record the cache-bust contract and the 200-ID submission batch ceiling (URL-length safety).
 
-Document the UX contract: any future dialog that creates/edits a multi-month KPI must surface (a) the full cycle months and (b) the review anchor month. Cross-link POLICY §54 v3.
+### 5. User-side step (one-time)
+The user's browser has the bad cached result for the **current React Query memory only** — a hard refresh or navigating away from the report tab and back will clear it. After this fix the Reload button alone will be enough.
 
-### 4. `mem/index.md`
+---
 
-Add reference to the new memory file.
+## Files touched
+- `src/components/reports/MonthlyTrendView.tsx` (edit)
+- `src/hooks/useMonthlyTrend.ts` (edit — staleTime + diag warn)
+- `src/test/monthlyTrendCacheBust.test.ts` (new)
+- `POLICY.md`, `DOCUMENTATION.md`, `mem/index.md`, `mem/features/reports/monthly-scorecard-trend.md` (docs)
 
-### 5. `DOCUMENTATION.md` + `POLICY.md`
-
-- DOCUMENTATION.md: add a short "Admin UX — Multi-month KPI assignment banner" subsection under the KPI Management section explaining the displayed cycle scope.
-- POLICY.md §54 v3: append a UX clause: *"All admin-facing creation/edit dialogs MUST display the full cycle month range and the review anchor month for any KPI with frequency ∈ {Bi-Monthly, Quarterly, Half-Yearly, Yearly}."*
-
-### 6. Tests
-
-- `src/test/multiMonthBannerCopy.test.ts` (new): unit-test a small pure helper `buildCycleScopeLabel(frequency, period, year, cycleStart)` that returns `{ cycleMonths: string[], anchorMonth: string }`. Covers:
-  - Quarterly Apr 2026 → cycle [Apr, May, Jun], anchor Jun.
-  - Bi-Monthly Mar 2026 with default cycle start → correct pair.
-  - Yearly Sep 2026 with fiscal cycle start Jul → cycle Jul–Jun, anchor Jun.
-  - Year-wrap case: Quarterly Nov 2026 → cycle [Nov, Dec, Jan], anchor Jan 2027.
-- Extract `buildCycleScopeLabel` into `src/lib/frequencyUtils.ts` (alongside `getActiveMonthForCycle`) so both UI and tests share one source of truth.
-
-## What we are NOT changing
-
-- `getActiveMonthForCycle()` logic.
-- `percolate_multimonth_score` trigger.
-- `enforce_frequency_lock_on_submission`.
-- The KPI insert payload (`review_period: resolvedPeriod`) — stays as-is.
-- Any DB schema, RLS, or workflow behavior.
-
-## Risk & Impact
-
-- **Data Impact:** None. Pure UI + copy + helper extraction.
-- **Workflow Impact:** None.
-- **UI/UX Impact:** Banner becomes more informative; same color/placement.
-- **Regression Risk:** Low. The new helper is pure and unit-tested; the banner is a leaf component.
-- **Mitigation:** New unit tests cover edge cases (year-wrap, fiscal cycle start, all multi-month frequencies).
-
-## Deliverables checklist
-
-- [ ] `buildCycleScopeLabel()` added to `src/lib/frequencyUtils.ts`.
-- [ ] `AdminKpiCreateDialog.tsx` banner updated.
-- [ ] `AdminKpiEditorForm.tsx` banner updated (if applicable).
-- [ ] `src/test/multiMonthBannerCopy.test.ts` added (4+ cases).
-- [ ] `mem/features/admin/multi-month-kpi-cycle-ux.md` created and indexed.
-- [ ] `DOCUMENTATION.md` and `POLICY.md` §54 v3 updated.
-- [ ] Full test suite green.
+After approval I’ll implement and ask you to click **Reload** once on the Date Range tab — cells should populate immediately.

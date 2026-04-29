@@ -199,6 +199,16 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
 
       await Promise.all([profilePromise, subsPromise]);
 
+      // Diagnostic: KPIs returned but zero submissions matched. This is the
+      // exact signature of the URL-length / batch-size regression that
+      // produced an all-dashes Score Trend table — keep it loud.
+      if (allKpis.length > 0 && subMap.size === 0) {
+        console.warn(
+          '[useMonthlyTrend] Fetched %d KPIs but 0 submissions — possible batch/URL failure.',
+          allKpis.length,
+        );
+      }
+
       // 3. Aggregate per employee per month
       type Bucket = { weighted: number; weight: number; any: boolean };
       const empAgg = new Map<string, Record<string, Bucket>>();
@@ -280,8 +290,11 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
       return { months, employees, capped };
     },
     enabled: filters.enabled !== false && !!filters.fromMonth && !!filters.toMonth,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
+    // Keep cache lifetime short: the previous 5-min staleTime made a single
+    // failed fetch (returning 93 employees with all-null cells) survive long
+    // after the underlying bug was fixed.
+    staleTime: 30 * 1000,
+    gcTime: 5 * 60 * 1000,
     retry: 1,
   });
 }
