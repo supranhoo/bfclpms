@@ -20,7 +20,7 @@
 | 4     | Asset & Calibration                  | ✅ done (4-A schema/RPCs + cron, 4-B UI register/detail/new, 4-C tests 23/23) |
 | 5     | Audit & Compliance Checklists        | ✅ done (5-A schema/RPCs, 5-B UI templates+runner+scoreboard, 5-C tests 11/11) |
 | 6     | Emergency Response                   | ✅ done (6-A schema/RPCs, 6-B UI hub+drill+contacts, 6-C tests 16/16) |
-| 7     | Analytics                            | ⏳ todo      |
+| 7     | Analytics                            | ✅ done (7-A MVs+TRIR+cron, 7-B edge fn, 7-C dashboard+hours UI, 7-D tests 16/16) |
 | X     | Cross-cutting Settings hub           | ⏳ todo      |
 
 Update this table as each sub-phase moves through `todo → in_progress → done`.
@@ -319,3 +319,8 @@ works, exports succeed, only authorised roles see global view.
 - 2026-04-29 — Phase 3 (Training & SOP) completed: 5 tables, 4 RPCs,
   scroll-locked reader, server-scored randomized quiz, daily overdue
   sweep cron, worker + admin UIs, 14/14 SSOT tests passing.
+- 2026-04-29 — Phase 7 (Analytics) completed: `safety_hours_worked` table,
+  6 materialized views (TRIR, severity, open/closed, training, audit,
+  permits), `refresh_safety_analytics()` RPC with 30-min pg_cron,
+  `safety-analytics` edge fn, dashboard + hours-worked admin pages,
+  CSV export, 16/16 SSOT tests passing.
