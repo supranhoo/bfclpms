@@ -34,3 +34,4 @@ Notification triggers must guard non-login recipients (no auth.users row) — pr
 - [Safety Permit-to-Work](mem://features/safety/permits-to-work) — Phase 2 PTW lifecycle, RPC-only transitions, configurable per-type approval ladders, HIRA/LOTO requirements, /safety/permits routes
 - [Safety Training & SOPs (Phase 3)](mem://features/safety/training-and-sops) — RPC-only training lifecycle, server-scored quizzes, scroll-locked reader, daily overdue sweep
 - [Safety Assets & Calibration (Phase 4)](mem://features/safety/assets-and-calibration) — Asset register, record_calibration RPC + history, T-7/T-1/overdue daily sweep, PTW expiry block (23/23 tests)
+- [Safety Audit Checklists (Phase 5)](mem://features/safety/audit-checklists) — Templated audits with weighted scoring, critical-fail auto-incidents, RPC-only lifecycle, BU scoreboard (11/11 tests)

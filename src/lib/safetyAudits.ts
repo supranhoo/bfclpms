@@ -86,7 +86,7 @@ export function countCriticalFailures(pairs: ScoringPair[]): number {
  * Mirrors the server-side check inside submit_audit_run.
  */
 export function validateAuditSubmission(pairs: ScoringPair[]): string | null {
-  if (pairs.length === 0) return 'Add responses for every item before submitting.';
+  if (pairs.length === 0) return 'Add responses for all items before submitting.';
   for (const { item, response } of pairs) {
     if (
       response.answer === 'no' &&
