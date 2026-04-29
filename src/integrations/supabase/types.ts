@@ -3668,6 +3668,72 @@ export type Database = {
           },
         ]
       }
+      pms_evidence_compression_jobs: {
+        Row: {
+          array_index: number | null
+          attempts: number
+          bucket_id: string | null
+          compressed_path: string | null
+          compressed_size_bytes: number | null
+          compressed_url: string | null
+          enqueued_at: string
+          id: string
+          last_error: string | null
+          mime_type: string | null
+          original_path: string | null
+          original_size_bytes: number | null
+          original_url: string
+          processed_at: string | null
+          rewritten_at: string | null
+          source_column: string
+          source_id: string
+          source_table: string
+          status: string
+        }
+        Insert: {
+          array_index?: number | null
+          attempts?: number
+          bucket_id?: string | null
+          compressed_path?: string | null
+          compressed_size_bytes?: number | null
+          compressed_url?: string | null
+          enqueued_at?: string
+          id?: string
+          last_error?: string | null
+          mime_type?: string | null
+          original_path?: string | null
+          original_size_bytes?: number | null
+          original_url: string
+          processed_at?: string | null
+          rewritten_at?: string | null
+          source_column: string
+          source_id: string
+          source_table: string
+          status?: string
+        }
+        Update: {
+          array_index?: number | null
+          attempts?: number
+          bucket_id?: string | null
+          compressed_path?: string | null
+          compressed_size_bytes?: number | null
+          compressed_url?: string | null
+          enqueued_at?: string
+          id?: string
+          last_error?: string | null
+          mime_type?: string | null
+          original_path?: string | null
+          original_size_bytes?: number | null
+          original_url?: string
+          processed_at?: string | null
+          rewritten_at?: string | null
+          source_column?: string
+          source_id?: string
+          source_table?: string
+          status?: string
+        }
+        Relationships: []
+      }
       pms_grades: {
         Row: {
           code: string | null
@@ -4494,33 +4560,51 @@ export type Database = {
       }
       safety_incident_evidence: {
         Row: {
+          compressed_at: string | null
+          compression_attempts: number
+          compression_error: string | null
+          compression_status: string
           file_name: string
           file_path: string
           id: string
           incident_id: string
           mime_type: string | null
+          original_file_path: string | null
+          original_size_bytes: number | null
           size_bytes: number | null
           stage: Database["public"]["Enums"]["safety_evidence_stage"]
           uploaded_at: string
           uploaded_by: string
         }
         Insert: {
+          compressed_at?: string | null
+          compression_attempts?: number
+          compression_error?: string | null
+          compression_status?: string
           file_name: string
           file_path: string
           id?: string
           incident_id: string
           mime_type?: string | null
+          original_file_path?: string | null
+          original_size_bytes?: number | null
           size_bytes?: number | null
           stage: Database["public"]["Enums"]["safety_evidence_stage"]
           uploaded_at?: string
           uploaded_by: string
         }
         Update: {
+          compressed_at?: string | null
+          compression_attempts?: number
+          compression_error?: string | null
+          compression_status?: string
           file_name?: string
           file_path?: string
           id?: string
           incident_id?: string
           mime_type?: string | null
+          original_file_path?: string | null
+          original_size_bytes?: number | null
           size_bytes?: number | null
           stage?: Database["public"]["Enums"]["safety_evidence_stage"]
           uploaded_at?: string
@@ -6100,6 +6184,7 @@ export type Database = {
         Args: { p_employee_id: string; p_owner_id: string }
         Returns: boolean
       }
+      is_image_url: { Args: { p_url: string }; Returns: boolean }
       is_month_locked_for_frequency: {
         Args: { p_frequency: string; p_month: string; p_year: number }
         Returns: boolean
