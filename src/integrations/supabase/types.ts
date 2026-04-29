@@ -4462,6 +4462,36 @@ export type Database = {
           },
         ]
       }
+      safety_audit_log: {
+        Row: {
+          created_at: string
+          details: Json
+          entity_id: string | null
+          entity_type: string
+          event_type: string
+          id: string
+          performed_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          details?: Json
+          entity_id?: string | null
+          entity_type: string
+          event_type: string
+          id?: string
+          performed_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          details?: Json
+          entity_id?: string | null
+          entity_type?: string
+          event_type?: string
+          id?: string
+          performed_by?: string | null
+        }
+        Relationships: []
+      }
       safety_module_access: {
         Row: {
           can_edit: boolean
@@ -4488,6 +4518,36 @@ export type Database = {
           granted_at?: string
           granted_by?: string | null
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      safety_user_roles: {
+        Row: {
+          assigned_at: string
+          assigned_by: string | null
+          business_unit_id: string | null
+          department_id: string | null
+          id: string
+          role: Database["public"]["Enums"]["safety_app_role"]
+          user_id: string
+        }
+        Insert: {
+          assigned_at?: string
+          assigned_by?: string | null
+          business_unit_id?: string | null
+          department_id?: string | null
+          id?: string
+          role: Database["public"]["Enums"]["safety_app_role"]
+          user_id: string
+        }
+        Update: {
+          assigned_at?: string
+          assigned_by?: string | null
+          business_unit_id?: string | null
+          department_id?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["safety_app_role"]
           user_id?: string
         }
         Relationships: []
@@ -5362,6 +5422,7 @@ export type Database = {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
       }
+      has_any_safety_role: { Args: { _user_id: string }; Returns: boolean }
       has_menu_access_override: {
         Args: { _menu_key: string; _user_id: string }
         Returns: boolean
@@ -5378,6 +5439,14 @@ export type Database = {
         Returns: boolean
       }
       has_safety_module_access: { Args: { _user_id: string }; Returns: boolean }
+      has_safety_role: {
+        Args: {
+          _business_unit_id?: string
+          _role: Database["public"]["Enums"]["safety_app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       is_data_owner_for_employee: {
         Args: { p_employee_id: string; p_owner_id: string }
         Returns: boolean
@@ -5493,6 +5562,15 @@ export type Database = {
         | "management_review"
         | "skip_level_check"
         | "hr_pms_review"
+      safety_app_role:
+        | "admin"
+        | "safety_head"
+        | "safety_officer"
+        | "bu_head"
+        | "manager"
+        | "supervisor"
+        | "worker"
+        | "auditor"
       tni_gap_type: "skill" | "knowledge" | "behavior" | "compliance"
       tni_priority: "high" | "medium" | "low"
       tni_status:
@@ -5660,6 +5738,16 @@ export const Constants = {
         "management_review",
         "skip_level_check",
         "hr_pms_review",
+      ],
+      safety_app_role: [
+        "admin",
+        "safety_head",
+        "safety_officer",
+        "bu_head",
+        "manager",
+        "supervisor",
+        "worker",
+        "auditor",
       ],
       tni_gap_type: ["skill", "knowledge", "behavior", "compliance"],
       tni_priority: ["high", "medium", "low"],
