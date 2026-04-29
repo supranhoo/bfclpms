@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 /**
  * Shell-isolation smoke test.
@@ -33,12 +34,20 @@ describe('Safety shell isolation', () => {
 
   it('SafetyHome page renders without throwing', async () => {
     const { default: SafetyHome } = await import('@/pages/safety/SafetyHome');
+    // SafetyHome uses TanStack Query (Phase 1.F dashboard tiles) — wrap in
+    // a QueryClientProvider so the hook can mount. Network calls fail
+    // safely in jsdom; we only assert the component does not throw.
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     const { container } = render(
-      <MemoryRouter>
-        <Routes>
-          <Route path="*" element={<SafetyHome />} />
-        </Routes>
-      </MemoryRouter>
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>
+          <Routes>
+            <Route path="*" element={<SafetyHome />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
     );
     expect(container.textContent).toMatch(/Safety/i);
   });
