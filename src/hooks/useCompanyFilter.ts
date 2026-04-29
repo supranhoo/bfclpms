@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchAllPaged } from '@/lib/fetchAll';
+import { useProfilesVersion } from '@/hooks/useProfilesVersion';
 
 export interface CompanyOption {
   id: string;
@@ -12,6 +13,7 @@ export interface CompanyOption {
 
 export function useCompanyFilter() {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('all');
+  const profilesVersion = useProfilesVersion();
 
   // Fetch companies
   const { data: companies } = useQuery({
@@ -29,7 +31,7 @@ export function useCompanyFilter() {
 
   // Build employee → company mapping via direct company_id OR department → BU → division → company chain
   const { data: mapData } = useQuery({
-    queryKey: ['employee-company-map'],
+    queryKey: ['employee-company-map', profilesVersion],
     queryFn: async () => {
       // Paged fetches to bypass PostgREST's 1000-row default cap.
       const profiles = await fetchAllPaged<any>((from, to) =>

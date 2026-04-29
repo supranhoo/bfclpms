@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useDepartments } from '@/hooks/useOrganization';
 import { fetchAllPaged } from '@/lib/fetchAll';
+import { useProfilesVersion } from '@/hooks/useProfilesVersion';
 
 interface UseEmployeeFilterOptionsArgs {
   enabledGrades?: boolean;
@@ -9,12 +10,13 @@ interface UseEmployeeFilterOptionsArgs {
 
 export function useEmployeeFilterOptions(args: UseEmployeeFilterOptionsArgs = {}) {
   const { enabledGrades = false } = args;
+  const profilesVersion = useProfilesVersion();
   // Fetch departments
   const { data: departments } = useDepartments();
 
   // Fetch distinct designations from profiles
   const { data: designations } = useQuery({
-    queryKey: ['distinct-designations'],
+    queryKey: ['distinct-designations', profilesVersion],
     queryFn: async () => {
       // Paged fetch — bypasses PostgREST's 1000-row default cap so distinct
       // designations from rows beyond row 1000 are not silently dropped.
@@ -32,7 +34,7 @@ export function useEmployeeFilterOptions(args: UseEmployeeFilterOptionsArgs = {}
 
   // Fetch distinct PMS grades from profiles
   const { data: grades } = useQuery({
-    queryKey: ['distinct-grades'],
+    queryKey: ['distinct-grades', profilesVersion],
     queryFn: async () => {
       // Paged fetch — bypasses PostgREST's 1000-row default cap.
       const data = await fetchAllPaged<{ pms_grade: string | null }>((from, to) =>
@@ -50,7 +52,7 @@ export function useEmployeeFilterOptions(args: UseEmployeeFilterOptionsArgs = {}
 
   // Fetch managers (profiles who have direct reports)
   const { data: managers } = useQuery({
-    queryKey: ['managers-list'],
+    queryKey: ['managers-list', profilesVersion],
     queryFn: async () => {
       // Paged fetch to bypass PostgREST's 1000-row default cap.
       const data = await fetchAllPaged<any>((from, to) =>

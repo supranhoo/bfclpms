@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchAllPaged } from '@/lib/fetchAll';
+import { useProfilesVersion } from '@/hooks/useProfilesVersion';
 
 export interface FilteredProfile {
   id: string;
@@ -33,8 +34,9 @@ export interface KpiFilterState {
 
 // Fetch profiles with full organization hierarchy
 export function useProfilesWithHierarchy() {
+  const profilesVersion = useProfilesVersion();
   return useQuery({
-    queryKey: ['profiles-hierarchy'],
+    queryKey: ['profiles-hierarchy', profilesVersion],
     queryFn: async () => {
       // Paged fetch to bypass PostgREST's 1000-row default cap.
       const data = await fetchAllPaged<any>((from, to) =>
