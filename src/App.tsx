@@ -66,6 +66,10 @@ const SafetyIncidentNew = lazy(() => import("./pages/safety/SafetyIncidentNew"))
 const SafetyIncidentDetail = lazy(() => import("./pages/safety/SafetyIncidentDetail"));
 const SafetySlaMonitor = lazy(() => import("./pages/safety/SafetySlaMonitor"));
 const SafetyAuditLog = lazy(() => import("./pages/safety/SafetyAuditLog"));
+const SafetyPermits = lazy(() => import("./pages/safety/SafetyPermits"));
+const SafetyPermitNew = lazy(() => import("./pages/safety/SafetyPermitNew"));
+const SafetyPermitDetail = lazy(() => import("./pages/safety/SafetyPermitDetail"));
+const SafetyPermitTypeConfig = lazy(() => import("./pages/safety/SafetyPermitTypeConfig"));
 
 // Report pages
 const PerformanceReport = lazy(() => import("./pages/reports/PerformanceReport"));
@@ -142,6 +146,10 @@ const App = () => (
                 <Route path="incidents" element={<Suspense fallback={<PageFallback />}><SafetyIncidents /></Suspense>} />
                 <Route path="incidents/new" element={<Suspense fallback={<PageFallback />}><SafetyIncidentNew /></Suspense>} />
                 <Route path="incidents/:id" element={<Suspense fallback={<PageFallback />}><SafetyIncidentDetail /></Suspense>} />
+                <Route path="permits" element={<Suspense fallback={<PageFallback />}><SafetyPermits /></Suspense>} />
+                <Route path="permits/new" element={<Suspense fallback={<PageFallback />}><SafetyPermitNew /></Suspense>} />
+                <Route path="permits/:id" element={<Suspense fallback={<PageFallback />}><SafetyPermitDetail /></Suspense>} />
+                <Route path="settings/permit-types" element={<Suspense fallback={<PageFallback />}><SafetyPermitTypeConfig /></Suspense>} />
                 <Route path="settings/sla" element={<Suspense fallback={<PageFallback />}><SafetySlaMonitor /></Suspense>} />
                 <Route path="settings/users" element={<Suspense fallback={<PageFallback />}><SafetyUsers /></Suspense>} />
                 <Route path="settings/audit" element={<Suspense fallback={<PageFallback />}><SafetyAuditLog /></Suspense>} />
