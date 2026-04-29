@@ -4866,6 +4866,60 @@ export type Database = {
         }
         Relationships: []
       }
+      safety_notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          id: string
+          incident_id: string | null
+          is_read: boolean
+          kind: string
+          payload: Json
+          read_at: string | null
+          recipient_id: string
+          title: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          incident_id?: string | null
+          is_read?: boolean
+          kind: string
+          payload?: Json
+          read_at?: string | null
+          recipient_id: string
+          title: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          incident_id?: string | null
+          is_read?: boolean
+          kind?: string
+          payload?: Json
+          read_at?: string | null
+          recipient_id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_notifications_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "safety_incidents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_notifications_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "safety_incidents_with_sla"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       safety_severity_sla: {
         Row: {
           acknowledge_hours: number
@@ -4889,6 +4943,45 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      safety_sla_escalations: {
+        Row: {
+          id: string
+          incident_id: string
+          level: string
+          notified_at: string
+          recipient_count: number
+        }
+        Insert: {
+          id?: string
+          incident_id: string
+          level: string
+          notified_at?: string
+          recipient_count?: number
+        }
+        Update: {
+          id?: string
+          incident_id?: string
+          level?: string
+          notified_at?: string
+          recipient_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_sla_escalations_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "safety_incidents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_sla_escalations_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "safety_incidents_with_sla"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       safety_user_roles: {
         Row: {
@@ -5852,6 +5945,17 @@ export type Database = {
         }
         Returns: number
       }
+      enqueue_safety_notification: {
+        Args: {
+          _body?: string
+          _incident: string
+          _kind: string
+          _payload?: Json
+          _recipient: string
+          _title: string
+        }
+        Returns: string
+      }
       find_ongoing_workflow: {
         Args: {
           p_config_type: string
@@ -6074,6 +6178,7 @@ export type Database = {
           terminal_year: number
         }[]
       }
+      run_safety_sla_escalations: { Args: never; Returns: Json }
       transition_safety_incident: {
         Args: {
           p_assigned_to?: string
