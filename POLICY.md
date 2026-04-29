@@ -2241,7 +2241,7 @@ The Safety module follows a strict **filters-first → click-to-load → paginat
 1. **No auto-fetch on list/query screens.** A list page must mount with the filter bar visible and an `awaiting-search` empty state. The query fires **only** when the user clicks the **Search** button (or presses Enter inside any filter input).
 2. **Server-side pagination is mandatory.** Default page size 25; user-selectable from {25, 50, 100}. No tabular surface may render more than one page of rows. Queries use `.range(from, to)` with `count: 'exact'`.
 3. **Cache key is the *submitted* filters + page + pageSize.** Typing in a filter input does not refetch; only Search does. Mutations re-run the **last submitted** query — never silently change filters.
-4. **Exempt surfaces:** detail pages (`/safety/.../:id`), single-aggregate dashboard tiles (`SafetyHome` tiles, `SafetyAnalytics` KPI cards), and `New`/`Edit` forms. Any embedded *table* inside a dashboard is **not** exempt.
+4. **Exempt surfaces:** detail pages (`/safety/.../:id`), single-aggregate dashboard tiles (`SafetyHome` tiles, `SafetyAnalytics` KPI cards), `New`/`Edit` forms, master-detail editor list panes (`SafetyAuditTemplates` left pane, `SafetyPermitTypeConfig`, `SafetyTrainingAdmin`), and **life-safety reference data** that must be instantly viewable in a crisis (`SafetyEmergency` dashboard, `SafetyEmergencyContacts`). Any embedded *table* inside an ordinary dashboard is **not** exempt.
 5. **Sanctioned primitives** — every Safety list MUST use:
    - `useManualQuery` (from `src/hooks/useManualQuery.ts`)
    - `<SafetyFilterBar>` (from `src/components/safety/SafetyFilterBar.tsx`)
@@ -2256,3 +2256,8 @@ The Safety module follows a strict **filters-first → click-to-load → paginat
 - Hardcoded page-size constants outside the primitives.
 
 **Related:** `mem://architecture/safety/manual-fetch-and-pagination`, `docs/adr/ADR-050.md`.
+
+### Migration log
+- **Phase 1 (2026-04-29):** SafetyAuditLog, SafetyIncidents, SafetyPermits, SafetyAudits.
+- **Phase 2 (2026-04-29):** SafetyAssets, SafetyHoursWorked, SafetySlaMonitor.
+- Static guard: `src/test/safetyManualFetchPages.test.ts` enforces every migrated page imports the sanctioned primitives.

@@ -1,4 +1,3 @@
-import { useQuery } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -21,34 +20,58 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Play, Timer } from 'lucide-react';
 import { useRunSafetySlaCheck } from '@/hooks/useSafetyNotifications';
+import { useManualQuery, type ManualQueryFetcherArgs } from '@/hooks/useManualQuery';
+import { SafetyFilterBar } from '@/components/safety/SafetyFilterBar';
+import { SafetyDataTable } from '@/components/safety/SafetyDataTable';
+
+type SlaRow = {
+  id: string;
+  incident_id: string;
+  level: 'amber' | 'red';
+  notified_at: string;
+  recipient_count: number;
+  safety_incidents?: {
+    incident_number?: string;
+    title?: string;
+    status?: string;
+    severity?: string;
+  } | null;
+};
+
+async function fetchSlaPage({
+  range,
+}: ManualQueryFetcherArgs<Record<string, never>>): Promise<{ rows: SlaRow[]; total: number }> {
+  const { data, error, count } = await supabase
+    .from('safety_sla_escalations' as never)
+    .select(
+      'id, incident_id, level, notified_at, recipient_count, safety_incidents(incident_number, title, status, severity)',
+      { count: 'exact' },
+    )
+    .order('notified_at', { ascending: false })
+    .range(range[0], range[1]);
+  if (error) throw error;
+  return { rows: (data ?? []) as unknown as SlaRow[], total: count ?? 0 };
+}
 
 /**
  * SafetySlaMonitor — /safety/settings/sla
  * ---------------------------------------
- * Phase 1.D admin page. Shows the latest SLA escalation history (one row
- * per incident+level) and exposes a "Run now" button that calls the
- * `check-safety-sla` edge function on demand. The same engine runs every
- * 5 minutes via pg_cron.
+ * Manual-fetch + paginated escalation history (POLICY §113 / ADR-050).
+ * Click "Load" to fetch the latest escalations; the engine still runs
+ * automatically every 5 minutes via pg_cron — this page is just a viewer.
  */
 export default function SafetySlaMonitor() {
   const { toast } = useToast();
   const runCheck = useRunSafetySlaCheck();
 
-  const escalations = useQuery({
-    queryKey: ['safety', 'sla_escalations'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('safety_sla_escalations' as any)
-        .select(
-          'id, incident_id, level, notified_at, recipient_count, safety_incidents(incident_number, title, status, severity)',
-        )
-        .order('notified_at', { ascending: false })
-        .limit(100);
-      if (error) throw error;
-      return data ?? [];
-    },
-    staleTime: 30_000,
-  });
+  const {
+    rows, total, page, pageSize, totalPages,
+    hasSubmitted, isLoading, isFetching,
+    submit, reset, setPage, setPageSize, refetchLast,
+  } = useManualQuery<SlaRow, Record<string, never>>(
+    ['safety', 'sla_escalations', 'list'],
+    fetchSlaPage,
+  );
 
   const onRun = async () => {
     try {
@@ -57,18 +80,18 @@ export default function SafetySlaMonitor() {
         title: 'SLA check complete',
         description: `Amber escalated: ${r.amber_escalated ?? 0} · Red escalated: ${r.red_escalated ?? 0}`,
       });
-      escalations.refetch();
-    } catch (e: any) {
+      refetchLast();
+    } catch (e: unknown) {
       toast({
         title: 'SLA check failed',
-        description: e.message ?? 'Unknown error',
+        description: e instanceof Error ? e.message : 'Unknown error',
         variant: 'destructive',
       });
     }
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 p-6">
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div>
@@ -89,64 +112,74 @@ export default function SafetySlaMonitor() {
             Run now
           </Button>
         </CardHeader>
-        <CardContent>
-          {escalations.isLoading ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              Loading escalations…
-            </div>
-          ) : (escalations.data ?? []).length === 0 ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              No SLA escalations have fired yet. Open incidents are healthy.
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Incident</TableHead>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Severity</TableHead>
-                  <TableHead>Stage</TableHead>
-                  <TableHead>Level</TableHead>
-                  <TableHead>Recipients</TableHead>
-                  <TableHead>When</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(escalations.data ?? []).map((row: any) => {
-                  const inc = row.safety_incidents ?? {};
-                  return (
-                    <TableRow key={row.id}>
-                      <TableCell className="font-mono text-xs">
-                        {inc.incident_number ?? '—'}
-                      </TableCell>
-                      <TableCell className="max-w-xs truncate">
-                        {inc.title ?? '—'}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{inc.severity ?? '—'}</Badge>
-                      </TableCell>
-                      <TableCell>{inc.status ?? '—'}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={row.level === 'red' ? 'destructive' : 'secondary'}
-                        >
-                          {row.level.toUpperCase()}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{row.recipient_count}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {formatDistanceToNow(new Date(row.notified_at), {
-                          addSuffix: true,
-                        })}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
+        <CardContent />
       </Card>
+
+      <SafetyFilterBar
+        title="Escalation history"
+        description="Click Load to fetch the latest SLA escalations."
+        onSubmit={() => submit({})}
+        onReset={() => reset()}
+        isSubmitting={isFetching}
+        submitLabel="Load"
+      >
+        <p className="text-xs text-muted-foreground md:col-span-3 lg:col-span-4 self-center">
+          No filters — paginated chronological view.
+        </p>
+      </SafetyFilterBar>
+
+      <SafetyDataTable
+        title="SLA escalations"
+        hasSubmitted={hasSubmitted}
+        isLoading={isLoading}
+        rowCount={rows.length}
+        total={total}
+        page={page}
+        pageSize={pageSize}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+      >
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Incident</TableHead>
+              <TableHead>Title</TableHead>
+              <TableHead>Severity</TableHead>
+              <TableHead>Stage</TableHead>
+              <TableHead>Level</TableHead>
+              <TableHead>Recipients</TableHead>
+              <TableHead>When</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => {
+              const inc = row.safety_incidents ?? {};
+              return (
+                <TableRow key={row.id}>
+                  <TableCell className="font-mono text-xs">
+                    {inc.incident_number ?? '—'}
+                  </TableCell>
+                  <TableCell className="max-w-xs truncate">{inc.title ?? '—'}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{inc.severity ?? '—'}</Badge>
+                  </TableCell>
+                  <TableCell>{inc.status ?? '—'}</TableCell>
+                  <TableCell>
+                    <Badge variant={row.level === 'red' ? 'destructive' : 'secondary'}>
+                      {row.level.toUpperCase()}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{row.recipient_count}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {formatDistanceToNow(new Date(row.notified_at), { addSuffix: true })}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </SafetyDataTable>
     </div>
   );
 }

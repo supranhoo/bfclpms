@@ -85,3 +85,20 @@ Update list-returning hooks to support manual + paginated mode (back-compat by a
 5. Add the manual-fetch test suite; update DOCUMENTATION Version History.
 
 After approval I'll execute the rollout in that order.
+
+---
+
+## 8. Phase 2 progress (2026-04-29)
+
+Migrated: **SafetyAssets**, **SafetyHoursWorked**, **SafetySlaMonitor**.
+
+Re-classified as **exempt** after RCA:
+- `SafetyEmergency` + `SafetyEmergencyContacts` — life-safety reference data must be visible without a click in a crisis.
+- `SafetyAuditTemplates` (left pane), `SafetyPermitTypeConfig`, `SafetyTrainingAdmin` — master-detail editor surfaces with bounded config datasets.
+- `SafetyTraining` (worker view) — single-user "my assignments" list, naturally bounded.
+- `SafetyUsers` — settings page; role-grants list is bounded (<100) and the search picker is part of an admin form.
+- `SafetyAuditScoreboard` — single-aggregate dashboard surface.
+
+Added: `src/test/safetyManualFetchPages.test.ts` — static guard ensuring every migrated page imports the sanctioned primitives and never imports `useQuery` directly.
+
+The manual-fetch + pagination policy is now fully rolled out for the high-volume Safety surfaces it was designed to protect.
