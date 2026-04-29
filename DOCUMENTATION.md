@@ -5828,3 +5828,37 @@ For a backfilled employee the `profiles` row already exists (master HR import). 
 - `src/hooks/useManualQuery.ts`, `src/components/safety/SafetyFilterBar.tsx`, `src/components/safety/SafetyDataTable.tsx`, `src/components/safety/SafetyEmptyState.tsx` (new)
 - `src/pages/safety/SafetyAuditLog.tsx`, `src/pages/safety/SafetyIncidents.tsx`, `src/pages/safety/SafetyPermits.tsx`, `src/pages/safety/SafetyAudits.tsx` (rewritten)
 - `src/test/safetyPagination.test.ts` (new)
+
+## v2026-04-29c — Monthly Scorecard Date-Range trend stale-cache fix
+
+**Symptom:** `/reports/monthly-scorecard` Date Range tab rendered "N of N
+employees" with every monthly cell blank ("—").
+
+**Root cause (RCA):** Two compounding issues —
+1. `useMonthlyTrend` was issuing submission batches of 800 KPI IDs per
+   `kpi_id=in.(...)` URL (~30 KB), exceeding the PostgREST URL limit. The
+   old code did `r.data ?? []` with no `r.error` check, so every batch
+   silently came back empty → every cell became "—".
+2. React Query cached that broken payload under
+   `['monthly-trend', ...]` with `staleTime: 5 min`. The "Reload" button
+   only re-set local state to the same values → same query key → React
+   Query returned the cached blank result without refetching.
+
+**Fix:**
+- `useMonthlyTrend.ts`: `SUB_BATCH = 200` (URL stays < 8 KB), explicit
+  `throw r.error`, diagnostic `console.warn` when KPIs > 0 but submissions
+  came back empty, `staleTime: 30s` / `gcTime: 5 min`.
+- `MonthlyTrendView.tsx`: `handleLoad` now calls
+  `queryClient.invalidateQueries({ queryKey: ['monthly-trend'] })` so a
+  user can recover from any stale cached failure with a single click.
+- POLICY §114 codifies both rules (cached-report reload + URL batch cap).
+- New test `src/test/monthlyTrendCacheBust.test.ts` is a regression guard
+  for all four invariants.
+- New memory `mem://features/reports/monthly-scorecard-trend` documents
+  the contract.
+
+**Files:**
+- `src/hooks/useMonthlyTrend.ts`, `src/components/reports/MonthlyTrendView.tsx`
+- `src/test/monthlyTrendCacheBust.test.ts` (new)
+- `mem/features/reports/monthly-scorecard-trend.md` (new)
+- `POLICY.md` (+§114), `DOCUMENTATION.md` (this entry), `mem/index.md` (+entry)
