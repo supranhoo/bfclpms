@@ -1,0 +1,17 @@
+---
+name: profile-cache-invalidation
+description: Mandatory invalidateProfileCaches(queryClient) call after any profile mutation, plus version-keyed query keys for hooks that cache profile-derived data
+type: constraint
+---
+Any code path that mutates `public.profiles` (UI edit, bulk import, edge function, direct DB) MUST trigger React Query invalidation for every cache listed in `PROFILE_DEPENDENT_QUERY_KEYS` (`src/lib/profileCacheKeys.ts`).
+
+Why: hooks like `useCompanyFilter` (10 min staleTime), `useProfilesWithHierarchy`, `useEmployeeFilterOptions` and `useMonthlyTrend` (5 min) cache employee → company / hierarchy maps and picker option lists. Without invalidation, an admin who changes `employee_code`, `full_name`, `department_id`, `company_id`, `is_active`, or `reporting_manager_id` will not see the update reflected in pickers, filter cascades or report grids until the staleTime elapses — making the employee appear "missing".
+
+How to apply:
+1. UI mutations: `import { invalidateProfileCaches } from '@/lib/profileCacheKeys';` and call it in every `onSuccess` that writes to `profiles` or `user_roles`. Replace bare `queryClient.invalidateQueries({ queryKey: ['profiles'] })` with this helper.
+2. New hooks that cache profile-derived data: import `useProfilesVersion` from `@/hooks/useProfilesVersion` and append the returned counter to the React Query key. The hook subscribes to a single shared Postgres realtime channel on `profiles` and increments the counter on any change — this catches mutations made outside the UI (imports, edge functions, direct DB).
+3. When adding a new cache that depends on profile fields, register its key in `PROFILE_DEPENDENT_QUERY_KEYS` and update `src/test/profileCacheInvalidation.test.ts`.
+
+Codified in POLICY.md §95. Regression test: `src/test/profileCacheInvalidation.test.ts`.
+
+Compliant sites: UserManagement (edit/create/bulkUpdate/delete), useCompanyFilter, useKpiFilters (useProfilesWithHierarchy), useEmployeeFilterOptions, useMonthlyTrend.
