@@ -1,104 +1,76 @@
-# Safety Module — Manual Fetch & Pagination Policy
+## Goal
 
-Codify and retrofit a single rule across `/safety/*`: **filters first → click to load → paginated tables**. No list/query screen may auto-fetch on mount, and no table may render an unbounded result set.
+Keep the existing (correct) behavior — multi-month KPIs (Bi-Monthly, Quarterly, Half-Yearly, Yearly) anchor on the cycle's terminal month, and scores auto-percolate back to sibling months — but make the UI **clearly explain why** so admins don't perceive it as a bug.
 
-## 1. Policy & SSOT (codify once, applies forever)
+## Background (no behavior change)
 
-Create the binding rule so all future Safety work follows it automatically:
+Per `mem://architecture/pms/multimonth-percolation` and POLICY §54 v3:
+- Only the terminal month of a cycle is reviewed (workflow runs once).
+- The `percolate_multimonth_score` DB trigger copies the approved score to all sibling months.
+- This prevents triple-reviewing the same Quarterly KPI and keeps scores consistent.
 
-- **`POLICY.md` §113 — Safety Manual-Fetch & Pagination**
-  - List/query screens MUST NOT auto-fetch on mount. A visible **Search** (filter screens) or **Load** (pure list screens) button triggers the query.
-  - Detail screens (`/:id`) and dashboard tiles that show a single aggregate are exempt — they auto-load.
-  - All tabular surfaces MUST paginate server-side: default page size 25, options 25/50/100, with prev/next + page indicator. No screen may render more than one page worth of rows at a time.
-  - Mutations (create / transition / approve) continue to invalidate caches and re-run the **last submitted** query — never silently re-issue different filters.
-- **`DOCUMENTATION.md`** — add a "Safety UX Conventions" section pointing to §113 and listing the standard hook/component primitives below.
-- **`mem://architecture/safety/manual-fetch-and-pagination`** — new memory file + index.md entry under Core ("Safety lists: manual fetch + paginated").
-- **`docs/adr/ADR-050.md`** — Safety Manual Fetch & Pagination ADR (context, decision, consequences, migration plan).
+The current banner only says *"will be assigned to June 2026 (cycle end month)"* — accurate, but doesn't explain the *why*, which causes confusion.
 
-## 2. Reusable primitives (the SSOT for every Safety list)
+## Changes
 
-Add in `src/components/safety/` and `src/hooks/`:
+### 1. `src/components/admin/AdminKpiCreateDialog.tsx` (~line 820)
 
-- **`useManualQuery<T>(queryKey, fetcher, { pageSize })`** — wraps React Query with `enabled: false`, exposes `submit(filters)`, `page`, `setPage`, `pageSize`, `setPageSize`, `hasSubmitted`, `isFetching`, `rows`, `total`. Internally does range-based fetch (`.range(from, to)`) + `count: 'exact'`.
-- **`<SafetyFilterBar>`** — slot wrapper with a right-aligned **Search** primary button + **Reset** secondary. Disables Search while a query is in flight; emits `onSubmit(filters)` only on click / Enter inside an input.
-- **`<SafetyDataTable>`** — thin wrapper over the existing `Table` adding: empty/loading/"Click Search to load" states, sticky pagination footer (`Page X of Y · 25/50/100`), and a `total` count badge.
-- **`<SafetyEmptyState variant="awaiting-search" | "no-results">`** — replaces today's bare "No data" rows.
+Replace the single-line banner with a richer info block that:
+- Lists **all months in the cycle** (e.g., "covers April, May, June 2026").
+- States the **review month** ("reviewed once in June 2026").
+- Adds a small `Info` icon with a tooltip: *"Multi-month KPIs are scored once at cycle end. The approved score automatically applies to every month in the cycle. This avoids duplicate reviews and ensures consistency."*
+- Uses existing `getCycleMonths()` helper from `src/lib/frequencyUtils.ts` to compute the cycle months dynamically (respects `frequency_cycle_start` overrides).
 
-These three primitives are the only sanctioned way to build a Safety list going forward; the policy memory references them by name.
+Visual: keep amber/info styling, add a 2-line layout — line 1 = cycle scope, line 2 = review anchor + tooltip.
 
-## 3. Retrofit existing Safety screens
+### 2. `src/components/admin/AdminKpiEditorForm.tsx` (if it has the same banner)
 
-Convert each list page below to: mount-time renders filter bar + empty "Apply filters and click Search" state; data + pagination only after Search.
+Apply the same enhanced banner for edit-mode parity. Verify first via `code--view`.
 
-| Screen | Current behavior | Change |
-|---|---|---|
-| `SafetyIncidents.tsx` | Auto-fetches all incidents, client-side search | Filter bar (status, severity, type, date range, text) → Search → paginated server query |
-| `SafetyPermits.tsx` | Auto-fetches, groups Live/History | Filter bar (status, type, text, date range) → Search → paginated; keep Live/History as a tab toggle within results |
-| `SafetyAudits.tsx` | Auto-loads runs + templates | Search button drives runs query; templates list also paginates (25/page) |
-| `SafetyAuditTemplates.tsx` | Auto-loads | Filter (active, search) → Search → paginated |
-| `SafetyAuditScoreboard.tsx` | Auto-aggregates | Period + BU filter → Search → paginated BU rows |
-| `SafetyAssets.tsx` | Auto-loads | Filter (type, status, calibration band, BU, text) → Search → paginated |
-| `SafetyTraining.tsx` / `SafetyTrainingAdmin.tsx` | Auto-loads | Filter (status, course, employee, BU) → Search → paginated |
-| `SafetyEmergency.tsx` (drills list) | Auto-loads | Filter (status, BU, date range) → Search → paginated |
-| `SafetyEmergencyContacts.tsx` | Auto-loads | Filter (BU, role, text) → Search → paginated |
-| `SafetyAuditLog.tsx` | Auto-loads 300 rows | Filter (entity, event, performer, date range, text) → Search → paginated (no implicit 300-row cap) |
-| `SafetySlaMonitor.tsx` | Auto-loads | Filter (state, severity, owner) → Search → paginated |
-| `SafetyHoursWorked.tsx` | Auto-loads | Filter (BU, year/month range) → Search → paginated |
-| `SafetyUsers.tsx` | Auto-loads roles/access | Filter (role, BU, text) → Search → paginated |
-| `SafetyAnalytics.tsx` | Auto-loads dashboard | **Exempt as dashboard**, but the BU drill-down table inside it switches to manual-search + paginated |
-| `SafetyHome.tsx` | Tiles + small recent lists | Tiles stay auto; embedded "Recent" lists become "Open queue →" links instead of inline data |
+### 3. `mem/features/admin/multi-month-kpi-cycle-ux.md` (new memory)
 
-Detail pages (`*Detail.tsx`), `New` forms, and `SafetySettings.tsx` are unchanged.
+Document the UX contract: any future dialog that creates/edits a multi-month KPI must surface (a) the full cycle months and (b) the review anchor month. Cross-link POLICY §54 v3.
 
-## 4. Hook layer changes
+### 4. `mem/index.md`
 
-Update list-returning hooks to support manual + paginated mode (back-compat by accepting `{ enabled: false }` and `{ page, pageSize }`):
+Add reference to the new memory file.
 
-- `useSafetyIncidents`, `useSafetyPermits`, `useAuditRuns`, `useAuditTemplates`, `useSafetyAssets`, `useSafetyTraining`, `useSafetyEmergency` (drills/contacts), `useSafetyAuditLog`, `useSafetyAnalytics` (BU drill-down only).
-- All switch to range queries with `count: 'exact', head: false`, returning `{ rows, total }`.
-- Cache key includes the **submitted** filters + `page` + `pageSize`; in-flight typing in the filter bar does not change the key until Search is pressed.
+### 5. `DOCUMENTATION.md` + `POLICY.md`
 
-## 5. Tests (regression protection)
+- DOCUMENTATION.md: add a short "Admin UX — Multi-month KPI assignment banner" subsection under the KPI Management section explaining the displayed cycle scope.
+- POLICY.md §54 v3: append a UX clause: *"All admin-facing creation/edit dialogs MUST display the full cycle month range and the review anchor month for any KPI with frequency ∈ {Bi-Monthly, Quarterly, Half-Yearly, Yearly}."*
 
-- **`src/test/safetyManualFetch.test.tsx`** — mounts each list page, asserts:
-  1. No network call fires before clicking Search.
-  2. Empty-state copy "Apply filters and click Search" is shown on mount.
-  3. Clicking Search dispatches exactly one query with the expected filters + `range(0, 24)`.
-  4. Pagination controls render `Page 1 of N` and advance the range on next-page click.
-- **`src/test/safetyPagination.test.ts`** — pure logic tests for `useManualQuery` (range math, page bounds, pageSize change resets to page 1, mutation re-runs last submitted query).
-- Existing 125 safety tests continue to pass.
+### 6. Tests
 
-## 6. Risk & Impact Report
+- `src/test/multiMonthBannerCopy.test.ts` (new): unit-test a small pure helper `buildCycleScopeLabel(frequency, period, year, cycleStart)` that returns `{ cycleMonths: string[], anchorMonth: string }`. Covers:
+  - Quarterly Apr 2026 → cycle [Apr, May, Jun], anchor Jun.
+  - Bi-Monthly Mar 2026 with default cycle start → correct pair.
+  - Yearly Sep 2026 with fiscal cycle start Jul → cycle Jul–Jun, anchor Jun.
+  - Year-wrap case: Quarterly Nov 2026 → cycle [Nov, Dec, Jan], anchor Jan 2027.
+- Extract `buildCycleScopeLabel` into `src/lib/frequencyUtils.ts` (alongside `getActiveMonthForCycle`) so both UI and tests share one source of truth.
 
-- **Data Impact:** none — read-side only; no schema, no RLS changes.
-- **Workflow Impact:** users now click Search to see lists. Mitigation: clear empty-state copy + auto-focus first filter; Enter key in any filter input also submits.
-- **UI/UX Consistency:** all Safety lists adopt the same filter-bar/table/pagination primitives — *more* consistent, not less.
-- **Regression Risk:** medium (touches every list page + hooks). Mitigated by (a) hooks remaining backward-compatible until each page is migrated, (b) the new test file gating every page, (c) per-page migration in small commits.
-- **Performance:** strictly improves cold-load — `/safety/incidents`, `/safety/permits`, `/safety/audit-log` no longer pull full tables on mount.
+## What we are NOT changing
 
-## 7. Rollout order
+- `getActiveMonthForCycle()` logic.
+- `percolate_multimonth_score` trigger.
+- `enforce_frequency_lock_on_submission`.
+- The KPI insert payload (`review_period: resolvedPeriod`) — stays as-is.
+- Any DB schema, RLS, or workflow behavior.
 
-1. Land policy docs + ADR + memory + primitives + `useManualQuery` (no UI change yet).
-2. Migrate `SafetyAuditLog` (highest payoff, currently fetches 300 rows).
-3. Migrate `SafetyIncidents`, `SafetyPermits`, `SafetyAudits` + `SafetyAuditTemplates`.
-4. Migrate `SafetyAssets`, `SafetyTraining(+Admin)`, `SafetyEmergency`, `SafetyEmergencyContacts`, `SafetySlaMonitor`, `SafetyHoursWorked`, `SafetyUsers`, `SafetyAuditScoreboard`, analytics drill-down.
-5. Add the manual-fetch test suite; update DOCUMENTATION Version History.
+## Risk & Impact
 
-After approval I'll execute the rollout in that order.
+- **Data Impact:** None. Pure UI + copy + helper extraction.
+- **Workflow Impact:** None.
+- **UI/UX Impact:** Banner becomes more informative; same color/placement.
+- **Regression Risk:** Low. The new helper is pure and unit-tested; the banner is a leaf component.
+- **Mitigation:** New unit tests cover edge cases (year-wrap, fiscal cycle start, all multi-month frequencies).
 
----
+## Deliverables checklist
 
-## 8. Phase 2 progress (2026-04-29)
-
-Migrated: **SafetyAssets**, **SafetyHoursWorked**, **SafetySlaMonitor**.
-
-Re-classified as **exempt** after RCA:
-- `SafetyEmergency` + `SafetyEmergencyContacts` — life-safety reference data must be visible without a click in a crisis.
-- `SafetyAuditTemplates` (left pane), `SafetyPermitTypeConfig`, `SafetyTrainingAdmin` — master-detail editor surfaces with bounded config datasets.
-- `SafetyTraining` (worker view) — single-user "my assignments" list, naturally bounded.
-- `SafetyUsers` — settings page; role-grants list is bounded (<100) and the search picker is part of an admin form.
-- `SafetyAuditScoreboard` — single-aggregate dashboard surface.
-
-Added: `src/test/safetyManualFetchPages.test.ts` — static guard ensuring every migrated page imports the sanctioned primitives and never imports `useQuery` directly.
-
-The manual-fetch + pagination policy is now fully rolled out for the high-volume Safety surfaces it was designed to protect.
+- [ ] `buildCycleScopeLabel()` added to `src/lib/frequencyUtils.ts`.
+- [ ] `AdminKpiCreateDialog.tsx` banner updated.
+- [ ] `AdminKpiEditorForm.tsx` banner updated (if applicable).
+- [ ] `src/test/multiMonthBannerCopy.test.ts` added (4+ cases).
+- [ ] `mem/features/admin/multi-month-kpi-cycle-ux.md` created and indexed.
+- [ ] `DOCUMENTATION.md` and `POLICY.md` §54 v3 updated.
+- [ ] Full test suite green.
