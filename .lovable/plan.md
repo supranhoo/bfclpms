@@ -248,3 +248,19 @@ Once you answer these, I will switch to build mode and ship Phase 0 + 1.A in the
 - **Docs:** `mem/features/safety/audit-and-dashboard.md` + index entry.
 
 **Next:** Phase 1.G — Realtime sync hook (`useSafetyRealtimeSync`) wiring `safety_incidents` + `safety_notifications` channel into the layout; Phase 1.H — closing the test gate (`shell-isolation`, `workflow-rpc`, `sla-calculation`).
+
+---
+
+## ✅ Status — Phase 1.G + 1.H delivered
+
+### 1.G — Realtime sync
+- `src/hooks/useSafetyRealtimeSync.ts` mounted by `SafetyLayout`. Single channel `safety-realtime-sync-<uid>`; subscribes to `safety_incidents`, `safety_incident_status_history`, `safety_incident_evidence`, `safety_incident_progress_log`, `safety_notifications` (filtered by recipient), `safety_sla_escalations`. Debounced 1500ms. ALL invalidations under `['safety',...]` — never touches PMS caches.
+- `useSafetyOfflineSync` stays mounted only by `SafetyOfflineBadge` (header) — not duplicated at layout to avoid double listeners.
+
+### 1.H — Test gate
+- Added `validateFsmTransition()` and `classifySlaState()` as pure helpers in `src/lib/safetyIncidents.ts` (SSOT mirrors of the RPC + view).
+- New suite `src/test/safetyFsmAndSla.test.ts` — 15 tests covering sequential FSM + SLA classification boundaries.
+- Patched `safetyShellIsolation.test.tsx` smoke-render to wrap `SafetyHome` in `QueryClientProvider` (regression from Phase 1.F dashboard hooks).
+- Full Safety gate: **21/21 passing** (`safetyFsmAndSla` + `safetyShellIsolation` + `safetyOfflineQueue`).
+
+**Phase 1 closed.** Ready to plan Phase 2 (permits / training / observation walks) on request.
