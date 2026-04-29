@@ -70,6 +70,8 @@ const SafetyPermits = lazy(() => import("./pages/safety/SafetyPermits"));
 const SafetyPermitNew = lazy(() => import("./pages/safety/SafetyPermitNew"));
 const SafetyPermitDetail = lazy(() => import("./pages/safety/SafetyPermitDetail"));
 const SafetyPermitTypeConfig = lazy(() => import("./pages/safety/SafetyPermitTypeConfig"));
+const SafetyTraining = lazy(() => import("./pages/safety/SafetyTraining"));
+const SafetyTrainingAdmin = lazy(() => import("./pages/safety/SafetyTrainingAdmin"));
 
 // Report pages
 const PerformanceReport = lazy(() => import("./pages/reports/PerformanceReport"));
@@ -149,6 +151,8 @@ const App = () => (
                 <Route path="permits" element={<Suspense fallback={<PageFallback />}><SafetyPermits /></Suspense>} />
                 <Route path="permits/new" element={<Suspense fallback={<PageFallback />}><SafetyPermitNew /></Suspense>} />
                 <Route path="permits/:id" element={<Suspense fallback={<PageFallback />}><SafetyPermitDetail /></Suspense>} />
+                <Route path="training" element={<Suspense fallback={<PageFallback />}><SafetyTraining /></Suspense>} />
+                <Route path="training/admin" element={<Suspense fallback={<PageFallback />}><SafetyTrainingAdmin /></Suspense>} />
                 <Route path="settings/permit-types" element={<Suspense fallback={<PageFallback />}><SafetyPermitTypeConfig /></Suspense>} />
                 <Route path="settings/sla" element={<Suspense fallback={<PageFallback />}><SafetySlaMonitor /></Suspense>} />
                 <Route path="settings/users" element={<Suspense fallback={<PageFallback />}><SafetyUsers /></Suspense>} />
