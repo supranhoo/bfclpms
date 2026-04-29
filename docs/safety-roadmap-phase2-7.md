@@ -17,7 +17,7 @@
 | A1    | Image Compression (client + server)  | ✅ done (bonus) |
 | 2     | Permit to Work                       | ✅ done (2-A schema/RPCs, 2-B UI, 2-C tests — 16/16) |
 | 3     | Training & SOP                       | ✅ done (3-A schema/RPCs + cron, 3-B UI worker+admin, 3-C tests 14/14) |
-| 4     | Asset & Calibration                  | ⏳ todo      |
+| 4     | Asset & Calibration                  | ✅ done (4-A schema/RPCs + cron, 4-B UI register/detail/new, 4-C tests 23/23) |
 | 5     | Audit & Compliance Checklists        | ⏳ todo      |
 | 6     | Emergency Response                   | ⏳ todo      |
 | 7     | Analytics                            | ⏳ todo      |
