@@ -45,3 +45,8 @@ All cache keys live under `['safety', 'permits', ...]`.
 - `src/lib/safetyPermits.ts` — labels, validators, requirement helpers
 - `src/hooks/useSafetyPermits.ts` — all queries + mutations (RPC wrappers)
 - `src/components/safety/PermitStatusBadge.tsx` — semantic-token badge
+
+## Tests
+- `src/test/safetyPermits.test.ts` — 16 pure-logic tests locking the
+  status/type enums, predicate sets (editable/terminal/live), HIRA/LOTO
+  helpers, and `validatePermitWindow` boundary cases.
