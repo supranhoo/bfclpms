@@ -40,7 +40,7 @@ const items = [
   { title: 'SLA Monitor', url: '/safety/settings/sla', icon: Timer },
   { title: 'Users & Roles', url: '/safety/settings/users', icon: Users },
   { title: 'Audit Log', url: '/safety/settings/audit', icon: ScrollText },
-  { title: 'Settings', url: '/safety/settings', icon: Settings, comingSoon: true },
+  { title: 'Settings', url: '/safety/settings', icon: Settings, end: true },
 ];
 
 export function SafetySidebar() {
