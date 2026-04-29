@@ -1,156 +1,181 @@
-## Your Rule (the new contract)
+# Safety Module — Phase 1 Plan (Brainstorm + Build Spec)
 
-For multi-month KPIs (Bi-Monthly / Quarterly / Half-Yearly / Yearly):
+## 0. Context confirmed in current codebase
 
-- The **terminal month** of each cycle is the only month that goes through the workflow (Self → Manager → … → Management → Approved).
-- All **non-terminal sibling months** in the same cycle are placeholders — no user is allowed to enter or review anything on them.
-- The instant the terminal month becomes `approved`, every sibling month in that cycle must:
-  1. Have its `status` flipped to `approved`
-  2. Have all stage scores, ratings, achieved values, remarks and evidence copied from the terminal month
-  3. Mirror the terminal month's `final_score` permanently — even if the workflow template changes later
-
-This replaces the current §54 "wait for sibling to reach its own terminal stage" guard, which was added in April to fix a different bug (auditor bypass) but contradicts your actual business model for multi-month KPIs.
+- Hub is **already DB-driven** via `public.modules` (`is_enabled`, `display_order`). Only `pms` row exists today. → Admin on/off requirement is satisfied by a single row + a tiny admin toggle UI; no schema changes needed for visibility.
+- `useModules()` returns only `is_enabled = true` rows. We will extend it with a per-user access join so revoking a user's Safety access also hides the card (not just the global toggle).
+- No prior `safety_*` tables, hooks, components, or edge functions exist. This is greenfield — clean port from your reference source.
+- `ALL_APP_ROLES` is the SSOT for PMS roles (`src/lib/roles.ts`). Safety roles will live in a **separate enum** (`safety_app_role`) and a separate `safety_user_roles` table to preserve the SSOT discipline and avoid polluting PMS RBAC.
 
 ---
 
-## Why It Doesn't Work Today (Diagnosis Recap)
+## 1. Engineering recommendations (additions / refinements to your spec)
 
-Confirmed against the live database for **Jitendra Dwivedi → "Power generation 45 MWh/AFBC" (Bi-Monthly Feb-Mar 2026)**:
+These are the deltas I recommend on top of your written spec. Each is non-blocking — call out which to drop before I build.
 
-| Month | Status | Final |
-|---|---|---|
-| March (terminal) | `approved` | 5 |
-| **February (sibling)** | **`kra_set`** | — |
-
-The DB trigger `percolate_multimonth_score` fired correctly when March was approved. It checked Feb, saw status was `kra_set` (below Feb's own terminal stage), and wrote a `PERCOLATION_DEFERRED` audit log instead of copying the score. Two such deferrals are recorded (Apr 9 and Apr 14). This matches POLICY §54 — but §54 is wrong for your business rule.
-
----
-
-## The Fix
-
-### 1. Rewrite the `percolate_multimonth_score` trigger (DB)
-
-Remove the workflow-stage guard entirely for non-terminal siblings. New logic:
-
-```text
-On terminal-month KPI transition to 'approved':
-  cycle_months = get_cycle_months(frequency, period, year, frequency_cycle_start)
-  terminal_month = last month in cycle_months (chronologically)
-  
-  IF NEW.review_period != terminal_month THEN
-    -- not the terminal month, skip
-    RETURN
-  END IF
-  
-  FOR each sibling KPI in same cycle (same employee, kra, kpi, year, frequency):
-    -- Force-set status to approved (no stage guard)
-    UPDATE kpis SET status = 'approved' WHERE id = sibling.id
-    
-    -- Upsert review_submissions with full snapshot from terminal
-    INSERT ... ON CONFLICT (kpi_id) DO UPDATE SET ...
-      auto_advance_reason = 'Multi-month sibling — auto-populated from terminal month {March 2026}'
-    
-    -- Audit log
-    INSERT INTO kpi_audit_logs (action='SCORE_PERCOLATED', performed_by=auth.uid(), 
-      metadata={source_kpi_id, source_period, frequency, forced=true})
-  END FOR
-```
-
-Key changes vs current trigger:
-- **Removed** the `v_sibling_terminal` lookup and the `IF v_sibling.kpi_status = v_sibling_terminal` branch
-- **Removed** `PERCOLATION_DEFERRED` path — never defer, always apply
-- **Added** an explicit guard so percolation only triggers when the **chronological terminal month** of the cycle is approved (prevents Feb-approval from overwriting an already-correct Mar)
-
-Determining the terminal month uses the existing `get_cycle_months()` function with `frequency_cycle_start` — so "Feb-Mar" → terminal = March, "Apr-Jun" → terminal = June, etc.
-
-### 2. Block UI entry on non-terminal sibling months
-
-Today the UI lets a user accidentally start a Self-review on Feb. Add a guard so:
-
-- **Self-Review screen** (`SelfReviewSheet.tsx`, `MobileSelfReviewCard.tsx`): if KPI is multi-month and current period is **not** the cycle's terminal month, show a read-only banner: *"This is a placeholder month for the {Feb-Mar} cycle. Score will auto-populate from {March} once approved. No action needed here."*
-- **Reviewer screens** (`UnifiedScorecard.tsx`, `KpiDetailsTable.tsx`): same banner; hide submit/score inputs.
-- **Admin Data Entry**: keep editable (admin override path) but show the banner.
-
-### 3. Backfill historical deferred KPIs
-
-Run a one-shot migration script that finds every KPI matching:
-```sql
--- non-terminal sibling, status != approved, but terminal sibling IS approved
-```
-…and applies the new percolation logic retroactively. The `4f7d79d0-…` (Feb 2026 AFBC) and `cc08d11e-…` siblings I confirmed earlier will be cleaned up automatically. Audit log: `BACKFILL_MULTIMONTH_PERCOLATION` with `performed_by = NULL` (system action).
-
-Estimated affected KPIs: I will report the exact count from a dry-run before applying.
-
-### 4. Workflow-change immutability
-
-You said: *"Even if the workflow is changed, final score should be same as what score is in the second month."*
-
-Today, `assign_active_workflow_to_kpis_in_period` (the workflow-change step-back trigger from `mem://features/admin/workflow-change-step-back`) reverts KPIs when their workflow template changes. We must add an exception:
-
-- If a KPI is a non-terminal multi-month sibling AND its terminal sibling is `approved`, the step-back trigger must **skip** it. The score is governed by the terminal month, not the local workflow.
-- Add the same exception to any "reset" or "reconcile" tool.
-
-### 5. Policy & documentation rewrite
-
-- **POLICY.md §54** — replace text. New rule: *"For multi-month KPIs, only the chronologically terminal month of each cycle traverses the workflow. Non-terminal sibling months are placeholders, locked from user entry, and inherit the terminal month's full score snapshot atomically upon approval. The pre-April-2026 'auditor bypass' concern is mitigated instead by §54.1: only the terminal month's auditor signs off; siblings inherit that approval as a derivative artifact."*
-- **POLICY.md §54.1** (new) — UI must prevent any user (Self / Manager / Auditor / Management) from entering data on non-terminal sibling months.
-- **DOCUMENTATION.md** — update "Multi-Month KPI Percolation" section + Version History entry.
-- **ADR-047** — add a third amendment dated today documenting the reversal of the §54 stage-guard, the business rationale, and the compensating control (UI lockdown of siblings).
-
-### 6. Tests
-
-- `src/test/multimonthPercolation.test.ts` (new) — assert that approving the terminal month flips a `kra_set` sibling to `approved` with identical scores.
-- DB function test covering: Bi-Monthly Feb-Mar, Quarterly Jan-Mar, Half-Yearly cycles, and an off-fiscal cycle (e.g. Aug-Sep).
-- Regression: assert the trigger does **not** fire when a non-terminal month is approved (e.g. someone manually approves Feb instead of March).
-- UI test: SelfReviewSheet shows the placeholder banner on Feb of a Feb-Mar cycle, hides inputs.
+1. **Two-layer visibility, not one.**
+  Keep `modules.is_enabled` as the **global kill-switch** (Admin → Module Hub Settings) AND introduce `safety_module_access` as the **per-user grant**. The Hub card is shown only when both are true. This lets you pilot Safety with 5 users before flipping the global switch.
+2. **Module-scoped Admin role.**
+  `admin` in PMS today is god-mode. For Safety we should require `safety_app_role = 'admin'` separately. A PMS admin who is not granted Safety admin sees the hub card only if explicitly granted. This prevents accidental cross-module privilege creep and matches your "RLS-first" directive.
+3. **Single FSM transition entry point — enforce at DB, not app.**
+  Your spec already has `transition_safety_incident` + a BEFORE UPDATE trigger checking `current_setting('safety.fsm_transition','true')`. Endorsed. Add the same guard for `safety_incident_tickets.ticket_status` and `safety_incident_status_history` inserts so no path can backdoor a state change.
+4. `**incident_number` generation — sequence + advisory lock.**
+  Use `nextval('safety_incident_number_seq')` inside a trigger with `pg_advisory_xact_lock(hashtext('safety_incident_number'))` to guarantee no duplicates under concurrent inserts (offline replays will hit this).
+5. **Offline duplicate guard — client UUID, not composite key.**
+  Your composite `(reporter_id, title, created_at::date, location)` will false-positive on legitimate same-day reports. Recommend: client generates `client_submission_id uuid` and DB has `UNIQUE (reporter_id, client_submission_id)`. Cleaner and idempotent.
+6. **Evidence model — one table, not jsonb + side table.**
+  Drop `safety_incidents.media_urls jsonb`. Use `safety_incident_evidence` exclusively with a `stage` enum column (`report`, `assignment`, `investigation`, `rca`, `capa`, `verification`). Closure trigger checks `EXISTS (… stage='verification')`. Single source of truth for files + cleaner RLS.
+7. **SLA — store the deadlines, compute escalation status as a generated column.**
+  `acknowledge_due_at`, `close_due_at` are stored at insert/severity-change. Add `sla_state text GENERATED ALWAYS AS (...) STORED` so the UI chip and reports agree on amber/red without app-side drift.
+8. **Realtime invalidation — keep your "all-or-nothing" rule but scope by module.**
+  `invalidateAllSafetyQueries(qc)` should invalidate only keys prefixed `['safety', …]` so it does not nuke PMS caches when a Safety event fires. Mirrors the `useProfilesVersion` pattern already in PMS.
+9. **Notifications — reuse existing dispatch engine, add a `module` discriminator.**
+  The PMS notification engine and `notifications` table already exist. Add `module text default 'pms'` and let Safety push events through the same pipeline. Avoids two unread-counts, two bells, two cron jobs.
+10. **Hub card visibility = realtime.**
+  Subscribe `useModules()` to changes on `safety_module_access` filtered by `user_id=auth.uid()` so revocation hides the card within one tick (matches your acceptance criterion in 1.A).
+11. **Audit log — single table for both modules, partitioned by `module`.**
+  Instead of `safety_assignment_audit_log`, extend the existing audit trail with a `module` column. One queryable surface for compliance, two views over it.
+12. **Tests — add a smoke test that proves PMS chrome never renders inside `/safety/*` and vice versa.** Catches the "polluted shell" regression you explicitly called out.
 
 ---
 
-## Risk & Impact
+## 2. Phase 0 — Hub & Decoupled Shell
 
-| Area | Impact | Mitigation |
-|---|---|---|
-| Data integrity | Medium — backfill rewrites historical sibling submissions. | Dry-run first; full audit log per row; reversible via `kpi_audit_logs` rollback. |
-| HR audit / "auditor bypass" concern | The reason §54 was added in April. | Compensating control: siblings are locked from any user entry. The terminal month auditor IS the authority for the whole cycle — by design. POLICY §54.1 documents this explicitly. |
-| Workflow template changes | Could previously revert siblings. | Step-back trigger updated to exempt approved-cycle siblings. |
-| RLS | None — the trigger is `SECURITY DEFINER`. | — |
-| Regression risk on single-month KPIs | None — trigger early-exits for `frequency NOT IN ('Bi-Monthly','Quarterly','Half-Yearly','Yearly')`. | Existing single-month tests retained. |
-| UI users seeing locked Feb | Behavioural change. | Clear banner explains why; matches business intent. |
+### Deliverables
 
----
+- Insert Safety row into `modules` (admin-toggleable from a new `/admin/modules` page — 1 toggle, 1 page, ~80 LOC).
+- `SafetyLayout.tsx` (new) — owns its own `Sidebar`, `MinimalHeader` variant, `NotificationBell` (filtered by `module='safety'`), idle timeout, `useSafetyRealtimeSync`.
+- `SafetySidebar.tsx` — Safety menu only.
+- Routes in `App.tsx` (lazy-loaded, behind `<SafetyModuleRoute>` guard that checks `safety_module_access` for the current user).
+- Hub card visibility: `useModules` extended to LEFT JOIN `safety_module_access` for the current user; Safety card hidden when no row.
 
-## Files Changed
+### Acceptance
 
-**Database:**
-- `supabase/migrations/<ts>_rewrite_multimonth_percolation.sql` (new) — trigger rewrite + backfill
-- `supabase/migrations/<ts>_workflow_change_sibling_exemption.sql` (new) — step-back exemption
-
-**Frontend (UI lockdown + banners):**
-- `src/lib/cycleResolution.ts` (new) — client-side mirror of `get_cycle_months` to detect terminal vs placeholder month
-- `src/components/review/SelfReviewSheet.tsx`
-- `src/components/review/MobileSelfReviewCard.tsx`
-- `src/components/review/UnifiedScorecard.tsx`
-- `src/components/review/KpiDetailsTable.tsx`
-- `src/components/dashboard/KpiTrackerModal.tsx` — show "auto-populated from {month}" caption on percolated rows
-
-**Tests:**
-- `src/test/multimonthPercolation.test.ts` (new)
-- `src/test/cycleResolution.test.ts` (new)
-- `src/test/siblingLockdown.test.ts` (new)
-
-**Docs / Memory:**
-- `POLICY.md` — §54 rewrite + §54.1 new
-- `DOCUMENTATION.md` — Multi-Month section + Version History
-- `docs/adr/ADR-047.md` — third amendment
-- `mem://architecture/pms/multimonth-percolation` (new memory rule)
-- `mem://index.md` — add reference
+- Login → Hub → Safety card visible only if granted → click → `/safety` with Safety-only chrome → `/safety/*` never renders PMS sidebar → back to Hub works.
 
 ---
 
-## Two Decisions I Need From You
+## 3. Phase 1.A — Permissions & User Management
 
-1. **Backfill scope** — apply the new rule retroactively to **all** historical KPIs (recommended, fixes Jitendra's Feb today and any other quietly deferred siblings), or only from a cutoff date forward (e.g. FY 2025-26 onward)?
+### Schema (one migration)
 
-2. **Sibling UI lockdown strictness** — should Admin (via Admin Data Entry) still be able to manually edit a placeholder sibling for exceptional repairs, or fully locked for everyone including Admin? My recommendation: Admin keeps an explicit override (audit-logged), all other roles fully locked.
+- Enum `safety_app_role`: `admin, safety_head, safety_officer, bu_head, manager, supervisor, worker, auditor`.
+- `safety_user_roles (id, user_id, role, business_unit_id NULL, department_id NULL, assigned_by, assigned_at)` — UNIQUE on the four-tuple.
+- `safety_module_access (user_id PK, can_view bool, can_edit bool, granted_by, granted_at)`.
+- `has_safety_role(_uid uuid, _role safety_app_role, _bu uuid default null) → bool` — SECURITY DEFINER, mirrors `has_role`. Used in every Safety RLS policy to prevent recursion.
+- Audit row in shared audit table on every grant/revoke.
 
-Approve and I'll implement.
+### UI: `/safety/settings/users`
+
+- Searchable list from `profiles` (filter `is_active=true`).
+- Per-user matrix: rows = Safety modules (incidents, permits, training, …), columns = role assignments scoped to BU/Dept multi-select.
+- Bulk CSV import (reuse PMS import patterns).
+- All mutations through `safety-rbac-mutate` edge function (audit-logged).
+
+---
+
+## 4. Phase 1.B — Incident Schema (3 migrations to keep restores clean)
+
+**Migration 1 — enums + master data**
+`safety_incident_status`, `safety_incident_severity`, `safety_incident_type`, `safety_master_data` seeded.
+
+**Migration 2 — core tables**
+`safety_incidents` (with `incident_number`, `client_submission_id`, severity-driven SLA cols, `sla_state` generated), `safety_incident_timeline` (`changed_by`, casted enums), `safety_incident_status_history`, `safety_incident_tickets`, `incident_progress_logs`, `safety_incident_evidence`.
+
+**Migration 3 — guards + realtime**
+
+- BEFORE UPDATE trigger blocking direct status writes unless `current_setting('safety.fsm_transition','true')`.
+- Closure trigger: requires verification_notes + ≥1 progress log + ≥1 evidence row with `stage='verification'`.
+- `REPLICA IDENTITY FULL` on the three realtime tables.
+- Add tables to `supabase_realtime` publication.
+- Storage bucket `safety-media` (private) + RLS policies for reporter/assignee/officer/head/admin/BU-head.
+
+---
+
+## 5. Phase 1.C/D — FSM Engine & Permission Matrix
+
+7-stage FSM: `reported → assigned → investigation → rca → corrective_action → verification → closed` + `orphaned` exception.
+
+- `transition_safety_incident(p_incident, p_to_status, p_user, p_notes, p_assigned_to)` — sequential index check, per-stage preconditions per your spec.
+- `approve_incident_safety(p_ticket, p_user)` — Safety Head closure path; sets the FSM session flag, atomic update of ticket+incident, writes timeline row with explicit casts, audit log.
+- Permission matrix exactly as you specified (table reproduced in `POLICY.md`).
+- UI: suppress generic "Advance to: verification" card; closure flows only via Approval Workflow panel.
+- Edge function envelope: `{ ok, error?, result? }` — never throws.
+
+---
+
+## 6. Phase 1.E — SLA Engine
+
+- Deadlines stored on insert (`acknowledge_due_at = created_at + 24h`; `close_due_at` from severity table).
+- `sla_state` generated column drives UI + reports.
+- Cron edge fn `check-safety-sla` every 15 min via `pg_cron` → escalation notifications via shared engine.
+- `SlaCountdown` chip on every list row.
+
+---
+
+## 7. Phase 1.F — Evidence
+
+- Single table `safety_incident_evidence (id, incident_id, stage, file_url, file_name, mime, size_bytes, uploaded_by, uploaded_at)`.
+- Reporter: ≥1 file at submission, ≤5 files, ≤20 MB each, mime allow-list `image/*, video/mp4, application/pdf`.
+- Verification: ≥1 row with `stage='verification'` enforced by closure trigger.
+- Downloads via `safety-incident-evidence` edge fn (signed URL + role check).
+
+---
+
+## 8. Phase 1.G/H — Notifications, Realtime, Offline
+
+- Reuse PMS `notifications` table; add `module` column. One bell, one cron, two filters.
+- `invalidateAllSafetyQueries(qc)` invalidates only `['safety', …]` keys.
+- IndexedDB queue (`offlineIncidentDb.ts`) keyed by `client_submission_id`. Reconnect → flush → DB UNIQUE prevents dupes.
+- All edge fns return `{ ok:false, error }` envelope; UI surfaces actual DB error.
+
+---
+
+## 9. Phase 1.I — UI Surfaces
+
+`SafetyHome`, `IncidentList` (role-scoped), `IncidentForm` (cascading type→severity, BU→dept, mandatory location, mandatory involved person for `unsafe_act`/`accident`, mandatory media), `IncidentDetail` with side panels (Assignment, Progress, Closure, Approval, Evidence, Orphan, SyncStatus, SlaCountdown). All destructive actions use `ConfirmDestructiveDialog`.
+
+---
+
+## 10. Phase 1.J — Audit & Compliance
+
+- Every status change → `safety_incident_timeline` (auto via RPC).
+- Every RBAC mutation + every evidence upload/download → shared audit table with `module='safety'`.
+- Read-only Audit Logs page filtered by `incident_id`.
+
+---
+
+## 11. Phase 1.K — Tests (gate for Phase 2)
+
+Port from your reference + add the chrome-isolation test:
+`workflow-rpc`, `workflow-enforcement`, `role-access`, `sla-calculation`, `escalation-triggers`, `incident-locking`, `**shell-isolation**` (asserts no PMS sidebar in `/safety/*` DOM and vice versa).
+
+---
+
+## 12. Risk & Impact Report (mandated by workspace knowledge)
+
+
+| Area          | Risk                                                 | Mitigation                                                                                                                              |
+| ------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Data          | New `safety_*` schema; zero overlap with PMS tables. | Separate enum + table namespace; no FK into PMS data except `auth.users(id)` and `profiles(id)`. No PMS row touched.                    |
+| RLS           | New policies must not introduce recursion.           | All policies route through `has_safety_role()` SECURITY DEFINER (mirrors PMS `has_role`).                                               |
+| Workflow      | FSM bypass via direct UPDATE.                        | BEFORE UPDATE trigger + session flag pattern. Tests cover every illegal transition.                                                     |
+| UI            | Safety chrome leaks into PMS routes (or vice versa). | Decoupled `SafetyLayout`; `shell-isolation` test in Phase 1.K.                                                                          |
+| Notifications | Two bells / two unread counts.                       | Single shared table with `module` discriminator; bell filters by current shell.                                                         |
+| Cache         | Safety realtime invalidates PMS queries.             | `invalidateAllSafetyQueries` scoped to `['safety', …]` keys only.                                                                       |
+| Offline       | Duplicate incidents on reconnect.                    | `client_submission_id uuid` + DB UNIQUE (reporter_id, client_submission_id).                                                            |
+| Regression    | PMS users lose features.                             | Zero edits to existing PMS files except `App.tsx` (route add), `ModuleHub.tsx` (already DB-driven), `useModules.ts` (LEFT JOIN access). |
+| Compliance    | Closure without proof.                               | Closure trigger checks notes + progress log + verification evidence.                                                                    |
+| Rollback      | Migration restores break.                            | 3 separate migrations (enums → tables → guards) so partial rollback is clean.                                                           |
+
+
+---
+
+## 13. Decisions I need from you before I start building
+
+1. **Confirm the 11 recommendations in §1** — accept all, or call out which to drop.
+2. **Initial Safety admin user** — should I seed the first `safety_app_role='admin'` row for your account on migration, or leave the table empty and use a bootstrap edge fn? - Answer - use admin accounts as admin here also  
+3. **BU/Dept source** — should Safety reuse PMS `companies/departments` tables, or have its own `safety_business_units`? (My recommendation: reuse PMS — single org tree, less drift.) Answer - reuse PMS 
+4. **Phase 0 scope** — do you want me to ship Phase 0 (Hub + shell + empty pages) as a standalone PR first, then Phase 1 in a second PR? Or one big drop? Answer One by One 
+
+Once you answer these, I will switch to build mode and ship Phase 0 + 1.A in the first turn (foundation: shell + RBAC + admin toggle + tests), then 1.B–1.L in subsequent turns so each is reviewable.
