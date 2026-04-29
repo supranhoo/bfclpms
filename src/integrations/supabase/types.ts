@@ -5004,6 +5004,293 @@ export type Database = {
           },
         ]
       }
+      safety_permit_approvals: {
+        Row: {
+          approver_id: string | null
+          approver_role: Database["public"]["Enums"]["safety_app_role"]
+          created_at: string
+          decided_at: string | null
+          decision: string | null
+          id: string
+          level: number
+          notes: string | null
+          permit_id: string
+        }
+        Insert: {
+          approver_id?: string | null
+          approver_role: Database["public"]["Enums"]["safety_app_role"]
+          created_at?: string
+          decided_at?: string | null
+          decision?: string | null
+          id?: string
+          level: number
+          notes?: string | null
+          permit_id: string
+        }
+        Update: {
+          approver_id?: string | null
+          approver_role?: Database["public"]["Enums"]["safety_app_role"]
+          created_at?: string
+          decided_at?: string | null
+          decision?: string | null
+          id?: string
+          level?: number
+          notes?: string | null
+          permit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_permit_approvals_permit_id_fkey"
+            columns: ["permit_id"]
+            isOneToOne: false
+            referencedRelation: "safety_permits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      safety_permit_evidence: {
+        Row: {
+          file_name: string
+          file_path: string
+          id: string
+          mime_type: string | null
+          permit_id: string
+          size_bytes: number | null
+          stage: string
+          uploaded_at: string
+          uploaded_by: string
+        }
+        Insert: {
+          file_name: string
+          file_path: string
+          id?: string
+          mime_type?: string | null
+          permit_id: string
+          size_bytes?: number | null
+          stage: string
+          uploaded_at?: string
+          uploaded_by: string
+        }
+        Update: {
+          file_name?: string
+          file_path?: string
+          id?: string
+          mime_type?: string | null
+          permit_id?: string
+          size_bytes?: number | null
+          stage?: string
+          uploaded_at?: string
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_permit_evidence_permit_id_fkey"
+            columns: ["permit_id"]
+            isOneToOne: false
+            referencedRelation: "safety_permits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      safety_permit_hira: {
+        Row: {
+          controls: string
+          created_at: string
+          hazard: string
+          id: string
+          permit_id: string
+          risk_after: string
+          risk_before: string
+        }
+        Insert: {
+          controls: string
+          created_at?: string
+          hazard: string
+          id?: string
+          permit_id: string
+          risk_after: string
+          risk_before: string
+        }
+        Update: {
+          controls?: string
+          created_at?: string
+          hazard?: string
+          id?: string
+          permit_id?: string
+          risk_after?: string
+          risk_before?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_permit_hira_permit_id_fkey"
+            columns: ["permit_id"]
+            isOneToOne: false
+            referencedRelation: "safety_permits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      safety_permit_loto_steps: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          isolated_at: string | null
+          isolated_by: string | null
+          permit_id: string
+          removed_at: string | null
+          removed_by: string | null
+          step_no: number
+          verified_at: string | null
+          verified_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          id?: string
+          isolated_at?: string | null
+          isolated_by?: string | null
+          permit_id: string
+          removed_at?: string | null
+          removed_by?: string | null
+          step_no: number
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          isolated_at?: string | null
+          isolated_by?: string | null
+          permit_id?: string
+          removed_at?: string | null
+          removed_by?: string | null
+          step_no?: number
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_permit_loto_steps_permit_id_fkey"
+            columns: ["permit_id"]
+            isOneToOne: false
+            referencedRelation: "safety_permits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      safety_permit_type_config: {
+        Row: {
+          approver_role: Database["public"]["Enums"]["safety_app_role"]
+          created_at: string
+          id: string
+          is_active: boolean
+          label: string
+          level: number
+          permit_type: Database["public"]["Enums"]["safety_permit_type"]
+          updated_at: string
+        }
+        Insert: {
+          approver_role: Database["public"]["Enums"]["safety_app_role"]
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label: string
+          level: number
+          permit_type: Database["public"]["Enums"]["safety_permit_type"]
+          updated_at?: string
+        }
+        Update: {
+          approver_role?: Database["public"]["Enums"]["safety_app_role"]
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label?: string
+          level?: number
+          permit_type?: Database["public"]["Enums"]["safety_permit_type"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      safety_permits: {
+        Row: {
+          business_unit_id: string | null
+          closed_at: string | null
+          closed_by: string | null
+          created_at: string
+          current_level: number
+          department_id: string | null
+          end_at: string
+          expired_at: string | null
+          hira_summary: string | null
+          id: string
+          linked_asset_ids: string[]
+          location: string
+          loto_required: boolean
+          permit_number: string | null
+          permit_type: Database["public"]["Enums"]["safety_permit_type"]
+          rejection_reason: string | null
+          requested_by: string
+          scope: string
+          start_at: string
+          status: Database["public"]["Enums"]["safety_permit_status"]
+          suspended_reason: string | null
+          total_levels: number
+          updated_at: string
+        }
+        Insert: {
+          business_unit_id?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string
+          current_level?: number
+          department_id?: string | null
+          end_at: string
+          expired_at?: string | null
+          hira_summary?: string | null
+          id?: string
+          linked_asset_ids?: string[]
+          location: string
+          loto_required?: boolean
+          permit_number?: string | null
+          permit_type: Database["public"]["Enums"]["safety_permit_type"]
+          rejection_reason?: string | null
+          requested_by: string
+          scope: string
+          start_at: string
+          status?: Database["public"]["Enums"]["safety_permit_status"]
+          suspended_reason?: string | null
+          total_levels?: number
+          updated_at?: string
+        }
+        Update: {
+          business_unit_id?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string
+          current_level?: number
+          department_id?: string | null
+          end_at?: string
+          expired_at?: string | null
+          hira_summary?: string | null
+          id?: string
+          linked_asset_ids?: string[]
+          location?: string
+          loto_required?: boolean
+          permit_number?: string | null
+          permit_type?: Database["public"]["Enums"]["safety_permit_type"]
+          rejection_reason?: string | null
+          requested_by?: string
+          scope?: string
+          start_at?: string
+          status?: Database["public"]["Enums"]["safety_permit_status"]
+          suspended_reason?: string | null
+          total_levels?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       safety_severity_sla: {
         Row: {
           acknowledge_hours: number
@@ -5968,6 +6255,7 @@ export type Database = {
       }
     }
     Functions: {
+      activate_permit: { Args: { p_permit_id: string }; Returns: Json }
       aggregate_sub_period_scores: {
         Args: { p_kpi_id: string; p_month: string; p_year: number }
         Returns: number
@@ -6014,12 +6302,20 @@ export type Database = {
         Args: { template_uuid: string }
         Returns: boolean
       }
+      close_permit: {
+        Args: { p_notes?: string; p_permit_id: string }
+        Returns: Json
+      }
       compute_org_kpi_score_for_kpi: {
         Args: { p_achieved: number; p_kpi_id: string }
         Returns: {
           rating: string
           score: number
         }[]
+      }
+      decide_permit_level: {
+        Args: { p_decision: string; p_notes?: string; p_permit_id: string }
+        Returns: Json
       }
       detect_training_needs_for_period: {
         Args: {
@@ -6040,6 +6336,7 @@ export type Database = {
         }
         Returns: string
       }
+      expire_overdue_permits: { Args: never; Returns: Json }
       find_ongoing_workflow: {
         Args: {
           p_config_type: string
@@ -6197,6 +6494,10 @@ export type Database = {
         Args: { _period_name: string; _review_year: number }
         Returns: boolean
       }
+      is_permit_approver: {
+        Args: { _permit_id: string; _uid: string }
+        Returns: boolean
+      }
       migrate_okv_on_scope_change: {
         Args: {
           p_category_id: string
@@ -6264,6 +6565,11 @@ export type Database = {
         }[]
       }
       run_safety_sla_escalations: { Args: never; Returns: Json }
+      submit_permit: { Args: { p_permit_id: string }; Returns: Json }
+      suspend_permit: {
+        Args: { p_permit_id: string; p_reason: string }
+        Returns: Json
+      }
       transition_safety_incident: {
         Args: {
           p_assigned_to?: string
@@ -6339,6 +6645,24 @@ export type Database = {
         | "accident"
         | "property_damage"
         | "environmental"
+      safety_permit_status:
+        | "draft"
+        | "submitted"
+        | "in_approval"
+        | "approved"
+        | "active"
+        | "suspended"
+        | "closed"
+        | "rejected"
+        | "expired"
+      safety_permit_type:
+        | "hot_work"
+        | "confined_space"
+        | "work_at_height"
+        | "electrical"
+        | "excavation"
+        | "lifting"
+        | "general"
       tni_gap_type: "skill" | "knowledge" | "behavior" | "compliance"
       tni_priority: "high" | "medium" | "low"
       tni_status:
@@ -6543,6 +6867,26 @@ export const Constants = {
         "accident",
         "property_damage",
         "environmental",
+      ],
+      safety_permit_status: [
+        "draft",
+        "submitted",
+        "in_approval",
+        "approved",
+        "active",
+        "suspended",
+        "closed",
+        "rejected",
+        "expired",
+      ],
+      safety_permit_type: [
+        "hot_work",
+        "confined_space",
+        "work_at_height",
+        "electrical",
+        "excavation",
+        "lifting",
+        "general",
       ],
       tni_gap_type: ["skill", "knowledge", "behavior", "compliance"],
       tni_priority: ["high", "medium", "low"],
