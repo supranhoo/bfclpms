@@ -5763,3 +5763,30 @@ For a backfilled employee the `profiles` row already exists (master HR import). 
 - `src/test/bugBountyFixes.test.ts`
 - `POLICY.md` (§116)
 - `mem/features/admin/admin-data-entry-workflow-controls`
+
+---
+
+### v2.66.7.51 — Profile Cache Invalidation Contract (29 Apr 2026)
+
+**Issue**: After an admin edited the `employee_code` of "Chandra Bhan Singh" from User Management, the employee disappeared from the Monthly Score Trend report, KPI pickers and the Company filter — even though all 170 of his historical KPIs (Sep 2025 → Jun 2026) remained intact in the database, linked correctly by `employee_id` (UUID).
+
+**Root cause** (system-wide RCA, NOT a band-aid): Several reports cache employee → company / hierarchy / picker maps for 5–10 minutes via React Query `staleTime`. Profile-edit `onSuccess` handlers only invalidated the bare `['profiles']` key, leaving stale snapshots of `employee-company-map`, `profiles-hierarchy`, `monthly-trend`, `distinct-designations`, `distinct-grades`, `managers-list`, etc. Pickers therefore filtered against an outdated dataset.
+
+**Fix**:
+1. New helper `src/lib/profileCacheKeys.ts` exporting `PROFILE_DEPENDENT_QUERY_KEYS` and `invalidateProfileCaches(queryClient)`.
+2. New realtime hook `src/hooks/useProfilesVersion.ts` — single shared Postgres-changes channel on `public.profiles` that bumps a module-level counter on any insert/update/delete and immediately invalidates the registered caches. Catches mutations made outside the UI (bulk imports, edge functions, direct DB).
+3. Patched the four `onSuccess` handlers in `src/pages/admin/UserManagement.tsx` (edit / create / bulk update / delete) to call `invalidateProfileCaches`.
+4. Appended `useProfilesVersion()` to query keys in `useCompanyFilter`, `useKpiFilters` (`useProfilesWithHierarchy`), `useEmployeeFilterOptions` (3 distinct-* / managers queries), and `useMonthlyTrend`.
+5. **POLICY.md §95** added; regression test `src/test/profileCacheInvalidation.test.ts` pins both the cache key registry and the helper's invalidation set (passes 2/2).
+
+**Files**:
+- `src/lib/profileCacheKeys.ts` (new)
+- `src/hooks/useProfilesVersion.ts` (new)
+- `src/pages/admin/UserManagement.tsx`
+- `src/hooks/useCompanyFilter.ts`
+- `src/hooks/useKpiFilters.ts`
+- `src/hooks/useEmployeeFilterOptions.ts`
+- `src/hooks/useMonthlyTrend.ts`
+- `src/test/profileCacheInvalidation.test.ts` (new)
+- `POLICY.md` (§95)
+- `mem/architecture/profile-cache-invalidation` (new)
