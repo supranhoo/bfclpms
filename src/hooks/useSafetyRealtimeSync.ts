@@ -64,6 +64,13 @@ const KEY_GROUPS = {
     ['safety', 'training'],
     ['safety', 'dashboard-stats'],
   ],
+  assets: [
+    ['safety', 'assets'],
+    ['safety', 'asset'],
+    ['safety', 'asset-calibrations'],
+    ['safety', 'asset-evidence'],
+    ['safety', 'dashboard-stats'],
+  ],
 } as const;
 
 type GroupName = keyof typeof KEY_GROUPS;
@@ -151,6 +158,21 @@ export function useSafetyRealtimeSync(enabled: boolean = true) {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'safety_training_attempts' },
         () => schedule('training'),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'safety_assets' },
+        () => schedule('assets'),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'safety_asset_calibrations' },
+        () => schedule('assets'),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'safety_asset_evidence' },
+        () => schedule('assets'),
       )
       .subscribe();
 
