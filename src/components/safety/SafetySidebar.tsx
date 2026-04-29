@@ -10,7 +10,10 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { Home, AlertTriangle, Settings, ArrowLeft, Users, Timer, ScrollText } from 'lucide-react';
+import {
+  Home, AlertTriangle, Settings, ArrowLeft, Users, Timer, ScrollText,
+  FileSignature, ShieldCheck,
+} from 'lucide-react';
 
 /**
  * SafetySidebar
@@ -24,6 +27,8 @@ import { Home, AlertTriangle, Settings, ArrowLeft, Users, Timer, ScrollText } fr
 const items = [
   { title: 'Safety Home', url: '/safety', icon: Home, end: true },
   { title: 'Incidents', url: '/safety/incidents', icon: AlertTriangle },
+  { title: 'Permits to Work', url: '/safety/permits', icon: FileSignature },
+  { title: 'Permit Types', url: '/safety/settings/permit-types', icon: ShieldCheck },
   { title: 'SLA Monitor', url: '/safety/settings/sla', icon: Timer },
   { title: 'Users & Roles', url: '/safety/settings/users', icon: Users },
   { title: 'Audit Log', url: '/safety/settings/audit', icon: ScrollText },

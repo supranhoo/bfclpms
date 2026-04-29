@@ -53,6 +53,13 @@ const KEY_GROUPS = {
     ['safety', 'dashboard-stats'],
     ['safety', 'incidents'],
   ],
+  permits: [
+    ['safety', 'permits'],
+    ['safety', 'dashboard-stats'],
+  ],
+  permitApprovals: [
+    ['safety', 'permits'],
+  ],
 } as const;
 
 type GroupName = keyof typeof KEY_GROUPS;
@@ -120,6 +127,16 @@ export function useSafetyRealtimeSync(enabled: boolean = true) {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'safety_sla_escalations' },
         () => schedule('sla'),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'safety_permits' },
+        () => schedule('permits'),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'safety_permit_approvals' },
+        () => schedule('permitApprovals'),
       )
       .subscribe();
 
