@@ -1,0 +1,12 @@
+---
+name: Safety RBAC
+description: Safety module uses safety_app_role enum + safety_user_roles table + has_safety_role() SECURITY DEFINER. Separate from PMS roles. Granting any safety role implicitly grants Hub access via has_safety_module_access.
+type: feature
+---
+- Roles: admin, safety_head, safety_officer, bu_head, manager, supervisor, worker, auditor (SSOT: src/lib/safetyRoles.ts).
+- Table: public.safety_user_roles (user_id, role, business_unit_id, department_id, assigned_by, assigned_at). Unique across the four-tuple, NULL-safe via COALESCE index.
+- Check helper: has_safety_role(uid, role, bu?) — SECURITY DEFINER, used in every Safety RLS policy to avoid recursion. Mirrors PMS has_role.
+- Convenience: has_any_safety_role(uid) for shell guards.
+- Audit: every grant/revoke logged to public.safety_audit_log via trigger; only admin role can read.
+- Module access: has_safety_module_access(uid) returns true if explicit row in safety_module_access OR ANY safety_user_roles row exists. Means granting a role auto-shows the Hub card.
+- UI: /safety/settings/users (SafetyUsers page) — admins grant/revoke; everyone sees their own assignments.
