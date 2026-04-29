@@ -14,8 +14,8 @@ import {
 } from '@/components/ui/select';
 import { Loader2, ArrowLeft, AlertTriangle, Upload, X } from 'lucide-react';
 import { useReportSafetyIncident } from '@/hooks/useSafetyIncidents';
-import { useUploadEvidence } from '@/hooks/useSafetyIncidentDetail';
 import { useBusinessUnits, useDepartments } from '@/hooks/useSafetyOrg';
+import { supabase } from '@/integrations/supabase/client';
 import {
   SAFETY_TYPE_LABELS,
   SAFETY_SEVERITY_LABELS,
@@ -88,14 +88,9 @@ export default function SafetyIncidentNew() {
         department_id: departmentId || null,
         involved_person_name: requiresInvolved ? involvedName.trim() : null,
       });
-      // Upload evidence sequentially against the new id.
-      const { useUploadEvidence: _ignored } = await import('@/hooks/useSafetyIncidentDetail');
-      // We need a hook bound to the new id, which is tricky outside React; use direct supabase calls instead.
-      const { supabase } = await import('@/integrations/supabase/client');
-      const { user } = await (async () => {
-        const { data } = await supabase.auth.getUser();
-        return { user: data.user };
-      })();
+      // Upload evidence sequentially against the new id (FK + RLS clean).
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData.user;
       if (!user) throw new Error('Session lost');
       for (const f of files) {
         const safeName = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
