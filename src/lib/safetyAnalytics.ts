@@ -66,16 +66,16 @@ export type SafetyAnalyticsPayload = {
 
 /** Aggregate org-wide totals from a multi-BU payload. */
 export function aggregateTotals(p: SafetyAnalyticsPayload) {
-  const sum = (arr: Array<Record<string, number>>, k: string) =>
+  const sum = (arr: Array<Record<string, unknown>>, k: string) =>
     arr.reduce((a, r) => a + (Number(r[k]) || 0), 0);
-  const totalRecordable = sum(p.trir as Array<Record<string, number>>, 'recordable_cases');
-  const totalHours = sum(p.trir as Array<Record<string, number>>, 'hours_worked');
+  const totalRecordable = sum(p.trir as unknown as Array<Record<string, unknown>>, 'recordable_cases');
+  const totalHours = sum(p.trir as unknown as Array<Record<string, unknown>>, 'hours_worked');
   return {
     orgTrir: computeTRIR(totalRecordable, totalHours),
-    openIncidents: sum(p.open_vs_closed as Array<Record<string, number>>, 'open_count'),
-    closedIncidents: sum(p.open_vs_closed as Array<Record<string, number>>, 'closed_count'),
-    criticalSev: sum(p.severity as Array<Record<string, number>>, 'critical_count'),
-    activePermits: sum(p.permit_throughput as Array<Record<string, number>>, 'active_count'),
+    openIncidents: sum(p.open_vs_closed as unknown as Array<Record<string, unknown>>, 'open_count'),
+    closedIncidents: sum(p.open_vs_closed as unknown as Array<Record<string, unknown>>, 'closed_count'),
+    criticalSev: sum(p.severity as unknown as Array<Record<string, unknown>>, 'critical_count'),
+    activePermits: sum(p.permit_throughput as unknown as Array<Record<string, unknown>>, 'active_count'),
     avgAuditScore: (() => {
       const rows = p.audit_scoreboard.filter((r) => r.avg_score != null);
       if (!rows.length) return null;

@@ -16,25 +16,45 @@ export function useSafetyAnalytics(businessUnitId?: string | null) {
   return useQuery<SafetyAnalyticsPayload>({
     queryKey: [...KEY, businessUnitId ?? 'all'],
     queryFn: async () => {
-      const filter = (q: ReturnType<typeof supabase.from>) =>
-        businessUnitId ? q.eq('business_unit_id', businessUnitId) : q;
-
-      const [trir, sev, oc, train, audit, permit] = await Promise.all([
-        filter(supabase.from('mv_safety_trir').select('*')),
-        filter(supabase.from('mv_safety_severity_rate').select('*')),
-        filter(supabase.from('mv_safety_incidents_open_vs_closed').select('*')),
-        supabase.from('mv_safety_training_compliance').select('*').limit(1).maybeSingle(),
-        filter(supabase.from('mv_safety_audit_scoreboard').select('*')),
-        filter(supabase.from('mv_safety_permit_throughput').select('*')),
+      // Materialized views are not in the generated types — use untyped client.
+      const sb = supabase as unknown as {
+        from: (t: string) => {
+          select: (cols: string) => {
+            eq: (c: string, v: string) => Promise<{ data: unknown }>;
+            limit: (n: number) => { maybeSingle: () => Promise<{ data: unknown }> };
+            then: Promise<{ data: unknown }>['then'];
+          } & Promise<{ data: unknown }>;
+        };
+      };
+      const fetchView = async (table: string) => {
+        const q = sb.from(table).select('*');
+        const res = businessUnitId
+          ? await (q as unknown as { eq: (c: string, v: string) => Promise<{ data: unknown }> }).eq(
+              'business_unit_id',
+              businessUnitId,
+            )
+          : await q;
+        return (res.data as unknown[]) ?? [];
+      };
+      const trainRes = await (
+        sb.from('mv_safety_training_compliance').select('*') as unknown as Promise<{ data: unknown }>
+      );
+      const trainArr = (trainRes.data as unknown[]) ?? [];
+      const [trir, sev, oc, audit, permit] = await Promise.all([
+        fetchView('mv_safety_trir'),
+        fetchView('mv_safety_severity_rate'),
+        fetchView('mv_safety_incidents_open_vs_closed'),
+        fetchView('mv_safety_audit_scoreboard'),
+        fetchView('mv_safety_permit_throughput'),
       ]);
 
       return {
-        trir: (trir.data as SafetyAnalyticsPayload['trir']) ?? [],
-        severity: (sev.data as SafetyAnalyticsPayload['severity']) ?? [],
-        open_vs_closed: (oc.data as SafetyAnalyticsPayload['open_vs_closed']) ?? [],
-        training: (train.data as SafetyAnalyticsPayload['training']) ?? null,
-        audit_scoreboard: (audit.data as SafetyAnalyticsPayload['audit_scoreboard']) ?? [],
-        permit_throughput: (permit.data as SafetyAnalyticsPayload['permit_throughput']) ?? [],
+        trir: trir as SafetyAnalyticsPayload['trir'],
+        severity: sev as SafetyAnalyticsPayload['severity'],
+        open_vs_closed: oc as SafetyAnalyticsPayload['open_vs_closed'],
+        training: (trainArr[0] as SafetyAnalyticsPayload['training']) ?? null,
+        audit_scoreboard: audit as SafetyAnalyticsPayload['audit_scoreboard'],
+        permit_throughput: permit as SafetyAnalyticsPayload['permit_throughput'],
         refreshed_at: new Date().toISOString(),
       };
     },
@@ -46,7 +66,11 @@ export function useRefreshSafetyAnalytics() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.rpc('refresh_safety_analytics');
+      const { data, error } = await (supabase.rpc as unknown as (
+        name: string,
+      ) => Promise<{ data: unknown; error: { message: string } | null }>)(
+        'refresh_safety_analytics',
+      );
       if (error) throw error;
       return data as { ok: boolean; error?: string; refreshed_at?: string };
     },
