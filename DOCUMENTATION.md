@@ -5790,3 +5790,39 @@ For a backfilled employee the `profiles` row already exists (master HR import). 
 - `src/test/profileCacheInvalidation.test.ts` (new)
 - `POLICY.md` (§95)
 - `mem/architecture/profile-cache-invalidation` (new)
+
+---
+
+### v2.66.7.52 — Safety Manual-Fetch & Pagination Policy (29 Apr 2026)
+
+**Change**: Codified a binding UX/performance contract for the Safety module — *filters first → click Search → server-paginated tables*. No `/safety/*` list/query screen may auto-fetch on mount; every tabular surface must paginate server-side via `.range()` with `count:'exact'` (default 25, options 25/50/100).
+
+**Why**: Existing Safety lists (`SafetyAuditLog` pulled 300 rows; `SafetyIncidents`, `SafetyPermits`, `SafetyAudits` pulled full tables) auto-fetched and filtered client-side. As Safety data grows this would degrade. We locked the rule in *now* via policy + ADR + memory + sanctioned primitives so every future Safety screen inherits it automatically.
+
+**Deliverables**:
+1. **Policy / governance**:
+   - `POLICY.md` §113 (the rule, exemptions, forbidden patterns)
+   - `docs/adr/ADR-050.md` (decision, alternatives, consequences)
+   - `mem://architecture/safety/manual-fetch-and-pagination` (Core memory + index entry)
+2. **Sanctioned primitives** (the only legal way to build a Safety list):
+   - `src/hooks/useManualQuery.ts` — `enabled:false` + `submit(filters)`, ranged paging, `refetchLast()` for mutations
+   - `src/components/safety/SafetyFilterBar.tsx` — Search/Reset shell, Enter-to-submit
+   - `src/components/safety/SafetyDataTable.tsx` — empty / loading / paginated table renderer
+   - `src/components/safety/SafetyEmptyState.tsx` — `awaiting-search` / `no-results` variants
+3. **Migrated pages** (Phase 1):
+   - `src/pages/safety/SafetyAuditLog.tsx` (was 300-row auto-fetch → ranged + server-side OR-search)
+   - `src/pages/safety/SafetyIncidents.tsx`
+   - `src/pages/safety/SafetyPermits.tsx`
+   - `src/pages/safety/SafetyAudits.tsx`
+4. **Tests**: `src/test/safetyPagination.test.ts` (7 tests) — pins range math, page guards, pageSize-resets-page, no-fetch-before-submit. Total suite: **688/688 passing**.
+
+**Remaining migration backlog** (Phase 2, same primitives, no new policy):
+`SafetyAuditTemplates`, `SafetyAuditScoreboard`, `SafetyAssets`, `SafetyTraining`, `SafetyTrainingAdmin`, `SafetyEmergency` (drills list), `SafetyEmergencyContacts`, `SafetySlaMonitor`, `SafetyHoursWorked`, `SafetyUsers`, plus the BU drill-down inside `SafetyAnalytics`. These pages remain functional today; Phase 2 will swap them onto the primitives page-by-page.
+
+**Files**:
+- `POLICY.md` (+§113), `DOCUMENTATION.md` (this entry), `mem/index.md` (+Core line, +Memory entry)
+- `docs/adr/ADR-050.md` (new)
+- `mem/architecture/safety/manual-fetch-and-pagination.md` (new)
+- `src/hooks/useManualQuery.ts`, `src/components/safety/SafetyFilterBar.tsx`, `src/components/safety/SafetyDataTable.tsx`, `src/components/safety/SafetyEmptyState.tsx` (new)
+- `src/pages/safety/SafetyAuditLog.tsx`, `src/pages/safety/SafetyIncidents.tsx`, `src/pages/safety/SafetyPermits.tsx`, `src/pages/safety/SafetyAudits.tsx` (rewritten)
+- `src/test/safetyPagination.test.ts` (new)
