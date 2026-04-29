@@ -50,6 +50,17 @@ async function fetchAssetsPage({
     .order('updated_at', { ascending: false })
     .range(range[0], range[1]);
   if (filters.status !== 'all') q = q.eq('status', filters.status);
+  // Calibration bucket → server-side date predicate (no client-side filtering of paged results).
+  if (filters.bucket !== 'all') {
+    const now = new Date();
+    const in1 = new Date(now.getTime() + 1 * 24 * 60 * 60 * 1000).toISOString();
+    const in7 = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const nowIso = now.toISOString();
+    if (filters.bucket === 'overdue') q = q.lt('calibration_expires_at', nowIso);
+    else if (filters.bucket === 't1') q = q.gte('calibration_expires_at', nowIso).lt('calibration_expires_at', in1);
+    else if (filters.bucket === 't7') q = q.gte('calibration_expires_at', in1).lt('calibration_expires_at', in7);
+    else if (filters.bucket === 'ok') q = q.gte('calibration_expires_at', in7);
+  }
   const search = filters.search.trim();
   if (search.length >= 2) {
     q = q.or(
