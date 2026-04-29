@@ -279,8 +279,6 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
     return getActiveMonthForCycle(frequency, reviewPeriod, reviewYear, frequencyCycleStart || null);
   }, [frequency, reviewPeriod, reviewYear, frequencyCycleStart]);
 
-  const showResolvedPreview = resolvedPeriod !== reviewPeriod;
-
   const cycleScope = useMemo(
     () => buildCycleScopeLabel(frequency, reviewPeriod, reviewYear, frequencyCycleStart || null),
     [frequency, reviewPeriod, reviewYear, frequencyCycleStart]
