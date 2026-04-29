@@ -127,6 +127,13 @@ const App = () => (
               <Route path="/reset-password" element={<Suspense fallback={<PageFallback />}><ResetPassword /></Suspense>} />
               <Route path="/home" element={<Suspense fallback={<PageFallback />}><ModuleHub /></Suspense>} />
               <Route path="/" element={<Navigate to="/home" replace />} />
+              {/* Safety module — fully decoupled shell. Sibling of /home so PMS chrome never renders here. */}
+              <Route
+                path="/safety"
+                element={<Suspense fallback={<PageFallback />}><SafetyLayout /></Suspense>}
+              >
+                <Route index element={<Suspense fallback={<PageFallback />}><SafetyHome /></Suspense>} />
+              </Route>
               <Route element={<DashboardLayout />}>
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/my-kpis" element={<Suspense fallback={<PageFallback />}><MyKpis /></Suspense>} /> {/* Redirects to /dashboard */}
@@ -422,7 +429,6 @@ const App = () => (
               </Route>
               <Route path="*" element={<Suspense fallback={<PageFallback />}><NotFound /></Suspense>} />
             </Routes>
-              {/* Safety module — fully decoupled shell, NOT wrapped in DashboardLayout. */}
           </BrowserRouter>
         </TooltipProvider>
       </AuthProvider>
