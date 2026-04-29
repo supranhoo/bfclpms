@@ -71,6 +71,10 @@ const KEY_GROUPS = {
     ['safety', 'asset-evidence'],
     ['safety', 'dashboard-stats'],
   ],
+  audits: [
+    ['safety', 'audits'],
+    ['safety', 'dashboard-stats'],
+  ],
 } as const;
 
 type GroupName = keyof typeof KEY_GROUPS;
@@ -173,6 +177,26 @@ export function useSafetyRealtimeSync(enabled: boolean = true) {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'safety_asset_evidence' },
         () => schedule('assets'),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'safety_audit_runs' },
+        () => schedule('audits'),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'safety_audit_run_responses' },
+        () => schedule('audits'),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'safety_audit_templates' },
+        () => schedule('audits'),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'safety_audit_template_items' },
+        () => schedule('audits'),
       )
       .subscribe();
 

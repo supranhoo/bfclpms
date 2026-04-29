@@ -75,6 +75,11 @@ const SafetyTrainingAdmin = lazy(() => import("./pages/safety/SafetyTrainingAdmi
 const SafetyAssets = lazy(() => import("./pages/safety/SafetyAssets"));
 const SafetyAssetNew = lazy(() => import("./pages/safety/SafetyAssetNew"));
 const SafetyAssetDetail = lazy(() => import("./pages/safety/SafetyAssetDetail"));
+const SafetyAudits = lazy(() => import("./pages/safety/SafetyAudits"));
+const SafetyAuditTemplates = lazy(() => import("./pages/safety/SafetyAuditTemplates"));
+const SafetyAuditRunNew = lazy(() => import("./pages/safety/SafetyAuditRunNew"));
+const SafetyAuditRunDetail = lazy(() => import("./pages/safety/SafetyAuditRunDetail"));
+const SafetyAuditScoreboard = lazy(() => import("./pages/safety/SafetyAuditScoreboard"));
 
 // Report pages
 const PerformanceReport = lazy(() => import("./pages/reports/PerformanceReport"));
@@ -159,6 +164,11 @@ const App = () => (
                 <Route path="assets" element={<Suspense fallback={<PageFallback />}><SafetyAssets /></Suspense>} />
                 <Route path="assets/new" element={<Suspense fallback={<PageFallback />}><SafetyAssetNew /></Suspense>} />
                 <Route path="assets/:id" element={<Suspense fallback={<PageFallback />}><SafetyAssetDetail /></Suspense>} />
+                <Route path="audits" element={<Suspense fallback={<PageFallback />}><SafetyAudits /></Suspense>} />
+                <Route path="audits/templates" element={<Suspense fallback={<PageFallback />}><SafetyAuditTemplates /></Suspense>} />
+                <Route path="audits/runs/new" element={<Suspense fallback={<PageFallback />}><SafetyAuditRunNew /></Suspense>} />
+                <Route path="audits/runs/:id" element={<Suspense fallback={<PageFallback />}><SafetyAuditRunDetail /></Suspense>} />
+                <Route path="audits/scoreboard" element={<Suspense fallback={<PageFallback />}><SafetyAuditScoreboard /></Suspense>} />
                 <Route path="settings/permit-types" element={<Suspense fallback={<PageFallback />}><SafetyPermitTypeConfig /></Suspense>} />
                 <Route path="settings/sla" element={<Suspense fallback={<PageFallback />}><SafetySlaMonitor /></Suspense>} />
                 <Route path="settings/users" element={<Suspense fallback={<PageFallback />}><SafetyUsers /></Suspense>} />
