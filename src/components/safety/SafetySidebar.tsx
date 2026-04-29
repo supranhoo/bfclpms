@@ -13,6 +13,7 @@ import {
 import {
   Home, AlertTriangle, Settings, ArrowLeft, Users, Timer, ScrollText,
   FileSignature, ShieldCheck, GraduationCap, BookOpen, Wrench, ClipboardCheck, Siren,
+  BarChart3, Activity,
 } from 'lucide-react';
 
 /**
@@ -33,6 +34,8 @@ const items = [
   { title: 'Emergency Response', url: '/safety/emergency', icon: Siren },
   { title: 'My Training', url: '/safety/training', icon: GraduationCap, end: true },
   { title: 'Training Admin', url: '/safety/training/admin', icon: BookOpen },
+  { title: 'Analytics', url: '/safety/analytics', icon: BarChart3 },
+  { title: 'Hours Worked', url: '/safety/settings/hours-worked', icon: Activity },
   { title: 'Permit Types', url: '/safety/settings/permit-types', icon: ShieldCheck },
   { title: 'SLA Monitor', url: '/safety/settings/sla', icon: Timer },
   { title: 'Users & Roles', url: '/safety/settings/users', icon: Users },
