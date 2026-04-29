@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -39,8 +39,8 @@ export default function SafetyPermitTypeConfig() {
     _new?: boolean;
   }>>([]);
 
-  // Re-seed draft when filtered rows change
-  useMemo(() => {
+  // Re-seed draft when filtered rows change. Side-effects only in useEffect.
+  useEffect(() => {
     setDraft(rows.map((r) => ({
       id: r.id,
       permit_type: r.permit_type,
