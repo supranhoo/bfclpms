@@ -21,7 +21,7 @@
 | 5     | Audit & Compliance Checklists        | ✅ done (5-A schema/RPCs, 5-B UI templates+runner+scoreboard, 5-C tests 11/11) |
 | 6     | Emergency Response                   | ✅ done (6-A schema/RPCs, 6-B UI hub+drill+contacts, 6-C tests 16/16) |
 | 7     | Analytics                            | ✅ done (7-A MVs+TRIR+cron, 7-B edge fn, 7-C dashboard+hours UI, 7-D tests 16/16) |
-| X     | Cross-cutting Settings hub           | ⏳ todo      |
+| X     | Cross-cutting Settings hub           | ✅ done (X-A safety_settings + RPC, X-B Settings hub UI, X-C tests 8/8) |
 
 Update this table as each sub-phase moves through `todo → in_progress → done`.
 
@@ -324,3 +324,10 @@ works, exports succeed, only authorised roles see global view.
   permits), `refresh_safety_analytics()` RPC with 30-min pg_cron,
   `safety-analytics` edge fn, dashboard + hours-worked admin pages,
   CSV export, 16/16 SSOT tests passing.
+- 2026-04-29 — Cross-cutting Settings Hub shipped: `safety_settings`
+  (key, value jsonb), `get_safety_setting`/`set_safety_setting` RPCs
+  (admin/safety_head only writes), six seeded defaults (PTW expiry
+  warning, training overdue escalation, audit thresholds, ack window,
+  drill cadence, calibration alert offsets), `/safety/settings` index
+  page with admin-link grid + JSON editor, 8/8 SSOT tests. Roadmap
+  100% complete; full Safety suite 125/125.

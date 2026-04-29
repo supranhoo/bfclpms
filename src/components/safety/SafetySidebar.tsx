@@ -40,7 +40,7 @@ const items = [
   { title: 'SLA Monitor', url: '/safety/settings/sla', icon: Timer },
   { title: 'Users & Roles', url: '/safety/settings/users', icon: Users },
   { title: 'Audit Log', url: '/safety/settings/audit', icon: ScrollText },
-  { title: 'Settings', url: '/safety/settings', icon: Settings, comingSoon: true },
+  { title: 'Settings', url: '/safety/settings', icon: Settings, end: true },
 ];
 
 export function SafetySidebar() {
@@ -65,27 +65,10 @@ export function SafetySidebar() {
                     isActive={isActive(item.url, item.end)}
                     tooltip={collapsed ? item.title : undefined}
                   >
-                    {item.comingSoon ? (
-                      <span
-                        className="flex items-center gap-2 opacity-50 cursor-not-allowed"
-                        aria-disabled="true"
-                      >
-                        <item.icon className="h-4 w-4" />
-                        {!collapsed && (
-                          <span className="flex items-center gap-2">
-                            {item.title}
-                            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                              soon
-                            </span>
-                          </span>
-                        )}
-                      </span>
-                    ) : (
-                      <NavLink to={item.url} end={item.end} className="flex items-center gap-2">
-                        <item.icon className="h-4 w-4" />
-                        {!collapsed && <span>{item.title}</span>}
-                      </NavLink>
-                    )}
+                    <NavLink to={item.url} end={item.end} className="flex items-center gap-2">
+                      <item.icon className="h-4 w-4" />
+                      {!collapsed && <span>{item.title}</span>}
+                    </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
