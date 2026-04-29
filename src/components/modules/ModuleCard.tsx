@@ -9,6 +9,7 @@ import {
   Building2,
   Briefcase,
   Settings,
+  ShieldAlert,
   LucideIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -32,6 +33,7 @@ const iconMap: Record<string, LucideIcon> = {
   Building2,
   Briefcase,
   Settings,
+  ShieldAlert,
 };
 
 export const ModuleCard = React.forwardRef<HTMLDivElement, ModuleCardProps>(function ModuleCard({
