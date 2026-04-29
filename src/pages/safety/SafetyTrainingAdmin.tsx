@@ -19,7 +19,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { ConfirmDestructiveDialog } from '@/components/safety/ConfirmDestructiveDialog';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { Plus, Pencil, Trash2, ArrowLeft, GraduationCap, Users } from 'lucide-react';
 import {
   useSafetySops,
