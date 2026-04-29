@@ -25,3 +25,4 @@ Notification triggers must guard non-login recipients (no auth.users row) — pr
 - [Safety Incident FSM](mem://architecture/safety/incident-fsm) — 7-stage server-enforced workflow; transition_safety_incident RPC is the only legal entry point; SLA via safety_incidents_with_sla view; client_submission_id for offline dedup; ['safety',...] cache prefix isolation (POLICY §112)
 - [Safety SLA & Notifications Engine](mem://features/safety/sla-and-notifications) — Phase 1.D in-app bell, idempotent escalation engine, pg_cron 5-min schedule, realtime invalidation
 - [Safety Offline Incident Queue](mem://features/safety/offline-queue) — Phase 1.E IndexedDB queue, idempotent submitSafetyIncident, auto-flush on reconnect, header offline badge
+- [Safety Audit & Dashboard](mem://features/safety/audit-and-dashboard) — Phase 1.F audit log surface and HSE KPI dashboard

@@ -236,3 +236,15 @@ Once you answer these, I will switch to build mode and ship Phase 0 + 1.A in the
 - **Memory + index synced.**
 
 **Next:** Phase 1.F — Audit log surface + admin "open incidents" dashboard widgets.
+
+---
+
+## ✅ Status — Phase 1.F delivered
+
+- **Audit surface:** `/safety/settings/audit` — `SafetyAuditLog.tsx` + `useSafetyAuditLog` hook with server filters (entity_type, event_type), client search, performer name resolution via batched `profiles` lookup. RLS restricts SELECT to safety admins.
+- **Dashboard:** `SafetyHome.tsx` rewritten with live KPI tiles (Open, SLA red, SLA amber, Closed), stage distribution bars, severity breakdown, overdue queue, and recent reports — all sourced from `useSafetyDashboardStats` over `safety_incidents_with_sla`.
+- **Sidebar:** "Audit Log" entry added.
+- **Cache:** all new query keys under `['safety', ...]` per POLICY §110.
+- **Docs:** `mem/features/safety/audit-and-dashboard.md` + index entry.
+
+**Next:** Phase 1.G — Realtime sync hook (`useSafetyRealtimeSync`) wiring `safety_incidents` + `safety_notifications` channel into the layout; Phase 1.H — closing the test gate (`shell-isolation`, `workflow-rpc`, `sla-calculation`).

@@ -65,6 +65,7 @@ const SafetyIncidents = lazy(() => import("./pages/safety/SafetyIncidents"));
 const SafetyIncidentNew = lazy(() => import("./pages/safety/SafetyIncidentNew"));
 const SafetyIncidentDetail = lazy(() => import("./pages/safety/SafetyIncidentDetail"));
 const SafetySlaMonitor = lazy(() => import("./pages/safety/SafetySlaMonitor"));
+const SafetyAuditLog = lazy(() => import("./pages/safety/SafetyAuditLog"));
 
 // Report pages
 const PerformanceReport = lazy(() => import("./pages/reports/PerformanceReport"));
@@ -143,6 +144,7 @@ const App = () => (
                 <Route path="incidents/:id" element={<Suspense fallback={<PageFallback />}><SafetyIncidentDetail /></Suspense>} />
                 <Route path="settings/sla" element={<Suspense fallback={<PageFallback />}><SafetySlaMonitor /></Suspense>} />
                 <Route path="settings/users" element={<Suspense fallback={<PageFallback />}><SafetyUsers /></Suspense>} />
+                <Route path="settings/audit" element={<Suspense fallback={<PageFallback />}><SafetyAuditLog /></Suspense>} />
               </Route>
               <Route element={<DashboardLayout />}>
                 <Route path="/dashboard" element={<Dashboard />} />

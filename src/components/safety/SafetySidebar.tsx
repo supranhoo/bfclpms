@@ -10,7 +10,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { Home, AlertTriangle, Settings, ArrowLeft, Users, Timer } from 'lucide-react';
+import { Home, AlertTriangle, Settings, ArrowLeft, Users, Timer, ScrollText } from 'lucide-react';
 
 /**
  * SafetySidebar
@@ -26,6 +26,7 @@ const items = [
   { title: 'Incidents', url: '/safety/incidents', icon: AlertTriangle },
   { title: 'SLA Monitor', url: '/safety/settings/sla', icon: Timer },
   { title: 'Users & Roles', url: '/safety/settings/users', icon: Users },
+  { title: 'Audit Log', url: '/safety/settings/audit', icon: ScrollText },
   { title: 'Settings', url: '/safety/settings', icon: Settings, comingSoon: true },
 ];
 
