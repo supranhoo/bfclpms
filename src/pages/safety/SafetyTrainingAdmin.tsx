@@ -174,7 +174,7 @@ function SopList({ onEdit }: { onEdit: (id: string) => void }) {
 
       <ConfirmDestructiveDialog
         open={!!confirmDelete}
-        onOpenChange={(o) => !o && setConfirmDelete(null)}
+        onCancel={() => setConfirmDelete(null)}
         title="Delete SOP?"
         description="This will permanently delete the SOP, its quiz, and all assignments + attempts."
         confirmLabel="Delete SOP"
@@ -616,7 +616,7 @@ function QuestionEditor({ quizId }: { quizId: string }) {
 
       <ConfirmDestructiveDialog
         open={!!confirmDelete}
-        onOpenChange={(o) => !o && setConfirmDelete(null)}
+        onCancel={() => setConfirmDelete(null)}
         title="Delete question?"
         description="This will permanently remove the question."
         confirmLabel="Delete"
