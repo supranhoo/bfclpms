@@ -29,6 +29,14 @@ View: `src/components/reports/MonthlyTrendView.tsx`
    `throw r.error` on failure and log via `console.error`. A diagnostic
    `console.warn` fires when `allKpis.length > 0 && subMap.size === 0`.
 
+5. **Reporting Manager column.** Both the on-screen table and the Excel
+   export include a "Reporting Manager" column right after Department.
+   Format: `Name(Code)` when employee_code exists, else `Name`. Empty
+   when no manager assigned (`—` on screen, blank in Excel). Manager
+   names are batch-fetched via `.in('id', uniqueManagerIds)` from
+   `profiles` after the main profile fetch; failures fall back to `null`
+   without breaking the report.
+
 ### Why
 
 Symptom on regression: table renders "N of N employees" with every cell as
