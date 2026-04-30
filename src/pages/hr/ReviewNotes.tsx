@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, Search, ShieldAlert } from 'lucide-react';
+import { Trash2, Search, ShieldAlert, Plus } from 'lucide-react';
 import { useReviewNoteAccess } from '@/hooks/useReviewNoteAccess';
 import {
   useReviewNotesList,
@@ -20,6 +20,9 @@ import {
   type ReviewNoteCategory,
 } from '@/services/reviewNotes/reviewNotesService';
 import { ReviewNoteStatusPill } from '@/components/reviewNotes/ReviewNoteStatusPill';
+import { EmployeePickerCombobox } from '@/components/reviewNotes/EmployeePickerCombobox';
+import { MonthPicker } from '@/components/reviewNotes/MonthPicker';
+import { AddReviewNoteSheet } from '@/components/reviewNotes/AddReviewNoteSheet';
 import { useProfiles } from '@/hooks/useOrganization';
 import { format } from 'date-fns';
 
@@ -29,17 +32,54 @@ const PRIORITY_STYLES: Record<string, string> = {
   high: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200',
 };
 
+type ApplyFromMode = 'any' | 'this_month' | 'next_month' | 'next_quarter' | 'specific';
+
+function firstOfMonth(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}-01`;
+}
+
 export default function ReviewNotes() {
   const access = useReviewNoteAccess();
   const [tab, setTab] = useState<ReviewNoteStatus | 'all'>('pending');
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
+  const [employeeFilter, setEmployeeFilter] = useState<string | null>(null);
+  const [applyFromMode, setApplyFromMode] = useState<ApplyFromMode>('any');
+  const [applyFromSpecific, setApplyFromSpecific] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+
+  const applyFromBounds = useMemo(() => {
+    const now = new Date();
+    if (applyFromMode === 'this_month') {
+      const start = firstOfMonth(now);
+      return { gte: start, lte: start };
+    }
+    if (applyFromMode === 'next_month') {
+      const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const start = firstOfMonth(next);
+      return { gte: start, lte: start };
+    }
+    if (applyFromMode === 'next_quarter') {
+      const start = firstOfMonth(new Date(now.getFullYear(), now.getMonth() + 1, 1));
+      const end = firstOfMonth(new Date(now.getFullYear(), now.getMonth() + 3, 1));
+      return { gte: start, lte: end };
+    }
+    if (applyFromMode === 'specific' && applyFromSpecific) {
+      return { gte: applyFromSpecific, lte: applyFromSpecific };
+    }
+    return { gte: undefined as string | undefined, lte: undefined as string | undefined };
+  }, [applyFromMode, applyFromSpecific]);
 
   const { data: notes = [], isLoading } = useReviewNotesList({
     status: tab === 'all' ? 'all' : tab,
     category: categoryFilter === 'all' ? undefined : (categoryFilter as ReviewNoteCategory),
     priority: priorityFilter === 'all' ? undefined : (priorityFilter as any),
+    subject_employee_id: employeeFilter ?? undefined,
+    applicable_from_gte: applyFromBounds.gte,
+    applicable_from_lte: applyFromBounds.lte,
     search: search.trim() || undefined,
   });
 
@@ -53,8 +93,11 @@ export default function ReviewNotes() {
 
   const { data: profiles = [] } = useProfiles();
   const profileMap = useMemo(() => {
-    const m = new Map<string, string>();
-    (profiles ?? []).forEach((p: any) => m.set(p.id, p.full_name || p.email || p.id.slice(0, 8)));
+    const m = new Map<string, { name: string; code: string | null }>();
+    (profiles ?? []).forEach((p: any) => m.set(p.id, {
+      name: p.full_name || p.email || p.id.slice(0, 8),
+      code: p.employee_code ?? null,
+    }));
     return m;
   }, [profiles]);
 
@@ -78,10 +121,19 @@ export default function ReviewNotes() {
     <div className="container mx-auto p-3 sm:p-6 space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl sm:text-2xl">HR Review Notes & Action Tracker</CardTitle>
-          <CardDescription>
-            Capture KPI / KRA change inputs during PMS review and track them through to the next cycle.
-          </CardDescription>
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <CardTitle className="text-xl sm:text-2xl">HR Review Notes & Action Tracker</CardTitle>
+              <CardDescription>
+                Capture KPI / KRA change inputs during PMS review and track them through to the next cycle.
+              </CardDescription>
+            </div>
+            {access.canCreate && (
+              <Button onClick={() => setAddOpen(true)} className="gap-1.5">
+                <Plus className="h-4 w-4" /> Add Note
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
@@ -93,14 +145,21 @@ export default function ReviewNotes() {
             </TabsList>
           </Tabs>
 
-          <div className="flex flex-col sm:flex-row gap-2">
-            <div className="relative flex-1">
+          <div className="flex flex-col lg:flex-row gap-2 flex-wrap">
+            <div className="relative flex-1 min-w-[180px]">
               <Search className="h-4 w-4 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search title or details…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-8 h-10"
+              />
+            </div>
+            <div className="w-full sm:w-56">
+              <EmployeePickerCombobox
+                asFilter
+                value={employeeFilter}
+                onChange={(id) => setEmployeeFilter(id)}
               />
             </div>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
@@ -121,13 +180,28 @@ export default function ReviewNotes() {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={applyFromMode} onValueChange={(v) => setApplyFromMode(v as ApplyFromMode)}>
+              <SelectTrigger className="w-full sm:w-44 h-10"><SelectValue placeholder="Apply From" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">Apply From: Any</SelectItem>
+                <SelectItem value="this_month">This month</SelectItem>
+                <SelectItem value="next_month">Next month</SelectItem>
+                <SelectItem value="next_quarter">Next quarter</SelectItem>
+                <SelectItem value="specific">Specific month…</SelectItem>
+              </SelectContent>
+            </Select>
+            {applyFromMode === 'specific' && (
+              <div className="w-full sm:w-44">
+                <MonthPicker value={applyFromSpecific} onChange={setApplyFromSpecific} placeholder="Pick month" />
+              </div>
+            )}
           </div>
 
           {isLoading ? (
             <div className="text-center py-8 text-muted-foreground">Loading…</div>
           ) : notes.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
-              No notes here. Use the <strong>+ Note</strong> trigger on a scorecard or profile to add one.
+              No notes here. Click <strong>+ Add Note</strong> above, or use the inline <strong>+ Note</strong> trigger on a scorecard or profile.
             </div>
           ) : (
             <div className="overflow-x-auto rounded-md border">
@@ -138,76 +212,89 @@ export default function ReviewNotes() {
                     <TableHead>Category</TableHead>
                     <TableHead className="min-w-[200px]">Title</TableHead>
                     <TableHead>Priority</TableHead>
+                    <TableHead>Apply From</TableHead>
                     <TableHead>Updated</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {notes.map((n) => (
-                    <TableRow key={n.id}>
-                      <TableCell className="font-medium">
-                        {profileMap.get(n.subject_employee_id) || n.subject_employee_id.slice(0, 8)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {REVIEW_NOTE_CATEGORY_LABELS[n.category]}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm font-medium">{n.title}</div>
-                        {n.details && (
-                          <div className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{n.details}</div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className={`${PRIORITY_STYLES[n.priority]} text-xs`}>
-                          {REVIEW_NOTE_PRIORITY_LABELS[n.priority]}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {format(new Date(n.updated_at), 'dd MMM yyyy')}
-                      </TableCell>
-                      <TableCell>
-                        <Select
-                          value={n.status}
-                          onValueChange={(v) => setStatus.mutate({ id: n.id, status: v as ReviewNoteStatus })}
-                          disabled={!access.canEdit && setStatus.isPending}
-                        >
-                          <SelectTrigger className="w-32 h-8 text-xs">
-                            <SelectValue>
-                              <ReviewNoteStatusPill status={n.status} />
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="pending">Pending</SelectItem>
-                            <SelectItem value="in_progress">In Progress</SelectItem>
-                            <SelectItem value="completed">Completed</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {access.canDelete && (
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                            onClick={() => {
-                              if (confirm('Delete this note? This cannot be undone.')) remove.mutate(n.id);
-                            }}
+                  {notes.map((n) => {
+                    const prof = profileMap.get(n.subject_employee_id);
+                    return (
+                      <TableRow key={n.id}>
+                        <TableCell className="font-medium">
+                          <div className="text-sm">{prof?.name || n.subject_employee_id.slice(0, 8)}</div>
+                          <div className="text-xs text-muted-foreground">{prof?.code || '—'}</div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">
+                            {REVIEW_NOTE_CATEGORY_LABELS[n.category]}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm font-medium">{n.title}</div>
+                          {n.details && (
+                            <div className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{n.details}</div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className={`${PRIORITY_STYLES[n.priority]} text-xs`}>
+                            {REVIEW_NOTE_PRIORITY_LABELS[n.priority]}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {n.applicable_from
+                            ? <span className="font-medium">{format(new Date(n.applicable_from), 'MMM yyyy')}</span>
+                            : <span className="text-muted-foreground">—</span>}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {format(new Date(n.updated_at), 'dd MMM yyyy')}
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={n.status}
+                            onValueChange={(v) => setStatus.mutate({ id: n.id, status: v as ReviewNoteStatus })}
+                            disabled={!access.canEdit && setStatus.isPending}
                           >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                            <SelectTrigger className="w-32 h-8 text-xs">
+                              <SelectValue>
+                                <ReviewNoteStatusPill status={n.status} />
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pending">Pending</SelectItem>
+                              <SelectItem value="in_progress">In Progress</SelectItem>
+                              <SelectItem value="completed">Completed</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {access.canDelete && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              onClick={() => {
+                                if (confirm('Delete this note? This cannot be undone.')) remove.mutate(n.id);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Hub-level "+ Add Note" — opens with employee picker enabled (no subjectEmployeeId prop). */}
+      <AddReviewNoteSheet open={addOpen} onOpenChange={setAddOpen} />
     </div>
   );
 }
