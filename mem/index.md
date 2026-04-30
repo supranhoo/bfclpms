@@ -44,3 +44,4 @@ Safety lists: no auto-fetch — Search button triggers query; every table pagina
 - [Monthly Scorecard Trend](mem://features/reports/monthly-scorecard-trend) — Cache-bust + 200-ID submission batch ceiling for the Date-Range trend
 - [Safety Mobile UX](mem://design/safety-mobile-ux) — Mobile primitives, sticky CTA, camera capture, FilterSheet for Safety entry-level users
 - [Identity & Access Console (IAC)](mem://architecture/security/identity-access-console) — Hub-level capability-based RBAC at /admin/iac, replacing per-module role enums
+- [HR Review Action Notes](mem://features/hr/review-action-notes) — HR notes for KPI changes during PMS review with admin-configurable per-role visibility and 3-state status FSM

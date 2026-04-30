@@ -42,6 +42,7 @@ import {
   LayoutDashboard,
   Package,
   GraduationCap,
+  StickyNote,
   UserX,
   Eye,
   ArrowLeft,
@@ -67,6 +68,7 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
   ],
   hr_pms: [
     { title: 'HR PMS Review', icon: ClipboardCheck, path: '/dashboard?view=hr_pms', menuKey: 'hr-pms-review', roles: ['hr_pms', 'admin'] },
+    { title: 'Review Notes', icon: StickyNote, path: '/hr/review-notes', roles: ['admin', 'hr_pms', 'manager', 'skip_level', 'management', 'auditor', 'employee'] },
   ],
   management: [
     { title: 'Management Dashboard', icon: LayoutDashboard, path: '/management-dashboard', menuKey: 'management-dashboard', roles: ['management', 'admin'] },
@@ -104,6 +106,7 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
     { title: 'Incentive Config', icon: Percent, path: '/admin/incentive-config', menuKey: 'admin-incentive', roles: ['admin'] },
     { title: 'Incentive Data Entry', icon: FileInput, path: '/admin/incentive-data-entry', menuKey: 'admin-incentive-data', roles: ['admin'] },
     { title: 'Employee Development', icon: GraduationCap, path: '/admin/employee-development', menuKey: 'admin-development', roles: ['admin', 'hr_pms'] },
+    { title: 'Review Notes Access', icon: Shield, path: '/admin/review-notes-access', roles: ['admin'] },
   ],
   dataEntry: [
     { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', menuKey: 'data-entry', roles: ['employee', 'manager', 'auditor', 'management', 'hr_pms'] },

@@ -4336,6 +4336,141 @@ export type Database = {
           },
         ]
       }
+      review_action_notes: {
+        Row: {
+          assignee_id: string | null
+          category: string
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          created_by: string
+          details: string | null
+          id: string
+          kpi_id: string | null
+          period_id: string | null
+          priority: string
+          status: string
+          subject_employee_id: string
+          target_period_id: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assignee_id?: string | null
+          category?: string
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          created_by: string
+          details?: string | null
+          id?: string
+          kpi_id?: string | null
+          period_id?: string | null
+          priority?: string
+          status?: string
+          subject_employee_id: string
+          target_period_id?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assignee_id?: string | null
+          category?: string
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          created_by?: string
+          details?: string | null
+          id?: string
+          kpi_id?: string | null
+          period_id?: string | null
+          priority?: string
+          status?: string
+          subject_employee_id?: string
+          target_period_id?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "review_action_notes_assignee_id_fkey"
+            columns: ["assignee_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "review_action_notes_assignee_id_fkey"
+            columns: ["assignee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "review_action_notes_completed_by_fkey"
+            columns: ["completed_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "review_action_notes_completed_by_fkey"
+            columns: ["completed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "review_action_notes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "review_action_notes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "review_action_notes_kpi_id_fkey"
+            columns: ["kpi_id"]
+            isOneToOne: false
+            referencedRelation: "kpis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "review_action_notes_period_id_fkey"
+            columns: ["period_id"]
+            isOneToOne: false
+            referencedRelation: "review_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "review_action_notes_subject_employee_id_fkey"
+            columns: ["subject_employee_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "review_action_notes_subject_employee_id_fkey"
+            columns: ["subject_employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "review_action_notes_target_period_id_fkey"
+            columns: ["target_period_id"]
+            isOneToOne: false
+            referencedRelation: "review_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       review_period_audit_log: {
         Row: {
           action: string
@@ -7814,6 +7949,10 @@ export type Database = {
       review_drill: {
         Args: { p_drill_id: string; p_summary?: string }
         Returns: Json
+      }
+      review_note_role_can: {
+        Args: { _action: string; _user_id: string }
+        Returns: boolean
       }
       run_safety_sla_escalations: { Args: never; Returns: Json }
       set_safety_setting: {
