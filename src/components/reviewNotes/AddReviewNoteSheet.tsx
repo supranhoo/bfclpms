@@ -9,14 +9,18 @@ import { useCreateReviewNote } from '@/hooks/useReviewNotes';
 import {
   REVIEW_NOTE_CATEGORY_LABELS,
   REVIEW_NOTE_PRIORITY_LABELS,
+  nextMonthFirstDay,
   type ReviewNoteCategory,
   type ReviewNotePriority,
 } from '@/services/reviewNotes/reviewNotesService';
+import { EmployeePickerCombobox, type EmployeeOption } from './EmployeePickerCombobox';
+import { MonthPicker } from './MonthPicker';
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  subjectEmployeeId: string;
+  /** Pre-selected subject (e.g. when opened from an inline scorecard trigger). When omitted, the sheet shows an employee picker. */
+  subjectEmployeeId?: string;
   subjectName?: string;
   kpiId?: string | null;
   kpiName?: string | null;
@@ -38,6 +42,12 @@ export function AddReviewNoteSheet({
   const [details, setDetails] = useState('');
   const [category, setCategory] = useState<ReviewNoteCategory>(defaultCategory);
   const [priority, setPriority] = useState<ReviewNotePriority>('medium');
+  const [pickedEmployeeId, setPickedEmployeeId] = useState<string | null>(null);
+  const [pickedEmployee, setPickedEmployee] = useState<EmployeeOption | null>(null);
+  const [applicableFrom, setApplicableFrom] = useState<string | null>(null);
+
+  const showEmployeePicker = !subjectEmployeeId;
+  const effectiveSubjectId = subjectEmployeeId ?? pickedEmployeeId;
 
   useEffect(() => {
     if (open) {
@@ -45,21 +55,26 @@ export function AddReviewNoteSheet({
       setDetails('');
       setCategory(defaultCategory);
       setPriority('medium');
+      setPickedEmployeeId(null);
+      setPickedEmployee(null);
+      // Default Apply-From to next month so HR rarely has to change it.
+      setApplicableFrom(nextMonthFirstDay());
     }
   }, [open, defaultCategory]);
 
   const create = useCreateReviewNote();
 
   const handleSave = async () => {
-    if (!title.trim()) return;
+    if (!title.trim() || !effectiveSubjectId) return;
     await create.mutateAsync({
-      subject_employee_id: subjectEmployeeId,
+      subject_employee_id: effectiveSubjectId,
       kpi_id: kpiId ?? null,
       period_id: periodId ?? null,
       category,
       title: title.trim(),
       details: details.trim() || null,
       priority,
+      applicable_from: applicableFrom,
     });
     onOpenChange(false);
   };
@@ -71,12 +86,31 @@ export function AddReviewNoteSheet({
           <SheetTitle>Add Review Note</SheetTitle>
           <SheetDescription>
             Capture an input now — change it in the next KRA cycle.
-            {subjectName && <span className="block mt-1 text-xs">For: <strong>{subjectName}</strong></span>}
+            {subjectName && !showEmployeePicker && (
+              <span className="block mt-1 text-xs">For: <strong>{subjectName}</strong></span>
+            )}
             {kpiName && <span className="block text-xs">KPI: <strong>{kpiName}</strong></span>}
           </SheetDescription>
         </SheetHeader>
 
         <div className="space-y-4 py-4">
+          {showEmployeePicker && (
+            <div className="space-y-2">
+              <Label htmlFor="rn-employee">Employee <span className="text-destructive">*</span></Label>
+              <EmployeePickerCombobox
+                value={pickedEmployeeId}
+                onChange={(id, emp) => { setPickedEmployeeId(id); setPickedEmployee(emp); }}
+              />
+              {pickedEmployee && (
+                <p className="text-xs text-muted-foreground">
+                  {pickedEmployee.full_name}
+                  {pickedEmployee.employee_code && ` · Code: ${pickedEmployee.employee_code}`}
+                  {pickedEmployee.department_name && ` · ${pickedEmployee.department_name}`}
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="rn-category">Category</Label>
             <Select value={category} onValueChange={(v) => setCategory(v as ReviewNoteCategory)}>
@@ -123,11 +157,19 @@ export function AddReviewNoteSheet({
               </SelectContent>
             </Select>
           </div>
+
+          <div className="space-y-2">
+            <Label>Apply From <span className="text-muted-foreground font-normal">(cycle month)</span></Label>
+            <MonthPicker value={applicableFrom} onChange={setApplicableFrom} placeholder="No specific month" />
+            <p className="text-xs text-muted-foreground">
+              Leave blank if there's no specific target cycle. Defaults to next month.
+            </p>
+          </div>
         </div>
 
         <SheetFooter className="gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={create.isPending}>Cancel</Button>
-          <Button onClick={handleSave} disabled={!title.trim() || create.isPending}>
+          <Button onClick={handleSave} disabled={!title.trim() || !effectiveSubjectId || create.isPending}>
             {create.isPending ? 'Saving…' : 'Save Note'}
           </Button>
         </SheetFooter>
