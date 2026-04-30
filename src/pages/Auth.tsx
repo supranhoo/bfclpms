@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { BarChart3, Loader2, CheckCircle, AlertCircle, Eye, EyeOff, Lock, Mail, ArrowRight } from 'lucide-react';
+import { BarChart3, Loader2, CheckCircle, AlertCircle, Eye, EyeOff, Lock, Mail, ArrowRight, IdCard, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { LoginSlideshow } from '@/components/auth/LoginSlideshow';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
@@ -25,9 +25,13 @@ export default function Auth() {
   const [rememberMe, setRememberMe] = useState(() => localStorage.getItem('pms_remember_me') !== 'false');
   
   // Login form state
-  const [loginEmail, setLoginEmail] = useState(() => localStorage.getItem('pms_remembered_email') || '');
+  const [loginIdentifier, setLoginIdentifier] = useState(() => localStorage.getItem('pms_remembered_email') || '');
   const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+
+  // Auto-detect: presence of "@" => email mode; otherwise employee-code mode.
+  const isCodeMode = loginIdentifier.length > 0 && !loginIdentifier.includes('@');
   
 
   // Focus state for input styling
@@ -82,8 +86,32 @@ export default function Auth() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    await signIn(loginEmail, loginPassword, rememberMe);
-    setIsSubmitting(false);
+    setLoginError(null);
+    try {
+      const raw = loginIdentifier.trim();
+      let resolvedEmail = raw;
+
+      // Employee-code path: resolve to synthetic email via SECURITY DEFINER RPC.
+      if (raw.length > 0 && !raw.includes('@')) {
+        const { data, error } = await supabase.rpc('lookup_synthetic_email_by_code', {
+          p_code: raw,
+          p_client_ip: null, // server-side RPC; IP-based throttle handled within fn (best-effort)
+        });
+        if (error || !data) {
+          // Anti-enumeration: identical generic message for unknown code AND wrong password.
+          setLoginError('Invalid credentials or inactive account.');
+          setIsSubmitting(false);
+          return;
+        }
+        resolvedEmail = String(data);
+      }
+
+      await signIn(resolvedEmail, loginPassword, rememberMe);
+    } catch (err) {
+      setLoginError('Invalid credentials or inactive account.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
 
@@ -220,30 +248,43 @@ export default function Auth() {
               <CardContent className="space-y-4 pt-4">
                 {/* Email Field */}
                 <div className="space-y-2">
-                  <Label htmlFor="login-email" className="text-sm font-medium">
-                    Email Address
+                  <Label htmlFor="login-identifier" className="text-sm font-medium">
+                    Email or Employee Code
                   </Label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Mail className={cn(
-                        "h-4 w-4 transition-colors",
-                        focusedField === 'login-email' ? 'text-primary' : 'text-muted-foreground'
-                      )} />
+                      {isCodeMode ? (
+                        <IdCard className={cn(
+                          "h-4 w-4 transition-colors",
+                          focusedField === 'login-identifier' ? 'text-primary' : 'text-muted-foreground'
+                        )} />
+                      ) : (
+                        <Mail className={cn(
+                          "h-4 w-4 transition-colors",
+                          focusedField === 'login-identifier' ? 'text-primary' : 'text-muted-foreground'
+                        )} />
+                      )}
                     </div>
                     <Input
-                      id="login-email"
-                      name="email"
-                      type="email"
-                      autoComplete="email"
-                      placeholder="name@company.com"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      onFocus={() => setFocusedField('login-email')}
+                      id="login-identifier"
+                      name="username"
+                      type="text"
+                      autoComplete="username"
+                      placeholder="name@company.com or EMP1234"
+                      value={loginIdentifier}
+                      onChange={(e) => { setLoginIdentifier(e.target.value); setLoginError(null); }}
+                      onFocus={() => setFocusedField('login-identifier')}
                       onBlur={() => setFocusedField(null)}
                       className="pl-10 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
                       required
                     />
                   </div>
+                  {isCodeMode && (
+                    <p className="text-[11px] text-muted-foreground flex items-start gap-1.5 leading-snug">
+                      <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                      Logging in with Employee Code. No email on file? Contact your administrator if you forget your password.
+                    </p>
+                  )}
                 </div>
 
                 {/* Password Field */}
@@ -252,13 +293,15 @@ export default function Auth() {
                     <Label htmlFor="login-password" className="text-sm font-medium">
                       Password
                     </Label>
-                    <button
-                      type="button"
-                      onClick={() => setForgotPasswordOpen(true)}
-                      className="text-xs text-primary hover:text-primary/80 hover:underline transition-colors"
-                    >
-                      Forgot?
-                    </button>
+                    {!isCodeMode && (
+                      <button
+                        type="button"
+                        onClick={() => setForgotPasswordOpen(true)}
+                        className="text-xs text-primary hover:text-primary/80 hover:underline transition-colors"
+                      >
+                        Forgot?
+                      </button>
+                    )}
                   </div>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -301,6 +344,12 @@ export default function Auth() {
                     Remember me
                   </Label>
                 </div>
+                {loginError && (
+                  <div className="flex items-center gap-2 p-2 text-xs text-destructive bg-destructive/10 rounded-md">
+                    <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span>{loginError}</span>
+                  </div>
+                )}
               </CardContent>
               <CardFooter className="flex flex-col gap-4">
                 <Button
