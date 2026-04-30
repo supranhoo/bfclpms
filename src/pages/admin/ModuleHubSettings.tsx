@@ -151,6 +151,8 @@ export default function ModuleHubSettings() {
         description="Control which modules appear on the Hub and who can access them."
       />
 
+      <BrandingLoaderPanel />
+
       <Card>
         <CardHeader>
           <div className="flex items-start gap-3">
