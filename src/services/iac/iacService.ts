@@ -129,7 +129,13 @@ export async function grantRole(input: {
     expires_at: input.expires_at ?? null,
   });
   if (error) throw error;
-  await audit('assignment.grant', 'assignment', `${input.user_id}:${input.role_id}`, input as Record<string, unknown>);
+  await audit('assignment.grant', 'assignment', `${input.user_id}:${input.role_id}`, {
+    user_id: input.user_id,
+    role_id: input.role_id,
+    scope_type: input.scope_type ?? 'global',
+    scope_id: input.scope_id ?? null,
+    expires_at: input.expires_at ?? null,
+  });
 }
 
 export async function revokeAssignment(id: string) {
@@ -150,7 +156,7 @@ export async function audit(
     _action: action,
     _target_type: target_type,
     _target_id: target_id ?? '',
-    _payload: payload,
+    _payload: payload as never,
   });
 }
 
@@ -232,12 +238,18 @@ export async function applyBulk(rows: IacBulkAssignmentRow[]): Promise<{ inserte
       return {
         user_id,
         role_id,
-        scope_type: r.scope_type ?? 'global',
+        scope_type: (r.scope_type ?? 'global') as IacScopeType,
         scope_id: r.scope_id ?? null,
         expires_at: r.expires_at ?? null,
       };
     })
-    .filter(Boolean) as Array<Record<string, unknown>>;
+    .filter((x): x is {
+      user_id: string;
+      role_id: string;
+      scope_type: IacScopeType;
+      scope_id: string | null;
+      expires_at: string | null;
+    } => x !== null);
 
   if (!payload.length) return { inserted: 0 };
   const { error } = await supabase.from('iac_user_role_assignments').insert(payload);
