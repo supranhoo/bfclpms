@@ -42,6 +42,7 @@ import {
   LayoutDashboard,
   Package,
   GraduationCap,
+  StickyNote,
   UserX,
   Eye,
   ArrowLeft,
