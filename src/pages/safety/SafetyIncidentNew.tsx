@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, ArrowLeft, AlertTriangle, Upload, X, WifiOff } from 'lucide-react';
+import { Loader2, ArrowLeft, AlertTriangle, Upload, X, WifiOff, Camera } from 'lucide-react';
 import { useBusinessUnits, useDepartments } from '@/hooks/useSafetyOrg';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -28,6 +28,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useImageCompressionSettings } from '@/hooks/useImageCompressionSettings';
+import { SafetyStickyActionBar } from '@/components/safety/SafetyStickyActionBar';
 
 /**
  * Incident report form (Phase 1.C).
