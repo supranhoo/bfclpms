@@ -1,78 +1,160 @@
 
-# Inline Edit for Report Tile Name & Description
+# HR Review Notes & Action Tracker
 
-## Goal
-Let admins rename and re-describe **any** report tile (pre-built or custom) directly from the Reports Hub card — without going into the Custom Reports Builder or editing source code. Changes persist for all users.
+A lightweight, in-app log so HR can capture KPI-change inputs the moment they come up during reviews, then track each item through to the next KRA-setting cycle. Per-role visibility is admin-configurable — nothing is hardcoded.
 
-## UX
+## Decisions locked in
 
-- On `/reports`, when the current user is an **admin** (effective role), each tile shows a small pencil icon in the top-right corner of the card header (visible on hover, always visible on mobile/touch).
-- Clicking the pencil opens a small **Edit Report Tile** dialog with two fields:
-  - **Title** (text input, required, max 80 chars)
-  - **Description** (textarea, max 240 chars)
-- Buttons: **Reset to default** (clears the override), **Cancel**, **Save**.
-- Card click navigation is suppressed when clicking the pencil (stopPropagation).
-- Non-admins see no pencil and see whatever override is currently saved (or the default).
+1. **Status model:** three states only — `pending` → `in_progress` → `completed`. No separate "WIP" concept. Assignee is optional in any state.
+2. **Visibility:** **admin-configurable per role** (Employee, Manager, Skip-Level, HR PMS, Admin, Auditor, Management). No hardcoded role gates in component code.
 
-## Storage (zero-hardcoding, dynamic config)
+---
 
-Reuse the existing `system_settings` pattern already used by `useReportColumnOverrides` / `useReportDisplayOrder`.
+## What gets built
 
-- New setting key: `report_tile_overrides`
-- Value (JSON):
-  ```json
-  {
-    "performance": { "title": "Org Performance", "description": "…" },
-    "custom_abc-123": { "title": "…", "description": "…" }
-  }
-  ```
-- Keyed by the same `reportKey` already on each `ReportCard` (works for both pre-built keys like `performance` and custom keys like `custom_<uuid>`).
-- Empty / missing entry → fall back to the hardcoded default (pre-built) or the DB-stored custom report fields.
-- "Reset to default" deletes that key from the JSON object and saves.
+### 1. Database (one new table + one settings key)
 
-## Files
+**Table: `review_action_notes`**
 
-**New**
-- `src/hooks/useReportTileOverrides.ts` — mirrors the shape of `useReportColumnOverrides`. Exposes `{ overrides, getOverride(reportKey), saveOverride(reportKey, {title, description}), clearOverride(reportKey), isLoading, isSaving }`.
-- `src/components/reports/EditReportTileDialog.tsx` — Radix Dialog with the two fields + Reset / Cancel / Save. Uses `useReportTileOverrides`.
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `subject_employee_id` | uuid → profiles | who the note is *about* |
+| `kpi_id` | uuid → kpis | nullable — note may be KRA-level, not KPI-level |
+| `period_id` | uuid → review_periods | nullable — captured during which review cycle |
+| `category` | text | enum-ish: `kpi_change`, `weightage_change`, `target_change`, `new_kpi`, `remove_kpi`, `role_realignment`, `training_need`, `other` |
+| `title` | text | short headline (≤120) |
+| `details` | text | free-form notes |
+| `status` | text | `pending` \| `in_progress` \| `completed`, default `pending` |
+| `priority` | text | `low` \| `medium` \| `high`, default `medium` |
+| `assignee_id` | uuid → profiles | nullable |
+| `target_period_id` | uuid → review_periods | nullable — when the change should land |
+| `created_by` | uuid → profiles | NOT NULL |
+| `created_at`, `updated_at` | timestamptz | |
+| `completed_at` | timestamptz | nullable, set when status flips to completed |
+| `completed_by` | uuid → profiles | nullable |
 
-**Edited**
-- `src/pages/reports/ReportsHub.tsx`
-  - Call `useReportTileOverrides()` once.
-  - When mapping `orderedReports`, merge each card with its override: `title = override?.title ?? report.title`, same for `description`.
-  - Render a small pencil button in `CardHeader` (admin-only via `useAuth().effectiveRole === 'admin'`), wired to open `EditReportTileDialog` with the report's `reportKey`, current title, current description, and the underlying default values (so "Reset" knows what to fall back to visually).
-  - `e.stopPropagation()` on the pencil button to prevent card navigation.
+Indexes on `subject_employee_id`, `status`, `period_id`, `assignee_id`.
 
-**No edits required** to `useSystemSettings`, custom report DB tables, or the Custom Report Builder — overrides are a thin display layer on top of whatever the source provides.
+**Audit trigger:** every insert/update writes a row to the existing `audit_logs` table (action types `review_note_created`, `review_note_updated`, `review_note_status_changed`).
 
-## Behavior matrix
+**Settings key (in existing `system_settings`):** `review_action_notes_visibility`
 
-| Report type    | Title source (priority)                                  | Description source (priority)                                  |
-|----------------|----------------------------------------------------------|----------------------------------------------------------------|
-| Pre-built      | tile override → hardcoded `reports[].title`              | tile override → hardcoded `reports[].description`              |
-| Custom         | tile override → `custom_reports.name` from DB            | tile override → `custom_reports.description` from DB           |
+```json
+{
+  "view":   ["admin","hr_pms","manager","skip_level","management","auditor"],
+  "create": ["admin","hr_pms","manager","skip_level"],
+  "edit":   ["admin","hr_pms"],
+  "delete": ["admin","hr_pms"],
+  "view_own_subject": ["employee"]
+}
+```
 
-The Custom Reports Builder remains the SSOT for custom report definitions; the tile override only changes what's shown on the Reports Hub card. The actual report page header is unaffected (separate concern, can be added later if requested).
+- `view` — roles that can see all notes (org-wide, scoped by their normal data access).
+- `view_own_subject` — roles that can only see notes where *they* are the `subject_employee_id` (lets the employee see notes about themselves if admin allows).
+- `create` / `edit` / `delete` — self-explanatory.
+- Admin is always implicitly included (defensive default in code).
 
-## Risk & Impact
+### 2. RLS
 
-- **Data**: One new JSON entry in `system_settings` (`report_tile_overrides`). No schema changes, no migration. Existing column-override pattern proves the approach.
-- **Workflow**: Pure display layer. No effect on report data, RLS, exports, or access checks (`useReportAccess` / `useMenuAccess` still gate visibility on the original `reportKey`).
-- **UI/UX**: Pencil is admin-only and visually subtle (ghost icon button). Card click still navigates.
-- **Regression**: Overrides fall back cleanly to defaults when missing or malformed JSON — same defensive parsing as `useReportColumnOverrides`. No change to existing tile order logic.
-- **Security**: Writing `system_settings` is already admin-gated by existing RLS on that table; the dialog is also gated on the client by effective admin role.
+Use the existing `has_role(uuid, app_role)` SECURITY DEFINER pattern (per project memory — never recurse, never check roles on `profiles`).
 
-## Tests
+Policies:
+- **SELECT** — allowed if `public.role_can('view', auth.uid())` returns true, OR (`view_own_subject` includes the user's role AND `subject_employee_id = auth.uid()`), OR row's `created_by = auth.uid()`, OR `assignee_id = auth.uid()`.
+- **INSERT** — allowed if `public.role_can('create', auth.uid())` AND `created_by = auth.uid()`.
+- **UPDATE** — `public.role_can('edit', auth.uid())` OR `assignee_id = auth.uid()` (assignee can move status forward but not delete).
+- **DELETE** — `public.role_can('delete', auth.uid())`.
 
-- `src/test/reportTileOverrides.test.ts`
-  - Default fallback when no override exists.
-  - Override applied for a pre-built key.
-  - Override applied for a custom key (`custom_<uuid>`).
-  - Reset removes only the targeted key, leaves siblings intact.
-  - Malformed JSON → falls back to defaults without throwing.
+`role_can(action text, user_id uuid)` is a new SECURITY DEFINER helper that reads the JSON setting and checks the user's effective role. This keeps the visibility config dynamic — admins flip a Switch and RLS picks it up next query, no migration needed.
 
-## Out of scope (explicitly)
+### 3. UI surfaces
 
-- Editing icon or color from the tile (admin can still do this via Custom Reports Builder for custom reports; pre-built icons stay).
-- Changing the title shown inside the report page itself.
-- Per-role / per-user overrides — this is a single global override.
+**A. New page: `/hr/review-notes`** (`src/pages/hr/ReviewNotes.tsx`)
+- Visible in the sidebar only for roles in the `view` list (read from settings, not hardcoded).
+- Filters: status (pills), category, priority, assignee, period, employee search.
+- Three-tab default view: **Pending (n)** · **In Progress (n)** · **Completed (n)** — counts always visible.
+- Table columns: Employee · Category · Title · Priority · Assignee · Target Period · Updated · Status pill.
+- Bulk select → bulk status change, bulk reassign.
+- Mobile: collapses to stacked cards (reuses `SafetyResponsiveList` pattern from the design memory).
+
+**B. Inline "Add Note" trigger from review surfaces**
+A small `+ Note` icon button injected into:
+- `UnifiedScorecard` row actions (per-KPI note)
+- Employee profile header (per-employee, KPI-agnostic)
+- KRA tile in the KPI mapping matrix (per-KRA)
+
+Opens `AddReviewNoteSheet` with subject/KPI/period pre-filled. The trigger itself is gated by `useReviewNoteAccess().canCreate` — same dynamic config.
+
+**C. "Notes" badge on profile / scorecard**
+A small chip showing `2 pending` when a subject has open notes — only rendered if the viewer's role passes the `view` (or `view_own_subject` + self) check.
+
+**D. Admin Settings page section** (`src/pages/admin/ReviewNotesAccess.tsx`, linked from the existing Admin Settings hub)
+- One row per role, four switches: View / Create / Edit / Delete, plus the "View only own subject" switch on the Employee row.
+- Saves to `system_settings.review_action_notes_visibility`.
+- Reuses the visual pattern from `ReviewPeriodRolePermissions.tsx`.
+
+### 4. Hooks & service layer (separation of concerns)
+
+- `src/services/reviewNotes/reviewNotesService.ts` — all DB calls (`list`, `getById`, `create`, `update`, `setStatus`, `remove`).
+- `src/hooks/useReviewNotes.ts` — TanStack Query wrappers + invalidation.
+- `src/hooks/useReviewNoteAccess.ts` — reads the visibility setting + current effective role and returns `{ canView, canCreate, canEdit, canDelete, canViewSubject(employeeId) }`. **All UI gating goes through this hook — no role string literals in components.**
+
+### 5. Tests (mandatory deliverables)
+
+- `src/test/reviewNotes/access.test.ts` — for each role, asserts `useReviewNoteAccess` returns the right matrix under several saved configs (default, locked-down, employee-self-only, fully open).
+- `src/test/reviewNotes/statusFsm.test.ts` — `pending → in_progress → completed` allowed; `completed → pending` allowed (re-open) only for `edit` role; assignee can advance but not re-open.
+- `src/test/reviewNotes/rlsShape.test.ts` — mocked Supabase client confirming the right `.eq()` / `.or()` filters are applied per role.
+- Mock data added to `src/test/setup.ts` covering: 1 employee with 3 notes (one per status), 1 manager with view-only access, 1 HR PMS with full edit.
+
+---
+
+## Risk & Impact Report
+
+| Area | Impact | Mitigation |
+|---|---|---|
+| **Data** | One new table, one new `system_settings` key, one new SECURITY DEFINER function. No changes to existing schemas. Audit trail piggybacks existing `audit_logs`. | Migration is additive only; rollback = drop table + delete setting row. |
+| **Workflow** | Pure additive log. Does **not** auto-mutate KPIs, weightages, or scorecards. Closing a note is a manual ack — the actual KRA edits still happen in the KRA Library / Org KPI Suite by HR. | Status = `completed` is a flag, not a write to `kpis`. Keeps SSOT clean. |
+| **UI/UX** | New sidebar entry (visibility-gated), small `+ Note` glyphs on existing surfaces (subtle, hover-revealed on desktop). | Inline triggers reuse existing icon button pattern; no layout reshuffling. Mobile uses the established `SafetyResponsiveList` pattern. |
+| **Regression** | Inline triggers touch `UnifiedScorecard`, profile hero, KPI matrix tile — all read-only additions. | Each integration point is wrapped in `<ReviewNoteTrigger />` so changes to the underlying component are localized. New tests cover access matrix to prevent role-gate regressions. |
+| **Security** | Visibility is data-driven. Misconfiguration could expose notes too widely. | Admin UI shows a live "Who can see this?" preview. RLS denies by default — if the settings JSON is missing/corrupt, only `admin` and `hr_pms` retain access (hardcoded fallback in `role_can`). Audit log captures every settings change. |
+| **Policy/Docs** | New module → DOCUMENTATION.md and POLICY.md must be updated atomically with the migration. New memory file `mem://features/hr/review-action-notes` describing the access matrix and status FSM. | Done in the same change set. |
+
+---
+
+## Out of scope (explicit)
+
+- Auto-applying notes to actual KPIs (no automated weightage/target mutations from this module — by design).
+- Email/notification batching beyond the existing notification engine — initial version uses in-app inbox + the existing daily digest.
+- Cross-period analytics on notes (a future "what % of notes get implemented next cycle?" report can be layered on without schema changes).
+
+---
+
+## Files to create / edit
+
+**Migrations**
+- `create table review_action_notes` + indexes + RLS + `role_can()` function + audit trigger
+- Insert default `review_action_notes_visibility` row
+
+**New code**
+- `src/services/reviewNotes/reviewNotesService.ts`
+- `src/hooks/useReviewNotes.ts`
+- `src/hooks/useReviewNoteAccess.ts`
+- `src/pages/hr/ReviewNotes.tsx`
+- `src/pages/admin/ReviewNotesAccess.tsx`
+- `src/components/reviewNotes/AddReviewNoteSheet.tsx`
+- `src/components/reviewNotes/ReviewNoteTrigger.tsx`
+- `src/components/reviewNotes/ReviewNotesTable.tsx`
+- `src/components/reviewNotes/ReviewNoteStatusPill.tsx`
+- Tests as listed above
+
+**Edited (small additions only)**
+- `src/components/layout/AppSidebar.tsx` — gated sidebar entry
+- `src/components/review/UnifiedScorecard*.tsx` — inject `<ReviewNoteTrigger />` on row
+- `src/components/profile/ProfileHero.tsx` — inject trigger + open-notes badge
+- `src/pages/admin/KpiMappingMatrix.tsx` — trigger on KRA tile
+- `src/App.tsx` — routes for `/hr/review-notes` and the admin settings page
+- `DOCUMENTATION.md`, `POLICY.md`, `mem://index.md`
+
+---
+
+Approve and I'll implement in this order: migration → service/hooks → admin settings page → main `/hr/review-notes` page → inline triggers → tests → docs/memory.
