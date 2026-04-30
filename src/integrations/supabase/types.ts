@@ -376,6 +376,27 @@ export type Database = {
           },
         ]
       }
+      auth_lookup_attempts: {
+        Row: {
+          attempted_at: string
+          client_ip: string | null
+          id: number
+          succeeded: boolean
+        }
+        Insert: {
+          attempted_at?: string
+          client_ip?: string | null
+          id?: number
+          succeeded?: boolean
+        }
+        Update: {
+          attempted_at?: string
+          client_ip?: string | null
+          id?: number
+          succeeded?: boolean
+        }
+        Relationships: []
+      }
       backup_logs: {
         Row: {
           backup_format: string
@@ -775,6 +796,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      email_change_audit: {
+        Row: {
+          id: string
+          new_email: string | null
+          old_email: string | null
+          performed_at: string
+          performed_by: string | null
+          source: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          new_email?: string | null
+          old_email?: string | null
+          performed_at?: string
+          performed_by?: string | null
+          source: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          new_email?: string | null
+          old_email?: string | null
+          performed_at?: string
+          performed_by?: string | null
+          source?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       email_dispatch_queue: {
         Row: {
@@ -4105,6 +4156,7 @@ export type Database = {
           email: string | null
           employee_code: string | null
           full_name: string | null
+          has_real_email: boolean
           id: string
           is_active: boolean
           level: string | null
@@ -4125,6 +4177,7 @@ export type Database = {
           email?: string | null
           employee_code?: string | null
           full_name?: string | null
+          has_real_email?: boolean
           id: string
           is_active?: boolean
           level?: string | null
@@ -4145,6 +4198,7 @@ export type Database = {
           email?: string | null
           employee_code?: string | null
           full_name?: string | null
+          has_real_email?: boolean
           id?: string
           is_active?: boolean
           level?: string | null
@@ -7669,6 +7723,10 @@ export type Database = {
         Args: { _permit_id: string; _uid: string }
         Returns: boolean
       }
+      lookup_synthetic_email_by_code: {
+        Args: { p_client_ip?: string; p_code: string }
+        Returns: string
+      }
       mark_audit_reviewed: {
         Args: { p_run_id: string; p_summary?: string }
         Returns: Json
@@ -7762,6 +7820,7 @@ export type Database = {
         Args: { p_description?: string; p_key: string; p_value: Json }
         Returns: Json
       }
+      should_send_email: { Args: { p_user_id: string }; Returns: boolean }
       start_drill: { Args: { p_drill_id: string }; Returns: Json }
       start_training_attempt: {
         Args: { _assignment_id: string }
