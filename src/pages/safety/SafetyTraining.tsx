@@ -51,10 +51,10 @@ function AssignmentList({ onOpen }: { onOpen: (id: string) => void }) {
   const { data, isLoading } = useMyTrainingAssignments();
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-4 sm:space-y-6 p-3 sm:p-6">
       <div>
-        <h1 className="text-2xl font-semibold flex items-center gap-2">
-          <GraduationCap className="h-6 w-6 text-primary" />
+        <h1 className="text-xl sm:text-2xl font-semibold flex items-center gap-2">
+          <GraduationCap className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
           My Training
         </h1>
         <p className="text-sm text-muted-foreground">
