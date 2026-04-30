@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, ShieldAlert, Search, UserCheck, UserX } from 'lucide-react';
+import { BrandingLoaderPanel } from '@/components/admin/BrandingLoaderPanel';
 
 /**
  * ModuleHubSettings (Admin → Module Hub)
