@@ -10,6 +10,7 @@ export type ReviewNoteCategory =
   | 'remove_kpi'
   | 'role_realignment'
   | 'training_need'
+  | 'reaudit'
   | 'other';
 
 export interface ReviewActionNote {
@@ -151,6 +152,7 @@ export const REVIEW_NOTE_CATEGORY_LABELS: Record<ReviewNoteCategory, string> = {
   remove_kpi: 'Remove KPI',
   role_realignment: 'Role Realignment',
   training_need: 'Training Need',
+  reaudit: 'Reaudit',
   other: 'Other',
 };
 
