@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -11,8 +11,10 @@ import {
 import { AlertTriangle, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useManualQuery, type ManualQueryFetcherArgs } from '@/hooks/useManualQuery';
-import { SafetyFilterBar } from '@/components/safety/SafetyFilterBar';
-import { SafetyDataTable } from '@/components/safety/SafetyDataTable';
+import { SafetyFilterSheet } from '@/components/safety/SafetyFilterSheet';
+import { SafetyResponsiveList } from '@/components/safety/SafetyResponsiveList';
+import { SafetyMobileListCard } from '@/components/safety/SafetyMobileListCard';
+import { SafetyStickyActionBar } from '@/components/safety/SafetyStickyActionBar';
 import { SafetyStatusBadge } from '@/components/safety/StatusBadge';
 import { SlaBadge } from '@/components/safety/SlaBadge';
 import {
@@ -89,19 +91,28 @@ export default function SafetyIncidents() {
   const handleSubmit = () => submit(draft);
   const handleReset = () => { setDraft(INITIAL); reset(); };
 
+  const activeCount = useMemo(() => {
+    let n = 0;
+    if (draft.status !== 'all') n++;
+    if (draft.severity !== 'all') n++;
+    if (draft.type !== 'all') n++;
+    if (draft.search.trim()) n++;
+    return n;
+  }, [draft]);
+
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4 p-3 sm:p-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
-            <AlertTriangle className="h-6 w-6 text-primary" />
+          <h1 className="text-xl sm:text-2xl font-semibold flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
             Safety Incidents
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs sm:text-sm text-muted-foreground">
             7-stage workflow: Reported → Assigned → Investigation → RCA → CAPA → Verification → Closed
           </p>
         </div>
-        <Button asChild>
+        <Button asChild className="hidden md:inline-flex">
           <Link to="/safety/incidents/new">
             <Plus className="h-4 w-4 mr-2" />
             Report Incident
@@ -109,10 +120,11 @@ export default function SafetyIncidents() {
         </Button>
       </div>
 
-      <SafetyFilterBar
+      <SafetyFilterSheet
         onSubmit={handleSubmit}
         onReset={handleReset}
         isSubmitting={isFetching}
+        activeCount={activeCount}
       >
         <Select value={draft.status} onValueChange={(v) => setDraft((d) => ({ ...d, status: v }))}>
           <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
@@ -143,19 +155,43 @@ export default function SafetyIncidents() {
           value={draft.search}
           onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))}
         />
-      </SafetyFilterBar>
+      </SafetyFilterSheet>
 
-      <SafetyDataTable
+      <SafetyResponsiveList
         title="Incidents"
         hasSubmitted={hasSubmitted}
         isLoading={isLoading}
-        rowCount={rows.length}
+        rows={rows}
         total={total}
         page={page}
         pageSize={pageSize}
         totalPages={totalPages}
         onPageChange={setPage}
-        onPageSizeChange={setPageSize}
+        mobileRender={(i) => (
+          <SafetyMobileListCard
+            onClick={() => navigate(`/safety/incidents/${i.id}`)}
+            title={
+              <span>
+                <span className="font-mono text-xs text-muted-foreground mr-1">
+                  {i.incident_number ?? '—'}
+                </span>
+                {i.title}
+              </span>
+            }
+            subtitle={
+              <>
+                {SAFETY_TYPE_LABELS[i.incident_type]} · {SAFETY_SEVERITY_LABELS[i.severity]}
+              </>
+            }
+            meta={format(new Date(i.created_at), 'dd MMM yyyy, HH:mm')}
+            badges={
+              <>
+                <SafetyStatusBadge status={i.status} />
+                <SlaBadge state={i.sla_state} />
+              </>
+            }
+          />
+        )}
       >
         <Table>
           <TableHeader>
@@ -191,7 +227,15 @@ export default function SafetyIncidents() {
             ))}
           </TableBody>
         </Table>
-      </SafetyDataTable>
+      </SafetyResponsiveList>
+
+      <SafetyStickyActionBar>
+        <Button asChild className="h-11">
+          <Link to="/safety/incidents/new">
+            <Plus className="h-4 w-4 mr-2" /> Report Incident
+          </Link>
+        </Button>
+      </SafetyStickyActionBar>
     </div>
   );
 }
