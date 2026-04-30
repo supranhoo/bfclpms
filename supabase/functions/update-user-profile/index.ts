@@ -104,14 +104,49 @@ Deno.serve(async (req) => {
         );
       }
 
+      // Block synthetic / placeholder addresses — these are reserved for
+      // employee-code login and must NEVER be set as a real contact email.
+      const lowered = newEmail.toLowerCase();
+      if (
+        lowered.endsWith('@noemail.bfclpms.local') ||
+        lowered.includes('@noemail.') ||
+        lowered.endsWith('@placeholder-pms.com')
+      ) {
+        return new Response(
+          JSON.stringify({ error: 'This email domain is reserved and cannot be used.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Uniqueness pre-check across auth.users (defense in depth — Supabase
+      // also enforces this, but we want a friendly error before the Admin call).
+      try {
+        const { data: existingProfile } = await supabaseAdmin
+          .from('profiles')
+          .select('id')
+          .ilike('email', newEmail)
+          .neq('id', user.id)
+          .maybeSingle();
+        if (existingProfile) {
+          return new Response(
+            JSON.stringify({ error: 'This email is already in use by another account.' }),
+            { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      } catch (_) { /* non-fatal */ }
+
       // Fetch from profiles table — always authoritative, JWT token may be stale
       // (e.g. if a previous Admin API email change was made, the JWT still holds the old claim)
       const { data: currentProfile } = await supabaseAdmin
         .from('profiles')
-        .select('email')
+        .select('email, has_real_email')
         .eq('id', user.id)
         .single();
       const oldEmail = currentProfile?.email ?? user.email ?? '';
+      const wasSynthetic =
+        currentProfile?.has_real_email === false ||
+        (user.email || '').toLowerCase().endsWith('@noemail.bfclpms.local') ||
+        (user.email || '').toLowerCase().endsWith('@placeholder-pms.com');
 
       // Guard: prevent no-op updates where old and new email are the same
       if (oldEmail.toLowerCase() === newEmail.toLowerCase()) {
@@ -137,13 +172,27 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Also sync the profiles table
+      // Also sync the profiles table — and flip has_real_email = true since
+      // the user now has a deliverable address.
       await supabaseAdmin
         .from('profiles')
-        .update({ email: newEmail })
+        .update({ email: newEmail, has_real_email: true })
         .eq('id', user.id);
 
-      console.log(`Email updated for user ${user.id}: ${oldEmail} → ${newEmail}`);
+      // Append-only audit row (POLICY §114).
+      try {
+        await supabaseAdmin.from('email_change_audit').insert({
+          user_id: user.id,
+          old_email: wasSynthetic ? null : oldEmail,
+          new_email: newEmail,
+          performed_by: user.id,
+          source: 'self_service',
+        });
+      } catch (auditErr) {
+        console.error('email_change_audit insert failed (non-fatal):', auditErr);
+      }
+
+      console.log(`Email updated for user ${user.id}: ${wasSynthetic ? '(no email)' : oldEmail} → ${newEmail}`);
 
       // Send branded notification email from the org's configured sender
       // (hrms@bfclalloys.com via Microsoft Graph) to the NEW email address.
@@ -181,7 +230,13 @@ Deno.serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({ success: true, message: 'Your email address has been updated successfully.' }),
+        JSON.stringify({
+          success: true,
+          message: wasSynthetic
+            ? 'Your email has been added. You can now receive notifications and reset your password by email.'
+            : 'Your email address has been updated successfully.',
+          was_synthetic: wasSynthetic,
+        }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

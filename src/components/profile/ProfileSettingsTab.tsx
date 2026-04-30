@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import {
-  Mail, Phone, Lock, Eye, EyeOff, Pencil, Check, X, Loader2,
+  Mail, Phone, Lock, Eye, EyeOff, Pencil, Check, X, Loader2, IdCard, Info,
 } from 'lucide-react';
 
 // ─── Password strength ─────────────────────────────────────────────────────
@@ -86,6 +86,18 @@ export default function ProfileSettingsTab({ user, profile, fetchProfile }: { us
   const pwdStrength = getPasswordStrength(newPwd);
   const currentMobile = localMobile ?? profile?.mobile_number ?? '';
 
+  // No-email user detection: profile flag OR auth email lives on the synthetic domain.
+  const userEmail: string = user?.email || '';
+  const hasRealEmail =
+    profile?.has_real_email !== false &&
+    !!userEmail &&
+    !userEmail.toLowerCase().endsWith('@noemail.bfclpms.local') &&
+    !userEmail.toLowerCase().endsWith('@placeholder-pms.com');
+  const displayEmailValue = hasRealEmail ? userEmail : '';
+  const emailPlaceholder = hasRealEmail
+    ? 'your@email.com'
+    : 'No email on file — add one to receive notifications';
+
   const refreshProfile = useCallback(async () => {
     if (!user) return;
     await fetchProfile(user.id);
@@ -149,10 +161,34 @@ export default function ProfileSettingsTab({ user, profile, fetchProfile }: { us
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Contact Information</CardTitle>
-          <CardDescription>Update your email and mobile number</CardDescription>
+          <CardDescription>
+            {hasRealEmail
+              ? 'Update your email and mobile number'
+              : 'You currently log in with your Employee Code. Add an email to receive notifications and use password reset.'}
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <InlineField label="Email Address" icon={Mail} value={user?.email || ''} placeholder="your@email.com" isEditing={editingEmail} editValue={editEmail} onEdit={() => { setEditEmail(user?.email || ''); setEditingEmail(true); }} onCancel={() => setEditingEmail(false)} onSave={handleSaveEmail} onEditValueChange={setEditEmail} isSaving={savingEmail} type="email" hint={editingEmail ? 'A confirmation will be sent to your new address.' : undefined} />
+          {!hasRealEmail && profile?.employee_code && (
+            <div className="flex items-start gap-2 p-2 text-xs text-muted-foreground bg-muted/50 rounded-md">
+              <IdCard className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+              <span>Your login is <strong className="text-foreground">{profile.employee_code}</strong>. Adding an email is optional but enables email notifications and self-service password reset.</span>
+            </div>
+          )}
+          <InlineField
+            label={hasRealEmail ? 'Email Address' : 'Add Email Address'}
+            icon={Mail}
+            value={displayEmailValue}
+            placeholder={emailPlaceholder}
+            isEditing={editingEmail}
+            editValue={editEmail}
+            onEdit={() => { setEditEmail(displayEmailValue); setEditingEmail(true); }}
+            onCancel={() => setEditingEmail(false)}
+            onSave={handleSaveEmail}
+            onEditValueChange={setEditEmail}
+            isSaving={savingEmail}
+            type="email"
+            hint={editingEmail ? 'Activates immediately — no confirmation email is sent.' : undefined}
+          />
           <Separator />
           <InlineField label="Mobile Number" icon={Phone} value={currentMobile} placeholder="+91 98765 43210" isEditing={editingMobile} editValue={editMobile} onEdit={() => { setEditMobile(currentMobile); setEditingMobile(true); }} onCancel={() => setEditingMobile(false)} onSave={handleSaveMobile} onEditValueChange={setEditMobile} isSaving={savingMobile} type="tel" />
         </CardContent>

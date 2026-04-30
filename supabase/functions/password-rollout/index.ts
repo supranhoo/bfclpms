@@ -41,8 +41,19 @@ function generateSecurePassword(length = 14): string {
 interface ProfileRecord {
   id: string;
   full_name: string | null;
-  email: string;
+  email: string | null;
   employee_code: string | null;
+  has_real_email?: boolean;
+}
+
+const SYNTHETIC_EMAIL_DOMAIN = "noemail.bfclpms.local";
+
+function buildSyntheticEmail(employeeCode: string | null, profileId: string): string {
+  const sanitized = (employeeCode || profileId)
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+  const handle = sanitized || `user-${profileId.slice(0, 8)}`;
+  return `${handle}@${SYNTHETIC_EMAIL_DOMAIN}`;
 }
 
 interface UserResult {
@@ -52,7 +63,8 @@ interface UserResult {
   error_message?: string;
   email_sent: boolean;
   email_error?: string;
-  auth_action?: "updated" | "created";
+  auth_action?: "updated" | "created" | "created_no_email";
+  has_real_email?: boolean;
 }
 
 async function processOneUser(
@@ -69,6 +81,8 @@ async function processOneUser(
   let emailSent = false;
   let emailError: string | undefined;
   let authAction: "updated" | "created" = "updated";
+  let hasRealEmail = profile.has_real_email !== false && !!profile.email;
+  let resolvedEmail = profile.email || "";
 
   try {
     const password = generateSecurePassword(14);
@@ -84,15 +98,21 @@ async function processOneUser(
     if (userMissing) {
       // Auto-provision: profile exists but auth.users record is missing
       // (typical for employees imported via master backfill before first login).
-      if (!profile.email) {
-        throw new Error(
-          "Cannot provision auth account: profile has no email address."
-        );
+      // If profile has no email -> mint a SYNTHETIC address under the reserved
+      // non-routable domain. User logs in via Employee Code; nothing is ever
+      // delivered to the synthetic address.
+      const usingSynthetic = !profile.email;
+      if (usingSynthetic) {
+        resolvedEmail = buildSyntheticEmail(profile.employee_code, profile.id);
+        hasRealEmail = false;
+      } else {
+        resolvedEmail = profile.email!;
+        hasRealEmail = true;
       }
 
       const { error: createErr } = await supabaseAdmin.auth.admin.createUser({
         id: profile.id,
-        email: profile.email,
+        email: resolvedEmail,
         password,
         email_confirm: true,
         user_metadata: {
@@ -120,7 +140,22 @@ async function processOneUser(
         }
         throw new Error(`Auth provisioning failed: ${msg}`);
       }
-      authAction = "created";
+      authAction = usingSynthetic ? "created_no_email" : "created";
+
+      // Sync the flag onto the profile so app code can rely on it.
+      await supabaseAdmin
+        .from("profiles")
+        .update({ has_real_email: hasRealEmail })
+        .eq("id", profile.id);
+
+      // Audit trail (append-only)
+      await supabaseAdmin.from("email_change_audit").insert({
+        user_id: profile.id,
+        old_email: null,
+        new_email: resolvedEmail,
+        performed_by: generatedBy,
+        source: "password_rollout",
+      });
     } else {
       const { error: updateError } =
         await supabaseAdmin.auth.admin.updateUserById(profile.id, { password });
@@ -128,9 +163,15 @@ async function processOneUser(
         throw new Error(`Auth update failed: ${updateError.message}`);
       }
       authAction = "updated";
+      // existing user — derive hasRealEmail from current auth email
+      const currentEmail = existing!.user!.email || "";
+      hasRealEmail = !!currentEmail && !currentEmail.toLowerCase().endsWith(`@${SYNTHETIC_EMAIL_DOMAIN}`)
+        && !currentEmail.toLowerCase().endsWith("@placeholder-pms.com");
+      resolvedEmail = currentEmail;
     }
 
-    if (sendEmail && profile.email) {
+    // Only send email when user has a real, deliverable address.
+    if (sendEmail && hasRealEmail && profile.email) {
       try {
         const emailBody = {
           event_type: "password_rollout",
@@ -164,6 +205,9 @@ async function processOneUser(
         emailError = e.message;
         console.error(`Email failed for ${profile.email}:`, e.message);
       }
+    } else if (sendEmail && !hasRealEmail) {
+      // Explicit, non-silent skip — surfaced in result so admin sees why no email was sent.
+      emailError = "skipped:no_real_email (user logs in via Employee Code; share password manually)";
     }
   } catch (e: any) {
     status = "failed";
@@ -177,7 +221,7 @@ async function processOneUser(
       user_id: profile.id,
       employee_code: profile.employee_code,
       full_name: profile.full_name,
-      email: profile.email,
+      email: resolvedEmail || profile.email,
       generated_by: generatedBy,
       email_sent: emailSent,
       email_error: emailError || null,
@@ -190,12 +234,13 @@ async function processOneUser(
 
   return {
     user_id: profile.id,
-    email: profile.email,
+    email: resolvedEmail || profile.email || "",
     status,
     error_message: errorMessage,
     email_sent: emailSent,
     email_error: emailError,
     auth_action: status === "success" ? authAction : undefined,
+    has_real_email: hasRealEmail,
   };
 }
 
@@ -230,7 +275,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: profiles } = await supabaseAdmin
       .from("profiles")
-      .select("id, full_name, email, employee_code")
+      .select("id, full_name, email, employee_code, has_real_email")
       .in("id", user_ids);
 
     if (!profiles || profiles.length === 0) {

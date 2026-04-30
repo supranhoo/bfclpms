@@ -1239,6 +1239,25 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       });
     }
 
+    // ── DISPATCH GATE (POLICY §114): never deliver to synthetic / placeholder addresses.
+    // These belong to no-email users who log in via Employee Code. Outbound mail to
+    // these domains would either bounce silently (.local has no MX) or worse, leak to
+    // an unowned domain. In-app notifications are unaffected (handled separately).
+    const lowerRecipient = (recipient_email || '').toLowerCase();
+    if (
+      !lowerRecipient ||
+      lowerRecipient.endsWith('@noemail.bfclpms.local') ||
+      lowerRecipient.includes('@noemail.') ||
+      lowerRecipient.endsWith('@placeholder-pms.com')
+    ) {
+      console.log(`Dispatch gate: skipping ${event_type} for non-deliverable address ${recipient_email}`);
+      await logEmail({ event_type, recipient_email, recipient_name, status: 'skipped', metadata: { reason: 'no_real_email' } });
+      return new Response(JSON.stringify({ skipped: true, reason: 'no_real_email' }), {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
     // Check if this event type is enabled
     const { data: eventsSetting } = await supabase
       .from("system_settings")

@@ -108,6 +108,7 @@ Deno.serve(async (req) => {
       company_id: body.company_id || null,
       location_id: locationId,
       portal_access: portalAccess,
+      has_real_email: !!body.email, // FALSE when no email provided -> employee-code login
     }
 
     // Admin account protection — never overwrite this profile
@@ -159,7 +160,12 @@ Deno.serve(async (req) => {
 
     // ─── AUTH + PROFILE PATH (portal access) ───
     const sanitizedCode = body.employee_code.toLowerCase().replace(/[^a-z0-9]/g, '')
-    const email = body.email || `${sanitizedCode || 'user'}@placeholder-pms.com`
+    // No email provided -> mint a SYNTHETIC, NON-ROUTABLE address. The user
+    // logs in via Employee Code (resolved through lookup_synthetic_email_by_code).
+    // The synthetic value lives ONLY on auth.users.email — profiles.email stays NULL.
+    const SYNTHETIC_DOMAIN = 'noemail.bfclpms.local'
+    const isSynthetic = !body.email
+    const email = body.email || `${sanitizedCode || 'user'}@${SYNTHETIC_DOMAIN}`
 
     // Step 2: Try to create the auth user
     const randomPassword = crypto.randomUUID() + 'Aa1!'
@@ -218,7 +224,11 @@ Deno.serve(async (req) => {
     // Step 3: Upsert the profile (trigger may have already created it)
     const { error: upsertError } = await supabaseAdmin
       .from('profiles')
-      .upsert({ id: userId, email, ...profilePayload }, { onConflict: 'id' })
+      .upsert(
+        // For synthetic accounts, profiles.email MUST be NULL (DB CHECK constraint).
+        { id: userId, email: isSynthetic ? null : email, ...profilePayload },
+        { onConflict: 'id' }
+      )
 
     if (upsertError) {
       console.error('Failed to upsert profile:', upsertError)
@@ -242,7 +252,22 @@ Deno.serve(async (req) => {
       })
     }
 
-    return new Response(JSON.stringify({ profile }), {
+    // Audit the synthetic-email creation so admins can trace it.
+    if (isSynthetic) {
+      try {
+        await supabaseAdmin.from('email_change_audit').insert({
+          user_id: userId,
+          old_email: null,
+          new_email: email,
+          performed_by: user.id,
+          source: 'create_employee',
+        })
+      } catch (e) {
+        console.warn('email_change_audit insert failed (non-fatal):', e)
+      }
+    }
+
+    return new Response(JSON.stringify({ profile, has_real_email: !isSynthetic }), {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
 
