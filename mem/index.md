@@ -45,3 +45,4 @@ Safety lists: no auto-fetch — Search button triggers query; every table pagina
 - [Safety Mobile UX](mem://design/safety-mobile-ux) — Mobile primitives, sticky CTA, camera capture, FilterSheet for Safety entry-level users
 - [Identity & Access Console (IAC)](mem://architecture/security/identity-access-console) — Hub-level capability-based RBAC at /admin/iac, replacing per-module role enums
 - [HR Review Action Notes](mem://features/hr/review-action-notes) — HR notes for KPI changes during PMS review with admin-configurable per-role visibility and 3-state status FSM
+- [Loader Branding Settings](mem://features/admin/loader-branding-settings) — Configurable rocket-overlay company name, tagline, and logo via system_settings; admin panel with live preview on Module Hub Settings
