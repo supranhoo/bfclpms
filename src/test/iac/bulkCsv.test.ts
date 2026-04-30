@@ -56,3 +56,92 @@ describe('IAC bulk CSV utilities', () => {
     expect(rows[0].email).toBe('jane.doe@example.com');
   });
 });
+describe('IAC role-matrix CSV utilities', () => {
+  const ROLES = ['pms_admin', 'pms_manager', 'safety_officer'];
+
+  it('matrix template lists all role columns and identity columns', () => {
+    const csv = matrixTemplateCsv(ROLES);
+    expect(csv).toContain('employee_code,email,full_name,is_active,pms_admin,pms_manager,safety_officer');
+  });
+
+  it('serialize -> parse round-trip preserves Y/blank cells', () => {
+    const rows: IacMatrixRow[] = [
+      { employee_code: 'E1', email: 'a@x.com', full_name: 'A', is_active: true,
+        roles: { pms_admin: 'Y', pms_manager: '', safety_officer: 'Y' } },
+      { employee_code: 'E2', email: 'b@x.com', full_name: 'B', is_active: true,
+        roles: { pms_admin: '', pms_manager: 'Y', safety_officer: '' } },
+    ];
+    const csv = serializeMatrixCsv(ROLES, rows);
+    const parsed = parseMatrixCsv(csv, ROLES);
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.rows[0].roles).toEqual({ pms_admin: 'Y', pms_manager: '', safety_officer: 'Y' });
+    expect(parsed.rows[1].roles).toEqual({ pms_admin: '', pms_manager: 'Y', safety_officer: '' });
+  });
+
+  it('flags unknown role columns and unrecognised cell values', () => {
+    const csv = 'email,pms_admin,bogus_role\nx@y.com,Y,Y\nz@y.com,maybe,\n';
+    const parsed = parseMatrixCsv(csv, ROLES);
+    expect(parsed.unknownRoleColumns).toContain('bogus_role');
+    expect(parsed.errors.some((e) => /Unrecognised cell value/.test(e.reason))).toBe(true);
+  });
+
+  it('rejects a CSV with no email/employee_code header', () => {
+    const parsed = parseMatrixCsv('full_name,pms_admin\nFoo,Y\n', ROLES);
+    expect(parsed.errors[0].reason).toMatch(/email.*employee_code/);
+  });
+
+  it('isMatrixCellTruthy recognises Y/yes/1/true (case-insensitive) only', () => {
+    ['Y', 'y', 'YES', 'true', '1'].forEach((v) => expect(isMatrixCellTruthy(v)).toBe(true));
+    ['', 'N', 'no', '0', '-', 'maybe'].forEach((v) => expect(isMatrixCellTruthy(v)).toBe(false));
+  });
+
+  it('diffMatrix produces correct grant/revoke/unchanged buckets', () => {
+    const parsed = parseMatrixCsv(
+      'email,pms_admin,pms_manager,safety_officer\n' +
+      'a@x.com,Y,,Y\n' + // a: keep admin, drop manager, add safety_officer
+      'b@x.com,,Y,\n',   // b: drop admin? (had none), keep manager (had it), no safety
+      ROLES,
+    );
+    const userByEmail = new Map([
+      ['a@x.com', { id: 'u-a', full_name: 'A', is_active: true }],
+      ['b@x.com', { id: 'u-b', full_name: 'B', is_active: true }],
+    ]);
+    const userByCode = new Map();
+    const roleByCode = new Map([
+      ['pms_admin', 'r-admin'], ['pms_manager', 'r-mgr'], ['safety_officer', 'r-so'],
+    ]);
+    const currentGlobal = new Map([
+      ['u-a', new Map([['pms_admin', 'asg-a-admin'], ['pms_manager', 'asg-a-mgr']])],
+      ['u-b', new Map([['pms_manager', 'asg-b-mgr']])],
+    ]);
+    const d = diffMatrix(parsed, userByEmail, userByCode, roleByCode, currentGlobal, false);
+    expect(d.toGrant.map((g) => `${g.email}:${g.role_code}`).sort()).toEqual([
+      'a@x.com:safety_officer',
+    ]);
+    expect(d.toRevoke.map((r) => `${r.email}:${r.role_code}`).sort()).toEqual([
+      'a@x.com:pms_manager',
+    ]);
+    expect(d.errors).toEqual([]);
+  });
+
+  it('flags inactive users unless override is enabled', () => {
+    const parsed = parseMatrixCsv('email,pms_admin\nx@y.com,Y\n', ROLES);
+    const userByEmail = new Map([['x@y.com', { id: 'u-x', full_name: 'X', is_active: false }]]);
+    const roleByCode = new Map([['pms_admin', 'r-admin']]);
+    const strict = diffMatrix(parsed, userByEmail, new Map(), roleByCode, new Map(), false);
+    expect(strict.errors[0].reason).toMatch(/inactive/i);
+    const lenient = diffMatrix(parsed, userByEmail, new Map(), roleByCode, new Map(), true);
+    expect(lenient.errors).toEqual([]);
+    expect(lenient.toGrant).toHaveLength(1);
+  });
+
+  it('falls back to employee_code when email is blank', () => {
+    const parsed = parseMatrixCsv('employee_code,email,pms_admin\nE99,,Y\n', ROLES);
+    expect(parsed.errors).toEqual([]);
+    const userByCode = new Map([['E99', { id: 'u-99', full_name: 'N', is_active: true, email: '' }]]);
+    const roleByCode = new Map([['pms_admin', 'r-admin']]);
+    const d = diffMatrix(parsed, new Map(), userByCode, roleByCode, new Map(), false);
+    expect(d.toGrant).toHaveLength(1);
+    expect(d.toGrant[0].user_id).toBe('u-99');
+  });
+});
