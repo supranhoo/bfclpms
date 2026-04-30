@@ -68,6 +68,7 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
   ],
   hr_pms: [
     { title: 'HR PMS Review', icon: ClipboardCheck, path: '/dashboard?view=hr_pms', menuKey: 'hr-pms-review', roles: ['hr_pms', 'admin'] },
+    { title: 'Review Notes', icon: StickyNote, path: '/hr/review-notes', roles: ['admin', 'hr_pms', 'manager', 'skip_level', 'management', 'auditor', 'employee'] },
   ],
   management: [
     { title: 'Management Dashboard', icon: LayoutDashboard, path: '/management-dashboard', menuKey: 'management-dashboard', roles: ['management', 'admin'] },
