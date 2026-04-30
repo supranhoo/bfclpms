@@ -215,10 +215,12 @@ function AssignmentRunner({
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-4 sm:space-y-6 p-3 sm:p-6">
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="sm" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back to my training
+        <Button variant="ghost" size="sm" className="min-h-[40px]" onClick={onBack}>
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          <span className="hidden sm:inline">Back to my training</span>
+          <span className="sm:hidden">Back</span>
         </Button>
       </div>
 
