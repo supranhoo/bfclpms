@@ -176,23 +176,25 @@ export async function previewBulk(rows: IacBulkAssignmentRow[]): Promise<IacBulk
   const emails = Array.from(new Set(rows.map((r) => r.email.trim().toLowerCase()))).filter(Boolean);
   const roleCodes = Array.from(new Set(rows.map((r) => r.role_code.trim()))).filter(Boolean);
 
-  const [profilesRes, rolesRes, assignsRes] = await Promise.all([
-    supabase.from('profiles').select('id, email').in('email', emails),
-    supabase.from('iac_roles').select('id, code').in('code', roleCodes),
-    supabase
-      .from('iac_user_role_assignments')
-      .select('user_id, role_id, scope_type, scope_id'),
-  ]);
-  if (profilesRes.error) throw profilesRes.error;
-  if (rolesRes.error) throw rolesRes.error;
+  const CHUNK_IN = 200;
+  const profileByEmail = new Map<string, string>();
+  for (let i = 0; i < emails.length; i += CHUNK_IN) {
+    const slice = emails.slice(i, i + CHUNK_IN);
+    const { data, error } = await supabase.from('profiles').select('id, email').in('email', slice);
+    if (error) throw error;
+    (data ?? []).forEach((p) => profileByEmail.set(String(p.email).toLowerCase(), p.id as string));
+  }
+  const roleByCode = new Map<string, string>();
+  for (let i = 0; i < roleCodes.length; i += CHUNK_IN) {
+    const slice = roleCodes.slice(i, i + CHUNK_IN);
+    const { data, error } = await supabase.from('iac_roles').select('id, code').in('code', slice);
+    if (error) throw error;
+    (data ?? []).forEach((r) => roleByCode.set(r.code as string, r.id as string));
+  }
+  const assignsRes = await supabase
+    .from('iac_user_role_assignments')
+    .select('user_id, role_id, scope_type, scope_id');
   if (assignsRes.error) throw assignsRes.error;
-
-  const profileByEmail = new Map<string, string>(
-    (profilesRes.data ?? []).map((p) => [String(p.email).toLowerCase(), p.id as string]),
-  );
-  const roleByCode = new Map<string, string>(
-    (rolesRes.data ?? []).map((r) => [r.code as string, r.id as string]),
-  );
   const existing = new Set<string>(
     (assignsRes.data ?? []).map(
       (a: { user_id: string; role_id: string; scope_type: string; scope_id: string | null }) =>
@@ -218,18 +220,21 @@ export async function applyBulk(rows: IacBulkAssignmentRow[]): Promise<{ inserte
   const emails = Array.from(new Set(rows.map((r) => r.email.trim().toLowerCase())));
   const codes = Array.from(new Set(rows.map((r) => r.role_code.trim())));
 
-  const [profilesRes, rolesRes] = await Promise.all([
-    supabase.from('profiles').select('id, email').in('email', emails),
-    supabase.from('iac_roles').select('id, code').in('code', codes),
-  ]);
-  if (profilesRes.error) throw profilesRes.error;
-  if (rolesRes.error) throw rolesRes.error;
-  const profileByEmail = new Map<string, string>(
-    (profilesRes.data ?? []).map((p) => [String(p.email).toLowerCase(), p.id as string]),
-  );
-  const roleByCode = new Map<string, string>(
-    (rolesRes.data ?? []).map((r) => [r.code as string, r.id as string]),
-  );
+  const CHUNK_IN = 200;
+  const profileByEmail = new Map<string, string>();
+  for (let i = 0; i < emails.length; i += CHUNK_IN) {
+    const slice = emails.slice(i, i + CHUNK_IN);
+    const { data, error } = await supabase.from('profiles').select('id, email').in('email', slice);
+    if (error) throw error;
+    (data ?? []).forEach((p) => profileByEmail.set(String(p.email).toLowerCase(), p.id as string));
+  }
+  const roleByCode = new Map<string, string>();
+  for (let i = 0; i < codes.length; i += CHUNK_IN) {
+    const slice = codes.slice(i, i + CHUNK_IN);
+    const { data, error } = await supabase.from('iac_roles').select('id, code').in('code', slice);
+    if (error) throw error;
+    (data ?? []).forEach((r) => roleByCode.set(r.code as string, r.id as string));
+  }
 
   const payload = rows
     .map((r) => {
