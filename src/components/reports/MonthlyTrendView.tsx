@@ -101,7 +101,8 @@ export function MonthlyTrendView({ canExport }: Props) {
     return allEmployees.filter(e =>
       e.fullName.toLowerCase().includes(s) ||
       e.employeeCode.toLowerCase().includes(s) ||
-      e.departmentName.toLowerCase().includes(s)
+      e.departmentName.toLowerCase().includes(s) ||
+      (e.reportingManagerName ?? '').toLowerCase().includes(s)
     );
   }, [allEmployees, search]);
 
@@ -119,6 +120,7 @@ export function MonthlyTrendView({ canExport }: Props) {
         'Employee Name': emp.fullName,
         'Designation': emp.designation,
         'Department': emp.departmentName,
+        'Reporting Manager': emp.reportingManagerName ?? '',
       };
       months.forEach(m => {
         row[m.label] = emp.monthlyScores[m.key] === null ? '-' : emp.monthlyScores[m.key];
