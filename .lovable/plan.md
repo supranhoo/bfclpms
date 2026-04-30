@@ -1,138 +1,105 @@
-# Plan: Employee Picker + "Applicable From" Month in HR Review Notes
+# Configurable Company Name in Rocket Loading Overlay
 
-## Problem
-Two gaps on `/hr/review-notes`:
-1. Notes can only be created via the inline trigger on a scorecard / profile — HR wants to add a note **directly from the hub** and pick the employee (with **employee code** for unambiguous mapping).
-2. Each note needs an **"Applicable From"** month so HR knows *when* the change should take effect (e.g. "apply from Jul-2026 cycle"), and so the list can be filtered/sorted by that target month.
+## Goal
+The "Please wait / Loading…" rocket overlay currently shows generic text. Add a configurable **Company Name** (and optional tagline) that appears beneath the rocket — driven by the existing `system_settings` table, editable by Admins. Zero hardcoding.
 
-## Scope
+## Where it appears
 
-### 1. New "+ Add Note" button on the hub header
-Top-right of the HR Review Notes card. Visible only when `useReviewNoteAccess().canCreate` is true (no hardcoded role check — same gate as the inline trigger).
+The `PageLoadingOverlay` (rocket card) is shown during page navigation and initial data loads across the entire app.
 
-### 2. Employee picker inside `AddReviewNoteSheet`
-When the sheet opens **without** a `subjectEmployeeId` prop (opened from the hub), render a searchable employee combobox at the top of the form. When opened **with** a prop (existing inline use), the picker is hidden — zero regression.
+## Proposed UI
 
-Picker behaviour:
-- Search by **name OR employee code OR email** (case-insensitive substring).
-- Each row shows: `{full_name}  ·  {employee_code}  ·  {department or designation}` to disambiguate same-name employees.
-- Only active employees (`is_active = true`).
-- Required before "Save Note" enables.
-- Built on existing shadcn `Command` + `Popover` primitives — no new deps.
-
-### 3. New "Applicable From" month field
-A month-picker on the Add/Edit sheet, stored as a `DATE` (always the 1st of the chosen month, e.g. `2026-07-01`).
-
-- **Input UI:** shadcn `Popover` + `Calendar` configured with month-only navigation; defaults to **next month** so HR rarely has to change it.
-- **Optional but encouraged** — leaving it blank means "no specific target cycle".
-- Visible by default (between Priority and Save).
-
-### 4. Show "Applicable From" in the table
-- New column **"Apply From"** between *Priority* and *Updated*, formatted `MMM yyyy` (e.g. `Jul 2026`). Shows `—` when blank.
-- New filter on the hub: **Apply From** dropdown with quick options:
-  - *Any*, *This month*, *Next month*, *Next quarter*, *Specific month…* (opens month-picker).
-- Default sort: `applicable_from ASC NULLS LAST, updated_at DESC` so upcoming-cycle items rise to the top.
-
-### 5. Employee filter on the hub
-A filter next to Category / Priority: **Employee** combobox (reuses the same picker component). Adds `subject_employee_id` to `ListFilters`.
-
-### 6. Show employee code in the table
-Update the "Employee" column to show name on top and `employee_code` muted below.
-
-## UI Sketch (hub, 1280px)
+### 1. Loader card (new layout)
 
 ```text
-┌────────────────────────────────────────────────────────────────────────────┐
-│ HR Review Notes & Action Tracker                       [ + Add Note ]      │
-│ Capture KPI / KRA change inputs during PMS review…                         │
-│                                                                            │
-│ [Pending (3)] [In Progress (1)] [Completed (12)] [All (16)]                │
-│                                                                            │
-│ [🔍 Search…  ] [Employee ▾] [Category ▾] [Priority ▾] [Apply From ▾]       │
-│                                                                            │
-│ ┌────────────────┬──────────┬────────────────┬───────┬──────────┬────────┐ │
-│ │ Employee       │ Category │ Title          │ Prio. │ Apply    │ Status │ │
-│ │                │          │                │       │ From     │        │ │
-│ ├────────────────┼──────────┼────────────────┼───────┼──────────┼────────┤ │
-│ │ Aarav Sharma   │ KPI      │ Reduce target  │ High  │ Jul 2026 │ Pend.  │ │
-│ │ EMP-0421       │ change   │                │       │          │        │ │
-│ │ Riya Patel     │ Weight   │ Drop safety 5% │ Med   │ —        │ WIP    │ │
-│ │ EMP-0588       │ change   │                │       │          │        │ │
-│ └────────────────┴──────────┴────────────────┴───────┴──────────┴────────┘ │
-└────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────┐
+│        🚀 (rocket)      │
+│                         │
+│       ACME CORP         │  ← company_name (bold, brand color)
+│   Performance Suite     │  ← company_tagline (muted, optional)
+│                         │
+│      Please wait        │
+│        Loading…         │
+└─────────────────────────┘
 ```
 
-## UI Sketch (Add Note sheet, opened from hub)
+- Company name renders only if a value is set (graceful fallback: today's exact look).
+- Tagline renders only if a value is set.
+- A small logo (existing `email_company_logo_url` setting, reused) can optionally render above the company name — toggle controlled in admin.
+
+### 2. Admin settings panel
+
+New card on **Admin → Module Hub Settings** (or General Settings) titled **"Branding · Loading Screen"**:
 
 ```text
-┌─────────────────────────────────┐
-│ Add Review Note              ✕  │
-├─────────────────────────────────┤
-│ Employee *                      │
-│ [ Search name or code…       ▾] │
-│   ┌─────────────────────────┐   │
-│   │ Aarav Sharma · EMP-0421 │   │
-│   │ Production              │   │
-│   ├─────────────────────────┤   │
-│   │ Aarav Singh · EMP-0588  │   │
-│   │ Quality                 │   │
-│   └─────────────────────────┘   │
-│                                 │
-│ Category   [ KPI change      ▾] │
-│ Title *    [ ……………………………… ]   │
-│ Details    [ …multi-line……… ]   │
-│ Priority   [ Medium          ▾] │
-│                                 │
-│ Apply From (cycle month)        │
-│ [ 📅  Jul 2026              ▾]  │
-│   defaults to next month        │
-│                                 │
-│         [ Cancel ] [ Save Note ]│
-└─────────────────────────────────┘
+┌─ Branding · Loading Screen ──────────────────────────┐
+│                                                      │
+│  Company Name           [ ACME CORP            ]     │
+│    Shown on the loading overlay across the app.      │
+│                                                      │
+│  Tagline (optional)     [ Performance Suite    ]     │
+│                                                      │
+│  Show logo on loader    [ ◯ Off  ● On ]              │
+│    Uses the logo configured in Email Branding.       │
+│                                                      │
+│  ┌─ Live Preview ──────────────┐                     │
+│  │       🚀                    │                     │
+│  │     ACME CORP               │                     │
+│  │  Performance Suite          │                     │
+│  │     Please wait             │                     │
+│  │       Loading…              │                     │
+│  └─────────────────────────────┘                     │
+│                                                      │
+│                              [ Save Changes ]        │
+└──────────────────────────────────────────────────────┘
 ```
 
-## Technical Details
+Live preview re-renders on every keystroke so admins see the result before saving.
 
-**DB change (single migration)**
-```sql
-ALTER TABLE public.review_action_notes
-  ADD COLUMN applicable_from DATE NULL;
-COMMENT ON COLUMN public.review_action_notes.applicable_from
-  IS 'Month (always day=1) when the captured change should take effect.';
-CREATE INDEX idx_ran_applicable_from
-  ON public.review_action_notes(applicable_from);
-```
-- Nullable, no default (existing rows stay `NULL`). No RLS change needed — same row, same policies.
+## Technical Plan
 
-**Files to edit**
-- `src/services/reviewNotes/reviewNotesService.ts` — add `applicable_from?: string | null` to `ReviewActionNote`, `ReviewActionNoteInput`, and `ListFilters`. Apply `.eq('subject_employee_id', …)`, `.gte/lte('applicable_from', …)` when set; default ordering becomes `applicable_from ASC NULLS LAST, updated_at DESC`.
-- `src/components/reviewNotes/AddReviewNoteSheet.tsx` — make `subjectEmployeeId` optional; add `EmployeePickerCombobox`; add month-picker; submit `applicable_from` as `YYYY-MM-01`.
-- `src/pages/hr/ReviewNotes.tsx` — header "+ Add Note" button, Employee + Apply-From filters, new "Apply From" column, employee-code line in cell.
-- `src/integrations/supabase/types.ts` — auto-regenerated.
+### Data
+- Reuse existing `system_settings` table. Three keys (idempotent migration `INSERT … ON CONFLICT DO NOTHING`):
+  - `branding_company_name` (string, default `''`)
+  - `branding_loader_tagline` (string, default `''`)
+  - `branding_loader_show_logo` (bool-as-string, default `'false'`)
+- `company_name` already used in PIP letter — this new key is loader-scoped to avoid coupling. (Could later unify; out of scope.)
 
-**Files to create**
-- `src/components/reviewNotes/EmployeePickerCombobox.tsx` — reusable Popover+Command picker over `useProfiles()`, filters out inactive, searches name/code/email.
-- `src/components/reviewNotes/MonthPicker.tsx` — thin wrapper around shadcn `Calendar` (`captionLayout="dropdown"`, snaps selection to first of month) + `Popover`. `pointer-events-auto` per shadcn rule.
-- `src/test/reviewNotes/employeePicker.test.ts` — search by code, by name, hides inactive, returns id.
-- `src/test/reviewNotes/applicableFrom.test.ts` — value normalises to day=1; default = next month; null filter excluded; sort orders nulls last.
+### Hook
+- New `useBrandingSettings()` in `src/hooks/useBrandingSettings.ts` — wraps three `useSystemSetting` calls, parses bool, returns `{ companyName, tagline, showLogo, logoUrl, isLoading }`. Cached via React Query (already configured in `useSystemSetting`).
+
+### Components
+- `src/components/ui/PageLoadingOverlay.tsx` — read branding via the new hook; render logo / company name / tagline conditionally above the existing "Please wait / Loading…" block. No layout regression when settings are empty.
+- `src/components/ui/RocketGrowthArt.tsx` — unchanged (SVG stays brand-locked).
+- `src/components/admin/BrandingLoaderPanel.tsx` (new) — three inputs + switch + live `<PageLoadingOverlay open label=… >` preview rendered in-place (not as fixed overlay; introduce a `variant="inline"` prop on the overlay so the same component can be embedded for preview).
+- Wire panel into `src/pages/admin/ModuleHubSettings.tsx` (or whichever existing General Settings page is appropriate — confirmed during build).
+
+### RLS / Security
+- `system_settings` already has admin-only write RLS. Read is public (needed so loader can fetch on first paint). No new policies required.
+
+### Tests
+- `src/test/branding/loaderBranding.test.tsx` — overlay renders without company name when setting empty, renders with name when set, hides tagline when empty, hides logo when toggle off.
+- `src/test/branding/brandingHook.test.ts` — bool parsing for `branding_loader_show_logo`.
+
+### Documentation
+- Update `DOCUMENTATION.md` → add "Branding · Loading Screen" section.
+- Update `POLICY.md` → note that loader copy is admin-configurable (no hardcoded company identity).
 
 ## Risk & Impact Report
-- **Data Impact:** Additive nullable column + index. No back-fill, no RLS change, existing rows unaffected.
-- **Workflow Impact:** Additive. No automation acts on `applicable_from` — it is informational and used for filter/sort only (consistent with the original "no automatic mutations" scope).
-- **UI/UX Consistency:** Reuses existing shadcn `Command`/`Popover`/`Calendar` patterns; matches other pickers in the app.
-- **Regression Risk:** Low. Inline trigger keeps passing `subjectEmployeeId` so its branch is unchanged. Default ordering change is the only behavioural shift for existing notes — mitigated because nulls go last, so old rows stay visible exactly where they are today.
-- **Mitigation:** Unit tests above; manual QA paths below.
 
-## QA checklist after build
-1. Hub → "+ Add Note" → search by code "EMP-0421" → pick Jul 2026 → save → row appears with name+code and `Jul 2026`.
-2. Inline trigger on a scorecard → sheet opens with employee locked (no picker) and Apply-From defaulted to next month → save still works.
-3. Apply-From filter → "Next quarter" shows only Jul/Aug/Sep 2026 rows; "Any" restores full list.
-4. Employee filter → only chosen person's notes show.
-5. Inactive employees absent from both pickers.
-6. Existing notes (created before migration) show `—` in Apply From and remain editable.
-7. Non-creator role does not see "+ Add Note".
-8. Memory file `mem://features/hr/review-action-notes` updated with the new column + picker behaviour.
+- **Data**: New settings keys only; no schema change to existing tables. Zero historical data impact.
+- **Workflow**: None — purely cosmetic admin control.
+- **UI/UX**: Loader gains 1–3 lines of text. Empty state matches today exactly (safe default).
+- **Regression**: Low. Overlay is a memoized presentational component; adding optional rows above existing text. Inline-variant prop kept opt-in to avoid altering current overlay callers.
+- **Mitigation**: New unit tests for both empty and populated settings; preview in admin panel prevents misconfiguration.
 
----
+## Files to Create / Edit
 
-Reply **approve** to implement, or tell me to drop/adjust any piece (e.g. skip the Apply-From quick filters, hide the column on mobile, make Apply-From mandatory).
+- `supabase/migrations/<ts>_branding_loader_settings.sql` (new)
+- `src/hooks/useBrandingSettings.ts` (new)
+- `src/components/admin/BrandingLoaderPanel.tsx` (new)
+- `src/components/ui/PageLoadingOverlay.tsx` (edit — add branding rows + `variant` prop)
+- `src/pages/admin/ModuleHubSettings.tsx` (edit — mount the panel)
+- `src/test/branding/loaderBranding.test.tsx` (new)
+- `src/test/branding/brandingHook.test.ts` (new)
+- `DOCUMENTATION.md`, `POLICY.md`, `mem/index.md` (sync)
