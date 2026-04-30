@@ -10,7 +10,6 @@ import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { Loader2 } from 'lucide-react';
 import { useIdleTimeout } from '@/hooks/useIdleTimeout';
 import { useSafetyRealtimeSync } from '@/hooks/useSafetyRealtimeSync';
-import { SafetyHeader } from './SafetyHeader';
 import { SafetySidebar } from './SafetySidebar';
 import { SafetyModuleRoute } from './SafetyModuleRoute';
 
@@ -35,7 +34,6 @@ function SafetyContent() {
         </div>
       )}
       <SidebarInset>
-        <SafetyHeader />
         <main
           className="flex-1 overflow-auto p-3 sm:p-6 bg-muted/30"
           data-testid="safety-main"
