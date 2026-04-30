@@ -1,13 +1,17 @@
 ---
 name: Safety Module Shell Isolation
-description: Safety module lives at /safety/* with a fully decoupled shell — no PMS layout imports allowed in either direction
+description: Safety module lives at /safety/* with a fully decoupled shell — no PMS layout imports allowed in either direction. Shell mirrors PMS UX (sidebar-only chrome, no top app header).
 type: constraint
 ---
 The Safety module ships as an independent shell wrapped by `SafetyLayout`
-(at `/safety`), composed of `SafetySidebar` + `SafetyHeader`. These three
-components MUST NOT import `AppSidebar`, `DashboardLayout`, or
-`MinimalHeader`. Conversely, `DashboardLayout` MUST NOT import anything
-from `src/components/safety/`. A regression test
+(at `/safety`), composed of `SafetySidebar` only — the standalone
+`SafetyHeader` was removed in favour of sidebar-only chrome that mirrors
+the PMS `AppSidebar` (logo + collapse trigger in `SidebarHeader`; theme
+toggle, Back-to-Hub, notification bell, offline badge, profile card and
+sign-out in `SidebarFooter`). `SafetyLayout` and `SafetySidebar` MUST NOT
+import `AppSidebar`, `DashboardLayout`, or `MinimalHeader`. Conversely,
+`DashboardLayout` MUST NOT import anything from `src/components/safety/`.
+A regression test
 (`src/test/safetyShellIsolation.test.tsx`) enforces both directions by
 grep-asserting the source files.
 

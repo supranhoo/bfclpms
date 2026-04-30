@@ -12,13 +12,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
  * would require mocking auth + Supabase.
  */
 describe('Safety shell isolation', () => {
-  it('SafetyLayout / Sidebar / Header do NOT import PMS chrome', async () => {
+  it('SafetyLayout / Sidebar do NOT import PMS chrome', async () => {
     const layoutSrc = await import('@/components/safety/SafetyLayout?raw');
     const sidebarSrc = await import('@/components/safety/SafetySidebar?raw');
-    const headerSrc = await import('@/components/safety/SafetyHeader?raw');
 
     const forbidden = ['AppSidebar', 'DashboardLayout', 'MinimalHeader'];
-    const sources = [layoutSrc.default, sidebarSrc.default, headerSrc.default];
+    const sources = [layoutSrc.default, sidebarSrc.default];
 
     for (const src of sources) {
       for (const sym of forbidden) {
