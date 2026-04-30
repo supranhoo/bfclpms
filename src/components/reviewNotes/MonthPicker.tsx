@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
-import { CalendarIcon, X } from 'lucide-react';
+import { CalendarIcon, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 
@@ -17,10 +16,9 @@ interface Props {
 }
 
 /** Always returns YYYY-MM-01 from a Date. */
-function toFirstOfMonth(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  return `${y}-${m}-01`;
+function toFirstOfMonth(year: number, monthIndex: number): string {
+  const m = String(monthIndex + 1).padStart(2, '0');
+  return `${year}-${m}-01`;
 }
 
 function parse(value: string | null): Date | undefined {
@@ -37,6 +35,13 @@ function parse(value: string | null): Date | undefined {
 export function MonthPicker({ value, onChange, placeholder = 'Pick a month', disabled, allowClear = true, className }: Props) {
   const [open, setOpen] = useState(false);
   const date = parse(value);
+  const today = new Date();
+  const initialYear = date ? date.getFullYear() : today.getFullYear();
+  const [viewYear, setViewYear] = useState<number>(initialYear);
+
+  const minYear = today.getFullYear() - 2;
+  const maxYear = today.getFullYear() + 5;
+  const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -63,22 +68,60 @@ export function MonthPicker({ value, onChange, placeholder = 'Pick a month', dis
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
-        <Calendar
-          mode="single"
-          selected={date}
-          onSelect={(d) => {
-            if (d) {
-              onChange(toFirstOfMonth(d));
-              setOpen(false);
-            }
-          }}
-          captionLayout="dropdown-buttons"
-          fromYear={new Date().getFullYear() - 2}
-          toYear={new Date().getFullYear() + 5}
-          initialFocus
-          className={cn('p-3 pointer-events-auto')}
-        />
+      <PopoverContent className="w-auto p-3 pointer-events-auto" align="start">
+        <div className="w-[260px] space-y-3">
+          <div className="flex items-center justify-between">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              disabled={viewYear <= minYear}
+              onClick={() => setViewYear((y) => Math.max(minYear, y - 1))}
+              aria-label="Previous year"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="text-sm font-semibold">{viewYear}</div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              disabled={viewYear >= maxYear}
+              onClick={() => setViewYear((y) => Math.min(maxYear, y + 1))}
+              aria-label="Next year"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {MONTHS_SHORT.map((label, idx) => {
+              const isSelected =
+                !!date && date.getFullYear() === viewYear && date.getMonth() === idx;
+              const isCurrent =
+                today.getFullYear() === viewYear && today.getMonth() === idx;
+              return (
+                <Button
+                  key={label}
+                  type="button"
+                  variant={isSelected ? 'default' : 'outline'}
+                  size="sm"
+                  className={cn(
+                    'h-9 text-xs font-medium',
+                    !isSelected && isCurrent && 'border-primary text-primary',
+                  )}
+                  onClick={() => {
+                    onChange(toFirstOfMonth(viewYear, idx));
+                    setOpen(false);
+                  }}
+                >
+                  {label}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
       </PopoverContent>
     </Popover>
   );
