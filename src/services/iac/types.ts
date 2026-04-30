@@ -73,6 +73,46 @@ export interface IacBulkExportRow {
   assigned_at: string;
 }
 
+// -------- Role matrix (per-user × per-role) ----------------------------
+/** One row per active user. Identity columns are read-only context. */
+export interface IacMatrixRow {
+  employee_code: string | null;
+  email: string;
+  full_name: string | null;
+  is_active: boolean;
+  /** Map of role_code -> 'Y' | '' (only role columns mutate the system). */
+  roles: Record<string, 'Y' | ''>;
+}
+
+export interface IacMatrixDiffEntry {
+  user_id: string;
+  email: string;
+  full_name: string | null;
+  role_id: string;
+  role_code: string;
+}
+
+export interface IacMatrixRowError {
+  lineNo: number;
+  email: string;
+  reason: string;
+}
+
+export interface IacMatrixDiff {
+  toGrant: IacMatrixDiffEntry[];
+  toRevoke: Array<IacMatrixDiffEntry & { assignment_id: string }>;
+  unchanged: number;
+  errors: IacMatrixRowError[];
+  /** Unknown role-code headers found in the uploaded CSV. */
+  unknownRoleColumns: string[];
+}
+
+export interface IacMatrixApplyResult {
+  inserted: number;
+  deleted: number;
+  failures: Array<{ phase: 'insert' | 'delete'; batchIndex: number; reason: string; size: number }>;
+}
+
 export type BulkRowIssue =
   | 'unknown_user'
   | 'unknown_role'
