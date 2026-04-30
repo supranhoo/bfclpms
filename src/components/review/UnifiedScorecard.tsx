@@ -567,6 +567,17 @@ export function UnifiedScorecard({
 
   // Calculate scores
   // Filtered KPIs for charts based on status filter
+  // Total assigned weightage across ALL KPIs (unfiltered) for the badge.
+  // This must always reflect the full period mapping, regardless of status filter.
+  const fullAssignedWeight = useMemo(() => {
+    if (!kpis?.length || !submissions) return 0;
+    return kpis.reduce((sum, kpi) => {
+      const submission = submissionMap.get(kpi.id);
+      if (submission?.is_na) return sum;
+      return sum + (kpi.weightage || 0);
+    }, 0);
+  }, [kpis, submissions, submissionMap]);
+
   const displayKpis = useMemo(() => {
     if (!kpis) return [];
     return statusFilter ? kpis.filter(k => k.status === statusFilter) : kpis;
@@ -1557,12 +1568,12 @@ export function UnifiedScorecard({
               <span
                 title="Total weightage of all KPIs assigned this period. Should equal 100%. N/A KPIs are excluded."
                 className={`text-xs font-medium px-1.5 py-0.5 rounded ${
-                  Math.round(scoreData.assignedWeight) === 100
+                  Math.round(fullAssignedWeight) === 100
                     ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
                     : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
                 }`}
               >
-                ({Math.round(scoreData.assignedWeight)}%)
+                ({Math.round(fullAssignedWeight)}%)
               </span>
             </CardTitle>
             <CardDescription className="text-xs">Score breakdown across KRA categories</CardDescription>
