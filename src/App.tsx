@@ -53,6 +53,8 @@ const IncentiveDataEntry = lazy(() => import("./pages/admin/IncentiveDataEntry")
 const EmployeeDevelopment = lazy(() => import("./pages/admin/EmployeeDevelopment"));
 const OrgKpiAuditReview = lazy(() => import("./pages/admin/OrgKpiAuditReview"));
 const EmployeeMasterBackfill = lazy(() => import("./pages/admin/EmployeeMasterBackfill"));
+const ReviewNotes = lazy(() => import("./pages/hr/ReviewNotes"));
+const ReviewNotesAccess = lazy(() => import("./pages/admin/ReviewNotesAccess"));
 const ModuleHubSettings = lazy(() => import("./pages/admin/ModuleHubSettings"));
 const IdentityAccessConsole = lazy(() => import("./pages/admin/IdentityAccessConsole"));
 
