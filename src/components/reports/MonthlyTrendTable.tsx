@@ -49,6 +49,7 @@ export function MonthlyTrendTable({ months, employees, isLoading }: Props) {
           <TableRow>
             <TableHead className="sticky left-0 bg-background z-10 min-w-[200px]">Employee</TableHead>
             <TableHead className="min-w-[140px]">Department</TableHead>
+            <TableHead className="min-w-[180px]">Reporting Manager</TableHead>
             {months.map(m => (
               <TableHead key={m.key} className="text-center whitespace-nowrap">
                 {m.label}
@@ -68,6 +69,7 @@ export function MonthlyTrendTable({ months, employees, isLoading }: Props) {
                 </div>
               </TableCell>
               <TableCell className="text-sm">{emp.departmentName || '-'}</TableCell>
+              <TableCell className="text-sm">{emp.reportingManagerName || '—'}</TableCell>
               {months.map(m => {
                 const v = emp.monthlyScores[m.key];
                 return (
