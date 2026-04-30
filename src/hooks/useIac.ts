@@ -5,7 +5,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as iac from '@/services/iac/iacService';
-import type { IacBulkAssignmentRow, IacScopeType } from '@/services/iac/types';
+import type { IacBulkAssignmentRow, IacScopeType, IacMatrixDiff } from '@/services/iac/types';
 
 const KEY = ['iac'] as const;
 
@@ -79,6 +79,26 @@ export function usePreviewBulk() {
 
 export function useExportAssignments() {
   return useMutation({ mutationFn: () => iac.exportAssignments() });
+}
+
+export function useExportRoleMatrix() {
+  return useMutation({ mutationFn: () => iac.exportRoleMatrix() });
+}
+
+export function useLoadMatrixLookups() {
+  return useMutation({ mutationFn: () => iac.loadMatrixLookups() });
+}
+
+export function useApplyMatrixDiff() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ diff, fileName }: { diff: IacMatrixDiff; fileName?: string }) =>
+      iac.applyMatrixDiff(diff, fileName),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['iac', 'assignments'] });
+      qc.invalidateQueries({ queryKey: ['iac', 'audit'] });
+    },
+  });
 }
 
 export type { IacScopeType };
