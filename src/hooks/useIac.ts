@@ -73,4 +73,12 @@ export function useApplyBulk() {
   });
 }
 
+export function usePreviewBulk() {
+  return useMutation({ mutationFn: (rows: IacBulkAssignmentRow[]) => iac.previewBulk(rows) });
+}
+
+export function useExportAssignments() {
+  return useMutation({ mutationFn: () => iac.exportAssignments() });
+}
+
 export type { IacScopeType };
