@@ -159,16 +159,28 @@ export default function SafetyEmergencyContacts() {
             <div className="py-8 text-center text-muted-foreground">No contacts yet.</div>
           ) : (
             contacts.map((c) => (
-              <div key={c.id} className="flex items-start gap-3 p-3 rounded-lg border bg-card">
+              <div key={c.id} className="flex items-start gap-3 p-3 rounded-lg border bg-card min-h-[64px]">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium">{c.name}</span>
                     {c.role_title && <span className="text-xs text-muted-foreground">· {c.role_title}</span>}
                     <Badge variant="outline">{SAFETY_EMERGENCY_CONTACT_TYPE_LABEL[c.contact_type]}</Badge>
                   </div>
-                  <div className="text-sm">
-                    <a href={`tel:${c.phone_primary}`} className="text-primary hover:underline">{c.phone_primary}</a>
-                    {c.phone_alt && <> · <a href={`tel:${c.phone_alt}`} className="text-primary hover:underline">{c.phone_alt}</a></>}
+                  <div className="text-sm flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                    <a
+                      href={`tel:${c.phone_primary}`}
+                      className="text-primary hover:underline inline-flex items-center min-h-[36px] font-medium"
+                    >
+                      📞 {c.phone_primary}
+                    </a>
+                    {c.phone_alt && (
+                      <a
+                        href={`tel:${c.phone_alt}`}
+                        className="text-primary hover:underline inline-flex items-center min-h-[36px]"
+                      >
+                        📞 {c.phone_alt}
+                      </a>
+                    )}
                   </div>
                   {c.email && (
                     <div className="text-xs text-muted-foreground">
@@ -179,8 +191,9 @@ export default function SafetyEmergencyContacts() {
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="text-destructive hover:bg-destructive/10"
+                  className="text-destructive hover:bg-destructive/10 h-10 w-10 shrink-0"
                   onClick={() => setPendingDelete(c.id)}
+                  aria-label="Remove contact"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>

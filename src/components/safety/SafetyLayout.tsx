@@ -29,13 +29,16 @@ function SafetyContent() {
   return (
     <>
       {showFloatingTrigger && (
-        <div className="fixed top-3 left-3 z-50 sm:top-4 sm:left-4">
+        <div
+          className="fixed top-3 left-3 z-50 sm:top-4 sm:left-4"
+          style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+        >
           <SidebarTrigger className="bg-background border shadow-sm rounded-md p-2 hover:bg-accent min-h-[44px] min-w-[44px]" />
         </div>
       )}
       <SidebarInset>
         <main
-          className="flex-1 overflow-auto p-3 sm:p-6 bg-muted/30"
+          className="flex-1 overflow-auto p-3 sm:p-6 pb-24 md:pb-6 bg-muted/30"
           data-testid="safety-main"
         >
           <ErrorBoundary>

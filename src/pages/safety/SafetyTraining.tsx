@@ -51,10 +51,10 @@ function AssignmentList({ onOpen }: { onOpen: (id: string) => void }) {
   const { data, isLoading } = useMyTrainingAssignments();
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-4 sm:space-y-6 p-3 sm:p-6">
       <div>
-        <h1 className="text-2xl font-semibold flex items-center gap-2">
-          <GraduationCap className="h-6 w-6 text-primary" />
+        <h1 className="text-xl sm:text-2xl font-semibold flex items-center gap-2">
+          <GraduationCap className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
           My Training
         </h1>
         <p className="text-sm text-muted-foreground">
@@ -215,10 +215,12 @@ function AssignmentRunner({
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-4 sm:space-y-6 p-3 sm:p-6">
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="sm" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back to my training
+        <Button variant="ghost" size="sm" className="min-h-[40px]" onClick={onBack}>
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          <span className="hidden sm:inline">Back to my training</span>
+          <span className="sm:hidden">Back</span>
         </Button>
       </div>
 

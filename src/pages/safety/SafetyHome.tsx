@@ -7,6 +7,7 @@ import {
   TrendingUp, Clock, CheckCircle2, AlertOctagon, Loader2,
 } from 'lucide-react';
 import { useSafetyDashboardStats } from '@/hooks/useSafetyDashboardStats';
+import { SafetyStickyActionBar } from '@/components/safety/SafetyStickyActionBar';
 import {
   SAFETY_STATUS_LABELS,
   SAFETY_SEVERITY_LABELS,
@@ -28,18 +29,18 @@ export default function SafetyHome() {
   const { data, isLoading } = useSafetyDashboardStats();
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <div className="flex flex-wrap items-start gap-4">
-        <div className="p-3 rounded-xl bg-destructive/10 text-destructive">
-          <ShieldAlert className="h-7 w-7" />
+    <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6">
+      <div className="flex flex-wrap items-start gap-3 sm:gap-4">
+        <div className="p-2.5 sm:p-3 rounded-xl bg-destructive/10 text-destructive">
+          <ShieldAlert className="h-6 w-6 sm:h-7 sm:w-7" />
         </div>
         <div className="flex-1 min-w-[220px]">
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Safety Dashboard</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-xl sm:text-3xl font-bold text-foreground">Safety Dashboard</h1>
+          <p className="text-xs sm:text-base text-muted-foreground">
             Live incident posture across reporting, investigation, and closure.
           </p>
         </div>
-        <Button asChild>
+        <Button asChild className="hidden md:inline-flex">
           <Link to="/safety/incidents/new" className="flex items-center gap-2">
             <Plus className="h-4 w-4" /> Report Incident
           </Link>
@@ -96,7 +97,9 @@ export default function SafetyHome() {
                   const pct = data.total ? Math.round((count / data.total) * 100) : 0;
                   return (
                     <div key={s} className="flex items-center gap-3 text-sm">
-                      <div className="w-36 shrink-0 text-muted-foreground">{SAFETY_STATUS_LABELS[s]}</div>
+                      <div className="w-24 sm:w-36 shrink-0 text-xs sm:text-sm text-muted-foreground truncate">
+                        {SAFETY_STATUS_LABELS[s]}
+                      </div>
                       <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
                         <div
                           className="h-full bg-primary"
@@ -165,7 +168,7 @@ export default function SafetyHome() {
                   <Link
                     key={inc.id}
                     to={`/safety/incidents/${inc.id}`}
-                    className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+                    className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors min-h-[64px]"
                   >
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-sm truncate">
@@ -175,8 +178,10 @@ export default function SafetyHome() {
                         {inc.location} · {format(new Date(inc.created_at), 'dd MMM yyyy')}
                       </div>
                     </div>
-                    <SafetyStatusBadge status={inc.status} />
-                    <SlaBadge state={inc.sla_state} />
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <SafetyStatusBadge status={inc.status} />
+                      <SlaBadge state={inc.sla_state} />
+                    </div>
                   </Link>
                 ))
               )}
@@ -205,7 +210,7 @@ export default function SafetyHome() {
                   <Link
                     key={inc.id}
                     to={`/safety/incidents/${inc.id}`}
-                    className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+                    className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors min-h-[64px]"
                   >
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-sm truncate">
@@ -215,8 +220,10 @@ export default function SafetyHome() {
                         {SAFETY_SEVERITY_LABELS[inc.severity]} · {inc.location}
                       </div>
                     </div>
-                    <SafetyStatusBadge status={inc.status} />
-                    <SlaBadge state={inc.sla_state} />
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <SafetyStatusBadge status={inc.status} />
+                      <SlaBadge state={inc.sla_state} />
+                    </div>
                   </Link>
                 ))
               )}
@@ -224,6 +231,14 @@ export default function SafetyHome() {
           </Card>
         </>
       )}
+
+      <SafetyStickyActionBar>
+        <Button asChild className="h-11">
+          <Link to="/safety/incidents/new" className="flex items-center justify-center gap-2">
+            <Plus className="h-4 w-4" /> Report Incident
+          </Link>
+        </Button>
+      </SafetyStickyActionBar>
     </div>
   );
 }

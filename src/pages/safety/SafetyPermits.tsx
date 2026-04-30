@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -11,8 +11,10 @@ import {
 import { Plus, FileSignature } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useManualQuery, type ManualQueryFetcherArgs } from '@/hooks/useManualQuery';
-import { SafetyFilterBar } from '@/components/safety/SafetyFilterBar';
-import { SafetyDataTable } from '@/components/safety/SafetyDataTable';
+import { SafetyFilterSheet } from '@/components/safety/SafetyFilterSheet';
+import { SafetyResponsiveList } from '@/components/safety/SafetyResponsiveList';
+import { SafetyMobileListCard } from '@/components/safety/SafetyMobileListCard';
+import { SafetyStickyActionBar } from '@/components/safety/SafetyStickyActionBar';
 import {
   SAFETY_PERMIT_STATUSES,
   SAFETY_PERMIT_STATUS_LABEL,
@@ -75,6 +77,7 @@ async function fetchPermitsPage({
 }
 
 export default function SafetyPermits() {
+  const navigate = useNavigate();
   const [draft, setDraft] = useState<PermitFilters>(INITIAL);
   const {
     rows, total, page, pageSize, totalPages,
@@ -82,29 +85,38 @@ export default function SafetyPermits() {
     submit, reset, setPage, setPageSize,
   } = useManualQuery<PermitRow, PermitFilters>(['safety', 'permits', 'list'], fetchPermitsPage);
 
+  const activeCount = useMemo(() => {
+    let n = 0;
+    if (draft.status !== 'all') n++;
+    if (draft.type !== 'all') n++;
+    if (draft.search.trim()) n++;
+    return n;
+  }, [draft]);
+
   return (
     <div className="max-w-6xl mx-auto space-y-4">
-      <div className="flex flex-wrap items-start gap-4">
-        <div className="p-3 rounded-xl bg-primary/10 text-primary">
-          <FileSignature className="h-6 w-6" />
+      <div className="flex flex-wrap items-start gap-3 sm:gap-4">
+        <div className="p-2.5 sm:p-3 rounded-xl bg-primary/10 text-primary">
+          <FileSignature className="h-5 w-5 sm:h-6 sm:w-6" />
         </div>
         <div className="flex-1 min-w-[220px]">
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Permits to Work</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-xl sm:text-3xl font-bold text-foreground">Permits to Work</h1>
+          <p className="text-xs sm:text-base text-muted-foreground">
             Issue, approve, activate, and close work permits across BUs and departments.
           </p>
         </div>
-        <Button asChild>
+        <Button asChild className="hidden md:inline-flex">
           <Link to="/safety/permits/new" className="flex items-center gap-2">
             <Plus className="h-4 w-4" /> New Permit
           </Link>
         </Button>
       </div>
 
-      <SafetyFilterBar
+      <SafetyFilterSheet
         onSubmit={() => submit(draft)}
         onReset={() => { setDraft(INITIAL); reset(); }}
         isSubmitting={isFetching}
+        activeCount={activeCount}
       >
         <Select value={draft.status} onValueChange={(v) => setDraft((d) => ({ ...d, status: v }))}>
           <SelectTrigger><SelectValue /></SelectTrigger>
@@ -129,19 +141,39 @@ export default function SafetyPermits() {
           value={draft.search}
           onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))}
         />
-      </SafetyFilterBar>
+      </SafetyFilterSheet>
 
-      <SafetyDataTable
+      <SafetyResponsiveList
         title="Permits"
         hasSubmitted={hasSubmitted}
         isLoading={isLoading}
-        rowCount={rows.length}
+        rows={rows}
         total={total}
         page={page}
         pageSize={pageSize}
         totalPages={totalPages}
         onPageChange={setPage}
-        onPageSizeChange={setPageSize}
+        mobileRender={(r) => (
+          <SafetyMobileListCard
+            onClick={() => navigate(`/safety/permits/${r.id}`)}
+            title={
+              <span>
+                <span className="font-mono text-xs text-muted-foreground mr-1">
+                  {r.permit_number ?? '—'}
+                </span>
+                {SAFETY_PERMIT_TYPE_LABEL[r.permit_type]}
+              </span>
+            }
+            subtitle={`${r.scope} · ${r.location}`}
+            meta={
+              <>
+                {format(new Date(r.start_at), 'dd MMM HH:mm')} → {format(new Date(r.end_at), 'dd MMM HH:mm')}
+                {' · L'}{r.current_level}/{r.total_levels}
+              </>
+            }
+            badges={<PermitStatusBadge status={r.status} />}
+          />
+        )}
       >
         <Table>
           <TableHeader>
@@ -177,7 +209,15 @@ export default function SafetyPermits() {
             ))}
           </TableBody>
         </Table>
-      </SafetyDataTable>
+      </SafetyResponsiveList>
+
+      <SafetyStickyActionBar>
+        <Button asChild className="h-11">
+          <Link to="/safety/permits/new" className="flex items-center justify-center gap-2">
+            <Plus className="h-4 w-4" /> New Permit
+          </Link>
+        </Button>
+      </SafetyStickyActionBar>
     </div>
   );
 }
