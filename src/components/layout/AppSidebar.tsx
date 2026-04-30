@@ -106,6 +106,7 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
     { title: 'Incentive Config', icon: Percent, path: '/admin/incentive-config', menuKey: 'admin-incentive', roles: ['admin'] },
     { title: 'Incentive Data Entry', icon: FileInput, path: '/admin/incentive-data-entry', menuKey: 'admin-incentive-data', roles: ['admin'] },
     { title: 'Employee Development', icon: GraduationCap, path: '/admin/employee-development', menuKey: 'admin-development', roles: ['admin', 'hr_pms'] },
+    { title: 'Review Notes Access', icon: Shield, path: '/admin/review-notes-access', roles: ['admin'] },
   ],
   dataEntry: [
     { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', menuKey: 'data-entry', roles: ['employee', 'manager', 'auditor', 'management', 'hr_pms'] },
