@@ -276,6 +276,16 @@ const App = () => (
                     <EmployeeMasterBackfill />
                   </ProtectedRoute>
                 } />
+                <Route path="/hr/review-notes" element={
+                  <ProtectedRoute allowedRoles={['admin', 'hr_pms', 'manager', 'skip_level', 'management', 'auditor', 'employee']}>
+                    <ReviewNotes />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/review-notes-access" element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <ReviewNotesAccess />
+                  </ProtectedRoute>
+                } />
               <Route path="/admin/module-hub" element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <Suspense fallback={<PageFallback />}><ModuleHubSettings /></Suspense>
