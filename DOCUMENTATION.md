@@ -5888,3 +5888,37 @@ to `Name` alone when no employee_code, and `—` / blank when no manager.
 - `src/components/reports/MonthlyTrendView.tsx`
 - `src/test/monthlyTrendCacheBust.test.ts` (extended)
 - `mem/features/reports/monthly-scorecard-trend.md` (extended)
+
+## v2.66.7.49 — Safety Module: Mobile-Friendly Entry-Level UX (2026-04-30)
+
+**Change.** Made the Safety module fully usable for entry-level users
+(Workers, Supervisors, Safety Officers) on phones (360–414px). Desktop
+layouts at `md+` are preserved unchanged.
+
+**Risk & Impact.** UI/CSS-only — zero schema, RLS, FSM, or permission
+changes. Scoped under `src/components/safety/**` and `src/pages/safety/**`
+only; PMS shell isolation invariant from `mem://architecture/safety/module-shell-isolation`
+is preserved.
+
+**New mobile primitives** (all in `src/components/safety/`):
+- `SafetyMobileListCard` — stacked tap-target row (min-h 88px) used on every list page.
+- `SafetyResponsiveList` — drop-in for `SafetyDataTable`; renders `<Table>` on `md+`, mobile cards on `<md`. Compact pager (Prev / Page X/Y / Next) on mobile.
+- `SafetyStickyActionBar` — fixed-bottom CTA bar, mobile-only (or `forceVisible`). Honours iOS safe-area inset.
+- `SafetyFilterSheet` — desktop = inline filter grid; mobile = "Filters (n)" trigger that opens a bottom Sheet, plus an immediate "Search" icon button.
+
+**Pages updated:**
+- `SafetyHome` — responsive header, mobile list rows wrap badges, sticky "Report Incident" CTA.
+- `SafetyIncidents` — `SafetyFilterSheet` + `SafetyResponsiveList` (mobile cards) + sticky "Report Incident".
+- `SafetyIncidentNew` — h-11 inputs, two-up evidence drop-zones with `<input capture="environment">` for direct camera access on mobile, sticky Submit / Cancel bar with offline banner.
+- `SafetyIncidentDetail` — tighter mobile padding, wrappable badges, condensed back button.
+- `SafetyPermits` — same mobile-cards / sticky-CTA pattern as Incidents.
+- `SafetyTraining` — responsive header + back button.
+- `SafetyEmergencyContacts` — phone numbers rendered as 📞-prefixed `tel:` links with min-h 36px and a 40px destructive icon button.
+- `SafetyLayout` — `<main>` now `pb-24 md:pb-6` so sticky CTAs never cover content; floating SidebarTrigger gets iOS safe-area-inset-top padding.
+
+**Tests & memory:**
+- `src/test/safetyMobileLayout.test.tsx` (new) — guards `SafetyMobileListCard` semantics and the `SafetyStickyActionBar` mobile-only render contract.
+- `mem/design/safety-mobile-ux.md` (new) — mobile-UX SSOT for Safety.
+- `mem/index.md` — entry added.
+
+**Out of scope:** Admin surfaces (`SafetyTrainingAdmin`, `SafetyUsers`, `SafetyHoursWorked`, `SafetyPermitTypeConfig`, `SafetyAuditTemplates`, `SafetySettings`) intentionally remain desktop-first.
