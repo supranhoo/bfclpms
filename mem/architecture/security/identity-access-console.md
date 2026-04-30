@@ -21,6 +21,11 @@ Single Hub-level surface at `/admin/iac` for managing identity & access across a
 
 **Coexistence:** Legacy `/admin/users` and `/safety/settings/users` keep working — both now show a banner linking to `/admin/iac`. RLS still uses `has_role()` / `has_safety_*` in Phase 1; backfill keeps `iac_user_role_assignments` in sync at migration time.
 
-**Phase 2 (planned):** Migrate RLS to `has_capability`; access templates for Joiner-Mover-Leaver; destructive-capability approvals; cron-driven `expires_at` revocation.
+**Phase 2 (shipped 2026-04-30):**
+- `has_role()` / `has_safety_role()` / `has_any_safety_role()` are now OR-shims: legacy table OR `iac_user_role_assignments`. Grants made in the new console immediately gate every existing RLS policy. Strictly additive.
+- Leaver automation: `iac_revoke_on_deactivation` trigger on `profiles.is_active` deletes all IAC assignments and audits with `actor_id = NULL` on the false transition.
+- Expiry sweep: `iac_sweep_expired()` RPC + `iac-sweep-expired` edge function (CRON_SECRET-gated, `verify_jwt = false`). Schedule daily at 02:00.
+
+**Phase 3 (planned):** Access templates for Joiner-Mover; destructive-capability approval workflow; collapse legacy `user_roles` / `safety_user_roles` once IAC has been authoritative for one release.
 
 **Constraint:** Capability codes are immutable once shipped (other code grants depend on them). To rename, deprecate + add new.

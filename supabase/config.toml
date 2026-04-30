@@ -77,3 +77,5 @@ verify_jwt = false
 
 [functions.compress-evidence]
 verify_jwt = false
+[functions.iac-sweep-expired]
+verify_jwt = false

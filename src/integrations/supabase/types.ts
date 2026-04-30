@@ -7647,6 +7647,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      iac_sweep_expired: { Args: never; Returns: number }
       is_data_owner_for_employee: {
         Args: { p_employee_id: string; p_owner_id: string }
         Returns: boolean
