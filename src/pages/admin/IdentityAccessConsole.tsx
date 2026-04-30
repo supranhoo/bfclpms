@@ -32,9 +32,14 @@ import {
   useRevokeAssignment,
   useSetRoleCapabilities,
   useApplyBulk,
+  usePreviewBulk,
+  useExportAssignments,
 } from '@/hooks/useIac';
-import { Loader2, Search, Shield, Trash2, UserPlus, FileSpreadsheet, ListTree, Users, History, Layers } from 'lucide-react';
-import type { IacBulkAssignmentRow } from '@/services/iac/types';
+import { Loader2, Search, Shield, Trash2, UserPlus, FileSpreadsheet, ListTree, Users, History, Layers, Download, Upload, AlertCircle, CheckCircle2, FileDown } from 'lucide-react';
+import type { IacBulkAssignmentRow, ParsedBulkRow, BulkRowIssue, IacBulkPreview } from '@/services/iac/types';
+import { parseCsv, validateBulkRow, serializeCsv, downloadCsv, templateCsv, BULK_HEADERS, issueLabel } from '@/lib/iac/csv';
+import { useRef } from 'react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import type { IacPerson } from '@/services/iac/iacService';
 
 /**
