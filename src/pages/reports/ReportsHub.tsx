@@ -5,6 +5,11 @@ import { useReportAccess } from '@/hooks/useReportAccess';
 import { useMenuAccess } from '@/hooks/useMenuAccess';
 import { useActiveCustomReports } from '@/hooks/useCustomReports';
 import { useReportDisplayOrder } from '@/hooks/useReportColumnOverrides';
+import { useReportTileOverrides, applyTileOverride } from '@/hooks/useReportTileOverrides';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
+import { useState } from 'react';
+import { EditReportTileDialog } from '@/components/reports/EditReportTileDialog';
 import { 
   BarChart3, 
   FileText, 
@@ -17,7 +22,8 @@ import {
   GraduationCap,
   Table2,
   Grid3X3,
-  Workflow
+  Workflow,
+  Pencil
 } from 'lucide-react';
 
 interface ReportCard {
@@ -203,6 +209,16 @@ export default function ReportsHub() {
   const { canAccess } = useMenuAccess();
   const { data: customReports = [] } = useActiveCustomReports();
   const { order: displayOrder } = useReportDisplayOrder();
+  const { overrides: tileOverrides } = useReportTileOverrides();
+  const { effectiveRole } = useAuth();
+  const isAdmin = effectiveRole === 'admin';
+  const [editing, setEditing] = useState<{
+    reportKey: string;
+    defaultTitle: string;
+    defaultDescription: string;
+    currentTitle: string;
+    currentDescription: string;
+  } | null>(null);
 
   // Combine pre-built + custom reports
   const customCards: ReportCard[] = customReports.map(r => ({
@@ -238,30 +254,71 @@ export default function ReportsHub() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {orderedReports.map((report) => (
-          <Card 
-            key={report.path} 
-            className="hover:shadow-md transition-shadow cursor-pointer group"
-            onClick={() => navigate(report.path)}
-          >
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg bg-muted ${report.color}`}>
-                  <report.icon className="h-5 w-5" />
+        {orderedReports.map((report) => {
+          const merged = applyTileOverride(
+            report.reportKey,
+            { title: report.title, description: report.description },
+            tileOverrides,
+          );
+          return (
+            <Card
+              key={report.path}
+              className="hover:shadow-md transition-shadow cursor-pointer group relative"
+              onClick={() => navigate(report.path)}
+            >
+              {isAdmin && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute top-2 right-2 h-7 w-7 opacity-60 hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditing({
+                      reportKey: report.reportKey,
+                      defaultTitle: report.title,
+                      defaultDescription: report.description,
+                      currentTitle: merged.title,
+                      currentDescription: merged.description,
+                    });
+                  }}
+                  aria-label={`Edit "${merged.title}" tile`}
+                  title="Edit tile name & description"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              )}
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-3 pr-8">
+                  <div className={`p-2 rounded-lg bg-muted ${report.color}`}>
+                    <report.icon className="h-5 w-5" />
+                  </div>
+                  <CardTitle className="text-base group-hover:text-primary transition-colors">
+                    {merged.title}
+                  </CardTitle>
                 </div>
-                <CardTitle className="text-base group-hover:text-primary transition-colors">
-                  {report.title}
-                </CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <CardDescription className="text-sm">
-                {report.description}
-              </CardDescription>
-            </CardContent>
-          </Card>
-        ))}
+              </CardHeader>
+              <CardContent>
+                <CardDescription className="text-sm">
+                  {merged.description}
+                </CardDescription>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
+
+      {editing && (
+        <EditReportTileDialog
+          open={!!editing}
+          onOpenChange={(o) => !o && setEditing(null)}
+          reportKey={editing.reportKey}
+          defaultTitle={editing.defaultTitle}
+          defaultDescription={editing.defaultDescription}
+          currentTitle={editing.currentTitle}
+          currentDescription={editing.currentDescription}
+        />
+      )}
     </div>
   );
 }
