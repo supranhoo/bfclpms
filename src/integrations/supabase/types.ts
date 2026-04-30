@@ -4338,6 +4338,7 @@ export type Database = {
       }
       review_action_notes: {
         Row: {
+          applicable_from: string | null
           assignee_id: string | null
           category: string
           completed_at: string | null
@@ -4356,6 +4357,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          applicable_from?: string | null
           assignee_id?: string | null
           category?: string
           completed_at?: string | null
@@ -4374,6 +4376,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          applicable_from?: string | null
           assignee_id?: string | null
           category?: string
           completed_at?: string | null
