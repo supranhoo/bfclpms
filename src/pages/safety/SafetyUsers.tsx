@@ -15,6 +15,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Loader2, Search, Shield, UserPlus, Trash2 } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import {
   ALL_SAFETY_ROLES,
   SAFETY_ROLE_LABEL,
@@ -114,6 +116,18 @@ export default function SafetyUsers() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+      <div className="rounded-md border bg-primary/5 px-4 py-3 flex items-start gap-3">
+        <Sparkles className="h-4 w-4 text-primary mt-0.5" />
+        <div className="flex-1 min-w-0 text-sm">
+          <p className="font-medium">Now part of the unified Identity & Access Console</p>
+          <p className="text-muted-foreground">
+            Manage Safety roles alongside PMS and future modules in one place. This page remains for module-scoped grants.
+          </p>
+        </div>
+        <Button asChild size="sm" variant="outline">
+          <Link to="/admin/iac">Open Console</Link>
+        </Button>
+      </div>
       <div className="flex items-start gap-3">
         <div className="p-2 rounded-lg bg-destructive/10 text-destructive">
           <Shield className="h-5 w-5" />
