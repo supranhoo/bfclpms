@@ -4,6 +4,7 @@
  * data contract has one place to evolve.
  */
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllPaged } from '@/lib/fetchAll';
 import type {
   IacAssignment,
   IacAuditEntry,
@@ -14,6 +15,9 @@ import type {
   IacRoleWithCaps,
   IacScopeType,
   IacBulkExportRow,
+  IacMatrixRow,
+  IacMatrixDiff,
+  IacMatrixApplyResult,
 } from './types';
 
 // -------- Capabilities --------------------------------------------------
@@ -344,4 +348,184 @@ export async function exportAssignments(): Promise<IacBulkExportRow[]> {
     expires_at: a.expires_at,
     assigned_at: a.assigned_at,
   }));
+}
+
+// =====================================================================
+// Role-matrix export / apply (one row per active user × one col per role)
+// =====================================================================
+
+export interface MatrixExportPayload {
+  roleCodes: string[];
+  rows: IacMatrixRow[];
+}
+
+/** Export EVERY active profile with their global role grants. Paginated. */
+export async function exportRoleMatrix(): Promise<MatrixExportPayload> {
+  // 1. Active roles → column order.
+  const { data: rolesData, error: rolesErr } = await supabase
+    .from('iac_roles')
+    .select('id, code, module')
+    .eq('is_active', true)
+    .order('module')
+    .order('code');
+  if (rolesErr) throw rolesErr;
+  const roleCodes = (rolesData ?? []).map((r) => r.code as string);
+  const roleIdToCode = new Map<string, string>(
+    (rolesData ?? []).map((r) => [r.id as string, r.code as string]),
+  );
+
+  // 2. ALL active profiles via paginated fetch (bypasses 1k cap).
+  const profiles = await fetchAllPaged<{
+    id: string; email: string | null; full_name: string | null;
+    employee_code: string | null; is_active: boolean;
+  }>((from, to) =>
+    supabase
+      .from('profiles')
+      .select('id, email, full_name, employee_code, is_active')
+      .eq('is_active', true)
+      .order('full_name')
+      .range(from, to),
+  );
+
+  // 3. ALL global assignments via paginated fetch.
+  const assigns = await fetchAllPaged<{
+    user_id: string; role_id: string; scope_type: IacScopeType;
+  }>((from, to) =>
+    supabase
+      .from('iac_user_role_assignments')
+      .select('user_id, role_id, scope_type')
+      .eq('scope_type', 'global')
+      .range(from, to),
+  );
+
+  const byUser = new Map<string, Set<string>>();
+  for (const a of assigns) {
+    const code = roleIdToCode.get(a.role_id);
+    if (!code) continue;
+    let s = byUser.get(a.user_id);
+    if (!s) { s = new Set(); byUser.set(a.user_id, s); }
+    s.add(code);
+  }
+
+  const rows: IacMatrixRow[] = profiles.map((p) => {
+    const owned = byUser.get(p.id) ?? new Set<string>();
+    const roles: Record<string, 'Y' | ''> = {};
+    for (const rc of roleCodes) roles[rc] = owned.has(rc) ? 'Y' : '';
+    return {
+      employee_code: p.employee_code,
+      email: p.email ?? '',
+      full_name: p.full_name,
+      is_active: p.is_active,
+      roles,
+    };
+  });
+
+  return { roleCodes, rows };
+}
+
+/**
+ * Lookup helpers used by the diff preview UI. Pulls every active user and
+ * every global assignment so the diff can be computed entirely client-side.
+ */
+export interface MatrixLookupBundle {
+  userByEmail: Map<string, { id: string; full_name: string | null; is_active: boolean }>;
+  userByCode: Map<string, { id: string; full_name: string | null; is_active: boolean; email: string }>;
+  roleByCode: Map<string, string>;
+  currentGlobal: Map<string, Map<string, string>>; // user_id -> role_code -> assignment_id
+}
+
+export async function loadMatrixLookups(): Promise<MatrixLookupBundle> {
+  const { data: rolesData, error: rolesErr } = await supabase
+    .from('iac_roles').select('id, code').eq('is_active', true);
+  if (rolesErr) throw rolesErr;
+  const roleByCode = new Map<string, string>();
+  const roleIdToCode = new Map<string, string>();
+  (rolesData ?? []).forEach((r) => {
+    roleByCode.set(r.code as string, r.id as string);
+    roleIdToCode.set(r.id as string, r.code as string);
+  });
+
+  const profiles = await fetchAllPaged<{
+    id: string; email: string | null; full_name: string | null;
+    employee_code: string | null; is_active: boolean;
+  }>((from, to) =>
+    supabase.from('profiles').select('id, email, full_name, employee_code, is_active').range(from, to),
+  );
+
+  const userByEmail = new Map<string, { id: string; full_name: string | null; is_active: boolean }>();
+  const userByCode = new Map<string, { id: string; full_name: string | null; is_active: boolean; email: string }>();
+  for (const p of profiles) {
+    if (p.email) userByEmail.set(String(p.email).toLowerCase(), { id: p.id, full_name: p.full_name, is_active: p.is_active });
+    if (p.employee_code) userByCode.set(p.employee_code, { id: p.id, full_name: p.full_name, is_active: p.is_active, email: p.email ?? '' });
+  }
+
+  const assigns = await fetchAllPaged<{
+    id: string; user_id: string; role_id: string; scope_type: IacScopeType;
+  }>((from, to) =>
+    supabase
+      .from('iac_user_role_assignments')
+      .select('id, user_id, role_id, scope_type')
+      .eq('scope_type', 'global')
+      .range(from, to),
+  );
+  const currentGlobal = new Map<string, Map<string, string>>();
+  for (const a of assigns) {
+    const code = roleIdToCode.get(a.role_id);
+    if (!code) continue;
+    let m = currentGlobal.get(a.user_id);
+    if (!m) { m = new Map(); currentGlobal.set(a.user_id, m); }
+    m.set(code, a.id);
+  }
+
+  return { userByEmail, userByCode, roleByCode, currentGlobal };
+}
+
+/**
+ * Apply a matrix diff. Inserts and deletes are batched in chunks of 500.
+ * Per-batch failures are collected (no silent fail) and an audit row is
+ * always written summarising the outcome.
+ */
+export async function applyMatrixDiff(diff: IacMatrixDiff, fileName?: string): Promise<IacMatrixApplyResult> {
+  const BATCH = 500;
+  const result: IacMatrixApplyResult = { inserted: 0, deleted: 0, failures: [] };
+
+  // Inserts
+  const inserts = diff.toGrant.map((g) => ({
+    user_id: g.user_id, role_id: g.role_id,
+    scope_type: 'global' as IacScopeType, scope_id: null, expires_at: null,
+  }));
+  for (let i = 0; i < inserts.length; i += BATCH) {
+    const slice = inserts.slice(i, i + BATCH);
+    const { error } = await supabase.from('iac_user_role_assignments').insert(slice);
+    if (error) {
+      result.failures.push({ phase: 'insert', batchIndex: Math.floor(i / BATCH), reason: error.message, size: slice.length });
+    } else {
+      result.inserted += slice.length;
+    }
+  }
+
+  // Deletes by assignment_id (precise — never touches non-global rows).
+  const deleteIds = diff.toRevoke.map((r) => r.assignment_id);
+  for (let i = 0; i < deleteIds.length; i += BATCH) {
+    const slice = deleteIds.slice(i, i + BATCH);
+    const { error } = await supabase.from('iac_user_role_assignments').delete().in('id', slice);
+    if (error) {
+      result.failures.push({ phase: 'delete', batchIndex: Math.floor(i / BATCH), reason: error.message, size: slice.length });
+    } else {
+      result.deleted += slice.length;
+    }
+  }
+
+  await audit('assignment.bulk_matrix_apply', 'assignment', null, {
+    file_name: fileName ?? null,
+    granted: result.inserted,
+    revoked: result.deleted,
+    failures: result.failures,
+    grant_total: diff.toGrant.length,
+    revoke_total: diff.toRevoke.length,
+    unchanged: diff.unchanged,
+    error_count: diff.errors.length,
+  });
+
+  return result;
 }
