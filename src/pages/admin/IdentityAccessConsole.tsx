@@ -400,6 +400,310 @@ function CapabilitiesTab() {
 // Bulk tab
 // =====================================================================
 function BulkTab() {
+  const [mode, setMode] = useState<'matrix' | 'advanced'>('matrix');
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant={mode === 'matrix' ? 'default' : 'outline'}
+          className="cursor-pointer" onClick={() => setMode('matrix')}>
+          Role Matrix (recommended)
+        </Badge>
+        <Badge variant={mode === 'advanced' ? 'default' : 'outline'}
+          className="cursor-pointer" onClick={() => setMode('advanced')}>
+          Advanced (long-form, scoped grants)
+        </Badge>
+      </div>
+      {mode === 'matrix' ? <MatrixBulkTab /> : <LongFormBulkTab />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------
+// Matrix flow: download, upload, diff preview, apply
+// ---------------------------------------------------------------------
+function MatrixBulkTab() {
+  const { toast } = useToast();
+  const exportMatrix = useExportRoleMatrix();
+  const loadLookups = useLoadMatrixLookups();
+  const applyDiff = useApplyMatrixDiff();
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [diff, setDiff] = useState<IacMatrixDiff | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [allowInactive, setAllowInactive] = useState(false);
+  const [applyResult, setApplyResult] = useState<Awaited<ReturnType<typeof applyDiff.mutateAsync>> | null>(null);
+  const [lastCsv, setLastCsv] = useState<string | null>(null);
+
+  const reportError = (where: string, e: unknown) => {
+    const msg = (e as Error)?.message ?? String(e);
+    // eslint-disable-next-line no-console
+    console.error(`[IAC.matrix] ${where}:`, e);
+    toast({ title: where, description: msg, variant: 'destructive' });
+  };
+
+  const handleDownload = async () => {
+    setApplyResult(null);
+    try {
+      const { roleCodes, rows } = await exportMatrix.mutateAsync();
+      if (rows.length === 0) {
+        toast({ title: 'Nothing to export', description: 'No active users found.', variant: 'destructive' });
+        return;
+      }
+      const csv = serializeMatrixCsv(roleCodes, rows);
+      downloadCsv(`iac-role-matrix-${new Date().toISOString().slice(0, 10)}.csv`, csv);
+      toast({ title: 'Exported', description: `${rows.length} employees × ${roleCodes.length} roles.` });
+    } catch (e) {
+      reportError('Export failed', e);
+    }
+  };
+
+  const handleTemplate = async () => {
+    try {
+      const { roleCodes } = await exportMatrix.mutateAsync();
+      downloadCsv('iac-role-matrix-template.csv', matrixTemplateCsv(roleCodes));
+      toast({ title: 'Template downloaded' });
+    } catch (e) {
+      reportError('Template download failed', e);
+    }
+  };
+
+  const recompute = async (csv: string, allowInact: boolean) => {
+    setPreviewing(true);
+    setDiff(null);
+    try {
+      const lookups = await loadLookups.mutateAsync();
+      const validRoleCodes = Array.from(lookups.roleByCode.keys());
+      const parsed = parseMatrixCsv(csv, validRoleCodes);
+      const d = diffMatrix(parsed, lookups.userByEmail, lookups.userByCode, lookups.roleByCode, lookups.currentGlobal, allowInact);
+      setDiff(d);
+      if (d.unknownRoleColumns.length) {
+        toast({
+          title: 'Some role columns ignored',
+          description: `Unknown role codes: ${d.unknownRoleColumns.join(', ')}`,
+          variant: 'destructive',
+        });
+      }
+    } catch (e) {
+      reportError('Preview failed', e);
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
+  const onFile = async (file: File | null) => {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      reportError('File too large', new Error('Max 10MB'));
+      return;
+    }
+    setApplyResult(null);
+    try {
+      const text = await file.text();
+      setLastCsv(text);
+      setFileName(file.name);
+      await recompute(text, allowInactive);
+      toast({ title: 'File loaded', description: file.name });
+    } catch (e) {
+      reportError('Could not read file', e);
+    }
+  };
+
+  const onAllowInactiveChange = async (next: boolean) => {
+    setAllowInactive(next);
+    if (lastCsv) await recompute(lastCsv, next);
+  };
+
+  const handleApply = async () => {
+    if (!diff) return;
+    if (diff.toGrant.length + diff.toRevoke.length === 0) return;
+    setApplyResult(null);
+    try {
+      const res = await applyDiff.mutateAsync({ diff, fileName: fileName ?? undefined });
+      setApplyResult(res);
+      const failed = res.failures.length;
+      toast({
+        title: failed === 0 ? 'Applied' : `Applied with ${failed} batch failure${failed === 1 ? '' : 's'}`,
+        description: `Granted ${res.inserted} · Revoked ${res.deleted}${failed ? ' · See result panel.' : ''}`,
+        variant: failed === 0 ? 'default' : 'destructive',
+      });
+      // Re-run preview against fresh state.
+      if (lastCsv) await recompute(lastCsv, allowInactive);
+    } catch (e) {
+      reportError('Apply failed', e);
+    }
+  };
+
+  const totalChanges = (diff?.toGrant.length ?? 0) + (diff?.toRevoke.length ?? 0);
+  const blockingErrors = diff?.errors.length ?? 0;
+
+  return (
+    <div className="space-y-4">
+      {/* Download */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2"><Download className="h-4 w-4" />Download role matrix</CardTitle>
+          <CardDescription>
+            One row per active employee, one column per role. Cell value <code>Y</code> means the
+            user has that role. Edit, save, and re-upload to grant or revoke in bulk.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <Button onClick={handleDownload} disabled={exportMatrix.isPending}>
+            {exportMatrix.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Download className="h-4 w-4 mr-2" />}
+            Download current matrix
+          </Button>
+          <Button onClick={handleTemplate} variant="outline" disabled={exportMatrix.isPending}>
+            <FileDown className="h-4 w-4 mr-2" />Empty template (headers only)
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Upload */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2"><Upload className="h-4 w-4" />Upload role matrix</CardTitle>
+          <CardDescription>
+            Lookup uses <code>email</code> first, then <code>employee_code</code>. Cells must be
+            <code> Y</code> (grant) or blank/<code>N</code>/<code>-</code> (revoke). Only
+            <code> scope_type=global</code> rows are touched — scoped assignments are preserved.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(e) => { void onFile(e.target.files?.[0] ?? null); e.currentTarget.value = ''; }}
+            />
+            <Button variant="outline" onClick={() => fileRef.current?.click()}>
+              <Upload className="h-4 w-4 mr-2" />Choose CSV file
+            </Button>
+            {fileName && <span className="text-xs text-muted-foreground">{fileName}</span>}
+            <label className="flex items-center gap-2 text-xs ml-auto">
+              <Checkbox checked={allowInactive} onCheckedChange={(v) => void onAllowInactiveChange(Boolean(v))} />
+              Include inactive users
+            </label>
+          </div>
+
+          {previewing && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" /> Computing diff…
+            </div>
+          )}
+
+          {diff && (
+            <div className="border rounded-md p-3 space-y-3 bg-muted/20">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <Bucket icon={<CheckCircle2 className="h-3 w-3 text-emerald-600" />} label="To grant" count={diff.toGrant.length} />
+                <Bucket icon={<AlertCircle className="h-3 w-3 text-amber-600" />} label="To revoke" count={diff.toRevoke.length} />
+                <Bucket icon={<CheckCircle2 className="h-3 w-3 text-muted-foreground" />} label="Unchanged" count={diff.unchanged} />
+                <Bucket icon={<AlertCircle className="h-3 w-3 text-destructive" />} label="Errors" count={diff.errors.length} />
+              </div>
+
+              {diff.unknownRoleColumns.length > 0 && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Unknown role columns ignored</AlertTitle>
+                  <AlertDescription className="font-mono text-xs">{diff.unknownRoleColumns.join(', ')}</AlertDescription>
+                </Alert>
+              )}
+
+              {diff.errors.length > 0 && (
+                <details className="text-xs" open>
+                  <summary className="cursor-pointer font-medium text-destructive">
+                    Errors ({diff.errors.length})
+                  </summary>
+                  <ul className="mt-1 ml-4 list-disc space-y-0.5 max-h-48 overflow-auto">
+                    {diff.errors.slice(0, 200).map((e, i) => (
+                      <li key={i}>
+                        <span className="text-muted-foreground">Line {e.lineNo}:</span>{' '}
+                        <span className="font-mono">{e.email || '∅'}</span> — {e.reason}
+                      </li>
+                    ))}
+                    {diff.errors.length > 200 && <li>…and {diff.errors.length - 200} more</li>}
+                  </ul>
+                </details>
+              )}
+
+              {diff.toGrant.length > 0 && (
+                <details className="text-xs">
+                  <summary className="cursor-pointer font-medium text-emerald-700">
+                    Grants preview ({diff.toGrant.length})
+                  </summary>
+                  <ul className="mt-1 ml-4 list-disc space-y-0.5 max-h-48 overflow-auto">
+                    {diff.toGrant.slice(0, 200).map((g, i) => (
+                      <li key={i}><span className="font-mono">{g.email}</span> ← <span className="font-medium">{g.role_code}</span></li>
+                    ))}
+                    {diff.toGrant.length > 200 && <li>…and {diff.toGrant.length - 200} more</li>}
+                  </ul>
+                </details>
+              )}
+
+              {diff.toRevoke.length > 0 && (
+                <details className="text-xs">
+                  <summary className="cursor-pointer font-medium text-amber-700">
+                    Revokes preview ({diff.toRevoke.length})
+                  </summary>
+                  <ul className="mt-1 ml-4 list-disc space-y-0.5 max-h-48 overflow-auto">
+                    {diff.toRevoke.slice(0, 200).map((r, i) => (
+                      <li key={i}><span className="font-mono">{r.email}</span> ✕ <span className="font-medium">{r.role_code}</span></li>
+                    ))}
+                    {diff.toRevoke.length > 200 && <li>…and {diff.toRevoke.length - 200} more</li>}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
+
+          {applyResult && (
+            <Alert variant={applyResult.failures.length === 0 ? 'default' : 'destructive'}>
+              <CheckCircle2 className="h-4 w-4" />
+              <AlertTitle>
+                Result · Granted {applyResult.inserted} · Revoked {applyResult.deleted}
+                {applyResult.failures.length > 0 ? ` · ${applyResult.failures.length} batch failure(s)` : ''}
+              </AlertTitle>
+              {applyResult.failures.length > 0 && (
+                <AlertDescription>
+                  <ul className="ml-4 list-disc text-xs mt-1">
+                    {applyResult.failures.map((f, i) => (
+                      <li key={i}>
+                        Batch #{f.batchIndex} ({f.phase}, {f.size} rows): {f.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </AlertDescription>
+              )}
+            </Alert>
+          )}
+
+          <div className="flex items-center justify-between flex-wrap gap-2 pt-2">
+            <p className="text-xs text-muted-foreground">
+              {diff
+                ? `${totalChanges} change${totalChanges === 1 ? '' : 's'} pending · ${blockingErrors} error${blockingErrors === 1 ? '' : 's'}`
+                : 'Upload a CSV to see the diff.'}
+            </p>
+            <Button
+              onClick={handleApply}
+              disabled={applyDiff.isPending || !diff || totalChanges === 0}
+              variant={diff && diff.toRevoke.length > 0 ? 'destructive' : 'default'}
+            >
+              {applyDiff.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Apply {totalChanges} change{totalChanges === 1 ? '' : 's'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------
+// Long-form (advanced) flow — original implementation, scope-aware.
+// ---------------------------------------------------------------------
+function LongFormBulkTab() {
   const { toast } = useToast();
   const apply = useApplyBulk();
   const preview = usePreviewBulk();
