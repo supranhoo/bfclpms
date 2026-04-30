@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, ShieldAlert, Search, UserCheck, UserX } from 'lucide-react';
+import { BrandingLoaderPanel } from '@/components/admin/BrandingLoaderPanel';
 
 /**
  * ModuleHubSettings (Admin → Module Hub)
@@ -149,6 +150,8 @@ export default function ModuleHubSettings() {
         title="Module Hub Settings"
         description="Control which modules appear on the Hub and who can access them."
       />
+
+      <BrandingLoaderPanel />
 
       <Card>
         <CardHeader>
