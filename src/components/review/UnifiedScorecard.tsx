@@ -1543,7 +1543,19 @@ export function UnifiedScorecard({
         {/* Category Breakdown - Wide (5/6) */}
         <Card className="md:col-span-5">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Performance by Category</CardTitle>
+            <CardTitle className="text-sm flex items-center gap-2 flex-wrap">
+              <span>Performance by Category</span>
+              <span
+                title="Total weightage of KPIs included in this scorecard. Less than 100% means some KPIs are N/A or unscored."
+                className={`text-xs font-medium px-1.5 py-0.5 rounded ${
+                  Math.round(scoreData.totalWeight) === 100
+                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                    : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                }`}
+              >
+                ({Math.round(scoreData.totalWeight)}%)
+              </span>
+            </CardTitle>
             <CardDescription className="text-xs">Score breakdown across KRA categories</CardDescription>
           </CardHeader>
           <CardContent style={{ height: Math.max(180, scoreData.categoryScores.length * 36) }}>
