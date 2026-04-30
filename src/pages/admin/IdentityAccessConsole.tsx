@@ -399,65 +399,329 @@ function CapabilitiesTab() {
 function BulkTab() {
   const { toast } = useToast();
   const apply = useApplyBulk();
-  const [csv, setCsv] = useState('email,role_code,scope_type,scope_id,expires_at\n');
-  const [busy, setBusy] = useState(false);
+  const preview = usePreviewBulk();
+  const exportMut = useExportAssignments();
+  const fileRef = useRef<HTMLInputElement | null>(null);
 
-  const parsed: IacBulkAssignmentRow[] = useMemo(() => {
-    const lines = csv.trim().split(/\r?\n/);
-    if (lines.length < 2) return [];
-    const headers = lines[0].split(',').map((h) => h.trim());
-    return lines.slice(1).map((line) => {
-      const cells = line.split(',').map((c) => c.trim());
-      const row: Record<string, string> = {};
-      headers.forEach((h, i) => { row[h] = cells[i] ?? ''; });
-      return {
-        email: row.email ?? '',
-        role_code: row.role_code ?? '',
-        scope_type: (row.scope_type || 'global') as IacBulkAssignmentRow['scope_type'],
-        scope_id: row.scope_id || null,
-        expires_at: row.expires_at || null,
-      };
-    }).filter((r) => r.email && r.role_code);
-  }, [csv]);
+  const [csv, setCsv] = useState<string>(() => templateCsv());
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [parsedRows, setParsedRows] = useState<ParsedBulkRow[]>([]);
+  const [previewResult, setPreviewResult] = useState<IacBulkPreview | null>(null);
+  const [lastErrorReport, setLastErrorReport] = useState<Array<{ email: string; role_code: string; reason: string }>>([]);
 
-  const submit = async () => {
-    setBusy(true);
+  const invalidRows = parsedRows.filter((r) => r.issues.length > 0);
+  const validRows = parsedRows.filter((r) => r.row !== null).map((r) => r.row!) as IacBulkAssignmentRow[];
+
+  const reportError = (where: string, e: unknown) => {
+    const msg = (e as Error)?.message ?? String(e);
+    // eslint-disable-next-line no-console
+    console.error(`[IAC.bulk] ${where}:`, e);
+    toast({ title: where, description: msg, variant: 'destructive' });
+  };
+
+  const runParseAndPreview = async (text: string) => {
+    setLastErrorReport([]);
+    setPreviewResult(null);
+    setParsedRows([]);
     try {
-      const res = await apply.mutateAsync(parsed);
-      toast({ title: 'Bulk import done', description: `${res.inserted} assignments created.` });
+      const { headers, rows } = parseCsv(text);
+      if (headers.length === 0) {
+        setParseError('CSV is empty.');
+        return;
+      }
+      const required = ['email', 'role_code'];
+      const missing = required.filter((h) => !headers.includes(h));
+      if (missing.length) {
+        const msg = `Missing required header(s): ${missing.join(', ')}`;
+        setParseError(msg);
+        toast({ title: 'CSV parse failed', description: msg, variant: 'destructive' });
+        return;
+      }
+      setParseError(null);
+      const validated = rows.map((r, i) => validateBulkRow(r, i + 2));
+      setParsedRows(validated);
+      const valid = validated.filter((r) => r.row !== null).map((r) => r.row!) as IacBulkAssignmentRow[];
+      if (valid.length === 0) {
+        setPreviewResult({ ok: [], unknownUsers: [], unknownRoles: [], duplicates: [] });
+        return;
+      }
+      try {
+        const res = await preview.mutateAsync(valid);
+        setPreviewResult(res);
+      } catch (e) {
+        setPreviewResult(null);
+        reportError('Preview failed', e);
+      }
     } catch (e) {
-      toast({ title: 'Bulk import failed', description: (e as Error).message, variant: 'destructive' });
-    } finally {
-      setBusy(false);
+      setParseError((e as Error).message);
+      reportError('CSV parse error', e);
     }
   };
 
+  const onCsvChange = (text: string) => {
+    setCsv(text);
+    void runParseAndPreview(text);
+  };
+
+  const onFile = async (file: File | null) => {
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      reportError('File too large', new Error('Max 2MB'));
+      return;
+    }
+    try {
+      const text = await file.text();
+      setCsv(text);
+      await runParseAndPreview(text);
+      toast({ title: 'File loaded', description: `${file.name} parsed.` });
+    } catch (e) {
+      reportError('Could not read file', e);
+    }
+  };
+
+  const handleDownloadAll = async () => {
+    try {
+      const rows = await exportMut.mutateAsync();
+      const csvText = serializeCsv(
+        rows,
+        ['email', 'role_code', 'scope_type', 'scope_id', 'expires_at', 'assigned_at'],
+      );
+      downloadCsv(`iac-assignments-${new Date().toISOString().slice(0, 10)}.csv`, csvText);
+      toast({ title: 'Downloaded', description: `${rows.length} assignments exported.` });
+    } catch (e) {
+      reportError('Export failed', e);
+    }
+  };
+
+  const handleDownloadTemplate = () => {
+    try {
+      downloadCsv('iac-template.csv', templateCsv());
+      toast({ title: 'Template downloaded' });
+    } catch (e) {
+      reportError('Template download failed', e);
+    }
+  };
+
+  const handleApply = async () => {
+    const ready = previewResult?.ok ?? [];
+    if (ready.length === 0) return;
+    try {
+      const res = await apply.mutateAsync(ready);
+      // Build error report from skipped rows
+      const skipped: Array<{ email: string; role_code: string; reason: string }> = [];
+      invalidRows.forEach((r) =>
+        r.issues.forEach((iss) =>
+          skipped.push({ email: r.raw.email ?? '', role_code: r.raw.role_code ?? '', reason: issueLabel(iss) }),
+        ),
+      );
+      (previewResult?.unknownUsers ?? []).forEach((r) =>
+        skipped.push({ email: r.email, role_code: r.role_code, reason: issueLabel('unknown_user') }),
+      );
+      (previewResult?.unknownRoles ?? []).forEach((r) =>
+        skipped.push({ email: r.email, role_code: r.role_code, reason: issueLabel('unknown_role') }),
+      );
+      (previewResult?.duplicates ?? []).forEach((r) =>
+        skipped.push({ email: r.email, role_code: r.role_code, reason: issueLabel('duplicate') }),
+      );
+      setLastErrorReport(skipped);
+      if (skipped.length === 0) {
+        toast({ title: 'Bulk import done', description: `${res.inserted} assignments created.` });
+      } else {
+        toast({
+          title: `${res.inserted} applied, ${skipped.length} skipped`,
+          description: 'Download the error report for details.',
+        });
+      }
+      // Refresh preview so applied rows now show as duplicates.
+      await runParseAndPreview(csv);
+    } catch (e) {
+      reportError('Bulk import failed', e);
+    }
+  };
+
+  const downloadErrorReport = () => {
+    if (lastErrorReport.length === 0) return;
+    try {
+      const txt = serializeCsv(lastErrorReport, ['email', 'role_code', 'reason']);
+      downloadCsv(`iac-bulk-errors-${Date.now()}.csv`, txt);
+    } catch (e) {
+      reportError('Error report download failed', e);
+    }
+  };
+
+  const readyCount = previewResult?.ok.length ?? 0;
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Bulk Operations</CardTitle>
-        <CardDescription>
-          Paste a CSV with columns <code>email,role_code,scope_type,scope_id,expires_at</code>.
-          Existing assignments are skipped server-side (idempotent).
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <Label htmlFor="iac-csv">CSV</Label>
-        <Textarea
-          id="iac-csv"
-          value={csv}
-          onChange={(e) => setCsv(e.target.value)}
-          rows={10}
-          className="font-mono text-xs"
-        />
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">Parsed {parsed.length} rows.</p>
-          <Button onClick={submit} disabled={busy || parsed.length === 0}>
-            {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Apply
+    <div className="space-y-4">
+      {/* Download */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2"><Download className="h-4 w-4" />Download</CardTitle>
+          <CardDescription>
+            Export every existing assignment, or grab an empty template. The export shape is
+            round-trip-compatible with Upload.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <Button onClick={handleDownloadAll} disabled={exportMut.isPending} variant="default">
+            {exportMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Download className="h-4 w-4 mr-2" />}
+            Download Assignments CSV
           </Button>
-        </div>
-      </CardContent>
-    </Card>
+          <Button onClick={handleDownloadTemplate} variant="outline">
+            <FileDown className="h-4 w-4 mr-2" />
+            Download Template CSV
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Upload */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2"><Upload className="h-4 w-4" />Upload</CardTitle>
+          <CardDescription>
+            Required columns: <code>email,role_code</code>. Optional: <code>scope_type,scope_id,expires_at</code>.
+            Lines starting with <code>#</code> are ignored. Existing assignments are skipped server-side (idempotent).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(e) => { void onFile(e.target.files?.[0] ?? null); e.currentTarget.value = ''; }}
+            />
+            <Button variant="outline" onClick={() => fileRef.current?.click()}>
+              <Upload className="h-4 w-4 mr-2" />Choose CSV file
+            </Button>
+            <span className="text-xs text-muted-foreground">…or paste below</span>
+          </div>
+
+          <div>
+            <Label htmlFor="iac-csv" className="text-xs">CSV content</Label>
+            <Textarea
+              id="iac-csv"
+              value={csv}
+              onChange={(e) => onCsvChange(e.target.value)}
+              rows={8}
+              className="font-mono text-xs mt-1"
+            />
+          </div>
+
+          {parseError && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>CSV parse error</AlertTitle>
+              <AlertDescription>{parseError}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Preview buckets */}
+          {!parseError && parsedRows.length > 0 && (
+            <PreviewBuckets
+              parsedTotal={parsedRows.length}
+              invalid={invalidRows}
+              preview={previewResult}
+              previewing={preview.isPending}
+            />
+          )}
+
+          <div className="flex items-center justify-between flex-wrap gap-2 pt-2">
+            <p className="text-xs text-muted-foreground">
+              Parsed {parsedRows.length} rows · {validRows.length} valid · {readyCount} ready to apply
+            </p>
+            <div className="flex gap-2">
+              {lastErrorReport.length > 0 && (
+                <Button variant="outline" size="sm" onClick={downloadErrorReport}>
+                  <FileDown className="h-4 w-4 mr-2" />Download error report ({lastErrorReport.length})
+                </Button>
+              )}
+              <Button onClick={handleApply} disabled={apply.isPending || readyCount === 0}>
+                {apply.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                Apply {readyCount} assignment{readyCount === 1 ? '' : 's'}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function PreviewBuckets({
+  parsedTotal, invalid, preview, previewing,
+}: {
+  parsedTotal: number;
+  invalid: ParsedBulkRow[];
+  preview: IacBulkPreview | null;
+  previewing: boolean;
+}) {
+  const ready = preview?.ok ?? [];
+  const unknownUsers = preview?.unknownUsers ?? [];
+  const unknownRoles = preview?.unknownRoles ?? [];
+  const duplicates = preview?.duplicates ?? [];
+
+  return (
+    <div className="border rounded-md p-3 space-y-3 bg-muted/20">
+      <div className="flex items-center gap-2 text-xs">
+        <span className="font-medium">Preview</span>
+        {previewing && <Loader2 className="h-3 w-3 animate-spin" />}
+        <span className="text-muted-foreground">({parsedTotal} parsed)</span>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+        <Bucket icon={<CheckCircle2 className="h-3 w-3 text-emerald-600" />} label="Ready" count={ready.length} />
+        <Bucket icon={<AlertCircle className="h-3 w-3 text-amber-600" />} label="Already exists" count={duplicates.length} />
+        <Bucket icon={<AlertCircle className="h-3 w-3 text-destructive" />} label="Unknown email" count={unknownUsers.length} />
+        <Bucket icon={<AlertCircle className="h-3 w-3 text-destructive" />} label="Unknown role" count={unknownRoles.length} />
+        <Bucket icon={<AlertCircle className="h-3 w-3 text-destructive" />} label="Invalid rows" count={invalid.length} />
+      </div>
+
+      {invalid.length > 0 && (
+        <details className="text-xs">
+          <summary className="cursor-pointer font-medium text-destructive">Invalid rows ({invalid.length})</summary>
+          <ul className="mt-1 ml-4 list-disc space-y-0.5">
+            {invalid.slice(0, 50).map((r) => (
+              <li key={r.lineNo}>
+                <span className="text-muted-foreground">Line {r.lineNo}:</span>{' '}
+                <span className="font-mono">{r.raw.email || '∅'} / {r.raw.role_code || '∅'}</span>
+                {' — '}
+                {r.issues.map(issueLabel).join('; ')}
+              </li>
+            ))}
+            {invalid.length > 50 && <li>…and {invalid.length - 50} more</li>}
+          </ul>
+        </details>
+      )}
+      {unknownUsers.length > 0 && (
+        <details className="text-xs">
+          <summary className="cursor-pointer font-medium text-destructive">Unknown emails ({unknownUsers.length})</summary>
+          <ul className="mt-1 ml-4 list-disc">
+            {unknownUsers.slice(0, 50).map((r, i) => <li key={i} className="font-mono">{r.email}</li>)}
+          </ul>
+        </details>
+      )}
+      {unknownRoles.length > 0 && (
+        <details className="text-xs">
+          <summary className="cursor-pointer font-medium text-destructive">Unknown role codes ({unknownRoles.length})</summary>
+          <ul className="mt-1 ml-4 list-disc">
+            {unknownRoles.slice(0, 50).map((r, i) => <li key={i} className="font-mono">{r.role_code}</li>)}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function Bucket({ icon, label, count }: { icon: React.ReactNode; label: string; count: number }) {
+  return (
+    <div className="border rounded p-2 bg-background flex items-center gap-2">
+      {icon}
+      <div className="min-w-0">
+        <p className="text-[10px] text-muted-foreground truncate">{label}</p>
+        <p className="font-semibold">{count}</p>
+      </div>
+    </div>
   );
 }
 
