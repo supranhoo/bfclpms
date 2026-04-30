@@ -20,6 +20,7 @@ export interface TrendEmployee {
   employeeCode: string;
   designation: string;
   departmentName: string;
+  reportingManagerName: string | null;
   isActive: boolean;
   monthlyScores: Record<string, number | null>;
   avg: number | null;
@@ -159,7 +160,7 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
           const batch = empIds.slice(i, i + 500);
           const { data } = await supabase
             .from('profiles')
-            .select('id, full_name, employee_code, designation, department_id, is_active, departments(name)')
+            .select('id, full_name, employee_code, designation, department_id, reporting_manager_id, is_active, departments(name)')
             .in('id', batch);
           (data ?? []).forEach((p: any) => profileMap.set(p.id, p));
         }
@@ -198,6 +199,37 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
       })();
 
       await Promise.all([profilePromise, subsPromise]);
+
+      // Fetch reporting manager names (formatted as `Name(Code)`).
+      // Filtered .in() lookup — exempt from fetchAllPaged per
+      // mem://architecture/profiles-query-policy.
+      const managerMap = new Map<string, string>();
+      try {
+        const managerIds = Array.from(
+          new Set(
+            Array.from(profileMap.values())
+              .map((p: any) => p.reporting_manager_id)
+              .filter((id: any): id is string => !!id),
+          ),
+        );
+        if (managerIds.length > 0) {
+          for (let i = 0; i < managerIds.length; i += 500) {
+            const batch = managerIds.slice(i, i + 500);
+            const { data, error } = await supabase
+              .from('profiles')
+              .select('id, full_name, employee_code')
+              .in('id', batch);
+            if (error) throw error;
+            (data ?? []).forEach((m: any) => {
+              const name = m.full_name || 'Unknown';
+              const code = m.employee_code;
+              managerMap.set(m.id, code ? `${name}(${code})` : name);
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('[useMonthlyTrend] reporting manager fetch failed:', e);
+      }
 
       // Diagnostic: KPIs returned but zero submissions matched. This is the
       // exact signature of the URL-length / batch-size regression that
@@ -278,6 +310,9 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
           employeeCode: profile.employee_code || '',
           designation: profile.designation || '',
           departmentName: profile.departments?.name || '',
+          reportingManagerName: profile.reporting_manager_id
+            ? (managerMap.get(profile.reporting_manager_id) ?? null)
+            : null,
           isActive: profile.is_active !== false,
           monthlyScores,
           avg,
