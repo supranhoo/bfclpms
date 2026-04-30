@@ -176,19 +176,20 @@ export default function SafetyIncidentNew() {
   };
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-4">
-      <Button variant="ghost" size="sm" onClick={() => navigate('/safety/incidents')}>
+    <div className="p-3 sm:p-6 max-w-3xl mx-auto space-y-3 sm:space-y-4">
+      <Button variant="ghost" size="sm" className="min-h-[40px]" onClick={() => navigate('/safety/incidents')}>
         <ArrowLeft className="h-4 w-4 mr-2" />
-        Back to incidents
+        <span className="hidden sm:inline">Back to incidents</span>
+        <span className="sm:hidden">Back</span>
       </Button>
       <Card>
-        <CardHeader>
+        <CardHeader className="px-4 py-3 sm:px-6 sm:py-4">
           <CardTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-primary" />
-            Report a Safety Incident
+            <span className="text-base sm:text-lg">Report a Safety Incident</span>
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-4 sm:px-6">
           {!isOnline && (
             <div className="mb-4 flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
               <WifiOff className="h-4 w-4" />
@@ -197,11 +198,11 @@ export default function SafetyIncidentNew() {
               </span>
             </div>
           )}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <form onSubmit={handleSubmit} className="space-y-4" id="safety-incident-form">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
               <div className="md:col-span-2">
                 <Label htmlFor="title">Title *</Label>
-                <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} />
+                <Input id="title" className="h-11" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} />
               </div>
               <div className="md:col-span-2">
                 <Label htmlFor="desc">What happened? *</Label>
