@@ -210,12 +210,12 @@ export default function SafetyIncidentNew() {
               </div>
               <div>
                 <Label htmlFor="loc">Location *</Label>
-                <Input id="loc" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Plant 2, Bay 3" />
+                <Input id="loc" className="h-11" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Plant 2, Bay 3" />
               </div>
               <div>
                 <Label>Type *</Label>
                 <Select value={type} onValueChange={(v) => setType(v as SafetyIncidentType)}>
-                  <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                  <SelectTrigger className="h-11"><SelectValue placeholder="Select type" /></SelectTrigger>
                   <SelectContent>
                     {(Object.keys(SAFETY_TYPE_LABELS) as SafetyIncidentType[]).map((k) => (
                       <SelectItem key={k} value={k}>{SAFETY_TYPE_LABELS[k]}</SelectItem>
@@ -226,7 +226,7 @@ export default function SafetyIncidentNew() {
               <div>
                 <Label>Severity *</Label>
                 <Select value={severity} onValueChange={(v) => setSeverity(v as SafetyIncidentSeverity)}>
-                  <SelectTrigger><SelectValue placeholder="Select severity" /></SelectTrigger>
+                  <SelectTrigger className="h-11"><SelectValue placeholder="Select severity" /></SelectTrigger>
                   <SelectContent>
                     {(Object.keys(SAFETY_SEVERITY_LABELS) as SafetyIncidentSeverity[]).map((k) => (
                       <SelectItem key={k} value={k}>{SAFETY_SEVERITY_LABELS[k]}</SelectItem>
@@ -237,7 +237,7 @@ export default function SafetyIncidentNew() {
               <div>
                 <Label>Business Unit</Label>
                 <Select value={businessUnitId} onValueChange={(v) => { setBusinessUnitId(v); setDepartmentId(''); }}>
-                  <SelectTrigger><SelectValue placeholder="Select BU" /></SelectTrigger>
+                  <SelectTrigger className="h-11"><SelectValue placeholder="Select BU" /></SelectTrigger>
                   <SelectContent>
                     {businessUnits.map((b) => (
                       <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
@@ -248,7 +248,7 @@ export default function SafetyIncidentNew() {
               <div>
                 <Label>Department</Label>
                 <Select value={departmentId} onValueChange={setDepartmentId} disabled={!businessUnitId}>
-                  <SelectTrigger><SelectValue placeholder={businessUnitId ? 'Select dept' : 'Select BU first'} /></SelectTrigger>
+                  <SelectTrigger className="h-11"><SelectValue placeholder={businessUnitId ? 'Select dept' : 'Select BU first'} /></SelectTrigger>
                   <SelectContent>
                     {departments.map((d) => (
                       <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
@@ -259,29 +259,42 @@ export default function SafetyIncidentNew() {
               {requiresInvolved && (
                 <div className="md:col-span-2">
                   <Label htmlFor="involved">Involved Person *</Label>
-                  <Input id="involved" value={involvedName} onChange={(e) => setInvolvedName(e.target.value)} placeholder="Name of person involved" />
+                  <Input id="involved" className="h-11" value={involvedName} onChange={(e) => setInvolvedName(e.target.value)} placeholder="Name of person involved" />
                 </div>
               )}
               <div className="md:col-span-2">
                 <Label>Evidence (≥1, max 5, ≤20 MB each — images, MP4, PDF) *</Label>
                 <div className="flex flex-col gap-2 mt-1">
-                  <label className="flex items-center justify-center border-2 border-dashed border-border rounded-md p-4 cursor-pointer hover:bg-accent/40 transition-colors">
-                    <Upload className="h-4 w-4 mr-2" />
-                    <span className="text-sm">Choose files</span>
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/*,video/mp4,application/pdf"
-                      onChange={onPickFiles}
-                      className="hidden"
-                    />
-                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-md p-4 sm:p-6 cursor-pointer hover:bg-accent/40 active:bg-accent/60 transition-colors min-h-[88px]">
+                      <Camera className="h-5 w-5 mb-1.5 text-primary" />
+                      <span className="text-xs sm:text-sm font-medium">Take photo</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={onPickFiles}
+                        className="hidden"
+                      />
+                    </label>
+                    <label className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-md p-4 sm:p-6 cursor-pointer hover:bg-accent/40 active:bg-accent/60 transition-colors min-h-[88px]">
+                      <Upload className="h-5 w-5 mb-1.5 text-muted-foreground" />
+                      <span className="text-xs sm:text-sm font-medium">Upload files</span>
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/*,video/mp4,application/pdf"
+                        onChange={onPickFiles}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
                   {files.length > 0 && (
                     <ul className="text-sm space-y-1">
                       {files.map((f, i) => (
-                        <li key={i} className="flex items-center justify-between bg-muted/40 rounded px-2 py-1">
-                          <span className="truncate">{f.name} <span className="text-muted-foreground">({Math.round(f.size / 1024)} KB)</span></span>
-                          <Button type="button" variant="ghost" size="icon" onClick={() => removeFile(i)}>
+                        <li key={i} className="flex items-center justify-between bg-muted/40 rounded px-2 py-1.5 min-h-[44px]">
+                          <span className="truncate text-xs sm:text-sm">{f.name} <span className="text-muted-foreground">({Math.round(f.size / 1024)} KB)</span></span>
+                          <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => removeFile(i)} aria-label="Remove file">
                             <X className="h-4 w-4" />
                           </Button>
                         </li>
@@ -291,7 +304,7 @@ export default function SafetyIncidentNew() {
                 </div>
               </div>
             </div>
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="hidden md:flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => navigate('/safety/incidents')}>Cancel</Button>
               <Button type="submit" disabled={!canSubmit || submitting}>
                 {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
@@ -301,6 +314,34 @@ export default function SafetyIncidentNew() {
           </form>
         </CardContent>
       </Card>
+
+      <SafetyStickyActionBar
+        banner={
+          !isOnline ? (
+            <div className="flex items-center gap-2 rounded-md bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+              <WifiOff className="h-3.5 w-3.5" /> Offline — will send when back online
+            </div>
+          ) : null
+        }
+      >
+        <Button
+          type="button"
+          variant="outline"
+          className="h-11"
+          onClick={() => navigate('/safety/incidents')}
+        >
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          form="safety-incident-form"
+          className="h-11"
+          disabled={!canSubmit || submitting}
+        >
+          {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+          Submit
+        </Button>
+      </SafetyStickyActionBar>
     </div>
   );
 }
