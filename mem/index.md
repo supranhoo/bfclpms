@@ -43,3 +43,4 @@ Safety lists: no auto-fetch — Search button triggers query; every table pagina
 - [Multi-month KPI Cycle UX](mem://features/admin/multi-month-kpi-cycle-ux) — Banner contract for showing full cycle months + anchor month in admin KPI dialogs
 - [Monthly Scorecard Trend](mem://features/reports/monthly-scorecard-trend) — Cache-bust + 200-ID submission batch ceiling for the Date-Range trend
 - [Safety Mobile UX](mem://design/safety-mobile-ux) — Mobile primitives, sticky CTA, camera capture, FilterSheet for Safety entry-level users
+- [Identity & Access Console (IAC)](mem://architecture/security/identity-access-console) — Hub-level capability-based RBAC at /admin/iac, replacing per-module role enums

@@ -21,7 +21,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { invalidateProfileCaches } from '@/lib/profileCacheKeys';
-import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus, KeyRound, Copy, Check, Trash2, Package, Calendar, Phone, UserX, UserCheck } from 'lucide-react';
+import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus, KeyRound, Copy, Check, Trash2, Package, Calendar, Phone, UserX, UserCheck, Sparkles } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { SmartAssignmentDialog } from '@/components/admin/SmartAssignmentDialog';
 import { EmployeeWorkingDaysDialog } from '@/components/admin/EmployeeWorkingDaysDialog';
@@ -630,6 +631,18 @@ export default function UserManagement() {
 
   return (
     <div className="space-y-6">
+      <div className="rounded-md border bg-primary/5 px-4 py-3 flex items-start gap-3">
+        <Sparkles className="h-4 w-4 text-primary mt-0.5" />
+        <div className="flex-1 min-w-0 text-sm">
+          <p className="font-medium">New: Identity & Access Console</p>
+          <p className="text-muted-foreground">
+            Manage users, roles, and capabilities across all modules in one place.
+          </p>
+        </div>
+        <Button asChild size="sm" variant="outline">
+          <Link to="/admin/iac">Open Console</Link>
+        </Button>
+      </div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-foreground">User Management</h1>

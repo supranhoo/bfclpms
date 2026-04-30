@@ -54,6 +54,7 @@ const EmployeeDevelopment = lazy(() => import("./pages/admin/EmployeeDevelopment
 const OrgKpiAuditReview = lazy(() => import("./pages/admin/OrgKpiAuditReview"));
 const EmployeeMasterBackfill = lazy(() => import("./pages/admin/EmployeeMasterBackfill"));
 const ModuleHubSettings = lazy(() => import("./pages/admin/ModuleHubSettings"));
+const IdentityAccessConsole = lazy(() => import("./pages/admin/IdentityAccessConsole"));
 
 // Safety module shell + pages
 const SafetyLayout = lazy(() =>
@@ -231,6 +232,11 @@ const App = () => (
                 <Route path="/admin/users" element={
                   <ProtectedRoute allowedRoles={['admin']} menuKey="admin-users">
                     <UserManagement />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/iac" element={
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-users">
+                    <IdentityAccessConsole />
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/kpis" element={

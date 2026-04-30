@@ -1174,6 +1174,170 @@ export type Database = {
         }
         Relationships: []
       }
+      iac_audit_log: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          id: number
+          payload: Json
+          target_id: string | null
+          target_type: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          id?: number
+          payload?: Json
+          target_id?: string | null
+          target_type: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          id?: number
+          payload?: Json
+          target_id?: string | null
+          target_type?: string
+        }
+        Relationships: []
+      }
+      iac_capabilities: {
+        Row: {
+          code: string
+          created_at: string
+          description: string | null
+          is_destructive: boolean
+          label: string
+          module: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          description?: string | null
+          is_destructive?: boolean
+          label: string
+          module: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          description?: string | null
+          is_destructive?: boolean
+          label?: string
+          module?: string
+        }
+        Relationships: []
+      }
+      iac_role_capabilities: {
+        Row: {
+          capability_code: string
+          role_id: string
+        }
+        Insert: {
+          capability_code: string
+          role_id: string
+        }
+        Update: {
+          capability_code?: string
+          role_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "iac_role_capabilities_capability_code_fkey"
+            columns: ["capability_code"]
+            isOneToOne: false
+            referencedRelation: "iac_capabilities"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "iac_role_capabilities_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "iac_roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      iac_roles: {
+        Row: {
+          code: string
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          is_system: boolean
+          module: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_system?: boolean
+          module: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_system?: boolean
+          module?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      iac_user_role_assignments: {
+        Row: {
+          assigned_at: string
+          assigned_by: string | null
+          expires_at: string | null
+          id: string
+          role_id: string
+          scope_id: string | null
+          scope_type: Database["public"]["Enums"]["iac_scope_type"]
+          user_id: string
+        }
+        Insert: {
+          assigned_at?: string
+          assigned_by?: string | null
+          expires_at?: string | null
+          id?: string
+          role_id: string
+          scope_id?: string | null
+          scope_type?: Database["public"]["Enums"]["iac_scope_type"]
+          user_id: string
+        }
+        Update: {
+          assigned_at?: string
+          assigned_by?: string | null
+          expires_at?: string | null
+          id?: string
+          role_id?: string
+          scope_id?: string | null
+          scope_type?: Database["public"]["Enums"]["iac_scope_type"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "iac_user_role_assignments_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "iac_roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       import_field_settings: {
         Row: {
           field_key: string
@@ -7441,6 +7605,15 @@ export type Database = {
         Returns: Database["public"]["Enums"]["app_role"]
       }
       has_any_safety_role: { Args: { _user_id: string }; Returns: boolean }
+      has_capability: {
+        Args: {
+          _capability: string
+          _scope_id?: string
+          _scope_type?: Database["public"]["Enums"]["iac_scope_type"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       has_menu_access_override: {
         Args: { _menu_key: string; _user_id: string }
         Returns: boolean
@@ -7464,6 +7637,15 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      iac_log: {
+        Args: {
+          _action: string
+          _payload?: Json
+          _target_id: string
+          _target_type: string
+        }
+        Returns: undefined
       }
       is_data_owner_for_employee: {
         Args: { p_employee_id: string; p_owner_id: string }
@@ -7613,6 +7795,7 @@ export type Database = {
         | "management"
         | "hr_pms"
         | "skip_level"
+      iac_scope_type: "global" | "company" | "business_unit" | "department"
       kpi_status: "open" | "submitted" | "approved_by_manager" | "locked"
       observation_type: "positive" | "concern" | "neutral"
       pip_milestone_status: "pending" | "met" | "partially_met" | "not_met"
@@ -7862,6 +8045,7 @@ export const Constants = {
         "hr_pms",
         "skip_level",
       ],
+      iac_scope_type: ["global", "company", "business_unit", "department"],
       kpi_status: ["open", "submitted", "approved_by_manager", "locked"],
       observation_type: ["positive", "concern", "neutral"],
       pip_milestone_status: ["pending", "met", "partially_met", "not_met"],
