@@ -1,83 +1,140 @@
+
+# Plan: Mobile-Friendly Safety Module (Entry-Level User Focus)
+
 ## Goal
-Bring the Safety shell UX to parity with the PMS shell so users get the same feel:
-1. **Sidebar collapse trigger** visible in the sidebar header (currently missing — only the floating trigger appears once the sidebar is already collapsed).
-2. **Hub button + Profile + Theme + Notifications moved out of a top header** and into the sidebar (footer + header), so Safety has no separate top app header — exactly like PMS.
+The Safety module currently uses desktop-first patterns (wide tables, fixed paddings, multi-column filter grids, inline action rows). Entry-level users — **Workers**, **Supervisors**, **Safety Officers** — work primarily from phones (shop-floor, site, plant). This plan makes every Safety surface they touch usable one-handed on a 360–414px screen, while keeping the existing desktop behavior intact at `md+`.
 
-Both items are scoped to the Safety shell only. PMS is untouched. Module isolation rules from `mem://architecture/safety/module-shell-isolation` are preserved (no PMS imports).
+## Scope (entry-level user surfaces — priority 1)
+1. `/safety` — Safety Home (KPI tiles, stage/severity, overdue queue)
+2. `/safety/incidents` — list + filters
+3. `/safety/incidents/new` — **Report Incident** (the most-used worker action)
+4. `/safety/incidents/:id` — detail + timeline + stage actions
+5. `/safety/permits` & `/safety/permits/new` — request/approve flow
+6. `/safety/training` — My Training (reader + quiz)
+7. `/safety/emergency` — drill log + contacts
+8. `/safety/audits` — runs list (supervisor view)
 
-### UI Preview (after change)
+Admin surfaces (`/safety/training/admin`, `SafetyUsers`, `SafetyHoursWorked`, `SafetyPermitTypeConfig`, `SafetyAuditTemplates`, `SafetySettings`) stay desktop-first — they are not entry-level workflows. We will only ensure they don't horizontally overflow on a phone.
 
+## Risk & Impact Report
+- **Data Impact:** None. UI/CSS-only.
+- **Workflow Impact:** None. No permission, FSM, or RLS change.
+- **UI/UX Consistency:** Desktop layouts preserved at `md:` breakpoint and above. Mobile gets dedicated card variants.
+- **Regression Risk:** Medium — touches every Safety page shell. Mitigated by:
+  - Reusing the existing `useIsMobile()` hook (single SSOT for breakpoint).
+  - All changes scoped under `src/components/safety/**` and `src/pages/safety/**` — PMS shell untouched (per `mem/architecture/safety/module-shell-isolation`).
+  - New components shipped behind small, additive props (no breaking signature changes on `SafetyDataTable` / `SafetyFilterBar`).
+- **Mitigation:** Add `src/test/safetyMobileLayout.test.tsx` snapshotting card variants at 375px; keep existing `safetyShellIsolation.test.tsx` green.
+
+---
+
+## Design Standards (new memory: `mem://design/safety-mobile-ux`)
+| Rule | Spec |
+|---|---|
+| Breakpoint | `useIsMobile()` < 768px → mobile card variant; ≥ 768 → existing table |
+| Touch target | min 44×44 px on all buttons/links a worker taps (matches `SafetySidebar` floating trigger) |
+| Page padding | `p-3 sm:p-6` everywhere (already in `SafetyLayout`, enforce in pages) |
+| Header H1 | `text-xl sm:text-2xl`, icon `h-5 w-5 sm:h-6 sm:w-6` |
+| Primary CTA | Sticky bottom bar on mobile (`fixed bottom-0 inset-x-0 p-3 border-t bg-background z-40`) for "Report Incident", "Submit", "Request Permit" |
+| Filter bar | Collapse to a single-column accordion on mobile; "Filters" trigger shows active-count badge |
+| List rows | `<table>` replaced by stacked `<Card>` on mobile (number, title, severity chip, SLA chip, status, tap → detail) |
+| Forms | All inputs full-width, label above; Select uses native sheet on mobile via existing Radix |
+| File upload | Big tappable drop-zone, camera capture hint (`accept="image/*" capture="environment"`) for incident evidence |
+| Sidebar | Already mobile-OK (off-canvas via `Sheet`, floating trigger, `min-h-[44px]`) — no change |
+
+---
+
+## Implementation Steps
+
+### Step 1 — Shared mobile primitives (new files)
+- **`src/components/safety/SafetyMobileListCard.tsx`** — Stacked card row used by Incidents/Permits/Audits/Drills lists. Props: `title`, `subtitle`, `meta` slots, `badges`, `onClick`. Mirrors `MobileSelfReviewCard.tsx` styling so PMS and Safety feel like one product.
+- **`src/components/safety/SafetyResponsiveList.tsx`** — Wrapper that picks `<Table>` (children) on `md+` and renders `SafetyMobileListCard[]` (via a `mobileItems` render-prop) on mobile. Replaces ad-hoc `useIsMobile` branching across pages.
+- **`src/components/safety/SafetyStickyActionBar.tsx`** — `fixed bottom-0` bar shown only on mobile. Used by `SafetyIncidentNew`, `SafetyPermitNew`, `SafetyIncidentDetail` (stage actions).
+- **`src/components/safety/SafetyFilterSheet.tsx`** — Mobile variant of `SafetyFilterBar`: collapses filters into a `<Sheet>` triggered by a "Filters (n)" button. Desktop keeps the existing inline grid.
+
+### Step 2 — Update `SafetyFilterBar`
+- Add `mobileCollapsed?: boolean` (default true). When true and `useIsMobile()`, render trigger button + Sheet; otherwise render current inline form.
+- Shows badge with count of non-default filters.
+
+### Step 3 — Update `SafetyDataTable`
+- Add optional `mobileRender?: (row) => ReactNode` + `rows` prop.
+- When mobile and `mobileRender` provided, render a `<div className="divide-y">` of `SafetyMobileListCard`s instead of the `<Table>` children.
+- Pagination footer becomes a sticky compact strip on mobile (Prev / `Page X/Y` / Next; rows-per-page hidden on mobile, defaults to 25).
+
+### Step 4 — Page-by-page adoption (entry-level surfaces)
+For each page below: replace the inline table block with `SafetyResponsiveList` and pass a `mobileRender` returning `SafetyMobileListCard`. Move primary CTA into `SafetyStickyActionBar` on mobile.
+
+- `SafetyHome.tsx`
+  - KPI grid already `grid-cols-2 lg:grid-cols-4` ✅
+  - "By Stage" rows: shrink label to `w-24` on mobile, hide `pct` bar label
+  - "Overdue" / "Recent" rows: stack `SafetyStatusBadge` + `SlaBadge` under title on mobile
+  - Move "Report Incident" header button into a sticky bottom CTA on mobile
+
+- `SafetyIncidents.tsx`
+  - Filters → `SafetyFilterSheet`
+  - Table → mobile cards: `#number` + title (line-1), `type · severity · location` (line-2), `<StatusBadge> <SlaBadge>` (line-3)
+  - Sticky "Report Incident" bottom CTA
+
+- `SafetyIncidentNew.tsx`
+  - Stack form fields full-width; Type & Severity selects become 1-col on mobile
+  - Evidence upload: large drop-zone with `capture="environment"` so Android/iOS open camera
+  - Submit → sticky bottom bar; show offline badge inline above bar when `!isOnline`
+
+- `SafetyIncidentDetail.tsx`
+  - Two-column desktop layout collapses to single column; Timeline becomes vertical card stack
+  - `StageActionPanel` actions move into sticky bottom bar on mobile
+
+- `SafetyPermits.tsx`, `SafetyPermitNew.tsx`, `SafetyPermitDetail.tsx`
+  - Same pattern: cards on mobile, sticky CTA, single-column form
+
+- `SafetyTraining.tsx`
+  - Assignment list → tappable cards (already cardish; tighten paddings)
+  - Reader: progress bar sticky-top on mobile; "I have read" button sticky-bottom
+  - Quiz: one question per screen on mobile (stepper), submit sticky-bottom
+
+- `SafetyEmergency.tsx`, `SafetyEmergencyContacts.tsx`
+  - Contacts: tap-to-call (`<a href="tel:...">`) cards on mobile
+  - Drill log: cards instead of table
+
+- `SafetyAudits.tsx`
+  - Cards on mobile; supervisor "Start Run" sticky CTA
+
+### Step 5 — `SafetyLayout` polish
+Already good after the last sidebar refactor. Two small fixes:
+- Add `pb-24 md:pb-0` to `<main>` so sticky bottom bars don't cover content
+- Ensure floating `SidebarTrigger` has `safe-area-inset-top` padding for iOS notch
+
+### Step 6 — Tests & docs
+- New `src/test/safetyMobileLayout.test.tsx` — renders `SafetyResponsiveList` at 375px, asserts cards present and `<Table>` not rendered; at 1024px asserts the inverse.
+- Update `src/test/safetyShellIsolation.test.tsx` — assert sticky CTA bars render only inside `data-testid="safety-shell"`.
+- Update `DOCUMENTATION.md` (Safety section) and add `mem/design/safety-mobile-ux.md`.
+- Bump version: `v2.66.7.49 — Safety mobile-friendly entry-level UX`.
+
+---
+
+## ASCII Layout Reference
 ```text
-┌─────────────────────────┬──────────────────────────────────────────────┐
-│ [🛡] Safety       [⇤]  │                                              │
-│     BFCL                │                                              │
-├─────────────────────────┤                                              │
-│ Safety                  │                                              │
-│ 🏠 Safety Home          │           Safety Dashboard                   │
-│ ⚠  Incidents            │           Live incident posture …            │
-│ 📝 Permits to Work      │                                              │
-│ 🔧 Assets & Calibration │   ┌──────────┐ ┌──────────┐ ┌──────────┐    │
-│ ✅ Audits & Compliance  │   │  Open    │ │ Overdue  │ │ At Risk  │    │
-│ 🚨 Emergency Response   │   │   0      │ │   0      │ │   0      │    │
-│ 🎓 My Training          │   └──────────┘ └──────────┘ └──────────┘    │
-│ 📖 Training Admin       │                                              │
-│ 📊 Analytics            │                                              │
-│ … (other items)         │                                              │
-│ ⚙  Settings             │                                              │
-├─────────────────────────┤                                              │
-│ ← Back to Hub      [🌙] │                                              │
-│ ┌─────────────────────┐ │                                              │
-│ │ [AC] Ankit C.    [⎋]│ │                                              │
-│ │      Safety         │ │                                              │
-│ └─────────────────────┘ │                                              │
-└─────────────────────────┴──────────────────────────────────────────────┘
+Mobile (< 768px) — Incidents list           Desktop (≥ 768px)
+┌────────────────────────────┐             ┌──────────────────────────────────────┐
+│ ☰  Safety                  │             │ │Sidebar│  Safety Incidents          │
+│ Safety Incidents           │             │ │       │  ┌Filters───────────────┐  │
+│ [Filters (2)]              │             │ │       │  │ Status │ Sev │ Type  │  │
+│ ┌────────────────────────┐ │             │ │       │  └──────────────────────┘  │
+│ │ INC-104 · Slip in shop │ │             │ │       │  ┌────Table────────────┐   │
+│ │ Near miss · High · Bay3│ │             │ │       │  │ # │ Title │ Sev │…  │   │
+│ │ [Investigation] [Amber]│ │             │ │       │  └─────────────────────┘   │
+│ └────────────────────────┘ │             │ │       │                            │
+│ … more cards …             │             └──────────────────────────────────────┘
+│                            │
+│ ──────────────────────────│
+│ [+ Report Incident] (CTA) │  ← sticky
+└────────────────────────────┘
 ```
 
-Key changes vs current Safety UI in screenshot:
-- Top "Safety / BFCL / Hub / 🔔 / 🌓 / Avatar" bar **removed**.
-- Sidebar header gets a **collapse `[⇤]` button** (matching PMS).
-- Sidebar footer gets the **profile card + sign-out + theme + Back-to-Hub** (matching PMS layout exactly).
-- Notification bell moves into the sidebar footer (small icon row) so Safety alerts are still 1-click reachable.
-- Offline badge moves to the sidebar footer row alongside notifications.
+## Files Touched (summary)
+**New:** `SafetyMobileListCard.tsx`, `SafetyResponsiveList.tsx`, `SafetyStickyActionBar.tsx`, `SafetyFilterSheet.tsx`, `safetyMobileLayout.test.tsx`, `mem/design/safety-mobile-ux.md`
+**Edited:** `SafetyFilterBar.tsx`, `SafetyDataTable.tsx`, `SafetyLayout.tsx`, all 8 entry-level pages listed above, `safetyShellIsolation.test.tsx`, `DOCUMENTATION.md`, `mem/index.md`
 
-### Files to change
+**Out of scope (this round):** Admin pages (Users, Hours Worked, Permit Types, Audit Templates, Training Admin, Settings) — only safe overflow fixes.
 
-1. **`src/components/safety/SafetySidebar.tsx`**
-   - Add `<SidebarHeader>` with Safety logo (red shield), title "Safety", subtitle = `appSettings.organization_name`, and a `<SidebarTrigger>` on the right (mirrors `AppSidebar` lines 221-238).
-   - Add `<SidebarFooter>` containing:
-     - Row 1: `Back to Hub` button (left) + `<ThemeToggle />` (right).
-     - Row 2: Small icon row — `<SafetyNotificationBell />` + `<SafetyOfflineBadge />`.
-     - Row 3: Profile card — avatar (destructive-toned fallback), full name, role label "Safety", sign-out icon button (mirrors `AppSidebar` lines 387-415).
-   - Use `useAuth()` for `profile` + `signOut`, `useAppSettings()` for org name, `useNavigate()` for Hub/Sign-out routing.
-
-2. **`src/components/safety/SafetyLayout.tsx`**
-   - Remove `<SafetyHeader />` from `<SafetyContent />` so the main pane starts at the top with no header bar (matches PMS `DashboardLayout`).
-   - Keep the existing floating `<SidebarTrigger>` shown only when the sidebar is collapsed (already implemented, identical to PMS).
-
-3. **`src/components/safety/SafetyHeader.tsx`** — keep file (no longer imported anywhere) but mark as deprecated via a top-of-file comment, OR delete it. **Recommendation:** delete to avoid dead code drift. Confirm no other importers via `rg "SafetyHeader"` before deletion.
-
-4. **`src/test/safetyShellIsolation.test.tsx`**
-   - Update the "do NOT import PMS chrome" assertion to also cover the new sidebar footer (no behavioural change).
-   - If `SafetyHeader.tsx` is deleted, remove the `headerSrc` import from the test.
-
-5. **`mem/architecture/safety/module-shell-isolation.md`**
-   - Update note: the Safety shell now mirrors the PMS shell pattern (header chrome lives inside the sidebar; no separate top app header). Forbidden-imports rule is unchanged.
-
-6. **`DOCUMENTATION.md`** — add a short note under the Safety section: "Safety shell UI mirrors PMS — sidebar-only chrome, no top header."
-
-7. **`POLICY.md`** — no policy change (purely UX parity).
-
-### Risk & Impact
-
-- **Data Impact:** None. No schema, RLS, or query changes.
-- **Workflow Impact:** None. Routes, RBAC gates (`SafetyModuleRoute`), and notification logic all unchanged — only the location of the bell/avatar moves.
-- **UI/UX Consistency:** Improves parity with PMS; removes the user-reported divergence.
-- **Regression Risk:** Low.
-  - `SafetyOfflineBadge` and `SafetyNotificationBell` already render fine inline; moving them into the sidebar footer doesn't change their hooks.
-  - Mobile: sidebar collapses to sheet — profile/notifications are reachable inside the sheet, identical to PMS pattern.
-- **Mitigation:**
-  - Keep the existing `safetyShellIsolation` test green (forbidden-imports unchanged).
-  - Smoke render `SafetySidebar` inside `MemoryRouter + QueryClientProvider` in the test to confirm no throw.
-  - Manually verify on the preview: collapse trigger, sign-out, theme toggle, Hub navigation, notification bell open.
-
-Approve to proceed.
+Approve to proceed?
