@@ -1,75 +1,70 @@
-# Plan: Show Total Weightage in "Performance by Category" Title
+## Problem (Root Cause)
 
-## Goal
-Append the sum of all included KPI weightages (for the selected period) to the "Performance by Category" card title, e.g.:
+The badge currently reads `scoreData.totalWeight`, which inside `UnifiedScorecard.tsx` (lines 575–627) only accumulates weight for KPIs that have a **submission, are not N/A, and have a non-null score**:
 
-- `Performance by Category (100%)` — when all KPIs are scored
-- `Performance by Category (98%)` — when some KPIs are N/A / excluded
-
-This makes it instantly visible whether the scorecard reflects the full weight allocation for the month, or whether some weight is missing (N/A / unscored KPIs).
-
-## Where
-File: `src/components/review/UnifiedScorecard.tsx` (around line 1546)
-
-The `scoreData.categoryScores` array already exposes a `weightage` per category, and `scoreData.totalWeight` exists. We will reuse `totalWeight` directly — it represents the effective sum of weightages used in the weighted score calculation (already excludes N/A per the N/A Status Governance memory).
-
-## Changes
-
-### 1. UnifiedScorecard.tsx — Title update
-Replace:
-```tsx
-<CardTitle className="text-sm">Performance by Category</CardTitle>
+```ts
+if (submission && !submission.is_na) {
+  const score = getRelevantScore(submission, kpi.status);
+  if (score !== null && weight > 0) {
+    totalWeight += weight;   // ← only scored KPIs counted
+  }
+}
 ```
-with:
-```tsx
-<CardTitle className="text-sm flex items-center gap-2">
-  Performance by Category
-  <span className={cn(
-    "text-xs font-medium px-1.5 py-0.5 rounded",
-    totalWeightPct === 100
-      ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
-      : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
-  )}>
-    ({totalWeightPct}%)
-  </span>
-</CardTitle>
+
+So when KPIs are assigned but not yet scored (typical at the start of a month), the badge shows **0%** even though 100% weightage is assigned. This contradicts the requirement.
+
+## Requirement Restated
+
+The badge must reflect the **total weightage of all KPIs assigned in the month** (a sanity check that admins/KRA setup sums to 100%) — independent of whether scores have been entered. Goal: confirm the KRA mapping is complete.
+
+## Fix
+
+In `src/components/review/UnifiedScorecard.tsx`:
+
+1. Compute a new field `assignedWeight` inside the `scoreData` useMemo that sums `kpi.weightage` for **every** KPI in `displayKpis` (skipping only those flagged `is_na = true`, since N/A KPIs are excluded from the 100% target per existing N/A Status Governance policy).
+2. Return it alongside `totalWeight`.
+3. Change the badge to read `Math.round(scoreData.assignedWeight)` instead of `scoreData.totalWeight`.
+4. Update the tooltip wording: "Total weightage of all assigned KPIs this period. Should equal 100%. N/A KPIs are excluded."
+5. Color rule unchanged: green at exactly 100, amber otherwise.
+
+### Pseudocode change
+
+```ts
+let assignedWeight = 0;
+displayKpis.forEach(kpi => {
+  const submission = submissionMap.get(kpi.id);
+  const isNA = submission?.is_na === true;
+  if (!isNA) assignedWeight += (kpi.weightage || 0);
+  // …existing scored-weight logic stays for overall rating calc
+});
+return { …, assignedWeight };
 ```
-Where `totalWeightPct = Math.round(scoreData.totalWeight)`.
 
-If `totalWeight < 100`, the amber pill signals to reviewers that some KPI weight is excluded (N/A or unscored). A tooltip on hover will say:
-> "Total weightage of KPIs included in this scorecard. < 100% means some KPIs are N/A or unscored."
+```tsx
+({Math.round(scoreData.assignedWeight)}%)
+```
 
-### 2. Description update (optional clarity)
-Keep description as-is, OR enhance to:
-> "Score breakdown across KRA categories — `{totalWeightPct}%` of total weightage included"
+## Why keep `totalWeight` separate
 
-I recommend keeping the badge in the title only, to avoid repetition.
+`totalWeight` is still required for the **overall rating** denominator (weighted average of scored KPIs). We only change what the **badge** displays — the rating math is untouched, preventing regression.
 
-## Edge Cases
-- **All N/A**: `totalWeight = 0` → show `(0%)` in amber, chart already shows empty state.
-- **Multi-month aggregation (YTD/QTD)**: `totalWeight` is computed from filtered KPIs in scope; same logic applies. No special handling needed.
-- **Rounding**: Use `Math.round()` so values like 99.7 display as `100%`. If precision matters we can switch to `toFixed(1)` — please confirm preference (default: rounded integer).
+## Tests
+
+Update `src/test/scorecard/categoryWeightageBadge.test.tsx`:
+- 3 KPIs, weights 40/30/30, none scored → badge **100%** (green).
+- 3 KPIs, weights 40/30/30, one marked `is_na` → badge **70%** (amber).
+- Weights 40/30/20 (gap of 10), none scored → badge **90%** (amber).
+- Weights 50/50, both scored → badge still **100%** (green).
 
 ## Risk & Impact
 
-| Area | Impact |
-|------|--------|
-| Data | None — pure UI, reuses existing `scoreData.totalWeight` |
-| Workflow | None |
-| UI/UX | Minor additive change, single Card title; no layout shift |
-| RLS / Security | Not affected |
-| Regression | Very low — title-only change in `UnifiedScorecard` |
+- **Data Impact:** None — purely a UI calculation change.
+- **Workflow Impact:** None.
+- **UI/UX:** Badge now correctly reflects assignment completeness; admins will immediately see KRA mapping gaps.
+- **Regression Risk:** Low. Overall rating uses unchanged `totalWeight`; only the badge value/tooltip changes.
+- **Mitigation:** Updated unit tests cover scored / unscored / N/A / partial-weight cases.
 
-## Tests
-Add `src/test/scorecard/categoryWeightageBadge.test.tsx`:
-- Renders `(100%)` with green pill when all KPIs weighted 100.
-- Renders `(98%)` with amber pill when one KPI is N/A (2% weight excluded).
-- Renders `(0%)` when all KPIs are N/A.
+## Files to Edit
 
-## Files Edited
-- `src/components/review/UnifiedScorecard.tsx`
-- `src/test/scorecard/categoryWeightageBadge.test.tsx` (new)
-- `mem/features/review/unified-scorecard-component` (note the badge convention)
-
-## Out of Scope
-- The `PerformanceReport.tsx` page also has a "Performance by Category" card (line 197). Confirm if you want the same badge there too — not included by default. Let me know and I'll extend.
+- `src/components/review/UnifiedScorecard.tsx` — add `assignedWeight`, swap badge source, update tooltip.
+- `src/test/scorecard/categoryWeightageBadge.test.tsx` — replace existing assertions with the four cases above.
