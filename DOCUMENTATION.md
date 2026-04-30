@@ -5862,3 +5862,27 @@ employees" with every monthly cell blank ("—").
 - `src/test/monthlyTrendCacheBust.test.ts` (new)
 - `mem/features/reports/monthly-scorecard-trend.md` (new)
 - `POLICY.md` (+§114), `DOCUMENTATION.md` (this entry), `mem/index.md` (+entry)
+
+## v2026-04-30 — Monthly Trend report: Reporting Manager column
+
+**Change:** Added a "Reporting Manager" column to the Monthly Scorecard
+Date Range (Trend) report, visible in both the on-screen table and the
+Excel export. Format is `Name(Code)` (e.g. `Jaspal(101125)`); falls back
+to `Name` alone when no employee_code, and `—` / blank when no manager.
+
+**Implementation:**
+- `useMonthlyTrend` now selects `reporting_manager_id` on profiles,
+  batch-fetches `id, full_name, employee_code` for the deduped manager
+  set via `.in()`, and exposes `reportingManagerName` on each row.
+- Manager fetch is wrapped in try/catch — failures degrade to `null`
+  rather than blocking the report.
+- `MonthlyTrendTable` adds the column right after Department.
+- `MonthlyTrendView` includes "Reporting Manager" in the Excel export
+  and the client-side search filter.
+
+**Files:**
+- `src/hooks/useMonthlyTrend.ts`
+- `src/components/reports/MonthlyTrendTable.tsx`
+- `src/components/reports/MonthlyTrendView.tsx`
+- `src/test/monthlyTrendCacheBust.test.ts` (extended)
+- `mem/features/reports/monthly-scorecard-trend.md` (extended)
