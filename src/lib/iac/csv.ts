@@ -13,9 +13,9 @@ function escapeCell(v: unknown): string {
   return s;
 }
 
-export function serializeCsv<T extends Record<string, unknown>>(rows: T[], headers: (keyof T)[]): string {
+export function serializeCsv<T>(rows: T[], headers: (keyof T)[]): string {
   const head = headers.map((h) => escapeCell(String(h))).join(',');
-  const body = rows.map((r) => headers.map((h) => escapeCell(r[h])).join(',')).join('\r\n');
+  const body = rows.map((r) => headers.map((h) => escapeCell((r as Record<string, unknown>)[h as string])).join(',')).join('\r\n');
   return rows.length ? `${head}\r\n${body}\r\n` : `${head}\r\n`;
 }
 
