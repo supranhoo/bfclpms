@@ -34,7 +34,8 @@ import {
   useApplyBulk,
 } from '@/hooks/useIac';
 import { Loader2, Search, Shield, Trash2, UserPlus, FileSpreadsheet, ListTree, Users, History, Layers } from 'lucide-react';
-import type { IacBulkAssignmentRow, IacPerson } from '@/services/iac/types';
+import type { IacBulkAssignmentRow } from '@/services/iac/types';
+import type { IacPerson } from '@/services/iac/iacService';
 
 /**
  * Identity & Access Console
