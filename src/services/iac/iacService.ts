@@ -313,14 +313,23 @@ export async function exportAssignments(): Promise<IacBulkExportRow[]> {
 
   const userIds = Array.from(new Set(all.map((a) => a.user_id)));
   const roleIds = Array.from(new Set(all.map((a) => a.role_id)));
-  const [profilesRes, rolesRes] = await Promise.all([
-    supabase.from('profiles').select('id, email').in('id', userIds),
-    supabase.from('iac_roles').select('id, code').in('id', roleIds),
-  ]);
-  if (profilesRes.error) throw profilesRes.error;
-  if (rolesRes.error) throw rolesRes.error;
-  const emailById = new Map((profilesRes.data ?? []).map((p) => [p.id as string, String(p.email)]));
-  const codeById = new Map((rolesRes.data ?? []).map((r) => [r.id as string, r.code as string]));
+  // Chunked .in() lookups — large IN lists exceed PostgREST's URL limit
+  // and return HTTP 400. 200 UUIDs per batch keeps URLs comfortably small.
+  const CHUNK = 200;
+  const emailById = new Map<string, string>();
+  for (let i = 0; i < userIds.length; i += CHUNK) {
+    const slice = userIds.slice(i, i + CHUNK);
+    const { data, error } = await supabase.from('profiles').select('id, email').in('id', slice);
+    if (error) throw error;
+    (data ?? []).forEach((p) => emailById.set(p.id as string, String(p.email)));
+  }
+  const codeById = new Map<string, string>();
+  for (let i = 0; i < roleIds.length; i += CHUNK) {
+    const slice = roleIds.slice(i, i + CHUNK);
+    const { data, error } = await supabase.from('iac_roles').select('id, code').in('id', slice);
+    if (error) throw error;
+    (data ?? []).forEach((r) => codeById.set(r.id as string, r.code as string));
+  }
 
   return all.map((a) => ({
     email: emailById.get(a.user_id) ?? '',
