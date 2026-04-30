@@ -66,4 +66,23 @@ describe('Performance by Category weightage badge', () => {
     expect(badgeLabel(99.7)).toBe('(100%)');
     expect(badgeTone(99.7)).toBe('green');
   });
+
+  it('uses full KPI list even when status filter hides some KPIs', () => {
+    // All KPIs in the period (unfiltered)
+    const allKpis: KpiLite[] = [
+      { weightage: 40 },
+      { weightage: 30 },
+      { weightage: 30 },
+    ];
+    // Filtered subset (e.g. only 2 match the status filter)
+    const filteredKpis: KpiLite[] = [
+      { weightage: 40 },
+      { weightage: 30 },
+    ];
+    // Badge must use ALL KPIs, not the filtered subset
+    expect(badgeLabel(assignedWeight(allKpis))).toBe('(100%)');
+    expect(badgeTone(assignedWeight(allKpis))).toBe('green');
+    // The filtered subset alone would be 70%, which is wrong for the badge
+    expect(badgeLabel(assignedWeight(filteredKpis))).toBe('(70%)');
+  });
 });
