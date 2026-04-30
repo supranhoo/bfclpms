@@ -1,40 +1,83 @@
-## Add Reporting Manager Column (with Employee Code) to Monthly Trend Report
+## Goal
+Bring the Safety shell UX to parity with the PMS shell so users get the same feel:
+1. **Sidebar collapse trigger** visible in the sidebar header (currently missing — only the floating trigger appears once the sidebar is already collapsed).
+2. **Hub button + Profile + Theme + Notifications moved out of a top header** and into the sidebar (footer + header), so Safety has no separate top app header — exactly like PMS.
 
-### Goal
-Add a "Reporting Manager" column to the Monthly Scorecard (Date Range/Trend) report — visible in the on-screen table and the Excel export — positioned right after the Department column. Manager renders as `FullName(EmployeeCode)`, e.g. `Jaspal(101125)`.
+Both items are scoped to the Safety shell only. PMS is untouched. Module isolation rules from `mem://architecture/safety/module-shell-isolation` are preserved (no PMS imports).
 
-### Format Rules
-- Manager with code: `Jaspal(101125)`
-- Manager without code: `Jaspal`
-- No manager assigned: `—` on screen, blank in Excel
+### UI Preview (after change)
 
-### Files to Change
+```text
+┌─────────────────────────┬──────────────────────────────────────────────┐
+│ [🛡] Safety       [⇤]  │                                              │
+│     BFCL                │                                              │
+├─────────────────────────┤                                              │
+│ Safety                  │                                              │
+│ 🏠 Safety Home          │           Safety Dashboard                   │
+│ ⚠  Incidents            │           Live incident posture …            │
+│ 📝 Permits to Work      │                                              │
+│ 🔧 Assets & Calibration │   ┌──────────┐ ┌──────────┐ ┌──────────┐    │
+│ ✅ Audits & Compliance  │   │  Open    │ │ Overdue  │ │ At Risk  │    │
+│ 🚨 Emergency Response   │   │   0      │ │   0      │ │   0      │    │
+│ 🎓 My Training          │   └──────────┘ └──────────┘ └──────────┘    │
+│ 📖 Training Admin       │                                              │
+│ 📊 Analytics            │                                              │
+│ … (other items)         │                                              │
+│ ⚙  Settings             │                                              │
+├─────────────────────────┤                                              │
+│ ← Back to Hub      [🌙] │                                              │
+│ ┌─────────────────────┐ │                                              │
+│ │ [AC] Ankit C.    [⎋]│ │                                              │
+│ │      Safety         │ │                                              │
+│ └─────────────────────┘ │                                              │
+└─────────────────────────┴──────────────────────────────────────────────┘
+```
 
-1. **`src/hooks/useMonthlyTrend.ts`**
-   - Add `reportingManagerName: string | null` to `TrendEmployee`.
-   - Include `reporting_manager_id` in the profiles `select`.
-   - After profile fetch, dedupe non-null `reporting_manager_id`s and batch-fetch via `.in('id', uniqueManagerIds)` selecting `id, full_name, employee_code`.
-   - Format helper: `code ? \`${name}(${code})\` : name`.
-   - Map onto each employee row; wrap in try/catch — fall back to `null` on failure.
+Key changes vs current Safety UI in screenshot:
+- Top "Safety / BFCL / Hub / 🔔 / 🌓 / Avatar" bar **removed**.
+- Sidebar header gets a **collapse `[⇤]` button** (matching PMS).
+- Sidebar footer gets the **profile card + sign-out + theme + Back-to-Hub** (matching PMS layout exactly).
+- Notification bell moves into the sidebar footer (small icon row) so Safety alerts are still 1-click reachable.
+- Offline badge moves to the sidebar footer row alongside notifications.
 
-2. **`src/components/reports/MonthlyTrendTable.tsx`**
-   - Add `<TableHead>Reporting Manager</TableHead>` after Department.
-   - Add `<TableCell className="text-sm">{emp.reportingManagerName || '—'}</TableCell>`.
+### Files to change
 
-3. **`src/components/reports/MonthlyTrendView.tsx`**
-   - Insert `'Reporting Manager': emp.reportingManagerName ?? ''` after Department in the export row mapper.
-   - Extend search filter to also match manager string.
+1. **`src/components/safety/SafetySidebar.tsx`**
+   - Add `<SidebarHeader>` with Safety logo (red shield), title "Safety", subtitle = `appSettings.organization_name`, and a `<SidebarTrigger>` on the right (mirrors `AppSidebar` lines 221-238).
+   - Add `<SidebarFooter>` containing:
+     - Row 1: `Back to Hub` button (left) + `<ThemeToggle />` (right).
+     - Row 2: Small icon row — `<SafetyNotificationBell />` + `<SafetyOfflineBadge />`.
+     - Row 3: Profile card — avatar (destructive-toned fallback), full name, role label "Safety", sign-out icon button (mirrors `AppSidebar` lines 387-415).
+   - Use `useAuth()` for `profile` + `signOut`, `useAppSettings()` for org name, `useNavigate()` for Hub/Sign-out routing.
 
-4. **`src/test/monthlyTrendCacheBust.test.ts`**
-   - Assert `reportingManagerName` exists on `TrendEmployee` and that the format `${name}(${code})` is built in the hook.
+2. **`src/components/safety/SafetyLayout.tsx`**
+   - Remove `<SafetyHeader />` from `<SafetyContent />` so the main pane starts at the top with no header bar (matches PMS `DashboardLayout`).
+   - Keep the existing floating `<SidebarTrigger>` shown only when the sidebar is collapsed (already implemented, identical to PMS).
 
-5. **Documentation sync (SSOT)**
-   - `mem/features/reports/monthly-scorecard-trend.md` — note `Name(Code)` format + batched manager fetch.
-   - `DOCUMENTATION.md` — add Reporting Manager to the Monthly Trend column list.
+3. **`src/components/safety/SafetyHeader.tsx`** — keep file (no longer imported anywhere) but mark as deprecated via a top-of-file comment, OR delete it. **Recommendation:** delete to avoid dead code drift. Confirm no other importers via `rg "SafetyHeader"` before deletion.
+
+4. **`src/test/safetyShellIsolation.test.tsx`**
+   - Update the "do NOT import PMS chrome" assertion to also cover the new sidebar footer (no behavioural change).
+   - If `SafetyHeader.tsx` is deleted, remove the `headerSrc` import from the test.
+
+5. **`mem/architecture/safety/module-shell-isolation.md`**
+   - Update note: the Safety shell now mirrors the PMS shell pattern (header chrome lives inside the sidebar; no separate top app header). Forbidden-imports rule is unchanged.
+
+6. **`DOCUMENTATION.md`** — add a short note under the Safety section: "Safety shell UI mirrors PMS — sidebar-only chrome, no top header."
+
+7. **`POLICY.md`** — no policy change (purely UX parity).
 
 ### Risk & Impact
-- **Data**: Read-only `.in('id', [...])` lookup on existing FK — exempt from `fetchAllPaged` per profiles-query-policy.
-- **Workflow**: Additive only.
-- **UI**: One extra column; horizontal scroll already enabled.
-- **Regression**: Low — manager fetch isolated in try/catch; failure shows `—`.
-- **Performance**: One extra query (~<200 unique managers, well under 1000 cap).
+
+- **Data Impact:** None. No schema, RLS, or query changes.
+- **Workflow Impact:** None. Routes, RBAC gates (`SafetyModuleRoute`), and notification logic all unchanged — only the location of the bell/avatar moves.
+- **UI/UX Consistency:** Improves parity with PMS; removes the user-reported divergence.
+- **Regression Risk:** Low.
+  - `SafetyOfflineBadge` and `SafetyNotificationBell` already render fine inline; moving them into the sidebar footer doesn't change their hooks.
+  - Mobile: sidebar collapses to sheet — profile/notifications are reachable inside the sheet, identical to PMS pattern.
+- **Mitigation:**
+  - Keep the existing `safetyShellIsolation` test green (forbidden-imports unchanged).
+  - Smoke render `SafetySidebar` inside `MemoryRouter + QueryClientProvider` in the test to confirm no throw.
+  - Manually verify on the preview: collapse trigger, sign-out, theme toggle, Hub navigation, notification bell open.
+
+Approve to proceed.
