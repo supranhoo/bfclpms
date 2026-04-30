@@ -49,4 +49,17 @@ describe('Monthly Scorecard trend cache-bust', () => {
     const src = read('src/hooks/useMonthlyTrend.ts');
     expect(src).toMatch(/throw r\.error/);
   });
+
+  it('useMonthlyTrend exposes reporting manager formatted as Name(Code)', () => {
+    const hook = read('src/hooks/useMonthlyTrend.ts');
+    expect(hook).toMatch(/reportingManagerName:\s*string\s*\|\s*null/);
+    expect(hook).toMatch(/reporting_manager_id/);
+    // Format: code ? `${name}(${code})` : name
+    expect(hook).toMatch(/\$\{name\}\(\$\{code\}\)/);
+  });
+
+  it('Monthly Trend export includes Reporting Manager column', () => {
+    const view = read('src/components/reports/MonthlyTrendView.tsx');
+    expect(view).toMatch(/'Reporting Manager':\s*emp\.reportingManagerName/);
+  });
 });
