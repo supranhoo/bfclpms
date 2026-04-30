@@ -1,104 +1,106 @@
 
-# Long-term Identity & Access Architecture
-
-## Problem
-User & Role Management is split across PMS (`/admin/users`, 1.5k LOC) and Safety (`/safety/settings/users`), each with its own enum (`app_role`, `safety_app_role`) and ad-hoc grant table. Adding HRMS/LMS would multiply enums, screens, RLS variants, and audit gaps. Admins have no single place to see "who can do what" across the Hub.
-
-## Target Architecture: Hub-level Identity & Access Console (IAC)
-
-One console at **`/hub/admin/iac`** owns the full identity lifecycle. Modules stop owning user CRUD; they only declare their capabilities into a central catalog. Permissions become composable bundles ("Roles") of capabilities — never hardcoded enums.
-
-```text
-                       ┌─────────────────────────────┐
-                       │   Hub: Identity & Access    │
-                       │   (single console, tabs)    │
-                       └──────────────┬──────────────┘
-                                      │
-        ┌─────────────────────────────┼─────────────────────────────┐
-        ▼                             ▼                             ▼
-   People (profiles)         Roles (bundles of caps)        Capability Catalog
-   - identity                - per-module                   - declared by each
-   - employment              - cloneable                      module at build
-   - status                  - org-scoped                   - immutable codes
-        │                             │                             │
-        └──────────────┬──────────────┘                             │
-                       ▼                                            │
-              user_role_assignments  ◀───────────────────────────────┘
-              (user × role × scope)            role_capabilities
-                       │
-                       ▼
-              has_capability(uid, 'safety.incident.create', scope) ──► RLS / UI guards
-```
-
-### Core principles
-1. **Capabilities, not enums.** Every gated action gets a stable code like `safety.incident.create`, `pms.review.approve`, `hub.iac.manage`. Modules register their own; the catalog is the SSOT.
-2. **Roles are data, not code.** A role is a row + a set of capability rows. Admins can create/clone/edit roles without a deploy. Seed roles (Safety Admin, Manager, Worker, PMS Admin, etc.) are migrations but editable.
-3. **Scope is first-class.** Every assignment carries an optional scope (module, business_unit, department, company). One uniform `has_capability(user, cap, scope)` SQL function powers all RLS.
-4. **Module access derives from capabilities.** No more `safety_module_access` table — if a user holds any capability tagged to module `safety`, they see the Hub card. PMS admins get all modules via a `*` capability.
-5. **Single console, tabbed.** Hub admins see all tabs. Module admins (e.g. Safety Admin) see only the tabs their capability allows.
-
-## Phase 1 — Console + Catalog (ships first)
-
-### DB (migration)
-- `capabilities (code PK, module, label, description, is_destructive)` — seeded with current PMS + Safety actions.
-- `roles (id, code, name, module, description, is_system, is_active)` — seeded with today's enum values for parity.
-- `role_capabilities (role_id, capability_code)`.
-- `user_role_assignments (id, user_id, role_id, scope_type, scope_id, assigned_by, assigned_at, expires_at)` — replaces `user_roles` and `safety_user_roles` over time. Scope_type ∈ `global | company | business_unit | department`.
-- SQL: `has_capability(_uid, _cap, _scope_type, _scope_id) returns bool` SECURITY DEFINER. Used everywhere `has_role(...)` is used today.
-- Compatibility shims: keep `has_role()` and `safety` helpers as thin wrappers that resolve through the new tables, so existing 100+ RLS policies don't move in v1.
-
-### UI — `/hub/admin/iac`
-Tabs (visibility filtered by capability):
-1. **People** — searchable directory; click → drawer with Identity, Employment, Module Access, Roles, Audit Trail.
-2. **Roles** — list per module, with capability checklist editor, "Clone role", "Compare roles" diff view.
-3. **Capabilities** — read-only catalog (developer reference) with usage count.
-4. **Bulk Operations** — CSV import/export of `user, module, role, scope`; bulk grant/revoke; preview-then-apply with a dry-run report.
-5. **Audit** — every assign/revoke/role-edit logged immutably; filter by user, actor, module, date.
-
-Bulk + audit are **mandatory in v1** per your direction.
-
-### Migration & coexistence
-- Old `/admin/users` and `/safety/settings/users` continue working — both become thin wrappers that deep-link into the new console with the relevant tab/filter pre-selected.
-- A one-time migration backfills `user_role_assignments` from `user_roles` + `safety_user_roles`. Old tables remain readable for one release, then dropped.
-
-## Phase 2 — Lifecycle Automation (after Phase 1 stable)
-
-- **Joiner-Mover-Leaver:** `access_templates` (e.g. "New Plant Supervisor") map a job role / department to a default capability bundle. On profile creation, an edge function applies the template.
-- **Mover:** when `profiles.department_id` or `designation` changes, the engine diffs current vs target capabilities and surfaces a one-click "apply changes" to the admin (or auto-applies for whitelisted templates).
-- **Leaver:** `is_active = false` triggers a SECURITY DEFINER function that revokes all assignments and writes an audit row attributed to `system`.
-- **Approval workflow:** capabilities flagged `is_destructive` (e.g. `pms.score.override`) require an approver before activation. Reuses the existing rollback-request pattern.
-- **Scheduled access:** `expires_at` on assignments + a daily cron that revokes and notifies — supports auditors, contractors, temporary acting roles.
+# IAC Bulk Tab — Full Download/Upload + Hardened Error Handling
 
 ## Risk & Impact Report
+- **Data Impact**: Read-only export + idempotent inserts to `iac_user_role_assignments`. No schema change. Existing `previewBulk`/`applyBulk` already de-dup server-side.
+- **Workflow Impact**: None. Same grant semantics as the People drawer; just batched.
+- **UI/UX**: Bulk tab gains 2 actions (Download, Upload File) + a structured preview table. Other tabs untouched.
+- **Regression Risk**: Low. Service layer is additive — current paste-CSV path keeps working.
+- **Mitigation**: Unit tests for CSV parse/serialize and preview categorization; toast surfaces every failure (no silent catch).
 
-| Area | Impact | Mitigation |
+## What changes (user-visible)
+
+### Bulk tab — three clear sections
+
+1. **Download current data** — two buttons:
+   - **Download Assignments CSV** — every row in `iac_user_role_assignments` joined with `profiles.email` and `iac_roles.code`, columns: `email,role_code,scope_type,scope_id,expires_at,assigned_at`. Same shape that Upload accepts → round-trip safe.
+   - **Download Template CSV** — empty file with header row + 1 example line + a `# comments` header explaining valid `scope_type` values and date format.
+
+2. **Upload data** — two input modes:
+   - **Choose file** button accepting `.csv` (uses `FileReader`).
+   - Existing **Paste CSV** textarea (kept for power users).
+   - Live **Preview** runs automatically on parse and shows 4 buckets in a table: ✅ Ready (N), ❌ Unknown email (N), ❌ Unknown role code (N), ⚠️ Already exists (N) — each expandable to see the offending rows.
+   - **Apply** button is disabled until parse succeeds and at least 1 row is in the Ready bucket. Button label shows the exact count: "Apply 12 assignments".
+   - After Apply: success toast with inserted count + a downloadable **Error Report CSV** if any row was skipped (unknown user/role).
+
+3. **Inline help panel** describing the CSV contract and listing valid scope values.
+
+## Error handling contract (no silent fail)
+
+Every step surfaces failures via `sonner` toast + inline UI state:
+
+| Step | Failure | User-visible result |
 |---|---|---|
-| RLS | 100+ policies reference `has_role` / `has_safety_*` | Phase 1 keeps these as wrappers over the new model. No policy rewrites required to ship. |
-| Data | `user_roles`, `safety_user_roles`, `safety_module_access` migrated | Idempotent backfill migration + parallel-run period; old tables read-only for one release before drop. |
-| UX | Two existing screens become wrappers | Wrappers deep-link into the new console preserving muscle memory. Old URLs keep working. |
-| Regression | Sidebar guards, ProtectedRoute, hub gating | Tests for `has_capability` parity vs `has_role` for every existing role × screen pair. |
-| Future modules | New module just inserts capabilities + seed roles, gets full IAC for free | Catalog is the contract; PRs adding capabilities are reviewable in one place. |
-| Multi-tenant | `scope_type=company` already in design | Multi-company governance memory honored; `corporate_id` tracked through scope. |
+| File read | Wrong MIME / >2MB / read error | Red toast: "Could not read file: <reason>" |
+| CSV parse | Missing required header (`email`, `role_code`) | Red banner above textarea + toast |
+| CSV parse | Bad row (missing email/role_code, bad date, invalid scope_type) | Row appears in "Invalid rows" bucket with reason; not sent |
+| Preview RPC | Supabase error | Red toast with `error.message`; Apply disabled |
+| Apply | Supabase insert error | Red toast with `error.message`; rows are NOT counted as inserted |
+| Apply | Partial — server skipped rows server-side | Yellow toast: "X applied, Y skipped — download report" |
+| Download | Network/permission error | Red toast |
 
-## Deliverables (Phase 1)
+No `try { ... } catch {}` swallowing. Every catch shows a toast and logs to `console.error` with a stable prefix `[IAC.bulk]`.
 
-**Code**
-- Migration: catalog, roles, assignments, `has_capability`, wrappers, backfill.
-- Hub route `/hub/admin/iac` with 5 tabs + drawer.
-- Shared service layer `src/services/iac/*` (no UI calls Supabase directly).
-- Wrapper redirects on `/admin/users` and `/safety/settings/users`.
+## Technical Plan
 
-**Tests** (mandatory)
-- Unit: `has_capability` matrix (role × cap × scope) with realistic mocks.
-- Parity: every existing role passes the same gates as today.
-- E2E happy + failure paths for grant, revoke, bulk import, audit write.
+### New types (extend `src/services/iac/types.ts`)
+```ts
+export interface IacBulkExportRow {
+  email: string;
+  role_code: string;
+  scope_type: IacScopeType;
+  scope_id: string | null;
+  expires_at: string | null;
+  assigned_at: string;
+}
+export type BulkRowIssue =
+  | 'unknown_user' | 'unknown_role' | 'duplicate'
+  | 'missing_email' | 'missing_role' | 'bad_scope' | 'bad_date';
+export interface ParsedBulkRow {
+  raw: Record<string,string>;
+  row: IacBulkAssignmentRow | null;
+  issues: BulkRowIssue[];
+  lineNo: number;
+}
+```
 
-**Docs**
-- `DOCUMENTATION.md` Identity & Access section + Version History bump.
-- `POLICY.md` updated: capability codes are immutable, roles are admin-editable, destructive caps require approval (Phase 2).
-- Memory note: `mem://architecture/security/identity-access-console`.
+### Service layer (`src/services/iac/iacService.ts`) — add:
+- `exportAssignments(): Promise<IacBulkExportRow[]>` — paginated fetch (1000-row chunks per Core memory) joining role + profile email; returns flat rows.
+- `getTemplateCsv(): string` — header + example.
+- Reuse existing `previewBulk` and `applyBulk` (already idempotent).
 
-## Out of scope (call out so we don't drift)
-- Replacing `access_profiles` / menu rights — they continue to govern *menu visibility*; capabilities govern *actions*. Phase 3 may merge them.
-- SSO/SCIM provisioning — separate track.
-- UI for editing the capability catalog — developer-managed via migration only.
+### CSV utility (`src/lib/iac/csv.ts`) — new file:
+- `serializeCsv(rows, headers)` — proper quoting (escape `,`, `"`, newline).
+- `parseCsv(text): { headers, rows }` — RFC-4180-ish parser, handles quoted fields. No external dep.
+- `validateBulkRow(row, lineNo): ParsedBulkRow` — checks required fields, scope enum, ISO date.
+
+### Hook (`src/hooks/useIac.ts`) — add:
+- `useExportAssignments()` (lazy `useMutation` so it triggers on click).
+- `usePreviewBulk()` for live preview.
+
+### UI (`src/pages/admin/IdentityAccessConsole.tsx`) — rewrite `BulkTab`:
+- Section "Download": two `Button`s wired to mutations. Clicking triggers `serializeCsv` → `Blob` → anchor download. Toast on success.
+- Section "Upload": file `<input type="file" accept=".csv">` + textarea. On change/paste → `parseCsv` → `validateBulkRow[]` → `previewBulk` → render preview table (Ready / Invalid / Unknown user / Unknown role / Duplicates).
+- "Apply" button shows loading spinner; only enabled when Ready > 0.
+- After apply: if any non-ready rows, generate error-report CSV (`email,role_code,reason`) and offer "Download error report" link in the success card.
+
+### Tests (`src/test/iac/bulkCsv.test.ts`) — new
+- Parses a CSV with quoted fields, embedded commas, CRLF.
+- Round-trip: `serializeCsv(parseCsv(x)) === x` for the canonical export shape.
+- `validateBulkRow` returns `bad_scope` for `xyz`, `bad_date` for `2026-13-40`, `missing_email` for empty.
+- Mock data: 5 sample rows covering all four preview buckets.
+
+### Documentation
+- Update `DOCUMENTATION.md` Bulk section with new contract + error matrix.
+- Update `mem/architecture/security/identity-access-console.md` Phase 2 → add "Bulk: round-trip CSV download/upload with structured preview and per-row error CSV export."
+
+## Files
+- **New**: `src/lib/iac/csv.ts`, `src/test/iac/bulkCsv.test.ts`
+- **Edit**: `src/services/iac/types.ts`, `src/services/iac/iacService.ts`, `src/hooks/useIac.ts`, `src/pages/admin/IdentityAccessConsole.tsx`, `DOCUMENTATION.md`, `mem/architecture/security/identity-access-console.md`
+
+## Acceptance criteria
+1. Download Assignments CSV produces a file that, if uploaded back unchanged, yields **0 Ready / N Duplicates** (round-trip verified).
+2. Uploading a malformed CSV never silently succeeds — every problem appears in the preview or as a red toast.
+3. Apply button shows exact insert count in label; toast confirms inserted vs skipped.
+4. Skipped rows can be downloaded as an error-report CSV with a `reason` column.
+5. All new tests pass.
