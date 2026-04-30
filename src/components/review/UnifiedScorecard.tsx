@@ -573,10 +573,13 @@ export function UnifiedScorecard({
   }, [kpis, statusFilter]);
 
   const scoreData = useMemo(() => {
-    if (!displayKpis.length || !submissions) return { overallScore: 0, rating: 0, categoryScores: [], totalWeightedScore: 0, totalWeight: 0 };
+    if (!displayKpis.length || !submissions) return { overallScore: 0, rating: 0, categoryScores: [], totalWeightedScore: 0, totalWeight: 0, assignedWeight: 0 };
     
     let totalWeightedScore = 0;
     let totalWeight = 0;
+    // assignedWeight = sum of weightages of all KPIs assigned this period (excluding N/A).
+    // Used for the badge that confirms KRA mapping totals 100%, independent of scoring progress.
+    let assignedWeight = 0;
     const categoryMap = new Map<string, { 
       totalScore: number; 
       totalWeight: number; 
@@ -598,6 +601,12 @@ export function UnifiedScorecard({
       
       const weight = kpi.weightage || 0;
       existing.dynamicWeightage += weight;
+
+      // Count toward "assigned weightage" unless explicitly marked N/A
+      // (per N/A Status Governance — N/A KPIs are excluded from the 100% target).
+      if (!submission?.is_na) {
+        assignedWeight += weight;
+      }
       
       // Only contribute to scores if submission exists, not NA, and has at least one score (POLICY §70)
       if (submission && !submission.is_na) {
@@ -623,7 +632,7 @@ export function UnifiedScorecard({
       weightage: data.dynamicWeightage,
     }));
     
-    return { overallScore, rating: overallRating, categoryScores, totalWeightedScore, totalWeight };
+    return { overallScore, rating: overallRating, categoryScores, totalWeightedScore, totalWeight, assignedWeight };
   }, [displayKpis, submissions, submissionMap, viewLevel]);
 
   // Submit review mutation
@@ -1546,14 +1555,14 @@ export function UnifiedScorecard({
             <CardTitle className="text-sm flex items-center gap-2 flex-wrap">
               <span>Performance by Category</span>
               <span
-                title="Total weightage of KPIs included in this scorecard. Less than 100% means some KPIs are N/A or unscored."
+                title="Total weightage of all KPIs assigned this period. Should equal 100%. N/A KPIs are excluded."
                 className={`text-xs font-medium px-1.5 py-0.5 rounded ${
-                  Math.round(scoreData.totalWeight) === 100
+                  Math.round(scoreData.assignedWeight) === 100
                     ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
                     : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
                 }`}
               >
-                ({Math.round(scoreData.totalWeight)}%)
+                ({Math.round(scoreData.assignedWeight)}%)
               </span>
             </CardTitle>
             <CardDescription className="text-xs">Score breakdown across KRA categories</CardDescription>
