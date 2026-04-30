@@ -5968,3 +5968,25 @@ Legacy screens (`/admin/users`, `/safety/settings/users`) keep working unchanged
 **What didn't change.** Zero RLS rewrites. Zero existing-policy edits. Both legacy tables (`user_roles`, `safety_user_roles`) remain authoritative and are still backfilled into IAC; the console's revoke action only removes the IAC row (Phase 3 will collapse the two sources after a parallel-run period).
 
 **Operator setup.** Schedule the cron in Cloud's Cron tab to call `iac-sweep-expired` daily at 02:00 with `x-cron-secret: <CRON_SECRET>`. Until that's wired up, an admin can hit the function manually or call the RPC `select public.iac_sweep_expired();` from a SQL session.
+
+### v2.66.7.52 — IAC Bulk: Round-trip download/upload + hardened error handling (2026-04-30)
+
+**Why.** Bulk tab shipped in Phase 1 only had a paste-CSV box. Admins had no way to export the current state and no structured feedback when imports went wrong; failures could surface as a single toast that hid per-row reasons.
+
+**What changed.**
+- **Download** section with two buttons: **Download Assignments CSV** (every row in `iac_user_role_assignments`, joined with `profiles.email` and `iac_roles.code`, paginated 1000 per page) and **Download Template CSV** (header + example + `#`-prefixed help).
+- **Upload** section now accepts a file via `<input type="file" accept=".csv">` *or* the existing paste box. CSV parser (`src/lib/iac/csv.ts`) is RFC-4180-ish — handles quoted fields, embedded commas/quotes, CRLF, and skips blank/`#` lines.
+- **Live preview** runs on every change/parse and groups rows into 5 buckets: ✅ Ready, ⚠️ Already exists, ❌ Unknown email, ❌ Unknown role, ❌ Invalid (missing email/role, bad scope, bad date). Each bucket is expandable.
+- **Apply** button is disabled until at least one Ready row exists; label shows the exact count ("Apply 12 assignments").
+- **Error report** — after Apply, every row that did *not* insert (invalid + unknown user/role + duplicate) is gathered into a downloadable CSV with an explicit `reason` column.
+- **No silent fail** — every failure path raises a destructive toast and logs `[IAC.bulk] <where>:` to the console. File >2MB, missing required headers, preview RPC error, and apply error all surface inline.
+
+**Round-trip guarantee.** Re-uploading an unmodified Assignments CSV produces 0 Ready / N Already-exists rows.
+
+**Files.**
+- `src/lib/iac/csv.ts` (new) — CSV parse/serialize/validate + download helper.
+- `src/services/iac/iacService.ts` — added `exportAssignments()` (paginated, joined).
+- `src/services/iac/types.ts` — added `IacBulkExportRow`, `BulkRowIssue`, `ParsedBulkRow`.
+- `src/hooks/useIac.ts` — added `usePreviewBulk`, `useExportAssignments`.
+- `src/pages/admin/IdentityAccessConsole.tsx` — `BulkTab` rewritten with Download / Upload / Preview / Error report sections.
+- `src/test/iac/bulkCsv.test.ts` (new) — 6 tests pinning parser, round-trip, and validators.

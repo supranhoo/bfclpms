@@ -63,3 +63,28 @@ export interface IacBulkPreview {
   unknownRoles: IacBulkAssignmentRow[];
   duplicates: IacBulkAssignmentRow[];
 }
+
+export interface IacBulkExportRow {
+  email: string;
+  role_code: string;
+  scope_type: IacScopeType;
+  scope_id: string | null;
+  expires_at: string | null;
+  assigned_at: string;
+}
+
+export type BulkRowIssue =
+  | 'unknown_user'
+  | 'unknown_role'
+  | 'duplicate'
+  | 'missing_email'
+  | 'missing_role'
+  | 'bad_scope'
+  | 'bad_date';
+
+export interface ParsedBulkRow {
+  raw: Record<string, string>;
+  row: IacBulkAssignmentRow | null;
+  issues: BulkRowIssue[];
+  lineNo: number;
+}

@@ -13,6 +13,7 @@ import type {
   IacRole,
   IacRoleWithCaps,
   IacScopeType,
+  IacBulkExportRow,
 } from './types';
 
 // -------- Capabilities --------------------------------------------------
@@ -280,4 +281,53 @@ export async function searchPeople(term: string, limit = 50): Promise<IacPerson[
   const { data, error } = await q;
   if (error) throw error;
   return (data ?? []) as IacPerson[];
+}
+
+// -------- Bulk export ---------------------------------------------------
+/**
+ * Pull every IAC assignment as a flat, round-trip-friendly CSV-shaped
+ * payload. Paginated in 1000-row chunks to stay within Supabase limits.
+ */
+export async function exportAssignments(): Promise<IacBulkExportRow[]> {
+  const PAGE = 1000;
+  const all: Array<{
+    user_id: string; role_id: string; scope_type: IacScopeType;
+    scope_id: string | null; expires_at: string | null; assigned_at: string;
+  }> = [];
+  let from = 0;
+  // Loop until a partial page is returned.
+  for (;;) {
+    const { data, error } = await supabase
+      .from('iac_user_role_assignments')
+      .select('user_id, role_id, scope_type, scope_id, expires_at, assigned_at')
+      .order('assigned_at', { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const batch = (data ?? []) as typeof all;
+    all.push(...batch);
+    if (batch.length < PAGE) break;
+    from += PAGE;
+  }
+
+  if (all.length === 0) return [];
+
+  const userIds = Array.from(new Set(all.map((a) => a.user_id)));
+  const roleIds = Array.from(new Set(all.map((a) => a.role_id)));
+  const [profilesRes, rolesRes] = await Promise.all([
+    supabase.from('profiles').select('id, email').in('id', userIds),
+    supabase.from('iac_roles').select('id, code').in('id', roleIds),
+  ]);
+  if (profilesRes.error) throw profilesRes.error;
+  if (rolesRes.error) throw rolesRes.error;
+  const emailById = new Map((profilesRes.data ?? []).map((p) => [p.id as string, String(p.email)]));
+  const codeById = new Map((rolesRes.data ?? []).map((r) => [r.id as string, r.code as string]));
+
+  return all.map((a) => ({
+    email: emailById.get(a.user_id) ?? '',
+    role_code: codeById.get(a.role_id) ?? '',
+    scope_type: a.scope_type,
+    scope_id: a.scope_id,
+    expires_at: a.expires_at,
+    assigned_at: a.assigned_at,
+  }));
 }
