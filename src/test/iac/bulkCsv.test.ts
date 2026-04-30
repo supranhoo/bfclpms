@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { parseCsv, serializeCsv, validateBulkRow, templateCsv } from '@/lib/iac/csv';
+import {
+  parseCsv, serializeCsv, validateBulkRow, templateCsv,
+  serializeMatrixCsv, matrixTemplateCsv, parseMatrixCsv, diffMatrix,
+  isMatrixCellTruthy,
+} from '@/lib/iac/csv';
+import type { IacMatrixRow } from '@/services/iac/types';
 
 describe('IAC bulk CSV utilities', () => {
   it('parses headers and rows, ignoring comments and blank lines', () => {
