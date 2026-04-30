@@ -5922,3 +5922,33 @@ is preserved.
 - `mem/index.md` — entry added.
 
 **Out of scope:** Admin surfaces (`SafetyTrainingAdmin`, `SafetyUsers`, `SafetyHoursWorked`, `SafetyPermitTypeConfig`, `SafetyAuditTemplates`, `SafetySettings`) intentionally remain desktop-first.
+
+### v2.66.7.50 — Identity & Access Console (IAC) Phase 1 (2026-04-30)
+
+**Why.** User & Role Management was duplicated across PMS (`/admin/users`) and Safety (`/safety/settings/users`), each with its own role enum. Adding HRMS/LMS would multiply screens, enums, and audit gaps. There was no single place to see "who can do what" across the Hub.
+
+**Architecture.** New capability/role/assignment model, additive to existing tables — Phase 1 ships zero RLS rewrites or breaking changes.
+
+- `iac_capabilities` — catalog of fine-grained actions (`safety.incident.create`, `pms.review.approve`, `hub.iac.manage`, …). Immutable, developer-managed.
+- `iac_roles` — bundles per module (PMS Admin, Safety Worker, …). Admin-editable, system roles flagged.
+- `iac_role_capabilities` — role ↔ capability mapping.
+- `iac_user_role_assignments` — user × role × scope (`global | company | business_unit | department`) with optional `expires_at` for time-bound access.
+- `iac_audit_log` — immutable trail; written via `iac_log()` SECURITY DEFINER function.
+- `has_capability(uid, cap, scope_type, scope_id)` — single authoritative SQL gate, used by RLS in Phase 2.
+
+**Backfill.** Existing 683 PMS `user_roles` rows + 3 Safety `safety_user_roles` rows mapped into `iac_user_role_assignments`. Old tables remain authoritative for RLS in Phase 1; the IAC console reads/writes the new model.
+
+**UI.** New `/admin/iac` console with five tabs:
+1. **People** — directory with drawer (identity, current assignments, grant/revoke).
+2. **Roles** — per-module list, capability checklist editor.
+3. **Capabilities** — read-only catalog with usage counts.
+4. **Bulk** — CSV import (`email,role_code,scope_type,scope_id,expires_at`), idempotent.
+5. **Audit** — immutable log of every grant/revoke/role change.
+
+Legacy screens (`/admin/users`, `/safety/settings/users`) keep working unchanged; both now show a banner pointing admins to the new console.
+
+**Service layer.** `src/services/iac/iacService.ts` is the only Supabase entry point for IAC; UI consumes it via `src/hooks/useIac.ts` React Query hooks.
+
+**Tests.** `src/test/iac/hasCapabilityParity.test.ts` validates the seeded role↔capability map against the legacy enum behavior.
+
+**Phase 2 (planned).** RLS policies migrate from `has_role` → `has_capability`; Joiner-Mover-Leaver automation via `access_templates`; destructive-capability approval workflow; scheduled-access cron driven by `expires_at`.
