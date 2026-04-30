@@ -5952,3 +5952,19 @@ Legacy screens (`/admin/users`, `/safety/settings/users`) keep working unchanged
 **Tests.** `src/test/iac/hasCapabilityParity.test.ts` validates the seeded role↔capability map against the legacy enum behavior.
 
 **Phase 2 (planned).** RLS policies migrate from `has_role` → `has_capability`; Joiner-Mover-Leaver automation via `access_templates`; destructive-capability approval workflow; scheduled-access cron driven by `expires_at`.
+
+### v2.66.7.51 — IAC Phase 2: Compatibility shims + Leaver + Expiry cron (2026-04-30)
+
+**Why.** Phase 1 shipped the new capability/role/assignment model and the `/admin/iac` console, but legacy `has_role()` / `has_safety_role()` SQL functions still read only from `user_roles` / `safety_user_roles`. That meant grants made through the new console did not actually gate any of the 254 RLS policies that depend on these helpers.
+
+**What changed.**
+- **`has_role(uid, role)` and `has_safety_role(uid, role, bu)`** rewritten as OR-shims: returns `true` if *either* the legacy table *or* the new `iac_user_role_assignments` grants the role. Strictly additive — every grant that worked before still works, and new IAC grants now take effect everywhere immediately. `has_any_safety_role()` got the same treatment. Function signatures and return types unchanged, so no callers needed updating.
+- **Leaver automation** — `iac_revoke_on_deactivation()` trigger fires `AFTER UPDATE OF is_active` on `profiles`. When `is_active` flips from `true` to `false`, every IAC assignment for that user is deleted and a single audit row is written with `actor_id = NULL` (system attribution per the Core memory rule).
+- **Expiry sweep** — `iac_sweep_expired()` SECURITY DEFINER RPC deletes assignments whose `expires_at` is in the past and audits the count. Idempotent.
+- **Cron edge function** `iac-sweep-expired` (`verify_jwt = false`, gated by `CRON_SECRET`) calls the RPC. Smoke-tested: returns 401 without the secret, deploys cleanly.
+
+**Tests.** `src/test/iac/phase2Behavior.test.ts` pins the OR-shim contract (legacy-only, IAC-only, neither, wrong-user permutations). 10/10 IAC tests green.
+
+**What didn't change.** Zero RLS rewrites. Zero existing-policy edits. Both legacy tables (`user_roles`, `safety_user_roles`) remain authoritative and are still backfilled into IAC; the console's revoke action only removes the IAC row (Phase 3 will collapse the two sources after a parallel-run period).
+
+**Operator setup.** Schedule the cron in Cloud's Cron tab to call `iac-sweep-expired` daily at 02:00 with `x-cron-secret: <CRON_SECRET>`. Until that's wired up, an admin can hit the function manually or call the RPC `select public.iac_sweep_expired();` from a SQL session.
