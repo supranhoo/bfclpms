@@ -39,29 +39,30 @@ export default function SafetyIncidentDetail() {
   }
 
   return (
-    <div className="p-6 space-y-4 max-w-6xl mx-auto">
-      <Button variant="ghost" size="sm" onClick={() => navigate('/safety/incidents')}>
+    <div className="p-3 sm:p-6 space-y-3 sm:space-y-4 max-w-6xl mx-auto">
+      <Button variant="ghost" size="sm" className="min-h-[40px]" onClick={() => navigate('/safety/incidents')}>
         <ArrowLeft className="h-4 w-4 mr-2" />
-        Back to incidents
+        <span className="hidden sm:inline">Back to incidents</span>
+        <span className="sm:hidden">Back</span>
       </Button>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="px-4 py-3 sm:px-6 sm:py-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs text-muted-foreground font-mono">{incident.incident_number}</p>
-              <CardTitle className="text-xl">{incident.title}</CardTitle>
-              <p className="text-sm text-muted-foreground mt-1">
+              <CardTitle className="text-lg sm:text-xl">{incident.title}</CardTitle>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                 {SAFETY_TYPE_LABELS[incident.incident_type]} • Severity {SAFETY_SEVERITY_LABELS[incident.severity]} • {incident.location}
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-1.5">
               <SafetyStatusBadge status={incident.status} />
               <SlaBadge state={incident.sla_state} />
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="px-4 sm:px-6 space-y-3">
           <div>
             <h3 className="text-sm font-medium mb-1">Description</h3>
             <p className="text-sm whitespace-pre-wrap">{incident.description}</p>
@@ -69,19 +70,19 @@ export default function SafetyIncidentDetail() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
             <div>
               <p className="text-xs text-muted-foreground">Reported</p>
-              <p>{format(new Date(incident.created_at), 'dd MMM yyyy, HH:mm')}</p>
+              <p className="text-xs sm:text-sm">{format(new Date(incident.created_at), 'dd MMM yyyy, HH:mm')}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Acknowledge by</p>
-              <p>{format(new Date(incident.acknowledge_due_at), 'dd MMM yyyy, HH:mm')}</p>
+              <p className="text-xs sm:text-sm">{format(new Date(incident.acknowledge_due_at), 'dd MMM yyyy, HH:mm')}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Close by</p>
-              <p>{format(new Date(incident.close_due_at), 'dd MMM yyyy, HH:mm')}</p>
+              <p className="text-xs sm:text-sm">{format(new Date(incident.close_due_at), 'dd MMM yyyy, HH:mm')}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Involved</p>
-              <p>{incident.involved_person_name ?? '—'}</p>
+              <p className="text-xs sm:text-sm">{incident.involved_person_name ?? '—'}</p>
             </div>
           </div>
         </CardContent>
