@@ -479,7 +479,8 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
                 </TableHeader>
                 <TableBody>
                   {SECTION_ORDER.filter(s => sections[s]?.length).map(section =>
-                    sections[section].map((cfg: MenuAccessConfig, idx: number) => {
+                    <>
+                    {sections[section].map((cfg: MenuAccessConfig, idx: number) => {
                       const r = getRights(cfg.menu_key);
                       return (
                         <TableRow key={cfg.menu_key}>
@@ -496,14 +497,16 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
                           ))}
                         </TableRow>
                       );
-                    })
+                    })}
+                    {section === 'hr_pms' && (
+                      <TableRow key="review-notes-access-inline">
+                        <TableCell colSpan={6} className="p-0">
+                          <ReviewNotesAccessInline />
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    </>
                   )}
-                  {/* Inline Review Notes Access config */}
-                  <TableRow>
-                    <TableCell colSpan={6} className="p-0">
-                      <ReviewNotesAccessInline />
-                    </TableCell>
-                  </TableRow>
                 </TableBody>
               </Table>
             </div>
