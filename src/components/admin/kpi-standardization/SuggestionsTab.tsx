@@ -13,6 +13,7 @@ import {
 import {
   useRegistrySuggestions,
   useDismissSuggestion,
+  useMergeDefinitions,
   type DefinitionMergeSuggestion,
   type AliasCandidateSuggestion,
 } from '@/hooks/useRegistrySuggestions';
@@ -40,9 +41,27 @@ export function SuggestionsTab() {
   } = useRegistrySuggestions();
   const { dismiss, loading: dismissing } = useDismissSuggestion();
   const { promote, loading: promoting } = usePromoteSignature();
+  const { merge, loading: merging } = useMergeDefinitions();
 
-  // Phase 4c will replace this stub with the real merge RPC + dialog state.
+  // Phase 4c: Live merge confirmation. `keepLeft` lets the admin pick which
+  // side of the pair survives; the UI defaults to the side with more aliases /
+  // linked KPIs, but always lets the admin flip it before confirming.
   const [pendingMerge, setPendingMerge] = useState<DefinitionMergeSuggestion | null>(null);
+  const [keepLeft, setKeepLeft] = useState(true);
+
+  const openMergeDialog = (row: DefinitionMergeSuggestion, keep: 'left' | 'right') => {
+    setKeepLeft(keep === 'left');
+    setPendingMerge(row);
+  };
+
+  const confirmMerge = async () => {
+    if (!pendingMerge) return;
+    const keepId = keepLeft ? pendingMerge.left_id : pendingMerge.right_id;
+    const dropId = keepLeft ? pendingMerge.right_id : pendingMerge.left_id;
+    const result = await merge(keepId, dropId, 'merged via Suggestions tab');
+    setPendingMerge(null);
+    if (result) void refresh();
+  };
 
   const totalSuggestions = defMerges.length + aliasCandidates.length;
 
@@ -160,12 +179,23 @@ export function SuggestionsTab() {
                             size="sm"
                             variant="outline"
                             className="h-7 text-xs"
-                            disabled
-                            title="Merge action arrives in Phase 4c (transactional merge_definitions RPC)."
-                            onClick={() => setPendingMerge(row)}
+                            disabled={merging}
+                            onClick={() => openMergeDialog(row, 'left')}
+                            title="Keep Definition A; delete Definition B"
                           >
                             <GitMerge className="h-3 w-3 mr-1" />
-                            Merge
+                            Keep A
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            disabled={merging}
+                            onClick={() => openMergeDialog(row, 'right')}
+                            title="Keep Definition B; delete Definition A"
+                          >
+                            <GitMerge className="h-3 w-3 mr-1" />
+                            Keep B
                           </Button>
                           <Button
                             size="sm"
@@ -251,21 +281,32 @@ export function SuggestionsTab() {
         </CardContent>
       </Card>
 
-      {/* Phase 4c: confirm dialog stub for definition merge. Action wired in 4c. */}
+      {/* Phase 4c: live merge confirmation. */}
       <ConfirmDestructiveDialog
         open={!!pendingMerge}
         onCancel={() => setPendingMerge(null)}
-        onConfirm={() => setPendingMerge(null)}
+        onConfirm={() => void confirmMerge()}
         title="Merge canonical definitions"
         description={
           pendingMerge
-            ? `The transactional merge action will be enabled in Phase 4c. Until then this confirmation is non-destructive — clicking "OK" will not modify any data.`
+            ? buildMergeDescription(pendingMerge, keepLeft)
             : ''
         }
-        confirmLabel="OK"
+        confirmLabel="Merge definitions"
+        isLoading={merging}
       />
     </div>
   );
+}
+
+function buildMergeDescription(row: DefinitionMergeSuggestion, keepLeft: boolean): string {
+  const kept = keepLeft
+    ? `${row.left_kra_name} / ${row.left_kpi_name}`
+    : `${row.right_kra_name} / ${row.right_kpi_name}`;
+  const dropped = keepLeft
+    ? `${row.right_kra_name} / ${row.right_kpi_name}`
+    : `${row.left_kra_name} / ${row.left_kpi_name}`;
+  return `This will permanently delete the canonical definition "${dropped}" and re-parent its aliases and linked KPIs to "${kept}". The action is logged in the registry audit log and cannot be undone.`;
 }
 
 function ThresholdSlider({
