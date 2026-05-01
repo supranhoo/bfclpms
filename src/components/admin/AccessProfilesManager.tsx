@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -10,6 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Shield, Plus, Trash2, Save, Users, Settings2, Search } from 'lucide-react';
 import { useAccessProfiles, type AccessProfileMenuRight } from '@/hooks/useAccessProfiles';
+import { ReviewNotesAccessInline } from './ReviewNotesAccessInline';
 import { useMenuAccess, type MenuAccessConfig } from '@/hooks/useMenuAccess';
 import { useCompanies } from '@/hooks/useCompanies';
 import { useDivisions, useBusinessUnits, useDepartments, useSubBranches } from '@/hooks/useOrganization';
@@ -478,7 +480,8 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
                 </TableHeader>
                 <TableBody>
                   {SECTION_ORDER.filter(s => sections[s]?.length).map(section =>
-                    sections[section].map((cfg: MenuAccessConfig, idx: number) => {
+                    <Fragment key={section}>
+                    {sections[section].map((cfg: MenuAccessConfig, idx: number) => {
                       const r = getRights(cfg.menu_key);
                       return (
                         <TableRow key={cfg.menu_key}>
@@ -495,7 +498,15 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
                           ))}
                         </TableRow>
                       );
-                    })
+                    })}
+                    {section === 'hr_pms' && (
+                      <TableRow key="review-notes-access-inline">
+                        <TableCell colSpan={6} className="p-0">
+                          <ReviewNotesAccessInline />
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    </Fragment>
                   )}
                 </TableBody>
               </Table>
