@@ -5990,3 +5990,57 @@ Legacy screens (`/admin/users`, `/safety/settings/users`) keep working unchanged
 - `src/hooks/useIac.ts` — added `usePreviewBulk`, `useExportAssignments`.
 - `src/pages/admin/IdentityAccessConsole.tsx` — `BulkTab` rewritten with Download / Upload / Preview / Error report sections.
 - `src/test/iac/bulkCsv.test.ts` (new) — 6 tests pinning parser, round-trip, and validators.
+
+---
+
+## §KPI_STANDARD — KPI Standardization & Canonical Registry
+
+**Added:** 2026-05-01
+
+**Problem.** Same KPI concept appears under multiple KRA name variants (e.g. "Control dust emission", "Control Dust Emission", "Environment compliance" all for the same PM10 KPI). This makes cross-month dashboards treat them as different KPIs, inflates reporting, and creates confusion during reviews.
+
+**Solution: Forward-Only Canonical Registry.**
+
+### Architecture
+
+Three new database objects:
+
+1. **`kpi_definitions`** — Master registry of canonical KPI names. Fields: `canonical_kra_name`, `canonical_kpi_name`, `category_id`. Unique constraint on all three.
+
+2. **`kpi_name_aliases`** — Maps old variant KRA/KPI names to canonical definitions. Fields: `definition_id` (FK), `variant_kra_name`, `variant_kpi_name`, `category_id`. Unique constraint on variant names + category.
+
+3. **`kpis.kpi_definition_id`** — Nullable FK on existing `kpis` table linking each KPI row to its canonical definition.
+
+4. **`resolve_canonical_kpi()`** — SECURITY DEFINER function that looks up alias table to resolve any variant to its canonical definition ID.
+
+### Forward-Only Policy
+
+- **Past data (before May 2026):** NEVER modified. Original text stays in DB.
+- **May 2026 onward:** KPI rows corrected to canonical names and linked via `kpi_definition_id`.
+- **Cross-month linking:** `kpi_name_aliases` table allows dashboards to group old variants with canonical names in trend views.
+
+### Admin Tool (`/admin/kpi-standardization`)
+
+Three tabs:
+- **Build Registry:** Scans all KPIs via `scan_kpi_duplicate_groups()` RPC, groups near-duplicates, admin picks canonical version per group.
+- **Review Registry:** View/edit/delete canonical definitions and their aliases.
+- **Correct May KPIs:** Shows unlinked KPIs for May 2026+, auto-matches to registry, admin applies corrections via `correct_may_kpis()` RPC.
+
+### DB Functions
+
+- `scan_kpi_duplicate_groups()` — Returns JSONB array of duplicate groups with variants, employee counts, and row counts.
+- `correct_may_kpis()` — Updates KPI + org_kpi_values rows for a specified period. Hard-coded safety: refuses to operate on periods before May 2026.
+
+### Enforcement (Soft)
+
+Registry-based picker is default for new KPI creation. Free-text entry remains allowed but flagged with a warning. Custom entries logged for periodic admin review.
+
+### Files
+
+- `supabase/migrations/*_kpi_definitions_registry.sql`
+- `supabase/migrations/*_kpi_standardization_functions.sql`
+- `src/pages/admin/KpiStandardization.tsx`
+- `src/components/admin/kpi-standardization/BuildRegistryTab.tsx`
+- `src/components/admin/kpi-standardization/ReviewRegistryTab.tsx`
+- `src/components/admin/kpi-standardization/CorrectMayKpisTab.tsx`
+- `src/hooks/useKpiRegistry.ts`
