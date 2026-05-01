@@ -10,6 +10,7 @@ import { OrgKpiScopedEntryTable, ScopedRow } from '@/components/admin/OrgKpiScop
 import { useObservationsByKpis } from '@/hooks/useKpiObservations';
 import type { KpiObservation } from '@/hooks/useKpiObservations';
 import { OrgKpiOwnerDialog } from '@/components/admin/OrgKpiOwnerDialog';
+import { OrgKpiScopeChangeDialog } from '@/components/admin/OrgKpiScopeChangeDialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { isValueOutOfRange, RatingThresholds } from '@/lib/ratingCalculation';
 import { Textarea } from '@/components/ui/textarea';
@@ -17,7 +18,8 @@ import { QualitativeSelect } from '@/components/review/QualitativeSelect';
 import { BINARY_OPTIONS, type QualitativeOption } from '@/lib/qualitativeUom';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle, RotateCcw, Trash2, Ban, Undo2, FileEdit, ShieldCheck } from 'lucide-react';
+import { Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle, RotateCcw, Trash2, Ban, Undo2, FileEdit, ShieldCheck, SlidersHorizontal } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useSentBackOrgKpiEmployees, type SentBackInfo } from '@/hooks/useSentBackOrgKpiEmployees';
 import { isComplianceKpi, useBulkEmployeeSubmissionDates } from '@/hooks/useComplianceSubFactors';
 
@@ -111,6 +113,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
   const [isBulkRollingBack, setIsBulkRollingBack] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [showOwnerDialog, setShowOwnerDialog] = useState(false);
+  const [scopeChangeTarget, setScopeChangeTarget] = useState<'organization' | 'department' | 'employee' | null>(null);
   const [rollbackReason, setRollbackReason] = useState('');
   const [bulkRollbackReason, setBulkRollbackReason] = useState('');
   const [achievedValue, setAchievedValue] = useState<string>(data.achievedValue?.toString() ?? '');
@@ -577,6 +580,31 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               <BarChart3 className="h-3.5 w-3.5" />
               Impact
             </Button>
+            {isAdmin && !isPropagated && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1">
+                    <SlidersHorizontal className="h-3.5 w-3.5" />
+                    Edit Scope
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {(['organization', 'department', 'employee'] as const).map(s => (
+                    <DropdownMenuItem
+                      key={s}
+                      disabled={data.scope === s}
+                      onClick={() => setScopeChangeTarget(s)}
+                      className="capitalize"
+                    >
+                      {s === 'organization' && <Building2 className="h-3.5 w-3.5 mr-2" />}
+                      {s === 'department' && <Users className="h-3.5 w-3.5 mr-2" />}
+                      {s === 'employee' && <User className="h-3.5 w-3.5 mr-2" />}
+                      {s}{data.scope === s ? ' (current)' : ''}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             {isAdmin && (
               <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1" onClick={() => setShowOwnerDialog(true)}>
                 <Users className="h-3.5 w-3.5" />
@@ -874,6 +902,21 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
         kraName={data.kraName}
         kpiName={data.kpiName}
       />
+      {scopeChangeTarget && (
+        <OrgKpiScopeChangeDialog
+          open={true}
+          onClose={() => setScopeChangeTarget(null)}
+          identifier={{
+            categoryId: data.categoryId,
+            kraName: data.kraName,
+            kpiName: data.kpiName,
+            reviewPeriod: reviewPeriod,
+            reviewYear: reviewYear,
+          }}
+          currentScope={data.scope}
+          newScope={scopeChangeTarget}
+        />
+      )}
     )}
     </>
   );
