@@ -1,11 +1,13 @@
 ---
-name: Multi-month KPI score inheritance
-description: Terminal month auto-percolates scores to all sibling months on approval; siblings are placeholders, never independently reviewed
+name: Multi-month KPI score inheritance and re-percolation
+description: Terminal month auto-percolates scores to siblings on approval AND on post-approval edits; siblings are placeholders
 type: feature
 ---
 For multi-month KPIs (Bi-Monthly, Quarterly, Half-Yearly, Yearly), only the chronologically terminal month of each cycle goes through the workflow. Sibling months are placeholders.
 
 When the terminal month transitions to `approved`, the `percolate_multimonth_score` trigger force-copies the full submission snapshot (all stage scores, ratings, achieved values, remarks, evidence) to every sibling AND sets `kpis.status = 'approved'`, regardless of the sibling's prior stage. The trigger sets `app.percolation_bypass = 'true'` (transaction-local) so the existing `enforce_frequency_lock_on_submission` trigger does not block its own legitimate writes.
+
+**Post-approval re-percolation** (§54 v4): If scores on the terminal month's `review_submissions` row are modified after approval, `trg_repercolate_on_submission_update` (AFTER UPDATE on `review_submissions`) automatically propagates updated scores to sibling submissions. Uses `app.repercolation_active = 'true'` as recursion guard. Audit action: `SCORE_REPERCOLATED` with `metadata.policy = 'POLICY_54_v4'`.
 
 **Cycle terminal resolution**: use `get_cycle_months(frequency, period, year, frequency_cycle_start)`. The terminal month is the highest calendar index in the array, EXCEPT when the cycle wraps Dec→Jan, in which case trust the array's last element. Client-side mirror: `getActiveMonthForCycle()` in `src/lib/frequencyUtils.ts`.
 
@@ -20,6 +22,7 @@ When the terminal month transitions to `approved`, the `percolate_multimonth_sco
 
 **Audit actions**:
 - `SCORE_PERCOLATED` (metadata.policy = 'POLICY_54_v3', forced=true) — runtime trigger
+- `SCORE_REPERCOLATED` (metadata.policy = 'POLICY_54_v4') — post-approval re-percolation trigger
 - `BACKFILL_MULTIMONTH_PERCOLATION` (performed_by = NULL) — one-shot historical repair on 2026-04-29 (142 terminals → 23 siblings)
 
-See POLICY.md §54 v3 and ADR-047.
+See POLICY.md §54 v3/v4 and ADR-047.
