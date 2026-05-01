@@ -6388,3 +6388,13 @@ trigger remain authoritative.
 
 **Tests:** `src/test/reviewNotes/edit.test.ts` covers the patch shape,
 subject-lock, and month snapping.
+
+### KPI Weightage Dashboard — Pagination (May 2026)
+
+The dashboard at `/admin/kpi-weightage-dashboard` paginates by **employee** to keep cold-load fast as headcount grows (see POLICY §114).
+
+- **Hook split**: `useKpiWeightageMatrix(fiscalYear, filters, { page, pageSize })` returns only the current page's employees. A separate `useWeightageVarianceSummary(fiscalYear, filters)` returns `{ varianceCount, acknowledgedCount, totalEmployees }` aggregated across the **full filter set** so the summary badges stay honest while the user pages.
+- **Query plan**: Step 1 fetches a page of `profiles` server-side (filters applied, `.range(from, to)`, `count: 'exact'`). Step 2 fetches `kpis` for the fiscal year scoped by `.in('employee_id', pageIds)` only. The previous client-side filter pass is gone.
+- **UI**: Filter changes reset to page 1. Free-text employee search is debounced 300 ms. A footer shows `Page X of Y · N employees` with `Per page` (25/50/100) and Prev/Next controls. Expand/Collapse All operate on the visible page.
+- **Cache invalidation**: All mutations (cell edit, acknowledge variance, add KPI to month, AdminKpiEditDialog close) invalidate the `['kpi-weightage-matrix']` prefix; the variance summary key (`['kpi-weightage-variance-summary']`) refreshes on its own staleTime or can be invalidated by callers when needed.
+- **Export**: The Excel export reflects the **current page only**. A future enhancement (out of scope here) is a "Export all (filter-scoped)" path using the aggregate query.
