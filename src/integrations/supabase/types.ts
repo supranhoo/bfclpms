@@ -4334,6 +4334,33 @@ export type Database = {
           },
         ]
       }
+      registry_suggestion_dismissals: {
+        Row: {
+          dismissed_at: string
+          dismissed_by: string | null
+          kind: string
+          left_id: string
+          reason: string | null
+          right_id: string
+        }
+        Insert: {
+          dismissed_at?: string
+          dismissed_by?: string | null
+          kind: string
+          left_id: string
+          reason?: string | null
+          right_id: string
+        }
+        Update: {
+          dismissed_at?: string
+          dismissed_by?: string | null
+          kind?: string
+          left_id?: string
+          reason?: string | null
+          right_id?: string
+        }
+        Relationships: []
+      }
       report_access_config: {
         Row: {
           created_at: string
@@ -7785,6 +7812,15 @@ export type Database = {
         }
         Returns: number
       }
+      dismiss_suggestion: {
+        Args: {
+          p_kind: string
+          p_left_id: string
+          p_reason?: string
+          p_right_id: string
+        }
+        Returns: undefined
+      }
       enqueue_safety_notification: {
         Args: {
           _body?: string
@@ -8127,6 +8163,8 @@ export type Database = {
         Returns: Json
       }
       should_send_email: { Args: { p_user_id: string }; Returns: boolean }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
       start_drill: { Args: { p_drill_id: string }; Returns: Json }
       start_training_attempt: {
         Args: { _assignment_id: string }
@@ -8137,6 +8175,40 @@ export type Database = {
       submit_training_attempt: {
         Args: { _answers: Json; _attempt_id: string; _reading_seconds?: number }
         Returns: Json
+      }
+      suggest_alias_candidates: {
+        Args: { p_limit?: number; p_min_similarity?: number }
+        Returns: {
+          canonical_kpi_name: string
+          canonical_kra_name: string
+          category_id: string
+          category_name: string
+          definition_id: string
+          last_seen: string
+          occurrence_count: number
+          signature_id: string
+          signature_kpi_name: string
+          signature_kra_name: string
+          similarity: number
+        }[]
+      }
+      suggest_definition_merges: {
+        Args: { p_limit?: number; p_min_similarity?: number }
+        Returns: {
+          category_id: string
+          category_name: string
+          left_alias_count: number
+          left_id: string
+          left_kpi_name: string
+          left_kra_name: string
+          left_linked_kpi_count: number
+          right_alias_count: number
+          right_id: string
+          right_kpi_name: string
+          right_kra_name: string
+          right_linked_kpi_count: number
+          similarity: number
+        }[]
       }
       suspend_permit: {
         Args: { p_permit_id: string; p_reason: string }
