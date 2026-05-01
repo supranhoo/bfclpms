@@ -9,7 +9,7 @@ import { Search, ChevronDown, ChevronRight, BookCheck, Trash2, Plus, Loader2 } f
 import { useKpiDefinitions, useKpiAliases, KpiDefinition } from '@/hooks/useKpiRegistry';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { ConfirmDestructiveDialog } from '@/components/shared/ConfirmDestructiveDialog';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 export function ReviewRegistryTab() {
   const { data: definitions, loading, refetch } = useKpiDefinitions();
