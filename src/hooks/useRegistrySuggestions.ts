@@ -179,3 +179,105 @@ export function useDismissSuggestion() {
 
   return { dismiss, loading };
 }
+
+/**
+ * Phase 4c: Wraps merge_definitions(p_keep_id, p_drop_id, p_reason).
+ *
+ * The RPC is transactional; it re-parents aliases, re-points kpis, deletes
+ * the dropped definition, writes one row to kpi_registry_audit_log, and
+ * auto-dismisses the suggestion pair so it does not resurface.
+ */
+export interface MergeDefinitionsResult {
+  success: boolean;
+  kept_id: string;
+  dropped_id: string;
+  reparented_aliases: number;
+  dropped_alias_conflicts: number;
+  repointed_kpis: number;
+  backfill_alias_id: string | null;
+}
+
+export function useMergeDefinitions() {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+
+  const merge = useCallback(async (
+    keepId: string,
+    dropId: string,
+    reason?: string,
+  ): Promise<MergeDefinitionsResult | null> => {
+    setLoading(true);
+    try {
+      const { data, error } = await (supabase.rpc as any)('merge_definitions', {
+        p_keep_id: keepId,
+        p_drop_id: dropId,
+        p_reason: reason ?? null,
+      });
+      if (error) throw error;
+      const result = data as MergeDefinitionsResult;
+      toast({
+        title: 'Definitions merged',
+        description:
+          `Re-parented ${result.reparented_aliases} alias(es) and re-pointed ${result.repointed_kpis} KPI link(s).` +
+          (result.dropped_alias_conflicts > 0
+            ? ` ${result.dropped_alias_conflicts} duplicate alias(es) discarded.`
+            : ''),
+      });
+      return result;
+    } catch (err: any) {
+      toast({
+        title: 'Merge failed',
+        description: err?.message || 'Unknown error',
+        variant: 'destructive',
+      });
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  return { merge, loading };
+}
+
+/**
+ * Phase 4c: Lightweight badge data for the Health dashboard.
+ * Always fails open (returns zeroes) so a transient RPC error does not
+ * blank the Health tab.
+ */
+export interface PendingSuggestionCount {
+  merge_count: number;
+  alias_count: number;
+  total: number;
+}
+
+export function usePendingSuggestionCount() {
+  const [counts, setCounts] = useState<PendingSuggestionCount>({
+    merge_count: 0, alias_count: 0, total: 0,
+  });
+  const [loading, setLoading] = useState(true);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await (supabase.rpc as any)(
+        'get_registry_pending_suggestion_count',
+      );
+      if (error) throw error;
+      if (data && typeof data === 'object') {
+        setCounts({
+          merge_count: Number((data as any).merge_count ?? 0),
+          alias_count: Number((data as any).alias_count ?? 0),
+          total: Number((data as any).total ?? 0),
+        });
+      }
+    } catch (e) {
+      console.warn('[usePendingSuggestionCount] failed', e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  return { counts, loading, refresh };
+}
