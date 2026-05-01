@@ -509,15 +509,12 @@ Deno.serve(async (req) => {
     for (let i = 0; i < kpisToInsert.length; i += 500) {
       const batch = kpisToInsert.slice(i, i + 500);
 
-      // Suppress per-KPI notifications during rollover batch insert
-      await supabase.rpc('execute_sql_void', { sql: "SET LOCAL app.rollover_batch = 'true'" }).catch(() => {
-        // Fallback: try raw SQL via postgrest if RPC doesn't exist
-      });
-
-      const { data: inserted, error: insertError } = await supabase
-        .from('kpis')
-        .insert(batch)
-        .select('id');
+      // Use the batch insert function that sets the rollover flag,
+      // suppressing per-KPI notification triggers
+      const { data: insertedCount, error: insertError } = await supabase
+        .rpc('batch_insert_kpis_with_rollover_flag', {
+          kpis_json: JSON.stringify(batch),
+        });
 
       if (insertError) {
         await supabase.from('kra_rollover_logs').insert({
@@ -529,7 +526,7 @@ Deno.serve(async (req) => {
         });
         throw new Error(`Insert failed: ${insertError.message}`);
       }
-      totalInserted += inserted?.length || 0;
+      totalInserted += insertedCount || 0;
     }
 
     // ── Send ONE consolidated notification + email per affected employee ──
