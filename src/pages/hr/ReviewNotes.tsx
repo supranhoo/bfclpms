@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, Search, ShieldAlert, Plus } from 'lucide-react';
+import { Trash2, Search, ShieldAlert, Plus, Pencil } from 'lucide-react';
 import { useReviewNoteAccess } from '@/hooks/useReviewNoteAccess';
 import {
   useReviewNotesList,
@@ -18,6 +18,7 @@ import {
   REVIEW_NOTE_PRIORITY_LABELS,
   type ReviewNoteStatus,
   type ReviewNoteCategory,
+  type ReviewActionNote,
 } from '@/services/reviewNotes/reviewNotesService';
 import { ReviewNoteStatusPill } from '@/components/reviewNotes/ReviewNoteStatusPill';
 import { EmployeePickerCombobox } from '@/components/reviewNotes/EmployeePickerCombobox';
@@ -50,6 +51,7 @@ export default function ReviewNotes() {
   const [applyFromMode, setApplyFromMode] = useState<ApplyFromMode>('any');
   const [applyFromSpecific, setApplyFromSpecific] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [editing, setEditing] = useState<ReviewActionNote | null>(null);
 
   const applyFromBounds = useMemo(() => {
     const now = new Date();
@@ -270,18 +272,34 @@ export default function ReviewNotes() {
                           </Select>
                         </TableCell>
                         <TableCell className="text-right">
-                          {access.canDelete && (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                              onClick={() => {
-                                if (confirm('Delete this note? This cannot be undone.')) remove.mutate(n.id);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
+                          <div className="flex items-center justify-end gap-1">
+                            {access.canEdit && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-muted-foreground hover:text-primary"
+                                onClick={() => setEditing(n)}
+                                title="Edit note"
+                                aria-label="Edit note"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {access.canDelete && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                onClick={() => {
+                                  if (confirm('Delete this note? This cannot be undone.')) remove.mutate(n.id);
+                                }}
+                                title="Delete note"
+                                aria-label="Delete note"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -295,6 +313,14 @@ export default function ReviewNotes() {
 
       {/* Hub-level "+ Add Note" — opens with employee picker enabled (no subjectEmployeeId prop). */}
       <AddReviewNoteSheet open={addOpen} onOpenChange={setAddOpen} />
+
+      {/* Inline edit sheet — subject is locked; pre-filled from the row. */}
+      <AddReviewNoteSheet
+        mode="edit"
+        note={editing}
+        open={!!editing}
+        onOpenChange={(o) => { if (!o) setEditing(null); }}
+      />
     </div>
   );
 }
