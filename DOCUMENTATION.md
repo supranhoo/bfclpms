@@ -6409,3 +6409,18 @@ The dashboard at `/admin/kpi-weightage-dashboard` paginates by **employee** to k
 4. Surfaces a contextual toast: *"Linked to existing canonical entry"* (reuse) or *"Registry entry created"* (new), with `<n> aliases linked (<m> already present)`.
 
 The pure helper `diffAliasInserts(canonical, variants, categoryId, existingAliases)` is exported from `src/hooks/useKpiRegistry.ts` and locked by `src/hooks/useBuildRegistry.test.ts` (5 tests: fresh insert, partial overlap, full overlap, internal duplicates, distinct category). Policy: §88A.6.
+
+## KPI Standardization — Phase 5b: History, Undo & Edit (v2.66.7.24)
+
+The `/admin/kpi-standardization` page now has 7 tabs. **History & Undo** is the new 7th tab.
+
+### What changed
+- **Edit canonical names** — every entry in *Review Registry* has a pencil icon that opens `EditDefinitionDialog`. Two propagation modes: *Registry only* or *Registry + propagate to current KPIs*. Propagation skips pre-May-2026 rows.
+- **Inline canonical editing on approval** — the *Build Registry* tab now lets admins override the canonical KRA/KPI text before clicking *Approve as Canonical*.
+- **Per-alias unlink** — *Review Registry* now exposes a `Link2Off` icon next to each non-canonical alias. Logged + undoable.
+- **Drill-in to KPI rows** — every duplicate variant (Build Registry), every registry entry (Review Registry), and every unlinked signature (Correct May KPIs) has a *View KPIs / View affected employees* expander backed by the shared paginated `AffectedKpisTable` (25/page).
+- **Append-only action history** — every standardization mutation logs to `public.kpi_standardization_actions`. Admin-only SELECT/INSERT; no UPDATE/DELETE policy.
+- **Undo** — `reverse_standardization_action(uuid)` is the single sanctioned undo path (SECURITY DEFINER, admin-gated). Reversed rows remain visible in the history (dimmed) for audit.
+- **`correct_may_kpis` v2** — same signature, now also captures a complete before-image (affected `kpi.id`s + prior `kpi_definition_id`) into the action payload so each rename can be reverted exactly.
+
+Policy: **§88I**. Locked by `src/hooks/useStandardizationHistory.test.ts` (10 tests).

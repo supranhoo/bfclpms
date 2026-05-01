@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ScanSearch, BookCheck, Wrench, ShieldCheck, Activity, Sparkles } from 'lucide-react';
+import { ScanSearch, BookCheck, Wrench, ShieldCheck, Activity, Sparkles, History } from 'lucide-react';
 import { BuildRegistryTab } from '@/components/admin/kpi-standardization/BuildRegistryTab';
 import { ReviewRegistryTab } from '@/components/admin/kpi-standardization/ReviewRegistryTab';
 import { CorrectMayKpisTab } from '@/components/admin/kpi-standardization/CorrectMayKpisTab';
 import { GovernanceTab } from '@/components/admin/kpi-standardization/GovernanceTab';
 import { HealthCoverageTab } from '@/components/admin/kpi-standardization/HealthCoverageTab';
 import { SuggestionsTab } from '@/components/admin/kpi-standardization/SuggestionsTab';
+import { HistoryUndoTab } from '@/components/admin/kpi-standardization/HistoryUndoTab';
 
 export default function KpiStandardization() {
   const [activeTab, setActiveTab] = useState('build');
@@ -21,7 +22,7 @@ export default function KpiStandardization() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-6 w-full max-w-4xl">
+        <TabsList className="grid grid-cols-7 w-full max-w-5xl">
           <TabsTrigger value="build" className="flex items-center gap-1.5">
             <ScanSearch className="h-4 w-4" />
             Build Registry
@@ -45,6 +46,10 @@ export default function KpiStandardization() {
           <TabsTrigger value="suggestions" className="flex items-center gap-1.5">
             <Sparkles className="h-4 w-4" />
             Suggestions
+          </TabsTrigger>
+          <TabsTrigger value="history" className="flex items-center gap-1.5">
+            <History className="h-4 w-4" />
+            History &amp; Undo
           </TabsTrigger>
         </TabsList>
 
@@ -70,6 +75,10 @@ export default function KpiStandardization() {
 
         <TabsContent value="suggestions" className="mt-4">
           <SuggestionsTab />
+        </TabsContent>
+
+        <TabsContent value="history" className="mt-4">
+          <HistoryUndoTab />
         </TabsContent>
       </Tabs>
     </div>

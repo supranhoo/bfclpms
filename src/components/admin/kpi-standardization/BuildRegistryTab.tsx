@@ -3,11 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Loader2, ScanSearch, CheckCircle2, Search } from 'lucide-react';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Loader2, ScanSearch, CheckCircle2, Search, Eye, Pencil } from 'lucide-react';
 import { useScanDuplicates, useBuildRegistry, DuplicateGroup } from '@/hooks/useKpiRegistry';
 import { useToast } from '@/hooks/use-toast';
+import { AffectedKpisTable } from './AffectedKpisTable';
 
 interface Props {
   onRegistryUpdated: () => void;
@@ -18,6 +20,10 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
   const { createDefinitionWithAliases, saving } = useBuildRegistry();
   const [search, setSearch] = useState('');
   const [selections, setSelections] = useState<Record<string, number>>({});
+  // Per-group canonical text overrides. Keyed by groupKey.
+  const [canonicalOverrides, setCanonicalOverrides] = useState<Record<string, { kra: string; kpi: string }>>({});
+  const [editingCanonical, setEditingCanonical] = useState<Record<string, boolean>>({});
+  const [drillIn, setDrillIn] = useState<Record<string, number | null>>({});
   const [processedGroups, setProcessedGroups] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
@@ -36,12 +42,19 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
   const handleApprove = async (group: DuplicateGroup) => {
     const key = groupKey(group);
     const selectedIdx = selections[key] ?? 0;
-    const canonical = group.variants[selectedIdx];
-    if (!canonical) return;
+    const baseCanonical = group.variants[selectedIdx];
+    if (!baseCanonical) return;
+    const override = canonicalOverrides[key];
+    const canonicalKra = (override?.kra ?? baseCanonical.kra_name).trim();
+    const canonicalKpi = (override?.kpi ?? baseCanonical.kpi_name).trim();
+    if (!canonicalKra || !canonicalKpi) {
+      toast({ title: 'Canonical KRA and KPI are required', variant: 'destructive' });
+      return;
+    }
 
     const defId = await createDefinitionWithAliases(
-      canonical.kra_name,
-      canonical.kpi_name,
+      canonicalKra,
+      canonicalKpi,
       group.category_id,
       group.variants.map(v => ({ kra_name: v.kra_name, kpi_name: v.kpi_name }))
     );
@@ -94,6 +107,12 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
       {pendingGroups.map((group) => {
         const key = groupKey(group);
         const selectedIdx = selections[key] ?? 0;
+        const override = canonicalOverrides[key];
+        const isEditing = !!editingCanonical[key];
+        const canonical = group.variants[selectedIdx];
+        const canonicalKra = override?.kra ?? canonical?.kra_name ?? '';
+        const canonicalKpi = override?.kpi ?? canonical?.kpi_name ?? '';
+        const drillIdx = drillIn[key];
 
         return (
           <Card key={key} className="border-l-4 border-l-amber-500">
@@ -111,7 +130,12 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
             <CardContent className="space-y-3">
               <RadioGroup
                 value={String(selectedIdx)}
-                onValueChange={v => setSelections(prev => ({ ...prev, [key]: Number(v) }))}
+                onValueChange={v => {
+                  setSelections(prev => ({ ...prev, [key]: Number(v) }));
+                  // reset override when user switches base variant
+                  setCanonicalOverrides(prev => { const n = { ...prev }; delete n[key]; return n; });
+                  setEditingCanonical(prev => ({ ...prev, [key]: false }));
+                }}
               >
                 {group.variants.map((variant, idx) => (
                   <div key={idx} className="flex items-start gap-3 p-2 rounded-md hover:bg-muted/50">
@@ -124,11 +148,69 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
                       <div className="flex gap-2 mt-1">
                         <Badge variant="secondary" className="text-xs">{variant.employee_count} employees</Badge>
                         <Badge variant="outline" className="text-xs">{variant.row_count} rows</Badge>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-5 px-2 text-xs"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setDrillIn(prev => ({ ...prev, [key]: prev[key] === idx ? null : idx }));
+                          }}
+                        >
+                          <Eye className="h-3 w-3 mr-1" />
+                          {drillIdx === idx ? 'Hide' : 'View'} KPIs
+                        </Button>
                       </div>
+                      {drillIdx === idx && (
+                        <div className="mt-2">
+                          <AffectedKpisTable
+                            categoryId={group.category_id}
+                            kraName={variant.kra_name}
+                            kpiName={variant.kpi_name}
+                          />
+                        </div>
+                      )}
                     </Label>
                   </div>
                 ))}
               </RadioGroup>
+
+              <div className="border rounded-md p-3 bg-muted/30 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-medium">Canonical name (will be saved to registry)</div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 text-xs"
+                    onClick={() => setEditingCanonical(prev => ({ ...prev, [key]: !isEditing }))}
+                  >
+                    <Pencil className="h-3 w-3 mr-1" />
+                    {isEditing ? 'Use selected variant' : 'Edit canonical'}
+                  </Button>
+                </div>
+                {isEditing ? (
+                  <div className="space-y-2">
+                    <Input
+                      value={canonicalKra}
+                      onChange={e => setCanonicalOverrides(prev => ({ ...prev, [key]: { kra: e.target.value, kpi: prev[key]?.kpi ?? canonicalKpi } }))}
+                      placeholder="Canonical KRA name"
+                      className="text-sm"
+                    />
+                    <Textarea
+                      value={canonicalKpi}
+                      onChange={e => setCanonicalOverrides(prev => ({ ...prev, [key]: { kpi: e.target.value, kra: prev[key]?.kra ?? canonicalKra } }))}
+                      placeholder="Canonical KPI name"
+                      rows={2}
+                      className="text-sm"
+                    />
+                  </div>
+                ) : (
+                  <div className="text-xs">
+                    <div className="font-medium">{canonicalKra}</div>
+                    <div className="text-muted-foreground line-clamp-2">{canonicalKpi}</div>
+                  </div>
+                )}
+              </div>
 
               <div className="flex justify-end pt-2">
                 <Button

@@ -5,17 +5,20 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Search, ChevronDown, ChevronRight, BookCheck, Trash2, Plus, Loader2 } from 'lucide-react';
-import { useKpiDefinitions, useKpiAliases, KpiDefinition } from '@/hooks/useKpiRegistry';
-import { supabase } from '@/integrations/supabase/client';
+import { Search, ChevronDown, ChevronRight, BookCheck, Trash2, Plus, Loader2, Pencil, Link2Off, Eye } from 'lucide-react';
+import { useKpiDefinitions, useKpiAliases, KpiDefinition, useDeleteDefinition, useUnlinkAlias } from '@/hooks/useKpiRegistry';
 import { useToast } from '@/hooks/use-toast';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
+import { EditDefinitionDialog } from './EditDefinitionDialog';
+import { AffectedKpisTable } from './AffectedKpisTable';
 
 export function ReviewRegistryTab() {
   const { data: definitions, loading, refetch } = useKpiDefinitions();
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<KpiDefinition | null>(null);
   const { toast } = useToast();
+  const { deleteDefinition } = useDeleteDefinition();
 
   const filtered = useMemo(() => {
     if (!search.trim()) return definitions;
@@ -27,13 +30,8 @@ export function ReviewRegistryTab() {
   }, [definitions, search]);
 
   const handleDelete = async (id: string) => {
-    const { error } = await supabase.from('kpi_definitions' as any).delete().eq('id', id);
-    if (error) {
-      toast({ title: 'Delete failed', description: error.message, variant: 'destructive' });
-    } else {
-      toast({ title: 'Definition deleted' });
-      refetch();
-    }
+    const ok = await deleteDefinition(id);
+    if (ok) refetch();
   };
 
   if (loading) {
@@ -85,12 +83,20 @@ export function ReviewRegistryTab() {
                   isExpanded={expandedId === def.id}
                   onToggle={() => setExpandedId(expandedId === def.id ? null : def.id)}
                   onDelete={() => handleDelete(def.id)}
+                  onEdit={() => setEditing(def)}
                 />
               ))}
             </div>
           )}
         </CardContent>
       </Card>
+
+      <EditDefinitionDialog
+        open={!!editing}
+        onClose={() => setEditing(null)}
+        definition={editing}
+        onSaved={refetch}
+      />
     </div>
   );
 }
@@ -100,14 +106,18 @@ function RegistryRow({
   isExpanded,
   onToggle,
   onDelete,
+  onEdit,
 }: {
   definition: KpiDefinition;
   isExpanded: boolean;
   onToggle: () => void;
   onDelete: () => void;
+  onEdit: () => void;
 }) {
-  const { data: aliases, loading } = useKpiAliases(isExpanded ? definition.id : undefined);
+  const { data: aliases, loading, refetch: refetchAliases } = useKpiAliases(isExpanded ? definition.id : undefined);
+  const { unlinkAlias, saving: unlinking } = useUnlinkAlias();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showAffected, setShowAffected] = useState(false);
 
   return (
     <>
@@ -122,14 +132,26 @@ function RegistryRow({
                   {definition.canonical_kpi_name.slice(0, 120)}
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
-                onClick={e => { e.stopPropagation(); setShowDeleteDialog(true); }}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center gap-1 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={e => { e.stopPropagation(); onEdit(); }}
+                  title="Edit canonical name"
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-destructive hover:text-destructive"
+                  onClick={e => { e.stopPropagation(); setShowDeleteDialog(true); }}
+                  title="Delete entry"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </CollapsibleTrigger>
           <CollapsibleContent>
@@ -144,15 +166,52 @@ function RegistryRow({
                   {aliases.map(alias => (
                     <div key={alias.id} className="flex items-center gap-2 text-xs bg-muted/30 rounded px-2 py-1.5">
                       <Badge variant="outline" className="text-xs shrink-0">KRA</Badge>
-                      <span className="truncate">{alias.variant_kra_name}</span>
+                      <span className="truncate flex-1" title={`${alias.variant_kra_name} / ${alias.variant_kpi_name}`}>{alias.variant_kra_name}</span>
                       {alias.variant_kra_name === definition.canonical_kra_name &&
                        alias.variant_kpi_name === definition.canonical_kpi_name && (
-                        <Badge className="text-xs ml-auto shrink-0">Canonical</Badge>
+                        <Badge className="text-xs shrink-0">Canonical</Badge>
+                      )}
+                      {!(alias.variant_kra_name === definition.canonical_kra_name &&
+                         alias.variant_kpi_name === definition.canonical_kpi_name) && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6"
+                          disabled={unlinking}
+                          onClick={async () => {
+                            const ok = await unlinkAlias(alias);
+                            if (ok) refetchAliases();
+                          }}
+                          title="Unlink this alias"
+                        >
+                          <Link2Off className="h-3 w-3" />
+                        </Button>
                       )}
                     </div>
                   ))}
                 </div>
               )}
+
+              <div className="mt-3 pt-2 border-t">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setShowAffected(s => !s)}
+                >
+                  <Eye className="h-3 w-3 mr-1" />
+                  {showAffected ? 'Hide' : 'View'} affected KPI rows
+                </Button>
+                {showAffected && (
+                  <div className="mt-2">
+                    <AffectedKpisTable
+                      categoryId={definition.category_id}
+                      kraName={definition.canonical_kra_name}
+                      kpiName={definition.canonical_kpi_name}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           </CollapsibleContent>
         </div>
