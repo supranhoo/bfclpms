@@ -6142,3 +6142,43 @@ tabs and the Phase 2b `promote_signature_to_definition` RPC.
 created before the registry existed and are intentionally frozen by
 §88B/§88C. Including them would permanently depress `coverage_pct` and
 make the metric useless as an operational signal for the new regime.
+
+### Phase 3a — Registry Visibility in Creation Flows (2026-05-01)
+
+Phase 3a closes the gap between the silent DB auto-link trigger (Phase 2b)
+and the authors who create KPIs. Authors now see at a glance whether the
+KPI they are about to save is part of the canonical registry, without
+introducing a second picker that would compete with the existing KRA
+Library template picker.
+
+- **`RegistryBadge`** — Self-fetching inline badge for forms with one
+  KRA/KPI input pair. Uses `useCanonicalResolver()` with a single
+  signature. Renders nothing while loading or out of scope, then either
+  a green "Registered" badge with the canonical name in tooltip, or an
+  amber "Not in registry" badge explaining the soft-enforcement model.
+- **`RegistryBadgePreset`** — Pure presentational variant for list
+  contexts. Consumes a pre-resolved Map from a parent that called
+  `useCanonicalResolver()` once with all visible signatures.
+- **`src/lib/canonicalEnforcementPeriod.ts`** — Extracted client mirror
+  of the DB `is_canonical_enforcement_period()` function. Single import
+  used by both `RegistryBadge` and the existing test suite, ensuring
+  the period rule is defined exactly once on the client.
+
+**Wiring:**
+- `AdminKpiEditorForm` — single `RegistryBadge` next to the "KPI Name"
+  label, gated on the edited KPI's own `review_period`/`review_year`.
+- `AdminKpiCreateDialog` — single `RegistryBadge` next to the "KPI Name *"
+  label, gated on the dialog's `reviewPeriod`/`reviewYear` state.
+- `SmartAssignmentDialog` — batch resolver in role-template list, with
+  `RegistryBadgePreset` rendered inside each template card next to the
+  existing Category and Weightage badges.
+
+**Deliberately not wired:**
+- `OrgKpiBulkImport` is an achievement-value importer (Excel rows of
+  achieved values mapped against existing org-level KPI definitions) —
+  it does not create new KPI names, so the registry concept does not
+  apply there. Adding a badge would be noise.
+
+**Tests:** `src/components/admin/kpi-standardization/RegistryBadge.test.tsx`
+(5 tests) locks the period-gate visibility rule and the signature-key
+normalization contract that ties badge lookups to the resolver's writes.

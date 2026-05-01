@@ -2389,3 +2389,19 @@ without measuring the produced URL length.
 5. **Drift is advisory.** `detect_alias_drift()` flags definitions whose aliases span >1 distinct KRA name. This is a hint, not a rule — some legitimate canonical KPIs do span KRA renames. Do not auto-split or auto-merge from this signal.
 
 6. **Fail-open loading.** The `useRegistryHealth` hook MUST set local error state on RPC failure rather than throwing, and the dashboard MUST render an inline destructive Card with the message instead of crashing the page.
+
+---
+
+## §88E — Phase 3a Registry Visibility in Creation Flows
+
+1. **Inline indicator only — no second picker.** The `RegistryBadge` (and its presentational sibling `RegistryBadgePreset`) only **labels** the user's current selection. It MUST NOT introduce a parallel picker that competes with the existing `kpi_templates` (KRA Library) picker; that would split authoring intent across two taxonomies.
+
+2. **Period-gated visibility.** The badge MUST hide whenever `isCanonicalEnforcementPeriod(period, year)` returns false. This keeps it invisible in pre-May-2026 data-repair and historical-edit flows so authors are not nudged about records they cannot restandardize.
+
+3. **Single client mirror of the period rule.** All client gating MUST go through `src/lib/canonicalEnforcementPeriod.ts`. Any future code that needs the same gate MUST import this helper rather than re-implement the month-list inline. The DB function `is_canonical_enforcement_period()` remains the source of truth; the client mirror exists only for UI hide/show decisions and is locked by `canonicalEnforcementPeriod.test.ts`.
+
+4. **Batch resolver in list contexts.** When showing the badge across multiple rows (e.g. SmartAssignmentDialog template cards), callers MUST use `useCanonicalResolver()` once with the full signature array and pass the resulting Map down via `RegistryBadgePreset`. Per-row `RegistryBadge` instances inside lists are forbidden — they would issue N RPCs.
+
+5. **Non-blocking, never enforced from the UI.** The badge MUST NOT prevent submission, change form validity, or alter what gets written to `kpis`. Auto-linking remains the trigger's job per §88C; the badge is purely informational.
+
+6. **Out of scope for 3a.** OrgKpiBulkImport is an **achievement-value** importer that maps Excel rows to existing `kpi_templates` — it does not author new KPI names. The badge does not appear there because there is no authoring decision to label.
