@@ -54,7 +54,6 @@ const EmployeeDevelopment = lazy(() => import("./pages/admin/EmployeeDevelopment
 const OrgKpiAuditReview = lazy(() => import("./pages/admin/OrgKpiAuditReview"));
 const EmployeeMasterBackfill = lazy(() => import("./pages/admin/EmployeeMasterBackfill"));
 const ReviewNotes = lazy(() => import("./pages/hr/ReviewNotes"));
-const ReviewNotesAccess = lazy(() => import("./pages/admin/ReviewNotesAccess"));
 const ModuleHubSettings = lazy(() => import("./pages/admin/ModuleHubSettings"));
 const IdentityAccessConsole = lazy(() => import("./pages/admin/IdentityAccessConsole"));
 
@@ -279,11 +278,6 @@ const App = () => (
                 <Route path="/hr/review-notes" element={
                   <ProtectedRoute allowedRoles={['admin', 'hr_pms', 'manager', 'skip_level', 'management', 'auditor', 'employee']}>
                     <ReviewNotes />
-                  </ProtectedRoute>
-                } />
-                <Route path="/admin/review-notes-access" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
-                    <ReviewNotesAccess />
                   </ProtectedRoute>
                 } />
               <Route path="/admin/module-hub" element={
