@@ -4,10 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Wrench, CheckCircle2, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Loader2, Wrench, CheckCircle2, AlertTriangle, ArrowRight, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useKpiDefinitions, useCorrectMayKpis, KpiDefinition } from '@/hooks/useKpiRegistry';
 import { useToast } from '@/hooks/use-toast';
+import { AffectedKpisTable } from './AffectedKpisTable';
 
 interface UnlinkedSignature {
   kra_name: string;
@@ -30,6 +31,7 @@ export function CorrectMayKpisTab() {
   const [loading, setLoading] = useState(false);
   const [mappings, setMappings] = useState<Record<string, string>>({});
   const [corrected, setCorrected] = useState<Set<string>>(new Set());
+  const [viewingKey, setViewingKey] = useState<string | null>(null);
 
   const fetchUnlinked = useCallback(async () => {
     setLoading(true);
@@ -242,6 +244,29 @@ export function CorrectMayKpisTab() {
                         No matching registry entry found — select manually or create one in Build Registry
                       </div>
                     )}
+
+                    <div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 text-xs"
+                        onClick={() => setViewingKey(viewingKey === key ? null : key)}
+                      >
+                        <Eye className="h-3 w-3 mr-1" />
+                        {viewingKey === key ? 'Hide' : 'View'} affected employees
+                      </Button>
+                      {viewingKey === key && (
+                        <div className="mt-2">
+                          <AffectedKpisTable
+                            categoryId={sig.category_id}
+                            kraName={sig.kra_name}
+                            kpiName={sig.kpi_name}
+                            reviewPeriod={period}
+                            reviewYear={year}
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })}
