@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Shield, Plus, Trash2, Save, Users, Settings2, Search } from 'lucide-react';
 import { useAccessProfiles, type AccessProfileMenuRight } from '@/hooks/useAccessProfiles';
+import { ReviewNotesAccessInline } from './ReviewNotesAccessInline';
 import { useMenuAccess, type MenuAccessConfig } from '@/hooks/useMenuAccess';
 import { useCompanies } from '@/hooks/useCompanies';
 import { useDivisions, useBusinessUnits, useDepartments, useSubBranches } from '@/hooks/useOrganization';
@@ -497,6 +498,12 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
                       );
                     })
                   )}
+                  {/* Inline Review Notes Access config */}
+                  <TableRow>
+                    <TableCell colSpan={6} className="p-0">
+                      <ReviewNotesAccessInline />
+                    </TableCell>
+                  </TableRow>
                 </TableBody>
               </Table>
             </div>
