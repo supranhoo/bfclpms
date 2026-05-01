@@ -2317,6 +2317,8 @@ without measuring the produced URL length.
 
 5. **Scoring Independence:** Standardizing KPI names does NOT affect per-employee scoring thresholds (r5-r0), target values, or weightages. These remain independently configurable.
 
+6. **Idempotent Approval:** "Approve as Canonical" in the Build Registry tab MUST be idempotent. If a `kpi_definitions` row already exists for the chosen `(canonical_kra_name, canonical_kpi_name)` pair, the flow MUST reuse that definition and only insert the missing `kpi_name_aliases` rows — never raise a duplicate-key error to the user. De-duplication is case- and whitespace-insensitive.
+
 ---
 
 ## §88B — Phase 2a Canonical Resolver Read Path
