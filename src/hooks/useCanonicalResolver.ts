@@ -57,9 +57,9 @@ export function useCanonicalResolver(signatures: CanonicalSignature[]) {
         kra_name: s.kra_name,
         kpi_name: s.kpi_name,
       }));
-      const { data, error } = await supabase.rpc(
-        'resolve_canonical_kpi_batch' as never,
-        { p_signatures: payload as never },
+      const { data, error } = await (supabase as any).rpc(
+        'resolve_canonical_kpi_batch',
+        { p_signatures: payload },
       );
       if (error) {
         // Don't blow up the page — degrade gracefully to "no resolutions" so
