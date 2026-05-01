@@ -2355,6 +2355,7 @@ without measuring the produced URL length.
 ## Version History
 - **v2.66.7.16 (2026-05-01):** §88B added — Phase 2a canonical resolver read path. Adds `resolve_canonical_kpi_batch` RPC, `useCanonicalResolver` hook, `canonicalGrouping` utilities, and KraSummaryTab merge with "Also known as" tooltip.
 - **v2.66.7.17 (2026-05-01):** §88C added — Phase 2b soft enforcement via DB trigger `trg_kpi_canonical_autolink`, feature flag `enable_kpi_canonical_autolink` (default ON), `promote_signature_to_definition` admin RPC, and Governance tab on /admin/kpi-standardization.
+- **v2.66.7.18 (2026-05-01):** §88D added — Phase 2c Registry Health & Coverage dashboard. Adds admin-only RPCs `get_registry_coverage_stats`, `get_unlinked_signatures`, `detect_alias_drift`, `useRegistryHealth` hook, and `HealthCoverageTab` on /admin/kpi-standardization.
 
 ---
 
@@ -2371,3 +2372,19 @@ without measuring the produced URL length.
 5. **Toggleable, audited.** The `enable_kpi_canonical_autolink` system_settings flag pauses auto-linking without dropping the trigger. Each auto-link writes a `KPI_CANONICAL_AUTOLINKED` audit row with `performed_by = NULL` (system action per System Performer Attribution memory). Audit insert is wrapped in EXCEPTION so logging failures never block KPI writes.
 
 6. **Admin-only promotion.** `promote_signature_to_definition()` is gated by an admin role check and back-links only May 2026+ rows. It MUST NOT be exposed to non-admin RPC callers.
+
+---
+
+## §88D — Phase 2c Registry Health & Coverage
+
+1. **Read-only metrics surface.** The Health & Coverage tab is purely observational. It MUST NOT mutate definitions, aliases, or KPI rows. All write actions remain in Build Registry / Review Registry / Governance tabs.
+
+2. **Coverage scope = enforcement scope.** All "in-scope" counts (`inscope_kpis_total`, `inscope_kpis_linked`, `inscope_kpis_unlinked`, `coverage_pct`) MUST use `is_canonical_enforcement_period(review_period, review_year)` so dashboard math always agrees with what the auto-link trigger actually controls. Historical KPIs (pre-May 2026) are intentionally excluded from coverage percentage to avoid permanently dragging it down.
+
+3. **Admin-gated RPCs.** `get_registry_coverage_stats`, `get_unlinked_signatures`, and `detect_alias_drift` MUST raise `access denied` for any caller lacking the `admin` role. They are SECURITY DEFINER with `SET search_path = public` per PLpgSQL Standards.
+
+4. **Unlinked queue ranking.** Unlinked signatures are ordered by `occurrence_count DESC, last_seen DESC` so admins triage the highest-impact gaps first. The default page size is 100; do not raise without a paging UI.
+
+5. **Drift is advisory.** `detect_alias_drift()` flags definitions whose aliases span >1 distinct KRA name. This is a hint, not a rule — some legitimate canonical KPIs do span KRA renames. Do not auto-split or auto-merge from this signal.
+
+6. **Fail-open loading.** The `useRegistryHealth` hook MUST set local error state on RPC failure rather than throwing, and the dashboard MUST render an inline destructive Card with the message instead of crashing the page.

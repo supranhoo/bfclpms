@@ -6106,3 +6106,39 @@ maintenance, fully reversible via feature flag.
 - **Tests:** `src/lib/canonicalEnforcementPeriod.test.ts` (6 tests
   documenting the period-gate contract — DB function is the source of
   truth, this test mirrors it).
+
+### Phase 2c — Registry Health & Coverage (2026-05-01)
+
+Phase 2c closes the loop on the registry by giving admins continuous
+visibility into how well it covers active KPI data. It is read-only —
+no new mutation paths are introduced. Promotion of unlinked signatures
+continues to flow through the existing Build Registry / Review Registry
+tabs and the Phase 2b `promote_signature_to_definition` RPC.
+
+- **`get_registry_coverage_stats()`** — Admin-only RPC returning a JSONB
+  blob with `total_definitions`, `total_aliases`, in-scope KPI counts
+  (`inscope_kpis_total`, `inscope_kpis_linked`, `inscope_kpis_unlinked`,
+  `inscope_distinct_signatures`), and `coverage_pct`. "In-scope" means
+  rows passing `is_canonical_enforcement_period()` (May 2026+) — the same
+  gate the auto-link trigger uses, so the dashboard math is always
+  consistent with what enforcement actually controls.
+- **`get_unlinked_signatures(limit)`** — Admin-only RPC returning the
+  distinct (category, kra_name, kpi_name) tuples that are in scope but
+  not linked. Ranked by occurrence count, then last-seen timestamp.
+- **`detect_alias_drift()`** — Admin-only RPC returning canonical
+  definitions whose aliases span more than one distinct KRA name. This
+  is an advisory signal for possible mis-grouping; admins decide whether
+  to split.
+- **`useRegistryHealth()`** — React hook that loads all three RPCs in
+  parallel and exposes `{ stats, unlinked, drift, loading, error,
+  refresh }`. Fails open: an RPC error sets `error` instead of throwing.
+- **`HealthCoverageTab`** — New tab on `/admin/kpi-standardization`
+  with four metric cards (Definitions, Aliases, Linked KPIs, Unlinked
+  KPIs), a coverage progress gauge tinted by threshold (≥90% green,
+  ≥60% amber, otherwise destructive), the unlinked signatures queue,
+  and the alias-drift table.
+
+**Why "in-scope" excludes pre-May-2026 data:** historical KPIs were
+created before the registry existed and are intentionally frozen by
+§88B/§88C. Including them would permanently depress `coverage_pct` and
+make the metric useless as an operational signal for the new regime.

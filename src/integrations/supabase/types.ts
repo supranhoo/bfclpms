@@ -7764,6 +7764,19 @@ export type Database = {
         Args: { p_decision: string; p_notes?: string; p_permit_id: string }
         Returns: Json
       }
+      detect_alias_drift: {
+        Args: never
+        Returns: {
+          alias_count: number
+          canonical_kpi_name: string
+          canonical_kra_name: string
+          category_id: string
+          category_name: string
+          definition_id: string
+          variant_kra_count: number
+          variant_kra_names: string[]
+        }[]
+      }
       detect_training_needs_for_period: {
         Args: {
           p_review_period: string
@@ -7874,6 +7887,7 @@ export type Database = {
           id: string
         }[]
       }
+      get_registry_coverage_stats: { Args: never; Returns: Json }
       get_safety_setting: { Args: { p_key: string }; Returns: Json }
       get_skip_level_manager: {
         Args: { employee_uuid: string }
@@ -7884,6 +7898,18 @@ export type Database = {
         Returns: {
           linked_count: number
           template_id: string
+        }[]
+      }
+      get_unlinked_signatures: {
+        Args: { p_limit?: number }
+        Returns: {
+          category_id: string
+          category_name: string
+          employee_count: number
+          kpi_name: string
+          kra_name: string
+          last_seen: string
+          occurrence_count: number
         }[]
       }
       get_user_access_profile_rights: {
