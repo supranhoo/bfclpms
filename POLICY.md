@@ -2284,6 +2284,10 @@ The Safety module follows a strict **filters-first → click-to-load → paginat
 
 Manual "Reload" / "Refresh" buttons on cached report screens MUST invalidate
 their query keys (`queryClient.invalidateQueries({ queryKey: [...] })`).
+
+---
+## Version History
+- **v2.66.7.15 (2026-05-01):** §54 v4 — Post-approval re-percolation trigger on `review_submissions`. Data repair for Jitendra Dwivedi AFBC Incentive Feb-Mar 2026.
 Toggling local state alone is not sufficient: when filters are unchanged,
 React Query returns the cached payload without re-issuing the request, so
 a previously-failed (empty/all-null) result will keep showing.
