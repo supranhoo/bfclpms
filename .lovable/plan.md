@@ -1,97 +1,126 @@
-## Phase 4 — Auto-Merge Suggestions for the Canonical Registry
+## Phase 5 — Definition Split (inverse of merge)
 
-Phase 3 made the registry visible and useful. Phase 4 helps admins **find duplicates they didn't know existed** — definitions that should probably be merged, and unlinked signatures that fuzzily match an existing definition. All suggestions are **advisory**: the admin always confirms.
+The Alias Drift card on the Health tab already tells admins *"Review and split if the variants are not truly the same KPI"* — but there's no action. Phase 5 closes that loop: when alias drift reveals two real KPIs accidentally grouped under one canonical definition, the admin can split them apart safely, with the same governance rigour as Phase 4c merge (transactional, audited, admin-only, forward-only).
 
-This phase strictly respects §88A–§88G: pre-May-2026 data is never touched, historical names never silently rewritten, and no automatic merging happens.
+### Scope
 
----
+Add a **Split Definition** flow that takes one definition `D` plus a partition of its aliases (group A vs group B), and produces:
+- The original definition `D` keeping group-A aliases (canonical text optionally renamed).
+- A new definition `D'` adopting group-B aliases (admin supplies its canonical KRA/KPI text).
+- All `kpis.kpi_definition_id` rows currently linked to `D` are re-pointed to `D` or `D'` based on which alias their `(kra_name, kpi_name)` matches. Rows with no matching alias stay on `D` (the "default" survivor).
+- One `KPI_DEFINITION_SPLIT` row in the existing `kpi_registry_audit_log` (table already supports new actions per Phase 4c).
 
-### Goals
+### Out of scope
 
-1. Surface **definition-vs-definition** duplicate candidates (e.g. "On-Time Delivery" and "OTD %" in the same category) using fuzzy matching beyond the current `LOWER(TRIM())` rule.
-2. Surface **signature-vs-definition** alias candidates — unlinked KPI signatures from May 2026+ that closely resemble an existing canonical definition but weren't auto-linked because they're not exact-match aliases yet.
-3. Give admins **one-click "promote as alias"** and **"merge definitions"** flows, both gated by an explicit confirm dialog.
-4. Keep everything inside the existing `/admin/kpi-standardization` Governance/Health surface — no new top-level pages.
-
-### Non-Goals
-
-- No automatic merging or alias creation. Suggestions only.
-- No ML or external services. Pure Postgres `pg_trgm` similarity + token-overlap heuristics.
-- No retroactive rewrite of pre-May-2026 KPI text.
-- No employee-facing UI — admins only.
+- No three-way splits (split into N≥3). Admin can repeat the operation.
+- No automatic detection of which aliases should go to which side — admin chooses explicitly.
+- No edits to historical `kra_name` / `kpi_name` text on KPIs (§88B still wins).
+- No employee-facing UI.
 
 ---
 
-### Sub-Phase 4a — Fuzzy Suggestion Engine (DB)
+### Sub-Phase 5a — Transactional `split_definition` RPC + audit
 
-Enable `pg_trgm` (already common in Supabase) and add three SECURITY DEFINER admin RPCs:
+**Migration adds:**
 
-- `suggest_definition_merges(p_min_similarity numeric default 0.55, p_limit int default 50)` — pairs of `kpi_definitions` in the **same category** whose `(canonical_kra_name || ' ' || canonical_kpi_name)` similarity ≥ threshold. Returns left/right definition ids, names, similarity score, alias counts, and linked-row counts (to help admins judge impact).
-- `suggest_alias_candidates(p_min_similarity numeric default 0.6, p_limit int default 100)` — unlinked May 2026+ signatures (from existing `get_unlinked_signatures` shape) paired with their best-matching canonical definition in the same category, when similarity ≥ threshold. One row per signature.
-- `dismiss_suggestion(p_kind text, p_left_id uuid, p_right_id uuid)` — records an admin "not a duplicate" decision so it stops appearing.
+```text
+split_definition(
+  p_source_id          uuid,    -- definition being split
+  p_keep_alias_ids     uuid[],  -- aliases that stay on source
+  p_move_alias_ids     uuid[],  -- aliases that move to new definition
+  p_new_kra_name       text,    -- canonical text for the NEW definition
+  p_new_kpi_name       text,
+  p_rename_source_kra  text,    -- optional rename of the source canonical
+  p_rename_source_kpi  text,
+  p_reason             text
+) RETURNS jsonb
+```
 
-New table `registry_suggestion_dismissals (kind text, left_id uuid, right_id uuid, dismissed_by uuid, dismissed_at timestamptz, PRIMARY KEY(kind,left_id,right_id))` with RLS limited to admins. Both suggestion RPCs anti-join this table.
+Behaviour, all in one transaction with `FOR UPDATE` locks on the source definition and every affected alias:
 
-All three RPCs raise on non-admin callers (mirrors existing Phase 2c pattern). Pre-May-2026 KPIs excluded via `is_canonical_enforcement_period()`.
+1. Admin gate via `has_role(auth.uid(), 'admin')`. Refuse otherwise.
+2. Validate `p_keep_alias_ids` ∪ `p_move_alias_ids` covers **every** alias of `p_source_id` exactly once (no overlap, no orphans). Refuse otherwise — admin must make an explicit decision for each alias.
+3. Validate `p_move_alias_ids` is non-empty (else this is just a rename — wrong tool).
+4. Insert new `kpi_definitions` row in the same `category_id` with `(p_new_kra_name, p_new_kpi_name)`. Hits the existing UNIQUE `(canonical_kra_name, canonical_kpi_name, category_id)` index — surface a clear error if it collides.
+5. `UPDATE kpi_name_aliases SET definition_id = <new_id> WHERE id = ANY(p_move_alias_ids)`. Re-parents only.
+6. Re-point KPIs: for every row in `kpis` where `kpi_definition_id = p_source_id`, look up its `(kra_name, kpi_name, category_id)` against `kpi_name_aliases` to see whether that signature now belongs to the new definition; if so, set `kpi_definition_id = <new_id>`. KPIs whose signature still matches a kept alias (or matches no alias at all) stay on the source. **Forward-only**: the same pattern as Phase 4c — only `kpi_definition_id` FKs change, the text columns are never touched.
+7. Optionally rename the source canonical text (`p_rename_source_*`) — useful when the split forces both sides to get a more specific name. Skip if NULLs.
+8. Insert one audit row: `action = 'KPI_DEFINITION_SPLIT'`, `primary_definition_id = source`, `affected_definition_id = new`, `payload` carrying both canonical snapshots (before + after rename), the kept/moved alias arrays, and the count of re-pointed KPIs.
+9. Return JSON summary `{ success, source_id, new_id, moved_aliases, repointed_kpis, renamed_source }`.
 
-### Sub-Phase 4b — Suggestions Tab in Admin UI
+Concurrency: lock the source definition first, then aliases in ascending UUID order — same deterministic strategy as `merge_definitions` to avoid deadlocks if an admin runs both flows in parallel.
 
-Add a 6th tab `SuggestionsTab` to `/admin/kpi-standardization`. Two sections:
+### Sub-Phase 5b — Split UI on the Suggestions tab
 
-- **Definition Merge Candidates** — table with: Definition A, Definition B, similarity %, linked-row counts, alias counts. Per-row actions:
-  - **Merge** → opens `ConfirmDestructiveDialog` (per Core safety rule) showing exactly what will happen: pick which definition survives, the other definition's aliases get reassigned, its `kpi_definition_id` references on `kpis`/`org_kpi_values` get repointed, then it's deleted. Wraps a new RPC `merge_definitions(p_keep uuid, p_drop uuid)`.
-  - **Dismiss** → calls `dismiss_suggestion('definition_merge', …)`.
-- **Alias Promotion Candidates** — table with: unlinked signature, best-match canonical, similarity %, occurrence count. Per-row actions:
-  - **Promote as alias** → calls existing `promote_signature_to_definition` flow but pre-fills the definition target. Light dialog (not destructive).
-  - **Dismiss** → `dismiss_suggestion('alias_candidate', …)`.
+Add a third section to `SuggestionsTab` (or a new `SplitTab` if section count gets noisy — decision below). Lists the same drift rows already exposed by `detect_alias_drift`, but with a **Split** action per row. Clicking opens a `SplitDefinitionDialog`:
 
-Threshold sliders at top (Definition match ≥ 0.55, Alias match ≥ 0.6) so admins can tune without code changes. Defaults persist per-user in `system_settings` is overkill — use `localStorage` only.
+```text
++------------------------------------------------------+
+| Split: <source canonical KRA / KPI>                  |
++------------------------------------------------------+
+| Keep on original                | Move to new        |
+| [ ] Alias 1 (variant text)      | [x] Alias 5        |
+| [x] Alias 2                     | [x] Alias 6        |
+| [x] Alias 3                     | [ ] Alias 7        |
+| [ ] Alias 4                     | [x] Alias 8        |
++------------------------------------------------------+
+| New definition canonical name:                       |
+|   KRA: [_________________]  KPI: [_________________] |
+| Optionally rename original (leave blank to keep):    |
+|   KRA: [_________________]  KPI: [_________________] |
++------------------------------------------------------+
+| Reason (required, free text):                        |
+|   [____________________________________________]     |
++------------------------------------------------------+
+| Live preview: 12 KPI links will move, 18 will stay.  |
++------------------------------------------------------+
+[ Cancel ]                          [ Split definition ]
+```
 
-`useRegistrySuggestions()` hook parallel-loads both endpoints, 5-min `staleTime`, fails open (existing pattern from `useRegistryHealth`).
+- Two-column checkbox list of every alias (loaded via existing alias-by-definition query). Each alias must end up on exactly one side; the dialog enforces this client-side and the RPC enforces it server-side.
+- The "Move to new" column must end up non-empty before the submit button enables.
+- A small live counter: how many `kpis` rows would land on each side. Driven by a cheap preview RPC `preview_split_definition(p_source_id, p_move_alias_ids)` that returns `{ stay_count, move_count }` so the admin sees impact before committing.
+- Wraps `ConfirmDestructiveDialog` per the Core safety rule (split deletes the source's existing structure, even though no rows are dropped).
+- On success: toast with the counts, refresh both Health drift list and the suggestions tile.
 
-### Sub-Phase 4c — Hardening & Audit
+**Decision needed**: place the split UI *(a)* as a third section in the existing `SuggestionsTab`, or *(b)* as a new 7th tab `SplitTab`. Recommendation: option (a) — it keeps governance actions consolidated and the drift list is small. Easy to flip later.
 
-- `merge_definitions` writes one `KPI_DEFINITION_MERGED` audit row per affected KPI (`performed_by = auth.uid()`, payload includes both definition snapshots) so the action is fully traceable. Wrapped in transaction; rolls back if any step fails.
-- Concurrency: `merge_definitions` `LOCK` both rows `FOR UPDATE` to prevent two admins racing on the same merge.
-- Idempotency: dismissals use the PK `(kind, left_id, right_id)` so re-clicking is a no-op.
-- Health dashboard gets a small KPI tile: "Open suggestions: N merges + M aliases" linking to the new tab.
+### Sub-Phase 5c — Audit viewer hookup (lightweight)
+
+The new `KPI_DEFINITION_SPLIT` rows land in `kpi_registry_audit_log` automatically. To make them visible without building a full audit viewer right now:
+
+- Extend the existing "Pending Auto-Merge Suggestions" tile on the Health tab into a small **Recent Registry Activity** card that lists the last 5 entries from `kpi_registry_audit_log` (action + performer + timestamp + summary). Read-only. Two new RPCs already exist for similar admin-only aggregates; this just adds a `get_recent_registry_audit(p_limit int default 5)` SECURITY DEFINER reader, admin-gated.
+- Defers the full audit-log viewer (one of the optional follow-ups from the previous turn) to a later phase — out of scope here.
 
 ---
 
 ### Risk & Impact
 
-- **Data Impact:** `merge_definitions` rewrites `kpi_definition_id` FKs on `kpis` and `org_kpi_values` for May 2026+ rows only (gated by `is_canonical_enforcement_period`). It does **not** modify the historical `kra_name`/`kpi_name` text — that stays per §88B. Aliases get re-parented, not deleted.
-- **Workflow Impact:** New admin tab. Other roles unaffected.
-- **UI/UX:** One new tab in an admin-only page. Reuses `ConfirmDestructiveDialog`, `GitMerge` icon, threshold-slider pattern.
-- **Regression Risk:** Medium-high on `merge_definitions` (touches FKs in two tables). Mitigation:
-  - Transactional execution with explicit row locks.
-  - Unit tests covering: alias re-parenting collisions (same `(definition_id, variant_kra, variant_kpi)` already exists on the survivor → skip insert, no-op), pre-May-2026 KPIs untouched, audit row written, dismissal idempotency.
-  - Dry-run preview in the confirm dialog showing exact counts before commit.
-- **Performance:** `pg_trgm` similarity over the ~hundreds of definitions/signatures we expect is well within budget. Both suggestion RPCs are admin-triggered, not on hot paths.
+- **Data Impact**: `split_definition` only touches `kpi_definitions` (insert + optional rename), `kpi_name_aliases.definition_id` (re-parent), and `kpis.kpi_definition_id` (re-point). Pre-May-2026 KPIs were never linked, so they stay untouched by definition. Historical text columns are not modified.
+- **Workflow Impact**: Admin-only surface. No effect on Manager/Employee/Auditor flows. Scoring is unaffected — splitting two KPIs apart doesn't change their raw values, just which canonical group they're attributed to.
+- **UI/UX Consistency**: Reuses `ConfirmDestructiveDialog`, table styling, and the existing `Sparkles` / `GitMerge` iconography (will use `GitBranch` for split). Same admin-only route.
+- **Regression Risk**:
+  - Wrong KPIs land on the wrong side → mitigated by the alias-coverage validation, the live KPI-count preview, and the immutable audit row that lets us reverse via a follow-up merge if needed.
+  - Concurrent admin merges and splits on the same definition → mitigated by the same row-lock ordering used in Phase 4c.
+  - UNIQUE collision on the new canonical name → caught by the existing index; RPC raises a friendly message.
+- **Mitigation**: unit tests on the alias partition validator, an integration scenario fixture covering "split forces a rename", and the live preview RPC so admins never commit blind.
 
 ### Sequencing
 
 ```text
-4a (DB engine + dismissals) → 4b (Suggestions tab UI) → 4c (Merge RPC + audit + Health tile)
+5a (split_definition + audit row + preview RPC)
+  -> 5b (SplitDefinitionDialog + drift-row Split action)
+  -> 5c (Recent Registry Activity card on Health tab)
 ```
 
-### Deliverables per sub-phase
+### Deliverables
 
-- Migration files for new RPCs / table / pg_trgm extension.
-- Hook + component + tests (`useRegistrySuggestions.test.ts`, `mergeDefinitionsValidation.test.ts`).
-- Updated `DOCUMENTATION.md`, `POLICY.md` (new §88H — Auto-merge suggestion governance).
-- `mem://features/admin/kpi-standardization-registry` refresh with Phase 4 section.
+- Migration: `split_definition`, `preview_split_definition`, `get_recent_registry_audit`, plus index touch-ups if needed.
+- Hooks: `useSplitDefinition`, `useSplitPreview`, `useRecentRegistryAudit`.
+- Components: `SplitDefinitionDialog`, drift-row `Split` button, "Recent Registry Activity" card on `HealthCoverageTab`.
+- Tests: alias-coverage validator unit tests; threshold + preview hook tests in the same style as Phase 4 tests.
+- Docs: `POLICY.md` §88H §§13–15 (split governance), `DOCUMENTATION.md` Phase 5 section, `.lovable/plan.md` Phase 5 progress block, refresh `mem://features/admin/kpi-standardization-registry`.
 
----
+### Open question
 
-### Open Question
-
-Default similarity threshold for **definition merge** suggestions: 0.55 is intentionally generous so admins see borderline cases. If you'd rather start conservative (fewer false positives, fewer suggestions to review), I can default to 0.7. Either is one-line to change.
-
----
-
-## Phase 4 Progress
-
-- Sub-Phase 4a (DB engine)        ✅ shipped 2026-05-01 (§88H) — pg_trgm, registry_suggestion_dismissals, suggest_definition_merges, suggest_alias_candidates, dismiss_suggestion.
-- Sub-Phase 4b (Suggestions tab)  ✅ shipped 2026-05-01 (§88H) — SuggestionsTab (6th tab), threshold sliders persisted to localStorage, alias promotion via existing promote_signature_to_definition. Definition Merge button stubbed pending 4c.
-- Sub-Phase 4c (merge_definitions + audit + Health tile) ✅ shipped 2026-05-01 (§88H) — `kpi_registry_audit_log` table (admin-only, append-only), transactional `merge_definitions(p_keep_id, p_drop_id, p_reason)` RPC with row locks, alias re-parenting + conflict drop, canonical backfill alias, KPI re-pointing, single `KPI_DEFINITION_MERGED` audit row, auto-dismissal of the merged pair. UI: per-row **Keep A / Keep B** buttons + live confirm dialog wired to `useMergeDefinitions`. Health tab now shows a "Pending Auto-Merge Suggestions" tile via `get_registry_pending_suggestion_count` + `usePendingSuggestionCount`.
+UI placement: extend `SuggestionsTab` with a third "Splits" section (recommended) **or** add a 7th `SplitTab`? Default to the section unless you say otherwise.
