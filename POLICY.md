@@ -2356,6 +2356,7 @@ without measuring the produced URL length.
 - **v2.66.7.16 (2026-05-01):** §88B added — Phase 2a canonical resolver read path. Adds `resolve_canonical_kpi_batch` RPC, `useCanonicalResolver` hook, `canonicalGrouping` utilities, and KraSummaryTab merge with "Also known as" tooltip.
 - **v2.66.7.17 (2026-05-01):** §88C added — Phase 2b soft enforcement via DB trigger `trg_kpi_canonical_autolink`, feature flag `enable_kpi_canonical_autolink` (default ON), `promote_signature_to_definition` admin RPC, and Governance tab on /admin/kpi-standardization.
 - **v2.66.7.18 (2026-05-01):** §88D added — Phase 2c Registry Health & Coverage dashboard. Adds admin-only RPCs `get_registry_coverage_stats`, `get_unlinked_signatures`, `detect_alias_drift`, `useRegistryHealth` hook, and `HealthCoverageTab` on /admin/kpi-standardization.
+- **v2.66.7.19 (2026-05-01):** §88E added — Phase 3a Registry visibility in creation flows. Adds `RegistryBadge` / `RegistryBadgePreset` components and `canonicalEnforcementPeriod.ts` shared helper. Wired into AdminKpiCreateDialog, AdminKpiEditorForm, and SmartAssignmentDialog (template cards). Bulk Import deliberately not wired — wrong domain (it imports values, not new KPIs).
 
 ---
 
