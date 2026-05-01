@@ -2549,6 +2549,57 @@ export type Database = {
           },
         ]
       }
+      kpi_registry_audit_log: {
+        Row: {
+          action: string
+          affected_definition_id: string | null
+          category_id: string | null
+          created_at: string
+          id: string
+          payload: Json
+          performed_by: string | null
+          primary_definition_id: string | null
+          reason: string | null
+        }
+        Insert: {
+          action: string
+          affected_definition_id?: string | null
+          category_id?: string | null
+          created_at?: string
+          id?: string
+          payload?: Json
+          performed_by?: string | null
+          primary_definition_id?: string | null
+          reason?: string | null
+        }
+        Update: {
+          action?: string
+          affected_definition_id?: string | null
+          category_id?: string | null
+          created_at?: string
+          id?: string
+          payload?: Json
+          performed_by?: string | null
+          primary_definition_id?: string | null
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kpi_registry_audit_log_performed_by_fkey"
+            columns: ["performed_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_registry_audit_log_performed_by_fkey"
+            columns: ["performed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kpi_rollback_requests: {
         Row: {
           actioned_at: string | null
@@ -7928,6 +7979,7 @@ export type Database = {
         Returns: Json
       }
       get_registry_coverage_stats: { Args: never; Returns: Json }
+      get_registry_pending_suggestion_count: { Args: never; Returns: Json }
       get_safety_setting: { Args: { p_key: string }; Returns: Json }
       get_skip_level_manager: {
         Args: { employee_uuid: string }
@@ -8045,6 +8097,10 @@ export type Database = {
       }
       mark_overdue_assets: { Args: never; Returns: Json }
       mark_overdue_training_assignments: { Args: never; Returns: Json }
+      merge_definitions: {
+        Args: { p_drop_id: string; p_keep_id: string; p_reason?: string }
+        Returns: Json
+      }
       migrate_okv_on_scope_change: {
         Args: {
           p_category_id: string
