@@ -6073,3 +6073,36 @@ listed trend hooks (`useMonthlyTrend`, `useKpiJourneyReport`,
 `useKpiEmployeeMatrix`) all aggregate per-employee for a single period and
 do not group across KPI variants, so no edits were required there. They
 will be re-evaluated in 2b/2c if user-visible drift emerges.
+
+### Phase 2b — Soft Enforcement at Creation (2026-05-01)
+
+Phase 2b enforces canonical linking at the database layer rather than in
+each of the 5 client-side KPI insert sites. This is the cleanest soft
+enforcement: zero changes to existing KPI creation UIs, single point of
+maintenance, fully reversible via feature flag.
+
+- **`is_canonical_enforcement_period(period, year)`** — Immutable helper
+  returning `true` only for May 2026 and later. Used by the trigger and
+  by `promote_signature_to_definition`.
+- **`trg_kpi_canonical_autolink`** — BEFORE INSERT/UPDATE trigger on
+  `public.kpis`. When the row's (category_id, kra_name, kpi_name) matches
+  a `kpi_name_aliases` entry AND the period is May 2026+, automatically
+  stamps `kpi_definition_id`. Skipped if user explicitly set the FK or
+  if the feature flag is OFF.
+- **`trg_kpi_canonical_autolink_audit`** — AFTER trigger writing
+  `KPI_CANONICAL_AUTOLINKED` audit rows with `performed_by = NULL`
+  (system action). Wrapped in EXCEPTION so audit failures never block
+  KPI creation.
+- **`enable_kpi_canonical_autolink`** system_settings flag (default ON).
+  Admin toggle in the new Governance tab.
+- **`promote_signature_to_definition(category_id, kra_name, kpi_name,
+  canonical_kra?, canonical_kpi?)`** — Admin RPC that creates a new
+  canonical definition + alias for an unlinked signature and back-links
+  all matching May 2026+ rows in one shot.
+- **`useCanonicalAutolinkSetting()` / `usePromoteSignature()`** —
+  React hooks for the toggle and promotion RPC.
+- **GovernanceTab** added to `/admin/kpi-standardization` showing the
+  toggle and the most recent 25 auto-link audit events.
+- **Tests:** `src/lib/canonicalEnforcementPeriod.test.ts` (6 tests
+  documenting the period-gate contract — DB function is the source of
+  truth, this test mirrors it).
