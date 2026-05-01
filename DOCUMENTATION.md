@@ -6044,3 +6044,32 @@ Registry-based picker is default for new KPI creation. Free-text entry remains a
 - `src/components/admin/kpi-standardization/ReviewRegistryTab.tsx`
 - `src/components/admin/kpi-standardization/CorrectMayKpisTab.tsx`
 - `src/hooks/useKpiRegistry.ts`
+
+### Phase 2a — Cross-Month Canonical Resolver (2026-05-01)
+
+Phase 2a activates the registry inside the read path. Historical rows still
+display under their original text on the per-month grids; only views that
+aggregate across variants (currently the Profile → KRA Summary tab) collapse
+matched variants into a single canonical KRA row.
+
+- **`resolve_canonical_kpi_batch(p_signatures jsonb)`** — RPC. Accepts an
+  array of `{ category_id, kra_name, kpi_name }` and returns the matching
+  `definition_id`, `canonical_kra_name`, and `canonical_kpi_name` for each.
+  Unmatched signatures get NULL columns. Read-only, SECURITY DEFINER.
+- **`useCanonicalResolver(signatures)`** — React hook wrapping the RPC.
+  Dedupes signatures, caches with 10-min staleTime, fails open (returns an
+  empty Map and logs) so a registry outage never blocks rendering.
+- **`src/lib/canonicalGrouping.ts`** — Pure utilities: `nk()`,
+  `signatureKey()`, `canonicalGroupKey()`, `canonicalDisplayNames()`,
+  `groupByCanonicalKey()`, `aliasesForGroup()`. Tested in
+  `src/lib/canonicalGrouping.test.ts` (9 tests).
+- **KraSummaryTab integration** — When two or more KRA-name variants in the
+  same category resolve to the same canonical definition, they collapse
+  into a single row. The canonical name is shown with a small `GitMerge`
+  icon; hovering reveals "Also known as: …" listing the original variants.
+
+**Out of scope for 2a** (revised after codebase audit): the originally
+listed trend hooks (`useMonthlyTrend`, `useKpiJourneyReport`,
+`useKpiEmployeeMatrix`) all aggregate per-employee for a single period and
+do not group across KPI variants, so no edits were required there. They
+will be re-evaluated in 2b/2c if user-visible drift emerges.
