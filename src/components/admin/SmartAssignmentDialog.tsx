@@ -115,6 +115,21 @@ export function SmartAssignmentDialog({
     ) || [];
   }, [templates, employeeRole]);
 
+  // Phase 3a: registry resolver for the visible role-matching templates.
+  // Skipped entirely (empty signatures) when the selected period is outside
+  // canonical enforcement scope, so historical/data-repair flows pay no cost.
+  const registrySignatures = useMemo(() => {
+    if (!inEnforcementScope) return [];
+    return roleTemplates
+      .filter(t => t.category_id && t.kra_name && t.kpi_name)
+      .map(t => ({
+        category_id: t.category_id!,
+        kra_name: t.kra_name,
+        kpi_name: t.kpi_name,
+      }));
+  }, [roleTemplates, inEnforcementScope]);
+  const { data: registryResolved } = useCanonicalResolver(registrySignatures);
+
   // Selected bundle details
   const selectedBundle = useMemo(() => 
     bundles?.find(b => b.id === selectedBundleId),
@@ -577,6 +592,12 @@ export function SmartAssignmentDialog({
                                 {template.weightage}%
                               </Badge>
                             )}
+                            <RegistryBadgePreset
+                              categoryId={template.category_id}
+                              kraName={template.kra_name}
+                              kpiName={template.kpi_name}
+                              resolved={registryResolved}
+                            />
                           </div>
                         </div>
                       </label>
