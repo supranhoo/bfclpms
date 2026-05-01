@@ -6398,3 +6398,14 @@ The dashboard at `/admin/kpi-weightage-dashboard` paginates by **employee** to k
 - **UI**: Filter changes reset to page 1. Free-text employee search is debounced 300 ms. A footer shows `Page X of Y · N employees` with `Per page` (25/50/100) and Prev/Next controls. Expand/Collapse All operate on the visible page.
 - **Cache invalidation**: All mutations (cell edit, acknowledge variance, add KPI to month, AdminKpiEditDialog close) invalidate the `['kpi-weightage-matrix']` prefix; the variance summary key (`['kpi-weightage-variance-summary']`) refreshes on its own staleTime or can be invalidated by callers when needed.
 - **Export**: The Excel export reflects the **current page only**. A future enhancement (out of scope here) is a "Export all (filter-scoped)" path using the aggregate query.
+
+### KPI Standardization — Idempotent Approve as Canonical (May 2026)
+
+`useBuildRegistry.createDefinitionWithAliases` no longer fails with a duplicate-key error when a `kpi_definitions` row already exists for the chosen canonical `(kra_name, kpi_name)` pair (e.g., from a prior approval, registry import, or merge/split). The hook now:
+
+1. Looks up the existing definition first; if found, reuses its `id`. A `23505` race during insert is also caught and resolved by re-reading.
+2. De-duplicates the canonical + variant list case- and whitespace-insensitively.
+3. Fetches existing aliases for the resolved `definition_id` and inserts only the missing rows.
+4. Surfaces a contextual toast: *"Linked to existing canonical entry"* (reuse) or *"Registry entry created"* (new), with `<n> aliases linked (<m> already present)`.
+
+The pure helper `diffAliasInserts(canonical, variants, categoryId, existingAliases)` is exported from `src/hooks/useKpiRegistry.ts` and locked by `src/hooks/useBuildRegistry.test.ts` (5 tests: fresh insert, partial overlap, full overlap, internal duplicates, distinct category). Policy: §88A.6.
