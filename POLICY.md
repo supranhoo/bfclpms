@@ -2478,3 +2478,24 @@ Admin pages that render a matrix grouped by employee (e.g., the **KPI Weightage 
 4. **Cache invalidation contract.** Mutations on these screens MUST invalidate the dashboard's base query key prefix so all pages and the summary refresh together.
 
 Rationale: the previous full-org load shipped thousands of rows on every visit and degraded as headcount grew. This contract caps cold-load cost while keeping admin numbers honest.
+
+## §88I — Phase 5b Reversible Standardization Actions
+
+1. **Append-only history.** Every mutation made through the KPI Standardization tools (create canonical, link/unlink alias, edit canonical, rename KPIs via `correct_may_kpis`, delete definition) MUST insert exactly one row into `public.kpi_standardization_actions`. The table has admin-only `SELECT` and `INSERT` policies and intentionally has **no `UPDATE` or `DELETE` policy** — rows are append-only. Reversal is a state flip (`reversed_at`, `reversed_by`) performed by a `SECURITY DEFINER` function, not by deleting the action row.
+
+2. **Single reversal entry point.** `reverse_standardization_action(p_action_id uuid)` is the only sanctioned undo path. It MUST validate the caller via `has_role(auth.uid(),'admin')`, refuse if `reversed_at IS NOT NULL`, and perform the inverse mutation atomically before stamping `reversed_at = now(), reversed_by = auth.uid()`. UI components MUST NOT replicate undo logic by issuing direct `DELETE` / `UPDATE` calls.
+
+3. **Forward-only freeze still wins.** Reversing a `rename_kpis` action restores prior `kra_name` / `kpi_name` / `kpi_definition_id` values **only on rows the original action touched** (captured by id in the payload's `kpi_rows[]`). It MUST NOT operate on any row whose `(review_period, review_year)` falls before May 2026. The original `correct_may_kpis` guard is what prevents pre-May-2026 rows from ever entering the payload in the first place.
+
+4. **Create-undo safety check.** Reversing a `create_definition` action MUST refuse when any `kpis` row still references the definition via `kpi_definition_id`. The function raises with the live count so the admin can unlink first or use Edit Definition to repoint. There is no force-delete path.
+
+5. **Edit-definition propagation contract.** `useEditDefinition` exposes two modes: *Registry only* (rewrites only the canonical names on `kpi_definitions`) and *Registry + propagate* (also calls `correct_may_kpis` for each distinct `(period, year, category, kra, kpi)` tuple currently linked to the definition). Propagation MUST iterate only May-2026+ tuples; pre-2026 rows are skipped client-side and the DB function would reject them anyway. Each propagated rename also generates its own `rename_kpis` action row, so undo is granular per period.
+
+6. **Pre-approval canonical edit.** The Build Registry tab MUST allow admins to edit the canonical KRA / KPI text inline before clicking *Approve as Canonical*. The chosen text becomes `canonical_kra_name` / `canonical_kpi_name`; all listed variants (including the originally selected one if its text now differs) are written as aliases. Empty/whitespace-only canonical text MUST block submission with a toast — no silent fallback.
+
+7. **Drill-in is read-only.** The shared `AffectedKpisTable` component (used by Build Registry, Review Registry, and Correct May KPIs) is purely observational. It MUST NOT expose any write actions on the listed KPI rows; standardization writes remain confined to the existing buttons.
+
+8. **History tab UX contract.** The History & Undo tab MUST show reversed actions in a dimmed state (not hidden) so the audit trail stays visible. Undo MUST go through `ConfirmDestructiveDialog` per the Destructive Action Governance memory.
+
+## Version History
+- **v2.66.7.24 (2026-05-01):** §88I added — Phase 5b Reversible Standardization Actions. New `kpi_standardization_actions` table (append-only, admin RLS), `log_standardization_action` + `reverse_standardization_action` RPCs, extended `correct_may_kpis` to capture before-image, new `useEditDefinition` / `useUnlinkAlias` / `useDeleteDefinition` / `useStandardizationHistory` hooks, `EditDefinitionDialog`, `AffectedKpisTable`, and `HistoryUndoTab` (7th tab on /admin/kpi-standardization). Build Registry now supports inline canonical editing and per-variant KPI drill-in.
