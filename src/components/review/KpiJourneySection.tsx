@@ -211,29 +211,93 @@ export function KpiJourneySection({
     [kpi.review_period, kpi.review_year]
   );
 
+  // Phase 3b: Resolve current KPI's canonical definition so prev-month lookup
+  // can also surface renamed variants of the same canonical KPI. If no
+  // registry match exists (pre-May 2026 data, or unregistered KPI), the
+  // resolver returns nothing and the lookup falls back to exact name match.
+  const currentSignature = useMemo(
+    () =>
+      kpi.category_id && kpi.kra_name && kpi.kpi_name
+        ? [{ category_id: kpi.category_id, kra_name: kpi.kra_name, kpi_name: kpi.kpi_name }]
+        : [],
+    [kpi.category_id, kpi.kra_name, kpi.kpi_name]
+  );
+  const { data: resolverMap } = useCanonicalResolver(currentSignature);
+  const currentDefinitionId = resolverMap?.get(
+    signatureKey({ category_id: kpi.category_id, kra_name: kpi.kra_name, kpi_name: kpi.kpi_name })
+  )?.definition_id ?? null;
+
+  // Fetch all variant (kra_name, kpi_name) pairs for this canonical definition
+  // so the prev-month query can match renamed historical rows. Includes the
+  // canonical pair itself plus every alias.
+  const { data: variantPairs = [] } = useQuery<Array<{ kra_name: string; kpi_name: string }>>({
+    queryKey: ['canonical-variants', currentDefinitionId],
+    queryFn: async () => {
+      if (!currentDefinitionId) return [];
+      const [defRes, aliasRes] = await Promise.all([
+        supabase
+          .from('kpi_definitions')
+          .select('canonical_kra_name, canonical_kpi_name')
+          .eq('id', currentDefinitionId)
+          .maybeSingle(),
+        supabase
+          .from('kpi_name_aliases')
+          .select('variant_kra_name, variant_kpi_name')
+          .eq('definition_id', currentDefinitionId),
+      ]);
+      const out: Array<{ kra_name: string; kpi_name: string }> = [];
+      if (defRes.data) {
+        out.push({
+          kra_name: defRes.data.canonical_kra_name,
+          kpi_name: defRes.data.canonical_kpi_name,
+        });
+      }
+      for (const a of aliasRes.data ?? []) {
+        out.push({ kra_name: a.variant_kra_name, kpi_name: a.variant_kpi_name });
+      }
+      return out;
+    },
+    enabled: !!currentDefinitionId,
+    staleTime: 10 * 60 * 1000,
+  });
+
   // Fetch previous months' matching KPIs + submissions
   const { data: prevMonthsData = [] } = useQuery({
-    queryKey: ['prev-month-kpis', kpi.employee_id, kpi.kpi_name, kpi.kra_name, kpi.category_id, prevPeriods],
+    queryKey: ['prev-month-kpis', kpi.employee_id, kpi.kpi_name, kpi.kra_name, kpi.category_id, prevPeriods, variantPairs],
     queryFn: async () => {
       if (prevPeriods.length === 0) return [];
       const uniqueMonths = prevPeriods.map(p => p.month);
       const uniqueYears = [...new Set(prevPeriods.map(p => p.year))];
 
-      // Fetch matching KPIs
+      // Build the set of (kra_name, kpi_name) pairs to match. When a canonical
+      // definition is known, include all aliases; otherwise just the current
+      // pair (preserves legacy exact-match behavior).
+      const pairs: Array<{ kra_name: string; kpi_name: string }> =
+        variantPairs.length > 0
+          ? variantPairs
+          : [{ kra_name: kpi.kra_name, kpi_name: kpi.kpi_name }];
+      const kraNames = Array.from(new Set(pairs.map(p => p.kra_name)));
+      const kpiNames = Array.from(new Set(pairs.map(p => p.kpi_name)));
+      const pairKeys = new Set(pairs.map(p => `${nk(p.kra_name)}|${nk(p.kpi_name)}`));
+
+      // Fetch matching KPIs (broad fetch by .in(); post-filter to exact pairs
+      // to avoid Cartesian-product false positives like (kraA + kpiB)).
       const { data: kpis, error: kErr } = await supabase
         .from('kpis')
         .select('*')
         .eq('employee_id', kpi.employee_id)
-        .eq('kpi_name', kpi.kpi_name)
-        .eq('kra_name', kpi.kra_name)
         .eq('category_id', kpi.category_id)
+        .in('kra_name', kraNames)
+        .in('kpi_name', kpiNames)
         .in('review_period', uniqueMonths)
         .in('review_year', uniqueYears);
       if (kErr) throw kErr;
       if (!kpis || kpis.length === 0) return [];
 
-      // Filter to exact month+year pairs
+      // Keep only rows whose (kra_name, kpi_name) is an actual variant pair
+      // and whose period+year is one of our targets.
       const filtered = kpis.filter(k =>
+        pairKeys.has(`${nk(k.kra_name)}|${nk(k.kpi_name)}`) &&
         prevPeriods.some(p => p.month === k.review_period && p.year === k.review_year)
       );
       if (filtered.length === 0) return [];
@@ -266,6 +330,10 @@ export function KpiJourneySection({
         }
       }
 
+      // Helper: did this prev-month row come from a renamed variant?
+      const isRenamedVariant = (k: any) =>
+        nk(k.kra_name) !== nk(kpi.kra_name) || nk(k.kpi_name) !== nk(kpi.kpi_name);
+
       return prevPeriods
         .map(p => {
           const matchKpi = filtered.find(k => k.review_period === p.month && k.review_year === p.year);
@@ -273,9 +341,21 @@ export function KpiJourneySection({
           const sub = subMap.get(matchKpi.id) || null;
           const wfKey = `${p.month}_${p.year}`;
           const stages = wfMap.get(wfKey) || effectiveStages;
-          return { period: p, kpi: matchKpi, submission: sub, workflowStages: stages };
+          return {
+            period: p,
+            kpi: matchKpi,
+            submission: sub,
+            workflowStages: stages,
+            isRenamedVariant: isRenamedVariant(matchKpi),
+          };
         })
-        .filter(Boolean) as { period: { month: string; year: number }; kpi: any; submission: any; workflowStages: string[] }[];
+        .filter(Boolean) as {
+          period: { month: string; year: number };
+          kpi: any;
+          submission: any;
+          workflowStages: string[];
+          isRenamedVariant: boolean;
+        }[];
     },
     enabled: prevPeriods.length > 0 && !!kpi.employee_id && !!kpi.kpi_name,
     staleTime: 2 * 60 * 1000,
