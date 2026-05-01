@@ -7606,6 +7606,10 @@ export type Database = {
           sibling_count: number
         }[]
       }
+      batch_insert_kpis_with_rollover_flag: {
+        Args: { kpis_json: Json }
+        Returns: number
+      }
       can_view_safety_incident: {
         Args: { _incident_id: string }
         Returns: boolean
