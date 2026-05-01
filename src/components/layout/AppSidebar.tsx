@@ -132,7 +132,7 @@ const getSectionForPath = (pathname: string, search: string = ''): string => {
   if (fullPath.includes('view=management')) return 'management';
   if (fullPath.includes('view=hr_pms')) return 'hr_pms';
   if (pathname === '/management-dashboard') return 'management';
-  if (['/dashboard', '/queries', '/pms-policy'].includes(pathname)) return 'main';
+  if (['/dashboard', '/queries', '/pms-policy', '/registry'].includes(pathname)) return 'main';
   if (pathname.startsWith('/admin')) return 'admin';
   if (pathname.startsWith('/reports')) return 'reports';
   if (pathname === '/audit-logs') return 'admin';
