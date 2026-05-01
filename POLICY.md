@@ -2465,3 +2465,14 @@ without measuring the produced URL length.
 14. **Split audit row.** Every successful split writes exactly one `KPI_DEFINITION_SPLIT` row to `kpi_registry_audit_log` with `performed_by = auth.uid()`, source-before / source-after / new-definition snapshots, the kept and moved alias id arrays, the count of re-pointed KPIs, and the rename flag. Same append-only governance as merges.
 
 15. **Split UI guardrails.** The SplitDefinitionDialog MUST surface a live KPI-impact preview (`preview_split_definition` RPC) before commit, MUST require a non-empty admin reason (recorded in audit), and MUST disable the submit button until the partition is valid. Server-side validation in `split_definition` is the source of truth — the UI is a fast-feedback layer, not an authority.
+
+## §114 — Admin Matrix Dashboard Pagination
+
+Admin pages that render a matrix grouped by employee (e.g., the **KPI Weightage Dashboard** at `/admin/kpi-weightage-dashboard`) MUST paginate the **outer dimension (employees)** server-side rather than loading the full org's fiscal-year dataset on mount.
+
+1. **Employee paging.** Page size options are `25 / 50 / 100`, default **25**. Filter changes (year, search, department, category, include-inactive) reset to page 1. Free-text search MUST be debounced (≥ 250 ms) before issuing a query.
+2. **Scoped detail fetch.** Once the page's employee IDs are known, the matrix detail query (KPIs, scores, etc.) MUST be scoped via `.in('employee_id', pageIds)` so the heavy query never runs unbounded.
+3. **Aggregate badges are filter-scoped, not page-scoped.** Summary counters (e.g. variance / acknowledged badges, total employees) MUST reflect the **full filter set**, computed via a separate, cached aggregate query. They MUST NOT silently change as the user pages.
+4. **Cache invalidation contract.** Mutations on these screens MUST invalidate the dashboard's base query key prefix so all pages and the summary refresh together.
+
+Rationale: the previous full-org load shipped thousands of rows on every visit and degraded as headcount grew. This contract caps cold-load cost while keeping admin numbers honest.
