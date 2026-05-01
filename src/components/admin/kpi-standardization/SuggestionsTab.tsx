@@ -282,41 +282,8 @@ export function SuggestionsTab() {
             ? buildMergeDescription(pendingMerge, keepLeft)
             : ''
         }
-        confirmLabel={merging ? 'Merging…' : 'Merge definitions'}
-        extra={
-          pendingMerge ? (
-            <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-2">
-              <div className="font-medium">Choose the surviving definition</div>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  className={`rounded border px-2 py-1.5 text-left ${keepLeft ? 'border-primary bg-primary/10' : 'border-border'}`}
-                  onClick={() => setKeepLeft(true)}
-                >
-                  <div className="font-medium">{pendingMerge.left_kra_name}</div>
-                  <div className="text-muted-foreground">{pendingMerge.left_kpi_name}</div>
-                  <div className="mt-1 text-[10px] text-muted-foreground">
-                    {pendingMerge.left_alias_count} aliases · {pendingMerge.left_linked_kpi_count} KPIs
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  className={`rounded border px-2 py-1.5 text-left ${!keepLeft ? 'border-primary bg-primary/10' : 'border-border'}`}
-                  onClick={() => setKeepLeft(false)}
-                >
-                  <div className="font-medium">{pendingMerge.right_kra_name}</div>
-                  <div className="text-muted-foreground">{pendingMerge.right_kpi_name}</div>
-                  <div className="mt-1 text-[10px] text-muted-foreground">
-                    {pendingMerge.right_alias_count} aliases · {pendingMerge.right_linked_kpi_count} KPIs
-                  </div>
-                </button>
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                The other definition will be deleted. Its aliases and linked KPIs will be re-parented to the surviving definition, and its canonical text is preserved as a backfill alias.
-              </p>
-            </div>
-          ) : undefined
-        }
+        confirmLabel="Merge definitions"
+        isLoading={merging}
       />
     </div>
   );
