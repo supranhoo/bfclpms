@@ -6343,3 +6343,33 @@ permanent record of every merge.
 The Phase 4b stubbed Merge button (which intentionally did nothing) is
 gone — every Merge action now goes through the transactional RPC and
 produces an audit row.
+
+### Phase 5 — Definition Split + Recent Activity (2026-05-01)
+
+The inverse of Phase 4c merge. When the Alias Drift card flags a
+canonical definition whose aliases span unrelated KRAs, an admin can
+now split it apart safely.
+
+- **`split_definition`** RPC (admin-only, transactional, deterministic
+  row locks): validates the alias partition (every alias placed exactly
+  once, move side non-empty), inserts a new `kpi_definitions` row in the
+  same category, re-parents the moved aliases, re-points
+  `kpis.kpi_definition_id` based on which alias each KPI's
+  `(kra_name, kpi_name)` signature now matches, optionally renames the
+  source canonical text, and writes one `KPI_DEFINITION_SPLIT` row to
+  `kpi_registry_audit_log`. Forward-only — historical text is never
+  touched (§88B).
+- **`preview_split_definition`** RPC: cheap dry-run powering the
+  dialog's live "X will move, Y will stay" counter.
+- **`get_recent_registry_audit(p_limit)`** RPC: admin-only reader for
+  the new "Recent Registry Activity" card on the Health tab.
+- **UI:** Alias Drift rows on the Health tab now expose a **Split**
+  button that opens `SplitDefinitionDialog` — a two-column alias
+  partition with live KPI-impact preview, required reason, and optional
+  source rename. The Health tab also shows a 5-row Recent Registry
+  Activity feed combining merges and splits.
+
+**Tests:** `src/hooks/useDefinitionSplit.test.ts` (8 tests) locks the
+`validateAliasPartition` pure function against empty-move, count
+mismatch, overlap, unknown ids, and the move-all edge case so the
+dialog's client-side gate stays in sync with the server check.

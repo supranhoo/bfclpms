@@ -1,13 +1,15 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Activity, AlertTriangle, GitMerge, RefreshCw, Database, Link2, Unlink, Sparkles } from 'lucide-react';
+import { Activity, AlertTriangle, GitMerge, RefreshCw, Database, Link2, Unlink, Sparkles, GitBranch } from 'lucide-react';
 import { useRegistryHealth } from '@/hooks/useRegistryHealth';
 import { usePendingSuggestionCount } from '@/hooks/useRegistrySuggestions';
+import { useRecentRegistryAudit } from '@/hooks/useDefinitionSplit';
+import { SplitDefinitionDialog } from './SplitDefinitionDialog';
 import { format } from 'date-fns';
 
 /**
@@ -18,6 +20,13 @@ import { format } from 'date-fns';
 export function HealthCoverageTab() {
   const { stats, unlinked, drift, loading, error, refresh } = useRegistryHealth();
   const { counts, loading: pendingLoading, refresh: refreshPending } = usePendingSuggestionCount();
+  const { entries: recent, loading: recentLoading, refresh: refreshRecent } = useRecentRegistryAudit(5);
+  const [splitTarget, setSplitTarget] = useState<{
+    definition_id: string;
+    canonical_kra_name: string;
+    canonical_kpi_name: string;
+    category_name: string;
+  } | null>(null);
 
   const coveragePct = stats?.coverage_pct ?? 0;
   const coverageTone = useMemo(() => {
@@ -38,10 +47,10 @@ export function HealthCoverageTab() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => { void refresh(); void refreshPending(); }}
-          disabled={loading || pendingLoading}
+          onClick={() => { void refresh(); void refreshPending(); void refreshRecent(); }}
+          disabled={loading || pendingLoading || recentLoading}
         >
-          <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${(loading || pendingLoading) ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${(loading || pendingLoading || recentLoading) ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </div>
@@ -223,6 +232,7 @@ export function HealthCoverageTab() {
                     <TableHead className="text-xs">Category</TableHead>
                     <TableHead className="text-xs">Variant KRAs</TableHead>
                     <TableHead className="text-xs text-right">Aliases</TableHead>
+                    <TableHead className="text-xs text-right whitespace-nowrap">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -243,11 +253,79 @@ export function HealthCoverageTab() {
                         </div>
                       </TableCell>
                       <TableCell className="text-xs text-right tabular-nums">{d.alias_count}</TableCell>
+                      <TableCell className="text-xs text-right whitespace-nowrap">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => setSplitTarget({
+                            definition_id: d.definition_id,
+                            canonical_kra_name: d.canonical_kra_name,
+                            canonical_kpi_name: d.canonical_kpi_name,
+                            category_name: d.category_name,
+                          })}
+                        >
+                          <GitBranch className="h-3 w-3 mr-1" />
+                          Split
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <SplitDefinitionDialog
+        open={!!splitTarget}
+        source={splitTarget}
+        onClose={() => setSplitTarget(null)}
+        onSuccess={() => { void refresh(); void refreshPending(); void refreshRecent(); }}
+      />
+
+      {/* Phase 5c: Recent Registry Activity */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Activity className="h-4 w-4 text-primary" />
+            Recent Registry Activity
+          </CardTitle>
+          <CardDescription>
+            Last 5 admin actions on the canonical registry (merges &amp; splits). Append-only.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {recentLoading ? (
+            <Skeleton className="h-9 w-full" />
+          ) : recent.length === 0 ? (
+            <p className="text-sm text-muted-foreground italic py-3 text-center">
+              No registry actions logged yet.
+            </p>
+          ) : (
+            <ul className="divide-y rounded-md border">
+              {recent.map((e) => (
+                <li key={e.id} className="px-3 py-2 text-xs flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium flex items-center gap-2">
+                      <Badge variant="outline" className="text-[10px] font-normal">
+                        {e.action.replace('KPI_DEFINITION_', '').toLowerCase()}
+                      </Badge>
+                      <span className="text-muted-foreground">
+                        by {e.performer_name ?? 'system'}
+                      </span>
+                    </div>
+                    {e.reason && (
+                      <div className="text-muted-foreground mt-0.5 line-clamp-2">{e.reason}</div>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground whitespace-nowrap">
+                    {format(new Date(e.created_at), 'dd MMM HH:mm')}
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
         </CardContent>
       </Card>
