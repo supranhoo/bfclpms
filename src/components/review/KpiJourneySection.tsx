@@ -20,7 +20,12 @@ import { isComplianceKpi, useComplianceSubFactors } from '@/hooks/useComplianceS
 import { isKpiLockedForPeriod, getActiveMonthForCycle } from '@/lib/frequencyUtils';
 import { useFrequencyConfig } from '@/hooks/useFrequencyConfig';
 import { useCanonicalResolver } from '@/hooks/useCanonicalResolver';
-import { signatureKey, nk } from '@/lib/canonicalGrouping';
+import { signatureKey } from '@/lib/canonicalGrouping';
+import {
+  buildPairKeySet,
+  isAllowedPair,
+  isRenamedFromCurrent,
+} from '@/lib/prevMonthCanonicalMatch';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -278,7 +283,7 @@ export function KpiJourneySection({
           : [{ kra_name: kpi.kra_name, kpi_name: kpi.kpi_name }];
       const kraNames = Array.from(new Set(pairs.map(p => p.kra_name)));
       const kpiNames = Array.from(new Set(pairs.map(p => p.kpi_name)));
-      const pairKeys = new Set(pairs.map(p => `${nk(p.kra_name)}|${nk(p.kpi_name)}`));
+      const pairKeys = buildPairKeySet(pairs);
 
       // Fetch matching KPIs (broad fetch by .in(); post-filter to exact pairs
       // to avoid Cartesian-product false positives like (kraA + kpiB)).
@@ -297,7 +302,7 @@ export function KpiJourneySection({
       // Keep only rows whose (kra_name, kpi_name) is an actual variant pair
       // and whose period+year is one of our targets.
       const filtered = kpis.filter(k =>
-        pairKeys.has(`${nk(k.kra_name)}|${nk(k.kpi_name)}`) &&
+        isAllowedPair({ kra_name: k.kra_name, kpi_name: k.kpi_name }, pairKeys) &&
         prevPeriods.some(p => p.month === k.review_period && p.year === k.review_year)
       );
       if (filtered.length === 0) return [];
@@ -330,10 +335,6 @@ export function KpiJourneySection({
         }
       }
 
-      // Helper: did this prev-month row come from a renamed variant?
-      const isRenamedVariant = (k: any) =>
-        nk(k.kra_name) !== nk(kpi.kra_name) || nk(k.kpi_name) !== nk(kpi.kpi_name);
-
       return prevPeriods
         .map(p => {
           const matchKpi = filtered.find(k => k.review_period === p.month && k.review_year === p.year);
@@ -346,7 +347,10 @@ export function KpiJourneySection({
             kpi: matchKpi,
             submission: sub,
             workflowStages: stages,
-            isRenamedVariant: isRenamedVariant(matchKpi),
+            isRenamedVariant: isRenamedFromCurrent(
+              { kra_name: matchKpi.kra_name, kpi_name: matchKpi.kpi_name },
+              { kra_name: kpi.kra_name, kpi_name: kpi.kpi_name },
+            ),
           };
         })
         .filter(Boolean) as {
