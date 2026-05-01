@@ -39,6 +39,7 @@ import {
   Calendar,
   GitBranch,
   Library,
+  GitMerge,
   LayoutDashboard,
   Package,
   GraduationCap,
