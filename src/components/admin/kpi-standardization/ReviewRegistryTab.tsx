@@ -160,10 +160,10 @@ function RegistryRow({
 
       <ConfirmDestructiveDialog
         open={showDeleteDialog}
-        onOpenChange={setShowDeleteDialog}
+        onCancel={() => setShowDeleteDialog(false)}
         title="Delete Registry Entry"
         description={`This will delete "${definition.canonical_kra_name}" and all its aliases. KPIs linked to this definition will be unlinked (data preserved).`}
-        onConfirm={onDelete}
+        onConfirm={() => { onDelete(); setShowDeleteDialog(false); }}
       />
     </>
   );
