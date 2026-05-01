@@ -464,6 +464,14 @@ const App = () => (
                     <Suspense fallback={<PageFallback />}><KpiStandardization /></Suspense>
                   </ProtectedRoute>
                 } />
+                <Route path="/registry" element={
+                  <ProtectedRoute
+                    allowedRoles={['admin', 'manager', 'hr_pms', 'management', 'auditor', 'skip_level']}
+                    menuKey="registry-browser"
+                  >
+                    <Suspense fallback={<PageFallback />}><RegistryBrowser /></Suspense>
+                  </ProtectedRoute>
+                } />
                 <Route path="/reports/incentive" element={
                   <ReportRoute reportKey="incentive">
                     <Suspense fallback={<PageFallback />}><IncentiveReport /></Suspense>
