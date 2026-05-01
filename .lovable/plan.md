@@ -87,3 +87,11 @@ Threshold sliders at top (Definition match ≥ 0.55, Alias match ≥ 0.6) so adm
 ### Open Question
 
 Default similarity threshold for **definition merge** suggestions: 0.55 is intentionally generous so admins see borderline cases. If you'd rather start conservative (fewer false positives, fewer suggestions to review), I can default to 0.7. Either is one-line to change.
+
+---
+
+## Phase 4 Progress
+
+- Sub-Phase 4a (DB engine)        ✅ shipped 2026-05-01 (§88H) — pg_trgm, registry_suggestion_dismissals, suggest_definition_merges, suggest_alias_candidates, dismiss_suggestion.
+- Sub-Phase 4b (Suggestions tab)  ✅ shipped 2026-05-01 (§88H) — SuggestionsTab (6th tab), threshold sliders persisted to localStorage, alias promotion via existing promote_signature_to_definition. Definition Merge button stubbed pending 4c.
+- Sub-Phase 4c (merge_definitions + audit + Health tile) ⏳ next.

@@ -6275,3 +6275,37 @@ this page. Admins continue to manage the registry from
 `RegistryDefinitionView` shape against accidental sensitive-field
 widening, asserting that none of the forbidden keys (`employee_id`,
 `*_score`, `achieved_value`, `r0`–`r5`, etc.) ever appear.
+
+### Phase 4a/4b — Auto-Merge Suggestions (2026-05-01)
+
+The exact-match scan (`scan_kpi_duplicate_groups`) only catches
+definitions with identical text after `LOWER(TRIM())`. Phase 4 adds a
+fuzzy suggestion engine on top, so admins can find duplicate
+canonical definitions ("On-Time Delivery" vs "OTD %") and unlinked
+signatures that closely resemble an existing canonical entry.
+
+- DB layer (Phase 4a): `pg_trgm` extension + three SECURITY DEFINER,
+  admin-only RPCs (`suggest_definition_merges`, `suggest_alias_candidates`,
+  `dismiss_suggestion`) plus the `registry_suggestion_dismissals` table
+  with admin-only RLS. All forward-only via
+  `is_canonical_enforcement_period` and constrained to same-category
+  comparisons.
+- UI layer (Phase 4b): A 6th `Suggestions` tab on
+  `/admin/kpi-standardization`. Threshold sliders (definition merge
+  default 0.55, alias default 0.6) persist to localStorage. The
+  definition-merge table shows alias and linked-KPI counts per side so
+  admins can judge merge impact; its **Merge** button is intentionally
+  stubbed pending Phase 4c. The alias-candidate table promotes via the
+  existing `promote_signature_to_definition` RPC and surfaces a
+  "Different text from signature" warning when the canonical text and
+  the unlinked signature do not match — historical text is never
+  silently rewritten.
+- Hooks: `useRegistrySuggestions` parallel-loads both endpoints (fails
+  open, mirrors `useRegistryHealth`); `useDismissSuggestion` wraps the
+  idempotent dismiss RPC. Pair canonicalization (`LEAST(id), GREATEST(id)`)
+  is enforced both in `suggest_definition_merges` and in the dismiss RPC
+  so dismissals stay stable regardless of click order.
+
+**Tests:** `src/hooks/useRegistrySuggestions.test.ts` (6 tests) locks
+the localStorage threshold persistence helper against bad inputs
+(non-numeric, < 0, > 1) so a corrupted setting can never crash the tab.
