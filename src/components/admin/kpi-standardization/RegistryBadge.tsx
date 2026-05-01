@@ -44,11 +44,11 @@ export function RegistryBadge({
     ? [{ category_id: categoryId!, kra_name: kraName!.trim(), kpi_name: kpiName!.trim() }]
     : [];
 
-  const { resolved, isLoading } = useCanonicalResolver(signatures);
+  const { data: resolved, isLoading } = useCanonicalResolver(signatures);
 
   if (!ready || !inScope || isLoading) return null;
 
-  const match = resolved.size > 0 ? Array.from(resolved.values())[0] : null;
+  const match = resolved && resolved.size > 0 ? Array.from(resolved.values())[0] : null;
   const isRegistered = !!match?.definition_id;
 
   return (
