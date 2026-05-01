@@ -30,7 +30,7 @@ export function GovernanceTab() {
     let cancelled = false;
     (async () => {
       setLogsLoading(true);
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('audit_logs')
         .select('id, created_at, metadata, new_value')
         .eq('action', 'KPI_CANONICAL_AUTOLINKED')
@@ -41,7 +41,7 @@ export function GovernanceTab() {
         console.warn('[GovernanceTab] audit fetch failed', error);
         setLogs([]);
       } else {
-        setLogs((data ?? []) as AutolinkLogRow[]);
+        setLogs((data ?? []) as unknown as AutolinkLogRow[]);
       }
       setLogsLoading(false);
     })();
