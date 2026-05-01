@@ -7747,6 +7747,19 @@ export type Database = {
           score: number
         }[]
       }
+      correct_may_kpis: {
+        Args: {
+          p_category_id: string
+          p_definition_id: string
+          p_new_kpi: string
+          p_new_kra: string
+          p_old_kpi: string
+          p_old_kra: string
+          p_review_period: string
+          p_review_year: number
+        }
+        Returns: number
+      }
       decide_permit_level: {
         Args: { p_decision: string; p_notes?: string; p_permit_id: string }
         Returns: Json
@@ -8053,6 +8066,7 @@ export type Database = {
         Returns: boolean
       }
       run_safety_sla_escalations: { Args: never; Returns: Json }
+      scan_kpi_duplicate_groups: { Args: never; Returns: Json }
       set_safety_setting: {
         Args: { p_description?: string; p_key: string; p_value: Json }
         Returns: Json
