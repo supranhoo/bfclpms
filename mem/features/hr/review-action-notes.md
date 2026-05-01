@@ -31,6 +31,7 @@ Lightweight log so HR can capture KPI/KRA-change inputs during reviews and track
   - "Employee" cell shows name + `employee_code` (muted line beneath).
   - "Apply From" column shows `MMM yyyy` or `—`.
   - Default sort: `applicable_from ASC NULLS LAST, updated_at DESC` (upcoming target cycles surface first).
+  - Actions column has a **Pencil** edit icon (gated by `canEdit`) beside the trash icon. It opens `<AddReviewNoteSheet mode="edit" note={row} />` pre-filled from the row. Subject employee is locked post-creation; only category, title, details, priority, and `applicable_from` can be patched. Routed through `useUpdateReviewNote()`.
 - Admin page `/admin/review-notes-access` — switch matrix to edit the visibility config.
 - Inline `<ReviewNoteTrigger />` (`src/components/reviewNotes/ReviewNoteTrigger.tsx`) — drop into any surface (scorecard row, profile header, KRA tile) with subject/kpi/period props. Renders nothing if `canCreate` is false.
 

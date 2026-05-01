@@ -5,13 +5,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useCreateReviewNote } from '@/hooks/useReviewNotes';
+import { useCreateReviewNote, useUpdateReviewNote } from '@/hooks/useReviewNotes';
 import {
   REVIEW_NOTE_CATEGORY_LABELS,
   REVIEW_NOTE_PRIORITY_LABELS,
   nextMonthFirstDay,
   type ReviewNoteCategory,
   type ReviewNotePriority,
+  type ReviewActionNote,
 } from '@/services/reviewNotes/reviewNotesService';
 import { EmployeePickerCombobox, type EmployeeOption } from './EmployeePickerCombobox';
 import { MonthPicker } from './MonthPicker';
@@ -26,6 +27,10 @@ interface Props {
   kpiName?: string | null;
   periodId?: string | null;
   defaultCategory?: ReviewNoteCategory;
+  /** Sheet mode. 'create' (default) inserts a new note; 'edit' patches `note`. */
+  mode?: 'create' | 'edit';
+  /** Required when mode === 'edit'. Source of truth for pre-fill. */
+  note?: ReviewActionNote | null;
 }
 
 export function AddReviewNoteSheet({
@@ -37,6 +42,8 @@ export function AddReviewNoteSheet({
   kpiName,
   periodId,
   defaultCategory = 'kpi_change',
+  mode = 'create',
+  note = null,
 }: Props) {
   const [title, setTitle] = useState('');
   const [details, setDetails] = useState('');
@@ -46,11 +53,24 @@ export function AddReviewNoteSheet({
   const [pickedEmployee, setPickedEmployee] = useState<EmployeeOption | null>(null);
   const [applicableFrom, setApplicableFrom] = useState<string | null>(null);
 
-  const showEmployeePicker = !subjectEmployeeId;
-  const effectiveSubjectId = subjectEmployeeId ?? pickedEmployeeId;
+  const isEdit = mode === 'edit';
+  // Subject is locked in edit mode (and when caller passes subjectEmployeeId).
+  const showEmployeePicker = !isEdit && !subjectEmployeeId;
+  const effectiveSubjectId = isEdit
+    ? note?.subject_employee_id ?? null
+    : subjectEmployeeId ?? pickedEmployeeId;
 
   useEffect(() => {
-    if (open) {
+    if (!open) return;
+    if (isEdit && note) {
+      setTitle(note.title ?? '');
+      setDetails(note.details ?? '');
+      setCategory(note.category);
+      setPriority(note.priority);
+      setPickedEmployeeId(null);
+      setPickedEmployee(null);
+      setApplicableFrom(note.applicable_from ?? null);
+    } else {
       setTitle('');
       setDetails('');
       setCategory(defaultCategory);
@@ -60,22 +80,38 @@ export function AddReviewNoteSheet({
       // Default Apply-From to next month so HR rarely has to change it.
       setApplicableFrom(nextMonthFirstDay());
     }
-  }, [open, defaultCategory]);
+  }, [open, defaultCategory, isEdit, note?.id]);
 
   const create = useCreateReviewNote();
+  const update = useUpdateReviewNote();
+  const pending = isEdit ? update.isPending : create.isPending;
 
   const handleSave = async () => {
     if (!title.trim() || !effectiveSubjectId) return;
-    await create.mutateAsync({
-      subject_employee_id: effectiveSubjectId,
-      kpi_id: kpiId ?? null,
-      period_id: periodId ?? null,
-      category,
-      title: title.trim(),
-      details: details.trim() || null,
-      priority,
-      applicable_from: applicableFrom,
-    });
+    if (isEdit && note) {
+      // Patch only the user-editable fields. subject_employee_id is intentionally locked.
+      await update.mutateAsync({
+        id: note.id,
+        patch: {
+          category,
+          title: title.trim(),
+          details: details.trim() || null,
+          priority,
+          applicable_from: applicableFrom,
+        },
+      });
+    } else {
+      await create.mutateAsync({
+        subject_employee_id: effectiveSubjectId,
+        kpi_id: kpiId ?? null,
+        period_id: periodId ?? null,
+        category,
+        title: title.trim(),
+        details: details.trim() || null,
+        priority,
+        applicable_from: applicableFrom,
+      });
+    }
     onOpenChange(false);
   };
 
@@ -83,9 +119,11 @@ export function AddReviewNoteSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-md overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>Add Review Note</SheetTitle>
+          <SheetTitle>{isEdit ? 'Edit Review Note' : 'Add Review Note'}</SheetTitle>
           <SheetDescription>
-            Capture an input now — change it in the next KRA cycle.
+            {isEdit
+              ? 'Update the captured input. Subject employee cannot be changed.'
+              : 'Capture an input now — change it in the next KRA cycle.'}
             {subjectName && !showEmployeePicker && (
               <span className="block mt-1 text-xs">For: <strong>{subjectName}</strong></span>
             )}
@@ -168,9 +206,9 @@ export function AddReviewNoteSheet({
         </div>
 
         <SheetFooter className="gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={create.isPending}>Cancel</Button>
-          <Button onClick={handleSave} disabled={!title.trim() || !effectiveSubjectId || create.isPending}>
-            {create.isPending ? 'Saving…' : 'Save Note'}
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>Cancel</Button>
+          <Button onClick={handleSave} disabled={!title.trim() || !effectiveSubjectId || pending}>
+            {pending ? 'Saving…' : isEdit ? 'Save Changes' : 'Save Note'}
           </Button>
         </SheetFooter>
       </SheetContent>
