@@ -578,6 +578,7 @@ When an admin marks a KPI as **N/A** via the Admin Data Entry dialog:
 - **Body:** `{"triggered_by": "cron"}` — triggers the system path which checks the `auto_kra_rollover` setting before proceeding
 - **Edge Function:** `auto-rollover-kpis` — copies KPIs from previous month to current month for all employees
 - **Disabling:** Set `auto_kra_rollover` to any value other than `enabled` in `system_settings`
+- **Notification Consolidation (§118):** Rollover inserts KPIs via `batch_insert_kpis_with_rollover_flag()` DB function which sets `app.rollover_batch = 'true'`, suppressing per-KPI notification triggers. After all inserts, the edge function sends ONE consolidated in-app notification and ONE email per employee with the full KPI list. The `send_email_on_notification` trigger skips `kra_rollover` type notifications to prevent duplicates.
 
 ---
 
