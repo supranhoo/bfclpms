@@ -17,6 +17,9 @@ import { Loader2, Package, FileText, Target, Sparkles, CheckCircle, AlertTriangl
 import { EffectiveMonthSelector } from './EffectiveMonthSelector';
 import { getActiveMonthForCycle } from '@/lib/frequencyUtils';
 import { formatKpiInsertError } from '@/lib/kpiErrorUtils';
+import { useCanonicalResolver } from '@/hooks/useCanonicalResolver';
+import { isCanonicalEnforcementPeriod } from '@/lib/canonicalEnforcementPeriod';
+import { RegistryBadgePreset } from './kpi-standardization/RegistryBadge';
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 

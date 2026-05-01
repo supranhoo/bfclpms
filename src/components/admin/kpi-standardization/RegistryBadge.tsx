@@ -3,6 +3,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { BookCheck, BookOpen } from 'lucide-react';
 import { useCanonicalResolver } from '@/hooks/useCanonicalResolver';
 import { isCanonicalEnforcementPeriod } from '@/lib/canonicalEnforcementPeriod';
+import { signatureKey, type CanonicalResolution } from '@/lib/canonicalGrouping';
 
 export interface RegistryBadgeProps {
   categoryId: string | null | undefined;
@@ -93,6 +94,60 @@ export function RegistryBadge({
               </div>
             </div>
           )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+/**
+ * Presentational variant for list contexts (e.g. template cards) where a
+ * parent has already batched the resolver call. Avoids per-row useQuery
+ * subscriptions.
+ */
+export interface RegistryBadgePresetProps {
+  categoryId: string | null | undefined;
+  kraName: string | null | undefined;
+  kpiName: string | null | undefined;
+  resolved: Map<string, CanonicalResolution> | undefined;
+  className?: string;
+}
+
+export function RegistryBadgePreset({
+  categoryId, kraName, kpiName, resolved, className,
+}: RegistryBadgePresetProps) {
+  if (!categoryId || !kraName?.trim() || !kpiName?.trim() || !resolved) return null;
+  const key = signatureKey({
+    category_id: categoryId,
+    kra_name: kraName.trim(),
+    kpi_name: kpiName.trim(),
+  });
+  const match = resolved.get(key);
+  const isRegistered = !!match?.definition_id;
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge
+            variant={isRegistered ? 'secondary' : 'outline'}
+            className={`text-[10px] font-normal gap-1 ${
+              isRegistered
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400'
+                : 'border-amber-200 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'
+            } ${className ?? ''}`}
+          >
+            {isRegistered ? (
+              <><BookCheck className="h-2.5 w-2.5" />Registered</>
+            ) : (
+              <><BookOpen className="h-2.5 w-2.5" />Not in registry</>
+            )}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs max-w-xs">
+          {isRegistered
+            ? <span>Canonical: {match!.canonical_kra_name} → {match!.canonical_kpi_name}</span>
+            : <span>Custom name — not in the canonical registry yet.</span>}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
