@@ -57,6 +57,7 @@ const ReviewNotes = lazy(() => import("./pages/hr/ReviewNotes"));
 const ModuleHubSettings = lazy(() => import("./pages/admin/ModuleHubSettings"));
 const IdentityAccessConsole = lazy(() => import("./pages/admin/IdentityAccessConsole"));
 const KpiStandardization = lazy(() => import("./pages/admin/KpiStandardization"));
+const RegistryBrowser = lazy(() => import("./pages/RegistryBrowser"));
 
 // Safety module shell + pages
 const SafetyLayout = lazy(() =>
