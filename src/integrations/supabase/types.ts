@@ -8041,6 +8041,17 @@ export type Database = {
         Args: { p_category_id: string; p_kpi_name: string; p_kra_name: string }
         Returns: string
       }
+      resolve_canonical_kpi_batch: {
+        Args: { p_signatures: Json }
+        Returns: {
+          canonical_kpi_name: string
+          canonical_kra_name: string
+          category_id: string
+          definition_id: string
+          kpi_name: string
+          kra_name: string
+        }[]
+      }
       resolve_cycle_anchor: {
         Args: { p_frequency: string; p_month_idx: number }
         Returns: string
