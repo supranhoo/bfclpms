@@ -89,6 +89,7 @@ export default function ProfileSettings() {
   const kpiRows = useMemo(() => {
     return kpis.map(k => ({
       id: k.id,
+      category_id: k.category_id,
       category_name: categoryMap[k.category_id] || null,
       kra_name: k.kra_name,
       kpi_name: k.kpi_name,
