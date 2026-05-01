@@ -56,6 +56,10 @@ export function SmartAssignmentDialog({
   const currentPeriod = selectedMonth;
   const currentYear = selectedYear;
 
+  // Phase 3a: batch-resolve canonical registry status for every template
+  // shown in the role list. Single RPC call per dialog open + period change.
+  const inEnforcementScope = isCanonicalEnforcementPeriod(currentPeriod, currentYear);
+
   // State
   const [activeTab, setActiveTab] = useState<'bundles' | 'templates'>('bundles');
   const [selectedBundleId, setSelectedBundleId] = useState<string>('');
