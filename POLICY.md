@@ -2431,3 +2431,21 @@ without measuring the produced URL length.
 4. **Default audience excludes plain Employees.** The seeded `registry-browser` menu_access_config row grants visibility to admin, manager, hr_pms, management, auditor, skip_level. Plain Employee role is intentionally excluded — they have no taxonomy-management need and are shielded from registry noise. Admins may opt them in via the standard menu admin UI if a workspace requires it.
 
 5. **Aggregate usage count uses the same period gate as enforcement.** `usage_count` is computed via `is_canonical_enforcement_period()` so the number a non-admin sees agrees exactly with what the trigger enforces and what the admin Health dashboard reports (§88D). Pre-May-2026 KPIs are not counted.
+
+## §88H — Phase 4 Auto-Merge Suggestions
+
+1. **Suggestions are advisory.** `suggest_definition_merges` and `suggest_alias_candidates` MUST NOT mutate any KPI, alias, or definition row. They surface candidates only. The Suggestions tab is a recommendation surface, not an enforcement surface.
+
+2. **Admin-only at the DB layer.** All Phase 4 RPCs (`suggest_definition_merges`, `suggest_alias_candidates`, `dismiss_suggestion`, and the future Phase 4c `merge_definitions`) raise `access denied` when the caller does not hold the `admin` role via `has_role(auth.uid(), 'admin')`. The UI surface lives only on `/admin/kpi-standardization`.
+
+3. **Forward-only scope.** Both suggestion RPCs use `is_canonical_enforcement_period()` so pre-May-2026 KPI rows never contribute to suggestions and are never affected by any subsequent merge action. This mirrors §88D and prevents the engine from proposing changes against frozen historical periods.
+
+4. **Same-category pairs only.** Definition merge candidates are constrained to definitions sharing the same `category_id`. Cross-category fuzzy matches are suppressed by design — categories represent distinct evaluation domains and a high lexical similarity across categories is almost always a false positive.
+
+5. **Stable pair canonicalization.** Definition pairs are always returned as `(LEAST(id), GREATEST(id))`, and `dismiss_suggestion` normalizes the same way. This guarantees that dismissing a pair from either ordering hits the same `(kind, left_id, right_id)` PK and the suggestion stops re-appearing.
+
+6. **Idempotent dismissals.** `registry_suggestion_dismissals` PK is `(kind, left_id, right_id)`. Re-dismissing the same pair is a no-op via `ON CONFLICT DO NOTHING`. There is no UI to undo a dismissal — admins remove rows from the table directly if a candidate should re-surface.
+
+7. **Alias promotion goes through the existing API.** The Suggestions tab promotes an alias candidate by calling the existing `promote_signature_to_definition(category, kra, kpi, canonical_kra, canonical_kpi)` RPC, which finds the existing definition (via the unique `(canonical_kra, canonical_kpi, category)` index) and adds the variant alias plus back-links matching May-2026+ rows. Phase 4 does not introduce a separate alias-attach RPC — there is exactly one promotion code path.
+
+8. **No silent merging.** Every action — merge, promote, dismiss — requires explicit user input. The Suggestions tab MUST NOT auto-apply a candidate, even at extreme similarity scores, and MUST NOT pre-tick or pre-select any row.
