@@ -2302,3 +2302,17 @@ without measuring the produced URL length.
 `src/components/reports/MonthlyTrendView.tsx`. Test:
 `src/test/monthlyTrendCacheBust.test.ts`. Memory:
 `mem://features/reports/monthly-scorecard-trend`.
+
+---
+
+## §88A — KPI Standardization Forward-Only Policy
+
+1. **Past Data Immutability:** KPI rows for periods before May 2026 MUST NOT be modified by the standardization tool. The `correct_may_kpis()` function enforces this with a hard check.
+
+2. **Canonical Registry Authority:** From May 2026 onward, all KPIs should reference a canonical `kpi_definitions` entry. The registry is the source of truth for KPI identity.
+
+3. **Alias-Based Cross-Month Linking:** Historical data is linked to canonical definitions via `kpi_name_aliases`, not by modifying the historical rows. Dashboard queries use `resolve_canonical_kpi()` to group across months.
+
+4. **Soft Enforcement:** Free-text KPI names are allowed but flagged. Registry selection is the default picker for all KPI creation flows.
+
+5. **Scoring Independence:** Standardizing KPI names does NOT affect per-employee scoring thresholds (r5-r0), target values, or weightages. These remain independently configurable.

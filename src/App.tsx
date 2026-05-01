@@ -56,6 +56,7 @@ const EmployeeMasterBackfill = lazy(() => import("./pages/admin/EmployeeMasterBa
 const ReviewNotes = lazy(() => import("./pages/hr/ReviewNotes"));
 const ModuleHubSettings = lazy(() => import("./pages/admin/ModuleHubSettings"));
 const IdentityAccessConsole = lazy(() => import("./pages/admin/IdentityAccessConsole"));
+const KpiStandardization = lazy(() => import("./pages/admin/KpiStandardization"));
 
 // Safety module shell + pages
 const SafetyLayout = lazy(() =>
@@ -455,6 +456,11 @@ const App = () => (
                 <Route path="/admin/org-kpi-audit-review" element={
                   <ProtectedRoute allowedRoles={['auditor', 'admin']} menuKey="admin-org-kpi-audit">
                     <Suspense fallback={<PageFallback />}><OrgKpiAuditReview /></Suspense>
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/kpi-standardization" element={
+                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-kpi-standardization">
+                    <Suspense fallback={<PageFallback />}><KpiStandardization /></Suspense>
                   </ProtectedRoute>
                 } />
                 <Route path="/reports/incentive" element={

@@ -1,0 +1,194 @@
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+
+export interface KpiDefinition {
+  id: string;
+  canonical_kra_name: string;
+  canonical_kpi_name: string;
+  category_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KpiNameAlias {
+  id: string;
+  definition_id: string;
+  variant_kra_name: string;
+  variant_kpi_name: string;
+  category_id: string;
+  created_at: string;
+}
+
+export interface DuplicateGroup {
+  normalized_kpi: string;
+  category_id: string;
+  category_name: string;
+  variants: {
+    kra_name: string;
+    kpi_name: string;
+    employee_count: number;
+    row_count: number;
+  }[];
+}
+
+export interface UnmatchedMayKpi {
+  kra_name: string;
+  kpi_name: string;
+  category_id: string;
+  category_name: string;
+  employee_count: number;
+  suggested_definition_id: string | null;
+  suggested_canonical_kra: string | null;
+  suggested_canonical_kpi: string | null;
+}
+
+export function useKpiDefinitions() {
+  const [data, setData] = useState<KpiDefinition[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const refetch = useCallback(async () => {
+    setLoading(true);
+    const { data: defs, error } = await supabase
+      .from('kpi_definitions' as any)
+      .select('*')
+      .order('canonical_kra_name');
+    if (!error && defs) setData(defs as any as KpiDefinition[]);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { refetch(); }, [refetch]);
+  return { data, loading, refetch };
+}
+
+export function useKpiAliases(definitionId?: string) {
+  const [data, setData] = useState<KpiNameAlias[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const refetch = useCallback(async () => {
+    setLoading(true);
+    let query = supabase.from('kpi_name_aliases' as any).select('*');
+    if (definitionId) query = query.eq('definition_id', definitionId);
+    const { data: aliases, error } = await query.order('created_at');
+    if (!error && aliases) setData(aliases as any as KpiNameAlias[]);
+    setLoading(false);
+  }, [definitionId]);
+
+  useEffect(() => { refetch(); }, [refetch]);
+  return { data, loading, refetch };
+}
+
+export function useScanDuplicates() {
+  const [groups, setGroups] = useState<DuplicateGroup[]>([]);
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  const scan = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Find KPI signatures that have multiple KRA name variants
+      const { data, error } = await supabase.rpc('scan_kpi_duplicate_groups' as any);
+      if (error) throw error;
+      setGroups((data as any as DuplicateGroup[]) || []);
+    } catch (err: any) {
+      toast({ title: 'Scan failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  return { groups, loading, scan };
+}
+
+export function useBuildRegistry() {
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
+
+  const createDefinitionWithAliases = useCallback(async (
+    canonicalKra: string,
+    canonicalKpi: string,
+    categoryId: string,
+    variants: { kra_name: string; kpi_name: string }[]
+  ) => {
+    setSaving(true);
+    try {
+      // Insert definition
+      const { data: def, error: defErr } = await supabase
+        .from('kpi_definitions' as any)
+        .insert({ canonical_kra_name: canonicalKra, canonical_kpi_name: canonicalKpi, category_id: categoryId } as any)
+        .select()
+        .single();
+      if (defErr) throw defErr;
+
+      const defId = (def as any).id;
+
+      // Insert aliases (including canonical name itself)
+      const allVariants = [
+        { kra_name: canonicalKra, kpi_name: canonicalKpi },
+        ...variants.filter(v => v.kra_name !== canonicalKra || v.kpi_name !== canonicalKpi)
+      ];
+
+      const aliasRows = allVariants.map(v => ({
+        definition_id: defId,
+        variant_kra_name: v.kra_name,
+        variant_kpi_name: v.kpi_name,
+        category_id: categoryId,
+      }));
+
+      const { error: aliasErr } = await supabase
+        .from('kpi_name_aliases' as any)
+        .insert(aliasRows as any);
+      if (aliasErr) throw aliasErr;
+
+      toast({ title: 'Registry entry created', description: `${allVariants.length} aliases linked` });
+      return defId;
+    } catch (err: any) {
+      toast({ title: 'Failed to create', description: err.message, variant: 'destructive' });
+      return null;
+    } finally {
+      setSaving(false);
+    }
+  }, [toast]);
+
+  return { createDefinitionWithAliases, saving };
+}
+
+export function useCorrectMayKpis() {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+
+  const correctKpis = useCallback(async (
+    categoryId: string,
+    oldKraName: string,
+    oldKpiName: string,
+    newKraName: string,
+    newKpiName: string,
+    definitionId: string,
+    reviewPeriod: string,
+    reviewYear: number
+  ) => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.rpc('correct_may_kpis' as any, {
+        p_category_id: categoryId,
+        p_old_kra: oldKraName,
+        p_old_kpi: oldKpiName,
+        p_new_kra: newKraName,
+        p_new_kpi: newKpiName,
+        p_definition_id: definitionId,
+        p_review_period: reviewPeriod,
+        p_review_year: reviewYear,
+      });
+      if (error) throw error;
+      toast({ title: 'KPIs corrected', description: `Updated to canonical name` });
+      return true;
+    } catch (err: any) {
+      toast({ title: 'Correction failed', description: err.message, variant: 'destructive' });
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  return { correctKpis, loading };
+}
