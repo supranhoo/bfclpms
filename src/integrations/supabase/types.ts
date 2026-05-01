@@ -7887,6 +7887,10 @@ export type Database = {
           id: string
         }[]
       }
+      get_public_registry_view: {
+        Args: { p_category_id?: string; p_search?: string }
+        Returns: Json
+      }
       get_registry_coverage_stats: { Args: never; Returns: Json }
       get_safety_setting: { Args: { p_key: string }; Returns: Json }
       get_skip_level_manager: {
