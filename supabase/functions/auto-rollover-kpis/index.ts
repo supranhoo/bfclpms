@@ -508,10 +508,13 @@ Deno.serve(async (req) => {
     let totalInserted = 0;
     for (let i = 0; i < kpisToInsert.length; i += 500) {
       const batch = kpisToInsert.slice(i, i + 500);
-      const { data: inserted, error: insertError } = await supabase
-        .from('kpis')
-        .insert(batch)
-        .select('id');
+
+      // Use the batch insert function that sets the rollover flag,
+      // suppressing per-KPI notification triggers
+      const { data: insertedCount, error: insertError } = await supabase
+        .rpc('batch_insert_kpis_with_rollover_flag', {
+          kpis_json: JSON.stringify(batch),
+        });
 
       if (insertError) {
         await supabase.from('kra_rollover_logs').insert({
@@ -523,7 +526,86 @@ Deno.serve(async (req) => {
         });
         throw new Error(`Insert failed: ${insertError.message}`);
       }
-      totalInserted += inserted?.length || 0;
+      totalInserted += insertedCount || 0;
+    }
+
+    // ── Send ONE consolidated notification + email per affected employee ──
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+
+    for (const result of rolledOver) {
+      const empId = result.employee_id;
+      const empKpis = employeeKpis[empId] || [];
+      const copiedKpis = kpisToInsert.filter((k: any) => k.employee_id === empId);
+      const uniqueKras = [...new Set(copiedKpis.map((k: any) => k.kra_name))];
+      const totalWeightage = copiedKpis.reduce((s: number, k: any) => s + (k.weightage || 0), 0);
+
+      const notifMessage = `${result.kpis_copied} KPI(s) have been rolled over from ${sourceMonth} ${sourceYear} to ${targetMonth} ${targetYear}. Total weightage: ${totalWeightage}%.`;
+
+      // Check if employee has an auth.users row before inserting notification
+      const { data: authCheck } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .eq('id', empId)
+        .single();
+
+      if (authCheck) {
+        // Insert consolidated in-app notification (best-effort)
+        try {
+          await supabase.from('notifications').insert({
+            user_id: empId,
+            type: 'kra_rollover',
+            title: 'KRA/KPIs Rolled Over',
+            message: notifMessage,
+            metadata: {
+              source_period: sourceMonth,
+              source_year: sourceYear,
+              target_period: targetMonth,
+              target_year: targetYear,
+              kpi_count: result.kpis_copied,
+              kra_names: uniqueKras,
+            },
+          });
+        } catch (e) {
+          console.error(`Failed to insert rollover notification for ${empId}:`, e);
+        }
+
+        // Send consolidated email (fire-and-forget)
+        if (authCheck.email) {
+          const kraList = copiedKpis.map((k: any) => ({
+            kra_name: k.kra_name,
+            kpi_name: String(k.kpi_name).split('\n')[0].substring(0, 100),
+            target_value: k.target_value != null ? String(k.target_value) : '-',
+            weightage: k.weightage != null ? `${k.weightage}%` : '-',
+            uom: k.uom || '-',
+          }));
+
+          try {
+            await fetch(`${supabaseUrl}/functions/v1/send-email-notification`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': anonKey,
+                'Authorization': `Bearer ${anonKey}`,
+              },
+              body: JSON.stringify({
+                event_type: 'kra_rollover',
+                recipient_email: authCheck.email,
+                recipient_name: authCheck.full_name || 'Employee',
+                review_period: targetMonth,
+                review_year: targetYear,
+                source_period: sourceMonth,
+                source_year: sourceYear,
+                kra_count: result.kpis_copied,
+                total_weightage: `${totalWeightage}%`,
+                kra_list: kraList,
+              }),
+            });
+          } catch (emailErr) {
+            console.error(`Failed to send rollover email for ${empId}:`, emailErr);
+          }
+        }
+      }
     }
 
     // Log successful rollover

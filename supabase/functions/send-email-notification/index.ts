@@ -484,6 +484,23 @@ Total Weightage: {{total_weightage}}
 
 Please log in to review the assignments.`,
   },
+  kra_rollover: {
+    subject: '[PMS] KRA/KPIs Rolled Over for {{review_period}} {{review_year}}',
+    body: `Hi {{recipient_name}},
+
+Your KRA/KPIs have been rolled over from {{source_period}} {{source_year}} to {{review_period}} {{review_year}}.
+
+Summary:
+- Total KPIs rolled over: {{kra_count}}
+- Total Weightage: {{total_weightage}}
+
+{{kra_table}}
+
+Please review your assignments and begin your self-review when the period opens.
+
+Regards,
+HRMS - Performance Management System`,
+  },
   admin_status_step_back: {
     subject: '[PMS] Admin Moved Your KPI Back',
     body: `Hi {{recipient_name}},
@@ -1220,7 +1237,8 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       kra_list, kra_count, employee_name, total_weightage,
       old_email, new_email,
       observation_title, observation_type, observation_description, reply_content,
-      auto_score_reason, kpi_list, final_score, _from_scheduler } = body;
+      auto_score_reason, kpi_list, final_score, _from_scheduler,
+      source_period, source_year } = body;
 
     // Check if email notifications are enabled
     const { data: enabledSetting } = await supabase
@@ -1443,6 +1461,8 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       observation_type,
       observation_description: observation_description ? stripMentionSyntax(observation_description) : observation_description,
       reply_content: reply_content ? stripMentionSyntax(reply_content) : reply_content,
+      source_period,
+      source_year,
     };
 
     // For final_approved, inject final_score and score_label
@@ -1463,6 +1483,11 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
 
     // For kra_batch_assigned, inject the KRA table HTML into the placeholder
     if (event_type === 'kra_batch_assigned' && Array.isArray(kra_list)) {
+      placeholderData.kra_table = buildKraTableHtml(kra_list);
+    }
+
+    // For kra_rollover, inject the KRA table HTML into the placeholder
+    if (event_type === 'kra_rollover' && Array.isArray(kra_list)) {
       placeholderData.kra_table = buildKraTableHtml(kra_list);
     }
 
