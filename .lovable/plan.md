@@ -90,12 +90,20 @@ Three sub-phases, sequenced from highest user value to deepest plumbing.
 ## Sequencing & Delivery
 
 ```text
-Sub-Phase 3a (Pickers)        ship first — direct UX win, exercises trigger end-to-end
+Sub-Phase 3a (Pickers)        ✅ shipped 2026-05-01 (§88E)
         ↓
-Sub-Phase 3b (Reports)        ship second — reaps Phase 2a resolver in user-facing reports
+Sub-Phase 3b (Reports)        ✅ shipped 2026-05-01 (§88F) — trimmed to KpiJourneySection prev-month panel only
         ↓
 Sub-Phase 3c (Visibility)     ship last — removes admin-only taxonomy gap
 ```
+
+**Phase 3b scope correction (post-audit):** A walkthrough of the codebase
+found that the originally-named report targets (VarianceReport,
+KpiJourneyReport, ManagementDashboard trend, EmployeePerformanceSummary)
+were either single-period (forbidden by §88B) or org-aggregate (no
+per-KPI grouping happens). The only surface where renames cause real
+data loss is `KpiJourneySection`'s "Previous 2 Months" panel; Phase 3b
+is therefore narrow by design. Documented in §88F.
 
 Each sub-phase ends with:
 
