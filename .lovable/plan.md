@@ -1,77 +1,64 @@
 
-## Problem
+## Goal
 
-When the system rolls over KRAs to a new period, the DB trigger `notify_on_kpi_created()` fires FOR EACH ROW on the `kpis` table. This creates one in-app notification per KPI, and the chained `send_email_on_notification()` trigger sends one email per notification. Result: if an employee has 6 KPIs, they receive 6 separate "New KRA Assigned to You" emails (as shown in the screenshot).
+Relocate the "HR Review Notes — Role Access" configuration from its standalone admin page (`/admin/review-notes-access`) into **System Settings > Menu Access > Profile Mapping**, displayed as a collapsible sub-section under the "HR PMS" section, directly below the "HR PMS Review" row.
 
-## Root Cause Chain
+## Current State
 
-1. `auto-rollover-kpis` edge function inserts KPIs in batches into `kpis` table
-2. `trigger_notify_kpi_created` (AFTER INSERT, FOR EACH ROW) fires `notify_on_kpi_created()` for each KPI
-3. Each notification INSERT triggers `send_email_on_notification()` which sends an email
+- Standalone page at `/admin/review-notes-access` with a role x action toggle matrix (View All, Create, Edit, Delete, View Own Only)
+- Sidebar entry "Review Notes Access" under admin menu items
+- Stored in `system_settings` table under key `review_action_notes_visibility`
 
-## Fix
+## Proposed UI
 
-### 1. Skip per-KPI notifications during rollover
+Inside the MappingTab, after the "HR PMS Review" row in the hr_pms section, render an inline expandable panel:
 
-Modify `notify_on_kpi_created()` to detect rollover-inserted KPIs (status = `kra_set` and no submission exists) and skip individual notifications when a rollover batch flag is active. The cleanest approach: the edge function will set a session variable (`SET LOCAL app.rollover_batch = 'true'`) before each batch insert, and the trigger will check for it.
-
-### 2. Send consolidated notifications from the edge function
-
-After all KPIs are inserted, the `auto-rollover-kpis` edge function will insert ONE notification per employee with a summary message, and invoke the email function once per employee with a consolidated email.
-
-### Consolidated Email Text
-
-**Subject:** `PMS - KRA/KPIs Rolled Over for {Month} {Year}`
-
-**Body:**
-```
-Hi {Employee Name},
-
-Your KRA/KPIs have been rolled over from {Source Month} {Source Year} to {Target Month} {Target Year}.
-
-Summary:
-- Total KPIs rolled over: {count}
-- KRA(s): {comma-separated unique KRA names}
-
-KPI Details:
-1. {KRA Name} - {KPI Name} (Weightage: {X}%)
-2. {KRA Name} - {KPI Name} (Weightage: {X}%)
-...
-
-Please review your assignments and begin your self-review when the period opens.
-
-Regards,
-HRMS - Performance Management System
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│ Section │ Menu Item        │ View │ Add │ Update │ Delete       │
+├─────────┼──────────────────┼──────┼─────┼────────┼──────────────┤
+│ HR PMS  │ HR PMS Review    │  ☑   │  ☑  │   ☑    │   ☑         │
+│         │                  │      │     │        │             │
+│         │ ┌── HR Review Notes Access ──────────────────────┐  │
+│         │ │                                                │  │
+│         │ │  Role          │ViewAll│Create│Edit│Delete│Own  │  │
+│         │ │  Admin [lock]  │  ●   │  ●  │  ● │  ●  │     │  │
+│         │ │  Manager       │  ●   │  ●  │    │     │     │  │
+│         │ │  Employee      │      │     │    │     │  ●  │  │
+│         │ │  Auditor       │  ●   │     │    │     │     │  │
+│         │ │  Management    │  ●   │     │    │     │     │  │
+│         │ │  HR PMS        │  ●   │  ●  │  ● │  ●  │     │  │
+│         │ │  Skip-Level    │  ●   │  ●  │    │     │     │  │
+│         │ │                                                │  │
+│         │ │          [Save Review Notes Permissions]        │  │
+│         │ └────────────────────────────────────────────────┘  │
+│         │                                                     │
+│ Audit   │ Audit Panel      │  ☑   │  ☑  │   ☑    │   ☑        │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Consolidated In-App Notification
+The sub-panel appears as a bordered card/accordion below the HR PMS Review checkbox row. It contains the same role x action switch matrix currently on the standalone page, with its own "Save" button. It loads/saves from the same `system_settings` key (`review_action_notes_visibility`).
 
-**Title:** `KRA/KPIs Rolled Over`
-**Message:** `{count} KPI(s) have been rolled over from {Source Month} {Source Year} to {Target Month} {Target Year}. Total weightage: {X}%.`
-**Type:** `kra_rollover`
+## Changes
 
-### Changes
+### 1. Create `ReviewNotesAccessInline` component
+New file: `src/components/admin/ReviewNotesAccessInline.tsx`
+- Extract the matrix UI from `ReviewNotesAccess.tsx` into a compact inline version (no Card wrapper, no page header)
+- Same toggle logic, same save behavior using `useSystemSetting` + `useUpdateSystemSetting`
+- Compact table with smaller text to fit inside the mapping tab
 
-**Migration (SQL)**
-- Alter `notify_on_kpi_created()` to check `current_setting('app.rollover_batch', true)`. If set to `'true'`, RETURN NEW without inserting a notification.
+### 2. Embed in MappingTab (`AccessProfilesManager.tsx`)
+- After rendering the `hr_pms` section rows in the Menu Access Rights table, inject a full-width `TableRow` containing the `ReviewNotesAccessInline` component inside a collapsible accordion/details element
+- Label: "HR Review Notes — Role Access"
+- Only visible when a profile is selected (same as the rest of the mapping tab)
 
-**`supabase/functions/auto-rollover-kpis/index.ts`**
-- Before each batch insert: execute `SET LOCAL app.rollover_batch = 'true'` via raw SQL
-- After all inserts complete: for each affected employee, insert ONE consolidated notification into `notifications` table
-- Invoke `send-email-notification` once per employee with event_type `kra_rollover` containing the full KPI list
+### 3. Remove standalone page and sidebar entry
+- Remove route `/admin/review-notes-access` from `App.tsx`
+- Remove lazy import of `ReviewNotesAccess`
+- Remove sidebar entry "Review Notes Access" from `AppSidebar.tsx`
+- Keep `src/pages/admin/ReviewNotesAccess.tsx` file (can delete later) or delete it now
 
-**`supabase/functions/send-email-notification/index.ts`**
-- Add `kra_rollover` event type handler that renders the consolidated email template shown above
+### 4. Update POLICY.md and DOCUMENTATION.md
+- Note the relocation of Review Notes Access configuration
 
-**`POLICY.md` / `DOCUMENTATION.md`**
-- Document the rollover notification consolidation policy
-
-**Test**
-- Add test case verifying rollover produces exactly one notification per employee
-
-### Risk & Impact
-
-- **Data Impact:** None -- notification content only
-- **Workflow Impact:** Employees receive one email instead of many; no functional change
-- **Regression Risk:** Low -- the `SET LOCAL` is transaction-scoped, so normal KPI creation (non-rollover) is unaffected
-- **Mitigation:** The `SET LOCAL` variable only persists within the current transaction; it cannot leak to other requests
+No database changes required. The `review_action_notes_visibility` system setting and `useReviewNoteAccess` hook remain unchanged.
