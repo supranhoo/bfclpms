@@ -1,64 +1,57 @@
 
-## Goal
+## Problem
 
-Relocate the "HR Review Notes — Role Access" configuration from its standalone admin page (`/admin/review-notes-access`) into **System Settings > Menu Access > Profile Mapping**, displayed as a collapsible sub-section under the "HR PMS" section, directly below the "HR PMS Review" row.
+The `percolate_multimonth_score` trigger on the `kpis` table only fires when `status` transitions **to** `approved`. If scores are changed **after** approval (e.g., admin edits management_score from 5 to 0 on March), the sibling months (e.g., February) never receive the updated scores.
 
-## Current State
+**Verified case**: Jitendra Dwivedi's AFBC Incentive KPI (Bi-Monthly, Feb-Mar cycle):
+- March (terminal): management_score=0, final_score=0, final_rating=red
+- February (sibling): self_score=5, all other scores NULL — never updated after March's post-approval edit
 
-- Standalone page at `/admin/review-notes-access` with a role x action toggle matrix (View All, Create, Edit, Delete, View Own Only)
-- Sidebar entry "Review Notes Access" under admin menu items
-- Stored in `system_settings` table under key `review_action_notes_visibility`
+Timeline from audit logs:
+1. March approved at 11:24:53 — percolation fired, copied `is_na=true` to Feb
+2. Admin then edited March's submission at 11:25:46 — changed `is_na` to false, set `management_score=0`, `final_score=0`
+3. No re-percolation occurred because March's status was already `approved`
 
-## Proposed UI
+## Fix
 
-Inside the MappingTab, after the "HR PMS Review" row in the hr_pms section, render an inline expandable panel:
+### 1. New DB trigger: `trg_repercolate_on_submission_update` on `review_submissions`
 
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│ Section │ Menu Item        │ View │ Add │ Update │ Delete       │
-├─────────┼──────────────────┼──────┼─────┼────────┼──────────────┤
-│ HR PMS  │ HR PMS Review    │  ☑   │  ☑  │   ☑    │   ☑         │
-│         │                  │      │     │        │             │
-│         │ ┌── HR Review Notes Access ──────────────────────┐  │
-│         │ │                                                │  │
-│         │ │  Role          │ViewAll│Create│Edit│Delete│Own  │  │
-│         │ │  Admin [lock]  │  ●   │  ●  │  ● │  ●  │     │  │
-│         │ │  Manager       │  ●   │  ●  │    │     │     │  │
-│         │ │  Employee      │      │     │    │     │  ●  │  │
-│         │ │  Auditor       │  ●   │     │    │     │     │  │
-│         │ │  Management    │  ●   │     │    │     │     │  │
-│         │ │  HR PMS        │  ●   │  ●  │  ● │  ●  │     │  │
-│         │ │  Skip-Level    │  ●   │  ●  │    │     │     │  │
-│         │ │                                                │  │
-│         │ │          [Save Review Notes Permissions]        │  │
-│         │ └────────────────────────────────────────────────┘  │
-│         │                                                     │
-│ Audit   │ Audit Panel      │  ☑   │  ☑  │   ☑    │   ☑        │
-└─────────────────────────────────────────────────────────────────┘
+A new AFTER UPDATE trigger on `review_submissions` that:
+- Checks if the parent KPI is multi-month, approved, and the terminal month of its cycle
+- Compares OLD vs NEW score columns — only fires if any score/rating/achieved_value/is_na actually changed
+- Copies all score fields to sibling month submissions (same logic as existing percolation)
+- Sets `app.percolation_bypass` to avoid frequency lock conflicts
+- Logs `SCORE_REPERCOLATED` audit action on each sibling
+
+Guard conditions (skip if):
+- KPI status is not `approved`
+- KPI is not a multi-month frequency
+- KPI review_period is not the terminal month
+- No score columns actually changed
+
+### 2. One-shot data repair for Feb-Mar AFBC Incentive
+
+Run a data repair to copy March's current scores to February's submission for the affected KPI.
+
+### 3. Update POLICY.md and memory
+
+Add a policy note that post-approval score edits on terminal months trigger automatic re-percolation to siblings.
+
+## Technical Details
+
+```sql
+-- Trigger function on review_submissions
+CREATE OR REPLACE FUNCTION public.repercolate_on_submission_update()
+RETURNS trigger ...
+-- Fires AFTER UPDATE on review_submissions
+-- Looks up parent kpi: frequency, status, review_period
+-- If approved + terminal month + score changed → copy to siblings
 ```
 
-The sub-panel appears as a bordered card/accordion below the HR PMS Review checkbox row. It contains the same role x action switch matrix currently on the standalone page, with its own "Save" button. It loads/saves from the same `system_settings` key (`review_action_notes_visibility`).
+The trigger reuses the same sibling-finding logic as `percolate_multimonth_score` (matching on employee_id, kra_name, kpi_name, review_year, frequency, cycle months).
 
-## Changes
-
-### 1. Create `ReviewNotesAccessInline` component
-New file: `src/components/admin/ReviewNotesAccessInline.tsx`
-- Extract the matrix UI from `ReviewNotesAccess.tsx` into a compact inline version (no Card wrapper, no page header)
-- Same toggle logic, same save behavior using `useSystemSetting` + `useUpdateSystemSetting`
-- Compact table with smaller text to fit inside the mapping tab
-
-### 2. Embed in MappingTab (`AccessProfilesManager.tsx`)
-- After rendering the `hr_pms` section rows in the Menu Access Rights table, inject a full-width `TableRow` containing the `ReviewNotesAccessInline` component inside a collapsible accordion/details element
-- Label: "HR Review Notes — Role Access"
-- Only visible when a profile is selected (same as the rest of the mapping tab)
-
-### 3. Remove standalone page and sidebar entry
-- Remove route `/admin/review-notes-access` from `App.tsx`
-- Remove lazy import of `ReviewNotesAccess`
-- Remove sidebar entry "Review Notes Access" from `AppSidebar.tsx`
-- Keep `src/pages/admin/ReviewNotesAccess.tsx` file (can delete later) or delete it now
-
-### 4. Update POLICY.md and DOCUMENTATION.md
-- Note the relocation of Review Notes Access configuration
-
-No database changes required. The `review_action_notes_visibility` system setting and `useReviewNoteAccess` hook remain unchanged.
+### Files to modify
+- New migration: create `repercolate_on_submission_update` trigger function + attach to `review_submissions`
+- New migration: one-shot repair for the affected Feb submission
+- `POLICY.md`: add re-percolation policy note
+- Memory file update: `mem/architecture/pms/multimonth-percolation`
