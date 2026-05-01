@@ -1,0 +1,26 @@
+---
+name: KPI Standardization Registry
+description: Forward-only canonical registry, alias mapping, idempotent approval, May 2026+ correction, and Phase 5b reversible actions (history + undo).
+type: feature
+---
+
+## Scope
+The KPI Standardization tooling at `/admin/kpi-standardization` (7 tabs) governs canonical KPI naming via `kpi_definitions` + `kpi_name_aliases`. Forward-only: pre-May-2026 KPI rows are FROZEN and never modified.
+
+## Key contracts
+- **Idempotent approval.** `useBuildRegistry.createDefinitionWithAliases` MUST look up an existing definition by `(canonical_kra_name, canonical_kpi_name)` before inserting, and only insert aliases not already linked. Race on `23505` falls back to re-read.
+- **Inline canonical edit (Build Registry).** Admins can override the canonical KRA/KPI text before approval. Empty/whitespace blocks submission.
+- **Edit canonical (Review Registry).** `useEditDefinition` updates `kpi_definitions` text. *Propagate* mode also runs `correct_may_kpis` for every May-2026+ `(period, year)` tuple currently linked.
+- **`correct_may_kpis` (DB)** rejects pre-May-2026 dates and now records full before-image (affected `kpi.id`s + prior `kpi_definition_id`) into `kpi_standardization_actions` so undo can revert each row exactly.
+
+## Reversibility (Phase 5b — §88I)
+- Single append-only `kpi_standardization_actions` table; admin SELECT/INSERT only, no UPDATE/DELETE policy.
+- `reverse_standardization_action(uuid)` is the only undo path. Refuses already-reversed rows. For `create_definition`, refuses when any `kpis.kpi_definition_id` still references the definition.
+- Reversed rows stay in the History tab (dimmed) — never hidden. Confirmation goes through `ConfirmDestructiveDialog`.
+
+## Drill-in
+`AffectedKpisTable` is the shared paginated (25/page) read-only viewer. Used in Build Registry (per variant), Review Registry (per definition), and Correct May KPIs (per signature). Reads from `kpis` joined to `profiles` for employee names. NEVER exposes write actions.
+
+## Out of scope
+- Pre-May-2026 data is frozen everywhere. Even propagation skips it client-side; DB function rejects it anyway.
+- The Registry Browser at `/registry` and `get_public_registry_view` remain read-only and never expose per-employee data.
