@@ -1,165 +1,147 @@
 
-# Phase 1: Forward-Only KPI Standardization
+# Phase 2: Activate the KPI Standardization Registry
 
-## Principle
-- Past months (Sep 2025 - Apr 2026): **completely frozen, zero changes**
-- May 2026 onward: all KPIs use one canonical name per concept
-- Cross-month reports: alias mapping links old variants to canonical names seamlessly
+Phase 1 built the registry tables, alias mapping, and admin tool. Phase 2 makes the registry actually do work across the app — linking trends, guiding new entries, and giving admins visibility into coverage.
 
----
-
-## 3 Real-World Examples
-
-### Example 1: Fugitive PM10 Emission KPI (229 rows, 3 KRA variants)
-
-**TODAY (the problem):**
-
-| Month | KRA Name | KPI Name | Employees |
-|-------|----------|----------|-----------|
-| Oct 2025 | Control dust emission | Ensure Fugitive Particulate Matter (PM10/AQI)... | 7 |
-| Oct 2025 | Environment compliance | Ensure Fugitive Particulate Matter (PM10)... | 3 |
-| Nov 2025 | Control dust emission | Ensure Fugitive Particulate Matter (PM10/AQI)... | 17 |
-| Apr 2026 | Control dust emission | Ensure Fugitive Particulate Matter (PM10/AQI)... | 31 |
-| Apr 2026 | Control Dust Emission | Ensure Fugitive Particulate Matter (PM10/AQI)... | 2 |
-| Apr 2026 | Control dust emission to make the plant environment compliant | Ensure Fugitive Particulate Matter (PM10/AQI)... | 1 |
-
-Same KPI concept, but 3 different KRA names ("Control dust emission", "Control Dust Emission", "Environment compliance", "Control dust emission to make the plant environment compliant"). Dashboard trend views treat these as separate KPIs.
-
-**AFTER STANDARDIZATION:**
-
-Registry entry created:
-- **Canonical KRA:** "Control Dust Emission"
-- **Canonical KPI:** "Ensure Fugitive Particulate Matter (PM10/AQI) emission levels are within permissible limits(50)"
-
-Alias mappings auto-created:
-- "Control dust emission" -> links to same definition
-- "Environment compliance" + PM10 KPI text -> links to same definition
-- "Control dust emission to make the plant environment compliant" -> links to same definition
-
-| Month | What happens |
-|-------|-------------|
-| Oct-Apr (past) | **NO CHANGE.** Rows keep original text. Alias table maps them to canonical definition for trend reports. |
-| May 2026 | Existing 31 rows get KRA corrected to "Control Dust Emission" and linked to `kpi_definition_id`. |
-| June+ | New KPIs auto-pick from registry. All 30+ employees get the exact same canonical text. |
-
-**Dashboard behavior:**
-- April page shows "Control dust emission" (original text, untouched)
-- May page shows "Control Dust Emission" (canonical)
-- Trend chart April vs May: system resolves both to same `kpi_definitions.id` via alias lookup, shows them as ONE continuous line
+Executed in three sequenced sub-phases. Each sub-phase is independently shippable and testable.
 
 ---
 
-### Example 2: Grievance Resolution KPI (58 rows, 2 KRA variants)
+## Sub-Phase 2a — Cross-Month Dashboard Linking
 
-**TODAY (the problem):**
+**Goal:** Old variants and new canonical entries appear as ONE continuous KPI in trend views, without changing how individual months render.
 
-| Month | KRA Name | KPI Name variant | Employees |
-|-------|----------|-----------------|-----------|
-| Sep-Apr | Timely  Grievance Resolution | "...Measures the number of employee grievances..." (Scoring: 5 for 0, 2 for 1, 0 for >1) | 21/mo |
-| Sep-Apr | Timely  Grievance Resolution | "...Measures the number of reasonable employee grievances..." (Scoring: 5 for 0, 3 for 1, 0 for >1) | 9/mo |
-| Sep-Apr | Timely Grievance Resolution | "...Measures the number of employee grievances..." (Scoring: 5 for 0, 3 for 1, 1 for 2, 0 for >2) | 2/mo |
+### What changes
+- Trend charts (Dashboard, MyKpis, Profile, Performance Report, Monthly Scorecard Trend) group by `kpi_definitions.id` when available, falling back to raw signature when no registry match exists.
+- Monthly grids (April page, May page, etc.) keep showing their own original text — no visual change on per-month views.
+- KPI Journey, KPI Employee Matrix, Variance Report group history correctly across renamed periods.
 
-Notice: KRA has "Timely  Grievance Resolution" (double space) vs "Timely Grievance Resolution" (single space). Same KPI concept, but the description text and scoring thresholds differ per employee group.
+### Technical details
+- New hook `useCanonicalResolver()` — wraps `resolve_canonical_kpi(category_id, kra_name, kpi_name)` RPC, batched + cached per session.
+- New utility `src/lib/canonicalGrouping.ts` with `groupByCanonicalKey(rows, resolverMap)` — returns a stable key: `definition_id` if matched, else `nk(category_id|kra|kpi)`.
+- Modify trend aggregators in:
+  - `src/hooks/useMonthlyTrend.ts`
+  - `src/hooks/useKpiJourneyReport.ts`
+  - `src/hooks/useKpiEmployeeMatrix.ts`
+  - `src/components/dashboard/PerformanceTrend.tsx`
+  - `src/pages/reports/PerformanceReport.tsx`, `VarianceReport.tsx`
+- Display rule: trend tooltip shows canonical name + small "(also known as: X, Y)" chip when multiple variants merged.
+- Resolver caches at the React Query level (key: `['canonical', categoryId, kra, kpi]`, staleTime 10min).
 
-**AFTER STANDARDIZATION:**
+### What stays the same
+- No DB schema changes.
+- Past KPI rows untouched.
+- `final_score`, `review_submissions`, `org_kpi_values` untouched.
 
-Registry entry created:
-- **Canonical KRA:** "Timely Grievance Resolution" (single space, proper casing)
-- **Canonical KPI:** "Timely Resolution of Employee Grievances" (short, clean title)
-
-**Key insight:** The scoring thresholds (5/2/0 vs 5/3/0 vs 5/3/1/0) are per-employee configurations stored in `r5/r4/r3/r2/r1/r0` columns on each KPI row. They remain **different per employee** -- only the KPI identity (name) is standardized. This is exactly what you described: "same KPI but scored differently as per defined target."
-
-| Month | What happens |
-|-------|-------------|
-| Sep-Apr (past) | **NO CHANGE.** "Timely  Grievance Resolution" (double space) stays as-is in DB. Alias maps it to canonical. |
-| May 2026 | All rows corrected to "Timely Grievance Resolution" (single space). Each employee keeps their own r5-r0 scoring thresholds. |
-| June+ | Registry enforces clean name. Individual targets/thresholds still set per employee. |
-
----
-
-### Example 3: Audit Observations Closure KPI (44 rows, 2 KRA variants)
-
-**TODAY (the problem):**
-
-| Month | KRA Name | KPI Name | Employees |
-|-------|----------|----------|-----------|
-| Oct-Apr | Closure of all Audit Points (CLC, HR, Audit,other) | Closure of Audit Observations (Multi-Departmental)... "100% closure" scoring | 9/mo |
-| Oct-Apr | Compliance to CLC norm | Closure of Audit Observations (Multi-Departmental)... same KPI text | 1/mo |
-| Oct-Apr | Audit | Closure of Audit Observations (Multi-Departmental)... "Rating 5: 0, Rating 2: 1" scoring | 1/mo |
-
-Exact same KPI concept, but under 3 different KRA names: "Closure of all Audit Points (CLC, HR, Audit,other)", "Compliance to CLC norm", and "Audit".
-
-**AFTER STANDARDIZATION:**
-
-Registry entry created:
-- **Canonical KRA:** "Closure of All Audit Points"
-- **Canonical KPI:** "Closure of Audit Observations (Multi-Departmental)"
-
-| Month | What happens |
-|-------|-------------|
-| Oct-Apr (past) | **NO CHANGE.** "Compliance to CLC norm" stays as-is. Alias maps all 3 KRA variants to the canonical definition. |
-| May 2026 | All rows get KRA corrected to "Closure of All Audit Points". Individual scoring thresholds preserved. |
-| June+ | New assignments pull from registry. One clean name for everyone. |
+### Risk & Impact
+- **Data Impact:** Read-only. Zero writes.
+- **Workflow Impact:** None — purely presentational grouping.
+- **UI/UX:** Trend lines may merge that previously appeared as separate lines. This is the desired behavior; tooltip discloses the merge.
+- **Regression Risk:** Medium for trend reports. Mitigation: snapshot tests on `groupByCanonicalKey` with mixed matched/unmatched fixtures; visual QA on Dashboard and KPI Employee Matrix before/after.
 
 ---
 
-## Architecture
+## Sub-Phase 2b — Soft Enforcement at Creation Flows
+
+**Goal:** Whenever a user/admin creates or assigns a KPI, the registry is suggested first, but custom names remain allowed (per your decision).
+
+### Touchpoints
+1. **Smart KRA Assignment** (`src/components/admin/SmartAssignment/`)
+   - KRA + KPI name fields become a combined searchable picker backed by `kpi_definitions`.
+   - "Use custom name" toggle reveals raw text inputs; saved with `kpi_definition_id = NULL` and a "Not in registry" badge.
+2. **Bulk Import** (`src/lib/importValidation.ts`, `src/services/iac/iacService.ts`)
+   - Import preview shows a "Registry match" column: green tick (auto-linked via alias), amber dot (fuzzy suggestion, click to confirm), grey dash (no match, will save as custom).
+   - Auto-link applies when an exact alias exists in `kpi_name_aliases`.
+3. **Copy KRAs** (existing flow)
+   - When copying May+ rows forward, re-resolve through registry so the new period's rows get `kpi_definition_id` populated automatically.
+4. **KRA Library** (`src/pages/admin/KRALibrary.tsx`)
+   - New "Link to Registry" action per library entry; library entries linked to a definition propagate canonical text on assignment.
+5. **Org KPI creation** (`OrgKpiEntryCard` and friends)
+   - Same picker pattern; Org KPI signature uses canonical name when linked.
+
+### Components to add
+- `src/components/admin/registry/RegistryPicker.tsx` — searchable Combobox over `kpi_definitions` with category filter, "Add custom" footer action.
+- `src/components/admin/registry/NotInRegistryBadge.tsx` — small amber badge for unlinked entries.
+- `src/hooks/useRegistrySearch.ts` — debounced search across canonical names + aliases.
+
+### Behavior rules
+- Picker filters by selected `category_id` when present.
+- Selecting a registry entry stamps both `kra_name` / `kpi_name` (as canonical) and `kpi_definition_id` on the row.
+- Custom entries: save with raw text, `kpi_definition_id = NULL`. They show in the registry health dashboard (2c) for admin triage.
+- Period guard: enforcement only activates for `review_period`/`review_year` >= May 2026. Earlier periods (e.g. data repair flows) bypass picker to avoid accidental rewrite.
+
+### Risk & Impact
+- **Data Impact:** Adds `kpi_definition_id` values to new rows. No schema change (column exists from Phase 1).
+- **Workflow Impact:** Smart Assignment and Bulk Import UX changes. Existing users will see a new picker — needs a one-line tooltip explaining "Pick a standard KPI or add custom."
+- **UI/UX:** New combobox in 5 places; consistent component reused everywhere.
+- **Regression Risk:** Bulk Import is highest-risk surface. Mitigation: keep existing import path working unchanged when no registry exists for a row; add unit tests around alias auto-match in `importValidation.test.ts`.
+
+---
+
+## Sub-Phase 2c — Registry Governance Dashboard
+
+**Goal:** Admins can see how clean their data is, find drift, and act on unmatched signatures.
+
+### New tab on `/admin/kpi-standardization` → "Health & Governance"
+
+Sections:
+1. **Coverage card** — "May 2026+ KPI rows: 1,247 total · 1,089 linked (87%) · 158 unlinked"
+2. **Unlinked Queue** — Paginated list of distinct (category, kra_name, kpi_name) signatures from May+ that have no `kpi_definition_id`. Each row has actions:
+   - "Link to existing definition" (registry picker)
+   - "Promote to new definition" (creates new `kpi_definitions` entry + back-fills aliases for this signature)
+3. **Alias Drift Detector** — Signatures that appear in May+ but match an existing alias by fuzzy normalization (`nk()` collation) yet weren't auto-linked. One-click "Apply alias" to link.
+4. **Registry Audit Log** — Filterable view of registry actions: definitions created, aliases added/removed, May correction runs. Backed by existing `audit_logs` with new action codes:
+   - `REGISTRY_DEFINITION_CREATED`
+   - `REGISTRY_ALIAS_ADDED`
+   - `REGISTRY_ALIAS_REMOVED`
+   - `REGISTRY_MAY_CORRECTION_APPLIED`
+   - `REGISTRY_KPI_LINKED`
+5. **Export** — Download canonical taxonomy as CSV (definition_id, canonical_kra, canonical_kpi, category, alias_count, linked_kpi_count).
+
+### Backend additions
+- New RPC `get_registry_coverage_stats()` → returns counts by category for May 2026+.
+- New RPC `get_unlinked_signatures(p_limit, p_offset, p_category_id)` → distinct unlinked signatures with row counts.
+- New RPC `detect_alias_drift()` → signatures that should auto-link but didn't.
+- Audit triggers on `kpi_definitions` and `kpi_name_aliases` insert/update/delete that write to `audit_logs` with `performed_by = auth.uid()`. System-driven events (e.g. May correction RPC) set `performed_by = NULL` per the System Performer Attribution memory.
+
+### Files to add
+- `src/components/admin/kpi-standardization/HealthGovernanceTab.tsx`
+- `src/components/admin/kpi-standardization/CoverageCard.tsx`
+- `src/components/admin/kpi-standardization/UnlinkedQueueTable.tsx`
+- `src/components/admin/kpi-standardization/AliasDriftPanel.tsx`
+- `src/components/admin/kpi-standardization/RegistryAuditLogPanel.tsx`
+- `src/hooks/useRegistryHealth.ts`
+- New migration: 3 RPCs + 2 audit triggers + indexes on `kpis(kpi_definition_id)` and `(category_id, kra_name, kpi_name)` if not present.
+
+### Risk & Impact
+- **Data Impact:** Adds indexes and audit log rows. No data mutation outside admin actions.
+- **Workflow Impact:** None for non-admin users. Admins gain new visibility tab.
+- **UI/UX:** New tab, follows existing `KpiStandardization.tsx` shell.
+- **Regression Risk:** Low. Read-heavy. Audit triggers are append-only.
+
+---
+
+## Sequencing & Delivery
 
 ```text
-kpi_definitions (NEW - Master Registry)
-+-- id (uuid, PK)
-+-- canonical_kra_name (text)
-+-- canonical_kpi_name (text)
-+-- category_id (uuid, FK)
-+-- created_at, updated_at
-+-- UNIQUE(canonical_kra_name, canonical_kpi_name, category_id)
-
-kpi_name_aliases (NEW - Cross-Month Linking)
-+-- id (uuid, PK)
-+-- definition_id (uuid, FK -> kpi_definitions)
-+-- variant_kra_name (text)
-+-- variant_kpi_name (text)
-+-- category_id (uuid, FK)
-+-- UNIQUE(variant_kra_name, variant_kpi_name, category_id)
-
-kpis table (EXISTING - add optional FK)
-+-- kpi_definition_id (uuid, nullable FK -> kpi_definitions)
+Sub-Phase 2a (Linking)        → ship first, immediate value, zero workflow change
+        ↓
+Sub-Phase 2b (Enforcement)    → ship second, requires 2a's resolver
+        ↓
+Sub-Phase 2c (Governance)     → ship last, measures success of 2a + 2b
 ```
 
-**How cross-month linking works (Example 1):**
-- Dashboard fetches April KPIs: finds "Control dust emission" / PM10 KPI
-- Looks up in `kpi_name_aliases`: matches -> `definition_id = abc-123`
-- Dashboard fetches May KPIs: finds "Control Dust Emission" / PM10 KPI with `kpi_definition_id = abc-123`
-- Both resolve to same definition -> shown as one KPI in trend charts
+Each sub-phase ends with:
+- Unit tests for new hooks/utilities
+- Updated mock data reflecting registry-linked + unlinked rows
+- DOCUMENTATION.md section updates
+- POLICY.md §88B addendum (Phase 2 enforcement and visibility rules)
+- mem://features/admin/kpi-standardization-registry update
 
 ---
 
-## Implementation Steps
-
-### Step 1: Database Migration
-- Create `kpi_definitions` and `kpi_name_aliases` tables with RLS
-- Add nullable `kpi_definition_id` column to `kpis`
-- Create `resolve_canonical_kpi()` function for dashboard queries
-
-### Step 2: Admin Tool - Build Registry (`/admin/kpi-standardization`)
-**Tab 1 - Build Registry:** System scans all unique signatures, groups near-duplicates, admin picks canonical name per group
-
-**Tab 2 - Review Registry:** View/edit all canonical KPIs and their aliases
-
-**Tab 3 - Correct May KPIs:** Auto-match May rows to registry, admin reviews and applies corrections
-
-### Step 3: Soft Enforcement for June Onward
-- KPI creation flows default to registry picker
-- Custom names allowed but flagged "Not in registry"
-
-### Step 4: Dashboard Cross-Month Linking
-- Update report queries to use `resolve_canonical_kpi()` for grouping
-- Past months show original text, trend aggregations group correctly
-
----
-
-## What This Does NOT Do
-- Does NOT modify any KPI rows before May 2026
-- Does NOT change scoring thresholds (r5-r0) -- those remain per-employee
-- Does NOT block free-text entry (soft enforcement only)
-- Does NOT affect review_submissions, final_scores, or workflow status
+## Out of Scope (deferred)
+- Hard enforcement (blocking custom names) — explicitly chosen as "soft" by user.
+- Retroactive correction of pre-May 2026 data — frozen by Phase 1 policy.
+- Auto-merging of definitions (admin-driven only).
+- ML-based fuzzy suggestions beyond the existing `nk()` normalization.
