@@ -1,144 +1,165 @@
 
-# KPI Uniqueness & Standardization — Long-Term Solution
+# Phase 1: Forward-Only KPI Standardization
 
-## The Problem (from your data)
-
-Your database shows clear evidence of the issue:
-- **Same KPI, different KRA names**: e.g., "Achieve FADs production target" appears under KRA "Achieve organization's production target" for some employees but under a slightly different KRA for others.
-- **Same intent, different text**: e.g., "100% time execution of new HR interventions" has two variants — one says "Adherence to timeline" and the other "Adherenec to timeline" (typo). Both are separate Org KPIs with 7 and 4 employees respectively.
-- **Same KPI, different scopes**: "Achieve FADs production target" exists as both `employee` scope (3 employees) and `organization` scope (1 employee).
-
-**Current uniqueness constraint**: `(employee_id, review_period, review_year, kra_name, kpi_name)` — this prevents the *same employee* from having duplicates, but does NOT enforce naming consistency *across* employees.
+## Principle
+- Past months (Sep 2025 - Apr 2026): **completely frozen, zero changes**
+- May 2026 onward: all KPIs use one canonical name per concept
+- Cross-month reports: alias mapping links old variants to canonical names seamlessly
 
 ---
 
-## Proposed Solution: Three-Layer Architecture
+## 3 Real-World Examples
 
-### Layer 1 — Master KPI Registry (New Table: `kpi_definitions`)
+### Example 1: Fugitive PM10 Emission KPI (229 rows, 3 KRA variants)
 
-A single canonical registry of all approved KPI definitions:
+**TODAY (the problem):**
+
+| Month | KRA Name | KPI Name | Employees |
+|-------|----------|----------|-----------|
+| Oct 2025 | Control dust emission | Ensure Fugitive Particulate Matter (PM10/AQI)... | 7 |
+| Oct 2025 | Environment compliance | Ensure Fugitive Particulate Matter (PM10)... | 3 |
+| Nov 2025 | Control dust emission | Ensure Fugitive Particulate Matter (PM10/AQI)... | 17 |
+| Apr 2026 | Control dust emission | Ensure Fugitive Particulate Matter (PM10/AQI)... | 31 |
+| Apr 2026 | Control Dust Emission | Ensure Fugitive Particulate Matter (PM10/AQI)... | 2 |
+| Apr 2026 | Control dust emission to make the plant environment compliant | Ensure Fugitive Particulate Matter (PM10/AQI)... | 1 |
+
+Same KPI concept, but 3 different KRA names ("Control dust emission", "Control Dust Emission", "Environment compliance", "Control dust emission to make the plant environment compliant"). Dashboard trend views treat these as separate KPIs.
+
+**AFTER STANDARDIZATION:**
+
+Registry entry created:
+- **Canonical KRA:** "Control Dust Emission"
+- **Canonical KPI:** "Ensure Fugitive Particulate Matter (PM10/AQI) emission levels are within permissible limits(50)"
+
+Alias mappings auto-created:
+- "Control dust emission" -> links to same definition
+- "Environment compliance" + PM10 KPI text -> links to same definition
+- "Control dust emission to make the plant environment compliant" -> links to same definition
+
+| Month | What happens |
+|-------|-------------|
+| Oct-Apr (past) | **NO CHANGE.** Rows keep original text. Alias table maps them to canonical definition for trend reports. |
+| May 2026 | Existing 31 rows get KRA corrected to "Control Dust Emission" and linked to `kpi_definition_id`. |
+| June+ | New KPIs auto-pick from registry. All 30+ employees get the exact same canonical text. |
+
+**Dashboard behavior:**
+- April page shows "Control dust emission" (original text, untouched)
+- May page shows "Control Dust Emission" (canonical)
+- Trend chart April vs May: system resolves both to same `kpi_definitions.id` via alias lookup, shows them as ONE continuous line
+
+---
+
+### Example 2: Grievance Resolution KPI (58 rows, 2 KRA variants)
+
+**TODAY (the problem):**
+
+| Month | KRA Name | KPI Name variant | Employees |
+|-------|----------|-----------------|-----------|
+| Sep-Apr | Timely  Grievance Resolution | "...Measures the number of employee grievances..." (Scoring: 5 for 0, 2 for 1, 0 for >1) | 21/mo |
+| Sep-Apr | Timely  Grievance Resolution | "...Measures the number of reasonable employee grievances..." (Scoring: 5 for 0, 3 for 1, 0 for >1) | 9/mo |
+| Sep-Apr | Timely Grievance Resolution | "...Measures the number of employee grievances..." (Scoring: 5 for 0, 3 for 1, 1 for 2, 0 for >2) | 2/mo |
+
+Notice: KRA has "Timely  Grievance Resolution" (double space) vs "Timely Grievance Resolution" (single space). Same KPI concept, but the description text and scoring thresholds differ per employee group.
+
+**AFTER STANDARDIZATION:**
+
+Registry entry created:
+- **Canonical KRA:** "Timely Grievance Resolution" (single space, proper casing)
+- **Canonical KPI:** "Timely Resolution of Employee Grievances" (short, clean title)
+
+**Key insight:** The scoring thresholds (5/2/0 vs 5/3/0 vs 5/3/1/0) are per-employee configurations stored in `r5/r4/r3/r2/r1/r0` columns on each KPI row. They remain **different per employee** -- only the KPI identity (name) is standardized. This is exactly what you described: "same KPI but scored differently as per defined target."
+
+| Month | What happens |
+|-------|-------------|
+| Sep-Apr (past) | **NO CHANGE.** "Timely  Grievance Resolution" (double space) stays as-is in DB. Alias maps it to canonical. |
+| May 2026 | All rows corrected to "Timely Grievance Resolution" (single space). Each employee keeps their own r5-r0 scoring thresholds. |
+| June+ | Registry enforces clean name. Individual targets/thresholds still set per employee. |
+
+---
+
+### Example 3: Audit Observations Closure KPI (44 rows, 2 KRA variants)
+
+**TODAY (the problem):**
+
+| Month | KRA Name | KPI Name | Employees |
+|-------|----------|----------|-----------|
+| Oct-Apr | Closure of all Audit Points (CLC, HR, Audit,other) | Closure of Audit Observations (Multi-Departmental)... "100% closure" scoring | 9/mo |
+| Oct-Apr | Compliance to CLC norm | Closure of Audit Observations (Multi-Departmental)... same KPI text | 1/mo |
+| Oct-Apr | Audit | Closure of Audit Observations (Multi-Departmental)... "Rating 5: 0, Rating 2: 1" scoring | 1/mo |
+
+Exact same KPI concept, but under 3 different KRA names: "Closure of all Audit Points (CLC, HR, Audit,other)", "Compliance to CLC norm", and "Audit".
+
+**AFTER STANDARDIZATION:**
+
+Registry entry created:
+- **Canonical KRA:** "Closure of All Audit Points"
+- **Canonical KPI:** "Closure of Audit Observations (Multi-Departmental)"
+
+| Month | What happens |
+|-------|-------------|
+| Oct-Apr (past) | **NO CHANGE.** "Compliance to CLC norm" stays as-is. Alias maps all 3 KRA variants to the canonical definition. |
+| May 2026 | All rows get KRA corrected to "Closure of All Audit Points". Individual scoring thresholds preserved. |
+| June+ | New assignments pull from registry. One clean name for everyone. |
+
+---
+
+## Architecture
 
 ```text
-kpi_definitions
-├── id (uuid, PK)
-├── canonical_name (text, UNIQUE)        -- "Achieve FADs production target"
-├── canonical_kra_name (text)            -- "Achieve organization's production target"
-├── category_id (uuid, FK)
-├── description (text)
-├── default_uom / default_uom_type
-├── default_frequency
-├── default_criteria
-├── default_thresholds (r0-r5)
-├── default_target_value
-├── allows_custom_target (boolean)       -- KEY: can employees have different targets?
-├── allows_custom_thresholds (boolean)   -- KEY: can rating slabs differ per employee?
-├── is_active (boolean)
-├── created_by / updated_at
-└── ref_code (text)
+kpi_definitions (NEW - Master Registry)
++-- id (uuid, PK)
++-- canonical_kra_name (text)
++-- canonical_kpi_name (text)
++-- category_id (uuid, FK)
++-- created_at, updated_at
++-- UNIQUE(canonical_kra_name, canonical_kpi_name, category_id)
+
+kpi_name_aliases (NEW - Cross-Month Linking)
++-- id (uuid, PK)
++-- definition_id (uuid, FK -> kpi_definitions)
++-- variant_kra_name (text)
++-- variant_kpi_name (text)
++-- category_id (uuid, FK)
++-- UNIQUE(variant_kra_name, variant_kpi_name, category_id)
+
+kpis table (EXISTING - add optional FK)
++-- kpi_definition_id (uuid, nullable FK -> kpi_definitions)
 ```
 
-**Why this solves Problem #1**: Every KPI maps to exactly one `kpi_definition_id`. No more free-text KPI names diverging across employees.
-
-**Why this solves Problem #2**: The `allows_custom_target` and `allows_custom_thresholds` flags let the same KPI definition have different scoring parameters per employee while keeping the KPI identity unified.
-
-### Layer 2 — Link KPIs to Definitions
-
-Add `kpi_definition_id (uuid, FK)` to the existing `kpis` table. This creates a soft link:
-
-- **Existing KPIs**: Continue working as-is (kpi_definition_id = NULL for legacy records)
-- **New KPIs**: Must reference a definition from the registry
-- **Migration path**: A reconciliation tool matches existing free-text KPI names to definitions
-
-When `allows_custom_target = true`:
-- The employee's `kpis.target_value` and `kpis.r0-r5` override the definition defaults
-- The KPI name, KRA name, UOM, frequency remain locked to the definition
-
-When `allows_custom_target = false`:
-- Target and thresholds are inherited from the definition (or from the Org KPI value)
-
-### Layer 3 — Org KPI Enforcement
-
-Org KPIs (`is_org_level = true`) already enforce shared scoring. The enhancement:
-
-- Org KPIs MUST reference a `kpi_definition_id`
-- When propagating, the definition's canonical name is used — no free-text entry
-- The existing `kpi_templates` table (925 active templates) becomes a **source** for populating `kpi_definitions`, not the assignment mechanism
+**How cross-month linking works (Example 1):**
+- Dashboard fetches April KPIs: finds "Control dust emission" / PM10 KPI
+- Looks up in `kpi_name_aliases`: matches -> `definition_id = abc-123`
+- Dashboard fetches May KPIs: finds "Control Dust Emission" / PM10 KPI with `kpi_definition_id = abc-123`
+- Both resolve to same definition -> shown as one KPI in trend charts
 
 ---
 
-## Implementation Phases
+## Implementation Steps
 
-### Phase 1: Data Cleanup Tool (Immediate Value)
+### Step 1: Database Migration
+- Create `kpi_definitions` and `kpi_name_aliases` tables with RLS
+- Add nullable `kpi_definition_id` column to `kpis`
+- Create `resolve_canonical_kpi()` function for dashboard queries
 
-Build an admin tool to identify and merge duplicate KPIs:
+### Step 2: Admin Tool - Build Registry (`/admin/kpi-standardization`)
+**Tab 1 - Build Registry:** System scans all unique signatures, groups near-duplicates, admin picks canonical name per group
 
-1. **Similarity Detection**: Fuzzy-match KPI names across all employees using normalized text comparison (lowercase, trim, collapse whitespace, strip trailing punctuation)
-2. **Merge UI**: Admin selects the "canonical" version, and all duplicates are re-pointed to the same KRA name + KPI name
-3. **Scope**: Only affects `kpis` table text fields — no schema changes needed
-4. **Audit**: Every merge logged with before/after values
+**Tab 2 - Review Registry:** View/edit all canonical KPIs and their aliases
 
-This gives you immediate relief while the full registry is built.
+**Tab 3 - Correct May KPIs:** Auto-match May rows to registry, admin reviews and applies corrections
 
-### Phase 2: Master KPI Registry
+### Step 3: Soft Enforcement for June Onward
+- KPI creation flows default to registry picker
+- Custom names allowed but flagged "Not in registry"
 
-1. Create `kpi_definitions` table
-2. Auto-populate from existing unique (category_id, kra_name, kpi_name) combinations
-3. Admin UI to review, merge, and approve definitions
-4. Mark which definitions allow custom targets/thresholds
-
-### Phase 3: Enforce Definition Linkage
-
-1. Add `kpi_definition_id` to `kpis` table
-2. Back-fill existing KPIs by matching text to definitions
-3. Update KPI creation flows (Smart Assignment, Copy KRAs, Bulk Import) to require selecting from the registry
-4. Org KPI creation enforces registry selection
-5. Add DB trigger: new KPIs without `kpi_definition_id` are rejected (after migration period)
-
-### Phase 4: Custom Target Support
-
-1. When creating an employee's KPI from a definition with `allows_custom_target = true`:
-   - Employee-level target/threshold fields remain editable
-   - Org KPI value entry shows per-employee target column
-2. When `allows_custom_target = false`:
-   - Target/thresholds are read-only, inherited from definition or Org KPI
+### Step 4: Dashboard Cross-Month Linking
+- Update report queries to use `resolve_canonical_kpi()` for grouping
+- Past months show original text, trend aggregations group correctly
 
 ---
 
-## How This Handles Your Two Scenarios
-
-### Scenario 1: "Same KPI written differently for 2 employees"
-- Both employees link to the same `kpi_definition_id`
-- KPI name is locked to the canonical version
-- Reports, matrices, and aggregations group them correctly
-- Org KPI data entry shows them as one KPI, not two
-
-### Scenario 2: "Same-looking KPI but scored differently per employee"
-- Same `kpi_definition_id`, but `allows_custom_target = true`
-- Employee A has target = 100, R5 = 120
-- Employee B has target = 200, R5 = 240
-- Both appear as the same KPI in reports but their scores are calculated against their own targets
-
----
-
-## Risk Assessment
-
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| Existing data disruption | High | Phase 1 is text-only cleanup; no schema changes |
-| Historical score integrity | High | `kpi_definition_id` is additive; existing data untouched |
-| Workflow disruption | Medium | Phased rollout; registry is optional in Phase 2, mandatory in Phase 3 |
-| Template system overlap | Low | `kpi_templates` feeds into `kpi_definitions`; no conflict |
-
----
-
-## Decision Points for You
-
-1. **Should we start with Phase 1 (cleanup tool) immediately?** This gives quick wins without any schema changes.
-
-2. **Custom targets**: For KPIs like production targets where different plants/departments have different numbers — should the target customization be at the employee level, department level, or both?
-
-3. **Enforcement timing**: When should free-text KPI creation be blocked? Next fiscal year? Immediately for new KPIs only?
-
-4. **Existing 925 templates**: Should the registry be seeded from templates, from actual KPI data, or both?
-
-Let me know which phase you'd like to start implementing, or if you want to adjust the approach.
+## What This Does NOT Do
+- Does NOT modify any KPI rows before May 2026
+- Does NOT change scoring thresholds (r5-r0) -- those remain per-employee
+- Does NOT block free-text entry (soft enforcement only)
+- Does NOT affect review_submissions, final_scores, or workflow status
