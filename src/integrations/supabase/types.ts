@@ -7978,6 +7978,21 @@ export type Database = {
         Args: { p_category_id?: string; p_search?: string }
         Returns: Json
       }
+      get_recent_registry_audit: {
+        Args: { p_limit?: number }
+        Returns: {
+          action: string
+          affected_definition_id: string
+          category_id: string
+          created_at: string
+          id: string
+          payload: Json
+          performed_by: string
+          performer_name: string
+          primary_definition_id: string
+          reason: string
+        }[]
+      }
       get_registry_coverage_stats: { Args: never; Returns: Json }
       get_registry_pending_suggestion_count: { Args: never; Returns: Json }
       get_safety_setting: { Args: { p_key: string }; Returns: Json }
@@ -8119,6 +8134,10 @@ export type Database = {
         Args: { p_kpi_ids: string[] }
         Returns: Json
       }
+      preview_split_definition: {
+        Args: { p_move_alias_ids: string[]; p_source_id: string }
+        Returns: Json
+      }
       promote_signature_to_definition: {
         Args: {
           p_canonical_kpi?: string
@@ -8221,6 +8240,19 @@ export type Database = {
       should_send_email: { Args: { p_user_id: string }; Returns: boolean }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      split_definition: {
+        Args: {
+          p_keep_alias_ids: string[]
+          p_move_alias_ids: string[]
+          p_new_kpi_name: string
+          p_new_kra_name: string
+          p_reason?: string
+          p_rename_source_kpi?: string
+          p_rename_source_kra?: string
+          p_source_id: string
+        }
+        Returns: Json
+      }
       start_drill: { Args: { p_drill_id: string }; Returns: Json }
       start_training_attempt: {
         Args: { _assignment_id: string }
