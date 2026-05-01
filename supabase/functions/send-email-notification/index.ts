@@ -484,6 +484,23 @@ Total Weightage: {{total_weightage}}
 
 Please log in to review the assignments.`,
   },
+  kra_rollover: {
+    subject: '[PMS] KRA/KPIs Rolled Over for {{review_period}} {{review_year}}',
+    body: `Hi {{recipient_name}},
+
+Your KRA/KPIs have been rolled over from {{source_period}} {{source_year}} to {{review_period}} {{review_year}}.
+
+Summary:
+- Total KPIs rolled over: {{kra_count}}
+- Total Weightage: {{total_weightage}}
+
+{{kra_table}}
+
+Please review your assignments and begin your self-review when the period opens.
+
+Regards,
+HRMS - Performance Management System`,
+  },
   admin_status_step_back: {
     subject: '[PMS] Admin Moved Your KPI Back',
     body: `Hi {{recipient_name}},
