@@ -2196,6 +2196,41 @@ export type Database = {
           },
         ]
       }
+      kpi_definitions: {
+        Row: {
+          canonical_kpi_name: string
+          canonical_kra_name: string
+          category_id: string
+          created_at: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          canonical_kpi_name: string
+          canonical_kra_name: string
+          category_id: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          canonical_kpi_name?: string
+          canonical_kra_name?: string
+          category_id?: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kpi_definitions_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "kra_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kpi_mention_access: {
         Row: {
           created_at: string
@@ -2224,6 +2259,48 @@ export type Database = {
             columns: ["kpi_id"]
             isOneToOne: false
             referencedRelation: "kpis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kpi_name_aliases: {
+        Row: {
+          category_id: string
+          created_at: string
+          definition_id: string
+          id: string
+          variant_kpi_name: string
+          variant_kra_name: string
+        }
+        Insert: {
+          category_id: string
+          created_at?: string
+          definition_id: string
+          id?: string
+          variant_kpi_name: string
+          variant_kra_name: string
+        }
+        Update: {
+          category_id?: string
+          created_at?: string
+          definition_id?: string
+          id?: string
+          variant_kpi_name?: string
+          variant_kra_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kpi_name_aliases_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "kra_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_name_aliases_definition_id_fkey"
+            columns: ["definition_id"]
+            isOneToOne: false
+            referencedRelation: "kpi_definitions"
             referencedColumns: ["id"]
           },
         ]
@@ -2658,6 +2735,7 @@ export type Database = {
           is_frequency_locked: boolean | null
           is_issued: boolean | null
           is_org_level: boolean | null
+          kpi_definition_id: string | null
           kpi_name: string
           kra_name: string
           org_level_scope: string | null
@@ -2696,6 +2774,7 @@ export type Database = {
           is_frequency_locked?: boolean | null
           is_issued?: boolean | null
           is_org_level?: boolean | null
+          kpi_definition_id?: string | null
           kpi_name: string
           kra_name: string
           org_level_scope?: string | null
@@ -2734,6 +2813,7 @@ export type Database = {
           is_frequency_locked?: boolean | null
           is_issued?: boolean | null
           is_org_level?: boolean | null
+          kpi_definition_id?: string | null
           kpi_name?: string
           kra_name?: string
           org_level_scope?: string | null
@@ -2780,6 +2860,13 @@ export type Database = {
             columns: ["employee_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpis_kpi_definition_id_fkey"
+            columns: ["kpi_definition_id"]
+            isOneToOne: false
+            referencedRelation: "kpi_definitions"
             referencedColumns: ["id"]
           },
           {
@@ -7936,6 +8023,10 @@ export type Database = {
       request_org_kpi_revision: {
         Args: { p_kpi_id: string; p_reason: string }
         Returns: Json
+      }
+      resolve_canonical_kpi: {
+        Args: { p_category_id: string; p_kpi_name: string; p_kra_name: string }
+        Returns: string
       }
       resolve_cycle_anchor: {
         Args: { p_frequency: string; p_month_idx: number }
