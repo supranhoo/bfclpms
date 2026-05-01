@@ -2354,3 +2354,20 @@ without measuring the produced URL length.
 
 ## Version History
 - **v2.66.7.16 (2026-05-01):** §88B added — Phase 2a canonical resolver read path. Adds `resolve_canonical_kpi_batch` RPC, `useCanonicalResolver` hook, `canonicalGrouping` utilities, and KraSummaryTab merge with "Also known as" tooltip.
+- **v2.66.7.17 (2026-05-01):** §88C added — Phase 2b soft enforcement via DB trigger `trg_kpi_canonical_autolink`, feature flag `enable_kpi_canonical_autolink` (default ON), `promote_signature_to_definition` admin RPC, and Governance tab on /admin/kpi-standardization.
+
+---
+
+## §88C — Phase 2b Soft Enforcement (Auto-link Trigger)
+
+1. **DB-layer enforcement only.** Canonical auto-linking on KPI insert/update is implemented as a BEFORE trigger on `public.kpis`. Client UIs MUST NOT replicate this logic. There is exactly one source of enforcement.
+
+2. **Forward-only gate.** The trigger only fires when `is_canonical_enforcement_period(review_period, review_year)` returns true (May 2026 or later). Any KPI in a frozen historical period is left untouched even if a matching alias exists.
+
+3. **User intent wins.** If a caller explicitly provides `kpi_definition_id` on insert, the trigger does NOT overwrite it. Manual links always take precedence over registry auto-links.
+
+4. **Soft, never blocking.** The trigger NEVER raises an error when an alias is missing. KPIs with custom names save with `kpi_definition_id = NULL` and surface in the Health/Unlinked queue (Phase 2c).
+
+5. **Toggleable, audited.** The `enable_kpi_canonical_autolink` system_settings flag pauses auto-linking without dropping the trigger. Each auto-link writes a `KPI_CANONICAL_AUTOLINKED` audit row with `performed_by = NULL` (system action per System Performer Attribution memory). Audit insert is wrapped in EXCEPTION so logging failures never block KPI writes.
+
+6. **Admin-only promotion.** `promote_signature_to_definition()` is gated by an admin role check and back-links only May 2026+ rows. It MUST NOT be exposed to non-admin RPC callers.
