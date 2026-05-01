@@ -49,10 +49,8 @@ export function SuggestionsTab() {
   const [pendingMerge, setPendingMerge] = useState<DefinitionMergeSuggestion | null>(null);
   const [keepLeft, setKeepLeft] = useState(true);
 
-  const openMergeDialog = (row: DefinitionMergeSuggestion) => {
-    const leftScore = row.left_alias_count + row.left_linked_kpi_count;
-    const rightScore = row.right_alias_count + row.right_linked_kpi_count;
-    setKeepLeft(leftScore >= rightScore);
+  const openMergeDialog = (row: DefinitionMergeSuggestion, keep: 'left' | 'right') => {
+    setKeepLeft(keep === 'left');
     setPendingMerge(row);
   };
 
@@ -182,10 +180,22 @@ export function SuggestionsTab() {
                             variant="outline"
                             className="h-7 text-xs"
                             disabled={merging}
-                            onClick={() => openMergeDialog(row)}
+                            onClick={() => openMergeDialog(row, 'left')}
+                            title="Keep Definition A; delete Definition B"
                           >
                             <GitMerge className="h-3 w-3 mr-1" />
-                            Merge
+                            Keep A
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            disabled={merging}
+                            onClick={() => openMergeDialog(row, 'right')}
+                            title="Keep Definition B; delete Definition A"
+                          >
+                            <GitMerge className="h-3 w-3 mr-1" />
+                            Keep B
                           </Button>
                           <Button
                             size="sm"
