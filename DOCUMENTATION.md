@@ -6309,3 +6309,37 @@ signatures that closely resemble an existing canonical entry.
 **Tests:** `src/hooks/useRegistrySuggestions.test.ts` (6 tests) locks
 the localStorage threshold persistence helper against bad inputs
 (non-numeric, < 0, > 1) so a corrupted setting can never crash the tab.
+
+### Phase 4c — Transactional Merge Engine + Registry Audit (2026-05-01)
+
+Phase 4c finishes the auto-merge story by giving admins a single, safe
+code path for actually collapsing two canonical definitions and a
+permanent record of every merge.
+
+- **`kpi_registry_audit_log`** — append-only table for registry-level
+  admin actions. Admin-only INSERT/SELECT, no UPDATE/DELETE policies.
+  Every successful merge writes one `KPI_DEFINITION_MERGED` row with
+  `performed_by`, kept/dropped definition snapshots, re-parented alias
+  count, dropped alias-conflict count, re-pointed KPI count, and the
+  backfill alias id (if one was inserted).
+- **`merge_definitions(p_keep_id, p_drop_id, p_reason)`** — transactional
+  SECURITY DEFINER RPC, admin-gated. Locks both definition rows
+  `FOR UPDATE` in deterministic UUID order to prevent concurrent-admin
+  races, refuses cross-category merges, re-parents aliases (deleting any
+  that would collide with an existing alias on the kept side), inserts a
+  backfill alias preserving the dropped canonical text, re-points
+  `kpis.kpi_definition_id`, deletes the dropped definition, writes the
+  audit row, and auto-dismisses the suggestion pair so it cannot
+  resurface. Returns a JSON summary of all counts.
+- **`get_registry_pending_suggestion_count()`** — lightweight aggregate
+  used by the Health dashboard tile. Returns `{ merge_count, alias_count,
+  total }` at default thresholds. Fails open to zeros for non-admins.
+- **UI:** `SuggestionsTab` now has per-row **Keep A** / **Keep B**
+  buttons that pre-select which definition survives, then a
+  `ConfirmDestructiveDialog` confirms before calling
+  `useMergeDefinitions`. The Health tab gains a "Pending Auto-Merge
+  Suggestions" tile that highlights when there is review work waiting.
+
+The Phase 4b stubbed Merge button (which intentionally did nothing) is
+gone — every Merge action now goes through the transactional RPC and
+produces an audit row.
