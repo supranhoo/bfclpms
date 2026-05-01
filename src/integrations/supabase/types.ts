@@ -2675,6 +2675,48 @@ export type Database = {
           },
         ]
       }
+      kpi_standardization_actions: {
+        Row: {
+          action_type: string
+          affected_row_count: number
+          category_id: string | null
+          definition_id: string | null
+          id: string
+          payload: Json
+          performed_at: string
+          performed_by: string | null
+          reverse_notes: string | null
+          reversed_at: string | null
+          reversed_by: string | null
+        }
+        Insert: {
+          action_type: string
+          affected_row_count?: number
+          category_id?: string | null
+          definition_id?: string | null
+          id?: string
+          payload?: Json
+          performed_at?: string
+          performed_by?: string | null
+          reverse_notes?: string | null
+          reversed_at?: string | null
+          reversed_by?: string | null
+        }
+        Update: {
+          action_type?: string
+          affected_row_count?: number
+          category_id?: string | null
+          definition_id?: string | null
+          id?: string
+          payload?: Json
+          performed_at?: string
+          performed_by?: string | null
+          reverse_notes?: string | null
+          reversed_at?: string | null
+          reversed_by?: string | null
+        }
+        Relationships: []
+      }
       kpi_templates: {
         Row: {
           applicable_roles: string[] | null
@@ -8102,6 +8144,16 @@ export type Database = {
         Args: { _permit_id: string; _uid: string }
         Returns: boolean
       }
+      log_standardization_action: {
+        Args: {
+          p_action_type: string
+          p_affected_row_count: number
+          p_category_id: string
+          p_definition_id: string
+          p_payload: Json
+        }
+        Returns: string
+      }
       lookup_synthetic_email_by_code: {
         Args: { p_client_ip?: string; p_code: string }
         Returns: string
@@ -8222,6 +8274,10 @@ export type Database = {
           terminal_period: string
           terminal_year: number
         }[]
+      }
+      reverse_standardization_action: {
+        Args: { p_action_id: string }
+        Returns: Json
       }
       review_drill: {
         Args: { p_drill_id: string; p_summary?: string }
