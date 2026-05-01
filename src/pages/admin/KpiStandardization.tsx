@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ScanSearch, BookCheck, Wrench } from 'lucide-react';
+import { ScanSearch, BookCheck, Wrench, ShieldCheck } from 'lucide-react';
 import { BuildRegistryTab } from '@/components/admin/kpi-standardization/BuildRegistryTab';
 import { ReviewRegistryTab } from '@/components/admin/kpi-standardization/ReviewRegistryTab';
 import { CorrectMayKpisTab } from '@/components/admin/kpi-standardization/CorrectMayKpisTab';
+import { GovernanceTab } from '@/components/admin/kpi-standardization/GovernanceTab';
 
 export default function KpiStandardization() {
   const [activeTab, setActiveTab] = useState('build');
@@ -19,7 +19,7 @@ export default function KpiStandardization() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-3 w-full max-w-lg">
+        <TabsList className="grid grid-cols-4 w-full max-w-2xl">
           <TabsTrigger value="build" className="flex items-center gap-1.5">
             <ScanSearch className="h-4 w-4" />
             Build Registry
@@ -31,6 +31,10 @@ export default function KpiStandardization() {
           <TabsTrigger value="correct" className="flex items-center gap-1.5">
             <Wrench className="h-4 w-4" />
             Correct May KPIs
+          </TabsTrigger>
+          <TabsTrigger value="governance" className="flex items-center gap-1.5">
+            <ShieldCheck className="h-4 w-4" />
+            Governance
           </TabsTrigger>
         </TabsList>
 
@@ -44,6 +48,10 @@ export default function KpiStandardization() {
 
         <TabsContent value="correct" className="mt-4">
           <CorrectMayKpisTab />
+        </TabsContent>
+
+        <TabsContent value="governance" className="mt-4">
+          <GovernanceTab />
         </TabsContent>
       </Tabs>
     </div>

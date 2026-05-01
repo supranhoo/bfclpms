@@ -7944,6 +7944,10 @@ export type Database = {
         Returns: undefined
       }
       iac_sweep_expired: { Args: never; Returns: number }
+      is_canonical_enforcement_period: {
+        Args: { p_period: string; p_year: number }
+        Returns: boolean
+      }
       is_data_owner_for_employee: {
         Args: { p_employee_id: string; p_owner_id: string }
         Returns: boolean
@@ -7991,6 +7995,16 @@ export type Database = {
       month_name_to_index: { Args: { p_month: string }; Returns: number }
       preview_org_kpi_propagation: {
         Args: { p_kpi_ids: string[] }
+        Returns: Json
+      }
+      promote_signature_to_definition: {
+        Args: {
+          p_canonical_kpi?: string
+          p_canonical_kra?: string
+          p_category_id: string
+          p_kpi_name: string
+          p_kra_name: string
+        }
         Returns: Json
       }
       propagate_org_kpi_value:
