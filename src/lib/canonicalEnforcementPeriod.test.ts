@@ -1,20 +1,13 @@
 import { describe, it, expect } from 'vitest';
+import { isCanonicalEnforcementPeriod } from './canonicalEnforcementPeriod';
 
 /**
  * Phase 2b: Mirror unit tests for the DB function
  * `is_canonical_enforcement_period(period, year)`.
  *
- * These tests document the canonical contract — the DB is the source of
- * truth, but if any client-side logic ever needs to mirror this gate it
- * MUST behave identically.
+ * The DB function is the source of truth. This suite locks the client
+ * mirror in `canonicalEnforcementPeriod.ts` to identical behavior.
  */
-function isCanonicalEnforcementPeriod(period: string | null, year: number | null): boolean {
-  if (year == null || period == null) return false;
-  if (year > 2026) return true;
-  if (year < 2026) return false;
-  return ['may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
-    .includes(period.toLowerCase());
-}
 
 describe('isCanonicalEnforcementPeriod (mirrors DB gate)', () => {
   it('returns false for any month in 2025', () => {
