@@ -902,21 +902,21 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
         kraName={data.kraName}
         kpiName={data.kpiName}
       />
-      {scopeChangeTarget && (
-        <OrgKpiScopeChangeDialog
-          open={true}
-          onClose={() => setScopeChangeTarget(null)}
-          identifier={{
-            categoryId: data.categoryId,
-            kraName: data.kraName,
-            kpiName: data.kpiName,
-            reviewPeriod: reviewPeriod,
-            reviewYear: reviewYear,
-          }}
-          currentScope={data.scope}
-          newScope={scopeChangeTarget}
-        />
-      )}
+    )}
+    {isAdmin && scopeChangeTarget && (
+      <OrgKpiScopeChangeDialog
+        open={true}
+        onClose={() => setScopeChangeTarget(null)}
+        identifier={{
+          categoryId: data.categoryId,
+          kraName: data.kraName,
+          kpiName: data.kpiName,
+          reviewPeriod: reviewPeriod,
+          reviewYear: reviewYear,
+        }}
+        currentScope={data.scope}
+        newScope={scopeChangeTarget}
+      />
     )}
     </>
   );
