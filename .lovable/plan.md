@@ -124,3 +124,10 @@ The new `KPI_DEFINITION_SPLIT` rows land in `kpi_registry_audit_log` automatical
 ### Open question
 
 UI placement: extend `SuggestionsTab` with a third "Splits" section (recommended) **or** add a 7th `SplitTab`? Default to the section unless you say otherwise.
+---
+
+## Phase 5 Progress
+
+- Sub-Phase 5a (split_definition + preview + recent audit reader) ✅ shipped 2026-05-01 — transactional `split_definition` RPC (alias partition validation, signature-based KPI re-pointing, optional source rename, single `KPI_DEFINITION_SPLIT` audit row), `preview_split_definition` dry-run, `get_recent_registry_audit` admin reader.
+- Sub-Phase 5b (SplitDefinitionDialog) ✅ shipped 2026-05-01 — Split button on Alias Drift rows, two-column alias partition with live KPI-count preview, mandatory reason, optional source rename. `useDefinitionSplit` hooks (`validateAliasPartition`, `useDefinitionAliases`, `useSplitPreview`, `useSplitDefinition`).
+- Sub-Phase 5c (Recent Registry Activity) ✅ shipped 2026-05-01 — Health tab card showing last 5 entries from `kpi_registry_audit_log` via `useRecentRegistryAudit`.
