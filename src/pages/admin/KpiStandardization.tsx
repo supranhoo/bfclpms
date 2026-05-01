@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ScanSearch, BookCheck, Wrench, ShieldCheck } from 'lucide-react';
+import { ScanSearch, BookCheck, Wrench, ShieldCheck, Activity } from 'lucide-react';
 import { BuildRegistryTab } from '@/components/admin/kpi-standardization/BuildRegistryTab';
 import { ReviewRegistryTab } from '@/components/admin/kpi-standardization/ReviewRegistryTab';
 import { CorrectMayKpisTab } from '@/components/admin/kpi-standardization/CorrectMayKpisTab';
 import { GovernanceTab } from '@/components/admin/kpi-standardization/GovernanceTab';
+import { HealthCoverageTab } from '@/components/admin/kpi-standardization/HealthCoverageTab';
 
 export default function KpiStandardization() {
   const [activeTab, setActiveTab] = useState('build');
@@ -19,7 +20,7 @@ export default function KpiStandardization() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-4 w-full max-w-2xl">
+        <TabsList className="grid grid-cols-5 w-full max-w-3xl">
           <TabsTrigger value="build" className="flex items-center gap-1.5">
             <ScanSearch className="h-4 w-4" />
             Build Registry
@@ -35,6 +36,10 @@ export default function KpiStandardization() {
           <TabsTrigger value="governance" className="flex items-center gap-1.5">
             <ShieldCheck className="h-4 w-4" />
             Governance
+          </TabsTrigger>
+          <TabsTrigger value="health" className="flex items-center gap-1.5">
+            <Activity className="h-4 w-4" />
+            Health & Coverage
           </TabsTrigger>
         </TabsList>
 
@@ -52,6 +57,10 @@ export default function KpiStandardization() {
 
         <TabsContent value="governance" className="mt-4">
           <GovernanceTab />
+        </TabsContent>
+
+        <TabsContent value="health" className="mt-4">
+          <HealthCoverageTab />
         </TabsContent>
       </Tabs>
     </div>
