@@ -2358,6 +2358,7 @@ without measuring the produced URL length.
 - **v2.66.7.18 (2026-05-01):** §88D added — Phase 2c Registry Health & Coverage dashboard. Adds admin-only RPCs `get_registry_coverage_stats`, `get_unlinked_signatures`, `detect_alias_drift`, `useRegistryHealth` hook, and `HealthCoverageTab` on /admin/kpi-standardization.
 - **v2.66.7.19 (2026-05-01):** §88E added — Phase 3a Registry visibility in creation flows. Adds `RegistryBadge` / `RegistryBadgePreset` components and `canonicalEnforcementPeriod.ts` shared helper. Wired into AdminKpiCreateDialog, AdminKpiEditorForm, and SmartAssignmentDialog (template cards). Bulk Import deliberately not wired — wrong domain (it imports values, not new KPIs).
 - **v2.66.7.20 (2026-05-01):** §88F added — Phase 3b Canonical-aware previous-month lookup in `KpiJourneySection`. The "Previous 2 Months" panel now resolves the current KPI to its canonical definition and matches historical rows against any registered alias (kra/kpi pair), so a renamed KPI still surfaces its history. Renamed matches are flagged with a `GitMerge` "Also known as" badge that reveals the original variant name in tooltip. Falls back to legacy exact-name match when no canonical definition exists.
+- **v2.66.7.21 (2026-05-01):** §88G added — Phase 3c Read-only Registry Browser at `/registry`. New SECURITY DEFINER RPC `get_public_registry_view(p_search, p_category_id)` returns canonical definitions, aliases, and per-definition aggregate usage counts. Authenticated users only — anon blocked. New `registry-browser` menu_access_config row defaults visibility to admin/manager/hr_pms/management/auditor/skip_level (plain employees excluded). Hook `useRegistryBrowser`, page `RegistryBrowser.tsx`, sidebar entry under main section.
 
 ---
 
@@ -2418,3 +2419,15 @@ without measuring the produced URL length.
 4. **Renamed-variant disclosure is required.** When a prev-month row's `(kra_name, kpi_name)` differs from the current KPI's pair under `nk()` normalization, the UI MUST surface a `GitMerge` "Also known as" tooltip that names the original variant. This preserves audit trust — reviewers must always be able to see what name the historical row was originally recorded under.
 
 5. **Graceful fallback when not registered.** When the current KPI has no `kpi_definition_id` resolution (pre-May-2026 KPIs, unregistered KPIs, or registry RPC failure), the lookup MUST fall back to the legacy single-pair exact-match behavior. No user-visible regression and no error toast.
+
+## §88G — Phase 3c Read-only Registry Browser
+
+1. **Read-only by contract.** `get_public_registry_view` RPC and the `/registry` page MUST NOT expose endpoints to create, update, delete, or promote registry entries. Admins continue to manage the registry from `/admin/kpi-standardization` (§88D, §88E) — there is exactly one write surface.
+
+2. **No sensitive performance data.** The RPC returns only: canonical name, aliases, category, and an aggregate usage count per definition. It MUST NEVER expose employee identifiers, scores, achieved values, evidence URLs, or any per-employee breakdown. Locked by `useRegistryBrowser.test.ts` which asserts the `RegistryDefinitionView` shape contains none of the forbidden keys (`employee_id`, `*_score`, `achieved_value`, `r0`–`r5`, etc.).
+
+3. **Authenticated users only.** The RPC raises `access denied` when `auth.uid()` is null. The page-level role gate (sidebar + ProtectedRoute + `registry-browser` menu_access_config) is the per-role visibility control; admins can adjust it from the existing menu admin UI without a code change.
+
+4. **Default audience excludes plain Employees.** The seeded `registry-browser` menu_access_config row grants visibility to admin, manager, hr_pms, management, auditor, skip_level. Plain Employee role is intentionally excluded — they have no taxonomy-management need and are shielded from registry noise. Admins may opt them in via the standard menu admin UI if a workspace requires it.
+
+5. **Aggregate usage count uses the same period gate as enforcement.** `usage_count` is computed via `is_canonical_enforcement_period()` so the number a non-admin sees agrees exactly with what the trigger enforces and what the admin Health dashboard reports (§88D). Pre-May-2026 KPIs are not counted.

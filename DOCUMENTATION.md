@@ -6229,3 +6229,49 @@ narrow by design (see §88F).
 **Tests:** `src/lib/prevMonthCanonicalMatch.test.ts` (8 tests) locks the
 pair-key normalization, the Cartesian-product rejection, and the rename
 detection rule.
+
+### Phase 3c — Read-only Registry Browser (2026-05-01)
+
+Closes the "shadow taxonomy" gap: until now only admins could see the
+canonical KPI registry. Phase 3c gives managers, HR PMS, management,
+auditors, and skip-level reviewers a read-only view at `/registry`.
+
+**Backend.**
+- `get_public_registry_view(p_search, p_category_id)` — SECURITY DEFINER
+  RPC. Returns `{ definitions: [{ id, canonical_kra_name,
+  canonical_kpi_name, category_id, category_name, category_color,
+  aliases: [{ kra_name, kpi_name }], alias_count, usage_count }],
+  total_count }`. **No employee identifiers, scores, evidence URLs, or
+  per-employee data ever leak.** Authenticated users only — anon raises
+  `access denied`.
+- `usage_count` is computed via `is_canonical_enforcement_period()` so
+  it agrees exactly with the trigger and the admin Health dashboard
+  (§88D). Pre-May-2026 KPIs are excluded by design.
+- `menu_access_config` seeded with `registry-browser` granting visibility
+  to admin/manager/hr_pms/management/auditor/skip_level. Plain Employee
+  is intentionally excluded; admins can opt them in via the existing
+  menu admin UI.
+
+**Frontend.**
+- `useRegistryBrowser(search, categoryId)` — react-query wrapper around
+  the RPC. 5-min staleTime; throws on error so the page can show the
+  inline error alert.
+- `src/pages/RegistryBrowser.tsx` — search + category filter + table
+  with `GitMerge` "Also known as" tooltip listing alias variants.
+  Uses the existing `PageHeader` and `Card` shells for visual parity
+  with reports.
+- Route `/registry` is gated by `ProtectedRoute` with allowedRoles
+  matching the menu_access_config defaults; the menu key allows admins
+  to override per role without a code change.
+- Sidebar entry "KPI Registry" under the `main` section, using the
+  same `GitMerge` icon as the admin standardization page for visual
+  continuity.
+
+**Read-only by contract.** No edit, delete, or promote action exists on
+this page. Admins continue to manage the registry from
+`/admin/kpi-standardization` — exactly one write surface (§88G).
+
+**Tests:** `src/hooks/useRegistryBrowser.test.ts` (4 tests) locks the
+`RegistryDefinitionView` shape against accidental sensitive-field
+widening, asserting that none of the forbidden keys (`employee_id`,
+`*_score`, `achieved_value`, `r0`–`r5`, etc.) ever appear.
