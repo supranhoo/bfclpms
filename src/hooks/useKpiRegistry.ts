@@ -2,6 +2,44 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
+/**
+ * Pure helper: given a canonical (kra,kpi), the full variant list, the category,
+ * and the aliases already linked to the resolved definition, return the rows
+ * that still need to be inserted into kpi_name_aliases. Used to make the
+ * "Approve as Canonical" flow idempotent.
+ */
+export function diffAliasInserts(
+  canonical: { kra_name: string; kpi_name: string },
+  variants: { kra_name: string; kpi_name: string }[],
+  categoryId: string,
+  existingAliases: { variant_kra_name: string; variant_kpi_name: string; category_id: string }[]
+): { rows: { variant_kra_name: string; variant_kpi_name: string; category_id: string }[]; totalConsidered: number } {
+  const key = (kra: string, kpi: string) =>
+    `${(kra || '').trim().toLowerCase()}||${(kpi || '').trim().toLowerCase()}`;
+
+  const all = [canonical, ...variants];
+  const dedupedMap = new Map<string, { kra_name: string; kpi_name: string }>();
+  all.forEach(v => {
+    const k = key(v.kra_name, v.kpi_name);
+    if (!dedupedMap.has(k)) dedupedMap.set(k, v);
+  });
+  const deduped = [...dedupedMap.values()];
+
+  const existingSet = new Set(
+    existingAliases.map(a => `${key(a.variant_kra_name, a.variant_kpi_name)}||${a.category_id}`)
+  );
+
+  const rows = deduped
+    .filter(v => !existingSet.has(`${key(v.kra_name, v.kpi_name)}||${categoryId}`))
+    .map(v => ({
+      variant_kra_name: v.kra_name,
+      variant_kpi_name: v.kpi_name,
+      category_id: categoryId,
+    }));
+
+  return { rows, totalConsidered: deduped.length };
+}
+
 export interface KpiDefinition {
   id: string;
   canonical_kra_name: string;
