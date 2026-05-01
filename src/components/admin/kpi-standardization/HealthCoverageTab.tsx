@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Activity, AlertTriangle, GitMerge, RefreshCw, Database, Link2, Unlink } from 'lucide-react';
+import { Activity, AlertTriangle, GitMerge, RefreshCw, Database, Link2, Unlink, Sparkles } from 'lucide-react';
 import { useRegistryHealth } from '@/hooks/useRegistryHealth';
+import { usePendingSuggestionCount } from '@/hooks/useRegistrySuggestions';
 import { format } from 'date-fns';
 
 /**
@@ -16,6 +17,7 @@ import { format } from 'date-fns';
  */
 export function HealthCoverageTab() {
   const { stats, unlinked, drift, loading, error, refresh } = useRegistryHealth();
+  const { counts, loading: pendingLoading, refresh: refreshPending } = usePendingSuggestionCount();
 
   const coveragePct = stats?.coverage_pct ?? 0;
   const coverageTone = useMemo(() => {
@@ -33,8 +35,13 @@ export function HealthCoverageTab() {
             Live metrics for canonical KPI coverage across May 2026+ data.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
-          <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => { void refresh(); void refreshPending(); }}
+          disabled={loading || pendingLoading}
+        >
+          <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${(loading || pendingLoading) ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </div>
@@ -77,6 +84,32 @@ export function HealthCoverageTab() {
           tone={stats && stats.inscope_kpis_unlinked > 0 ? 'warn' : undefined}
         />
       </div>
+
+      {/* Phase 4c: Pending suggestions tile */}
+      <Card className={counts.total > 0 ? 'border-primary/40 bg-primary/5' : undefined}>
+        <CardContent className="p-4 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="rounded-md bg-primary/10 p-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <div className="text-sm font-medium">Pending Auto-Merge Suggestions</div>
+              <div className="text-xs text-muted-foreground">
+                {pendingLoading
+                  ? 'Loading…'
+                  : counts.total === 0
+                    ? 'No fuzzy duplicates detected at default thresholds.'
+                    : `${counts.merge_count} definition merge(s), ${counts.alias_count} alias candidate(s) waiting for review.`}
+              </div>
+            </div>
+          </div>
+          {counts.total > 0 && (
+            <Badge variant="outline" className="border-primary/40 text-primary font-semibold tabular-nums">
+              {counts.total} open
+            </Badge>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Coverage gauge */}
       <Card>
