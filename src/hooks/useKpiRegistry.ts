@@ -112,35 +112,100 @@ export function useBuildRegistry() {
   ) => {
     setSaving(true);
     try {
-      // Insert definition
-      const { data: def, error: defErr } = await supabase
+      // Step 1: Look up existing definition (idempotent re-approval)
+      const { data: existing, error: lookupErr } = await supabase
         .from('kpi_definitions' as any)
-        .insert({ canonical_kra_name: canonicalKra, canonical_kpi_name: canonicalKpi, category_id: categoryId } as any)
-        .select()
-        .single();
-      if (defErr) throw defErr;
+        .select('id')
+        .eq('canonical_kra_name', canonicalKra)
+        .eq('canonical_kpi_name', canonicalKpi)
+        .maybeSingle();
+      if (lookupErr) throw lookupErr;
 
-      const defId = (def as any).id;
+      let defId: string;
+      let reused = false;
 
-      // Insert aliases (including canonical name itself)
+      if (existing) {
+        defId = (existing as any).id;
+        reused = true;
+      } else {
+        const { data: def, error: defErr } = await supabase
+          .from('kpi_definitions' as any)
+          .insert({ canonical_kra_name: canonicalKra, canonical_kpi_name: canonicalKpi, category_id: categoryId } as any)
+          .select()
+          .single();
+        if (defErr) {
+          // Race: another writer created it between lookup and insert
+          if ((defErr as any).code === '23505') {
+            const { data: retry } = await supabase
+              .from('kpi_definitions' as any)
+              .select('id')
+              .eq('canonical_kra_name', canonicalKra)
+              .eq('canonical_kpi_name', canonicalKpi)
+              .maybeSingle();
+            if (!retry) throw defErr;
+            defId = (retry as any).id;
+            reused = true;
+          } else {
+            throw defErr;
+          }
+        } else {
+          defId = (def as any).id;
+        }
+      }
+
+      // Step 2: Build canonical + variant list, de-duped
       const allVariants = [
         { kra_name: canonicalKra, kpi_name: canonicalKpi },
-        ...variants.filter(v => v.kra_name !== canonicalKra || v.kpi_name !== canonicalKpi)
+        ...variants,
       ];
+      const variantKey = (kra: string, kpi: string) =>
+        `${(kra || '').trim().toLowerCase()}||${(kpi || '').trim().toLowerCase()}`;
+      const dedupedMap = new Map<string, { kra_name: string; kpi_name: string }>();
+      allVariants.forEach(v => {
+        const k = variantKey(v.kra_name, v.kpi_name);
+        if (!dedupedMap.has(k)) dedupedMap.set(k, v);
+      });
+      const deduped = [...dedupedMap.values()];
 
-      const aliasRows = allVariants.map(v => ({
-        definition_id: defId,
-        variant_kra_name: v.kra_name,
-        variant_kpi_name: v.kpi_name,
-        category_id: categoryId,
-      }));
-
-      const { error: aliasErr } = await supabase
+      // Step 3: Fetch existing aliases for this definition
+      const { data: existingAliases, error: aliasFetchErr } = await supabase
         .from('kpi_name_aliases' as any)
-        .insert(aliasRows as any);
-      if (aliasErr) throw aliasErr;
+        .select('variant_kra_name, variant_kpi_name, category_id')
+        .eq('definition_id', defId);
+      if (aliasFetchErr) throw aliasFetchErr;
 
-      toast({ title: 'Registry entry created', description: `${allVariants.length} aliases linked` });
+      const existingSet = new Set(
+        (existingAliases || []).map((a: any) =>
+          `${variantKey(a.variant_kra_name, a.variant_kpi_name)}||${a.category_id}`
+        )
+      );
+
+      const newAliasRows = deduped
+        .filter(v => !existingSet.has(`${variantKey(v.kra_name, v.kpi_name)}||${categoryId}`))
+        .map(v => ({
+          definition_id: defId,
+          variant_kra_name: v.kra_name,
+          variant_kpi_name: v.kpi_name,
+          category_id: categoryId,
+        }));
+
+      let inserted = 0;
+      if (newAliasRows.length > 0) {
+        const { error: aliasErr } = await supabase
+          .from('kpi_name_aliases' as any)
+          .insert(newAliasRows as any);
+        if (aliasErr && (aliasErr as any).code !== '23505') throw aliasErr;
+        if (!aliasErr) inserted = newAliasRows.length;
+      }
+
+      const skipped = deduped.length - inserted;
+      toast({
+        title: reused ? 'Linked to existing canonical entry' : 'Registry entry created',
+        description:
+          inserted === 0
+            ? `All ${deduped.length} aliases were already linked`
+            : `${inserted} alias${inserted === 1 ? '' : 'es'} linked${skipped > 0 ? ` (${skipped} already present)` : ''}`,
+      });
       return defId;
     } catch (err: any) {
       toast({ title: 'Failed to create', description: err.message, variant: 'destructive' });
