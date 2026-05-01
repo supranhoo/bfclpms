@@ -9,9 +9,15 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Loader2, ChevronRight, Download, Search, AlertTriangle, CheckCircle2, Pencil, Plus, Info } from 'lucide-react';
+import { Loader2, ChevronRight, ChevronLeft, Download, Search, AlertTriangle, CheckCircle2, Pencil, Plus, Info } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { useKpiWeightageMatrix, type EmployeeMatrix } from '@/hooks/useKpiWeightageMatrix';
+import {
+  useKpiWeightageMatrix,
+  useWeightageVarianceSummary,
+  WEIGHTAGE_PAGE_SIZE_OPTIONS,
+  WEIGHTAGE_DEFAULT_PAGE_SIZE,
+  type EmployeeMatrix,
+} from '@/hooks/useKpiWeightageMatrix';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { WeightageCellEditor } from '@/components/admin/WeightageCellEditor';
@@ -33,6 +39,7 @@ function KpiWeightageDashboard() {
   const currentFiscalYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
   const [fiscalYear, setFiscalYear] = useState(currentFiscalYear);
   const [employeeSearch, setEmployeeSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [departmentId, setDepartmentId] = useState<string>('');
   const [categoryId, setCategoryId] = useState<string>('');
   const [showInactive, setShowInactive] = useState(false);
@@ -40,6 +47,19 @@ function KpiWeightageDashboard() {
   const [openEmployees, setOpenEmployees] = useState<Set<string>>(new Set());
   const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
   const [loadingEditKpi, setLoadingEditKpi] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(WEIGHTAGE_DEFAULT_PAGE_SIZE);
+
+  // Debounce free-text search to avoid hammering the DB on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(employeeSearch.trim()), 300);
+    return () => clearTimeout(t);
+  }, [employeeSearch]);
+
+  // Reset to page 1 whenever any filter changes.
+  useEffect(() => {
+    setPage(1);
+  }, [fiscalYear, debouncedSearch, departmentId, categoryId, showInactive, pageSize]);
 
   const handleEditKpi = async (kpiId: string) => {
     setLoadingEditKpi(true);
@@ -56,12 +76,15 @@ function KpiWeightageDashboard() {
 
   const fiscalLabel = (y: number) => `${y}-${String(y + 1).slice(-2)}`;
 
-  const { data, isLoading } = useKpiWeightageMatrix(fiscalYear, {
-    employeeSearch: employeeSearch || undefined,
+  const filterArgs = {
+    employeeSearch: debouncedSearch || undefined,
     departmentId: departmentId && departmentId !== 'all' ? departmentId : undefined,
     categoryId: categoryId && categoryId !== 'all' ? categoryId : undefined,
     includeInactive: showInactive,
-  });
+  };
+
+  const { data, isLoading } = useKpiWeightageMatrix(fiscalYear, filterArgs, { page, pageSize });
+  const { data: summary } = useWeightageVarianceSummary(fiscalYear, filterArgs);
 
   const { data: departments } = useQuery({
     queryKey: ['departments-list'],
@@ -81,6 +104,8 @@ function KpiWeightageDashboard() {
 
   const employees = data?.employees || [];
   const globalMonths = data?.globalActiveMonths || [];
+  const totalEmployees = summary?.totalEmployees ?? data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalEmployees / pageSize));
 
   const toggleEmployee = (id: string) => {
     setOpenEmployees(prev => {
@@ -93,24 +118,9 @@ function KpiWeightageDashboard() {
   const expandAll = () => setOpenEmployees(new Set(employees.map(e => e.employeeId)));
   const collapseAll = () => setOpenEmployees(new Set());
 
-  const { varianceCount, acknowledgedCount } = useMemo(() => {
-    let variance = 0;
-    let acknowledged = 0;
-    for (const emp of employees) {
-      for (const kras of Object.values(emp.kras)) {
-        for (const kpi of kras) {
-          if (kpi.hasMismatch) {
-            if (kpi.isAcknowledged) {
-              acknowledged++;
-            } else {
-              variance++;
-            }
-          }
-        }
-      }
-    }
-    return { varianceCount: variance, acknowledgedCount: acknowledged };
-  }, [employees]);
+  // Aggregate across the FULL filter set (not just the current page).
+  const varianceCount = summary?.varianceCount ?? 0;
+  const acknowledgedCount = summary?.acknowledgedCount ?? 0;
 
   const totalMismatchCount = varianceCount + acknowledgedCount;
   const prevVarianceRef = useRef(varianceCount);
@@ -231,7 +241,7 @@ function KpiWeightageDashboard() {
       {/* Summary */}
       <div className="flex gap-3 flex-wrap items-center">
         <Badge variant="secondary" className="text-sm py-1 px-3">
-          {employees.length} Employees
+          {totalEmployees} Employees
         </Badge>
         {varianceCount > 0 ? (
           <TooltipProvider>
@@ -314,6 +324,45 @@ function KpiWeightageDashboard() {
           showOnlyUnacknowledged={showOnlyUnacknowledged}
         />
       ))}
+
+      {/* Pagination footer */}
+      {totalEmployees > 0 && (
+        <Card>
+          <CardContent className="py-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="text-xs text-muted-foreground">
+              Page {page} of {totalPages} · {totalEmployees} employees
+              <span className="ml-2 italic">(current page only)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="ps" className="text-xs text-muted-foreground">Per page</Label>
+              <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+                <SelectTrigger id="ps" className="h-8 w-[80px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {WEIGHTAGE_PAGE_SIZE_OPTIONS.map((n) => (
+                    <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1 || isLoading}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" /> Prev
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages || isLoading}
+              >
+                Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <AdminKpiEditDialog
         isOpen={!!editingKpi}
