@@ -13,6 +13,7 @@ import { useAdminUpdateKpi, ReviewStatus, KPI } from '@/hooks/useKpis';
 import { Loader2, Building2, Info, Copy, ChevronDown } from 'lucide-react';
 import { UomTypeSelector } from '@/components/admin/UomTypeSelector';
 import { TieredOptionsBuilder } from '@/components/admin/TieredOptionsBuilder';
+import { RegistryBadge } from '@/components/admin/kpi-standardization/RegistryBadge';
 import { UomType, QualitativeOption, validateQualitativeOptions, BINARY_OPTIONS, BINARY_OPTIONS_INVERTED, isBinaryInverted } from '@/lib/qualitativeUom';
 import { UOM_OPTIONS } from '@/lib/uomConstants';
 import { getCycleOptionsForFrequency, MULTI_MONTH_FREQUENCIES } from '@/lib/frequencyCycleOptions';
@@ -446,7 +447,16 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
       </div>
 
       <div className="space-y-1.5">
-        <Label className="text-xs">KPI Name</Label>
+        <div className="flex items-center justify-between gap-2">
+          <Label className="text-xs">KPI Name</Label>
+          <RegistryBadge
+            categoryId={formData.category_id}
+            kraName={formData.kra_name}
+            kpiName={formData.kpi_name}
+            reviewPeriod={kpi?.review_period ?? null}
+            reviewYear={kpi?.review_year ?? null}
+          />
+        </div>
         <Textarea
           value={formData.kpi_name}
           onChange={(e) => setFormData(prev => ({ ...prev, kpi_name: e.target.value }))}

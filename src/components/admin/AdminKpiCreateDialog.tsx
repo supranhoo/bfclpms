@@ -26,6 +26,7 @@ import { Check, ChevronsUpDown, ArrowLeft, Info } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { KraLibrarySearchPanel } from './KraLibrarySearchPanel';
+import { RegistryBadge } from './kpi-standardization/RegistryBadge';
 
 interface AdminKpiCreateDialogProps {
   isOpen: boolean;
@@ -652,7 +653,16 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
 
                 {/* KPI Name */}
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">KPI Name *</Label>
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="text-sm font-medium">KPI Name *</Label>
+                    <RegistryBadge
+                      categoryId={categoryId}
+                      kraName={kraName}
+                      kpiName={kpiName}
+                      reviewPeriod={reviewPeriod}
+                      reviewYear={reviewYear}
+                    />
+                  </div>
                   {isCustomKpi ? (
                     <div className="flex gap-2">
                       <Textarea

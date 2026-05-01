@@ -17,6 +17,9 @@ import { Loader2, Package, FileText, Target, Sparkles, CheckCircle, AlertTriangl
 import { EffectiveMonthSelector } from './EffectiveMonthSelector';
 import { getActiveMonthForCycle } from '@/lib/frequencyUtils';
 import { formatKpiInsertError } from '@/lib/kpiErrorUtils';
+import { useCanonicalResolver } from '@/hooks/useCanonicalResolver';
+import { isCanonicalEnforcementPeriod } from '@/lib/canonicalEnforcementPeriod';
+import { RegistryBadgePreset } from './kpi-standardization/RegistryBadge';
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -52,6 +55,10 @@ export function SmartAssignmentDialog({
 
   const currentPeriod = selectedMonth;
   const currentYear = selectedYear;
+
+  // Phase 3a: batch-resolve canonical registry status for every template
+  // shown in the role list. Single RPC call per dialog open + period change.
+  const inEnforcementScope = isCanonicalEnforcementPeriod(currentPeriod, currentYear);
 
   // State
   const [activeTab, setActiveTab] = useState<'bundles' | 'templates'>('bundles');
@@ -107,6 +114,21 @@ export function SmartAssignmentDialog({
       (t.applicable_roles.length === 0 || t.applicable_roles.includes(employeeRole as AppRole))
     ) || [];
   }, [templates, employeeRole]);
+
+  // Phase 3a: registry resolver for the visible role-matching templates.
+  // Skipped entirely (empty signatures) when the selected period is outside
+  // canonical enforcement scope, so historical/data-repair flows pay no cost.
+  const registrySignatures = useMemo(() => {
+    if (!inEnforcementScope) return [];
+    return roleTemplates
+      .filter(t => t.category_id && t.kra_name && t.kpi_name)
+      .map(t => ({
+        category_id: t.category_id!,
+        kra_name: t.kra_name,
+        kpi_name: t.kpi_name,
+      }));
+  }, [roleTemplates, inEnforcementScope]);
+  const { data: registryResolved } = useCanonicalResolver(registrySignatures);
 
   // Selected bundle details
   const selectedBundle = useMemo(() => 
@@ -570,6 +592,12 @@ export function SmartAssignmentDialog({
                                 {template.weightage}%
                               </Badge>
                             )}
+                            <RegistryBadgePreset
+                              categoryId={template.category_id}
+                              kraName={template.kra_name}
+                              kpiName={template.kpi_name}
+                              resolved={registryResolved}
+                            />
                           </div>
                         </div>
                       </label>
