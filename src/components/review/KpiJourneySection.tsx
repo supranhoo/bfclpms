@@ -780,7 +780,7 @@ export function KpiJourneySection({
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-3 pt-2">
-              {prevMonthsData.map(({ period, kpi: prevKpi, submission: prevSub, workflowStages: prevWf }) => {
+              {prevMonthsData.map(({ period, kpi: prevKpi, submission: prevSub, workflowStages: prevWf, isRenamedVariant }) => {
                 const prevStages = getVisibleStagesForLevel(viewLevel, prevWf);
                 const prevStatus = prevKpi.status || 'kra_set';
                 const prevIsNA = prevSub?.is_na || false;
@@ -804,6 +804,32 @@ export function KpiJourneySection({
                       <Badge variant="outline" className="text-[10px] text-muted-foreground">
                         {statusLabels[prevStatus] || prevStatus.replace(/_/g, ' ')}
                       </Badge>
+                      {isRenamedVariant && (
+                        <TooltipProvider delayDuration={150}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span
+                                className="inline-flex items-center gap-1 text-[10px] text-muted-foreground"
+                                aria-label="Also known as a different KPI name in this period"
+                              >
+                                <GitMerge className="h-3 w-3" />
+                                <span>Also known as</span>
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p className="text-xs font-medium mb-1">Standardized via registry</p>
+                              <p className="text-xs text-muted-foreground">
+                                In {period.month} {period.year}, this KPI was recorded as:
+                              </p>
+                              <p className="text-xs mt-1">
+                                <span className="font-medium">{prevKpi.kra_name}</span>
+                                {' / '}
+                                <span className="font-medium">{prevKpi.kpi_name}</span>
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
                     </div>
                     <div className={`grid ${prevGridCols} gap-2`}>
                       {prevStages.map(stage => {
