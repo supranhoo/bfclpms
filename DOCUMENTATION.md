@@ -6373,3 +6373,18 @@ now split it apart safely.
 `validateAliasPartition` pure function against empty-move, count
 mismatch, overlap, unknown ids, and the move-all edge case so the
 dialog's client-side gate stays in sync with the server check.
+
+### HR Review Notes — Inline Edit (2026-05-01)
+
+`AddReviewNoteSheet` now supports `mode="edit"` and a `note` prop. The
+`/hr/review-notes` table renders a Pencil icon (gated by
+`useReviewNoteAccess().canEdit`) beside the trash button on each row.
+Selecting it opens the same sheet pre-filled from the row and patches
+via `useUpdateReviewNote`. Subject employee is intentionally locked
+post-creation; only category, title, details, priority, and
+`applicable_from` are editable. Server-side `applicable_from`
+normalisation (first-of-month) and the existing completion-stamp
+trigger remain authoritative.
+
+**Tests:** `src/test/reviewNotes/edit.test.ts` covers the patch shape,
+subject-lock, and month snapping.
