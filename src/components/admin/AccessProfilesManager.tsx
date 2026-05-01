@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -479,7 +480,7 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
                 </TableHeader>
                 <TableBody>
                   {SECTION_ORDER.filter(s => sections[s]?.length).map(section =>
-                    <>
+                    <Fragment key={section}>
                     {sections[section].map((cfg: MenuAccessConfig, idx: number) => {
                       const r = getRights(cfg.menu_key);
                       return (
@@ -505,7 +506,7 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
                         </TableCell>
                       </TableRow>
                     )}
-                    </>
+                    </Fragment>
                   )}
                 </TableBody>
               </Table>
