@@ -2316,3 +2316,41 @@ without measuring the produced URL length.
 4. **Soft Enforcement:** Free-text KPI names are allowed but flagged. Registry selection is the default picker for all KPI creation flows.
 
 5. **Scoring Independence:** Standardizing KPI names does NOT affect per-employee scoring thresholds (r5-r0), target values, or weightages. These remain independently configurable.
+
+---
+
+## §88B — Phase 2a Canonical Resolver Read Path
+
+1. **Read-only resolution.** Cross-month canonical grouping is performed
+   exclusively at read time via `resolve_canonical_kpi_batch()`. No view,
+   hook, or component built on top of this resolver is permitted to write
+   back to `kpis`, `review_submissions`, `org_kpi_values`, or any other
+   data table. Standardization writes remain confined to the admin tools
+   in §88A.
+
+2. **Fail open, never blank.** If the resolver RPC errors or returns an
+   empty payload, callers MUST fall back to raw signature grouping (each
+   row in its own bucket). A registry outage must never produce a blank
+   or misleading aggregate. `useCanonicalResolver` enforces this with a
+   try/catch that returns an empty Map and logs to console.
+
+3. **Per-month grids unchanged.** Any UI surface that presents a single
+   review period MUST continue to render the row's own `kra_name` /
+   `kpi_name` text (the historical record). Canonical names may only
+   replace the displayed text on aggregations that span multiple variants
+   in the current view, and even then only with a visible "Also known
+   as" disclosure.
+
+4. **Signature key normalization.** The `nk()` helper
+   (lowercase + trim + collapse whitespace) is the canonical client-side
+   key for grouping in the read path. It is NOT used as a SQL filter;
+   server lookups use the registry tables' indexed columns directly.
+
+5. **Disclosure requirement.** Wherever variants are merged into a
+   canonical row, the UI MUST surface a small visual indicator (e.g.
+   `GitMerge` icon) and on-hover list of the original variant texts so
+   users can audit why a previously-distinct row no longer appears
+   separately.
+
+## Version History
+- **v2.66.7.16 (2026-05-01):** §88B added — Phase 2a canonical resolver read path. Adds `resolve_canonical_kpi_batch` RPC, `useCanonicalResolver` hook, `canonicalGrouping` utilities, and KraSummaryTab merge with "Also known as" tooltip.
