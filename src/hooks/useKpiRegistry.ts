@@ -237,6 +237,34 @@ export function useBuildRegistry() {
       }
 
       const skipped = deduped.length - inserted;
+      // Log to action history (best-effort; never block primary write)
+      try {
+        if (!reused) {
+          await supabase.rpc('log_standardization_action' as any, {
+            p_action_type: 'create_definition',
+            p_definition_id: defId,
+            p_category_id: categoryId,
+            p_payload: { canonical_kra_name: canonicalKra, canonical_kpi_name: canonicalKpi },
+            p_affected_row_count: 1,
+          });
+        }
+        if (inserted > 0) {
+          await supabase.rpc('log_standardization_action' as any, {
+            p_action_type: 'link_alias',
+            p_definition_id: defId,
+            p_category_id: categoryId,
+            p_payload: { aliases: newAliasRows.map(r => ({
+              variant_kra_name: r.variant_kra_name,
+              variant_kpi_name: r.variant_kpi_name,
+              category_id: r.category_id,
+            })) },
+            p_affected_row_count: inserted,
+          });
+        }
+      } catch (logErr) {
+        console.warn('[standardization] action log failed', logErr);
+      }
+
       toast({
         title: reused ? 'Linked to existing canonical entry' : 'Registry entry created',
         description:
@@ -254,6 +282,235 @@ export function useBuildRegistry() {
   }, [toast]);
 
   return { createDefinitionWithAliases, saving };
+}
+
+/**
+ * Edit a canonical definition (rename canonical KRA/KPI). Optionally propagate
+ * the rename to current-period KPIs (May 2026 onward) that link to this definition.
+ */
+export function useEditDefinition() {
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
+
+  const editDefinition = useCallback(async (
+    definitionId: string,
+    newKra: string,
+    newKpi: string,
+    propagate: boolean
+  ) => {
+    setSaving(true);
+    try {
+      const { data: before, error: readErr } = await supabase
+        .from('kpi_definitions' as any)
+        .select('id, canonical_kra_name, canonical_kpi_name, category_id')
+        .eq('id', definitionId)
+        .single();
+      if (readErr) throw readErr;
+      const beforeRow = before as any;
+
+      const { error: updErr } = await supabase
+        .from('kpi_definitions' as any)
+        .update({ canonical_kra_name: newKra.trim(), canonical_kpi_name: newKpi.trim() } as any)
+        .eq('id', definitionId);
+      if (updErr) throw updErr;
+
+      let propagated = 0;
+      if (propagate) {
+        // Fetch all (period, year) tuples for May 2026+ where rows link to this defId
+        const { data: rows, error: kpisErr } = await supabase
+          .from('kpis' as any)
+          .select('kra_name, kpi_name, review_period, review_year, category_id')
+          .eq('kpi_definition_id', definitionId);
+        if (kpisErr) throw kpisErr;
+        const monthNum = (p: string) => ['January','February','March','April','May','June','July','August','September','October','November','December'].indexOf(p) + 1;
+        const seen = new Set<string>();
+        for (const r of (rows as any[] || [])) {
+          if (r.review_year < 2026 || (r.review_year === 2026 && monthNum(r.review_period) < 5)) continue;
+          const k = `${r.category_id}::${r.kra_name}::${r.kpi_name}::${r.review_period}::${r.review_year}`;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          const { data, error } = await supabase.rpc('correct_may_kpis' as any, {
+            p_category_id: r.category_id,
+            p_old_kra: r.kra_name,
+            p_old_kpi: r.kpi_name,
+            p_new_kra: newKra.trim(),
+            p_new_kpi: newKpi.trim(),
+            p_definition_id: definitionId,
+            p_review_period: r.review_period,
+            p_review_year: r.review_year,
+          });
+          if (!error && typeof data === 'number') propagated += data;
+        }
+      }
+
+      await supabase.rpc('log_standardization_action' as any, {
+        p_action_type: 'edit_definition',
+        p_definition_id: definitionId,
+        p_category_id: beforeRow.category_id,
+        p_payload: {
+          before: { canonical_kra_name: beforeRow.canonical_kra_name, canonical_kpi_name: beforeRow.canonical_kpi_name },
+          after: { canonical_kra_name: newKra.trim(), canonical_kpi_name: newKpi.trim() },
+          propagate, propagated,
+        },
+        p_affected_row_count: 1 + propagated,
+      });
+
+      toast({
+        title: 'Definition updated',
+        description: propagate ? `Renamed and propagated to ${propagated} KPI rows` : 'Canonical name updated (no propagation)',
+      });
+      return true;
+    } catch (err: any) {
+      toast({ title: 'Edit failed', description: err.message, variant: 'destructive' });
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }, [toast]);
+
+  return { editDefinition, saving };
+}
+
+/**
+ * Delete a single alias and log the action so it can be undone.
+ */
+export function useUnlinkAlias() {
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
+
+  const unlinkAlias = useCallback(async (alias: KpiNameAlias) => {
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('kpi_name_aliases' as any)
+        .delete()
+        .eq('id', alias.id);
+      if (error) throw error;
+      await supabase.rpc('log_standardization_action' as any, {
+        p_action_type: 'unlink_alias',
+        p_definition_id: alias.definition_id,
+        p_category_id: alias.category_id,
+        p_payload: { aliases: [{
+          variant_kra_name: alias.variant_kra_name,
+          variant_kpi_name: alias.variant_kpi_name,
+          category_id: alias.category_id,
+        }] },
+        p_affected_row_count: 1,
+      });
+      toast({ title: 'Alias unlinked' });
+      return true;
+    } catch (err: any) {
+      toast({ title: 'Unlink failed', description: err.message, variant: 'destructive' });
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }, [toast]);
+
+  return { unlinkAlias, saving };
+}
+
+/**
+ * Delete a definition and capture a snapshot of its aliases for undo.
+ */
+export function useDeleteDefinition() {
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
+
+  const deleteDefinition = useCallback(async (definitionId: string) => {
+    setSaving(true);
+    try {
+      const { data: def, error: defErr } = await supabase
+        .from('kpi_definitions' as any)
+        .select('id, canonical_kra_name, canonical_kpi_name, category_id')
+        .eq('id', definitionId)
+        .single();
+      if (defErr) throw defErr;
+
+      const { data: aliases } = await supabase
+        .from('kpi_name_aliases' as any)
+        .select('variant_kra_name, variant_kpi_name, category_id')
+        .eq('definition_id', definitionId);
+
+      const { error: delErr } = await supabase
+        .from('kpi_definitions' as any)
+        .delete()
+        .eq('id', definitionId);
+      if (delErr) throw delErr;
+
+      await supabase.rpc('log_standardization_action' as any, {
+        p_action_type: 'delete_definition',
+        p_definition_id: definitionId,
+        p_category_id: (def as any).category_id,
+        p_payload: { definition: def, aliases: aliases || [] },
+        p_affected_row_count: 1 + ((aliases as any[] | null)?.length || 0),
+      });
+      toast({ title: 'Definition deleted', description: 'You can undo this from History & Undo' });
+      return true;
+    } catch (err: any) {
+      toast({ title: 'Delete failed', description: err.message, variant: 'destructive' });
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }, [toast]);
+
+  return { deleteDefinition, saving };
+}
+
+export interface StandardizationAction {
+  id: string;
+  action_type: 'create_definition'|'link_alias'|'rename_kpis'|'delete_definition'|'edit_definition'|'unlink_alias';
+  definition_id: string | null;
+  category_id: string | null;
+  payload: any;
+  affected_row_count: number;
+  performed_by: string | null;
+  performed_at: string;
+  reversed_at: string | null;
+  reversed_by: string | null;
+}
+
+export function useStandardizationHistory(limit: number = 200) {
+  const [data, setData] = useState<StandardizationAction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [reversing, setReversing] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const refetch = useCallback(async () => {
+    setLoading(true);
+    const { data: rows, error } = await supabase
+      .from('kpi_standardization_actions' as any)
+      .select('*')
+      .order('performed_at', { ascending: false })
+      .limit(limit);
+    if (!error && rows) setData(rows as any);
+    setLoading(false);
+  }, [limit]);
+
+  useEffect(() => { refetch(); }, [refetch]);
+
+  const reverseAction = useCallback(async (actionId: string) => {
+    setReversing(actionId);
+    try {
+      const { data, error } = await supabase.rpc('reverse_standardization_action' as any, { p_action_id: actionId });
+      if (error) throw error;
+      const result = data as any;
+      toast({
+        title: 'Action reversed',
+        description: `${result?.action_type || 'Action'} undone — ${result?.affected || 0} rows affected`,
+      });
+      await refetch();
+      return true;
+    } catch (err: any) {
+      toast({ title: 'Undo failed', description: err.message, variant: 'destructive' });
+      return false;
+    } finally {
+      setReversing(null);
+    }
+  }, [refetch, toast]);
+
+  return { data, loading, refetch, reverseAction, reversing };
 }
 
 export function useCorrectMayKpis() {
