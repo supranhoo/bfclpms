@@ -2137,6 +2137,20 @@ When a profile (`public.profiles`) row is inserted, updated, or deleted — thro
 
 **Related**: ADR-047 (third amendment), `mem://architecture/pms/multimonth-percolation`.
 
+## §54 v4 — Post-Approval Re-Percolation (May 1, 2026 amendment)
+
+**Extends §54 v3.** If scores on the terminal month's `review_submissions` row are modified **after** the KPI is already `approved` (e.g., admin corrects management_score), the `repercolate_on_submission_update` trigger automatically propagates the updated scores to all sibling month submissions.
+
+**Trigger**: `trg_repercolate_on_submission_update` (AFTER UPDATE on `review_submissions`). Fires only when:
+1. Any score, rating, achieved_value, or is_na column actually changed (OLD vs NEW comparison).
+2. The parent KPI is `approved`, multi-month frequency, and the terminal month of its cycle.
+
+**Recursion guard**: Sets `app.repercolation_active = 'true'` (transaction-local) before writing to siblings. The trigger checks this flag and skips if already active, preventing infinite loops.
+
+**Audit action**: `SCORE_REPERCOLATED` with `metadata.policy = 'POLICY_54_v4'` and `metadata.tool = 'repercolate_on_submission_update'`.
+
+**One-shot repair (May 1, 2026)**: Jitendra Dwivedi's AFBC Incentive Feb-Mar 2026 cycle had stale February data (is_na=true, no management/final scores) after March was corrected post-approval. Manually repaired with `SCORE_REPERCOLATED` audit log.
+
 
 ## §110 — Safety Module Shell Isolation (Phase 0)
 **Date:** 2026-04-29 · **Status:** Active
