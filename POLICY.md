@@ -2357,6 +2357,7 @@ without measuring the produced URL length.
 - **v2.66.7.17 (2026-05-01):** §88C added — Phase 2b soft enforcement via DB trigger `trg_kpi_canonical_autolink`, feature flag `enable_kpi_canonical_autolink` (default ON), `promote_signature_to_definition` admin RPC, and Governance tab on /admin/kpi-standardization.
 - **v2.66.7.18 (2026-05-01):** §88D added — Phase 2c Registry Health & Coverage dashboard. Adds admin-only RPCs `get_registry_coverage_stats`, `get_unlinked_signatures`, `detect_alias_drift`, `useRegistryHealth` hook, and `HealthCoverageTab` on /admin/kpi-standardization.
 - **v2.66.7.19 (2026-05-01):** §88E added — Phase 3a Registry visibility in creation flows. Adds `RegistryBadge` / `RegistryBadgePreset` components and `canonicalEnforcementPeriod.ts` shared helper. Wired into AdminKpiCreateDialog, AdminKpiEditorForm, and SmartAssignmentDialog (template cards). Bulk Import deliberately not wired — wrong domain (it imports values, not new KPIs).
+- **v2.66.7.20 (2026-05-01):** §88F added — Phase 3b Canonical-aware previous-month lookup in `KpiJourneySection`. The "Previous 2 Months" panel now resolves the current KPI to its canonical definition and matches historical rows against any registered alias (kra/kpi pair), so a renamed KPI still surfaces its history. Renamed matches are flagged with a `GitMerge` "Also known as" badge that reveals the original variant name in tooltip. Falls back to legacy exact-name match when no canonical definition exists.
 
 ---
 
@@ -2405,3 +2406,15 @@ without measuring the produced URL length.
 5. **Non-blocking, never enforced from the UI.** The badge MUST NOT prevent submission, change form validity, or alter what gets written to `kpis`. Auto-linking remains the trigger's job per §88C; the badge is purely informational.
 
 6. **Out of scope for 3a.** OrgKpiBulkImport is an **achievement-value** importer that maps Excel rows to existing `kpi_templates` — it does not author new KPI names. The badge does not appear there because there is no authoring decision to label.
+
+## §88F — Phase 3b Canonical-Aware Cross-Period Lookup
+
+1. **Scope is narrow by audit.** Phase 3b applies **only** to `KpiJourneySection`'s "Previous 2 Months" panel. Other reports originally listed in the Phase 3 plan (VarianceReport, KpiJourneyReport, ManagementDashboard's Performance Trend, EmployeePerformanceSummary) are either single-period (forbidden by §88B) or org-aggregate (no per-KPI grouping happens), so canonical merging is not applicable and MUST NOT be retrofitted there.
+
+2. **Read-path only — no write, no schema change.** The lookup expansion is a pure widening of the `.eq('kra_name')`/`.eq('kpi_name')` filter into `.in()` over registered alias pairs. It does not insert, update, or migrate any row, and it never modifies the displayed text of historical rows (per §88B).
+
+3. **Variant pair filtering is mandatory.** Because `.in('kra_name', ...)` and `.in('kpi_name', ...)` are independent IN-clauses, the result MUST be post-filtered by `isAllowedPair()` from `src/lib/prevMonthCanonicalMatch.ts` to reject Cartesian-product false positives like (kraA + kpiB) when only (kraA + kpiA) and (kraB + kpiB) are registered. Locked by `prevMonthCanonicalMatch.test.ts`.
+
+4. **Renamed-variant disclosure is required.** When a prev-month row's `(kra_name, kpi_name)` differs from the current KPI's pair under `nk()` normalization, the UI MUST surface a `GitMerge` "Also known as" tooltip that names the original variant. This preserves audit trust — reviewers must always be able to see what name the historical row was originally recorded under.
+
+5. **Graceful fallback when not registered.** When the current KPI has no `kpi_definition_id` resolution (pre-May-2026 KPIs, unregistered KPIs, or registry RPC failure), the lookup MUST fall back to the legacy single-pair exact-match behavior. No user-visible regression and no error toast.

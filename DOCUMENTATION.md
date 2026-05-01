@@ -6182,3 +6182,50 @@ Library template picker.
 **Tests:** `src/components/admin/kpi-standardization/RegistryBadge.test.tsx`
 (5 tests) locks the period-gate visibility rule and the signature-key
 normalization contract that ties badge lookups to the resolver's writes.
+
+### Phase 3b — Canonical-Aware Cross-Period Lookup (2026-05-01)
+
+**Problem.** `KpiJourneySection`'s "Previous 2 Months" panel queried
+previous-period KPIs by exact `kra_name = ? AND kpi_name = ?` match. If a
+KPI was renamed across months (legal under §88A's forward-only registry),
+the prev-month lookup missed and the reviewer saw "no previous data" even
+though the canonical KPI clearly had history under an earlier name.
+
+**Audit-driven scope reduction.** The original Phase 3 plan named four
+report surfaces. A walkthrough of the codebase found that:
+- `VarianceReport` and `KpiJourneyReport` are **single-period** reports
+  (one selected month + year). §88B forbids modifying them.
+- `ManagementDashboard`'s `PerformanceTrendChart` aggregates **org-wide
+  weighted averages per period** — there is no per-KPI grouping, so
+  canonical merging has no effect.
+- `EmployeePerformanceSummary` aggregates per **employee**, not per KPI
+  name across periods.
+
+The only surface where renames cause a real, user-visible loss of data is
+the prev-month panel inside KpiJourneySection. Phase 3b is therefore
+narrow by design (see §88F).
+
+**Implementation.**
+1. `useCanonicalResolver` resolves the current KPI's signature to a
+   `kpi_definition_id` if any. When found, a follow-up query fetches the
+   canonical pair plus every alias from `kpi_definitions` and
+   `kpi_name_aliases`.
+2. The prev-month query swaps `.eq('kra_name')`/`.eq('kpi_name')` for
+   `.in('kra_name', ...)`/`.in('kpi_name', ...)` over the variant pairs.
+3. **Cartesian-product guard.** Because `.in()` clauses are independent,
+   the result is post-filtered by `isAllowedPair()` from
+   `src/lib/prevMonthCanonicalMatch.ts` — only rows whose actual
+   `(kra_name, kpi_name)` pair exists in the registry-derived pair set
+   are kept.
+4. Each surviving prev-month row is tagged `isRenamedVariant` via
+   `isRenamedFromCurrent()` (case- and whitespace-insensitive). Renamed
+   rows render an inline `GitMerge` "Also known as" badge whose tooltip
+   names the original variant text — preserving the audit-trust rule
+   that historical text is never silently rewritten (§88B).
+5. **Fallback.** When no canonical definition exists (pre-May-2026 KPIs,
+   unregistered KPIs, RPC failure), the lookup degrades to the legacy
+   single-pair exact-match. No regression and no error toast.
+
+**Tests:** `src/lib/prevMonthCanonicalMatch.test.ts` (8 tests) locks the
+pair-key normalization, the Cartesian-product rejection, and the rename
+detection rule.

@@ -8,7 +8,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ReviewStageCard, StageStatus } from './ReviewStageCard';
 import { KPI, ReviewSubmission, KpiQuery } from '@/hooks/useKpis';
-import { User, Briefcase, Shield, MessageSquare, History, UserCheck, ClipboardCheck, AlertTriangle, Download, ChevronDown, CalendarClock, FileCheck, Info } from 'lucide-react';
+import { User, Briefcase, Shield, MessageSquare, History, UserCheck, ClipboardCheck, AlertTriangle, Download, ChevronDown, CalendarClock, FileCheck, Info, GitMerge } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { getVisibleJourneyStages, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { UomType } from '@/lib/qualitativeUom';
@@ -18,6 +19,13 @@ import { format } from 'date-fns';
 import { isComplianceKpi, useComplianceSubFactors } from '@/hooks/useComplianceSubFactors';
 import { isKpiLockedForPeriod, getActiveMonthForCycle } from '@/lib/frequencyUtils';
 import { useFrequencyConfig } from '@/hooks/useFrequencyConfig';
+import { useCanonicalResolver } from '@/hooks/useCanonicalResolver';
+import { signatureKey } from '@/lib/canonicalGrouping';
+import {
+  buildPairKeySet,
+  isAllowedPair,
+  isRenamedFromCurrent,
+} from '@/lib/prevMonthCanonicalMatch';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -208,29 +216,93 @@ export function KpiJourneySection({
     [kpi.review_period, kpi.review_year]
   );
 
+  // Phase 3b: Resolve current KPI's canonical definition so prev-month lookup
+  // can also surface renamed variants of the same canonical KPI. If no
+  // registry match exists (pre-May 2026 data, or unregistered KPI), the
+  // resolver returns nothing and the lookup falls back to exact name match.
+  const currentSignature = useMemo(
+    () =>
+      kpi.category_id && kpi.kra_name && kpi.kpi_name
+        ? [{ category_id: kpi.category_id, kra_name: kpi.kra_name, kpi_name: kpi.kpi_name }]
+        : [],
+    [kpi.category_id, kpi.kra_name, kpi.kpi_name]
+  );
+  const { data: resolverMap } = useCanonicalResolver(currentSignature);
+  const currentDefinitionId = resolverMap?.get(
+    signatureKey({ category_id: kpi.category_id, kra_name: kpi.kra_name, kpi_name: kpi.kpi_name })
+  )?.definition_id ?? null;
+
+  // Fetch all variant (kra_name, kpi_name) pairs for this canonical definition
+  // so the prev-month query can match renamed historical rows. Includes the
+  // canonical pair itself plus every alias.
+  const { data: variantPairs = [] } = useQuery<Array<{ kra_name: string; kpi_name: string }>>({
+    queryKey: ['canonical-variants', currentDefinitionId],
+    queryFn: async () => {
+      if (!currentDefinitionId) return [];
+      const [defRes, aliasRes] = await Promise.all([
+        supabase
+          .from('kpi_definitions')
+          .select('canonical_kra_name, canonical_kpi_name')
+          .eq('id', currentDefinitionId)
+          .maybeSingle(),
+        supabase
+          .from('kpi_name_aliases')
+          .select('variant_kra_name, variant_kpi_name')
+          .eq('definition_id', currentDefinitionId),
+      ]);
+      const out: Array<{ kra_name: string; kpi_name: string }> = [];
+      if (defRes.data) {
+        out.push({
+          kra_name: defRes.data.canonical_kra_name,
+          kpi_name: defRes.data.canonical_kpi_name,
+        });
+      }
+      for (const a of aliasRes.data ?? []) {
+        out.push({ kra_name: a.variant_kra_name, kpi_name: a.variant_kpi_name });
+      }
+      return out;
+    },
+    enabled: !!currentDefinitionId,
+    staleTime: 10 * 60 * 1000,
+  });
+
   // Fetch previous months' matching KPIs + submissions
   const { data: prevMonthsData = [] } = useQuery({
-    queryKey: ['prev-month-kpis', kpi.employee_id, kpi.kpi_name, kpi.kra_name, kpi.category_id, prevPeriods],
+    queryKey: ['prev-month-kpis', kpi.employee_id, kpi.kpi_name, kpi.kra_name, kpi.category_id, prevPeriods, variantPairs],
     queryFn: async () => {
       if (prevPeriods.length === 0) return [];
       const uniqueMonths = prevPeriods.map(p => p.month);
       const uniqueYears = [...new Set(prevPeriods.map(p => p.year))];
 
-      // Fetch matching KPIs
+      // Build the set of (kra_name, kpi_name) pairs to match. When a canonical
+      // definition is known, include all aliases; otherwise just the current
+      // pair (preserves legacy exact-match behavior).
+      const pairs: Array<{ kra_name: string; kpi_name: string }> =
+        variantPairs.length > 0
+          ? variantPairs
+          : [{ kra_name: kpi.kra_name, kpi_name: kpi.kpi_name }];
+      const kraNames = Array.from(new Set(pairs.map(p => p.kra_name)));
+      const kpiNames = Array.from(new Set(pairs.map(p => p.kpi_name)));
+      const pairKeys = buildPairKeySet(pairs);
+
+      // Fetch matching KPIs (broad fetch by .in(); post-filter to exact pairs
+      // to avoid Cartesian-product false positives like (kraA + kpiB)).
       const { data: kpis, error: kErr } = await supabase
         .from('kpis')
         .select('*')
         .eq('employee_id', kpi.employee_id)
-        .eq('kpi_name', kpi.kpi_name)
-        .eq('kra_name', kpi.kra_name)
         .eq('category_id', kpi.category_id)
+        .in('kra_name', kraNames)
+        .in('kpi_name', kpiNames)
         .in('review_period', uniqueMonths)
         .in('review_year', uniqueYears);
       if (kErr) throw kErr;
       if (!kpis || kpis.length === 0) return [];
 
-      // Filter to exact month+year pairs
+      // Keep only rows whose (kra_name, kpi_name) is an actual variant pair
+      // and whose period+year is one of our targets.
       const filtered = kpis.filter(k =>
+        isAllowedPair({ kra_name: k.kra_name, kpi_name: k.kpi_name }, pairKeys) &&
         prevPeriods.some(p => p.month === k.review_period && p.year === k.review_year)
       );
       if (filtered.length === 0) return [];
@@ -270,9 +342,24 @@ export function KpiJourneySection({
           const sub = subMap.get(matchKpi.id) || null;
           const wfKey = `${p.month}_${p.year}`;
           const stages = wfMap.get(wfKey) || effectiveStages;
-          return { period: p, kpi: matchKpi, submission: sub, workflowStages: stages };
+          return {
+            period: p,
+            kpi: matchKpi,
+            submission: sub,
+            workflowStages: stages,
+            isRenamedVariant: isRenamedFromCurrent(
+              { kra_name: matchKpi.kra_name, kpi_name: matchKpi.kpi_name },
+              { kra_name: kpi.kra_name, kpi_name: kpi.kpi_name },
+            ),
+          };
         })
-        .filter(Boolean) as { period: { month: string; year: number }; kpi: any; submission: any; workflowStages: string[] }[];
+        .filter(Boolean) as {
+          period: { month: string; year: number };
+          kpi: any;
+          submission: any;
+          workflowStages: string[];
+          isRenamedVariant: boolean;
+        }[];
     },
     enabled: prevPeriods.length > 0 && !!kpi.employee_id && !!kpi.kpi_name,
     staleTime: 2 * 60 * 1000,
@@ -697,7 +784,7 @@ export function KpiJourneySection({
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-3 pt-2">
-              {prevMonthsData.map(({ period, kpi: prevKpi, submission: prevSub, workflowStages: prevWf }) => {
+              {prevMonthsData.map(({ period, kpi: prevKpi, submission: prevSub, workflowStages: prevWf, isRenamedVariant }) => {
                 const prevStages = getVisibleStagesForLevel(viewLevel, prevWf);
                 const prevStatus = prevKpi.status || 'kra_set';
                 const prevIsNA = prevSub?.is_na || false;
@@ -721,6 +808,32 @@ export function KpiJourneySection({
                       <Badge variant="outline" className="text-[10px] text-muted-foreground">
                         {statusLabels[prevStatus] || prevStatus.replace(/_/g, ' ')}
                       </Badge>
+                      {isRenamedVariant && (
+                        <TooltipProvider delayDuration={150}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span
+                                className="inline-flex items-center gap-1 text-[10px] text-muted-foreground"
+                                aria-label="Also known as a different KPI name in this period"
+                              >
+                                <GitMerge className="h-3 w-3" />
+                                <span>Also known as</span>
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p className="text-xs font-medium mb-1">Standardized via registry</p>
+                              <p className="text-xs text-muted-foreground">
+                                In {period.month} {period.year}, this KPI was recorded as:
+                              </p>
+                              <p className="text-xs mt-1">
+                                <span className="font-medium">{prevKpi.kra_name}</span>
+                                {' / '}
+                                <span className="font-medium">{prevKpi.kpi_name}</span>
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
                     </div>
                     <div className={`grid ${prevGridCols} gap-2`}>
                       {prevStages.map(stage => {
