@@ -94,7 +94,7 @@ Sub-Phase 3a (Pickers)        ✅ shipped 2026-05-01 (§88E)
         ↓
 Sub-Phase 3b (Reports)        ✅ shipped 2026-05-01 (§88F) — trimmed to KpiJourneySection prev-month panel only
         ↓
-Sub-Phase 3c (Visibility)     ship last — removes admin-only taxonomy gap
+Sub-Phase 3c (Visibility)     ✅ shipped 2026-05-01 (§88G) — `/registry` page + `get_public_registry_view` RPC
 ```
 
 **Phase 3b scope correction (post-audit):** A walkthrough of the codebase

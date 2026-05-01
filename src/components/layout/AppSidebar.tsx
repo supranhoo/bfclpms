@@ -63,6 +63,7 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
     { title: 'My Dashboard', icon: Home, path: '/dashboard', menuKey: 'dashboard', roles: ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms', 'skip_level'] },
     { title: 'Inbox', icon: MessageSquare, path: '/queries', menuKey: 'inbox', roles: ['employee', 'manager', 'admin', 'auditor', 'management', 'hr_pms', 'skip_level'], showBadge: true },
     { title: 'PMS Policy', icon: FileText, path: '/pms-policy', menuKey: 'pms-policy', roles: [...new Set(['admin', ...policyVisibleRoles])] },
+    { title: 'KPI Registry', icon: GitMerge, path: '/registry', menuKey: 'registry-browser', roles: ['admin', 'manager', 'hr_pms', 'management', 'auditor', 'skip_level'] },
   ],
   manager: [
     { title: 'Team Reviews', icon: Users, path: '/dashboard?view=team', menuKey: 'team-reviews', roles: ['manager', 'admin', 'management'] },
@@ -131,7 +132,7 @@ const getSectionForPath = (pathname: string, search: string = ''): string => {
   if (fullPath.includes('view=management')) return 'management';
   if (fullPath.includes('view=hr_pms')) return 'hr_pms';
   if (pathname === '/management-dashboard') return 'management';
-  if (['/dashboard', '/queries', '/pms-policy'].includes(pathname)) return 'main';
+  if (['/dashboard', '/queries', '/pms-policy', '/registry'].includes(pathname)) return 'main';
   if (pathname.startsWith('/admin')) return 'admin';
   if (pathname.startsWith('/reports')) return 'reports';
   if (pathname === '/audit-logs') return 'admin';
