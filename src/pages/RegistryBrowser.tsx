@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Search, GitMerge, BookOpen, Info } from 'lucide-react';
+import { Search, GitMerge, Info } from 'lucide-react';
 import { useRegistryBrowser } from '@/hooks/useRegistryBrowser';
 
 /**
@@ -61,7 +61,6 @@ export default function RegistryBrowser() {
       <PageHeader
         title="KPI Registry Browser"
         description="Read-only view of the canonical KPI taxonomy used across the organisation."
-        icon={BookOpen}
       />
 
       <Alert>
