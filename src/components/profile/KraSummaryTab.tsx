@@ -3,10 +3,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ClipboardList, ChevronRight, ChevronDown } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { ClipboardList, ChevronRight, ChevronDown, GitMerge } from 'lucide-react';
+import { useCanonicalResolver } from '@/hooks/useCanonicalResolver';
+import {
+  canonicalGroupKey,
+  canonicalDisplayNames,
+  signatureKey,
+  type CanonicalSignature,
+} from '@/lib/canonicalGrouping';
 
 interface KpiRow {
   id: string;
+  category_id?: string | null;
   category_name: string | null;
   kra_name: string | null;
   kpi_name: string | null;
@@ -31,6 +40,10 @@ interface KraGroup {
   key: string;
   category_name: string;
   kra_name: string;
+  /** Canonical names from registry, when matched */
+  canonicalKraName: string | null;
+  isCanonical: boolean;
+  aliasKraNames: string[];
   kpis: KpiRow[];
   kpiCount: number;
   totalWeightage: number;
@@ -53,23 +66,81 @@ const kraStatusColors: Record<string, string> = {
 export default function KraSummaryTab({ kpis }: { kpis: KpiRow[] }) {
   const [expandedKras, setExpandedKras] = useState<Set<string>>(new Set());
 
+  // Build the canonical-resolution input (only KPIs with full signatures).
+  const signatures = useMemo<CanonicalSignature[]>(
+    () =>
+      kpis
+        .filter(k => k.category_id && k.kra_name && k.kpi_name)
+        .map(k => ({
+          category_id: k.category_id as string,
+          kra_name: k.kra_name as string,
+          kpi_name: k.kpi_name as string,
+        })),
+    [kpis],
+  );
+  const { data: resolverMap } = useCanonicalResolver(signatures);
+
   const kraGroups = useMemo<KraGroup[]>(() => {
-    const map = new Map<string, KpiRow[]>();
+    const resolver = resolverMap ?? new Map();
+    const map = new Map<string, { kpis: KpiRow[]; canonicalKra: string | null; firstKraText: string; firstCategory: string }>();
+
     for (const kpi of kpis) {
-      const key = `${kpi.category_name || ''}||${kpi.kra_name || ''}`;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(kpi);
+      const sig: CanonicalSignature | null =
+        kpi.category_id && kpi.kra_name && kpi.kpi_name
+          ? { category_id: kpi.category_id, kra_name: kpi.kra_name, kpi_name: kpi.kpi_name }
+          : null;
+
+      let key: string;
+      let canonicalKra: string | null = null;
+      if (sig) {
+        const groupKey = canonicalGroupKey(sig, resolver);
+        if (groupKey.startsWith('def:')) {
+          // Group at the KRA level, not KPI level: collapse all KPIs that
+          // resolve to the same canonical KRA name within the same category.
+          const display = canonicalDisplayNames(sig, resolver);
+          canonicalKra = display.kra_name;
+          key = `def-kra:${kpi.category_id}|${display.kra_name}`;
+        } else {
+          key = `raw-kra:${kpi.category_id || ''}|${(kpi.kra_name || '').trim().toLowerCase()}`;
+        }
+      } else {
+        key = `raw-kra:${kpi.category_id || ''}|${(kpi.kra_name || '').trim().toLowerCase()}`;
+      }
+
+      if (!map.has(key)) {
+        map.set(key, {
+          kpis: [],
+          canonicalKra,
+          firstKraText: kpi.kra_name || '—',
+          firstCategory: kpi.category_name || '—',
+        });
+      }
+      map.get(key)!.kpis.push(kpi);
     }
-    return Array.from(map.entries()).map(([key, group]) => ({
-      key,
-      category_name: group[0].category_name || '—',
-      kra_name: group[0].kra_name || '—',
-      kpis: group,
-      kpiCount: group.length,
-      totalWeightage: group.reduce((s, k) => s + (k.weightage || 0), 0),
-      status: deriveKraStatus(group),
-    }));
-  }, [kpis]);
+
+    return Array.from(map.entries()).map(([key, group]) => {
+      const displayKra = group.canonicalKra ?? group.firstKraText;
+      const aliasNames = Array.from(
+        new Set(
+          group.kpis
+            .map(k => k.kra_name || '')
+            .filter(name => name && name.trim().toLowerCase() !== displayKra.trim().toLowerCase()),
+        ),
+      );
+      return {
+        key,
+        category_name: group.firstCategory,
+        kra_name: displayKra,
+        canonicalKraName: group.canonicalKra,
+        isCanonical: group.canonicalKra !== null,
+        aliasKraNames: aliasNames,
+        kpis: group.kpis,
+        kpiCount: group.kpis.length,
+        totalWeightage: group.kpis.reduce((s, k) => s + (k.weightage || 0), 0),
+        status: deriveKraStatus(group.kpis),
+      };
+    });
+  }, [kpis, resolverMap]);
 
   if (kpis.length === 0) {
     return (
@@ -162,7 +233,29 @@ export default function KraSummaryTab({ kpis }: { kpis: KpiRow[] }) {
                             <TableCell>
                               <Badge variant="outline" className="text-xs">{group.category_name}</Badge>
                             </TableCell>
-                            <TableCell className="text-sm font-medium">{group.kra_name}</TableCell>
+                            <TableCell className="text-sm font-medium">
+                              <div className="flex items-center gap-1.5">
+                                <span>{group.kra_name}</span>
+                                {group.isCanonical && group.aliasKraNames.length > 0 && (
+                                  <TooltipProvider delayDuration={150}>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className="inline-flex items-center" aria-label="Merged variants">
+                                          <GitMerge className="h-3 w-3 text-muted-foreground" />
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="top" className="max-w-xs">
+                                        <p className="text-xs font-medium mb-1">Standardized KRA</p>
+                                        <p className="text-xs text-muted-foreground">
+                                          Also known as:{' '}
+                                          {group.aliasKraNames.join(', ')}
+                                        </p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                )}
+                              </div>
+                            </TableCell>
                             <TableCell className="text-sm font-medium">{group.kpiCount}</TableCell>
                             <TableCell className="text-sm font-medium">{group.totalWeightage}%</TableCell>
                             <TableCell>
