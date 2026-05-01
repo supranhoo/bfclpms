@@ -22,7 +22,7 @@ const PAGE_SIZE = 25;
 
 export function AffectedKpisTable({ categoryId, kraName, kpiName, reviewPeriod, reviewYear }: Props) {
   const [rows, setRows] = useState<any[]>([]);
-  const [employees, setEmployees] = useState<Record<string, { name: string; department: string | null }>>({});
+  const [employees, setEmployees] = useState<Record<string, { name: string }>>({});
   const [count, setCount] = useState(0);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -49,10 +49,10 @@ export function AffectedKpisTable({ categoryId, kraName, kpiName, reviewPeriod, 
       if (empIds.length > 0) {
         const { data: profs } = await supabase
           .from('profiles')
-          .select('id, full_name, department')
+          .select('id, full_name')
           .in('id', empIds);
-        const map: Record<string, { name: string; department: string | null }> = {};
-        (profs || []).forEach((p: any) => { map[p.id] = { name: p.full_name, department: p.department }; });
+        const map: Record<string, { name: string }> = {};
+        (profs || []).forEach((p: any) => { map[p.id] = { name: p.full_name }; });
         setEmployees(map);
       }
     } catch (e) {
@@ -83,7 +83,6 @@ export function AffectedKpisTable({ categoryId, kraName, kpiName, reviewPeriod, 
           <thead className="bg-muted/40 sticky top-0">
             <tr>
               <th className="text-left px-2 py-1.5">Employee</th>
-              <th className="text-left px-2 py-1.5">Department</th>
               <th className="text-left px-2 py-1.5">Period</th>
               <th className="text-left px-2 py-1.5">Weightage</th>
               <th className="text-left px-2 py-1.5">Status</th>
@@ -95,7 +94,6 @@ export function AffectedKpisTable({ categoryId, kraName, kpiName, reviewPeriod, 
               return (
                 <tr key={r.id} className="border-t">
                   <td className="px-2 py-1.5">{emp?.name || r.employee_id.slice(0, 8)}</td>
-                  <td className="px-2 py-1.5 text-muted-foreground">{emp?.department || '—'}</td>
                   <td className="px-2 py-1.5">{r.review_period} {r.review_year}</td>
                   <td className="px-2 py-1.5">{r.weightage ?? '—'}</td>
                   <td className="px-2 py-1.5"><Badge variant="outline" className="text-[10px]">{r.status || '—'}</Badge></td>
