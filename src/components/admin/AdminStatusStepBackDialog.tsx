@@ -9,7 +9,13 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft, Undo2, AlertTriangle } from 'lucide-react';
 import { getStageLabel } from '@/hooks/useWorkflowConfig';
-import { useAdminStatusStepBack, getPreviousStatus, FULL_STATUS_ORDER } from '@/hooks/useAdminDataEntry';
+import {
+  useAdminStatusStepBack,
+  getPreviousStatus,
+  FULL_STATUS_ORDER,
+  computeStepBackTargets,
+  getDataAwareDefaultTarget,
+} from '@/hooks/useAdminDataEntry';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -96,49 +102,15 @@ export function AdminStatusStepBackDialog({
   const workflowStages = externalStages || fetchedStages || undefined;
   const previousStatus = getPreviousStatus(currentStatus, workflowStages);
 
-  // Compute all valid target stages: union of (a) workflow-template stages
-  // before current and (b) any stage with persisted data before current.
-  // Each entry is tagged so the UI can flag stages that are only available
-  // because they hold historic data.
-  const availableTargets = useMemo(() => {
-    const stages = (workflowStages || FULL_STATUS_ORDER) as ReviewStatus[];
-    const currentIdx = stages.indexOf(currentStatus);
-    const fullIdx = FULL_STATUS_ORDER.indexOf(currentStatus);
-    if (fullIdx <= 0) return [] as Array<{ stage: ReviewStatus; historic: boolean }>;
+  const availableTargets = useMemo(
+    () => computeStepBackTargets(currentStatus, workflowStages, dataBearingStages ?? []),
+    [currentStatus, workflowStages, dataBearingStages]
+  );
 
-    const inWorkflow = new Set<ReviewStatus>(stages);
-    const dataSet = new Set<ReviewStatus>(dataBearingStages ?? []);
-
-    const collected: Array<{ stage: ReviewStatus; historic: boolean }> = [];
-    // Always include kra_set as a baseline reset target.
-    collected.push({ stage: 'kra_set', historic: false });
-
-    // Walk FULL_STATUS_ORDER to keep canonical ordering regardless of workflow shape.
-    for (let i = 0; i < fullIdx; i++) {
-      const stage = FULL_STATUS_ORDER[i];
-      if (stage === 'kra_set') continue;
-      const inWf = inWorkflow.has(stage);
-      const hasData = dataSet.has(stage);
-      if (inWf || hasData) {
-        collected.push({ stage, historic: !inWf && hasData });
-      }
-    }
-    return collected;
-  }, [currentStatus, workflowStages, dataBearingStages]);
-
-  // Smarter default: prefer the immediately-prior data-bearing stage (so an
-  // approved KPI with auditor_score defaults back to Audit Review instead of
-  // skipping over real recorded data).
-  const dataAwareDefault = useMemo<ReviewStatus | null>(() => {
-    if (!dataBearingStages || dataBearingStages.length === 0) return null;
-    const fullIdx = FULL_STATUS_ORDER.indexOf(currentStatus);
-    if (fullIdx <= 0) return null;
-    for (let i = fullIdx - 1; i >= 0; i--) {
-      const s = FULL_STATUS_ORDER[i];
-      if (dataBearingStages.includes(s)) return s;
-    }
-    return null;
-  }, [currentStatus, dataBearingStages]);
+  const dataAwareDefault = useMemo<ReviewStatus | null>(
+    () => getDataAwareDefaultTarget(currentStatus, dataBearingStages ?? []),
+    [currentStatus, dataBearingStages]
+  );
 
   const effectiveTarget = fullReset
     ? 'kra_set'
