@@ -2133,6 +2133,8 @@ The Step Back KPI Status dialog (`AdminStatusStepBackDialog`) MUST offer every w
 
 **Forbidden**: Filtering the target dropdown strictly by the workflow template. Calling `get_employee_workflow` without period args from this dialog. Hiding a stage that has any non-NULL `*_score` value below `current`.
 
+**Anti-stale render rule (v2.66.7.51)**. The dialog MUST NOT render an enabled `Target Stage` selector while either the period-aware workflow query OR the data-bearing-stage query is still resolving. During resolution it MUST show a "Resolving target stages…" placeholder and disable the Confirm button. Default-selection MUST be derived **only** from the already-composed `availableTargets` (via `getPreferredStepBackTarget`); it is forbidden for the displayed Select value to be a stage that is not present in the dropdown options. Any in-flight `selectedTarget` that becomes invalid after the option list resolves MUST be reset.
+
 **Regression coverage**: `src/test/stepBackTargetComposition.test.ts` (8 cases) pins the union semantics, canonical ordering, baseline `kra_set` inclusion, and the data-aware default selector.
 
 ---
