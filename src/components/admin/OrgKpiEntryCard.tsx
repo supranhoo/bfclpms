@@ -18,7 +18,7 @@ import { QualitativeSelect } from '@/components/review/QualitativeSelect';
 import { BINARY_OPTIONS, type QualitativeOption } from '@/lib/qualitativeUom';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle, RotateCcw, Trash2, Ban, Undo2, FileEdit, ShieldCheck, SlidersHorizontal } from 'lucide-react';
+import { Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle, RotateCcw, Trash2, Ban, Undo2, FileEdit, ShieldCheck, SlidersHorizontal, Eraser } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useSentBackOrgKpiEmployees, type SentBackInfo } from '@/hooks/useSentBackOrgKpiEmployees';
 import { isComplianceKpi, useBulkEmployeeSubmissionDates } from '@/hooks/useComplianceSubFactors';
@@ -88,6 +88,7 @@ interface OrgKpiEntryCardProps {
   onBulkRollback?: (reason: string) => Promise<void>;
   onOpenImpact: () => void;
   onRemoveFromOrg?: () => Promise<void>;
+  onClearEntry?: () => Promise<void>;
 }
 
 const statusConfig: Record<string, { label: string; icon: typeof Clock; variant: 'outline' | 'secondary' | 'default' | 'destructive'; className: string }> = {
@@ -105,13 +106,14 @@ const scopeIcons = {
   employee: User,
 };
 
-export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, governanceLocked, employeeKpiIds, sentBackMap, onSave, onSaveAndPropagate, onUnlock, onRollback, onBulkRollback, onOpenImpact, onRemoveFromOrg }: OrgKpiEntryCardProps) {
+export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, governanceLocked, employeeKpiIds, sentBackMap, onSave, onSaveAndPropagate, onUnlock, onRollback, onBulkRollback, onOpenImpact, onRemoveFromOrg, onClearEntry }: OrgKpiEntryCardProps) {
   const isLocked = (data.status === 'propagated' && !isAdmin) || (governanceLocked === true);
   const isPropagated = data.status === 'propagated';
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [isRollingBack, setIsRollingBack] = useState(false);
   const [isBulkRollingBack, setIsBulkRollingBack] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const [showOwnerDialog, setShowOwnerDialog] = useState(false);
   const [scopeChangeTarget, setScopeChangeTarget] = useState<'organization' | 'department' | 'employee' | null>(null);
   const [rollbackReason, setRollbackReason] = useState('');
@@ -736,6 +738,71 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                     >
                       {isBulkRollingBack ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
                       Confirm Bulk Rollback
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+            {isAdmin && data.status === 'entered' && !governanceLocked && onClearEntry && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1 border-amber-500/50 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950"
+                    disabled={isClearing}
+                  >
+                    {isClearing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eraser className="h-3.5 w-3.5" />}
+                    Clear Entry
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Clear entered value?</AlertDialogTitle>
+                    <AlertDialogDescription asChild>
+                      <div className="space-y-2">
+                        <p>
+                          This will permanently remove the entered value, remarks, evidence and N/A flag for{' '}
+                          <strong>"{data.kpiName}"</strong> in <strong>{reviewPeriod} {reviewYear}</strong>.
+                        </p>
+                        <p className="text-amber-700 dark:text-amber-400 font-medium">
+                          The KPI returns to <strong>Pending</strong>. This action cannot be undone.
+                        </p>
+                      </div>
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      disabled={isClearing}
+                      className="bg-amber-600 text-white hover:bg-amber-700"
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        setIsClearing(true);
+                        try {
+                          await onClearEntry();
+                          // Reset local card state
+                          setAchievedValue('');
+                          setRemarks('');
+                          setEvidenceUrl(null);
+                          setIsNa(false);
+                          setNaRemarks('');
+                          setScopedValues(prev => prev.map(r => ({
+                            ...r,
+                            achievedValue: null,
+                            remarks: '',
+                            evidenceUrl: null,
+                            isNa: false,
+                          })));
+                          isDirtyRef.current = false;
+                          setSaveStatus('idle');
+                        } finally {
+                          setIsClearing(false);
+                        }
+                      }}
+                    >
+                      {isClearing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                      Confirm Clear
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>

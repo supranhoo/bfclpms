@@ -1,95 +1,73 @@
-## RCA
+## Goal
+Add an Admin-only **Clear Entry** button on Org KPI cards in `Organization KPI Data Entry`, so admins can remove entered values (and their supporting data: remarks, evidence, N/A flag) for KPIs in the **"Value Entered"** state — without needing the heavier rollback flow.
 
-I checked the code and the live data for the screenshot case.
+## Where it fits in the existing UI
 
-For Amol Ashok Shivankar's **March 2026** KPI `Stack Emission and PM Monitoring Adherence`, the backend returns:
+On `/admin/org-kpi-data`, each KPI card (`OrgKpiEntryCard`) already has an admin action row containing **Unlock**, **Rollback**, **Bulk Rollback**, and **Remove from Org KPIs**. These work only in specific states:
+- **Unlock / Rollback** → only when `status === 'propagated'`
+- **Remove from Org KPIs** → only when `status !== 'propagated'`
 
-- Period-resolved workflow: `kra_set → self_review → manager_check → audit → approved`
-- Current/default workflow: `kra_set → self_review → manager_check → skip_level_check → hr_pms_review → approved`
-- Submission data: `self_score = 5`, `manager_score = 5`, `auditor_score = 0`, `final_score = 0`
+**Gap today:** when a KPI is in the **"Value Entered"** state (data saved but not propagated), an admin can edit the number but cannot wipe the entry back to **Pending** in one click. Editing the input to empty does not reliably reset remarks, evidence, or N/A. This plan fills that gap.
 
-So the dialog should show **Audit Review** and default to it. The screenshot still shows **Skip-level Review / HR PMS Review**, which means the UI is still resolving the target list from a stale/current workflow path before the period-aware/data-bearing correction is effectively reflected in the rendered dropdown.
+## What "Clear Entry" does
 
-Most likely failure points found in code:
+For the selected KPI in the current period/year, when clicked by an Admin:
 
-1. `AdminStatusStepBackDialog` can render before `dataBearingStages` finishes loading, so the Select value can initialize to `HR PMS Review` from the fallback workflow and not visibly correct itself.
-2. `previousStatus` is still computed independently from the target list and can influence the displayed selected value even when `availableTargets` contains a better period/data-aware option.
-3. The dialog accepts optional external workflow data, but `KpiReviewPanel` passes workflow stages only into `KpiJourneySection`, not into `AdminStatusStepBackDialog`; therefore the dialog has to refetch and may briefly use fallback/current information.
-4. There is no visible loading/diagnostic state to prevent admins from selecting a target before workflow + submission score evidence has been resolved.
+1. **Organization scope** — delete the single `org_kpi_values` row for `(category, kra, kpi, period, year, department=null, employee=null)`.
+2. **Department scope** — delete all `org_kpi_values` rows for that definition + period where `department_id IS NOT NULL`.
+3. **Employee scope** — delete all `org_kpi_values` rows for that definition + period where `employee_id IS NOT NULL`.
+4. Reset associated UI state on the card: achieved value, remarks, evidence URL, N/A flag, sub-factors.
+5. Write an audit log entry (`action: 'cleared'`, performed_by = current admin) so the action is traceable.
+6. Invalidate React Query caches (`org-kpi-values`, `org-kpi-value`) so the card returns to **Pending** immediately.
+
+**Does NOT touch** child employee `kpis` rows or `kpi_data` — because in the "Value Entered" state nothing has been propagated yet. (For propagated KPIs, the existing Rollback flow remains the correct tool.)
+
+## Visibility & guardrails
+
+- Button appears **only** when:
+  - `isAdmin === true`
+  - `status === 'entered'` (i.e. value exists but not propagated/approved)
+  - period is **not** governance-locked
+- For `propagated` / `approved` → the existing **Unlock** + **Rollback** buttons remain the path; Clear Entry is hidden.
+- For `pending` → no entry exists, button is hidden.
+- Confirmation via `AlertDialog` (same pattern as Remove from Org KPIs / Rollback) listing exactly how many rows will be cleared and warning the action is irreversible.
+
+## Technical Implementation
+
+**1. New hook `useClearOrgKpiEntry` in `src/hooks/useOrgKpiValues.ts`**
+- Input: `{ categoryId, kraName, kpiName, reviewPeriod, reviewYear, scope }`
+- Builds a Supabase `.delete()` query on `org_kpi_values` filtered by the 5 identity columns; for `department`/`employee` scope, returns deleted count.
+- On success → invalidate `['org-kpi-values']`, `['org-kpi-value']`, `['org-level-kpis-with-employees']`.
+- On error → toast (reuse existing pattern in `useDeleteOrgKpiValue`).
+
+**2. Wire prop into `OrgKpiEntryCard`** (`src/components/admin/OrgKpiEntryCard.tsx`)
+- Add optional `onClearEntry?: () => Promise<void>` prop.
+- Render a new button between **Unlock** and **Remove from Org KPIs** in the admin action row (~line 614–760), gated by `isAdmin && data.status === 'entered' && !governanceLocked`.
+- Use `Eraser` icon from `lucide-react`, label **"Clear Entry"**, wrapped in `AlertDialog` with body:
+  > "This will permanently remove the entered value, remarks, evidence and N/A flag for this KPI in {period} {year}. The KPI returns to Pending. This action cannot be undone."
+- On confirm → call `onClearEntry`, then locally reset `achievedValue`, `remarks`, `evidenceUrl`, `isNa`, `scopedValues` to empty.
+
+**3. Wire handler in `OrgKpiDataEntry.tsx`** (~line 1499 area, alongside `onRemoveFromOrg`)
+- Call the new hook; on success, also write a row via `insertAuditLogs` with `action: 'cleared'` (matching the existing `unlocked` audit pattern at line 1456–1465) and show toast `"Entry cleared — KPI back to Pending"`.
+
+**4. RLS / security**
+- Existing RLS on `org_kpi_values` already gates DELETE to admins / owners; no policy changes needed. Confirm by reading the table policy before merging.
+
+**5. Audit + Documentation**
+- Update `DOCUMENTATION.md` Org KPI section + version-history entry: "Admin Clear Entry on Org KPI Data Entry cards (state: entered)".
+- No `POLICY.md` change — this is an admin-recovery action, not a policy shift.
 
 ## Risk & Impact Report
 
-**Data Impact**
-- No schema or RLS change required.
-- No historical data will be modified by this fix.
-- Step-back execution will still use the existing audit log and cascade-clear behavior.
+- **Data Impact:** Deletes rows in `org_kpi_values` only for non-propagated entries. No FK cascades into `kpis`/`kpi_data`. Audit log preserves the deletion.
+- **Workflow Impact:** None for end users — only the admin's reset path changes. Propagated/approved flows untouched.
+- **UI/UX:** Adds one button to an already-existing admin button row; matches existing destructive-action dialog pattern (per the `Destructive Action Governance` memory).
+- **Regression Risk:** Low. New hook is isolated; visibility guard prevents accidental use on propagated rows. Card local-state reset prevents stale optimistic UI.
+- **Mitigation:** AlertDialog confirmation + status-gated visibility + audit log + governance-lock check.
 
-**Workflow Impact**
-- Only the admin Step Back target-selection UI changes.
-- It will become stricter: the target dropdown will wait until the period workflow and persisted score stages have loaded.
-- For the reported March 2026 case, target should become `Audit Review`, not `HR PMS Review`.
+## Out of scope (for future)
 
-**UI/UX Impact**
-- The dialog may show a short “resolving target stages” state before enabling the dropdown.
-- Target labels will be clearer, including a small note when a stage is available because it has recorded data.
+- Per-row Clear inside the scoped employee/department table (would require row-level delete UI in `OrgKpiScopedEntryTable`).
+- Bulk Clear across multiple KPIs at once.
 
-**Regression Risk**
-- Medium, because step-back target selection touches approved KPI correction workflows and sibling reset behavior.
-- Low database risk because this is UI/helper logic only.
-
-**Mitigation Plan**
-- Centralize default-target selection from the already-computed target list instead of mixing `previousStatus`, `dataAwareDefault`, and fallback values.
-- Add regression tests for the exact Amol data shape: period workflow excludes HR PMS and includes Audit, `auditor_score = 0`, current status `approved`.
-- Update `POLICY.md`, `DOCUMENTATION.md`, and memory to record the stricter “do not render stale target list” rule.
-
-## Implementation Plan
-
-1. **Make Step Back target resolution atomic**
-   - In `AdminStatusStepBackDialog.tsx`, derive one canonical `resolvedDefaultTarget` from `availableTargets` after both queries finish.
-   - Stop using `previousStatus` as an independent Select fallback when `availableTargets` already has a data-aware target.
-   - If the exact current KPI has `auditor_score = 0`, ensure `audit` is considered data-bearing because the code already checks `!== null`, not truthiness.
-
-2. **Prevent stale workflow dropdown display**
-   - Add a loading state while the workflow query or data-bearing-stage query is pending.
-   - Disable the Select and Confirm button until target stages are resolved.
-   - Reset `selectedTarget` when the dialog opens for a new KPI or when the computed default changes, so hard refresh/cached React state cannot retain `HR PMS Review`.
-
-3. **Prefer the computed target list for default selection**
-   - Add a helper such as `getPreferredStepBackTarget(currentStatus, targets, dataBearingStages)` in `useAdminDataEntry.ts`.
-   - Preference order:
-     1. Nearest prior data-bearing stage present in `availableTargets`
-     2. Nearest prior workflow stage present in `availableTargets`
-     3. `kra_set`
-   - This avoids a mismatch where dropdown options and selected value are calculated by different rules.
-
-4. **Pass known workflow stages through the review panel path where available**
-   - Update `KpiHeaderSection` props to accept `workflowStages`.
-   - Pass `workflowStages` from `KpiReviewPanel` into `KpiHeaderSection`, then into `AdminStatusStepBackDialog`.
-   - Keep the dialog’s own period-aware RPC as fallback for pages like `AllKpis`.
-
-5. **Improve admin diagnostics in the dialog**
-   - Add a small note showing the resolved basis, e.g. `Workflow for March 2026` and `Audit Review included from recorded score`.
-   - Keep `(historic)` only for stages present due to data but absent from the resolved period workflow.
-
-6. **Regression tests and mock coverage**
-   - Extend `src/test/stepBackTargetComposition.test.ts` with the exact failing shape:
-     - Workflow: `kra_set, self_review, manager_check, audit, approved`
-     - Data-bearing: `self_review, manager_check, audit`
-     - Current: `approved`
-     - Expected default: `audit`
-     - Expected excluded targets: `skip_level_check`, `hr_pms_review`
-   - Add a test for loading/stale-state behavior at helper level by ensuring defaults are derived only from final target composition.
-
-7. **Documentation and policy sync**
-   - Update `POLICY.md §117` to add: target dropdown must not render or enable stale fallback stages while period/data-bearing resolution is still loading.
-   - Update `DOCUMENTATION.md` Version History with the RCA and fix.
-   - Update `mem/features/admin/workflow-resilient-status-stepback` with the stricter default/anti-stale rule.
-
-## Expected Result
-
-After implementation, for Amol’s March 2026 approved KPI:
-
-- The dropdown will show `KRA Set`, `Self Review`, `Manager Review`, and `Audit Review`.
-- It will **not** show `Skip-level Review` or `HR PMS Review` for that period.
-- The default selected target will be **Audit Review**.
-- Confirming step-back will move the KPI from `Approved` back to `Audit Review`, preserving earlier Self/Manager data and clearing only downstream approved/final fields according to existing step-back policy.
+Reply **approve** to switch to build mode and implement.

@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKraCategories, useDepartments, useProfiles } from '@/hooks/useOrganization';
-import { useOrgKpiValues, useBulkUpsertOrgKpiValues, OrgKpiValue } from '@/hooks/useOrgKpiValues';
+import { useOrgKpiValues, useBulkUpsertOrgKpiValues, useClearOrgKpiEntry, OrgKpiValue } from '@/hooks/useOrgKpiValues';
 import { useOrgLevelKpisWithEmployees, useOrgLevelKpis } from '@/hooks/useOrgLevelKpis';
 import { useOrgKpiOwnershipMap } from '@/hooks/useOrgKpiDataOwner';
 import { useUnmarkAsOrgLevel } from '@/hooks/useMarkAsOrgLevel';
@@ -117,6 +117,7 @@ export default function OrgKpiDataEntry() {
   const bulkUpsert = useBulkUpsertOrgKpiValues();
   const propagate = usePropagateOrgKpiValue();
   const previewPropagation = usePreviewOrgKpiPropagation();
+  const clearEntry = useClearOrgKpiEntry();
 
   // Phase A4 — pre-flight propagation preview state
   const [previewState, setPreviewState] = useState<{
@@ -1505,6 +1506,26 @@ export default function OrgKpiDataEntry() {
                           reviewYear: selectedYear,
                         });
                         toast({ title: `"${kpi.kpi_name}" removed from Org KPIs` });
+                      } : undefined}
+                      onClearEntry={isAdmin ? async () => {
+                        await clearEntry.mutateAsync({
+                          categoryId: kpi.category_id,
+                          kraName: kpi.kra_name,
+                          kpiName: kpi.kpi_name,
+                          reviewPeriod: selectedPeriod,
+                          reviewYear: selectedYear,
+                        });
+                        try {
+                          await insertAuditLogs.mutateAsync([{
+                            category_id: kpi.category_id,
+                            kra_name: kpi.kra_name,
+                            kpi_name: kpi.kpi_name,
+                            review_period: selectedPeriod,
+                            review_year: selectedYear,
+                            action: 'cleared',
+                            performed_by: profile?.id || '',
+                          }]);
+                        } catch { /* non-blocking */ }
                       } : undefined}
                     />
                   );

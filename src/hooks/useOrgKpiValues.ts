@@ -379,6 +379,51 @@ export function useDeleteOrgKpiValue() {
   });
 }
 
+/**
+ * Admin-only: Clear the entered value(s) for an Org KPI definition in a given period,
+ * regardless of scope (organization/department/employee). Removes ALL org_kpi_values
+ * rows matching (category, kra, kpi, period, year). Used to reset a KPI from
+ * "Value Entered" back to "Pending" without touching propagated child KPIs.
+ */
+export function useClearOrgKpiEntry() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (params: {
+      categoryId: string;
+      kraName: string;
+      kpiName: string;
+      reviewPeriod: string;
+      reviewYear: number;
+    }) => {
+      const { error, count } = await supabase
+        .from('org_kpi_values')
+        .delete({ count: 'exact' })
+        .eq('category_id', params.categoryId)
+        .eq('kra_name', params.kraName)
+        .eq('kpi_name', params.kpiName)
+        .eq('review_period', params.reviewPeriod)
+        .eq('review_year', params.reviewYear);
+
+      if (error) throw error;
+      return { deleted: count ?? 0 };
+    },
+    onSuccess: ({ deleted }) => {
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-value'] });
+      queryClient.invalidateQueries({ queryKey: ['org-level-kpis-with-employees'] });
+      toast({
+        title: 'Entry cleared',
+        description: `${deleted} row${deleted === 1 ? '' : 's'} removed — KPI back to Pending.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to clear entry', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
 // Hook to get org-level categories
 export function useOrgLevelCategories() {
   return useQuery({
