@@ -743,6 +743,71 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                 </AlertDialogContent>
               </AlertDialog>
             )}
+            {isAdmin && data.status === 'entered' && !governanceLocked && onClearEntry && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1 border-amber-500/50 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950"
+                    disabled={isClearing}
+                  >
+                    {isClearing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eraser className="h-3.5 w-3.5" />}
+                    Clear Entry
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Clear entered value?</AlertDialogTitle>
+                    <AlertDialogDescription asChild>
+                      <div className="space-y-2">
+                        <p>
+                          This will permanently remove the entered value, remarks, evidence and N/A flag for{' '}
+                          <strong>"{data.kpiName}"</strong> in <strong>{reviewPeriod} {reviewYear}</strong>.
+                        </p>
+                        <p className="text-amber-700 dark:text-amber-400 font-medium">
+                          The KPI returns to <strong>Pending</strong>. This action cannot be undone.
+                        </p>
+                      </div>
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      disabled={isClearing}
+                      className="bg-amber-600 text-white hover:bg-amber-700"
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        setIsClearing(true);
+                        try {
+                          await onClearEntry();
+                          // Reset local card state
+                          setAchievedValue('');
+                          setRemarks('');
+                          setEvidenceUrl(null);
+                          setIsNa(false);
+                          setNaRemarks('');
+                          setScopedValues(prev => prev.map(r => ({
+                            ...r,
+                            achievedValue: null,
+                            remarks: '',
+                            evidenceUrl: null,
+                            isNa: false,
+                          })));
+                          isDirtyRef.current = false;
+                          setSaveStatus('idle');
+                        } finally {
+                          setIsClearing(false);
+                        }
+                      }}
+                    >
+                      {isClearing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                      Confirm Clear
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
             {isAdmin && !isPropagated && onRemoveFromOrg && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
