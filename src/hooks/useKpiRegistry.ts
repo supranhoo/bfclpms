@@ -122,11 +122,13 @@ export function useScanDuplicates() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  const scan = useCallback(async () => {
+  const scan = useCallback(async (includeSkipped: boolean = false) => {
     setLoading(true);
     try {
       // Find KPI signatures that have multiple KRA name variants
-      const { data, error } = await supabase.rpc('scan_kpi_duplicate_groups' as any);
+      const { data, error } = await supabase.rpc('scan_kpi_duplicate_groups' as any, {
+        p_include_skipped: includeSkipped,
+      });
       if (error) throw error;
       // Defensive client-side de-dup: even if a stale/buggy server function
       // ever returns duplicated variants again, the UI must not show them.
