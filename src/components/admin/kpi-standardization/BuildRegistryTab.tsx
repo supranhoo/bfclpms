@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Loader2, ScanSearch, CheckCircle2, Search, Eye, Pencil, Ban, RotateCcw, Split } from 'lucide-react';
+import { Loader2, ScanSearch, CheckCircle2, Search, Eye, Pencil, Ban, RotateCcw, Split, ChevronDown, ChevronUp } from 'lucide-react';
 import { useScanDuplicates, useBuildRegistry, useScannerSkips, DuplicateGroup } from '@/hooks/useKpiRegistry';
 import { useToast } from '@/hooks/use-toast';
 import { AffectedKpisTable } from './AffectedKpisTable';
@@ -48,6 +48,11 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
   const [editingByBucket, setEditingByBucket] = useState<Record<string, Record<BucketId, boolean>>>({});
   const [drillIn, setDrillIn] = useState<Record<string, number | null>>({});
   const [processedGroups, setProcessedGroups] = useState<Set<string>>(new Set());
+  // Per-group "title expanded" toggles + per-group, per-variant "kpi expanded" toggles.
+  // Lets admins read the full KPI text inline without leaving the scan results.
+  const [expandedTitles, setExpandedTitles] = useState<Record<string, boolean>>({});
+  const [expandedVariants, setExpandedVariants] = useState<Record<string, Record<number, boolean>>>({});
+  const [expandedCanonical, setExpandedCanonical] = useState<Record<string, Record<string, boolean>>>({});
   const [skipTarget, setSkipTarget] = useState<DuplicateGroup | null>(null);
   const [skipReason, setSkipReason] = useState('');
   const { toast } = useToast();
@@ -246,11 +251,27 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
             className={`border-l-4 ${isSkipped ? 'border-l-muted-foreground opacity-60' : 'border-l-amber-500'}`}
           >
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-sm font-medium">
-                    {group.normalized_kpi.slice(0, 100)}...
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <CardTitle
+                    className={`text-sm font-medium break-words ${expandedTitles[key] ? '' : 'line-clamp-2'}`}
+                    title={group.normalized_kpi}
+                  >
+                    {group.normalized_kpi}
                   </CardTitle>
+                  {group.normalized_kpi.length > 100 && (
+                    <button
+                      type="button"
+                      className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                      onClick={() => setExpandedTitles(prev => ({ ...prev, [key]: !prev[key] }))}
+                    >
+                      {expandedTitles[key] ? (
+                        <><ChevronUp className="h-3 w-3" />Show less</>
+                      ) : (
+                        <><ChevronDown className="h-3 w-3" />Show full KPI</>
+                      )}
+                    </button>
+                  )}
                   <div className="flex gap-2 mt-1">
                     <Badge variant="outline">{group.category_name}</Badge>
                     {group.has_fuzzy && (
@@ -336,9 +357,28 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
                       </div>
                       <div className="flex-1">
                         <div className="font-medium text-sm">{variant.kra_name}</div>
-                        <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                          {variant.kpi_name.slice(0, 150)}
+                        <div
+                          className={`text-xs text-muted-foreground mt-0.5 break-words ${expandedVariants[key]?.[idx] ? '' : 'line-clamp-2'}`}
+                          title={variant.kpi_name}
+                        >
+                          {variant.kpi_name}
                         </div>
+                        {variant.kpi_name.length > 150 && (
+                          <button
+                            type="button"
+                            className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                            onClick={() => setExpandedVariants(prev => ({
+                              ...prev,
+                              [key]: { ...(prev[key] ?? {}), [idx]: !prev[key]?.[idx] },
+                            }))}
+                          >
+                            {expandedVariants[key]?.[idx] ? (
+                              <><ChevronUp className="h-3 w-3" />Show less</>
+                            ) : (
+                              <><ChevronDown className="h-3 w-3" />Show full KPI</>
+                            )}
+                          </button>
+                        )}
                         <div className="flex gap-2 mt-1 flex-wrap">
                           <Badge variant="secondary" className="text-xs">{variant.employee_count} employees</Badge>
                           <Badge variant="outline" className="text-xs">{variant.row_count} rows</Badge>
@@ -433,8 +473,29 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
                       </div>
                     ) : (
                       <div className="text-xs">
-                        <div className="font-medium">{kra}</div>
-                        <div className="text-muted-foreground line-clamp-2">{kpi}</div>
+                        <div className="font-medium break-words">{kra}</div>
+                        <div
+                          className={`text-muted-foreground break-words ${expandedCanonical[key]?.[b.bucketId] ? '' : 'line-clamp-2'}`}
+                          title={kpi}
+                        >
+                          {kpi}
+                        </div>
+                        {kpi && kpi.length > 150 && (
+                          <button
+                            type="button"
+                            className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                            onClick={() => setExpandedCanonical(prev => ({
+                              ...prev,
+                              [key]: { ...(prev[key] ?? {}), [b.bucketId]: !prev[key]?.[b.bucketId] },
+                            }))}
+                          >
+                            {expandedCanonical[key]?.[b.bucketId] ? (
+                              <><ChevronUp className="h-3 w-3" />Show less</>
+                            ) : (
+                              <><ChevronDown className="h-3 w-3" />Show full KPI</>
+                            )}
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
