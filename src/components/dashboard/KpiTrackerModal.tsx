@@ -7,6 +7,11 @@ import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } f
 import { ChevronDown, ChevronRight, MessageSquare } from 'lucide-react';
 import type { KPI, ReviewSubmission } from '@/hooks/useKpis';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
+import {
+  useCanonicalVariantPairs,
+  matchesCanonicalKpi,
+  preferredVariantRow,
+} from '@/lib/canonicalRelatedKpis';
 
 interface KpiTrackerModalProps {
   isOpen: boolean;
@@ -125,20 +130,35 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions, wo
   const activeStages = workflowStages || DEFAULT_STAGES;
   const scoreColumns = useMemo(() => buildScoreColumns(activeStages), [activeStages]);
 
+  // Canonical-aware sibling resolution. See POLICY §88I and
+  // src/lib/canonicalRelatedKpis.ts.
+  const { data: variantPairs = [] } = useCanonicalVariantPairs(kpi);
+
   const monthlyData = useMemo(() => {
     if (!kpi) return [];
-    
-    const relatedKpis = allKpis.filter(k => 
-      k.employee_id === kpi.employee_id &&
-      k.kpi_name === kpi.kpi_name &&
-      k.kra_name === kpi.kra_name
+
+    const relatedKpis = allKpis.filter(k =>
+      matchesCanonicalKpi(k, kpi, variantPairs),
+    );
+
+    // When two alias rows exist for the same period, prefer canonical →
+    // current row → first.
+    const byPeriod = new Map<string, typeof relatedKpis>();
+    for (const k of relatedKpis) {
+      const key = `${k.review_period}-${k.review_year}`;
+      const arr = byPeriod.get(key) ?? [];
+      arr.push(k);
+      byPeriod.set(key, arr);
+    }
+    const dedupedKpis = Array.from(byPeriod.values()).map(rows =>
+      preferredVariantRow(rows, variantPairs, kpi.id),
     );
 
     const submissionMap = new Map(submissions.map(s => [s.kpi_id, s]));
 
     const periodMap = new Map<string, MonthEntry>();
 
-    relatedKpis.forEach(k => {
+    dedupedKpis.forEach(k => {
       const periodKey = `${k.review_period}-${k.review_year}`;
       if (!periodMap.has(periodKey)) {
         const sub = submissionMap.get(k.id);
@@ -167,7 +187,7 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions, wo
       if (a.year !== b.year) return a.year - b.year;
       return getMonthSortIndex(a.month) - getMonthSortIndex(b.month);
     });
-  }, [kpi, allKpis, submissions, activeStages]);
+  }, [kpi, allKpis, submissions, activeStages, variantPairs]);
 
   const toggleRow = (idx: number) => {
     setExpandedRows(prev => {
