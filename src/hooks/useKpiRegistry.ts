@@ -68,8 +68,14 @@ export interface DuplicateGroup {
     kpi_name: string;
     employee_count: number;
     row_count: number;
+    /** 'exact' = name matches the cluster representative; 'fuzzy' = trigram-matched. */
+    match_type?: 'exact' | 'fuzzy';
+    /** Trigram similarity to the cluster representative (1.0 for the representative itself). */
+    similarity?: number;
   }[];
   is_skipped?: boolean;
+  /** True when at least one variant in the group is a fuzzy match. */
+  has_fuzzy?: boolean;
 }
 
 export interface UnmatchedMayKpi {
@@ -123,12 +129,16 @@ export function useScanDuplicates() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  const scan = useCallback(async (includeSkipped: boolean = false) => {
+  const scan = useCallback(async (
+    includeSkipped: boolean = false,
+    fuzzyThreshold: number = 0.55,
+  ) => {
     setLoading(true);
     try {
       // Find KPI signatures that have multiple KRA name variants
       const { data, error } = await supabase.rpc('scan_kpi_duplicate_groups' as any, {
         p_include_skipped: includeSkipped,
+        p_fuzzy_threshold: fuzzyThreshold,
       });
       if (error) throw error;
       // Defensive client-side de-dup: even if a stale/buggy server function
