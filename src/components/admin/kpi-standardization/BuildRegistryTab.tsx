@@ -332,7 +332,9 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
 
       <ConfirmDestructiveDialog
         open={!!skipTarget}
-        onOpenChange={(o) => { if (!o) { setSkipTarget(null); setSkipReason(''); } }}
+        onCancel={() => { setSkipTarget(null); setSkipReason(''); }}
+        onConfirm={confirmSkip}
+        isLoading={skipSaving}
         title="Skip this group from the scanner?"
         description={
           skipTarget
@@ -340,19 +342,7 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
             : ''
         }
         confirmLabel="Skip group"
-        onConfirm={confirmSkip}
-      >
-        <div className="space-y-2">
-          <Label htmlFor="skip-reason" className="text-xs">Reason (optional)</Label>
-          <Textarea
-            id="skip-reason"
-            value={skipReason}
-            onChange={(e) => setSkipReason(e.target.value)}
-            placeholder="e.g. These are genuinely different KPIs that share similar wording."
-            rows={2}
-          />
-        </div>
-      </ConfirmDestructiveDialog>
+      />
     </div>
   );
 }
