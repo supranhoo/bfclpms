@@ -69,6 +69,7 @@ export interface DuplicateGroup {
     employee_count: number;
     row_count: number;
   }[];
+  is_skipped?: boolean;
 }
 
 export interface UnmatchedMayKpi {
@@ -122,11 +123,13 @@ export function useScanDuplicates() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  const scan = useCallback(async () => {
+  const scan = useCallback(async (includeSkipped: boolean = false) => {
     setLoading(true);
     try {
       // Find KPI signatures that have multiple KRA name variants
-      const { data, error } = await supabase.rpc('scan_kpi_duplicate_groups' as any);
+      const { data, error } = await supabase.rpc('scan_kpi_duplicate_groups' as any, {
+        p_include_skipped: includeSkipped,
+      });
       if (error) throw error;
       // Defensive client-side de-dup: even if a stale/buggy server function
       // ever returns duplicated variants again, the UI must not show them.
@@ -464,7 +467,15 @@ export function useDeleteDefinition() {
 
 export interface StandardizationAction {
   id: string;
-  action_type: 'create_definition'|'link_alias'|'rename_kpis'|'delete_definition'|'edit_definition'|'unlink_alias';
+  action_type:
+    | 'create_definition'
+    | 'link_alias'
+    | 'rename_kpis'
+    | 'delete_definition'
+    | 'edit_definition'
+    | 'unlink_alias'
+    | 'skip_group'
+    | 'unskip_group';
   definition_id: string | null;
   category_id: string | null;
   payload: any;
@@ -473,6 +484,115 @@ export interface StandardizationAction {
   performed_at: string;
   reversed_at: string | null;
   reversed_by: string | null;
+}
+
+/**
+ * Persistent "Don't Merge" list for the duplicate scanner. Admin-only.
+ * Skipping a group hides it from `scan_kpi_duplicate_groups` until it is
+ * un-skipped or surfaced via the "Include skipped" toggle.
+ */
+export interface ScannerSkip {
+  id: string;
+  category_id: string;
+  normalized_kpi: string;
+  skipped_by: string | null;
+  skipped_at: string;
+  reason: string | null;
+}
+
+export function useScannerSkips() {
+  const { toast } = useToast();
+  const [data, setData] = useState<ScannerSkip[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const refetch = useCallback(async () => {
+    setLoading(true);
+    const { data: rows, error } = await supabase
+      .from('kpi_scanner_skips' as any)
+      .select('*')
+      .order('skipped_at', { ascending: false });
+    if (!error && rows) setData(rows as any as ScannerSkip[]);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { refetch(); }, [refetch]);
+
+  const skipGroup = useCallback(async (
+    categoryId: string,
+    normalizedKpi: string,
+    reason: string | null,
+  ) => {
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('kpi_scanner_skips' as any)
+        .insert({
+          category_id: categoryId,
+          normalized_kpi: normalizedKpi,
+          reason: reason?.trim() || null,
+        } as any);
+      if (error && (error as any).code !== '23505') throw error;
+      try {
+        await supabase.rpc('log_standardization_action' as any, {
+          p_action_type: 'skip_group',
+          p_definition_id: null,
+          p_category_id: categoryId,
+          p_payload: { category_id: categoryId, normalized_kpi: normalizedKpi, reason },
+          p_affected_row_count: 1,
+        });
+      } catch (logErr) {
+        console.warn('[standardization] skip log failed', logErr);
+      }
+      toast({
+        title: 'Group skipped',
+        description: 'Restore from History & Undo or toggle "Include skipped".',
+      });
+      await refetch();
+      return true;
+    } catch (err: any) {
+      toast({ title: 'Skip failed', description: err.message, variant: 'destructive' });
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }, [refetch, toast]);
+
+  const unskipGroup = useCallback(async (
+    categoryId: string,
+    normalizedKpi: string,
+  ) => {
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('kpi_scanner_skips' as any)
+        .delete()
+        .eq('category_id', categoryId)
+        .eq('normalized_kpi', normalizedKpi);
+      if (error) throw error;
+      try {
+        await supabase.rpc('log_standardization_action' as any, {
+          p_action_type: 'unskip_group',
+          p_definition_id: null,
+          p_category_id: categoryId,
+          p_payload: { category_id: categoryId, normalized_kpi: normalizedKpi },
+          p_affected_row_count: 1,
+        });
+      } catch (logErr) {
+        console.warn('[standardization] unskip log failed', logErr);
+      }
+      toast({ title: 'Group restored to scanner' });
+      await refetch();
+      return true;
+    } catch (err: any) {
+      toast({ title: 'Un-skip failed', description: err.message, variant: 'destructive' });
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }, [refetch, toast]);
+
+  return { data, loading, saving, refetch, skipGroup, unskipGroup };
 }
 
 export function useStandardizationHistory(limit: number = 200) {

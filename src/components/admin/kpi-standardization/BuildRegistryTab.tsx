@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -6,10 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Loader2, ScanSearch, CheckCircle2, Search, Eye, Pencil } from 'lucide-react';
-import { useScanDuplicates, useBuildRegistry, DuplicateGroup } from '@/hooks/useKpiRegistry';
+import { Switch } from '@/components/ui/switch';
+import { Loader2, ScanSearch, CheckCircle2, Search, Eye, Pencil, Ban, RotateCcw } from 'lucide-react';
+import { useScanDuplicates, useBuildRegistry, useScannerSkips, DuplicateGroup } from '@/hooks/useKpiRegistry';
 import { useToast } from '@/hooks/use-toast';
 import { AffectedKpisTable } from './AffectedKpisTable';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 interface Props {
   onRegistryUpdated: () => void;
@@ -18,14 +20,26 @@ interface Props {
 export function BuildRegistryTab({ onRegistryUpdated }: Props) {
   const { groups, loading: scanning, scan } = useScanDuplicates();
   const { createDefinitionWithAliases, saving } = useBuildRegistry();
+  const { skipGroup, unskipGroup, saving: skipSaving } = useScannerSkips();
   const [search, setSearch] = useState('');
+  const [includeSkipped, setIncludeSkipped] = useState(false);
   const [selections, setSelections] = useState<Record<string, number>>({});
   // Per-group canonical text overrides. Keyed by groupKey.
   const [canonicalOverrides, setCanonicalOverrides] = useState<Record<string, { kra: string; kpi: string }>>({});
   const [editingCanonical, setEditingCanonical] = useState<Record<string, boolean>>({});
   const [drillIn, setDrillIn] = useState<Record<string, number | null>>({});
   const [processedGroups, setProcessedGroups] = useState<Set<string>>(new Set());
+  const [skipTarget, setSkipTarget] = useState<DuplicateGroup | null>(null);
+  const [skipReason, setSkipReason] = useState('');
   const { toast } = useToast();
+
+  // Re-scan whenever the include-skipped toggle flips so admins see results immediately.
+  useEffect(() => {
+    if (groups.length > 0) {
+      scan(includeSkipped);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [includeSkipped]);
 
   const filteredGroups = useMemo(() => {
     if (!search.trim()) return groups;
@@ -37,7 +51,9 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
     );
   }, [groups, search]);
 
-  const pendingGroups = filteredGroups.filter(g => !processedGroups.has(groupKey(g)));
+  const visibleGroups = filteredGroups.filter(g => !processedGroups.has(groupKey(g)));
+  const skippedCount = filteredGroups.filter(g => g.is_skipped).length;
+  const pendingCount = visibleGroups.filter(g => !g.is_skipped).length;
 
   const handleApprove = async (group: DuplicateGroup) => {
     const key = groupKey(group);
@@ -64,6 +80,23 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
     }
   };
 
+  const confirmSkip = async () => {
+    if (!skipTarget) return;
+    const ok = await skipGroup(skipTarget.category_id, skipTarget.normalized_kpi, skipReason || null);
+    if (ok) {
+      setProcessedGroups(prev => new Set([...prev, groupKey(skipTarget)]));
+      setSkipTarget(null);
+      setSkipReason('');
+      // Refresh so the badge counts stay correct
+      scan(includeSkipped);
+    }
+  };
+
+  const handleUnskip = async (group: DuplicateGroup) => {
+    const ok = await unskipGroup(group.category_id, group.normalized_kpi);
+    if (ok) scan(includeSkipped);
+  };
+
   return (
     <div className="space-y-4">
       <Card>
@@ -74,20 +107,33 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
           </CardTitle>
           <CardDescription>
             Scan all KPIs to find groups where the same KPI appears under different KRA names.
-            Pick the canonical version for each group to create a registry entry.
+            Approve the canonical version, or click "Don't merge" to permanently skip a group.
+            Already-approved variants are hidden automatically.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-3">
-            <Button onClick={scan} disabled={scanning}>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={() => scan(includeSkipped)} disabled={scanning}>
               {scanning ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ScanSearch className="h-4 w-4 mr-2" />}
               {groups.length > 0 ? 'Re-scan' : 'Scan for Duplicates'}
             </Button>
             {groups.length > 0 && (
               <Badge variant="secondary">
-                {pendingGroups.length} pending / {groups.length} total groups
+                {pendingCount} pending
+                {skippedCount > 0 && ` / ${skippedCount} skipped`}
+                {' / '}{groups.length} total
               </Badge>
             )}
+            <div className="flex items-center gap-2 ml-auto">
+              <Switch
+                id="include-skipped"
+                checked={includeSkipped}
+                onCheckedChange={setIncludeSkipped}
+              />
+              <Label htmlFor="include-skipped" className="text-xs cursor-pointer">
+                Include skipped groups
+              </Label>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -104,7 +150,7 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
         </div>
       )}
 
-      {pendingGroups.map((group) => {
+      {visibleGroups.map((group) => {
         const key = groupKey(group);
         const selectedIdx = selections[key] ?? 0;
         const override = canonicalOverrides[key];
@@ -113,21 +159,34 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
         const canonicalKra = override?.kra ?? canonical?.kra_name ?? '';
         const canonicalKpi = override?.kpi ?? canonical?.kpi_name ?? '';
         const drillIdx = drillIn[key];
+        const isSkipped = !!group.is_skipped;
 
         return (
-          <Card key={key} className="border-l-4 border-l-amber-500">
+          <Card
+            key={key}
+            className={`border-l-4 ${isSkipped ? 'border-l-muted-foreground opacity-60' : 'border-l-amber-500'}`}
+          >
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-sm font-medium">
                     {group.normalized_kpi.slice(0, 100)}...
                   </CardTitle>
-                  <Badge variant="outline" className="mt-1">{group.category_name}</Badge>
+                  <div className="flex gap-2 mt-1">
+                    <Badge variant="outline">{group.category_name}</Badge>
+                    {isSkipped && <Badge variant="secondary">Skipped — won't show on next scan</Badge>}
+                  </div>
                 </div>
                 <Badge variant="destructive">{group.variants.length} variants</Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
+              {isSkipped ? (
+                <div className="text-xs text-muted-foreground p-3 border rounded-md bg-muted/30">
+                  This group has been marked "Don't Merge". It is hidden from regular scans.
+                  Use <strong>Restore</strong> below to bring it back, or undo from <em>History &amp; Undo</em>.
+                </div>
+              ) : (
               <RadioGroup
                 value={String(selectedIdx)}
                 onValueChange={v => {
@@ -174,7 +233,10 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
                   </div>
                 ))}
               </RadioGroup>
+              )}
 
+              {!isSkipped && (
+              <>
               <div className="border rounded-md p-3 bg-muted/30 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="text-xs font-medium">Canonical name (will be saved to registry)</div>
@@ -211,29 +273,55 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
                   </div>
                 )}
               </div>
+              </>
+              )}
 
-              <div className="flex justify-end pt-2">
-                <Button
-                  size="sm"
-                  onClick={() => handleApprove(group)}
-                  disabled={saving}
-                >
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <CheckCircle2 className="h-4 w-4 mr-1" />}
-                  Approve as Canonical
-                </Button>
+              <div className="flex justify-end gap-2 pt-2">
+                {isSkipped ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleUnskip(group)}
+                    disabled={skipSaving}
+                  >
+                    <RotateCcw className="h-4 w-4 mr-1" />
+                    Restore (un-skip)
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => { setSkipTarget(group); setSkipReason(''); }}
+                      disabled={skipSaving || saving}
+                    >
+                      <Ban className="h-4 w-4 mr-1" />
+                      Don't merge
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => handleApprove(group)}
+                      disabled={saving}
+                    >
+                      {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <CheckCircle2 className="h-4 w-4 mr-1" />}
+                      Approve as Canonical
+                    </Button>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
         );
       })}
 
-      {groups.length > 0 && pendingGroups.length === 0 && (
+      {groups.length > 0 && visibleGroups.length === 0 && (
         <Card className="border-l-4 border-l-green-500">
           <CardContent className="py-8 text-center">
             <CheckCircle2 className="h-8 w-8 text-green-500 mx-auto mb-2" />
             <p className="font-medium">All duplicate groups processed!</p>
             <p className="text-sm text-muted-foreground mt-1">
-              Switch to the Review Registry tab to see all canonical entries.
+              Approved entries appear in Review Registry. Skipped entries can be restored from History &amp; Undo
+              or by toggling "Include skipped" above.
             </p>
             <Button variant="outline" className="mt-3" onClick={onRegistryUpdated}>
               Go to Review Registry
@@ -241,6 +329,20 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
           </CardContent>
         </Card>
       )}
+
+      <ConfirmDestructiveDialog
+        open={!!skipTarget}
+        onCancel={() => { setSkipTarget(null); setSkipReason(''); }}
+        onConfirm={confirmSkip}
+        isLoading={skipSaving}
+        title="Skip this group from the scanner?"
+        description={
+          skipTarget
+            ? `"${skipTarget.normalized_kpi.slice(0, 120)}" will be hidden from future scans. This is reversible from History & Undo or by toggling "Include skipped".`
+            : ''
+        }
+        confirmLabel="Skip group"
+      />
     </div>
   );
 }

@@ -2675,6 +2675,41 @@ export type Database = {
           },
         ]
       }
+      kpi_scanner_skips: {
+        Row: {
+          category_id: string
+          id: string
+          normalized_kpi: string
+          reason: string | null
+          skipped_at: string
+          skipped_by: string | null
+        }
+        Insert: {
+          category_id: string
+          id?: string
+          normalized_kpi: string
+          reason?: string | null
+          skipped_at?: string
+          skipped_by?: string | null
+        }
+        Update: {
+          category_id?: string
+          id?: string
+          normalized_kpi?: string
+          reason?: string | null
+          skipped_at?: string
+          skipped_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kpi_scanner_skips_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "kra_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kpi_standardization_actions: {
         Row: {
           action_type: string
@@ -8288,7 +8323,10 @@ export type Database = {
         Returns: boolean
       }
       run_safety_sla_escalations: { Args: never; Returns: Json }
-      scan_kpi_duplicate_groups: { Args: never; Returns: Json }
+      scan_kpi_duplicate_groups: {
+        Args: { p_include_skipped?: boolean }
+        Returns: Json
+      }
       set_safety_setting: {
         Args: { p_description?: string; p_key: string; p_value: Json }
         Returns: Json
