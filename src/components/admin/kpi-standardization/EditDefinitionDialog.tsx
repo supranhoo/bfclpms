@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { useEditDefinition, KpiDefinition } from '@/hooks/useKpiRegistry';
 
@@ -19,20 +18,20 @@ export function EditDefinitionDialog({ open, onClose, definition, onSaved }: Pro
   const { editDefinition, saving } = useEditDefinition();
   const [kra, setKra] = useState('');
   const [kpi, setKpi] = useState('');
-  const [propagate, setPropagate] = useState<'registry' | 'propagate'>('registry');
 
   useEffect(() => {
     if (definition) {
       setKra(definition.canonical_kra_name);
       setKpi(definition.canonical_kpi_name);
-      setPropagate('registry');
     }
   }, [definition]);
 
   const handleSave = async () => {
     if (!definition) return;
     if (!kra.trim() || !kpi.trim()) return;
-    const ok = await editDefinition(definition.id, kra, kpi, propagate === 'propagate');
+    // Phase 5c: edits always propagate to May-2026+ linked rows. The flag
+    // is retained in the API for compatibility but is no longer user-tunable.
+    const ok = await editDefinition(definition.id, kra, kpi, true);
     if (ok) {
       onSaved?.();
       onClose();
@@ -47,8 +46,10 @@ export function EditDefinitionDialog({ open, onClose, definition, onSaved }: Pro
         <DialogHeader>
           <DialogTitle>Edit Canonical Definition</DialogTitle>
           <DialogDescription>
-            Rename the canonical KRA / KPI for this registry entry. You can also push the new
-            name down to current-period KPI rows that link to this definition.
+            Rename the canonical KRA / KPI for this registry entry. The new
+            text is always pushed down to every linked KPI row from May 2026
+            onward so it appears on the user dashboard immediately. Past data
+            (before May 2026) is never modified.
           </DialogDescription>
         </DialogHeader>
 
@@ -62,34 +63,14 @@ export function EditDefinitionDialog({ open, onClose, definition, onSaved }: Pro
             <Textarea value={kpi} onChange={e => setKpi(e.target.value)} maxLength={2000} rows={3} />
           </div>
 
-          <div className="space-y-2">
-            <Label>Propagation</Label>
-            <RadioGroup value={propagate} onValueChange={v => setPropagate(v as any)}>
-              <div className="flex items-start gap-2 p-2 rounded-md border">
-                <RadioGroupItem value="registry" id="prop-reg" className="mt-0.5" />
-                <Label htmlFor="prop-reg" className="cursor-pointer flex-1 font-normal">
-                  <div className="text-sm font-medium">Registry only</div>
-                  <div className="text-xs text-muted-foreground">Update the canonical name in the registry. KPI rows keep their current text.</div>
-                </Label>
-              </div>
-              <div className="flex items-start gap-2 p-2 rounded-md border">
-                <RadioGroupItem value="propagate" id="prop-all" className="mt-0.5" />
-                <Label htmlFor="prop-all" className="cursor-pointer flex-1 font-normal">
-                  <div className="text-sm font-medium">Registry + propagate to current KPIs</div>
-                  <div className="text-xs text-muted-foreground">
-                    Also rename every linked KPI from May 2026 onward. Past data is never changed.
-                  </div>
-                </Label>
-              </div>
-            </RadioGroup>
+          <div className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-md p-2">
+            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            <span>
+              Saving will overwrite KRA/KPI text on every linked row from
+              May 2026 onward and will reflect on the user dashboard. The
+              action is logged and can be undone from <strong>History &amp; Undo</strong>.
+            </span>
           </div>
-
-          {propagate === 'propagate' && (
-            <div className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-md p-2">
-              <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-              <span>This will overwrite KRA/KPI text on every linked row from May 2026 onward. The action will be logged and can be undone from <strong>History &amp; Undo</strong>.</span>
-            </div>
-          )}
         </div>
 
         <DialogFooter>
