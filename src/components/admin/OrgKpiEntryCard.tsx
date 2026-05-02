@@ -18,7 +18,7 @@ import { QualitativeSelect } from '@/components/review/QualitativeSelect';
 import { BINARY_OPTIONS, type QualitativeOption } from '@/lib/qualitativeUom';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle, RotateCcw, Trash2, Ban, Undo2, FileEdit, ShieldCheck, SlidersHorizontal } from 'lucide-react';
+import { Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle, RotateCcw, Trash2, Ban, Undo2, FileEdit, ShieldCheck, SlidersHorizontal, Eraser } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useSentBackOrgKpiEmployees, type SentBackInfo } from '@/hooks/useSentBackOrgKpiEmployees';
 import { isComplianceKpi, useBulkEmployeeSubmissionDates } from '@/hooks/useComplianceSubFactors';
@@ -88,6 +88,7 @@ interface OrgKpiEntryCardProps {
   onBulkRollback?: (reason: string) => Promise<void>;
   onOpenImpact: () => void;
   onRemoveFromOrg?: () => Promise<void>;
+  onClearEntry?: () => Promise<void>;
 }
 
 const statusConfig: Record<string, { label: string; icon: typeof Clock; variant: 'outline' | 'secondary' | 'default' | 'destructive'; className: string }> = {
@@ -105,13 +106,14 @@ const scopeIcons = {
   employee: User,
 };
 
-export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, governanceLocked, employeeKpiIds, sentBackMap, onSave, onSaveAndPropagate, onUnlock, onRollback, onBulkRollback, onOpenImpact, onRemoveFromOrg }: OrgKpiEntryCardProps) {
+export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, governanceLocked, employeeKpiIds, sentBackMap, onSave, onSaveAndPropagate, onUnlock, onRollback, onBulkRollback, onOpenImpact, onRemoveFromOrg, onClearEntry }: OrgKpiEntryCardProps) {
   const isLocked = (data.status === 'propagated' && !isAdmin) || (governanceLocked === true);
   const isPropagated = data.status === 'propagated';
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [isRollingBack, setIsRollingBack] = useState(false);
   const [isBulkRollingBack, setIsBulkRollingBack] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const [showOwnerDialog, setShowOwnerDialog] = useState(false);
   const [scopeChangeTarget, setScopeChangeTarget] = useState<'organization' | 'department' | 'employee' | null>(null);
   const [rollbackReason, setRollbackReason] = useState('');
