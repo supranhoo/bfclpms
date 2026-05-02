@@ -33,7 +33,8 @@ function applySkipFilter<T extends { category_id: string; normalized_kpi: string
 }
 
 describe('scanner skip filter (mirrors SQL contract)', () => {
-  const groups = [
+  type G = { category_id: string; normalized_kpi: string; variants: unknown[]; is_skipped?: boolean };
+  const groups: G[] = [
     { category_id: 'c1', normalized_kpi: 'control dust emission', variants: [] },
     { category_id: 'c1', normalized_kpi: 'time on task',           variants: [] },
     { category_id: 'c2', normalized_kpi: 'control dust emission', variants: [] },
