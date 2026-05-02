@@ -310,10 +310,16 @@ export function AdminStatusStepBackDialog({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={!reason.trim() || stepBackMutation.isPending}
+            disabled={!reason.trim() || stepBackMutation.isPending || isResolving}
             variant={fullReset ? 'destructive' : 'default'}
           >
-            {stepBackMutation.isPending ? 'Processing...' : fullReset ? 'Confirm Full Reset' : 'Confirm Step Back'}
+            {stepBackMutation.isPending
+              ? 'Processing...'
+              : isResolving
+              ? 'Resolving…'
+              : fullReset
+              ? 'Confirm Full Reset'
+              : 'Confirm Step Back'}
           </Button>
         </DialogFooter>
       </DialogContent>
