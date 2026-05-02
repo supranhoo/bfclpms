@@ -44,6 +44,12 @@ The KPI Standardization tooling at `/admin/kpi-standardization` (7 tabs) governs
 - Pre-May-2026 data is frozen everywhere. Even propagation skips it client-side; DB function rejects it anyway.
 - The Registry Browser at `/registry` and `get_public_registry_view` remain read-only and never expose per-employee data.
 
+## Phase 5c — Edit-always-propagates + retroactive link backfill (May 2026)
+- `useEditDefinition` ALWAYS rewrites May-2026+ linked rows' `kra_name`/`kpi_name` columns. The `propagate` argument is kept for API compatibility but is not user-tunable; `EditDefinitionDialog` no longer shows the registry-only / propagate radio.
+- `KpiHeaderSection` (the "View KPI Details" panel header) prefers `canonicalPair(variantPairs)` over the literal row text. This guarantees admin renames surface immediately on the user dashboard even before propagation finishes or for rows whose text columns lag.
+- A one-shot SQL migration retroactively sets `kpis.kpi_definition_id` for May-2026+ rows whose `(category_id, kra_name, kpi_name)` matches a canonical or alias pair. Pre-May-2026 rows are excluded. Logged in `kpi_standardization_actions` as `backfill_definition_links` (new allowed action_type, append-only).
+- The `kpi_standardization_actions_action_type_check` constraint now also allows `skip_group`, `unskip_group`, and `backfill_definition_links` (the first two were already produced by `useScannerSkips` but had been missing from the constraint).
+
 ## Canonical-aware consumers (cross-period UI)
 Any UI that aggregates a single KPI across periods MUST resolve sibling rows via canonical definition + aliases — strict `kpi_name`/`kra_name` equality silently drops alias-renamed historical months. Use the shared helper `src/lib/canonicalRelatedKpis.ts`:
 - `useCanonicalVariantPairs(kpi)` → React Query hook returning `[{kra_name, kpi_name}, …]` (canonical first, then aliases). Empty array when KPI is unregistered.
