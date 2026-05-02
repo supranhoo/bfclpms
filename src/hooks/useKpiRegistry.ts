@@ -163,7 +163,8 @@ export function useBuildRegistry() {
     canonicalKra: string,
     canonicalKpi: string,
     categoryId: string,
-    variants: { kra_name: string; kpi_name: string }[]
+    variants: { kra_name: string; kpi_name: string }[],
+    options: { silent?: boolean } = {},
   ) => {
     setSaving(true);
     try {
@@ -282,7 +283,7 @@ export function useBuildRegistry() {
         console.warn('[standardization] action log failed', logErr);
       }
 
-      toast({
+      if (!options.silent) toast({
         title: reused ? 'Linked to existing canonical entry' : 'Registry entry created',
         description:
           inserted === 0
@@ -291,7 +292,7 @@ export function useBuildRegistry() {
       });
       return defId;
     } catch (err: any) {
-      toast({ title: 'Failed to create', description: err.message, variant: 'destructive' });
+      if (!options.silent) toast({ title: 'Failed to create', description: err.message, variant: 'destructive' });
       return null;
     } finally {
       setSaving(false);
