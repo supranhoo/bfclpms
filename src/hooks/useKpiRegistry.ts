@@ -69,6 +69,7 @@ export interface DuplicateGroup {
     employee_count: number;
     row_count: number;
   }[];
+  is_skipped?: boolean;
 }
 
 export interface UnmatchedMayKpi {
