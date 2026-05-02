@@ -389,6 +389,11 @@ export function useClearOrgKpiEntry() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  // Mirror of the normalizer used in src/hooks/useOrgLevelKpis.ts so a card
+  // built from de-duplicated definitions can match every underlying variant
+  // string in org_kpi_values (whitespace, dashes, "%" drift in long names).
+  const nk = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+
   return useMutation({
     mutationFn: async (params: {
       categoryId: string;
@@ -397,22 +402,55 @@ export function useClearOrgKpiEntry() {
       reviewPeriod: string;
       reviewYear: number;
     }) => {
+      // Step 1 — collect every kpi_name variant in this category/KRA/period
+      // whose normalized form matches the card's name.
+      const { data: variantRows, error: lookupErr } = await supabase
+        .from('org_kpi_values')
+        .select('kpi_name')
+        .eq('category_id', params.categoryId)
+        .eq('kra_name', params.kraName)
+        .eq('review_period', params.reviewPeriod)
+        .eq('review_year', params.reviewYear);
+
+      if (lookupErr) throw lookupErr;
+
+      const targetKey = nk(params.kpiName);
+      const variantNames = Array.from(
+        new Set(
+          (variantRows ?? [])
+            .map(r => r.kpi_name as string)
+            .filter(name => nk(name) === targetKey)
+        )
+      );
+
+      if (variantNames.length === 0) {
+        return { deleted: 0, matched: false };
+      }
+
+      // Step 2 — delete every matching variant in one shot.
       const { error, count } = await supabase
         .from('org_kpi_values')
         .delete({ count: 'exact' })
         .eq('category_id', params.categoryId)
         .eq('kra_name', params.kraName)
-        .eq('kpi_name', params.kpiName)
+        .in('kpi_name', variantNames)
         .eq('review_period', params.reviewPeriod)
         .eq('review_year', params.reviewYear);
 
       if (error) throw error;
-      return { deleted: count ?? 0 };
+      return { deleted: count ?? 0, matched: true };
     },
-    onSuccess: ({ deleted }) => {
+    onSuccess: ({ deleted, matched }) => {
       queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
       queryClient.invalidateQueries({ queryKey: ['org-kpi-value'] });
       queryClient.invalidateQueries({ queryKey: ['org-level-kpis-with-employees'] });
+      if (!matched) {
+        toast({
+          title: 'Nothing to clear',
+          description: 'No entered values were found for this KPI in this period.',
+        });
+        return;
+      }
       toast({
         title: 'Entry cleared',
         description: `${deleted} row${deleted === 1 ? '' : 's'} removed — KPI back to Pending.`,
