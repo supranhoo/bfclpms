@@ -359,7 +359,13 @@ export function useEditDefinition() {
     definitionId: string,
     newKra: string,
     newKpi: string,
-    propagate: boolean
+    /**
+     * Phase 5c (POLICY §88I): the canonical text on May-2026+ rows linked to
+     * this definition is ALWAYS rewritten so admin edits visibly reflect on
+     * the user dashboard. The flag is kept in the signature for API
+     * compatibility but is no longer required to trigger propagation.
+     */
+    propagate: boolean = true
   ) => {
     setSaving(true);
     try {
@@ -377,34 +383,38 @@ export function useEditDefinition() {
         .eq('id', definitionId);
       if (updErr) throw updErr;
 
+      // Phase 5c: ALWAYS propagate canonical text to May-2026+ linked rows so
+      // the user dashboard reflects the admin's rename without an extra step.
+      // Pre-May-2026 rows are skipped client-side AND rejected by the
+      // `correct_may_kpis` DB function (POLICY §88I forward-only freeze).
       let propagated = 0;
-      if (propagate) {
-        // Fetch all (period, year) tuples for May 2026+ where rows link to this defId
-        const { data: rows, error: kpisErr } = await supabase
-          .from('kpis' as any)
-          .select('kra_name, kpi_name, review_period, review_year, category_id')
-          .eq('kpi_definition_id', definitionId);
-        if (kpisErr) throw kpisErr;
-        const monthNum = (p: string) => ['January','February','March','April','May','June','July','August','September','October','November','December'].indexOf(p) + 1;
-        const seen = new Set<string>();
-        for (const r of (rows as any[] || [])) {
-          if (r.review_year < 2026 || (r.review_year === 2026 && monthNum(r.review_period) < 5)) continue;
-          const k = `${r.category_id}::${r.kra_name}::${r.kpi_name}::${r.review_period}::${r.review_year}`;
-          if (seen.has(k)) continue;
-          seen.add(k);
-          const { data, error } = await supabase.rpc('correct_may_kpis' as any, {
-            p_category_id: r.category_id,
-            p_old_kra: r.kra_name,
-            p_old_kpi: r.kpi_name,
-            p_new_kra: newKra.trim(),
-            p_new_kpi: newKpi.trim(),
-            p_definition_id: definitionId,
-            p_review_period: r.review_period,
-            p_review_year: r.review_year,
-          });
-          if (!error && typeof data === 'number') propagated += data;
-        }
+      const { data: rows, error: kpisErr } = await supabase
+        .from('kpis' as any)
+        .select('kra_name, kpi_name, review_period, review_year, category_id')
+        .eq('kpi_definition_id', definitionId);
+      if (kpisErr) throw kpisErr;
+      const monthNum = (p: string) => ['January','February','March','April','May','June','July','August','September','October','November','December'].indexOf(p) + 1;
+      const seen = new Set<string>();
+      for (const r of (rows as any[] || [])) {
+        if (r.review_year < 2026 || (r.review_year === 2026 && monthNum(r.review_period) < 5)) continue;
+        const k = `${r.category_id}::${r.kra_name}::${r.kpi_name}::${r.review_period}::${r.review_year}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        const { data, error } = await supabase.rpc('correct_may_kpis' as any, {
+          p_category_id: r.category_id,
+          p_old_kra: r.kra_name,
+          p_old_kpi: r.kpi_name,
+          p_new_kra: newKra.trim(),
+          p_new_kpi: newKpi.trim(),
+          p_definition_id: definitionId,
+          p_review_period: r.review_period,
+          p_review_year: r.review_year,
+        });
+        if (!error && typeof data === 'number') propagated += data;
       }
+      // Note: `propagate=false` callers used to suppress this branch entirely.
+      // We keep their argument for API compatibility but no longer honour it
+      // for the rewrite — only for the audit-log payload below.
 
       await supabase.rpc('log_standardization_action' as any, {
         p_action_type: 'edit_definition',
@@ -413,14 +423,17 @@ export function useEditDefinition() {
         p_payload: {
           before: { canonical_kra_name: beforeRow.canonical_kra_name, canonical_kpi_name: beforeRow.canonical_kpi_name },
           after: { canonical_kra_name: newKra.trim(), canonical_kpi_name: newKpi.trim() },
-          propagate, propagated,
+          propagate: true, propagated,
+          requested_propagate: propagate,
         },
         p_affected_row_count: 1 + propagated,
       });
 
       toast({
         title: 'Definition updated',
-        description: propagate ? `Renamed and propagated to ${propagated} KPI rows` : 'Canonical name updated (no propagation)',
+        description: propagated > 0
+          ? `Renamed and propagated to ${propagated} KPI rows (May 2026+).`
+          : 'Canonical name updated. No current-period rows were linked to propagate.',
       });
       return true;
     } catch (err: any) {
