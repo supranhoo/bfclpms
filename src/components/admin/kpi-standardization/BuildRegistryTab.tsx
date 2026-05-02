@@ -5,14 +5,23 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Switch } from '@/components/ui/switch';
-import { Loader2, ScanSearch, CheckCircle2, Search, Eye, Pencil, Ban, RotateCcw } from 'lucide-react';
+import { Loader2, ScanSearch, CheckCircle2, Search, Eye, Pencil, Ban, RotateCcw, Split } from 'lucide-react';
 import { useScanDuplicates, useBuildRegistry, useScannerSkips, DuplicateGroup } from '@/hooks/useKpiRegistry';
 import { useToast } from '@/hooks/use-toast';
 import { AffectedKpisTable } from './AffectedKpisTable';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  BucketId,
+  SKIP_BUCKET,
+  summarizeBuckets,
+  defaultCanonicalForBucket,
+  nextAvailableBucket,
+  suggestBucketAssignments,
+  validateBuckets,
+  CanonicalDraft,
+} from '@/lib/scanGroupBuckets';
 
 const SENSITIVITY_OPTIONS: Array<{ label: string; value: string; threshold: number; hint: string }> = [
   { label: 'Strict',   value: 'strict',   threshold: 0.75, hint: 'Only very close matches' },
