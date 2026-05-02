@@ -51,3 +51,35 @@ describe('dedupeScannerGroups', () => {
     expect(out[0].category_id).toBe('c1');
   });
 });
+
+describe('dedupeVariants — fuzzy match metadata', () => {
+  it('preserves match_type and similarity on first sight', () => {
+    const out = dedupeVariants([
+      { kra_name: 'A', kpi_name: 'X', employee_count: 1, row_count: 1, match_type: 'exact', similarity: 1 },
+      { kra_name: 'B', kpi_name: 'Y', employee_count: 1, row_count: 1, match_type: 'fuzzy', similarity: 0.62 },
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out.find(v => v.kpi_name === 'X')?.match_type).toBe('exact');
+    expect(out.find(v => v.kpi_name === 'Y')?.match_type).toBe('fuzzy');
+    expect(out.find(v => v.kpi_name === 'Y')?.similarity).toBe(0.62);
+  });
+
+  it('upgrades match_type from fuzzy → exact when the same variant arrives twice', () => {
+    const out = dedupeVariants([
+      { kra_name: 'A', kpi_name: 'X', employee_count: 1, row_count: 1, match_type: 'fuzzy', similarity: 0.6 },
+      { kra_name: 'A', kpi_name: 'X', employee_count: 1, row_count: 1, match_type: 'exact', similarity: 1 },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].match_type).toBe('exact');
+    expect(out[0].similarity).toBe(1);
+  });
+
+  it('keeps the highest similarity when collapsing duplicates', () => {
+    const out = dedupeVariants([
+      { kra_name: 'A', kpi_name: 'X', employee_count: 1, row_count: 1, match_type: 'fuzzy', similarity: 0.55 },
+      { kra_name: 'A', kpi_name: 'X', employee_count: 1, row_count: 1, match_type: 'fuzzy', similarity: 0.78 },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].similarity).toBe(0.78);
+  });
+});

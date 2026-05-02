@@ -11,6 +11,8 @@ export interface ScannerVariant {
   kpi_name: string;
   employee_count: number;
   row_count: number;
+  match_type?: 'exact' | 'fuzzy';
+  similarity?: number;
 }
 
 export interface ScannerGroup {
@@ -18,6 +20,8 @@ export interface ScannerGroup {
   category_id: string;
   category_name: string;
   variants: ScannerVariant[];
+  is_skipped?: boolean;
+  has_fuzzy?: boolean;
 }
 
 const variantKey = (v: { kra_name: string; kpi_name: string }) =>
@@ -35,6 +39,14 @@ export function dedupeVariants(variants: ScannerVariant[]): ScannerVariant[] {
       // to avoid double-counting from a row-multiplied source.
       existing.employee_count = Math.max(existing.employee_count, v.employee_count);
       existing.row_count = Math.max(existing.row_count, v.row_count);
+      // Prefer 'exact' over 'fuzzy', and the higher similarity score, when
+      // collapsing two snapshots of the same variant from different scans.
+      if (v.match_type === 'exact' && existing.match_type !== 'exact') {
+        existing.match_type = 'exact';
+      }
+      if (typeof v.similarity === 'number') {
+        existing.similarity = Math.max(existing.similarity ?? 0, v.similarity);
+      }
     }
   }
   return [...map.values()];

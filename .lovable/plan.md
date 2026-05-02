@@ -1,77 +1,76 @@
-# Fix: KPI History & Tracker Sheet missing alias months
+## Problem (RCA)
 
-## Problem
+The "Scan for Duplicates" button now returns an **empty list**, even though many similar KPIs still exist (e.g. the "Ensure Fugitive Particulate Matter" KPI shows up in two near-identical forms — `(PM10)` vs `(PM10/AQI)` with slightly different "Description:" text).
 
-For "Days compliance for report" (Date-type KPI), the **Review Journey** correctly shows April 2026 with an "Also known as" badge — meaning that month's KPI is stored under an *alias* name and is resolved via the canonical registry.
+Verified via network log (`scan_kpi_duplicate_groups` returns `[]`) and a direct DB inspection: 1,162 distinct `(kra_name, kpi_name)` pairs are still **unaliased**, but the SQL function only emits a group when **the same KPI name appears under two or more different KRA names**:
 
-However:
-- **KPI History** card shows only the current row (May-26).
-- **KPI Tracker Sheet** modal shows only April + May.
-
-Both ignore older months stored under different (but alias-equivalent) `kpi_name` / `kra_name` strings.
-
-## Root Cause
-
-`KpiHistoryCard` (`src/components/review/KpiHistoryCard.tsx`) and `KpiTrackerModal` (`src/components/dashboard/KpiTrackerModal.tsx`) both filter related months with strict equality:
-
-```ts
-allKpis.filter(k =>
-  k.employee_id === kpi.employee_id &&
-  k.kpi_name === kpi.kpi_name &&
-  k.kra_name === kpi.kra_name
-)
+```sql
+HAVING COUNT(DISTINCT s.kra_name) > 1
 ```
 
-After the KPI Standardization rollout, prior months' KPI rows often carry the *original* (alias) text while the current month carries the *canonical* text. Strict equality drops those. `KpiJourneySection` already solved this by resolving the current KPI's `kpi_definition_id` and matching against canonical + every alias variant — we need the same logic in History & Tracker.
+Two consequences:
 
-## Risk & Impact Report
+1. **Near-duplicate KPI names are invisible.** `Ensure Fugitive Particulate Matter (PM10)…` and `Ensure Fugitive Particulate Matter (PM10/AQI)…` differ by a few characters, so `LOWER(TRIM(kpi_name))` produces two different `norm_kpi` values and they never group together.
+2. **After approving a canonical entry**, the residual rows for that KPI typically all share **one** KRA — so even if they were unaliased, the `>1 KRA` rule excludes them. The scanner therefore looks "empty" right after approval, which is exactly what the user is seeing.
 
-- **Data Impact**: Read-only; no schema changes. New SELECTs against `kpi_definitions` and `kpi_name_aliases` (already used elsewhere, RLS already in place).
-- **Workflow Impact**: None. UI-only.
-- **UI/UX**: History/Tracker will now show the same set of months Review Journey already groups together — consistent behaviour across the page.
-- **Regression Risk**: Low. The new matcher is a *superset* of the old strict match (always includes the current row). For KPIs without a canonical definition, behaviour is unchanged.
-- **Mitigation**: Add a small pure helper + unit tests covering (a) no canonical → strict match, (b) canonical with N aliases → matches all variants, (c) different employee never matches.
+The earlier reported bug (same KPI re-appearing after approval) and the current "scan returns nothing" bug are **the same root cause**: the scanner uses **strict text equality** for grouping and **strict KRA-multiplicity** as the duplicate signal.
+
+The "Don't merge" option already exists as a button on each group card — it is only visible once the scanner actually returns groups, which is why it appears "missing" today.
 
 ## Plan
 
-### 1. Shared resolver helper
+Make the scanner **fuzzy-aware** so it surfaces near-duplicate KPIs and same-KPI-single-KRA leftovers, without losing the existing exact-match behaviour or the persistent skip list.
 
-Create `src/lib/canonicalRelatedKpis.ts` exporting:
+### 1. Upgrade `scan_kpi_duplicate_groups` (new migration)
 
-- `useCanonicalVariantPairs(kpi)` — React Query hook that, given a KPI, fetches its `kpi_definition_id` (via `kpis` row) plus all `(kra_name, kpi_name)` pairs from `kpi_definitions` + `kpi_name_aliases` for the same definition. Mirrors the logic already in `KpiJourneySection` (lines ~219-265) so both call-sites stay in sync.
-- `matchesCanonicalKpi(row, currentKpi, variantPairs)` — pure predicate: same employee, same UoM/frequency-tolerant, AND `(kra_name, kpi_name)` is in the variant set (case/whitespace-insensitive). Falls back to strict equality if `variantPairs` is empty/loading.
+Replace the function so it returns **two kinds of groups**, both filtered through the existing `kpi_scanner_skips` table:
 
-### 2. Wire into KpiHistoryCard
+- **Exact group** (today's behaviour): same normalized KPI name, ≥2 distinct KRAs.
+- **Fuzzy group** (new): KPIs whose normalized names share a high token-similarity score within the **same category**, even when there is only one KRA. Implementation:
+  - Enable `pg_trgm` (already standard in Supabase) and use `similarity()` ≥ a tunable threshold (default `0.55`), combined with shared significant-word count ≥ 2 (stop-words filtered).
+  - Group by the **shortest representative name** in the cluster; emit each member as a `variant` with `match_type: 'exact' | 'fuzzy'` and a `similarity` score.
+  - A new RPC parameter `p_fuzzy_threshold numeric DEFAULT 0.55` lets admins loosen / tighten matching from the UI.
+  - Skip-list logic stays unchanged — `(category_id, normalized_kpi_of_representative)` keys the skip row.
 
-`src/components/review/KpiHistoryCard.tsx`:
-- Call `useCanonicalVariantPairs(kpi)`.
-- Replace the `relatedKpis` filter with `matchesCanonicalKpi`.
-- Keep "exclude current row id" behaviour for the history list.
+The existing `WHERE NOT EXISTS (...kpi_name_aliases...)` filter is preserved so already-approved variants stay hidden.
 
-### 3. Wire into KpiTrackerModal
+### 2. UI updates — `BuildRegistryTab.tsx`
 
-`src/components/dashboard/KpiTrackerModal.tsx`:
-- Same hook + matcher in the `monthlyData` `useMemo`.
-- Period dedup key stays `${review_period}-${review_year}`; if two alias rows exist for the same period, prefer the one whose `(kra, kpi)` matches the canonical pair, else the current `kpi.id`, else first.
+- Add a **Match sensitivity** select (`Strict` / `Balanced` / `Loose` → `0.75 / 0.55 / 0.40`) next to the *Scan* button. Default `Balanced`.
+- On each group card, badge each variant with `Exact` or `Fuzzy XX%` so admins can judge confidence before approving.
+- When a fuzzy group is approved, the canonical text defaults to the **longest** variant (most descriptive) instead of the first; user can still edit.
+- Keep the existing **"Don't merge"** button — and add a one-line hint under the scan button reminding admins it exists ("Use *Don't merge* on a group to permanently hide it; restore from *History & Undo*.").
 
-### 4. Tests
+### 3. Defensive client-side dedup
 
-`src/lib/canonicalRelatedKpis.test.ts`:
-- Strict fallback when no canonical id.
-- Includes alias variants when canonical id resolves.
-- Ignores rows from other employees.
-- Period dedup prefers canonical row over alias row.
+Extend `dedupeScannerGroups` to also collapse fuzzy duplicates that may overlap across thresholds (same canonical representative + same category).
 
-### 5. Docs & memory
+### 4. Tests + docs
 
-- `DOCUMENTATION.md` — note that History/Tracker are canonical-aware.
-- `POLICY.md` §88I — add clause: "Any UI that aggregates a KPI across periods MUST resolve via canonical definition + aliases, never strict name equality."
-- `mem/features/admin/kpi-standardization-registry` — append a "Consumers" subsection listing History card, Tracker modal, and Review Journey as canonical-aware surfaces (so future similar widgets follow suit).
+- New unit tests in `src/lib/scanGroupsDedup.test.ts` covering fuzzy-variant tagging and threshold-driven dedup.
+- New SQL-shaped test cases in `src/hooks/useScannerSkips.test.ts` for the `match_type` field passing through the hook.
+- Update `POLICY.md` §88I and `mem/features/admin/kpi-standardization-registry` to record:
+  - "Scanner uses pg_trgm fuzzy matching at a tunable threshold; admins can loosen/tighten per scan."
+  - "Don't-merge skips are keyed on the representative variant; loosening the threshold may surface a fuzzy cousin under a new key — that is expected."
+- Add `docs/adr/ADR-051.md` capturing the move from strict-equality to similarity-based grouping.
 
-## Files touched
+### Risk & Impact
 
-- new: `src/lib/canonicalRelatedKpis.ts`
-- new: `src/lib/canonicalRelatedKpis.test.ts`
-- edit: `src/components/review/KpiHistoryCard.tsx`
-- edit: `src/components/dashboard/KpiTrackerModal.tsx`
-- edit: `DOCUMENTATION.md`, `POLICY.md`, `mem/features/admin/kpi-standardization-registry`
+| Area | Impact | Mitigation |
+|---|---|---|
+| Data | Read-only RPC change; no data writes. Existing `kpi_definitions` / `kpi_name_aliases` / `kpi_scanner_skips` schemas untouched. | Migration only `CREATE OR REPLACE FUNCTION`; reversible by re-deploying the previous body. |
+| Workflow | Scanner will surface ~hundreds more groups initially. | Default threshold `Balanced (0.55)` is conservative; admins control sensitivity per scan; "Don't merge" already covers noise. |
+| Performance | `pg_trgm` self-join is O(N²) inside a category. Worst category today has a few hundred KPIs → well under 1 s. | Per-category grouping + `similarity()` short-circuit; add `pg_trgm` GIN index on `LOWER(TRIM(kpi_name))` if needed. |
+| UI / UX | One new control + per-variant badges. No layout breakage on the 1295×770 viewport. | Reuses existing `Select` + `Badge` primitives. |
+| Regressions | Approval, skip, restore, and review flows are unchanged at the data layer. | Existing tests for `useScannerSkips` and `useBuildRegistry` continue to pass; new tests added. |
+
+### Files to be created / changed
+
+- `supabase/migrations/<new>_fuzzy_scan_kpi_duplicate_groups.sql` (new)
+- `src/hooks/useKpiRegistry.ts` (extend `useScanDuplicates` to accept a threshold)
+- `src/components/admin/kpi-standardization/BuildRegistryTab.tsx` (sensitivity selector, match-type badges, hint copy)
+- `src/lib/scanGroupsDedup.ts` + `.test.ts` (fuzzy-aware dedup)
+- `src/hooks/useScannerSkips.test.ts` (extend contract)
+- `POLICY.md`, `DOCUMENTATION.md`, `mem/features/admin/kpi-standardization-registry`, `docs/adr/ADR-051.md`
+
+Approve to implement.
