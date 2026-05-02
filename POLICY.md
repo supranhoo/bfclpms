@@ -1662,6 +1662,18 @@ Once an `achieved_value` (and its supporting `sub_factors`, remarks, and evidenc
 
 Refactors that replace the per-submission value column with a live foreign-key lookup are **forbidden** under this policy because they would silently mutate already-approved historical scores in violation of HR audit law.
 
+### §88.1 — Re-propagation Block is Benign, Not a Failure (v2.66.8)
+
+The propagation RPC (`propagate_org_kpi_value`) only advances `kpis.status` from `kra_set` to `self_review`. Once an employee KPI has moved past `kra_set` (i.e. self_review or any later stage), every subsequent propagation call for that KPI is **intentionally skipped** with `reason: 'not_in_kra_set'`. This is the runtime expression of §88 — the snapshot is frozen and may not be silently overwritten.
+
+UI surfaces MUST classify this skip as **informational** ("Already propagated"), not destructive. A red error toast in this case is itself a regression because:
+
+1. The data is correct — previously propagated values remain in place.
+2. The data owner has no recoverable action to take; the system is deliberately protecting downstream submissions.
+3. Per-scope batch loops (e.g. `OrgKpiDataEntry.executeSaveAndPropagate`) MUST emit one summary toast for the entire batch, not one toast per scope. Stacked destructive toasts cause panic and false bug reports.
+
+`destructive` toast variant remains correct for hard failures: `reason: 'kpi_not_found'` or `reason: 'race_lost_during_advance'`.
+
 ---
 
 ## §89 — Per-KPI Audit Granularity for Org KPI Propagation (v2.66.7.3)
