@@ -639,6 +639,39 @@ export function getDataAwareDefaultTarget(
   return null;
 }
 
+/**
+ * POLICY §117 — Preferred default step-back target derived ONLY from the
+ * already-composed `availableTargets`. This guarantees the dropdown's selected
+ * value can never disagree with its option list (e.g. defaulting to a stale
+ * `hr_pms_review` while the resolved list correctly omits it).
+ *
+ * Preference order:
+ *  1. Nearest prior data-bearing stage that is also in `availableTargets`.
+ *  2. Nearest prior workflow/template stage in `availableTargets` (last entry
+ *     before `current` in canonical order).
+ *  3. `kra_set` (always present as baseline).
+ */
+export function getPreferredStepBackTarget(
+  current: Database['public']['Enums']['review_status'],
+  availableTargets: Array<{ stage: Database['public']['Enums']['review_status']; historic: boolean }>,
+  dataBearingStages: Array<Database['public']['Enums']['review_status']>
+): Database['public']['Enums']['review_status'] | null {
+  if (!availableTargets || availableTargets.length === 0) return null;
+  const inTargets = new Set(availableTargets.map(t => t.stage));
+  const fullIdx = FULL_STATUS_ORDER.indexOf(current);
+  if (fullIdx <= 0) return null;
+
+  for (let i = fullIdx - 1; i >= 0; i--) {
+    const s = FULL_STATUS_ORDER[i];
+    if (dataBearingStages.includes(s) && inTargets.has(s)) return s;
+  }
+  for (let i = fullIdx - 1; i >= 0; i--) {
+    const s = FULL_STATUS_ORDER[i];
+    if (inTargets.has(s)) return s;
+  }
+  return 'kra_set';
+}
+
 interface AdminStepBackParams {
   kpi_id: string;
   employee_id: string;
