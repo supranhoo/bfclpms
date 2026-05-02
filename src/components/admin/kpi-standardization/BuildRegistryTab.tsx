@@ -35,15 +35,17 @@ interface Props {
 
 export function BuildRegistryTab({ onRegistryUpdated }: Props) {
   const { groups, loading: scanning, scan } = useScanDuplicates();
-  const { createDefinitionWithAliases, saving } = useBuildRegistry();
+  const { createDefinitionWithAliases, createMultipleDefinitionsWithAliases, saving } = useBuildRegistry();
   const { skipGroup, unskipGroup, saving: skipSaving } = useScannerSkips();
   const [search, setSearch] = useState('');
   const [includeSkipped, setIncludeSkipped] = useState(false);
   const [sensitivity, setSensitivity] = useState<string>('balanced');
-  const [selections, setSelections] = useState<Record<string, number>>({});
-  // Per-group canonical text overrides. Keyed by groupKey.
-  const [canonicalOverrides, setCanonicalOverrides] = useState<Record<string, { kra: string; kpi: string }>>({});
-  const [editingCanonical, setEditingCanonical] = useState<Record<string, boolean>>({});
+  // Per-group bucket assignments: groupKey -> variantIndex -> bucketId.
+  const [bucketAssignments, setBucketAssignments] = useState<Record<string, Record<number, BucketId>>>({});
+  // Per-group, per-bucket canonical text overrides: groupKey -> bucketId -> {kra,kpi}.
+  const [canonicalByBucket, setCanonicalByBucket] = useState<Record<string, Record<BucketId, CanonicalDraft>>>({});
+  // Per-group, per-bucket "edit canonical" toggle.
+  const [editingByBucket, setEditingByBucket] = useState<Record<string, Record<BucketId, boolean>>>({});
   const [drillIn, setDrillIn] = useState<Record<string, number | null>>({});
   const [processedGroups, setProcessedGroups] = useState<Set<string>>(new Set());
   const [skipTarget, setSkipTarget] = useState<DuplicateGroup | null>(null);
@@ -77,29 +79,58 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
   const skippedCount = filteredGroups.filter(g => g.is_skipped).length;
   const pendingCount = visibleGroups.filter(g => !g.is_skipped).length;
 
+  const setBucketFor = (key: string, idx: number, bucket: BucketId) => {
+    setBucketAssignments(prev => ({
+      ...prev,
+      [key]: { ...(prev[key] ?? {}), [idx]: bucket },
+    }));
+  };
+
   const handleApprove = async (group: DuplicateGroup) => {
     const key = groupKey(group);
-    const selectedIdx = selections[key] ?? 0;
-    const baseCanonical = group.variants[selectedIdx];
-    if (!baseCanonical) return;
-    const override = canonicalOverrides[key];
-    const canonicalKra = (override?.kra ?? baseCanonical.kra_name).trim();
-    const canonicalKpi = (override?.kpi ?? baseCanonical.kpi_name).trim();
-    if (!canonicalKra || !canonicalKpi) {
-      toast({ title: 'Canonical KRA and KPI are required', variant: 'destructive' });
+    const assignments = bucketAssignments[key] ?? {};
+    const buckets = summarizeBuckets(group.variants, assignments);
+    const drafts = canonicalByBucket[key] ?? {};
+
+    // Resolve canonical text per bucket (override -> default longest variant).
+    const resolved: Record<BucketId, CanonicalDraft> = {};
+    buckets.forEach(b => {
+      const override = drafts[b.bucketId];
+      const fallback = defaultCanonicalForBucket(b);
+      resolved[b.bucketId] = {
+        kra: (override?.kra ?? fallback?.kra_name ?? '').trim(),
+        kpi: (override?.kpi ?? fallback?.kpi_name ?? '').trim(),
+      };
+    });
+
+    const errors = validateBuckets(buckets, resolved);
+    if (errors.length > 0) {
+      toast({ title: 'Cannot approve', description: errors[0], variant: 'destructive' });
       return;
     }
 
-    const defId = await createDefinitionWithAliases(
-      canonicalKra,
-      canonicalKpi,
-      group.category_id,
-      group.variants.map(v => ({ kra_name: v.kra_name, kpi_name: v.kpi_name }))
-    );
-
-    if (defId) {
-      setProcessedGroups(prev => new Set([...prev, key]));
+    if (buckets.length === 1) {
+      const only = buckets[0];
+      const c = resolved[only.bucketId];
+      const defId = await createDefinitionWithAliases(
+        c.kra,
+        c.kpi,
+        group.category_id,
+        only.variants.map(v => ({ kra_name: v.kra_name, kpi_name: v.kpi_name })),
+      );
+      if (defId) setProcessedGroups(prev => new Set([...prev, key]));
+      return;
     }
+
+    const ok = await createMultipleDefinitionsWithAliases(
+      group.category_id,
+      buckets.map(b => ({
+        canonicalKra: resolved[b.bucketId].kra,
+        canonicalKpi: resolved[b.bucketId].kpi,
+        variants: b.variants.map(v => ({ kra_name: v.kra_name, kpi_name: v.kpi_name })),
+      })),
+    );
+    if (ok) setProcessedGroups(prev => new Set([...prev, key]));
   };
 
   const confirmSkip = async () => {
