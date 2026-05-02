@@ -262,6 +262,8 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
           employeeId={employeeId || kpi.employee_id}
           employeeName={employeeProfile?.full_name || 'Employee'}
           currentStatus={status}
+          reviewPeriod={kpi.review_period ?? undefined}
+          reviewYear={kpi.review_year ?? undefined}
         />
       </>
     )}
