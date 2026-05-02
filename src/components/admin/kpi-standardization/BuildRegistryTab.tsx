@@ -293,12 +293,20 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
                     Suggest split
                   </Button>
                 </div>
-                {group.variants.map((variant, idx) => {
+                {(() => {
+                  // Compute the visible bucket-letter pills ONCE per group so every
+                  // row offers the same A / B / C / … set. Includes 'A', every bucket
+                  // currently in use elsewhere in the group (excluding SKIP), and the
+                  // next free letter so admins can always grow a new bucket.
+                  const usedLetters = new Set<BucketId>(['A']);
+                  Object.values(assignments).forEach(b => {
+                    if (b && b !== SKIP_BUCKET) usedLetters.add(b);
+                  });
+                  usedLetters.add(nextAvailableBucket(assignments));
+                  const sharedBucketOptions = [...usedLetters].sort();
+                  return group.variants.map((variant, idx) => {
                   const currentBucket = assignments[idx] ?? 'A';
-                  const usedBuckets = new Set<BucketId>(Object.values(assignments));
-                  // Always allow current + 'A' + the next free letter, plus SKIP.
-                  const offered = new Set<BucketId>([currentBucket, 'A', nextAvailableBucket(assignments)]);
-                  const bucketOptions = [...offered].sort();
+                  const bucketOptions = sharedBucketOptions;
                   return (
                     <div key={idx} className="flex items-start gap-3 p-2 rounded-md hover:bg-muted/50 border">
                       <div className="flex flex-col gap-1 pt-1">
@@ -355,8 +363,6 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
                             <Eye className="h-3 w-3 mr-1" />
                             {drillIdx === idx ? 'Hide' : 'View'} KPIs
                           </Button>
-                          {/* Suppress unused-var warning for usedBuckets */}
-                          <span className="hidden">{usedBuckets.size}</span>
                         </div>
                         {drillIdx === idx && (
                           <div className="mt-2">
@@ -370,7 +376,8 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
                       </div>
                     </div>
                   );
-                })}
+                  });
+                })()}
               </>
               )}
 
