@@ -473,8 +473,29 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
                       </div>
                     ) : (
                       <div className="text-xs">
-                        <div className="font-medium">{kra}</div>
-                        <div className="text-muted-foreground line-clamp-2">{kpi}</div>
+                        <div className="font-medium break-words">{kra}</div>
+                        <div
+                          className={`text-muted-foreground break-words ${expandedCanonical[key]?.[b.bucketId] ? '' : 'line-clamp-2'}`}
+                          title={kpi}
+                        >
+                          {kpi}
+                        </div>
+                        {kpi && kpi.length > 150 && (
+                          <button
+                            type="button"
+                            className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                            onClick={() => setExpandedCanonical(prev => ({
+                              ...prev,
+                              [key]: { ...(prev[key] ?? {}), [b.bucketId]: !prev[key]?.[b.bucketId] },
+                            }))}
+                          >
+                            {expandedCanonical[key]?.[b.bucketId] ? (
+                              <><ChevronUp className="h-3 w-3" />Show less</>
+                            ) : (
+                              <><ChevronDown className="h-3 w-3" />Show full KPI</>
+                            )}
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
