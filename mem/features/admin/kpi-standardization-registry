@@ -51,3 +51,12 @@ Any UI that aggregates a single KPI across periods MUST resolve sibling rows via
 - `preferredVariantRow(rows, variantPairs, currentKpiId)` → period-dedup tiebreaker (canonical → current id → first).
 
 Current consumers: `src/components/review/KpiHistoryCard.tsx`, `src/components/dashboard/KpiTrackerModal.tsx`, `src/components/review/KpiJourneySection.tsx` (the latter still uses an inlined version of the resolver query for the prev-month batch fetch — keep its logic in lock-step). When adding new monthly/annual aggregation widgets, wire them through this helper instead of reimplementing the matcher.
+
+## Group splitting (multi-canonical approval, May 2026)
+A fuzzy cluster can contain semantically distinct KPIs (e.g. `Total Recordable Injury (LTI)` vs `(STI)`). The Build Registry UI lets admins **partition** any group into multiple buckets (`A`, `B`, `C`, …) plus a `Skip` bucket and approve all buckets in one click — each active bucket creates its own `kpi_definition` and links only its own variants as aliases.
+- Helper: `src/lib/scanGroupBuckets.ts` (`summarizeBuckets`, `defaultCanonicalForBucket`, `nextAvailableBucket`, `suggestBucketAssignments`, `validateBuckets`). Tests in `scanGroupBuckets.test.ts` lock the contract.
+- Hook: `useBuildRegistry.createMultipleDefinitionsWithAliases` loops the existing idempotent single-bucket call inside one saving lock, suppresses per-bucket toasts when ≥2 buckets are submitted, and emits one summary toast. The single-bucket path is unchanged.
+- Default behaviour is identical to pre-split UX: every variant lives in bucket `A`, so the Approve button creates a single canonical exactly as before.
+- `Suggest split` uses keyword heuristics (LTI → A, STI → B, PM10 → A, PM10/AQI → B, PM2.5 → B) to pre-assign buckets; the admin can override any cell.
+- Variants assigned to `Skip` are excluded from approval and remain available for the next scan or for `Don't merge`.
+- No DB changes. Re-running a partitioned approval is a no-op thanks to the idempotent definition + alias inserts.
