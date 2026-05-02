@@ -14,6 +14,8 @@ const ACTION_LABEL: Record<StandardizationAction['action_type'], string> = {
   delete_definition: 'Deleted canonical entry',
   edit_definition: 'Edited canonical name',
   unlink_alias: 'Unlinked alias',
+  skip_group: 'Skipped duplicate group',
+  unskip_group: 'Restored skipped group',
 };
 
 export function HistoryUndoTab() {
@@ -45,6 +47,10 @@ export function HistoryUndoTab() {
         return `${p.before?.canonical_kpi_name?.slice(0, 50) || ''} → ${p.after?.canonical_kpi_name?.slice(0, 50) || ''}`;
       case 'unlink_alias':
         return p.aliases?.[0]?.variant_kpi_name?.slice(0, 80) || 'Unlinked alias';
+      case 'skip_group':
+        return `${(p.normalized_kpi || '').slice(0, 80)}${p.reason ? ` — ${String(p.reason).slice(0, 60)}` : ''}`;
+      case 'unskip_group':
+        return (p.normalized_kpi || '').slice(0, 80);
     }
   };
 
