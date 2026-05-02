@@ -17,6 +17,10 @@ import { AdminKpiEditDialog } from '@/components/admin/AdminKpiEditDialog';
 import { AdminDataEntryDialog } from '@/components/admin/AdminDataEntryDialog';
 import { AdminStatusStepBackDialog } from '@/components/admin/AdminStatusStepBackDialog';
 import { getPreviousStatus } from '@/hooks/useAdminDataEntry';
+import {
+  useCanonicalVariantPairs,
+  canonicalPair,
+} from '@/lib/canonicalRelatedKpis';
 
 interface KpiHeaderSectionProps {
   kpi: KPI;
@@ -34,6 +38,17 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [dataEntryDialogOpen, setDataEntryDialogOpen] = useState(false);
   const [stepBackDialogOpen, setStepBackDialogOpen] = useState(false);
+
+  // Phase 5c (POLICY §88I): when this KPI is registered in the canonical
+  // registry, prefer the canonical KRA/KPI text over the literal columns on
+  // the row. This guarantees admin renames in /admin/kpi-standardization
+  // are visible immediately even if the row's text columns lag behind
+  // (e.g. autolink stamped the row before propagation, or propagation
+  // hasn't run yet for a freshly inserted row).
+  const { data: variantPairs = [] } = useCanonicalVariantPairs(kpi);
+  const canonical = canonicalPair(variantPairs);
+  const displayKra = canonical?.kra_name ?? kpi.kra_name;
+  const displayKpi = canonical?.kpi_name ?? kpi.kpi_name;
 
   const categoryName = kpi.kra_categories?.name || 'Uncategorized';
   const categoryColor = kpi.kra_categories?.color || '#6B7280';
@@ -181,10 +196,10 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
 
       {/* KRA & KPI Names - Full text, no truncation */}
       <h3 className="font-semibold text-sm sm:text-lg text-primary leading-tight whitespace-pre-wrap">
-        {renderBoldKpiText(kpi.kra_name)}
+        {renderBoldKpiText(displayKra)}
       </h3>
       <p className="text-xs sm:text-sm text-muted-foreground mt-1 leading-relaxed whitespace-pre-wrap">
-        {renderBoldKpiText(kpi.kpi_name)}
+        {renderBoldKpiText(displayKpi)}
       </p>
 
       {isAdmin && (
