@@ -1,0 +1,13 @@
+---
+name: workflow-resilient-status-stepback
+description: Status regression cascade-clearing, sibling reversion, period-aware target lookup, and data-bearing target union
+type: feature
+---
+
+The 'Step Back' status action allows administrators to manually regress a KPI to any preceding workflow stage via a target stage selector dropdown. To ensure data consistency and prevent a misleading UI, all status regressions (both 'Full Reset' and 'Cascade' step-backs) include a comprehensive clearing of reviewer data—nullifying scores, ratings, remarks, and both singular ('*_evidence_url') and multi-file ('*_evidence_urls') evidence arrays. Specifically, regressing a status before 'self_review' clears the 'auto_advance_reason' to ensure the 'System Auto-Advanced' banner is removed. For multi-month KPIs, stepping back an 'approved' record automatically identifies and reverts its percolated sibling months to maintain consistency across the cycle. However, per Policy §75, step-back operations must preserve non-terminal siblings if the terminal month of the cycle remains independently approved, preventing unintended data loss during broad status regressions. All destructive actions, including 'Full Reset', are protected by a 'ConfirmDestructiveDialog' reconfirmation guard.
+
+**Target Stage Composition (POLICY §117, BUG-048).** The dropdown is the union of (a) every stage strictly before `current` in the KPI's *period-resolved* workflow template, and (b) every stage with a non-NULL `*_score` column in `review_submissions`. `kra_set` is always included and the list is sorted by `FULL_STATUS_ORDER`. Stages present only because of historic data are flagged inline with `(historic)`. Pure helpers `computeStepBackTargets` and `getDataAwareDefaultTarget` live in `src/hooks/useAdminDataEntry.ts`; tests in `src/test/stepBackTargetComposition.test.ts`.
+
+**Period-aware workflow lookup.** Callers (`KpiHeaderSection`, `AllKpis`) MUST forward `reviewPeriod` and `reviewYear` to the dialog, and the dialog MUST pass them to `get_employee_workflow(employee_uuid, p_review_period, p_review_year)`. Calling the RPC without period args returns the *current* global fallback and silently misrepresents the workflow that actually governed the KPI when reviewed — this is forbidden.
+
+**Default target.** Defaults to the immediately-prior data-bearing stage when one exists, otherwise to `getPreviousStatus(currentStatus, workflowStages)`, otherwise to `kra_set`. Example: an `approved` KPI with `auditor_score = 0` defaults back to Audit Review, not the next-earlier stage in the workflow template.
