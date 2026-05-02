@@ -6029,6 +6029,7 @@ Three tabs:
 ### DB Functions
 
 - `scan_kpi_duplicate_groups()` — Returns JSONB array of duplicate groups with variants, employee counts, and row counts.
+  - **Invariant (May 2026 fix):** the `variants` array contains exactly one entry per distinct `(category_id, kra_name, kpi_name)`. An earlier revision joined `kpis` back to its own aggregate and inflated each variant by its `row_count` (a single variant with 8 rows was emitted 8 times in the UI). The function now builds `variants` directly from the aggregate, and `src/lib/scanGroupsDedup.ts` provides client-side defence-in-depth.
 - `correct_may_kpis()` — Updates KPI + org_kpi_values rows for a specified period. Hard-coded safety: refuses to operate on periods before May 2026.
 
 ### Enforcement (Soft)
