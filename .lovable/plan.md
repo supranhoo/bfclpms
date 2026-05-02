@@ -1,85 +1,83 @@
-## Problem
+## Bug
+The migration `20260502061046_*_scanner_alias_and_skip.sql` ships a `scan_kpi_duplicate_groups` whose `grouped` CTE references `s.kpi_name` (raw) inside an `EXISTS` subquery while the `GROUP BY` only contains `LOWER(TRIM(s.kpi_name))`. Postgres rejects it:
 
-Two real gaps in **Build Registry → Duplicate Scanner**:
+> subquery uses ungrouped column "s.kpi_name" from outer query
 
-1. **Approved groups reappear after Re-scan.** Approval only writes to `kpi_definitions` + `kpi_name_aliases`. The scanner (`scan_kpi_duplicate_groups`) reads raw `kpis` rows and has no idea those (KRA, KPI) pairs are now linked to a canonical entry. So they show up again exactly as before.
-2. **No "Don't Merge" option.** The scanner sometimes shows two variants that are genuinely different KPIs (just similar wording). Today the only way to dismiss them is to approve as canonical (wrong) or ignore them forever (they keep coming back). Local React `processedGroups` state is lost on refresh / Re-scan.
+So **every** call to "Scan for Duplicates" fails — the Build Registry tab is unusable.
 
-## Risk & Impact Report
+## Root cause
+Inside an aggregate query, expressions in correlated subqueries must reference grouped columns or aggregates. `LOWER(TRIM(s.kpi_name))` is grouped; `s.kpi_name` itself is not.
 
-- **Data Impact**: Adds one new table `kpi_scanner_skips` (admin-only, RLS). No change to `kpis`, `kpi_definitions`, `kpi_name_aliases`. Pre-May-2026 frozen rule unaffected.
-- **Workflow Impact**: None for non-admin users. Admins gain one new action ("Skip"); existing "Approve as Canonical" unchanged.
-- **UI/UX Consistency**: Reuses existing button + Badge + ConfirmDestructiveDialog patterns. No layout shift.
-- **Regression Risk**: Low. Scanner logic change is additive (extra anti-join filters); covered by new tests. Skip table is opt-in — empty by default = same behaviour as today.
-- **Mitigation**: Unit tests for both filter paths (alias-linked, skip-marked) + an "Include skipped" toggle so admins can always re-surface a skipped group.
+## Fix
+New migration that replaces `scan_kpi_duplicate_groups(boolean)` with a corrected version. Two safe options; we'll use **option A** because it keeps the structure identical and easiest to audit:
 
-## What changes
+**A. Pre-compute `norm_kpi` in the `sub` CTE**, then group on it directly. The `EXISTS` subquery against `kpi_scanner_skips` then references `s.cat_id` / `s.norm_kpi`, both grouped.
 
-### 1. Scanner becomes alias-aware
-
-Update `scan_kpi_duplicate_groups` so a `(category_id, kra_name, kpi_name)` variant is excluded when it already appears in `kpi_name_aliases`. After exclusion, if a group has fewer than 2 distinct KRA names left, the whole group drops out.
-
-Why this is safe: aliases are the canonical record of "this variant has been standardised". Using them as the filter source means the scanner stays in sync the moment an admin clicks **Approve as Canonical** — no extra backfill needed, no dependency on the BEFORE trigger having stamped historical `kpis` rows.
-
-### 2. Persistent "Skip / Don't Merge" action
-
-New table `kpi_scanner_skips`:
-
-```text
-id              uuid PK
-category_id     uuid
-normalized_kpi  text     -- LOWER(TRIM(kpi_name)), matches scanner grouping
-skipped_by      uuid     -- auth.uid()
-skipped_at      timestamptz
-reason          text     -- optional admin note
-UNIQUE (category_id, normalized_kpi)
+```sql
+WITH sub AS (
+  SELECT
+    k.category_id                AS cat_id,
+    k.kra_name,
+    k.kpi_name,
+    LOWER(TRIM(k.kpi_name))      AS norm_kpi,
+    COUNT(DISTINCT k.employee_id) AS emp_count,
+    COUNT(*)                     AS row_count
+  FROM public.kpis k
+  WHERE NOT EXISTS ( ... alias filter unchanged ... )
+  GROUP BY k.category_id, k.kra_name, k.kpi_name
+),
+grouped AS (
+  SELECT
+    s.norm_kpi,
+    s.cat_id,
+    COALESCE(c.name,'Unknown')   AS cat_name,
+    jsonb_agg( jsonb_build_object(
+      'kra_name',       s.kra_name,
+      'kpi_name',       s.kpi_name,
+      'employee_count', s.emp_count,
+      'row_count',      s.row_count
+    ) ORDER BY s.kra_name, s.kpi_name) AS variants,
+    SUM(s.row_count) AS total_rows,
+    EXISTS (
+      SELECT 1 FROM public.kpi_scanner_skips sk
+      WHERE sk.category_id = s.cat_id
+        AND sk.normalized_kpi = s.norm_kpi
+    ) AS is_skipped
+  FROM sub s
+  LEFT JOIN public.kra_categories c ON c.id = s.cat_id
+  GROUP BY s.norm_kpi, s.cat_id, c.name
+  HAVING COUNT(DISTINCT s.kra_name) > 1
+)
+SELECT jsonb_agg(
+  jsonb_build_object(
+    'normalized_kpi', norm_kpi,
+    'category_id',    cat_id,
+    'category_name',  cat_name,
+    'variants',       variants,
+    'is_skipped',     is_skipped
+  ) ORDER BY total_rows DESC
+)
+INTO v_result
+FROM grouped
+WHERE (p_include_skipped OR NOT is_skipped);
 ```
 
-- RLS: admin-only SELECT/INSERT/DELETE. No UPDATE.
-- Scanner excludes any group whose `(cat_id, norm_kpi)` is in this table.
-- Scanner accepts a new boolean arg `p_include_skipped` (default `false`) so the UI can offer an "Include skipped groups" toggle.
-- Action is reversible: an "Un-skip" button removes the row, and the next scan brings the group back.
-- Logged into existing `kpi_standardization_actions` so it appears in History & Undo with the same dim/restore pattern as other actions.
+All other contracts (alias-aware exclusion, skip filter, `is_skipped` tag, dedup invariant) are preserved.
 
-### 3. UI (Build Registry tab)
+## Risk & Impact
+- **Data impact:** none — pure read function, no schema change.
+- **Workflow impact:** restores the Scanner; no behavioural change vs. the intended spec.
+- **UI impact:** none; existing client code (`useScanDuplicates`, `dedupeScannerGroups`, `BuildRegistryTab`) already expects this shape.
+- **Regression risk:** low. Logic is equivalent to the prior version once the GROUP BY is satisfied. Existing tests in `scanGroupsDedup.test.ts` and `useScannerSkips.test.ts` continue to apply.
 
-- Add a secondary **Skip ("Don't merge")** button next to **Approve as Canonical** on every group card. Opens `ConfirmDestructiveDialog` (consistent with policy §safety). Optional reason textarea.
-- Header badge becomes: `N pending / M skipped / T total groups`.
-- Add an "Include skipped" toggle (off by default). When on, skipped groups render dimmed with an **Un-skip** button instead of Approve/Skip.
-- Toast on success: "Group skipped. You can restore it from History & Undo or by toggling 'Include skipped'."
-
-### 4. Tests + docs
-
-- `src/lib/scanGroupsDedup.test.ts` already covers variant collapse — extend with a test that an alias-matched variant is filtered out client-side as a defence-in-depth check (mirrors existing dedup pattern).
-- New `src/hooks/useScannerSkips.test.ts` — covers create, list, un-skip, and the include-skipped flag.
-- Update `mem/features/admin/kpi-standardization-registry`, `POLICY.md` §88I, and `DOCUMENTATION.md` to record the new invariant: *the scanner must never re-emit a group whose variants are all aliased OR whose normalized signature has been explicitly skipped.*
-
-## Files
-
-**SQL (new migration)**
-- `supabase/migrations/<ts>_scanner_alias_and_skip.sql`
-  - Create `kpi_scanner_skips` + RLS
-  - Rewrite `scan_kpi_duplicate_groups(p_include_skipped boolean DEFAULT false)` with alias anti-join + skip anti-join
-
-**Hooks**
-- `src/hooks/useKpiRegistry.ts` — add `useScannerSkips` (list / add / remove), pass `p_include_skipped` from `useScanDuplicates`
-- `src/hooks/useScannerSkips.test.ts` (new)
-
-**Client utility**
-- `src/lib/scanGroupsDedup.ts` — extend with `filterAliasedVariants(groups, aliases)` defence-in-depth pass
-- `src/lib/scanGroupsDedup.test.ts` — extend tests
-
-**UI**
-- `src/components/admin/kpi-standardization/BuildRegistryTab.tsx` — Skip button, Include-skipped toggle, Un-skip button, badge counts
-- `src/components/admin/kpi-standardization/HistoryUndoTab.tsx` — render the new `skip_group` / `unskip_group` action types
-
-**Docs**
-- `POLICY.md` §88I (clauses 10 + 11)
-- `DOCUMENTATION.md` (KPI Standardization section)
-- `mem/features/admin/kpi-standardization-registry`
+## Deliverables
+1. **Migration:** `supabase/migrations/<ts>_fix_scanner_grouping.sql` — `DROP FUNCTION` + recreate as above.
+2. **Doc/policy sync:**
+   - `POLICY.md` §88I: append a note that the scanner pre-computes `norm_kpi` in the inner CTE so all correlated subqueries reference grouped columns.
+   - `DOCUMENTATION.md`: same note in the standardization section.
+   - `mem/features/admin/kpi-standardization-registry`: extend the "Scanner invariant" bullet to mention the grouped-column rule.
+3. **Test:** add a thin SQL contract note + a Vitest case in `useStandardizationHistory.test.ts` (or a new pure helper test) that documents the expected JSON shape — pure logic, no DB. (The real protection is the migration itself; without DB-in-test we can't execute the function in unit tests.)
 
 ## Out of scope
-
-- No change to pre-May-2026 frozen data.
-- No automatic backfill of `kpis.kpi_definition_id` (separate concern; the alias-anti-join makes it unnecessary for the scanner).
-- Registry Browser and `get_public_registry_view` unchanged.
+- No changes to `kpi_scanner_skips` table, RLS, or `reverse_standardization_action`.
+- No client-side changes — `BuildRegistryTab`, hooks, and dedup helper stay as-is.
