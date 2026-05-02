@@ -219,7 +219,10 @@ export default function ManagementDashboard() {
       const profileMap = new Map(profiles.map(p => [p.id, p]));
 
       const getScore = (kpi: any): number | null => {
-        const s = kpi.review_submissions;
+        // PostgREST returns one-to-many embeds as arrays. Normalize to a
+        // single submission row (there's at most one per KPI in practice).
+        const raw = kpi.review_submissions;
+        const s = Array.isArray(raw) ? raw[0] : raw;
         if (!s || s.is_na) return null;
         const score = (kpi.status === 'approved' ? s.final_score : null) ?? s.management_score ?? s.auditor_score 
           ?? s.hr_pms_score ?? s.skip_level_score 
@@ -414,7 +417,8 @@ export default function ManagementDashboard() {
       // Reviewer analytics — manager score bias
       const managerScores = new Map<string, { total: number; count: number }>();
       kpis.forEach(kpi => {
-        const submission = kpi.review_submissions;
+        const rawSub = kpi.review_submissions;
+        const submission = Array.isArray(rawSub) ? rawSub[0] : rawSub;
         const ms = submission?.manager_score;
         if (ms != null && ms > 0) {
           const profile = profileMap.get(kpi.employee_id);
@@ -450,7 +454,8 @@ export default function ManagementDashboard() {
         audTotal: number; audCount: number;
       }>();
       kpis.forEach(kpi => {
-        const s = kpi.review_submissions;
+        const raw = kpi.review_submissions;
+        const s = Array.isArray(raw) ? raw[0] : raw;
         if (!s || s.manager_score == null || s.manager_score <= 0) return;
         const profile = profileMap.get(kpi.employee_id);
         const managerId = profile?.reporting_manager_id;
