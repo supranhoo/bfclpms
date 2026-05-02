@@ -400,11 +400,23 @@ export function useBulkPropagateOrgKpiValues() {
             : undefined,
         });
       } else if (result.skippedCount && result.skippedCount > 0) {
-        toast({
-          title: 'Nothing to propagate',
-          description: `All ${result.skippedCount} KPI(s) already past initial stage.`,
-          variant: 'destructive',
-        });
+        // v2.66.8 — see usePropagateOrgKpiValue.onSuccess for rationale.
+        const skipped = result.skipped || [];
+        const allBenign = skipped.length > 0 && skipped.every(
+          s => s.reason === 'not_in_kra_set'
+        );
+        if (allBenign) {
+          toast({
+            title: 'Already propagated',
+            description: `All ${result.skippedCount} KPI(s) have already advanced past the data-owner stage. Previously propagated values remain in place.`,
+          });
+        } else {
+          toast({
+            title: 'Nothing to propagate',
+            description: `${result.skippedCount} KPI(s) could not be advanced. Please refresh and retry.`,
+            variant: 'destructive',
+          });
+        }
       }
     },
     onError: (error: Error) => {
