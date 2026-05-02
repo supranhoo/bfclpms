@@ -266,6 +266,7 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
           currentStatus={status}
           reviewPeriod={kpi.review_period ?? undefined}
           reviewYear={kpi.review_year ?? undefined}
+          workflowStages={workflowStages}
         />
       </>
     )}
