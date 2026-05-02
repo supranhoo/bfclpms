@@ -1,76 +1,60 @@
-## Problem (RCA)
+## Problem
 
-The "Scan for Duplicates" button now returns an **empty list**, even though many similar KPIs still exist (e.g. the "Ensure Fugitive Particulate Matter" KPI shows up in two near-identical forms — `(PM10)` vs `(PM10/AQI)` with slightly different "Description:" text).
+The fuzzy scanner correctly groups all "Total Recordable Injury" variants together — but in this case the group actually contains **two distinct KPIs**: LTI (Lost Time Injury) and STI (Short Term Injury). Today the UI forces a single canonical for the whole group, so the admin can either:
 
-Verified via network log (`scan_kpi_duplicate_groups` returns `[]`) and a direct DB inspection: 1,162 distinct `(kra_name, kpi_name)` pairs are still **unaliased**, but the SQL function only emits a group when **the same KPI name appears under two or more different KRA names**:
+- merge LTI + STI into one (wrong), or
+- skip the whole group (loses both fixes).
 
-```sql
-HAVING COUNT(DISTINCT s.kra_name) > 1
-```
-
-Two consequences:
-
-1. **Near-duplicate KPI names are invisible.** `Ensure Fugitive Particulate Matter (PM10)…` and `Ensure Fugitive Particulate Matter (PM10/AQI)…` differ by a few characters, so `LOWER(TRIM(kpi_name))` produces two different `norm_kpi` values and they never group together.
-2. **After approving a canonical entry**, the residual rows for that KPI typically all share **one** KRA — so even if they were unaliased, the `>1 KRA` rule excludes them. The scanner therefore looks "empty" right after approval, which is exactly what the user is seeing.
-
-The earlier reported bug (same KPI re-appearing after approval) and the current "scan returns nothing" bug are **the same root cause**: the scanner uses **strict text equality** for grouping and **strict KRA-multiplicity** as the duplicate signal.
-
-The "Don't merge" option already exists as a button on each group card — it is only visible once the scanner actually returns groups, which is why it appears "missing" today.
+What's missing: a way to **split** the group into sub-clusters before approval, so LTI variants become one canonical and STI variants become another in a single workflow.
 
 ## Plan
 
-Make the scanner **fuzzy-aware** so it surfaces near-duplicate KPIs and same-KPI-single-KRA leftovers, without losing the existing exact-match behaviour or the persistent skip list.
+Add per-group **bucketing** to the Build Registry card. Each variant gets a small bucket selector (`A`, `B`, `C`, …); admins drop similar variants into the same bucket and approve all buckets in one click.
 
-### 1. Upgrade `scan_kpi_duplicate_groups` (new migration)
+### 1. UI — `BuildRegistryTab.tsx`
 
-Replace the function so it returns **two kinds of groups**, both filtered through the existing `kpi_scanner_skips` table:
+- Replace the single `RadioGroup` with a per-variant **Bucket selector** (segmented control: `A` / `B` / `C` / `Skip`). Default = all variants in bucket `A` (preserves today's single-canonical behaviour).
+- When 2+ buckets are in use, the card switches to **multi-canonical mode**:
+  - One **canonical editor** per active bucket, each pre-filled with the longest variant in that bucket.
+  - A small "Suggest split" button uses a quick client-side keyword check (e.g. presence of `LTI` vs `STI`, `(PM10)` vs `(PM10/AQI)`) to auto-assign buckets — admin can override.
+  - Variants marked `Skip` are excluded from approval (left for the next scan or for `Don't merge`).
+- The single **Approve as Canonical** button becomes **Approve N canonicals** when multi-bucket. Disabled until every active bucket has a non-empty canonical KRA + KPI and at least one variant.
+- Keep the existing **Don't merge** and **Edit canonical** affordances unchanged.
 
-- **Exact group** (today's behaviour): same normalized KPI name, ≥2 distinct KRAs.
-- **Fuzzy group** (new): KPIs whose normalized names share a high token-similarity score within the **same category**, even when there is only one KRA. Implementation:
-  - Enable `pg_trgm` (already standard in Supabase) and use `similarity()` ≥ a tunable threshold (default `0.55`), combined with shared significant-word count ≥ 2 (stop-words filtered).
-  - Group by the **shortest representative name** in the cluster; emit each member as a `variant` with `match_type: 'exact' | 'fuzzy'` and a `similarity` score.
-  - A new RPC parameter `p_fuzzy_threshold numeric DEFAULT 0.55` lets admins loosen / tighten matching from the UI.
-  - Skip-list logic stays unchanged — `(category_id, normalized_kpi_of_representative)` keys the skip row.
+### 2. Hook — `useBuildRegistry.ts`
 
-The existing `WHERE NOT EXISTS (...kpi_name_aliases...)` filter is preserved so already-approved variants stay hidden.
+- Add `createMultipleDefinitionsWithAliases(buckets)` that loops the existing idempotent `createDefinitionWithAliases` per bucket inside a single try block, aggregates the result, and emits one summary toast (`"3 canonical entries created, 11 aliases linked"`). Any per-bucket failure surfaces inline; successful buckets stay applied (idempotent re-approval is safe on retry).
+- The single-bucket path keeps calling the original function — zero behaviour change for existing users.
 
-### 2. UI updates — `BuildRegistryTab.tsx`
+### 3. State + processing
 
-- Add a **Match sensitivity** select (`Strict` / `Balanced` / `Loose` → `0.75 / 0.55 / 0.40`) next to the *Scan* button. Default `Balanced`.
-- On each group card, badge each variant with `Exact` or `Fuzzy XX%` so admins can judge confidence before approving.
-- When a fuzzy group is approved, the canonical text defaults to the **longest** variant (most descriptive) instead of the first; user can still edit.
-- Keep the existing **"Don't merge"** button — and add a one-line hint under the scan button reminding admins it exists ("Use *Don't merge* on a group to permanently hide it; restore from *History & Undo*.").
+- `processedGroups` is marked only after **all** buckets succeed, so the card stays visible if a partial failure happens.
+- After approval, the card collapses with a green check showing "`N` canonicals created from this group" (mirroring today's done-card pattern).
 
-### 3. Defensive client-side dedup
+### 4. No DB changes
 
-Extend `dedupeScannerGroups` to also collapse fuzzy duplicates that may overlap across thresholds (same canonical representative + same category).
+- This is purely a client-side partitioning of an already-fetched group. The DB scanner, alias schema, skip list, history/undo, and idempotent `createDefinitionWithAliases` are untouched.
 
-### 4. Tests + docs
+### 5. Tests + docs
 
-- New unit tests in `src/lib/scanGroupsDedup.test.ts` covering fuzzy-variant tagging and threshold-driven dedup.
-- New SQL-shaped test cases in `src/hooks/useScannerSkips.test.ts` for the `match_type` field passing through the hook.
-- Update `POLICY.md` §88I and `mem/features/admin/kpi-standardization-registry` to record:
-  - "Scanner uses pg_trgm fuzzy matching at a tunable threshold; admins can loosen/tighten per scan."
-  - "Don't-merge skips are keyed on the representative variant; loosening the threshold may surface a fuzzy cousin under a new key — that is expected."
-- Add `docs/adr/ADR-051.md` capturing the move from strict-equality to similarity-based grouping.
+- New tests in `src/lib/scanGroupBuckets.test.ts` (new helper) covering: default-single-bucket, multi-bucket partitioning, "Skip" exclusion, longest-variant canonical defaulting per bucket, and the keyword-based auto-suggest (`LTI` / `STI` / `PM10` / `PM10/AQI`).
+- Update `POLICY.md` §88I clause 13 with a note that fuzzy groups MAY be split into sub-clusters in the UI — the DB contract is unchanged.
+- Update `mem/features/admin/kpi-standardization-registry` "Fuzzy scanner" section.
 
 ### Risk & Impact
 
 | Area | Impact | Mitigation |
 |---|---|---|
-| Data | Read-only RPC change; no data writes. Existing `kpi_definitions` / `kpi_name_aliases` / `kpi_scanner_skips` schemas untouched. | Migration only `CREATE OR REPLACE FUNCTION`; reversible by re-deploying the previous body. |
-| Workflow | Scanner will surface ~hundreds more groups initially. | Default threshold `Balanced (0.55)` is conservative; admins control sensitivity per scan; "Don't merge" already covers noise. |
-| Performance | `pg_trgm` self-join is O(N²) inside a category. Worst category today has a few hundred KPIs → well under 1 s. | Per-category grouping + `similarity()` short-circuit; add `pg_trgm` GIN index on `LOWER(TRIM(kpi_name))` if needed. |
-| UI / UX | One new control + per-variant badges. No layout breakage on the 1295×770 viewport. | Reuses existing `Select` + `Badge` primitives. |
-| Regressions | Approval, skip, restore, and review flows are unchanged at the data layer. | Existing tests for `useScannerSkips` and `useBuildRegistry` continue to pass; new tests added. |
+| Data | None — no DB writes change shape; each bucket calls the existing idempotent insert. | Re-running the same partition is a no-op. |
+| Workflow | Admins gain a more powerful action; default behaviour (single bucket) matches today exactly. | Single bucket = old UX; multi-bucket only activates when admin assigns ≥2 buckets. |
+| UI/UX | Adds a row of small bucket pills per variant + N canonical editors when split. Fits the 1295×770 viewport. | Reuses existing `Badge` + `Input` / `Textarea` primitives; collapses cleanly when only one bucket is in use. |
+| Regression risk | Hook gains a sibling function; existing single-canonical path is unchanged. | New unit tests + the existing `useScannerSkips` / dedup tests keep the rest locked. |
 
-### Files to be created / changed
+### Files
 
-- `supabase/migrations/<new>_fuzzy_scan_kpi_duplicate_groups.sql` (new)
-- `src/hooks/useKpiRegistry.ts` (extend `useScanDuplicates` to accept a threshold)
-- `src/components/admin/kpi-standardization/BuildRegistryTab.tsx` (sensitivity selector, match-type badges, hint copy)
-- `src/lib/scanGroupsDedup.ts` + `.test.ts` (fuzzy-aware dedup)
-- `src/hooks/useScannerSkips.test.ts` (extend contract)
-- `POLICY.md`, `DOCUMENTATION.md`, `mem/features/admin/kpi-standardization-registry`, `docs/adr/ADR-051.md`
+- `src/components/admin/kpi-standardization/BuildRegistryTab.tsx` (bucket selector, multi-canonical editor, approve-N flow)
+- `src/hooks/useKpiRegistry.ts` (`createMultipleDefinitionsWithAliases` helper)
+- `src/lib/scanGroupBuckets.ts` + `.test.ts` (new pure helpers: bucket assignment, auto-suggest, validation)
+- `POLICY.md`, `mem/features/admin/kpi-standardization-registry`
 
 Approve to implement.
