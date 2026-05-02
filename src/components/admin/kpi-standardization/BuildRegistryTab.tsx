@@ -183,12 +183,14 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
               </Label>
               <Select value={sensitivity} onValueChange={setSensitivity}>
                 <SelectTrigger id="sensitivity" className="h-8 w-[140px] text-xs">
-                  <SelectValue />
+                  <SelectValue placeholder="Balanced">
+                    {SENSITIVITY_OPTIONS.find(o => o.value === sensitivity)?.label}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {SENSITIVITY_OPTIONS.map(o => (
                     <SelectItem key={o.value} value={o.value} className="text-xs">
-                      <div className="flex flex-col">
+                      <div className="flex flex-col leading-tight py-0.5">
                         <span>{o.label}</span>
                         <span className="text-[10px] text-muted-foreground">{o.hint}</span>
                       </div>
