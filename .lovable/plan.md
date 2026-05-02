@@ -1,80 +1,70 @@
-# Why your KPI Standardization edit doesn't show on the dashboard
+# Fix: BUG-047 Stale Reason Guardrail (Jitendra Bharti — Automation KRA, March 2026)
 
-## What I found (RCA)
+## Root Cause Analysis
 
-I traced the exact KPI in your screenshot ("Ensure Zero Harm workplace" / "Proactive Safety Reporting (UA, UC, & Near Miss) …", May 2026, employee Gaurav Tiwari) end-to-end through the database.
+The `enforce_on_behalf_score_or_na` BEFORE INSERT/UPDATE trigger inspects `NEW.auto_advance_reason`. That column is **set once** by `useAdminDataEntry` (`'Scored by Admin on behalf of hr_pms'`) and is **never cleared** by subsequent step-backs, status overrides, send-backs, or score wipes.
 
-There are **two independent reasons** the edit isn't reflecting, and both have to be fixed for the dashboard to show your new wording.
+Forensic timeline for KPI `2c1a2a54…` (Jitendra Bharti, March 2026, "CLMS implementation"):
 
-### Reason 1 — The actual KPI rows are not linked to the canonical definition
+| When        | Action                              | Result                                                          |
+|-------------|-------------------------------------|-----------------------------------------------------------------|
+| Mar 28      | Admin scored on behalf of HR PMS    | hr_pms_score=5, hr_pms_rating=blue, reason="…on behalf of hr_pms"; status → approved |
+| Mar 28      | `ADMIN_STATUS_OVERRIDE` ("testing") | Status reverted; hr_pms score/rating eventually cleared by step-back cascade |
+| Apr 3–5     | Multiple step-backs / reconciles    | Row now has `hr_pms_score=NULL, hr_pms_rating=NULL`, `is_na=false`, **stale** `auto_advance_reason="Scored by Admin on behalf of hr_pms"` |
+| Today       | Auditor tries any update            | Trigger reads stale reason + NULL score ⇒ raises BUG-047        |
 
-A canonical definition does exist in `kpi_definitions`:
-- id `bc48a549-cab6-4903-808b-ef2a12495a96`
-- canonical KRA: `Ensure Zero Harm workplace`
-- canonical KPI: `Proactive Safety Reporting (UA, UC, & Near Miss) Description: …`
+The trigger cannot tell the difference between "this current write is the on-behalf write" and "this row carries leftover provenance text from a write that was later undone." Any subsequent UPDATE — auditor scoring, manager re-review, even unrelated column writes — gets blocked.
 
-But every matching row in `kpis` for May 2026 has **`kpi_definition_id = NULL`** — so the auto-link never bound them to the definition you edited. As a consequence, even on consumers that *are* canonical-aware (`KpiHistoryCard`, `KpiTrackerModal`, `KpiJourneySection`), `useCanonicalVariantPairs` returns `[]` and they fall back to **strict string equality** on `kra_name`/`kpi_name`. The dashboard therefore renders whatever literal text is stored on the `kpis` row — your registry edit is invisible.
+## What to Build
 
-### Reason 2 — The dashboard "View KPI Details" reads `kpis.kra_name` / `kpis.kpi_name` directly
+### 1. Database migration — make the guardrail write-scoped, not row-scoped
 
-Even when a KPI *is* linked, today only the **propagate** branch of `useEditDefinition` rewrites the literal `kra_name`/`kpi_name` columns on `kpis` (via `correct_may_kpis`). The detail panel, scorecard header, breadcrumbs, etc. read those columns directly. So:
-- If you edited the canonical text **without ticking "Propagate"** → the registry row changes but the live `kpis` row text doesn't, and the dashboard keeps showing the old text.
-- If you ticked Propagate → it only rewrote rows where `kpi_definition_id = <this definition>`, which (per Reason 1) was zero rows for this KPI.
+Replace `enforce_on_behalf_score_or_na` so it only enforces when the **current write itself** is the on-behalf submission. Two checks must both be true to enforce:
 
-Net effect for your screenshot: **0 rows updated, dashboard shows the original imported text.**
+- `NEW.auto_advance_reason` matches the on-behalf pattern, **AND**
+- `OLD.auto_advance_reason IS DISTINCT FROM NEW.auto_advance_reason` (it is being set/changed by this write — i.e. this UPDATE is the actual on-behalf event), OR `TG_OP = 'INSERT'`.
 
-### Bonus observation
-The `canonical_kpi_name` for this definition is the entire "Description / Formula / Scoring Logic" blob (over 400 chars). Whatever the admin pasted as the canonical KPI name went straight into the column — that's why the rendered title in the dialog is so long. You probably want to re-edit it to a short, clean canonical (e.g. `Proactive Safety Reporting (UA, UC, & Near Miss)`) and put the description into the `kpi_description` field instead.
+This preserves BUG-047 protection on the original write path (admin clicks submit in `AdminDataEntryDialog`) but stops the false positive on every later UPDATE that merely inherits the stale text.
 
----
+### 2. Database migration — clear stale reasons on cascade-clear paths
 
-## Fix plan
+In the existing step-back / cascade-clear / send-back triggers and RPCs that null out a stage's score, also null `auto_advance_reason` (or rewrite it to a `Cleared by …` marker). This prevents stale provenance text from accumulating. Scope: only clear when the write also clears the matching `<stage>_score` and `<stage>_rating`.
 
-### Step 1 — Backfill the missing `kpi_definition_id` link (one-time, scoped)
+### 3. Database migration — one-time data repair
 
-Add an admin-only utility (one-shot SQL migration) that, for **May 2026+ rows only** and respecting the existing forward-only freeze, sets `kpis.kpi_definition_id = d.id` where the row's `(category_id, normalized kra_name, normalized kpi_name)` matches either:
-- a `kpi_definitions` canonical pair, OR
-- a `kpi_name_aliases` variant pair.
+For rows currently in the broken state (stale on-behalf reason + null score + not N/A + status no longer at or past the corresponding stage), null `auto_advance_reason` so existing UPDATE attempts unblock immediately. Scoped audit: insert `kpi_audit_logs` rows with `action = 'RECONCILE_STATUS'`, `metadata.reason = 'bug047_stale_reason_repair_v1'`, `performed_by = NULL` per system-performer attribution policy.
 
-This is the same matcher already used by `useCanonicalAutolink`; we just run it once retroactively. Pre-May-2026 rows are never touched (POLICY §88I freeze).
+### 4. Regression tests
 
-After this backfill, all the canonical-aware UI (`KpiHistoryCard`, `KpiTrackerModal`, `KpiJourneySection`) will start grouping the historical alias rows correctly without any further code change.
+Add to `src/test/bugBountyFixes.test.ts` under `BUG-047`:
 
-### Step 2 — Make `useEditDefinition` always propagate the visible text on May 2026+ rows
+- Existing on-behalf write with NULL score + N/A=false → still blocked (positive control).
+- INSERT with on-behalf reason + score present → allowed.
+- UPDATE that does **not** change `auto_advance_reason` and only modifies an unrelated column (e.g. `auditor_remarks`) on a row with stale on-behalf text → **allowed** (the regression we are fixing).
+- Step-back path that clears `hr_pms_score` also clears `auto_advance_reason`.
 
-Today the propagate checkbox is opt-in. Change the contract so that for May 2026+ rows linked to the definition (post-Step-1 they will be linked), the literal `kra_name` / `kpi_name` columns on `kpis` are **always** rewritten to the new canonical text. The checkbox stays only as an "also rewrite older alias rows" escalation if we ever extend it.
+### 5. Documentation sync
 
-Implementation: in `src/hooks/useKpiRegistry.ts → useEditDefinition`, drop the `if (propagate)` guard around the `correct_may_kpis` loop and run it unconditionally for May-2026+ tuples; keep the existing audit log entry but record `propagate=true` automatically. Update `EditDefinitionDialog.tsx` copy so admins know edits are always applied to current-period rows.
+- `POLICY.md` §116: clarify guardrail is write-scoped (only fires on the write that sets the on-behalf reason). Add §116.x noting that cascade-clear paths must also clear `auto_advance_reason`.
+- `mem/features/admin/admin-data-entry-workflow-controls`: update the BUG-047 paragraph with the stale-reason caveat and the new "write-scoped" semantics.
+- `DOCUMENTATION.md` Version History: append entry "vX.Y.Z — BUG-047 stale-reason guardrail fix".
 
-### Step 3 — Fall back to canonical text in the dashboard detail panel
+## Risk & Impact Report
 
-Belt-and-braces: in the "View KPI Details" component (the dialog in your screenshot — `KpiTrackerModal` / its header), when `useCanonicalVariantPairs` resolves a definition, render `canonicalPair(variantPairs).kra_name` / `.kpi_name` for the visible title instead of `kpi.kra_name` / `kpi.kpi_name`. This guarantees the registry's canonical wording wins on screen even if a future row is created before autolink stamps it.
+| Area              | Impact / Mitigation                                                                                                      |
+|-------------------|---------------------------------------------------------------------------------------------------------------------------|
+| Data Impact       | One-time NULL of `auto_advance_reason` on stale rows; preserves all scores. Audit-logged. Scoped WHERE clause.            |
+| Workflow Impact   | None for normal flows. AdminDataEntry on-behalf still requires score-or-N/A on the actual submit (POLICY §116 intact).    |
+| UI/UX Consistency | None. Timeline ("on behalf of …") rendering uses `kpi_audit_logs` rows, not the live `auto_advance_reason` column.        |
+| Regression Risk   | Trigger logic narrows enforcement — covered by new positive + negative unit tests in `bugBountyFixes.test.ts`.            |
+| Mitigation        | Write-scoped check (`OLD IS DISTINCT FROM NEW`) + cascade-clear on step-back + tests covering both.                       |
 
-### Step 4 — Re-edit the bad canonical entry for this specific KPI
+## Files to Change
 
-Admin task (no code): in `/admin/kpi-standardization → Review Registry`, open definition `bc48a549-…` and shorten `canonical_kpi_name` to the real KPI title (e.g. `Proactive Safety Reporting (UA, UC, & Near Miss)`). Tick "Propagate". With Steps 1-3 in place this will now correctly rewrite every May-2026+ row.
+- `supabase/migrations/<timestamp>_bug047_write_scoped_guardrail.sql` — new
+- `src/test/bugBountyFixes.test.ts` — new BUG-047 cases
+- `POLICY.md` — §116 clarifications
+- `DOCUMENTATION.md` — version history entry
+- `mem/features/admin/admin-data-entry-workflow-controls` — updated note
 
-### Step 5 — Tests & docs
-
-- Unit test for the backfill SQL: an unlinked May-2026 row whose `(kra,kpi)` matches an alias gets stamped; a pre-May-2026 row never does.
-- Unit test for `useEditDefinition`: editing a canonical now updates `kpis.kra_name`/`kpi_name` on linked May-2026+ rows even with `propagate=false` in the call site (default behaviour change).
-- Component test asserting the detail header prefers canonical text when variant pairs are present.
-- Update `mem/features/admin/kpi-standardization-registry` and `POLICY.md` §88I to reflect: (a) one-shot backfill semantics, (b) edit-always-propagates contract, (c) detail-panel canonical-first rendering.
-
-## Risk & impact
-
-- **Data impact**: Step 1 only writes to `kpis.kpi_definition_id` (no business field change), only for May 2026+ rows where a canonical mapping already exists, so it cannot change scores or history. Step 2/4 will rewrite `kra_name`/`kpi_name` for May 2026+ rows linked to *edited* definitions — exactly what the user wants — and is logged in `kpi_audit_logs` + `kpi_standardization_actions` for full reversibility via the existing History/Undo tab.
-- **Workflow impact**: None. Workflow stages, scores, weightages, and approvals are untouched.
-- **UI/UX**: Headers across the dashboard, scorecard, modals, and reports will start showing the cleaned canonical wording for current-period rows.
-- **Regression risk**: Low. Canonical-aware consumers already exist; we're feeding them the link they were missing. Pre-May-2026 freeze is preserved by every code path.
-- **Mitigation**: New unit tests in Step 5; manual QA on the exact KPI from the screenshot before merging.
-
-## Files I expect to touch
-
-- `supabase/migrations/<new>.sql` — one-shot backfill of `kpis.kpi_definition_id`.
-- `src/hooks/useKpiRegistry.ts` — make `useEditDefinition` always propagate to current-period rows.
-- `src/components/admin/kpi-standardization/EditDefinitionDialog.tsx` — copy update.
-- `src/components/dashboard/KpiTrackerModal.tsx` (and the detail header it renders) — prefer canonical pair for display.
-- `src/lib/canonicalRelatedKpis.ts` — small helper to expose the canonical pair to header components if not already exported in a usable form.
-- Tests under `src/test/` and `src/lib/`.
-- `mem/features/admin/kpi-standardization-registry`, `POLICY.md`, `DOCUMENTATION.md` change-log.
+Approve to implement.
