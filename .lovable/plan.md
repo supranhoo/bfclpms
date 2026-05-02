@@ -1,93 +1,95 @@
-# Fix: Step Back dialog hides workflow stages that the KPI actually used
+## RCA
 
-## Root Cause Analysis
+I checked the code and the live data for the screenshot case.
 
-**Reported case**: Amol Ashok Shivankar — *Stack Emission and PM Monitoring Adherence* — March 2026, currently `approved`. The Target Stage dropdown offers only: KRA Set, Self Review, Manager Review, Skip-Level Review, HR PMS Review. **Audit Review and Management Review are missing.**
+For Amol Ashok Shivankar's **March 2026** KPI `Stack Emission and PM Monitoring Adherence`, the backend returns:
 
-**What the database shows**:
+- Period-resolved workflow: `kra_set → self_review → manager_check → audit → approved`
+- Current/default workflow: `kra_set → self_review → manager_check → skip_level_check → hr_pms_review → approved`
+- Submission data: `self_score = 5`, `manager_score = 5`, `auditor_score = 0`, `final_score = 0`
 
-| Field            | Value |
-|------------------|-------|
-| status           | approved |
-| self_score       | 5 |
-| manager_score    | 5 |
-| skip_level_score | NULL |
-| hr_pms_score     | NULL |
-| **auditor_score**| **0** ← KPI did go through audit |
-| management_score | NULL |
-| final_score      | 0 |
+So the dialog should show **Audit Review** and default to it. The screenshot still shows **Skip-level Review / HR PMS Review**, which means the UI is still resolving the target list from a stale/current workflow path before the period-aware/data-bearing correction is effectively reflected in the rendered dropdown.
 
-`get_employee_workflow('Amol')` (no period args) returns:
-```
-[kra_set, self_review, manager_check, skip_level_check, hr_pms_review, approved]
-```
-— a **5-stage** workflow with no `audit` and no `management_review`.
+Most likely failure points found in code:
 
-**Two compounding defects:**
-
-### Defect A — Period-blind workflow lookup
-`AdminStatusStepBackDialog` calls `get_employee_workflow(employee_uuid)` **without `p_review_period` / `p_review_year`**. The RPC therefore skips all the period-specific priority branches and returns the *current* global fallback. If the workflow template was changed since the KPI was reviewed, the dialog shows the new template's stages — not the stages the KPI actually traversed.
-
-### Defect B — Workflow template ignores stages with real data
-Even when the resolved workflow doesn't include `audit`, the KPI's `review_submissions` row has `auditor_score = 0`. Stages that hold actual scoring data MUST be reachable via step-back, otherwise the admin can never reverse a wrong auditor decision (the very purpose of step-back).
-
-The result: a user-facing toast called this *"incorrect target stages"* — and they're right. The dialog hides legitimate, data-bearing stages.
-
-## What to Build
-
-### 1. Pass the KPI's period to the workflow lookup
-
-In `AdminStatusStepBackDialog.tsx`:
-
-- Accept new optional props `reviewPeriod?: string` and `reviewYear?: number`.
-- Pass them through to `supabase.rpc('get_employee_workflow', { employee_uuid, p_review_period, p_review_year })` so the RPC walks its period-specific priority chain (which falls back to global only when no period match exists).
-- Update every caller (`KpiHeaderSection`, `AllKpis`, anywhere else that opens the dialog) to forward the KPI's `review_period` / `review_year`.
-
-### 2. Union with stages that hold real submission data
-
-Add a second query in the dialog that fetches the KPI's `review_submissions` row and inspects which `*_score` columns are non-NULL. For each non-NULL score, ensure the corresponding stage (`self_review`, `manager_check`, `skip_level_check`, `hr_pms_review`, `audit`, `management_review`) is **always present** in `availableTargets`, even if the resolved workflow omits it. Sort the union by `FULL_STATUS_ORDER` so the dropdown stays in canonical order.
-
-This guarantees: any stage with persisted data is reachable for step-back, and pure metadata-only stages from the configured template still show too.
-
-### 3. Default-target safety
-
-`getPreviousStatus` currently returns the stage immediately before `current` in the resolved workflow. With the union from step 2, also recompute the default selection so it points to the **immediately-prior data-bearing stage** if one exists (i.e. for an approved KPI with auditor_score=0, default to `audit`, not `hr_pms_review`). Falls through to the existing logic when no scored stages precede `current`.
-
-### 4. Visual hint
-
-When a stage in the dropdown is included only because it has data (not because it's part of the current workflow template), append a small inline badge `(historic)` next to its label so the admin knows why it's offered. Pure tooltip — no behavior change.
-
-### 5. Documentation + memory sync
-
-- POLICY.md — add §117 "Step-Back Target Set Composition": *"The step-back target dropdown is the union of (a) stages in the KPI's period-resolved workflow template and (b) every stage with non-NULL persisted data in `review_submissions`. Hiding a data-bearing stage is forbidden because it makes recorded scores unreachable for correction."*
-- Memory `workflow-resilient-status-stepback` — append the union rule and period-aware lookup requirement.
-
-### 6. Regression tests
-
-`src/test/` — new tests for `AdminStatusStepBackDialog`:
-- KPI with `auditor_score=0` but workflow template lacks `audit` → dropdown still includes `Audit Review`.
-- Period-aware RPC called with `p_review_period` / `p_review_year`.
-- Default target = nearest prior data-bearing stage when one exists.
-- Workflow + data both empty for a stage → that stage is not offered.
+1. `AdminStatusStepBackDialog` can render before `dataBearingStages` finishes loading, so the Select value can initialize to `HR PMS Review` from the fallback workflow and not visibly correct itself.
+2. `previousStatus` is still computed independently from the target list and can influence the displayed selected value even when `availableTargets` contains a better period/data-aware option.
+3. The dialog accepts optional external workflow data, but `KpiReviewPanel` passes workflow stages only into `KpiJourneySection`, not into `AdminStatusStepBackDialog`; therefore the dialog has to refetch and may briefly use fallback/current information.
+4. There is no visible loading/diagnostic state to prevent admins from selecting a target before workflow + submission score evidence has been resolved.
 
 ## Risk & Impact Report
 
-| Area              | Impact / Mitigation                                                                                                              |
-|-------------------|----------------------------------------------------------------------------------------------------------------------------------|
-| Data Impact       | None. Only UI selection logic changes; RPC + step-back mutation untouched.                                                       |
-| Workflow Impact   | The step-back mutation already accepts any `target_status` enum; allowing a data-bearing stage to be selected does not bypass any policy — the cascade-clear in `useAdminStatusStepBack` already handles arbitrary targets. |
-| UI/UX Consistency | Dropdown gains 0–2 extra options only when persisted data warrants. Non-disruptive for KPIs whose workflow + data align.         |
-| Regression Risk   | Low. Existing call sites continue working without the new period props (default = current behavior); union fallback is additive.  |
-| Mitigation        | Period args are optional; data-union runs only when the KPI has a `review_submissions` row; tests cover all four combinations.    |
+**Data Impact**
+- No schema or RLS change required.
+- No historical data will be modified by this fix.
+- Step-back execution will still use the existing audit log and cascade-clear behavior.
 
-## Files to Change
+**Workflow Impact**
+- Only the admin Step Back target-selection UI changes.
+- It will become stricter: the target dropdown will wait until the period workflow and persisted score stages have loaded.
+- For the reported March 2026 case, target should become `Audit Review`, not `HR PMS Review`.
 
-- `src/components/admin/AdminStatusStepBackDialog.tsx` — period-aware RPC, union with data-bearing stages, smarter default
-- `src/components/review/KpiHeaderSection.tsx` — forward `reviewPeriod`/`reviewYear` to dialog
-- `src/pages/admin/AllKpis.tsx` — forward `reviewPeriod`/`reviewYear` to dialog
-- `src/hooks/useAdminDataEntry.ts` — minor: optional `getPreviousStatus` data-aware variant (or keep separate util)
-- `POLICY.md` — new §117
-- `mem/features/admin/workflow-resilient-status-stepback` — append union rule
-- `src/test/` — new tests
+**UI/UX Impact**
+- The dialog may show a short “resolving target stages” state before enabling the dropdown.
+- Target labels will be clearer, including a small note when a stage is available because it has recorded data.
 
-Approve to implement.
+**Regression Risk**
+- Medium, because step-back target selection touches approved KPI correction workflows and sibling reset behavior.
+- Low database risk because this is UI/helper logic only.
+
+**Mitigation Plan**
+- Centralize default-target selection from the already-computed target list instead of mixing `previousStatus`, `dataAwareDefault`, and fallback values.
+- Add regression tests for the exact Amol data shape: period workflow excludes HR PMS and includes Audit, `auditor_score = 0`, current status `approved`.
+- Update `POLICY.md`, `DOCUMENTATION.md`, and memory to record the stricter “do not render stale target list” rule.
+
+## Implementation Plan
+
+1. **Make Step Back target resolution atomic**
+   - In `AdminStatusStepBackDialog.tsx`, derive one canonical `resolvedDefaultTarget` from `availableTargets` after both queries finish.
+   - Stop using `previousStatus` as an independent Select fallback when `availableTargets` already has a data-aware target.
+   - If the exact current KPI has `auditor_score = 0`, ensure `audit` is considered data-bearing because the code already checks `!== null`, not truthiness.
+
+2. **Prevent stale workflow dropdown display**
+   - Add a loading state while the workflow query or data-bearing-stage query is pending.
+   - Disable the Select and Confirm button until target stages are resolved.
+   - Reset `selectedTarget` when the dialog opens for a new KPI or when the computed default changes, so hard refresh/cached React state cannot retain `HR PMS Review`.
+
+3. **Prefer the computed target list for default selection**
+   - Add a helper such as `getPreferredStepBackTarget(currentStatus, targets, dataBearingStages)` in `useAdminDataEntry.ts`.
+   - Preference order:
+     1. Nearest prior data-bearing stage present in `availableTargets`
+     2. Nearest prior workflow stage present in `availableTargets`
+     3. `kra_set`
+   - This avoids a mismatch where dropdown options and selected value are calculated by different rules.
+
+4. **Pass known workflow stages through the review panel path where available**
+   - Update `KpiHeaderSection` props to accept `workflowStages`.
+   - Pass `workflowStages` from `KpiReviewPanel` into `KpiHeaderSection`, then into `AdminStatusStepBackDialog`.
+   - Keep the dialog’s own period-aware RPC as fallback for pages like `AllKpis`.
+
+5. **Improve admin diagnostics in the dialog**
+   - Add a small note showing the resolved basis, e.g. `Workflow for March 2026` and `Audit Review included from recorded score`.
+   - Keep `(historic)` only for stages present due to data but absent from the resolved period workflow.
+
+6. **Regression tests and mock coverage**
+   - Extend `src/test/stepBackTargetComposition.test.ts` with the exact failing shape:
+     - Workflow: `kra_set, self_review, manager_check, audit, approved`
+     - Data-bearing: `self_review, manager_check, audit`
+     - Current: `approved`
+     - Expected default: `audit`
+     - Expected excluded targets: `skip_level_check`, `hr_pms_review`
+   - Add a test for loading/stale-state behavior at helper level by ensuring defaults are derived only from final target composition.
+
+7. **Documentation and policy sync**
+   - Update `POLICY.md §117` to add: target dropdown must not render or enable stale fallback stages while period/data-bearing resolution is still loading.
+   - Update `DOCUMENTATION.md` Version History with the RCA and fix.
+   - Update `mem/features/admin/workflow-resilient-status-stepback` with the stricter default/anti-stale rule.
+
+## Expected Result
+
+After implementation, for Amol’s March 2026 approved KPI:
+
+- The dropdown will show `KRA Set`, `Self Review`, `Manager Review`, and `Audit Review`.
+- It will **not** show `Skip-level Review` or `HR PMS Review` for that period.
+- The default selected target will be **Audit Review**.
+- Confirming step-back will move the KPI from `Approved` back to `Audit Review`, preserving earlier Self/Manager data and clearing only downstream approved/final fields according to existing step-back policy.

@@ -30,9 +30,11 @@ interface KpiHeaderSectionProps {
   orgKpiEnteredByName?: string | null;
   orgKpiDataOwnerNames?: string[];
   employeeId?: string;
+  /** Period-resolved workflow stages, when known by the parent. POLICY §117. */
+  workflowStages?: string[];
 }
 
-export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTimeline, orgKpiEnteredByName, orgKpiDataOwnerNames, employeeId }: KpiHeaderSectionProps) {
+export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTimeline, orgKpiEnteredByName, orgKpiDataOwnerNames, employeeId, workflowStages }: KpiHeaderSectionProps) {
   const { role } = useAuth();
   const isAdmin = role === 'admin';
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -264,6 +266,7 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
           currentStatus={status}
           reviewPeriod={kpi.review_period ?? undefined}
           reviewYear={kpi.review_year ?? undefined}
+          workflowStages={workflowStages}
         />
       </>
     )}

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
@@ -13,7 +13,7 @@ import {
   useAdminStatusStepBack,
   getPreviousStatus,
   computeStepBackTargets,
-  getDataAwareDefaultTarget,
+  getPreferredStepBackTarget,
 } from '@/hooks/useAdminDataEntry';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
@@ -60,7 +60,7 @@ export function AdminStatusStepBackDialog({
 
   // Fetch employee's actual workflow stages when dialog is open and no external stages provided.
   // Pass period args so the RPC walks its period-specific priority chain (POLICY §117).
-  const { data: fetchedStages } = useQuery({
+  const { data: fetchedStages, isLoading: stagesLoading, isFetching: stagesFetching } = useQuery({
     queryKey: ['employee-workflow', employeeId, reviewPeriod ?? null, reviewYear ?? null],
     queryFn: async () => {
       const { data } = await supabase.rpc('get_employee_workflow', {
@@ -76,7 +76,7 @@ export function AdminStatusStepBackDialog({
 
   // Fetch persisted scoring data for this KPI so step-back can always reach
   // any stage that actually has data (POLICY §117 — Step-Back Target Composition).
-  const { data: dataBearingStages } = useQuery({
+  const { data: dataBearingStages, isLoading: dataLoading, isFetching: dataFetching } = useQuery({
     queryKey: ['kpi-data-bearing-stages', kpiId],
     queryFn: async () => {
       const { data } = await supabase
@@ -106,14 +106,32 @@ export function AdminStatusStepBackDialog({
     [currentStatus, workflowStages, dataBearingStages]
   );
 
-  const dataAwareDefault = useMemo<ReviewStatus | null>(
-    () => getDataAwareDefaultTarget(currentStatus, dataBearingStages ?? []),
-    [currentStatus, dataBearingStages]
+  // POLICY §117 — derive the canonical default ONLY from `availableTargets`
+  // so the Select value can never disagree with its option list.
+  const preferredDefault = useMemo<ReviewStatus | null>(
+    () => getPreferredStepBackTarget(currentStatus, availableTargets, dataBearingStages ?? []),
+    [currentStatus, availableTargets, dataBearingStages]
   );
+
+  // Resolution must wait for BOTH the period-aware workflow lookup AND the
+  // data-bearing stages query — otherwise the Select can briefly initialize
+  // to a stale fallback (e.g. HR PMS) and stick due to user/cached state.
+  const isResolving = (!externalStages && (stagesLoading || stagesFetching)) || dataLoading || dataFetching;
+
+  // Reset any previously selected target when the dialog opens for a new KPI
+  // or when the resolved option set changes underneath it.
+  useEffect(() => {
+    if (!isOpen) return;
+    if (selectedTarget && !availableTargets.some(t => t.stage === selectedTarget)) {
+      setSelectedTarget('');
+    }
+  }, [isOpen, kpiId, availableTargets, selectedTarget]);
 
   const effectiveTarget = fullReset
     ? 'kra_set'
-    : (selectedTarget || dataAwareDefault || previousStatus || 'kra_set') as ReviewStatus;
+    : ((selectedTarget && availableTargets.some(t => t.stage === selectedTarget))
+        ? selectedTarget
+        : (preferredDefault || 'kra_set')) as ReviewStatus;
 
   const handleSubmit = () => {
     if (!effectiveTarget || !reason.trim()) return;
@@ -202,13 +220,19 @@ export function AdminStatusStepBackDialog({
                 <Badge variant="secondary" className="text-sm">
                   {getStageLabel('kra_set')} (Full Reset)
                 </Badge>
+              ) : isResolving ? (
+                <Badge variant="outline" className="text-sm text-muted-foreground">
+                  Resolving target stages…
+                </Badge>
               ) : availableTargets.length > 1 ? (
                 <Select
-                  value={selectedTarget || dataAwareDefault || (previousStatus ?? '')}
+                  value={(selectedTarget && availableTargets.some(t => t.stage === selectedTarget))
+                    ? selectedTarget
+                    : (preferredDefault ?? '')}
                   onValueChange={(v) => setSelectedTarget(v as ReviewStatus)}
                   disabled={fullReset}
                 >
-                  <SelectTrigger className="w-[180px]">
+                  <SelectTrigger className="w-[200px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -224,14 +248,20 @@ export function AdminStatusStepBackDialog({
                 </Select>
               ) : (
                 <Badge variant="secondary" className="text-sm">
-                  {dataAwareDefault
-                    ? getStageLabel(dataAwareDefault)
+                  {preferredDefault
+                    ? getStageLabel(preferredDefault)
                     : previousStatus
                     ? getStageLabel(previousStatus)
                     : '—'}
                 </Badge>
               )}
             </div>
+            {!isResolving && reviewPeriod && reviewYear && (
+              <p className="text-[11px] text-muted-foreground">
+                Workflow resolved for {reviewPeriod} {reviewYear}
+                {availableTargets.some(t => t.historic) && ' · includes stages with recorded data'}
+              </p>
+            )}
           </div>
 
           {/* Full Reset checkbox */}
@@ -279,10 +309,16 @@ export function AdminStatusStepBackDialog({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={!reason.trim() || stepBackMutation.isPending}
+            disabled={!reason.trim() || stepBackMutation.isPending || isResolving}
             variant={fullReset ? 'destructive' : 'default'}
           >
-            {stepBackMutation.isPending ? 'Processing...' : fullReset ? 'Confirm Full Reset' : 'Confirm Step Back'}
+            {stepBackMutation.isPending
+              ? 'Processing...'
+              : isResolving
+              ? 'Resolving…'
+              : fullReset
+              ? 'Confirm Full Reset'
+              : 'Confirm Step Back'}
           </Button>
         </DialogFooter>
       </DialogContent>
