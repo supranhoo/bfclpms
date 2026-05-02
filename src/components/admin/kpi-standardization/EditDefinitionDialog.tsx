@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { useEditDefinition, KpiDefinition } from '@/hooks/useKpiRegistry';
 
@@ -19,20 +18,20 @@ export function EditDefinitionDialog({ open, onClose, definition, onSaved }: Pro
   const { editDefinition, saving } = useEditDefinition();
   const [kra, setKra] = useState('');
   const [kpi, setKpi] = useState('');
-  const [propagate, setPropagate] = useState<'registry' | 'propagate'>('registry');
 
   useEffect(() => {
     if (definition) {
       setKra(definition.canonical_kra_name);
       setKpi(definition.canonical_kpi_name);
-      setPropagate('registry');
     }
   }, [definition]);
 
   const handleSave = async () => {
     if (!definition) return;
     if (!kra.trim() || !kpi.trim()) return;
-    const ok = await editDefinition(definition.id, kra, kpi, propagate === 'propagate');
+    // Phase 5c: edits always propagate to May-2026+ linked rows. The flag
+    // is retained in the API for compatibility but is no longer user-tunable.
+    const ok = await editDefinition(definition.id, kra, kpi, true);
     if (ok) {
       onSaved?.();
       onClose();
