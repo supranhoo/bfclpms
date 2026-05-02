@@ -326,6 +326,7 @@ export function useBuildRegistry() {
           b.canonicalKpi,
           categoryId,
           b.variants,
+          { silent: buckets.length > 1 },
         );
         if (id) succeeded++;
       }
