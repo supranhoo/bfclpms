@@ -34,6 +34,12 @@ interface PropagateParams {
   naRemarks?: string;
   remarks?: string;
   evidenceUrl?: string | null;
+  /**
+   * v2.66.8 — When true, this single mutateAsync call will NOT emit its own
+   * success/info toast. Use this when looping over many scopes so the caller
+   * can emit ONE summary toast instead of N stacked ones.
+   */
+  silent?: boolean;
 }
 
 /**
