@@ -630,6 +630,11 @@ export default function OrgKpiDataEntry() {
     
     // Track propagation results for completeness validation
     let totalPropagated = 0;
+    // v2.66.8 — Aggregate skip totals across the per-scope loop so we can emit
+    // ONE summary toast for the whole batch instead of N stacked toasts (the
+    // previous "1 matching past initial stage" message that fired 13× silently).
+    let totalSkippedBenign = 0;
+    let totalSkippedHard = 0;
     const kk = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
     const expectedCount = employeeCountMap.get(kk) ?? 0;
     
@@ -685,9 +690,41 @@ export default function OrgKpiDataEntry() {
           isNa: sv.isNa,
           remarks: sv.remarks || undefined,
           evidenceUrl: sv.evidenceUrl || undefined,
+          // v2.66.8 — silence per-scope toasts; we emit one summary below
+          silent: true,
         });
         totalPropagated += result.propagatedCount;
+        // Aggregate skip reasons for the summary toast
+        const skipped = result.skipped || [];
+        for (const s of skipped) {
+          if (s.reason === 'not_in_kra_set') totalSkippedBenign++;
+          else totalSkippedHard++;
+        }
         propagatedScopeIds.push(sv.scopeId);
+      }
+
+      // v2.66.8 — Single summary toast for the per-scope batch
+      if (totalPropagated > 0 && (totalSkippedBenign + totalSkippedHard) === 0) {
+        toast({
+          title: `Propagated to ${totalPropagated} employee KPI(s)`,
+          description: 'Review submissions updated with org-level values.',
+        });
+      } else if (totalPropagated > 0 && totalSkippedBenign > 0 && totalSkippedHard === 0) {
+        toast({
+          title: `Propagated to ${totalPropagated} employee KPI(s)`,
+          description: `${totalSkippedBenign} already past the data-owner stage — their previously propagated values remain in place.`,
+        });
+      } else if (totalPropagated === 0 && totalSkippedBenign > 0 && totalSkippedHard === 0) {
+        toast({
+          title: 'Already propagated',
+          description: `All ${totalSkippedBenign} matching KPI(s) have already advanced past the data-owner stage. Re-propagation is intentionally blocked once an employee has self-reviewed (POLICY §88).`,
+        });
+      } else if (totalSkippedHard > 0) {
+        toast({
+          title: `Propagation incomplete`,
+          description: `${totalPropagated} updated, ${totalSkippedHard} could not be advanced (missing rows or race condition). Please refresh and retry.`,
+          variant: 'destructive',
+        });
       }
     }
 
