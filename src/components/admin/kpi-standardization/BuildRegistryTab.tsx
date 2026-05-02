@@ -460,7 +460,7 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
                       disabled={saving}
                     >
                       {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <CheckCircle2 className="h-4 w-4 mr-1" />}
-                      Approve as Canonical
+                      {isMultiBucket ? `Approve ${buckets.length} canonicals` : 'Approve as Canonical'}
                     </Button>
                   </>
                 )}
