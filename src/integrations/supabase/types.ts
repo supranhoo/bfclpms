@@ -8324,7 +8324,7 @@ export type Database = {
       }
       run_safety_sla_escalations: { Args: never; Returns: Json }
       scan_kpi_duplicate_groups: {
-        Args: { p_include_skipped?: boolean }
+        Args: { p_fuzzy_threshold?: number; p_include_skipped?: boolean }
         Returns: Json
       }
       set_safety_setting: {
