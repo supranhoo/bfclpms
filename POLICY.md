@@ -2111,6 +2111,32 @@ A submission that advances the KPI past the reviewer stage with neither signatur
 
 ---
 
+## §117 — Step-Back Target Composition (v2.66.7.50, BUG-048)
+
+**Date:** 2026-05-02 · **Status:** Active
+
+The Step Back KPI Status dialog (`AdminStatusStepBackDialog`) MUST offer every workflow stage that the KPI either belongs to **or** has persisted scoring data for. Specifically, the **Target Stage** dropdown is the union of:
+
+1. Every stage strictly before the current `kpis.status` in the KPI's **period-resolved** workflow template — i.e. `get_employee_workflow(employee_uuid, p_review_period, p_review_year)`. The period args MUST be passed; calling the RPC without them returns the *current* global fallback and silently misrepresents the workflow that actually governed the KPI when it was reviewed.
+2. Every stage with non-NULL persisted data in `review_submissions` (`self_score`, `manager_score`, `skip_level_score`, `hr_pms_score`, `auditor_score`, `management_score`) that is strictly before the current status.
+
+`kra_set` MUST always be included as a baseline reset target. The list MUST be sorted by the canonical `FULL_STATUS_ORDER`.
+
+**Why**: Hiding a stage that holds real scoring data makes the recorded score unreachable for correction — the very purpose of step-back. Reported case: Amol Ashok Shivankar's March 2026 *Stack Emission and PM Monitoring Adherence* KPI was approved with `auditor_score = 0` (forcing `final_score = 0`) even though his current workflow template omits the `audit` stage. The dropdown previously offered only KRA Set / Self / Manager / Skip-Level / HR PMS, leaving the auditor's zero permanently locked behind an invisible stage.
+
+**Required enforcement**:
+
+1. **Period-aware lookup.** Call sites that open `AdminStatusStepBackDialog` (`KpiHeaderSection`, `AllKpis`, any future surface) MUST forward `reviewPeriod` and `reviewYear` props. The dialog MUST pass them to `get_employee_workflow`. Omitting them is forbidden.
+2. **Data-bearing union.** The dialog MUST query `review_submissions` for the KPI and union every stage with a non-NULL score column into the target set, regardless of whether that stage is in the resolved workflow template.
+3. **Default selection.** The default selected target MUST be the immediately-prior **data-bearing** stage when one exists (e.g. `audit` for the Amol case above), falling through to `getPreviousStatus(currentStatus, workflowStages)` and finally `kra_set`.
+4. **UI hint.** Stages that appear only because of historic data (not in the resolved workflow template) MUST be flagged inline with a `(historic)` marker so the admin understands why the option is offered.
+
+**Forbidden**: Filtering the target dropdown strictly by the workflow template. Calling `get_employee_workflow` without period args from this dialog. Hiding a stage that has any non-NULL `*_score` value below `current`.
+
+**Regression coverage**: `src/test/stepBackTargetComposition.test.ts` (8 cases) pins the union semantics, canonical ordering, baseline `kra_set` inclusion, and the data-aware default selector.
+
+---
+
 ## §95 — Profile Cache Invalidation Contract
 
 When a profile (`public.profiles`) row is inserted, updated, or deleted — through any code path (User Management UI, bulk imports, edge functions, direct DB) — the React Query caches that derive from profile fields (`employee_code`, `full_name`, `designation`, `department_id`, `company_id`, `is_active`, `reporting_manager_id`) MUST be invalidated immediately.

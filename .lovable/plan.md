@@ -1,78 +1,93 @@
-# Fix: Misleading "Nothing to propagate — past initial stage" message
+# Fix: Step Back dialog hides workflow stages that the KPI actually used
 
 ## Root Cause Analysis
 
-**KPI**: "Completion of Mandated Average Training Hours" — April 2026, 13 employees, scope per-employee.
+**Reported case**: Amol Ashok Shivankar — *Stack Emission and PM Monitoring Adherence* — March 2026, currently `approved`. The Target Stage dropdown offers only: KRA Set, Self Review, Manager Review, Skip-Level Review, HR PMS Review. **Audit Review and Management Review are missing.**
 
-**Forensic timeline** (from `kpi_audit_logs` + `org_kpi_values` + `review_submissions`):
+**What the database shows**:
 
-| Time         | Event                                                                                   |
-|--------------|-----------------------------------------------------------------------------------------|
-| 12:34:41–45  | Data owner clicked **Propagate** the first time. RPC advanced all 13 KPIs `kra_set` → `self_review`, wrote `review_submissions` (achieved=100, self_score=5). All `org_kpi_values.status = 'propagated'`. |
-| 12:36:23–39  | Data owner clicked **Propagate** again (~2 min later). Every employee KPI was already `self_review`, so the RPC skipped all 13 and emitted `PROPAGATION_PARTIAL` audit rows. The UI fired 13 destructive toasts; the user only sees the last one: *"All 1 matching KPI(s) are already past the initial stage."* |
+| Field            | Value |
+|------------------|-------|
+| status           | approved |
+| self_score       | 5 |
+| manager_score    | 5 |
+| skip_level_score | NULL |
+| hr_pms_score     | NULL |
+| **auditor_score**| **0** ← KPI did go through audit |
+| management_score | NULL |
+| final_score      | 0 |
 
-**Nothing is actually stuck.** All 13 review submissions are present with achieved_value=100 and self_score=5. The second Propagate click was a no-op. The error message is misleading because:
+`get_employee_workflow('Amol')` (no period args) returns:
+```
+[kra_set, self_review, manager_check, skip_level_check, hr_pms_review, approved]
+```
+— a **5-stage** workflow with no `audit` and no `management_review`.
 
-1. The toast variant is `destructive` (red) — looks like a failure.
-2. The text "past the initial stage" implies a problem the data owner needs to fix, when in reality the propagation is already complete.
-3. The card UI ("1 Pending" badge, red completion bar) reinforces the impression that something is broken, even though the system is in the correct end state.
+**Two compounding defects:**
 
-The underlying RPC behaviour is **correct and intentional** (POLICY §88 Submission Snapshot Immutability — a data owner's edit must not silently overwrite an in-flight self-review). The bug is purely in **how the result is communicated to the user**.
+### Defect A — Period-blind workflow lookup
+`AdminStatusStepBackDialog` calls `get_employee_workflow(employee_uuid)` **without `p_review_period` / `p_review_year`**. The RPC therefore skips all the period-specific priority branches and returns the *current* global fallback. If the workflow template was changed since the KPI was reviewed, the dialog shows the new template's stages — not the stages the KPI actually traversed.
+
+### Defect B — Workflow template ignores stages with real data
+Even when the resolved workflow doesn't include `audit`, the KPI's `review_submissions` row has `auditor_score = 0`. Stages that hold actual scoring data MUST be reachable via step-back, otherwise the admin can never reverse a wrong auditor decision (the very purpose of step-back).
+
+The result: a user-facing toast called this *"incorrect target stages"* — and they're right. The dialog hides legitimate, data-bearing stages.
 
 ## What to Build
 
-### 1. Re-classify the toast — informational, not destructive
+### 1. Pass the KPI's period to the workflow lookup
 
-In `src/hooks/usePropagateOrgKpiValue.ts`:
+In `AdminStatusStepBackDialog.tsx`:
 
-- When `propagatedCount === 0 && skippedCount > 0` AND every skip reason is `not_in_kra_set` (i.e. employees have already moved past self-review), change the toast from `variant: 'destructive'` to default and rewrite the copy:
+- Accept new optional props `reviewPeriod?: string` and `reviewYear?: number`.
+- Pass them through to `supabase.rpc('get_employee_workflow', { employee_uuid, p_review_period, p_review_year })` so the RPC walks its period-specific priority chain (which falls back to global only when no period match exists).
+- Update every caller (`KpiHeaderSection`, `AllKpis`, anywhere else that opens the dialog) to forward the KPI's `review_period` / `review_year`.
 
-  > **"Already propagated"**
-  > "All N matching KPI(s) have already advanced past the data-owner stage. The previously propagated values are still in place — re-propagation is blocked once an employee has self-reviewed (POLICY §88)."
+### 2. Union with stages that hold real submission data
 
-- Keep `destructive` variant only for genuine failures (`kpi_not_found`, `race_lost_during_advance`).
+Add a second query in the dialog that fetches the KPI's `review_submissions` row and inspects which `*_score` columns are non-NULL. For each non-NULL score, ensure the corresponding stage (`self_review`, `manager_check`, `skip_level_check`, `hr_pms_review`, `audit`, `management_review`) is **always present** in `availableTargets`, even if the resolved workflow omits it. Sort the union by `FULL_STATUS_ORDER` so the dropdown stays in canonical order.
 
-### 2. Per-batch toast dedup
+This guarantees: any stage with persisted data is reachable for step-back, and pure metadata-only stages from the configured template still show too.
 
-In `executeSaveAndPropagate` (`src/pages/admin/OrgKpiDataEntry.tsx`), the per-employee loop fires `propagate.mutateAsync` once per scope, each emitting its own toast. For a 13-employee batch this is 13 stacked toasts. Suppress per-call toasts during a batch and emit a single summary toast at the end:
+### 3. Default-target safety
 
-- Add `silent?: boolean` flag to `usePropagateOrgKpiValue` (skips its own `onSuccess` toast when set).
-- Aggregate `{ propagated, skipped, alreadyDone }` totals across the loop and emit one summary: *"Propagated to N employees. M already up to date."*
+`getPreviousStatus` currently returns the stage immediately before `current` in the resolved workflow. With the union from step 2, also recompute the default selection so it points to the **immediately-prior data-bearing stage** if one exists (i.e. for an approved KPI with auditor_score=0, default to `audit`, not `hr_pms_review`). Falls through to the existing logic when no scored stages precede `current`.
 
-### 3. Card status — recognise "already propagated, employees moved on"
+### 4. Visual hint
 
-In `OrgKpiDataEntry.tsx > getKpiStatus`, the current logic flags `'stuck'` only when child KPI is still `kra_set`. It does NOT recognise the legitimate "all OKVs propagated, all employees self-reviewing" state. Add a `'in_review'` (or merge with `'propagated'`) bucket so the card shows green / completed instead of red 0% — and the category badge stops counting it as "1 Pending".
+When a stage in the dropdown is included only because it has data (not because it's part of the current workflow template), append a small inline badge `(historic)` next to its label so the admin knows why it's offered. Pure tooltip — no behavior change.
 
-Specifically: when scope=employee/department, OKVs are all `propagated`/`approved`, AND every child KPI is at `self_review` or beyond, the card status should be `'propagated'` (not `'stuck'`).
+### 5. Documentation + memory sync
 
-### 4. Documentation + memory sync
+- POLICY.md — add §117 "Step-Back Target Set Composition": *"The step-back target dropdown is the union of (a) stages in the KPI's period-resolved workflow template and (b) every stage with non-NULL persisted data in `review_submissions`. Hiding a data-bearing stage is forbidden because it makes recorded scores unreachable for correction."*
+- Memory `workflow-resilient-status-stepback` — append the union rule and period-aware lookup requirement.
 
-- POLICY.md §88: append clarification that re-propagation is blocked once a child KPI has advanced past `kra_set`, and that this is by design (snapshot immutability) — not a recoverable error.
-- mem `org-kpi-management-suite`: note the toast re-classification rule for "already propagated" vs "failure".
+### 6. Regression tests
 
-### 5. Regression tests
-
-`src/test/` — add tests for `usePropagateOrgKpiValue`:
-- All-past-kra_set result → informational toast, NOT destructive.
-- Mixed (some kra_set, some not) → "Partial: N propagated, M already past stage" — still informational.
-- True race-loss / kpi_not_found → destructive toast preserved.
+`src/test/` — new tests for `AdminStatusStepBackDialog`:
+- KPI with `auditor_score=0` but workflow template lacks `audit` → dropdown still includes `Audit Review`.
+- Period-aware RPC called with `p_review_period` / `p_review_year`.
+- Default target = nearest prior data-bearing stage when one exists.
+- Workflow + data both empty for a stage → that stage is not offered.
 
 ## Risk & Impact Report
 
-| Area              | Impact / Mitigation                                                                                                     |
-|-------------------|-------------------------------------------------------------------------------------------------------------------------|
-| Data Impact       | None. No DB writes change. RPC behaviour preserved (still blocks overwrite — POLICY §88 intact).                         |
-| Workflow Impact   | None. Re-propagation remains blocked once self-review starts — only the user-facing message and card state change.        |
-| UI/UX Consistency | Card no longer falsely flags propagated rows as red "Pending"; toast no longer falsely flags as failure.                  |
-| Regression Risk   | Low — only message + status-classification logic changes. Existing tests for propagation success path are unaffected.    |
-| Mitigation        | New unit tests cover all three result branches; `'silent'` flag is opt-in and defaults preserve current behaviour.        |
+| Area              | Impact / Mitigation                                                                                                              |
+|-------------------|----------------------------------------------------------------------------------------------------------------------------------|
+| Data Impact       | None. Only UI selection logic changes; RPC + step-back mutation untouched.                                                       |
+| Workflow Impact   | The step-back mutation already accepts any `target_status` enum; allowing a data-bearing stage to be selected does not bypass any policy — the cascade-clear in `useAdminStatusStepBack` already handles arbitrary targets. |
+| UI/UX Consistency | Dropdown gains 0–2 extra options only when persisted data warrants. Non-disruptive for KPIs whose workflow + data align.         |
+| Regression Risk   | Low. Existing call sites continue working without the new period props (default = current behavior); union fallback is additive.  |
+| Mitigation        | Period args are optional; data-union runs only when the KPI has a `review_submissions` row; tests cover all four combinations.    |
 
 ## Files to Change
 
-- `src/hooks/usePropagateOrgKpiValue.ts` — toast re-classification + `silent` option
-- `src/pages/admin/OrgKpiDataEntry.tsx` — batch summary toast + `getKpiStatus` recognises `in_review`/`propagated`
-- `POLICY.md` — §88 clarification
-- `mem/features/admin/org-kpi-management-suite` — re-propagation messaging rule
-- `src/test/` — new tests for propagation result classification
+- `src/components/admin/AdminStatusStepBackDialog.tsx` — period-aware RPC, union with data-bearing stages, smarter default
+- `src/components/review/KpiHeaderSection.tsx` — forward `reviewPeriod`/`reviewYear` to dialog
+- `src/pages/admin/AllKpis.tsx` — forward `reviewPeriod`/`reviewYear` to dialog
+- `src/hooks/useAdminDataEntry.ts` — minor: optional `getPreviousStatus` data-aware variant (or keep separate util)
+- `POLICY.md` — new §117
+- `mem/features/admin/workflow-resilient-status-stepback` — append union rule
+- `src/test/` — new tests
 
 Approve to implement.

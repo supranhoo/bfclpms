@@ -9,7 +9,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft, Undo2, AlertTriangle } from 'lucide-react';
 import { getStageLabel } from '@/hooks/useWorkflowConfig';
-import { useAdminStatusStepBack, getPreviousStatus, FULL_STATUS_ORDER } from '@/hooks/useAdminDataEntry';
+import {
+  useAdminStatusStepBack,
+  getPreviousStatus,
+  computeStepBackTargets,
+  getDataAwareDefaultTarget,
+} from '@/hooks/useAdminDataEntry';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -25,6 +30,13 @@ interface AdminStatusStepBackDialogProps {
   employeeName: string;
   currentStatus: ReviewStatus;
   workflowStages?: string[];
+  /**
+   * KPI period — used so the workflow lookup resolves the template that actually
+   * governed this KPI (not the current global template). Forwarded to
+   * `get_employee_workflow(employee_uuid, p_review_period, p_review_year)`.
+   */
+  reviewPeriod?: string;
+  reviewYear?: number;
 }
 
 export function AdminStatusStepBackDialog({
@@ -37,6 +49,8 @@ export function AdminStatusStepBackDialog({
   employeeName,
   currentStatus,
   workflowStages: externalStages,
+  reviewPeriod,
+  reviewYear,
 }: AdminStatusStepBackDialogProps) {
   const [reason, setReason] = useState('');
   const [fullReset, setFullReset] = useState(false);
@@ -44,49 +58,62 @@ export function AdminStatusStepBackDialog({
   const [showFullResetConfirm, setShowFullResetConfirm] = useState(false);
   const stepBackMutation = useAdminStatusStepBack();
 
-  // Fetch employee's actual workflow stages when dialog is open and no external stages provided
+  // Fetch employee's actual workflow stages when dialog is open and no external stages provided.
+  // Pass period args so the RPC walks its period-specific priority chain (POLICY §117).
   const { data: fetchedStages } = useQuery({
-    queryKey: ['employee-workflow', employeeId],
+    queryKey: ['employee-workflow', employeeId, reviewPeriod ?? null, reviewYear ?? null],
     queryFn: async () => {
-      const { data } = await supabase.rpc('get_employee_workflow', { employee_uuid: employeeId });
+      const { data } = await supabase.rpc('get_employee_workflow', {
+        employee_uuid: employeeId,
+        p_review_period: reviewPeriod ?? undefined,
+        p_review_year: reviewYear ?? undefined,
+      });
       return (data as string[]) || undefined;
     },
     enabled: isOpen && !externalStages,
     staleTime: 5 * 60 * 1000,
   });
 
+  // Fetch persisted scoring data for this KPI so step-back can always reach
+  // any stage that actually has data (POLICY §117 — Step-Back Target Composition).
+  const { data: dataBearingStages } = useQuery({
+    queryKey: ['kpi-data-bearing-stages', kpiId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('review_submissions')
+        .select('self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score')
+        .eq('kpi_id', kpiId)
+        .maybeSingle();
+      if (!data) return [] as ReviewStatus[];
+      const stages: ReviewStatus[] = [];
+      if (data.self_score !== null) stages.push('self_review');
+      if (data.manager_score !== null) stages.push('manager_check');
+      if (data.skip_level_score !== null) stages.push('skip_level_check');
+      if (data.hr_pms_score !== null) stages.push('hr_pms_review');
+      if (data.auditor_score !== null) stages.push('audit');
+      if (data.management_score !== null) stages.push('management_review');
+      return stages;
+    },
+    enabled: isOpen,
+    staleTime: 60 * 1000,
+  });
+
   const workflowStages = externalStages || fetchedStages || undefined;
   const previousStatus = getPreviousStatus(currentStatus, workflowStages);
 
-  // Compute all valid target stages (everything before current status in the workflow)
-  const availableTargets = useMemo(() => {
-    const stages = (workflowStages || FULL_STATUS_ORDER) as ReviewStatus[];
-    const currentIdx = stages.indexOf(currentStatus);
-    // Also check FULL_STATUS_ORDER for orphaned status
-    const fullIdx = FULL_STATUS_ORDER.indexOf(currentStatus);
-    const effectiveIdx = currentIdx >= 0 ? currentIdx : fullIdx;
+  const availableTargets = useMemo(
+    () => computeStepBackTargets(currentStatus, workflowStages, dataBearingStages ?? []),
+    [currentStatus, workflowStages, dataBearingStages]
+  );
 
-    if (effectiveIdx <= 0) return [];
+  const dataAwareDefault = useMemo<ReviewStatus | null>(
+    () => getDataAwareDefaultTarget(currentStatus, dataBearingStages ?? []),
+    [currentStatus, dataBearingStages]
+  );
 
-    const targets: ReviewStatus[] = [];
-    // Always include kra_set
-    if (!targets.includes('kra_set')) targets.push('kra_set');
-
-    // Add all workflow stages before current
-    for (let i = 0; i < effectiveIdx; i++) {
-      const stage = stages[i];
-      if (stage && !targets.includes(stage) && stage !== 'kra_set') {
-        targets.push(stage);
-      }
-    }
-
-    return targets;
-  }, [currentStatus, workflowStages]);
-
-  // Default to previous status when dialog opens
   const effectiveTarget = fullReset
     ? 'kra_set'
-    : (selectedTarget || previousStatus || 'kra_set') as ReviewStatus;
+    : (selectedTarget || dataAwareDefault || previousStatus || 'kra_set') as ReviewStatus;
 
   const handleSubmit = () => {
     if (!effectiveTarget || !reason.trim()) return;
@@ -177,7 +204,7 @@ export function AdminStatusStepBackDialog({
                 </Badge>
               ) : availableTargets.length > 1 ? (
                 <Select
-                  value={selectedTarget || (previousStatus ?? '')}
+                  value={selectedTarget || dataAwareDefault || (previousStatus ?? '')}
                   onValueChange={(v) => setSelectedTarget(v as ReviewStatus)}
                   disabled={fullReset}
                 >
@@ -185,16 +212,23 @@ export function AdminStatusStepBackDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {availableTargets.map((stage) => (
+                    {availableTargets.map(({ stage, historic }) => (
                       <SelectItem key={stage} value={stage}>
                         {getStageLabel(stage)}
+                        {historic && (
+                          <span className="ml-1 text-xs text-muted-foreground">(historic)</span>
+                        )}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               ) : (
                 <Badge variant="secondary" className="text-sm">
-                  {previousStatus ? getStageLabel(previousStatus) : '—'}
+                  {dataAwareDefault
+                    ? getStageLabel(dataAwareDefault)
+                    : previousStatus
+                    ? getStageLabel(previousStatus)
+                    : '—'}
                 </Badge>
               )}
             </div>

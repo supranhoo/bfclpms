@@ -1005,6 +1005,8 @@ export default function AllKpis() {
           employeeId={stepBackEmployee.id}
           employeeName={stepBackEmployee.name}
           currentStatus={stepBackKpi.status || 'kra_set'}
+          reviewPeriod={stepBackKpi.review_period ?? undefined}
+          reviewYear={stepBackKpi.review_year ?? undefined}
         />
       )}
 
