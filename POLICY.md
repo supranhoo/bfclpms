@@ -2087,6 +2087,10 @@ A submission that advances the KPI past the reviewer stage with neither signatur
 1. **Client guard** — `AdminDataEntryDialog` MUST disable Submit unless `roleLevel === 'self'` OR a score / rating is provided OR the `Mark as N/A` toggle is on. Inline error MUST cite POLICY §116.
 2. **DB trigger** — `enforce_on_behalf_score_or_na` (BEFORE INSERT OR UPDATE on `review_submissions`) MUST raise an exception when `auto_advance_reason ILIKE '%on behalf of <stage>%'` AND the stage's score AND rating columns are both NULL AND `is_na <> true`. Repair migrations and fast-track writes are exempt by `auto_advance_reason` prefix.
 
+   **§116.1 — WRITE-SCOPED enforcement (BUG-047 v2, 2026-05).** The trigger MUST only enforce on the actual on-behalf write — i.e. an `INSERT`, or an `UPDATE` where `OLD.auto_advance_reason IS DISTINCT FROM NEW.auto_advance_reason`. Subsequent updates that merely inherit the existing reason text MUST be allowed through. Otherwise stale provenance text left over after step-back, status override, or cascade-clear permanently locks the row from any further edit (auditor scoring, send-back recovery, etc.). Original guarantee is preserved because the on-behalf write itself is still validated.
+
+   **§116.2 — Cascade-clear hygiene.** Any code path that nulls out a stage's `<stage>_score` and `<stage>_rating` (step-back, send-back, status step-back) SHOULD also null `auto_advance_reason` when that text references the cleared stage. The one-time repair migration `bug047_write_scoped_guardrail` cleared all currently-stale rows; ongoing hygiene prevents recurrence.
+
 **Forbidden**:
 - Removing or weakening either guard.
 - Advancing a KPI's `kpis.status` past `<stage>` from any new code path without writing the corresponding `review_submissions` signature.
