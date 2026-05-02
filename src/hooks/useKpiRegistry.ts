@@ -163,7 +163,8 @@ export function useBuildRegistry() {
     canonicalKra: string,
     canonicalKpi: string,
     categoryId: string,
-    variants: { kra_name: string; kpi_name: string }[]
+    variants: { kra_name: string; kpi_name: string }[],
+    options: { silent?: boolean } = {},
   ) => {
     setSaving(true);
     try {
@@ -282,7 +283,7 @@ export function useBuildRegistry() {
         console.warn('[standardization] action log failed', logErr);
       }
 
-      toast({
+      if (!options.silent) toast({
         title: reused ? 'Linked to existing canonical entry' : 'Registry entry created',
         description:
           inserted === 0
@@ -291,14 +292,59 @@ export function useBuildRegistry() {
       });
       return defId;
     } catch (err: any) {
-      toast({ title: 'Failed to create', description: err.message, variant: 'destructive' });
+      if (!options.silent) toast({ title: 'Failed to create', description: err.message, variant: 'destructive' });
       return null;
     } finally {
       setSaving(false);
     }
   }, [toast]);
 
-  return { createDefinitionWithAliases, saving };
+  /**
+   * Approve multiple canonical entries from a single duplicate-scan group
+   * (one per bucket). Calls {@link createDefinitionWithAliases} per bucket
+   * inside a single saving lock and emits one summary toast.
+   *
+   * Returns `true` only when *every* bucket succeeded — partial failures
+   * leave the group visible so the admin can retry. Each call is idempotent,
+   * so retries are safe.
+   */
+  const createMultipleDefinitionsWithAliases = useCallback(async (
+    categoryId: string,
+    buckets: Array<{
+      canonicalKra: string;
+      canonicalKpi: string;
+      variants: { kra_name: string; kpi_name: string }[];
+    }>,
+  ): Promise<boolean> => {
+    if (buckets.length === 0) return false;
+    setSaving(true);
+    try {
+      let succeeded = 0;
+      for (const b of buckets) {
+        const id = await createDefinitionWithAliases(
+          b.canonicalKra,
+          b.canonicalKpi,
+          categoryId,
+          b.variants,
+          { silent: buckets.length > 1 },
+        );
+        if (id) succeeded++;
+      }
+      const allOk = succeeded === buckets.length;
+      if (buckets.length > 1) {
+        toast({
+          title: allOk ? 'Group split & approved' : 'Group partially approved',
+          description: `${succeeded} of ${buckets.length} canonical entries created`,
+          variant: allOk ? 'default' : 'destructive',
+        });
+      }
+      return allOk;
+    } finally {
+      setSaving(false);
+    }
+  }, [createDefinitionWithAliases, toast]);
+
+  return { createDefinitionWithAliases, createMultipleDefinitionsWithAliases, saving };
 }
 
 /**

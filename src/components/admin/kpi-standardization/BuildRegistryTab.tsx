@@ -5,14 +5,23 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Switch } from '@/components/ui/switch';
-import { Loader2, ScanSearch, CheckCircle2, Search, Eye, Pencil, Ban, RotateCcw } from 'lucide-react';
+import { Loader2, ScanSearch, CheckCircle2, Search, Eye, Pencil, Ban, RotateCcw, Split } from 'lucide-react';
 import { useScanDuplicates, useBuildRegistry, useScannerSkips, DuplicateGroup } from '@/hooks/useKpiRegistry';
 import { useToast } from '@/hooks/use-toast';
 import { AffectedKpisTable } from './AffectedKpisTable';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  BucketId,
+  SKIP_BUCKET,
+  summarizeBuckets,
+  defaultCanonicalForBucket,
+  nextAvailableBucket,
+  suggestBucketAssignments,
+  validateBuckets,
+  CanonicalDraft,
+} from '@/lib/scanGroupBuckets';
 
 const SENSITIVITY_OPTIONS: Array<{ label: string; value: string; threshold: number; hint: string }> = [
   { label: 'Strict',   value: 'strict',   threshold: 0.75, hint: 'Only very close matches' },
@@ -26,15 +35,17 @@ interface Props {
 
 export function BuildRegistryTab({ onRegistryUpdated }: Props) {
   const { groups, loading: scanning, scan } = useScanDuplicates();
-  const { createDefinitionWithAliases, saving } = useBuildRegistry();
+  const { createDefinitionWithAliases, createMultipleDefinitionsWithAliases, saving } = useBuildRegistry();
   const { skipGroup, unskipGroup, saving: skipSaving } = useScannerSkips();
   const [search, setSearch] = useState('');
   const [includeSkipped, setIncludeSkipped] = useState(false);
   const [sensitivity, setSensitivity] = useState<string>('balanced');
-  const [selections, setSelections] = useState<Record<string, number>>({});
-  // Per-group canonical text overrides. Keyed by groupKey.
-  const [canonicalOverrides, setCanonicalOverrides] = useState<Record<string, { kra: string; kpi: string }>>({});
-  const [editingCanonical, setEditingCanonical] = useState<Record<string, boolean>>({});
+  // Per-group bucket assignments: groupKey -> variantIndex -> bucketId.
+  const [bucketAssignments, setBucketAssignments] = useState<Record<string, Record<number, BucketId>>>({});
+  // Per-group, per-bucket canonical text overrides: groupKey -> bucketId -> {kra,kpi}.
+  const [canonicalByBucket, setCanonicalByBucket] = useState<Record<string, Record<BucketId, CanonicalDraft>>>({});
+  // Per-group, per-bucket "edit canonical" toggle.
+  const [editingByBucket, setEditingByBucket] = useState<Record<string, Record<BucketId, boolean>>>({});
   const [drillIn, setDrillIn] = useState<Record<string, number | null>>({});
   const [processedGroups, setProcessedGroups] = useState<Set<string>>(new Set());
   const [skipTarget, setSkipTarget] = useState<DuplicateGroup | null>(null);
@@ -68,29 +79,58 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
   const skippedCount = filteredGroups.filter(g => g.is_skipped).length;
   const pendingCount = visibleGroups.filter(g => !g.is_skipped).length;
 
+  const setBucketFor = (key: string, idx: number, bucket: BucketId) => {
+    setBucketAssignments(prev => ({
+      ...prev,
+      [key]: { ...(prev[key] ?? {}), [idx]: bucket },
+    }));
+  };
+
   const handleApprove = async (group: DuplicateGroup) => {
     const key = groupKey(group);
-    const selectedIdx = selections[key] ?? 0;
-    const baseCanonical = group.variants[selectedIdx];
-    if (!baseCanonical) return;
-    const override = canonicalOverrides[key];
-    const canonicalKra = (override?.kra ?? baseCanonical.kra_name).trim();
-    const canonicalKpi = (override?.kpi ?? baseCanonical.kpi_name).trim();
-    if (!canonicalKra || !canonicalKpi) {
-      toast({ title: 'Canonical KRA and KPI are required', variant: 'destructive' });
+    const assignments = bucketAssignments[key] ?? {};
+    const buckets = summarizeBuckets(group.variants, assignments);
+    const drafts = canonicalByBucket[key] ?? {};
+
+    // Resolve canonical text per bucket (override -> default longest variant).
+    const resolved: Record<BucketId, CanonicalDraft> = {};
+    buckets.forEach(b => {
+      const override = drafts[b.bucketId];
+      const fallback = defaultCanonicalForBucket(b);
+      resolved[b.bucketId] = {
+        kra: (override?.kra ?? fallback?.kra_name ?? '').trim(),
+        kpi: (override?.kpi ?? fallback?.kpi_name ?? '').trim(),
+      };
+    });
+
+    const errors = validateBuckets(buckets, resolved);
+    if (errors.length > 0) {
+      toast({ title: 'Cannot approve', description: errors[0], variant: 'destructive' });
       return;
     }
 
-    const defId = await createDefinitionWithAliases(
-      canonicalKra,
-      canonicalKpi,
-      group.category_id,
-      group.variants.map(v => ({ kra_name: v.kra_name, kpi_name: v.kpi_name }))
-    );
-
-    if (defId) {
-      setProcessedGroups(prev => new Set([...prev, key]));
+    if (buckets.length === 1) {
+      const only = buckets[0];
+      const c = resolved[only.bucketId];
+      const defId = await createDefinitionWithAliases(
+        c.kra,
+        c.kpi,
+        group.category_id,
+        only.variants.map(v => ({ kra_name: v.kra_name, kpi_name: v.kpi_name })),
+      );
+      if (defId) setProcessedGroups(prev => new Set([...prev, key]));
+      return;
     }
+
+    const ok = await createMultipleDefinitionsWithAliases(
+      group.category_id,
+      buckets.map(b => ({
+        canonicalKra: resolved[b.bucketId].kra,
+        canonicalKpi: resolved[b.bucketId].kpi,
+        variants: b.variants.map(v => ({ kra_name: v.kra_name, kpi_name: v.kpi_name })),
+      })),
+    );
+    if (ok) setProcessedGroups(prev => new Set([...prev, key]));
   };
 
   const confirmSkip = async () => {
@@ -190,22 +230,13 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
 
       {visibleGroups.map((group) => {
         const key = groupKey(group);
-        // For fuzzy groups, default to the longest (most descriptive) variant.
-        // For exact-only groups, keep the historical "first variant wins" default.
-        const defaultIdx = group.has_fuzzy
-          ? group.variants.reduce(
-              (best, v, i) => (v.kpi_name.length > group.variants[best].kpi_name.length ? i : best),
-              0,
-            )
-          : 0;
-        const selectedIdx = selections[key] ?? defaultIdx;
-        const override = canonicalOverrides[key];
-        const isEditing = !!editingCanonical[key];
-        const canonical = group.variants[selectedIdx];
-        const canonicalKra = override?.kra ?? canonical?.kra_name ?? '';
-        const canonicalKpi = override?.kpi ?? canonical?.kpi_name ?? '';
         const drillIdx = drillIn[key];
         const isSkipped = !!group.is_skipped;
+        const assignments = bucketAssignments[key] ?? {};
+        const buckets = summarizeBuckets(group.variants, assignments);
+        const isMultiBucket = buckets.length > 1;
+        const drafts = canonicalByBucket[key] ?? {};
+        const editing = editingByBucket[key] ?? {};
 
         return (
           <Card
@@ -238,103 +269,168 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
                   Use <strong>Restore</strong> below to bring it back, or undo from <em>History &amp; Undo</em>.
                 </div>
               ) : (
-              <RadioGroup
-                value={String(selectedIdx)}
-                onValueChange={v => {
-                  setSelections(prev => ({ ...prev, [key]: Number(v) }));
-                  // reset override when user switches base variant
-                  setCanonicalOverrides(prev => { const n = { ...prev }; delete n[key]; return n; });
-                  setEditingCanonical(prev => ({ ...prev, [key]: false }));
-                }}
-              >
-                {group.variants.map((variant, idx) => (
-                  <div key={idx} className="flex items-start gap-3 p-2 rounded-md hover:bg-muted/50">
-                    <RadioGroupItem value={String(idx)} id={`${key}-${idx}`} className="mt-1" />
-                    <Label htmlFor={`${key}-${idx}`} className="flex-1 cursor-pointer">
-                      <div className="font-medium text-sm">{variant.kra_name}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                        {variant.kpi_name.slice(0, 150)}
-                      </div>
-                      <div className="flex gap-2 mt-1">
-                        <Badge variant="secondary" className="text-xs">{variant.employee_count} employees</Badge>
-                        <Badge variant="outline" className="text-xs">{variant.row_count} rows</Badge>
-                        {variant.match_type === 'fuzzy' ? (
-                          <Badge variant="outline" className="text-xs border-amber-500 text-amber-600">
-                            Fuzzy {Math.round((variant.similarity ?? 0) * 100)}%
-                          </Badge>
-                        ) : variant.match_type === 'exact' ? (
-                          <Badge variant="outline" className="text-xs border-emerald-500 text-emerald-600">
-                            Exact
-                          </Badge>
-                        ) : null}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-5 px-2 text-xs"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setDrillIn(prev => ({ ...prev, [key]: prev[key] === idx ? null : idx }));
-                          }}
-                        >
-                          <Eye className="h-3 w-3 mr-1" />
-                          {drillIdx === idx ? 'Hide' : 'View'} KPIs
-                        </Button>
-                      </div>
-                      {drillIdx === idx && (
-                        <div className="mt-2">
-                          <AffectedKpisTable
-                            categoryId={group.category_id}
-                            kraName={variant.kra_name}
-                            kpiName={variant.kpi_name}
-                          />
-                        </div>
-                      )}
-                    </Label>
-                  </div>
-                ))}
-              </RadioGroup>
-              )}
-
-              {!isSkipped && (
               <>
-              <div className="border rounded-md p-3 bg-muted/30 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-medium">Canonical name (will be saved to registry)</div>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="text-xs text-muted-foreground">
+                    Assign each variant to a bucket. Variants in the same bucket merge into one canonical entry.
+                    Use <strong>Skip</strong> to leave a variant out of this approval.
+                  </div>
                   <Button
                     size="sm"
-                    variant="ghost"
-                    className="h-6 text-xs"
-                    onClick={() => setEditingCanonical(prev => ({ ...prev, [key]: !isEditing }))}
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      const suggested = suggestBucketAssignments(group.variants);
+                      setBucketAssignments(prev => ({ ...prev, [key]: suggested }));
+                      // Reset canonical overrides + edit toggles for this group when re-bucketing.
+                      setCanonicalByBucket(prev => { const n = { ...prev }; delete n[key]; return n; });
+                      setEditingByBucket(prev => { const n = { ...prev }; delete n[key]; return n; });
+                    }}
                   >
-                    <Pencil className="h-3 w-3 mr-1" />
-                    {isEditing ? 'Use selected variant' : 'Edit canonical'}
+                    <Split className="h-3 w-3 mr-1" />
+                    Suggest split
                   </Button>
                 </div>
-                {isEditing ? (
-                  <div className="space-y-2">
-                    <Input
-                      value={canonicalKra}
-                      onChange={e => setCanonicalOverrides(prev => ({ ...prev, [key]: { kra: e.target.value, kpi: prev[key]?.kpi ?? canonicalKpi } }))}
-                      placeholder="Canonical KRA name"
-                      className="text-sm"
-                    />
-                    <Textarea
-                      value={canonicalKpi}
-                      onChange={e => setCanonicalOverrides(prev => ({ ...prev, [key]: { kpi: e.target.value, kra: prev[key]?.kra ?? canonicalKra } }))}
-                      placeholder="Canonical KPI name"
-                      rows={2}
-                      className="text-sm"
-                    />
-                  </div>
-                ) : (
-                  <div className="text-xs">
-                    <div className="font-medium">{canonicalKra}</div>
-                    <div className="text-muted-foreground line-clamp-2">{canonicalKpi}</div>
-                  </div>
-                )}
-              </div>
+                {group.variants.map((variant, idx) => {
+                  const currentBucket = assignments[idx] ?? 'A';
+                  const usedBuckets = new Set<BucketId>(Object.values(assignments));
+                  // Always allow current + 'A' + the next free letter, plus SKIP.
+                  const offered = new Set<BucketId>([currentBucket, 'A', nextAvailableBucket(assignments)]);
+                  const bucketOptions = [...offered].sort();
+                  return (
+                    <div key={idx} className="flex items-start gap-3 p-2 rounded-md hover:bg-muted/50 border">
+                      <div className="flex flex-col gap-1 pt-1">
+                        <div className="flex gap-1">
+                          {bucketOptions.map(b => (
+                            <Button
+                              key={b}
+                              size="sm"
+                              variant={currentBucket === b ? 'default' : 'outline'}
+                              className="h-6 w-6 p-0 text-[11px] font-semibold"
+                              onClick={() => setBucketFor(key, idx, b)}
+                              title={`Assign to bucket ${b}`}
+                            >
+                              {b}
+                            </Button>
+                          ))}
+                          <Button
+                            size="sm"
+                            variant={currentBucket === SKIP_BUCKET ? 'destructive' : 'outline'}
+                            className="h-6 px-2 text-[10px] font-semibold"
+                            onClick={() => setBucketFor(key, idx, SKIP_BUCKET)}
+                            title="Exclude this variant from approval"
+                          >
+                            Skip
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-medium text-sm">{variant.kra_name}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                          {variant.kpi_name.slice(0, 150)}
+                        </div>
+                        <div className="flex gap-2 mt-1 flex-wrap">
+                          <Badge variant="secondary" className="text-xs">{variant.employee_count} employees</Badge>
+                          <Badge variant="outline" className="text-xs">{variant.row_count} rows</Badge>
+                          {variant.match_type === 'fuzzy' ? (
+                            <Badge variant="outline" className="text-xs border-amber-500 text-amber-600">
+                              Fuzzy {Math.round((variant.similarity ?? 0) * 100)}%
+                            </Badge>
+                          ) : variant.match_type === 'exact' ? (
+                            <Badge variant="outline" className="text-xs border-emerald-500 text-emerald-600">
+                              Exact
+                            </Badge>
+                          ) : null}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 px-2 text-xs"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setDrillIn(prev => ({ ...prev, [key]: prev[key] === idx ? null : idx }));
+                            }}
+                          >
+                            <Eye className="h-3 w-3 mr-1" />
+                            {drillIdx === idx ? 'Hide' : 'View'} KPIs
+                          </Button>
+                          {/* Suppress unused-var warning for usedBuckets */}
+                          <span className="hidden">{usedBuckets.size}</span>
+                        </div>
+                        {drillIdx === idx && (
+                          <div className="mt-2">
+                            <AffectedKpisTable
+                              categoryId={group.category_id}
+                              kraName={variant.kra_name}
+                              kpiName={variant.kpi_name}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </>
               )}
+
+              {!isSkipped && buckets.map(b => {
+                const fallback = defaultCanonicalForBucket(b);
+                const draft = drafts[b.bucketId];
+                const kra = draft?.kra ?? fallback?.kra_name ?? '';
+                const kpi = draft?.kpi ?? fallback?.kpi_name ?? '';
+                const isEditing = !!editing[b.bucketId];
+                return (
+                  <div key={b.bucketId} className="border rounded-md p-3 bg-muted/30 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-medium flex items-center gap-2">
+                        {isMultiBucket && (
+                          <Badge variant="default" className="h-5 px-1.5 text-[10px]">Bucket {b.bucketId}</Badge>
+                        )}
+                        Canonical name ({b.variants.length} variant{b.variants.length === 1 ? '' : 's'})
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 text-xs"
+                        onClick={() => setEditingByBucket(prev => ({
+                          ...prev,
+                          [key]: { ...(prev[key] ?? {}), [b.bucketId]: !isEditing },
+                        }))}
+                      >
+                        <Pencil className="h-3 w-3 mr-1" />
+                        {isEditing ? 'Use longest variant' : 'Edit canonical'}
+                      </Button>
+                    </div>
+                    {isEditing ? (
+                      <div className="space-y-2">
+                        <Input
+                          value={kra}
+                          onChange={e => setCanonicalByBucket(prev => ({
+                            ...prev,
+                            [key]: { ...(prev[key] ?? {}), [b.bucketId]: { kra: e.target.value, kpi } },
+                          }))}
+                          placeholder="Canonical KRA name"
+                          className="text-sm"
+                        />
+                        <Textarea
+                          value={kpi}
+                          onChange={e => setCanonicalByBucket(prev => ({
+                            ...prev,
+                            [key]: { ...(prev[key] ?? {}), [b.bucketId]: { kra, kpi: e.target.value } },
+                          }))}
+                          placeholder="Canonical KPI name"
+                          rows={2}
+                          className="text-sm"
+                        />
+                      </div>
+                    ) : (
+                      <div className="text-xs">
+                        <div className="font-medium">{kra}</div>
+                        <div className="text-muted-foreground line-clamp-2">{kpi}</div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
 
               <div className="flex justify-end gap-2 pt-2">
                 {isSkipped ? (
@@ -364,7 +460,7 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
                       disabled={saving}
                     >
                       {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <CheckCircle2 className="h-4 w-4 mr-1" />}
-                      Approve as Canonical
+                      {isMultiBucket ? `Approve ${buckets.length} canonicals` : 'Approve as Canonical'}
                     </Button>
                   </>
                 )}
