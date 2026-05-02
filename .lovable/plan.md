@@ -1,46 +1,80 @@
-# Show Full KPI Text in Scan Results — Build Registry
+# Why your KPI Standardization edit doesn't show on the dashboard
 
-## Problem
+## What I found (RCA)
 
-In the **KPI Standardization → Build Registry** tab, fuzzy-match scan results truncate KPI text in three places, so admins can't read the full KPI before deciding how to bucket variants:
+I traced the exact KPI in your screenshot ("Ensure Zero Harm workplace" / "Proactive Safety Reporting (UA, UC, & Near Miss) …", May 2026, employee Gaurav Tiwari) end-to-end through the database.
 
-1. **Group header title** — hard-cut at 100 characters with `...` appended (e.g. *"completion of mandated average training hours - description: fosters skill development and a learn..."*).
-2. **Variant rows** — KPI name is sliced to 150 chars and additionally clipped with `line-clamp-2`, hiding mid-sentence content.
-3. **Canonical preview pill** — KPI preview under each bucket draft is also `line-clamp-2`.
+There are **two independent reasons** the edit isn't reflecting, and both have to be fixed for the dashboard to show your new wording.
 
-The user wants to see the complete KPI text on demand.
+### Reason 1 — The actual KPI rows are not linked to the canonical definition
 
-## Solution
+A canonical definition does exist in `kpi_definitions`:
+- id `bc48a549-cab6-4903-808b-ef2a12495a96`
+- canonical KRA: `Ensure Zero Harm workplace`
+- canonical KPI: `Proactive Safety Reporting (UA, UC, & Near Miss) Description: …`
 
-Add lightweight per-row **"Show more / Show less"** toggles. Default view stays compact (so the list of groups remains scannable), but a single click on any truncated text expands that row to show the full KPI name in-place. No modal, no extra navigation — just inline expansion.
+But every matching row in `kpis` for May 2026 has **`kpi_definition_id = NULL`** — so the auto-link never bound them to the definition you edited. As a consequence, even on consumers that *are* canonical-aware (`KpiHistoryCard`, `KpiTrackerModal`, `KpiJourneySection`), `useCanonicalVariantPairs` returns `[]` and they fall back to **strict string equality** on `kra_name`/`kpi_name`. The dashboard therefore renders whatever literal text is stored on the `kpis` row — your registry edit is invisible.
 
-### Behaviour
+### Reason 2 — The dashboard "View KPI Details" reads `kpis.kra_name` / `kpis.kpi_name` directly
 
-- **Group header title** — render full `normalized_kpi` with `line-clamp-2` by default, plus a small `Show more` link beside the title (only when the text actually overflows). Clicking expands to full text; `Show less` collapses it.
-- **Variant KPI body** — remove the hard `slice(0, 150)`. Default to `line-clamp-2`. Add a small `Show more` link at the end of the line when the variant's KPI name is long enough to be clipped. Toggle expands that single variant row only.
-- **Canonical preview pill** — same `line-clamp-2` + `Show more` toggle.
-- Expanded state lives in local component state, keyed by `groupKey` + variant index (and a separate key for the group title). State resets when the scan is re-run.
-- The expand link uses an existing `Button variant="link"` with `ChevronDown` / `ChevronUp` icons (lucide-react, already imported elsewhere) so no new dependency is added.
-- Keep the "View KPIs" drill-down button untouched — it serves a different purpose (showing employees/rows behind the variant).
+Even when a KPI *is* linked, today only the **propagate** branch of `useEditDefinition` rewrites the literal `kra_name`/`kpi_name` columns on `kpis` (via `correct_may_kpis`). The detail panel, scorecard header, breadcrumbs, etc. read those columns directly. So:
+- If you edited the canonical text **without ticking "Propagate"** → the registry row changes but the live `kpis` row text doesn't, and the dashboard keeps showing the old text.
+- If you ticked Propagate → it only rewrote rows where `kpi_definition_id = <this definition>`, which (per Reason 1) was zero rows for this KPI.
 
-### Files touched
+Net effect for your screenshot: **0 rows updated, dashboard shows the original imported text.**
 
-- `src/components/admin/kpi-standardization/BuildRegistryTab.tsx` — only file changed.
-  - Add `expandedTitles: Record<string, boolean>` and `expandedVariants: Record<string, Record<number, boolean>>` state.
-  - Replace `{group.normalized_kpi.slice(0, 100)}...` with full text + conditional `line-clamp-2` + toggle.
-  - Replace `{variant.kpi_name.slice(0, 150)}` with full `variant.kpi_name` + conditional `line-clamp-2` + toggle.
-  - Apply the same toggle pattern to the canonical preview at line 437.
+### Bonus observation
+The `canonical_kpi_name` for this definition is the entire "Description / Formula / Scoring Logic" blob (over 400 chars). Whatever the admin pasted as the canonical KPI name went straight into the column — that's why the rendered title in the dialog is so long. You probably want to re-edit it to a short, clean canonical (e.g. `Proactive Safety Reporting (UA, UC, & Near Miss)`) and put the description into the `kpi_description` field instead.
 
-### Risk & Impact
+---
 
-- **Data**: none — purely a presentational change.
-- **Workflow**: none — bucketing, suggest split, and approval logic are untouched.
-- **UI/UX**: default density is preserved (still `line-clamp-2`); expansion is opt-in per row, so long groups won't visually explode unless the admin asks.
-- **Regression**: very low. Only the three render sites above change. Existing buckets / shared bucket pills / "Suggest split" remain identical.
-- **Mitigation**: keep state local to the component; no changes to props, hooks, or data shape.
+## Fix plan
 
-### Out of scope
+### Step 1 — Backfill the missing `kpi_definition_id` link (one-time, scoped)
 
-- No DB / RLS / policy changes.
-- No new tests required (cosmetic toggle); existing `scanGroupsDedup` and `scanGroupBuckets` tests cover the underlying logic.
-- POLICY.md and memory files remain unchanged — this is a UI affordance, not a policy shift.
+Add an admin-only utility (one-shot SQL migration) that, for **May 2026+ rows only** and respecting the existing forward-only freeze, sets `kpis.kpi_definition_id = d.id` where the row's `(category_id, normalized kra_name, normalized kpi_name)` matches either:
+- a `kpi_definitions` canonical pair, OR
+- a `kpi_name_aliases` variant pair.
+
+This is the same matcher already used by `useCanonicalAutolink`; we just run it once retroactively. Pre-May-2026 rows are never touched (POLICY §88I freeze).
+
+After this backfill, all the canonical-aware UI (`KpiHistoryCard`, `KpiTrackerModal`, `KpiJourneySection`) will start grouping the historical alias rows correctly without any further code change.
+
+### Step 2 — Make `useEditDefinition` always propagate the visible text on May 2026+ rows
+
+Today the propagate checkbox is opt-in. Change the contract so that for May 2026+ rows linked to the definition (post-Step-1 they will be linked), the literal `kra_name` / `kpi_name` columns on `kpis` are **always** rewritten to the new canonical text. The checkbox stays only as an "also rewrite older alias rows" escalation if we ever extend it.
+
+Implementation: in `src/hooks/useKpiRegistry.ts → useEditDefinition`, drop the `if (propagate)` guard around the `correct_may_kpis` loop and run it unconditionally for May-2026+ tuples; keep the existing audit log entry but record `propagate=true` automatically. Update `EditDefinitionDialog.tsx` copy so admins know edits are always applied to current-period rows.
+
+### Step 3 — Fall back to canonical text in the dashboard detail panel
+
+Belt-and-braces: in the "View KPI Details" component (the dialog in your screenshot — `KpiTrackerModal` / its header), when `useCanonicalVariantPairs` resolves a definition, render `canonicalPair(variantPairs).kra_name` / `.kpi_name` for the visible title instead of `kpi.kra_name` / `kpi.kpi_name`. This guarantees the registry's canonical wording wins on screen even if a future row is created before autolink stamps it.
+
+### Step 4 — Re-edit the bad canonical entry for this specific KPI
+
+Admin task (no code): in `/admin/kpi-standardization → Review Registry`, open definition `bc48a549-…` and shorten `canonical_kpi_name` to the real KPI title (e.g. `Proactive Safety Reporting (UA, UC, & Near Miss)`). Tick "Propagate". With Steps 1-3 in place this will now correctly rewrite every May-2026+ row.
+
+### Step 5 — Tests & docs
+
+- Unit test for the backfill SQL: an unlinked May-2026 row whose `(kra,kpi)` matches an alias gets stamped; a pre-May-2026 row never does.
+- Unit test for `useEditDefinition`: editing a canonical now updates `kpis.kra_name`/`kpi_name` on linked May-2026+ rows even with `propagate=false` in the call site (default behaviour change).
+- Component test asserting the detail header prefers canonical text when variant pairs are present.
+- Update `mem/features/admin/kpi-standardization-registry` and `POLICY.md` §88I to reflect: (a) one-shot backfill semantics, (b) edit-always-propagates contract, (c) detail-panel canonical-first rendering.
+
+## Risk & impact
+
+- **Data impact**: Step 1 only writes to `kpis.kpi_definition_id` (no business field change), only for May 2026+ rows where a canonical mapping already exists, so it cannot change scores or history. Step 2/4 will rewrite `kra_name`/`kpi_name` for May 2026+ rows linked to *edited* definitions — exactly what the user wants — and is logged in `kpi_audit_logs` + `kpi_standardization_actions` for full reversibility via the existing History/Undo tab.
+- **Workflow impact**: None. Workflow stages, scores, weightages, and approvals are untouched.
+- **UI/UX**: Headers across the dashboard, scorecard, modals, and reports will start showing the cleaned canonical wording for current-period rows.
+- **Regression risk**: Low. Canonical-aware consumers already exist; we're feeding them the link they were missing. Pre-May-2026 freeze is preserved by every code path.
+- **Mitigation**: New unit tests in Step 5; manual QA on the exact KPI from the screenshot before merging.
+
+## Files I expect to touch
+
+- `supabase/migrations/<new>.sql` — one-shot backfill of `kpis.kpi_definition_id`.
+- `src/hooks/useKpiRegistry.ts` — make `useEditDefinition` always propagate to current-period rows.
+- `src/components/admin/kpi-standardization/EditDefinitionDialog.tsx` — copy update.
+- `src/components/dashboard/KpiTrackerModal.tsx` (and the detail header it renders) — prefer canonical pair for display.
+- `src/lib/canonicalRelatedKpis.ts` — small helper to expose the canonical pair to header components if not already exported in a usable form.
+- Tests under `src/test/` and `src/lib/`.
+- `mem/features/admin/kpi-standardization-registry`, `POLICY.md`, `DOCUMENTATION.md` change-log.
