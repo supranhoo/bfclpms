@@ -1,70 +1,78 @@
-# Fix: BUG-047 Stale Reason Guardrail (Jitendra Bharti — Automation KRA, March 2026)
+# Fix: Misleading "Nothing to propagate — past initial stage" message
 
 ## Root Cause Analysis
 
-The `enforce_on_behalf_score_or_na` BEFORE INSERT/UPDATE trigger inspects `NEW.auto_advance_reason`. That column is **set once** by `useAdminDataEntry` (`'Scored by Admin on behalf of hr_pms'`) and is **never cleared** by subsequent step-backs, status overrides, send-backs, or score wipes.
+**KPI**: "Completion of Mandated Average Training Hours" — April 2026, 13 employees, scope per-employee.
 
-Forensic timeline for KPI `2c1a2a54…` (Jitendra Bharti, March 2026, "CLMS implementation"):
+**Forensic timeline** (from `kpi_audit_logs` + `org_kpi_values` + `review_submissions`):
 
-| When        | Action                              | Result                                                          |
-|-------------|-------------------------------------|-----------------------------------------------------------------|
-| Mar 28      | Admin scored on behalf of HR PMS    | hr_pms_score=5, hr_pms_rating=blue, reason="…on behalf of hr_pms"; status → approved |
-| Mar 28      | `ADMIN_STATUS_OVERRIDE` ("testing") | Status reverted; hr_pms score/rating eventually cleared by step-back cascade |
-| Apr 3–5     | Multiple step-backs / reconciles    | Row now has `hr_pms_score=NULL, hr_pms_rating=NULL`, `is_na=false`, **stale** `auto_advance_reason="Scored by Admin on behalf of hr_pms"` |
-| Today       | Auditor tries any update            | Trigger reads stale reason + NULL score ⇒ raises BUG-047        |
+| Time         | Event                                                                                   |
+|--------------|-----------------------------------------------------------------------------------------|
+| 12:34:41–45  | Data owner clicked **Propagate** the first time. RPC advanced all 13 KPIs `kra_set` → `self_review`, wrote `review_submissions` (achieved=100, self_score=5). All `org_kpi_values.status = 'propagated'`. |
+| 12:36:23–39  | Data owner clicked **Propagate** again (~2 min later). Every employee KPI was already `self_review`, so the RPC skipped all 13 and emitted `PROPAGATION_PARTIAL` audit rows. The UI fired 13 destructive toasts; the user only sees the last one: *"All 1 matching KPI(s) are already past the initial stage."* |
 
-The trigger cannot tell the difference between "this current write is the on-behalf write" and "this row carries leftover provenance text from a write that was later undone." Any subsequent UPDATE — auditor scoring, manager re-review, even unrelated column writes — gets blocked.
+**Nothing is actually stuck.** All 13 review submissions are present with achieved_value=100 and self_score=5. The second Propagate click was a no-op. The error message is misleading because:
+
+1. The toast variant is `destructive` (red) — looks like a failure.
+2. The text "past the initial stage" implies a problem the data owner needs to fix, when in reality the propagation is already complete.
+3. The card UI ("1 Pending" badge, red completion bar) reinforces the impression that something is broken, even though the system is in the correct end state.
+
+The underlying RPC behaviour is **correct and intentional** (POLICY §88 Submission Snapshot Immutability — a data owner's edit must not silently overwrite an in-flight self-review). The bug is purely in **how the result is communicated to the user**.
 
 ## What to Build
 
-### 1. Database migration — make the guardrail write-scoped, not row-scoped
+### 1. Re-classify the toast — informational, not destructive
 
-Replace `enforce_on_behalf_score_or_na` so it only enforces when the **current write itself** is the on-behalf submission. Two checks must both be true to enforce:
+In `src/hooks/usePropagateOrgKpiValue.ts`:
 
-- `NEW.auto_advance_reason` matches the on-behalf pattern, **AND**
-- `OLD.auto_advance_reason IS DISTINCT FROM NEW.auto_advance_reason` (it is being set/changed by this write — i.e. this UPDATE is the actual on-behalf event), OR `TG_OP = 'INSERT'`.
+- When `propagatedCount === 0 && skippedCount > 0` AND every skip reason is `not_in_kra_set` (i.e. employees have already moved past self-review), change the toast from `variant: 'destructive'` to default and rewrite the copy:
 
-This preserves BUG-047 protection on the original write path (admin clicks submit in `AdminDataEntryDialog`) but stops the false positive on every later UPDATE that merely inherits the stale text.
+  > **"Already propagated"**
+  > "All N matching KPI(s) have already advanced past the data-owner stage. The previously propagated values are still in place — re-propagation is blocked once an employee has self-reviewed (POLICY §88)."
 
-### 2. Database migration — clear stale reasons on cascade-clear paths
+- Keep `destructive` variant only for genuine failures (`kpi_not_found`, `race_lost_during_advance`).
 
-In the existing step-back / cascade-clear / send-back triggers and RPCs that null out a stage's score, also null `auto_advance_reason` (or rewrite it to a `Cleared by …` marker). This prevents stale provenance text from accumulating. Scope: only clear when the write also clears the matching `<stage>_score` and `<stage>_rating`.
+### 2. Per-batch toast dedup
 
-### 3. Database migration — one-time data repair
+In `executeSaveAndPropagate` (`src/pages/admin/OrgKpiDataEntry.tsx`), the per-employee loop fires `propagate.mutateAsync` once per scope, each emitting its own toast. For a 13-employee batch this is 13 stacked toasts. Suppress per-call toasts during a batch and emit a single summary toast at the end:
 
-For rows currently in the broken state (stale on-behalf reason + null score + not N/A + status no longer at or past the corresponding stage), null `auto_advance_reason` so existing UPDATE attempts unblock immediately. Scoped audit: insert `kpi_audit_logs` rows with `action = 'RECONCILE_STATUS'`, `metadata.reason = 'bug047_stale_reason_repair_v1'`, `performed_by = NULL` per system-performer attribution policy.
+- Add `silent?: boolean` flag to `usePropagateOrgKpiValue` (skips its own `onSuccess` toast when set).
+- Aggregate `{ propagated, skipped, alreadyDone }` totals across the loop and emit one summary: *"Propagated to N employees. M already up to date."*
 
-### 4. Regression tests
+### 3. Card status — recognise "already propagated, employees moved on"
 
-Add to `src/test/bugBountyFixes.test.ts` under `BUG-047`:
+In `OrgKpiDataEntry.tsx > getKpiStatus`, the current logic flags `'stuck'` only when child KPI is still `kra_set`. It does NOT recognise the legitimate "all OKVs propagated, all employees self-reviewing" state. Add a `'in_review'` (or merge with `'propagated'`) bucket so the card shows green / completed instead of red 0% — and the category badge stops counting it as "1 Pending".
 
-- Existing on-behalf write with NULL score + N/A=false → still blocked (positive control).
-- INSERT with on-behalf reason + score present → allowed.
-- UPDATE that does **not** change `auto_advance_reason` and only modifies an unrelated column (e.g. `auditor_remarks`) on a row with stale on-behalf text → **allowed** (the regression we are fixing).
-- Step-back path that clears `hr_pms_score` also clears `auto_advance_reason`.
+Specifically: when scope=employee/department, OKVs are all `propagated`/`approved`, AND every child KPI is at `self_review` or beyond, the card status should be `'propagated'` (not `'stuck'`).
 
-### 5. Documentation sync
+### 4. Documentation + memory sync
 
-- `POLICY.md` §116: clarify guardrail is write-scoped (only fires on the write that sets the on-behalf reason). Add §116.x noting that cascade-clear paths must also clear `auto_advance_reason`.
-- `mem/features/admin/admin-data-entry-workflow-controls`: update the BUG-047 paragraph with the stale-reason caveat and the new "write-scoped" semantics.
-- `DOCUMENTATION.md` Version History: append entry "vX.Y.Z — BUG-047 stale-reason guardrail fix".
+- POLICY.md §88: append clarification that re-propagation is blocked once a child KPI has advanced past `kra_set`, and that this is by design (snapshot immutability) — not a recoverable error.
+- mem `org-kpi-management-suite`: note the toast re-classification rule for "already propagated" vs "failure".
+
+### 5. Regression tests
+
+`src/test/` — add tests for `usePropagateOrgKpiValue`:
+- All-past-kra_set result → informational toast, NOT destructive.
+- Mixed (some kra_set, some not) → "Partial: N propagated, M already past stage" — still informational.
+- True race-loss / kpi_not_found → destructive toast preserved.
 
 ## Risk & Impact Report
 
-| Area              | Impact / Mitigation                                                                                                      |
-|-------------------|---------------------------------------------------------------------------------------------------------------------------|
-| Data Impact       | One-time NULL of `auto_advance_reason` on stale rows; preserves all scores. Audit-logged. Scoped WHERE clause.            |
-| Workflow Impact   | None for normal flows. AdminDataEntry on-behalf still requires score-or-N/A on the actual submit (POLICY §116 intact).    |
-| UI/UX Consistency | None. Timeline ("on behalf of …") rendering uses `kpi_audit_logs` rows, not the live `auto_advance_reason` column.        |
-| Regression Risk   | Trigger logic narrows enforcement — covered by new positive + negative unit tests in `bugBountyFixes.test.ts`.            |
-| Mitigation        | Write-scoped check (`OLD IS DISTINCT FROM NEW`) + cascade-clear on step-back + tests covering both.                       |
+| Area              | Impact / Mitigation                                                                                                     |
+|-------------------|-------------------------------------------------------------------------------------------------------------------------|
+| Data Impact       | None. No DB writes change. RPC behaviour preserved (still blocks overwrite — POLICY §88 intact).                         |
+| Workflow Impact   | None. Re-propagation remains blocked once self-review starts — only the user-facing message and card state change.        |
+| UI/UX Consistency | Card no longer falsely flags propagated rows as red "Pending"; toast no longer falsely flags as failure.                  |
+| Regression Risk   | Low — only message + status-classification logic changes. Existing tests for propagation success path are unaffected.    |
+| Mitigation        | New unit tests cover all three result branches; `'silent'` flag is opt-in and defaults preserve current behaviour.        |
 
 ## Files to Change
 
-- `supabase/migrations/<timestamp>_bug047_write_scoped_guardrail.sql` — new
-- `src/test/bugBountyFixes.test.ts` — new BUG-047 cases
-- `POLICY.md` — §116 clarifications
-- `DOCUMENTATION.md` — version history entry
-- `mem/features/admin/admin-data-entry-workflow-controls` — updated note
+- `src/hooks/usePropagateOrgKpiValue.ts` — toast re-classification + `silent` option
+- `src/pages/admin/OrgKpiDataEntry.tsx` — batch summary toast + `getKpiStatus` recognises `in_review`/`propagated`
+- `POLICY.md` — §88 clarification
+- `mem/features/admin/org-kpi-management-suite` — re-propagation messaging rule
+- `src/test/` — new tests for propagation result classification
 
 Approve to implement.
