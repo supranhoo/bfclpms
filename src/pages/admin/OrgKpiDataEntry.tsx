@@ -1507,6 +1507,26 @@ export default function OrgKpiDataEntry() {
                         });
                         toast({ title: `"${kpi.kpi_name}" removed from Org KPIs` });
                       } : undefined}
+                      onClearEntry={isAdmin ? async () => {
+                        await clearEntry.mutateAsync({
+                          categoryId: kpi.category_id,
+                          kraName: kpi.kra_name,
+                          kpiName: kpi.kpi_name,
+                          reviewPeriod: selectedPeriod,
+                          reviewYear: selectedYear,
+                        });
+                        try {
+                          await insertAuditLogs.mutateAsync([{
+                            category_id: kpi.category_id,
+                            kra_name: kpi.kra_name,
+                            kpi_name: kpi.kpi_name,
+                            review_period: selectedPeriod,
+                            review_year: selectedYear,
+                            action: 'cleared',
+                            performed_by: profile?.id || '',
+                          }]);
+                        } catch { /* non-blocking */ }
+                      } : undefined}
                     />
                   );
                 })}
