@@ -251,11 +251,27 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
             className={`border-l-4 ${isSkipped ? 'border-l-muted-foreground opacity-60' : 'border-l-amber-500'}`}
           >
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-sm font-medium">
-                    {group.normalized_kpi.slice(0, 100)}...
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <CardTitle
+                    className={`text-sm font-medium break-words ${expandedTitles[key] ? '' : 'line-clamp-2'}`}
+                    title={group.normalized_kpi}
+                  >
+                    {group.normalized_kpi}
                   </CardTitle>
+                  {group.normalized_kpi.length > 100 && (
+                    <button
+                      type="button"
+                      className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                      onClick={() => setExpandedTitles(prev => ({ ...prev, [key]: !prev[key] }))}
+                    >
+                      {expandedTitles[key] ? (
+                        <><ChevronUp className="h-3 w-3" />Show less</>
+                      ) : (
+                        <><ChevronDown className="h-3 w-3" />Show full KPI</>
+                      )}
+                    </button>
+                  )}
                   <div className="flex gap-2 mt-1">
                     <Badge variant="outline">{group.category_name}</Badge>
                     {group.has_fuzzy && (
