@@ -5,6 +5,10 @@ import { Badge } from '@/components/ui/badge';
 import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
 import { History, TrendingUp, TrendingDown, Minus, ExternalLink } from 'lucide-react';
 import type { KPI, ReviewSubmission } from '@/hooks/useKpis';
+import {
+  useCanonicalVariantPairs,
+  matchesCanonicalKpi,
+} from '@/lib/canonicalRelatedKpis';
 
 const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -23,14 +27,16 @@ export function KpiHistoryCard({
   maxMonths = 6,
   onViewFullHistory,
 }: KpiHistoryCardProps) {
+  // Canonical-aware sibling resolution: includes alias variants of the same
+  // KPI under their original (renamed) text. Falls back to strict equality
+  // when the KPI isn't in the standardization registry. See POLICY §88I.
+  const { data: variantPairs = [] } = useCanonicalVariantPairs(kpi);
+
   const monthlyData = useMemo(() => {
-    // Find related KPIs with same name for this employee (excluding current)
+    // Find related KPIs (canonical + every alias) for this employee,
+    // excluding the current row.
     const relatedKpis = allKpis.filter(
-      k =>
-        k.employee_id === kpi.employee_id &&
-        k.kpi_name === kpi.kpi_name &&
-        k.kra_name === kpi.kra_name &&
-        k.id !== kpi.id
+      k => k.id !== kpi.id && matchesCanonicalKpi(k, kpi, variantPairs),
     );
 
     const submissionMap = new Map(submissions.map(s => [s.kpi_id, s]));
@@ -57,7 +63,7 @@ export function KpiHistoryCard({
         return monthOrder.indexOf(monthB) - monthOrder.indexOf(monthA);
       })
       .slice(0, maxMonths);
-  }, [kpi, allKpis, submissions, maxMonths]);
+  }, [kpi, allKpis, submissions, maxMonths, variantPairs]);
 
   // Calculate trend direction
   const trend = useMemo(() => {

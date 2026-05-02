@@ -36,3 +36,11 @@ The KPI Standardization tooling at `/admin/kpi-standardization` (7 tabs) governs
 ## Out of scope
 - Pre-May-2026 data is frozen everywhere. Even propagation skips it client-side; DB function rejects it anyway.
 - The Registry Browser at `/registry` and `get_public_registry_view` remain read-only and never expose per-employee data.
+
+## Canonical-aware consumers (cross-period UI)
+Any UI that aggregates a single KPI across periods MUST resolve sibling rows via canonical definition + aliases — strict `kpi_name`/`kra_name` equality silently drops alias-renamed historical months. Use the shared helper `src/lib/canonicalRelatedKpis.ts`:
+- `useCanonicalVariantPairs(kpi)` → React Query hook returning `[{kra_name, kpi_name}, …]` (canonical first, then aliases). Empty array when KPI is unregistered.
+- `matchesCanonicalKpi(row, current, variantPairs)` → predicate. Falls back to strict equality when `variantPairs` is empty (legacy data).
+- `preferredVariantRow(rows, variantPairs, currentKpiId)` → period-dedup tiebreaker (canonical → current id → first).
+
+Current consumers: `src/components/review/KpiHistoryCard.tsx`, `src/components/dashboard/KpiTrackerModal.tsx`, `src/components/review/KpiJourneySection.tsx` (the latter still uses an inlined version of the resolver query for the prev-month batch fetch — keep its logic in lock-step). When adding new monthly/annual aggregation widgets, wire them through this helper instead of reimplementing the matcher.
