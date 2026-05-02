@@ -12,6 +12,13 @@ import { useScanDuplicates, useBuildRegistry, useScannerSkips, DuplicateGroup } 
 import { useToast } from '@/hooks/use-toast';
 import { AffectedKpisTable } from './AffectedKpisTable';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+const SENSITIVITY_OPTIONS: Array<{ label: string; value: string; threshold: number; hint: string }> = [
+  { label: 'Strict',   value: 'strict',   threshold: 0.75, hint: 'Only very close matches' },
+  { label: 'Balanced', value: 'balanced', threshold: 0.55, hint: 'Recommended default' },
+  { label: 'Loose',    value: 'loose',    threshold: 0.40, hint: 'Catches more near-duplicates (more noise)' },
+];
 
 interface Props {
   onRegistryUpdated: () => void;
@@ -23,6 +30,7 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
   const { skipGroup, unskipGroup, saving: skipSaving } = useScannerSkips();
   const [search, setSearch] = useState('');
   const [includeSkipped, setIncludeSkipped] = useState(false);
+  const [sensitivity, setSensitivity] = useState<string>('balanced');
   const [selections, setSelections] = useState<Record<string, number>>({});
   // Per-group canonical text overrides. Keyed by groupKey.
   const [canonicalOverrides, setCanonicalOverrides] = useState<Record<string, { kra: string; kpi: string }>>({});
@@ -33,13 +41,18 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
   const [skipReason, setSkipReason] = useState('');
   const { toast } = useToast();
 
-  // Re-scan whenever the include-skipped toggle flips so admins see results immediately.
+  const currentThreshold = useMemo(
+    () => SENSITIVITY_OPTIONS.find(o => o.value === sensitivity)?.threshold ?? 0.55,
+    [sensitivity],
+  );
+
+  // Re-scan whenever the include-skipped toggle or sensitivity changes so admins see results immediately.
   useEffect(() => {
     if (groups.length > 0) {
-      scan(includeSkipped);
+      scan(includeSkipped, currentThreshold);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [includeSkipped]);
+  }, [includeSkipped, currentThreshold]);
 
   const filteredGroups = useMemo(() => {
     if (!search.trim()) return groups;
@@ -88,13 +101,13 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
       setSkipTarget(null);
       setSkipReason('');
       // Refresh so the badge counts stay correct
-      scan(includeSkipped);
+      scan(includeSkipped, currentThreshold);
     }
   };
 
   const handleUnskip = async (group: DuplicateGroup) => {
     const ok = await unskipGroup(group.category_id, group.normalized_kpi);
-    if (ok) scan(includeSkipped);
+    if (ok) scan(includeSkipped, currentThreshold);
   };
 
   return (
@@ -113,7 +126,7 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={() => scan(includeSkipped)} disabled={scanning}>
+            <Button onClick={() => scan(includeSkipped, currentThreshold)} disabled={scanning}>
               {scanning ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ScanSearch className="h-4 w-4 mr-2" />}
               {groups.length > 0 ? 'Re-scan' : 'Scan for Duplicates'}
             </Button>
@@ -124,6 +137,26 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
                 {' / '}{groups.length} total
               </Badge>
             )}
+            <div className="flex items-center gap-2">
+              <Label htmlFor="sensitivity" className="text-xs whitespace-nowrap">
+                Match sensitivity
+              </Label>
+              <Select value={sensitivity} onValueChange={setSensitivity}>
+                <SelectTrigger id="sensitivity" className="h-8 w-[140px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SENSITIVITY_OPTIONS.map(o => (
+                    <SelectItem key={o.value} value={o.value} className="text-xs">
+                      <div className="flex flex-col">
+                        <span>{o.label}</span>
+                        <span className="text-[10px] text-muted-foreground">{o.hint}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex items-center gap-2 ml-auto">
               <Switch
                 id="include-skipped"
@@ -135,6 +168,11 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
               </Label>
             </div>
           </div>
+          <p className="text-[11px] text-muted-foreground mt-2">
+            Tip: use <strong>Don't merge</strong> on a group to permanently hide it from future scans.
+            You can always restore it from <em>History &amp; Undo</em> or by toggling
+            <em> Include skipped groups</em> above.
+          </p>
         </CardContent>
       </Card>
 
@@ -174,6 +212,11 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
                   </CardTitle>
                   <div className="flex gap-2 mt-1">
                     <Badge variant="outline">{group.category_name}</Badge>
+                    {group.has_fuzzy && (
+                      <Badge variant="outline" className="border-amber-500 text-amber-600">
+                        Fuzzy match
+                      </Badge>
+                    )}
                     {isSkipped && <Badge variant="secondary">Skipped — won't show on next scan</Badge>}
                   </div>
                 </div>
@@ -207,6 +250,15 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
                       <div className="flex gap-2 mt-1">
                         <Badge variant="secondary" className="text-xs">{variant.employee_count} employees</Badge>
                         <Badge variant="outline" className="text-xs">{variant.row_count} rows</Badge>
+                        {variant.match_type === 'fuzzy' ? (
+                          <Badge variant="outline" className="text-xs border-amber-500 text-amber-600">
+                            Fuzzy {Math.round((variant.similarity ?? 0) * 100)}%
+                          </Badge>
+                        ) : variant.match_type === 'exact' ? (
+                          <Badge variant="outline" className="text-xs border-emerald-500 text-emerald-600">
+                            Exact
+                          </Badge>
+                        ) : null}
                         <Button
                           variant="ghost"
                           size="sm"
