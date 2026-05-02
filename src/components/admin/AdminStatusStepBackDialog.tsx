@@ -13,7 +13,6 @@ import {
   useAdminStatusStepBack,
   getPreviousStatus,
   computeStepBackTargets,
-  getDataAwareDefaultTarget,
   getPreferredStepBackTarget,
 } from '@/hooks/useAdminDataEntry';
 import { supabase } from '@/integrations/supabase/client';
