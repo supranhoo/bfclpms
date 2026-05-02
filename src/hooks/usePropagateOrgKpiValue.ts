@@ -292,6 +292,8 @@ export function usePropagateOrgKpiValue() {
       // Fire-and-forget: log to kpi_audit_logs for Review Timeline visibility
       logPropagationAudit(kpiRatings, params.isNa).catch(() => {});
 
+      // v2.66.8 — propagate the silent flag through onSuccess via the result
+      (result as any).__silent = !!params.silent;
       return result;
     },
     onSuccess: (result) => {
@@ -301,6 +303,8 @@ export function usePropagateOrgKpiValue() {
       queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
+      // v2.66.8 — caller-driven silence (batch loops emit one summary toast)
+      if ((result as any).__silent) return;
       if (result.propagatedCount > 0) {
         toast({
           title: `Propagated to ${result.propagatedCount} employee KPI(s)`,
@@ -309,11 +313,25 @@ export function usePropagateOrgKpiValue() {
             : 'Review submissions updated with org-level values',
         });
       } else if (result.skippedCount && result.skippedCount > 0) {
-        toast({
-          title: 'Nothing to propagate',
-          description: `All ${result.skippedCount} matching KPI(s) are already past the initial stage. Definition was not advanced.`,
-          variant: 'destructive',
-        });
+        // v2.66.8 — Re-classified per POLICY §88: when employees have already
+        // self-reviewed, re-propagation is intentionally blocked (snapshot
+        // immutability). This is NOT a failure — surface as informational.
+        const skipped = result.skipped || [];
+        const allBenign = skipped.length > 0 && skipped.every(
+          s => s.reason === 'not_in_kra_set'
+        );
+        if (allBenign) {
+          toast({
+            title: 'Already propagated',
+            description: `All ${result.skippedCount} matching KPI(s) have already advanced past the data-owner stage. The previously propagated values remain in place — re-propagation is blocked once an employee has self-reviewed.`,
+          });
+        } else {
+          toast({
+            title: 'Nothing to propagate',
+            description: `${result.skippedCount} KPI(s) could not be advanced (e.g. missing rows or race condition). Please refresh and retry.`,
+            variant: 'destructive',
+          });
+        }
       }
     },
     onError: (error: Error) => {
