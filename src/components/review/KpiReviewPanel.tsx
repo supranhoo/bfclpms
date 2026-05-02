@@ -76,6 +76,7 @@ export function KpiReviewPanel({
         orgKpiEnteredByName={orgKpiEnteredByName}
         orgKpiDataOwnerNames={orgKpiDataOwnerNames}
         employeeId={kpi.employee_id}
+        workflowStages={workflowStages}
       />
 
       {/* Two-Column Layout - collapses at md breakpoint for mobile sheets */}
