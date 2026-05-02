@@ -33,6 +33,7 @@ export function useMarkAsOrgLevel() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['org-level-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['org-level-kpis-with-employees'] });
       queryClient.invalidateQueries({ queryKey: ['org-kpi-suggestions'] });
     },
   });
@@ -61,6 +62,7 @@ export function useMarkAsOrgLevel() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['org-level-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['org-level-kpis-with-employees'] });
       queryClient.invalidateQueries({ queryKey: ['org-kpi-suggestions'] });
     },
   });
