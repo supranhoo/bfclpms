@@ -2497,5 +2497,8 @@ Rationale: the previous full-org load shipped thousands of rows on every visit a
 
 8. **History tab UX contract.** The History & Undo tab MUST show reversed actions in a dimmed state (not hidden) so the audit trail stays visible. Undo MUST go through `ConfirmDestructiveDialog` per the Destructive Action Governance memory.
 
+9. **Scanner uniqueness invariant.** `scan_kpi_duplicate_groups` MUST emit at most one variant per `(category_id, kra_name, kpi_name)`. Self-joining `kpis` to its own aggregate is forbidden — it inflates the `variants` array by `row_count` and produces visually duplicated rows in the Build Registry tab. The client (`useScanDuplicates` → `dedupeScannerGroups`) keeps a defensive de-dup pass; both layers MUST be preserved.
+
 ## Version History
 - **v2.66.7.24 (2026-05-01):** §88I added — Phase 5b Reversible Standardization Actions. New `kpi_standardization_actions` table (append-only, admin RLS), `log_standardization_action` + `reverse_standardization_action` RPCs, extended `correct_may_kpis` to capture before-image, new `useEditDefinition` / `useUnlinkAlias` / `useDeleteDefinition` / `useStandardizationHistory` hooks, `EditDefinitionDialog`, `AffectedKpisTable`, and `HistoryUndoTab` (7th tab on /admin/kpi-standardization). Build Registry now supports inline canonical editing and per-variant KPI drill-in.
+- **v2.66.7.25 (2026-05-02):** §88I clause 9 added. Fixed `scan_kpi_duplicate_groups` row-inflation bug; added `src/lib/scanGroupsDedup.ts` defensive helper + `scanGroupsDedup.test.ts`.

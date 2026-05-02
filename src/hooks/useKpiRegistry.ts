@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { dedupeScannerGroups } from '@/lib/scanGroupsDedup';
 
 /**
  * Pure helper: given a canonical (kra,kpi), the full variant list, the category,
@@ -127,7 +128,10 @@ export function useScanDuplicates() {
       // Find KPI signatures that have multiple KRA name variants
       const { data, error } = await supabase.rpc('scan_kpi_duplicate_groups' as any);
       if (error) throw error;
-      setGroups((data as any as DuplicateGroup[]) || []);
+      // Defensive client-side de-dup: even if a stale/buggy server function
+      // ever returns duplicated variants again, the UI must not show them.
+      const raw = (data as any as DuplicateGroup[]) || [];
+      setGroups(dedupeScannerGroups(raw as any) as DuplicateGroup[]);
     } catch (err: any) {
       toast({ title: 'Scan failed', description: err.message, variant: 'destructive' });
     } finally {
