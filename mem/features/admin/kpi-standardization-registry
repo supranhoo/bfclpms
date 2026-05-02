@@ -33,6 +33,13 @@ The KPI Standardization tooling at `/admin/kpi-standardization` (7 tabs) governs
 - Skip / un-skip log into `kpi_standardization_actions` (`skip_group` / `unskip_group`) and are reversible via the History tab — `reverse_standardization_action` removes / re-inserts the skip row. Confirmation goes through `ConfirmDestructiveDialog`.
 - Hook: `useScannerSkips` (`skipGroup`, `unskipGroup`). UI: Build Registry tab adds **Don't merge** button + **Include skipped** toggle; HistoryUndoTab labels `skip_group` / `unskip_group`.
 
+## Fuzzy scanner (May 2026)
+- `scan_kpi_duplicate_groups(p_include_skipped boolean, p_fuzzy_threshold numeric DEFAULT 0.55)` uses `pg_trgm` similarity to cluster near-identical KPI names within the same category. The non-recursive LATERAL pass picks the lexicographically-smallest neighbour above threshold as the cluster representative — bounded O(N²) per category, kept fast by a `gin_trgm_ops` index on `LOWER(TRIM(kpi_name))`.
+- Each variant is tagged `match_type: 'exact' | 'fuzzy'` plus a `similarity` score (0..1). Group-level `has_fuzzy` flags clusters that contain at least one fuzzy match.
+- A group is emitted when **either** ≥2 distinct KRAs share the same KPI name (legacy rule) **or** ≥2 fuzzy-similar variants cluster together. This is what surfaces same-KPI/single-KRA leftovers like the "Fugitive Particulate Matter (PM10)" vs "(PM10/AQI)" pair after the user has approved the canonical.
+- Skip-list keying is unchanged: `(category_id, normalized_kpi_of_representative)`. Loosening the threshold may surface a fuzzy cousin under a new representative — that is expected and admins can `Don't merge` it independently.
+- UI: `BuildRegistryTab` exposes a **Match sensitivity** select (Strict 0.75 / Balanced 0.55 / Loose 0.40), badges every variant Exact / Fuzzy XX%, and defaults the canonical selection on fuzzy groups to the **longest** (most descriptive) variant. The **Don't merge** button per group remains the cleanup escape hatch.
+
 ## Out of scope
 - Pre-May-2026 data is frozen everywhere. Even propagation skips it client-side; DB function rejects it anyway.
 - The Registry Browser at `/registry` and `get_public_registry_view` remain read-only and never expose per-employee data.
