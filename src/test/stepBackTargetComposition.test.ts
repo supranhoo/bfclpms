@@ -3,6 +3,7 @@ import {
   FULL_STATUS_ORDER,
   computeStepBackTargets,
   getDataAwareDefaultTarget,
+  getPreferredStepBackTarget,
 } from '@/hooks/useAdminDataEntry';
 
 /**
@@ -85,5 +86,41 @@ describe('getDataAwareDefaultTarget', () => {
       'audit', // recorded but logically after manager_check — must be ignored
     ]);
     expect(target).toBe('self_review');
+  });
+});
+
+describe('getPreferredStepBackTarget (POLICY §117 — Amol March 2026 regression)', () => {
+  it('defaults to Audit Review when audit is in the period workflow and has a recorded score', () => {
+    // Period-resolved workflow excludes skip-level + HR PMS, includes audit.
+    const workflow = ['kra_set', 'self_review', 'manager_check', 'audit', 'approved'];
+    const dataBearing = ['self_review', 'manager_check', 'audit'] as const;
+    const targets = computeStepBackTargets('approved', workflow, [...dataBearing]);
+
+    const stages = targets.map(t => t.stage);
+    // The dropdown must NOT offer skip_level / hr_pms for this period.
+    expect(stages).not.toContain('skip_level_check');
+    expect(stages).not.toContain('hr_pms_review');
+    // Default selection must land on Audit Review.
+    expect(getPreferredStepBackTarget('approved', targets, [...dataBearing])).toBe('audit');
+  });
+
+  it('falls back to nearest prior workflow stage when no data-bearing stage qualifies', () => {
+    const workflow = ['kra_set', 'self_review', 'manager_check', 'approved'];
+    const targets = computeStepBackTargets('approved', workflow, []);
+    expect(getPreferredStepBackTarget('approved', targets, [])).toBe('manager_check');
+  });
+
+  it('returns kra_set when nothing else is eligible', () => {
+    const workflow = ['kra_set', 'self_review'];
+    const targets = computeStepBackTargets('self_review', workflow, []);
+    expect(getPreferredStepBackTarget('self_review', targets, [])).toBe('kra_set');
+  });
+
+  it('never returns a stage that is not in availableTargets', () => {
+    const workflow = ['kra_set', 'self_review', 'manager_check', 'approved'];
+    const targets = computeStepBackTargets('approved', workflow, []);
+    const targetStages = new Set(targets.map(t => t.stage));
+    const result = getPreferredStepBackTarget('approved', targets, ['hr_pms_review']);
+    expect(result && targetStages.has(result)).toBe(true);
   });
 });
