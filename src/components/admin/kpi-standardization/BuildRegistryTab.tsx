@@ -190,7 +190,15 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
 
       {visibleGroups.map((group) => {
         const key = groupKey(group);
-        const selectedIdx = selections[key] ?? 0;
+        // For fuzzy groups, default to the longest (most descriptive) variant.
+        // For exact-only groups, keep the historical "first variant wins" default.
+        const defaultIdx = group.has_fuzzy
+          ? group.variants.reduce(
+              (best, v, i) => (v.kpi_name.length > group.variants[best].kpi_name.length ? i : best),
+              0,
+            )
+          : 0;
+        const selectedIdx = selections[key] ?? defaultIdx;
         const override = canonicalOverrides[key];
         const isEditing = !!editingCanonical[key];
         const canonical = group.variants[selectedIdx];
