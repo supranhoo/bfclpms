@@ -578,6 +578,67 @@ export function getPreviousStatus(
   return idx > 0 ? stages[idx - 1] : null;
 }
 
+/**
+ * POLICY §117 — Step-Back Target Composition.
+ *
+ * Compute the union of (a) workflow-template stages strictly before `current`,
+ * and (b) any stage with persisted scoring data in `review_submissions` that is
+ * strictly before `current`. Stages that exist only because of recorded data
+ * (i.e. not in the active workflow template) are flagged as `historic` so the
+ * UI can surface that distinction to the admin.
+ *
+ * `kra_set` is always included as a baseline reset target. Result is sorted by
+ * `FULL_STATUS_ORDER` for canonical ordering regardless of the workflow shape.
+ */
+export function computeStepBackTargets(
+  current: Database['public']['Enums']['review_status'],
+  workflowStages: string[] | undefined,
+  dataBearingStages: Array<Database['public']['Enums']['review_status']>
+): Array<{ stage: Database['public']['Enums']['review_status']; historic: boolean }> {
+  const fullIdx = FULL_STATUS_ORDER.indexOf(current);
+  if (fullIdx <= 0) return [];
+
+  const inWorkflow = new Set<string>(workflowStages ?? FULL_STATUS_ORDER);
+  const dataSet = new Set<string>(dataBearingStages);
+
+  const out: Array<{
+    stage: Database['public']['Enums']['review_status'];
+    historic: boolean;
+  }> = [{ stage: 'kra_set', historic: false }];
+
+  for (let i = 0; i < fullIdx; i++) {
+    const stage = FULL_STATUS_ORDER[i];
+    if (stage === 'kra_set') continue;
+    const inWf = inWorkflow.has(stage);
+    const hasData = dataSet.has(stage);
+    if (inWf || hasData) {
+      out.push({ stage, historic: !inWf && hasData });
+    }
+  }
+  return out;
+}
+
+/**
+ * POLICY §117 — Default step-back target.
+ *
+ * Prefer the immediately-prior data-bearing stage when one exists, so an
+ * approved KPI with `auditor_score` defaults back to Audit Review instead of
+ * skipping over the recorded score.
+ */
+export function getDataAwareDefaultTarget(
+  current: Database['public']['Enums']['review_status'],
+  dataBearingStages: Array<Database['public']['Enums']['review_status']>
+): Database['public']['Enums']['review_status'] | null {
+  if (!dataBearingStages || dataBearingStages.length === 0) return null;
+  const fullIdx = FULL_STATUS_ORDER.indexOf(current);
+  if (fullIdx <= 0) return null;
+  for (let i = fullIdx - 1; i >= 0; i--) {
+    const s = FULL_STATUS_ORDER[i];
+    if (dataBearingStages.includes(s)) return s;
+  }
+  return null;
+}
+
 interface AdminStepBackParams {
   kpi_id: string;
   employee_id: string;
