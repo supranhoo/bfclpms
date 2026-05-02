@@ -357,9 +357,28 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
                       </div>
                       <div className="flex-1">
                         <div className="font-medium text-sm">{variant.kra_name}</div>
-                        <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                          {variant.kpi_name.slice(0, 150)}
+                        <div
+                          className={`text-xs text-muted-foreground mt-0.5 break-words ${expandedVariants[key]?.[idx] ? '' : 'line-clamp-2'}`}
+                          title={variant.kpi_name}
+                        >
+                          {variant.kpi_name}
                         </div>
+                        {variant.kpi_name.length > 150 && (
+                          <button
+                            type="button"
+                            className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                            onClick={() => setExpandedVariants(prev => ({
+                              ...prev,
+                              [key]: { ...(prev[key] ?? {}), [idx]: !prev[key]?.[idx] },
+                            }))}
+                          >
+                            {expandedVariants[key]?.[idx] ? (
+                              <><ChevronUp className="h-3 w-3" />Show less</>
+                            ) : (
+                              <><ChevronDown className="h-3 w-3" />Show full KPI</>
+                            )}
+                          </button>
+                        )}
                         <div className="flex gap-2 mt-1 flex-wrap">
                           <Badge variant="secondary" className="text-xs">{variant.employee_count} employees</Badge>
                           <Badge variant="outline" className="text-xs">{variant.row_count} rows</Badge>
