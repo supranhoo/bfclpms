@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Loader2, ScanSearch, CheckCircle2, Search, Eye, Pencil, Ban, RotateCcw, Split } from 'lucide-react';
+import { Loader2, ScanSearch, CheckCircle2, Search, Eye, Pencil, Ban, RotateCcw, Split, ChevronDown, ChevronUp } from 'lucide-react';
 import { useScanDuplicates, useBuildRegistry, useScannerSkips, DuplicateGroup } from '@/hooks/useKpiRegistry';
 import { useToast } from '@/hooks/use-toast';
 import { AffectedKpisTable } from './AffectedKpisTable';
@@ -48,6 +48,11 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
   const [editingByBucket, setEditingByBucket] = useState<Record<string, Record<BucketId, boolean>>>({});
   const [drillIn, setDrillIn] = useState<Record<string, number | null>>({});
   const [processedGroups, setProcessedGroups] = useState<Set<string>>(new Set());
+  // Per-group "title expanded" toggles + per-group, per-variant "kpi expanded" toggles.
+  // Lets admins read the full KPI text inline without leaving the scan results.
+  const [expandedTitles, setExpandedTitles] = useState<Record<string, boolean>>({});
+  const [expandedVariants, setExpandedVariants] = useState<Record<string, Record<number, boolean>>>({});
+  const [expandedCanonical, setExpandedCanonical] = useState<Record<string, Record<string, boolean>>>({});
   const [skipTarget, setSkipTarget] = useState<DuplicateGroup | null>(null);
   const [skipReason, setSkipReason] = useState('');
   const { toast } = useToast();
