@@ -530,7 +530,7 @@ Deno.serve(async (req) => {
     }
 
     // ── Send ONE consolidated notification + email per affected employee ──
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    // (supabaseUrl is already declared at the top of the handler)
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 
     for (const result of rolledOver) {
