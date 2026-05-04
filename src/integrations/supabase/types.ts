@@ -8000,6 +8000,15 @@ export type Database = {
         }
         Returns: string[]
       }
+      get_cycle_terminal_month: {
+        Args: {
+          p_frequency: string
+          p_frequency_cycle_start?: string
+          p_review_period: string
+          p_review_year: number
+        }
+        Returns: string
+      }
       get_direct_report_ids: {
         Args: { _manager_id: string }
         Returns: string[]
@@ -8271,8 +8280,16 @@ export type Database = {
         Returns: undefined
       }
       refresh_safety_analytics: { Args: never; Returns: Json }
+      repair_multimonth_workflow_drift_v5: {
+        Args: { p_apply?: boolean }
+        Returns: Json
+      }
       repair_org_kpi_cycle_anchors: {
         Args: { p_dry_run?: boolean }
+        Returns: Json
+      }
+      repair_sibling_frequency_drift_v5: {
+        Args: { p_apply?: boolean }
         Returns: Json
       }
       request_org_kpi_revision: {
