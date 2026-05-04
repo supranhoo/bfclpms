@@ -2520,6 +2520,7 @@ Admin pages that render a matrix grouped by employee (e.g., the **KPI Weightage 
 2. **Scoped detail fetch.** Once the page's employee IDs are known, the matrix detail query (KPIs, scores, etc.) MUST be scoped via `.in('employee_id', pageIds)` so the heavy query never runs unbounded.
 3. **Aggregate badges are filter-scoped, not page-scoped.** Summary counters (e.g. variance / acknowledged badges, total employees) MUST reflect the **full filter set**, computed via a separate, cached aggregate query. They MUST NOT silently change as the user pages.
 4. **Cache invalidation contract.** Mutations on these screens MUST invalidate the dashboard's base query key prefix so all pages and the summary refresh together.
+5. **Mapped-employees only (May 2026).** The KPI Weightage Dashboard MUST restrict its employee universe to people who have at least one `kpis` row in either review_year of the selected fiscal cycle (and matching the active category filter). Profiles with no KRA/KPI mapping MUST NOT appear in the list, the badges, or the Export. Implemented by pre-resolving distinct `employee_id`s from `kpis` and constraining the profiles query via `.in('id', …)` in both `useKpiWeightageMatrix` and `useWeightageVarianceSummary`.
 
 Rationale: the previous full-org load shipped thousands of rows on every visit and degraded as headcount grew. This contract caps cold-load cost while keeping admin numbers honest.
 
