@@ -16,3 +16,4 @@ Rules:
 - Step 1 = filtered `profiles.range(...)` with `count:'exact'`. Step 2 = `kpis.in('employee_id', pageIds)`. No more full-org client-side filtering.
 - All mutations invalidate the `['kpi-weightage-matrix']` query key prefix; variance summary uses its own key prefix.
 - Excel export currently reflects the visible page only (filter-scoped export is a future enhancement).
+- **Mapped-only universe**: Both hooks first resolve distinct `employee_id`s from `kpis` for the selected fiscal-year pair (and category) via `fetchEmployeesWithKpis()`, then constrain `profiles` with `.in('id', …)`. Profiles with zero KPI mappings never appear in the list, badges, or Export. POLICY §114.5.

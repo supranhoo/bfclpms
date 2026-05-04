@@ -6399,6 +6399,7 @@ The dashboard at `/admin/kpi-weightage-dashboard` paginates by **employee** to k
 - **UI**: Filter changes reset to page 1. Free-text employee search is debounced 300 ms. A footer shows `Page X of Y · N employees` with `Per page` (25/50/100) and Prev/Next controls. Expand/Collapse All operate on the visible page.
 - **Cache invalidation**: All mutations (cell edit, acknowledge variance, add KPI to month, AdminKpiEditDialog close) invalidate the `['kpi-weightage-matrix']` prefix; the variance summary key (`['kpi-weightage-variance-summary']`) refreshes on its own staleTime or can be invalidated by callers when needed.
 - **Export**: The Excel export reflects the **current page only**. A future enhancement (out of scope here) is a "Export all (filter-scoped)" path using the aggregate query.
+- **Mapped employees only (May 2026 v5.1.1)**: Both `useKpiWeightageMatrix` and `useWeightageVarianceSummary` first resolve the distinct set of `employee_id`s present in `kpis` for the selected fiscal-year pair (and category, if filtered) via `fetchEmployeesWithKpis()`, then constrain the profiles query with `.in('id', eligibleIds)`. This removes the long tail of unassigned profiles (was 2532, now ~mapped count) from the list, badges and Export — POLICY §114.5.
 
 ### KPI Standardization — Idempotent Approve as Canonical (May 2026)
 
