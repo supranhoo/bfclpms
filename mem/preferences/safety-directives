@@ -1,12 +1,3 @@
-## Persist Safety Directives as Project Memory
-
-Save the user's safety/caution operating rules as a permanent Core memory rule so every future session on this project automatically applies them.
-
-### Changes
-
-**1. Create new memory file** `mem://preferences/safety-directives`
-
-```
 ---
 name: safety-directives
 description: Mandatory cautious-mode operating rules — zero destructive autonomy, stop-and-ask on errors, propose-don't-act, least privilege
@@ -23,20 +14,3 @@ Treat every environment as production. Apply these rules to every action:
 4. **Least privilege** — Do not opportunistically use elevated tokens, service-role keys, or admin credentials discovered in env/secrets unless the user explicitly instructs their use for a specific isolated task.
 
 **Why:** User mandate — system safety and data preservation outrank helpfulness. Violations risk irreversible production data loss.
-```
-
-**2. Update `mem://index.md`** — append a one-liner to the **Core** section (always-in-context) plus a Memories entry pointing to the detail file:
-
-- Core line added: `Safety: zero destructive autonomy, stop-and-ask on errors, propose-don't-act, least-privilege. See safety-directives.`
-- Memories line added: `[Safety Directives](mem://preferences/safety-directives) — Mandatory cautious-mode rules for destructive ops, errors, and privilege use`
-
-All existing Core rules and Memories entries are preserved verbatim (the index file is rewritten in full).
-
-### Risk & Impact
-
-- **Data Impact:** None — memory files only.
-- **Workflow Impact:** Future sessions will pause more often for confirmation on destructive actions. Intended.
-- **Regression Risk:** None.
-- **Mitigation:** No code or schema touched.
-
-Approve to switch to build mode and write the two memory files.
