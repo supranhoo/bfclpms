@@ -13,6 +13,7 @@ import { LateJoinerBackfillSection } from './LateJoinerBackfillSection';
 import { OrgKpiInheritanceReconciler } from './OrgKpiInheritanceReconciler';
 import { OrgKpiCycleAnchorRepair } from './OrgKpiCycleAnchorRepair';
 import { RescoreBackfilledSubmissionsDialog } from './RescoreBackfilledSubmissionsDialog';
+import { MultimonthWorkflowDriftCard } from './MultimonthWorkflowDriftCard';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
