@@ -1,0 +1,17 @@
+---
+name: lean-load-policy
+description: POLICY §120 — debounced inputs, slim KPI projection, paginated lists; rejects blanket select('*') rewrite, 20-row picker caps, and blanket spinner→skeleton swaps
+type: constraint
+---
+POLICY §120 Lean-Load. Performance defaults across PMS:
+
+1. Search/filter text inputs that drive in-memory `.filter()` over >~200 rows OR trigger a network call MUST wrap value in `useDebouncedValue(value, 300)` from `src/hooks/useDebouncedValue.ts` before feeding `useMemo` deps or React Query keys. Categorical filters (role/status/dept) exempt.
+2. New list/grid/report queries paginate via `.range()` + `count: 'exact'` with explicit column lists. Reference patterns: `KpiWeightageDashboard`, `SafetyAudits`, `EmailLogs`, `AffectedKpisTable`.
+3. `useAllKpis` / `useKpisByPeriod` MUST select only `SLIM_KPI_SELECT` (defined in `src/hooks/useKpis.ts`). Heavy text columns load on row open.
+4. Full-org reads remain confined to the 25 sanctioned `fetchAllPaged` sites registered in `mem/architecture/profiles-query-policy`. Capping employee pickers or scoring engines to 20 rows is forbidden — breaks 2,533-employee filtering and weighted-score math (POLICY §94).
+5. `select('*', { count: 'exact', head: true })` is a zero-row count call and is NOT a violation. Do not perform a blanket `select('*')` rewrite — risks breaking `types.ts` inference with no runtime gain.
+6. `Skeleton` (`src/components/ui/skeleton.tsx`) for page/list loads; `Loader2` stays inside buttons. No blanket swap.
+
+Compliant debounced sites: `UserManagement.tsx`, `useReviewPageState.ts`, `OrgKpiEntryCard.tsx`, `useMentionSearch.ts`, `KpiWeightageDashboard.tsx`, `useSafetyRealtimeSync.ts`. Extend this list when adding new ones.
+
+Regression test: `src/test/useDebouncedValue.test.tsx` (5 tests).
