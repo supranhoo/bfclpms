@@ -8289,7 +8289,7 @@ export type Database = {
         Returns: Json
       }
       repair_sibling_frequency_drift_v5: {
-        Args: { p_apply?: boolean }
+        Args: { p_apply?: boolean; p_kpi_id?: string }
         Returns: Json
       }
       request_org_kpi_revision: {
