@@ -8,8 +8,15 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Mail, CheckCircle2, XCircle, SkipForward, Clock, Search, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { Mail, CheckCircle2, XCircle, SkipForward, Clock, Search, ChevronDown, ChevronRight, RefreshCw, Download, CalendarIcon, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
+import * as XLSX from 'xlsx';
+import { fetchAllPaged } from '@/lib/fetchAll';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+import type { DateRange } from 'react-day-picker';
 
 interface EmailLog {
   id: string;
@@ -73,6 +80,13 @@ export default function EmailLogs() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [eventFilter, setEventFilter] = useState<string>('all');
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [downloadRange, setDownloadRange] = useState<DateRange | undefined>(() => {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - 7);
+    return { from, to };
+  });
+  const [downloading, setDownloading] = useState(false);
 
   const { data: logs = [], isLoading, refetch } = useQuery({
     queryKey: ['email-logs'],
@@ -118,6 +132,66 @@ export default function EmailLogs() {
     return [...new Set(logs.map(l => l.event_type))].sort();
   }, [logs]);
 
+  const handleDownload = async () => {
+    if (!downloadRange?.from || !downloadRange?.to) {
+      toast.error('Please select a date range');
+      return;
+    }
+    setDownloading(true);
+    try {
+      const fromIso = new Date(downloadRange.from);
+      fromIso.setHours(0, 0, 0, 0);
+      const toIso = new Date(downloadRange.to);
+      toIso.setHours(23, 59, 59, 999);
+
+      const rows = await fetchAllPaged<EmailLog>((from, to) => {
+        let q = supabase
+          .from('email_logs')
+          .select('*')
+          .gte('created_at', fromIso.toISOString())
+          .lte('created_at', toIso.toISOString())
+          .order('created_at', { ascending: false })
+          .range(from, to);
+        if (statusFilter !== 'all') q = q.eq('status', statusFilter);
+        if (eventFilter !== 'all') q = q.eq('event_type', eventFilter);
+        return q as unknown as PromiseLike<{ data: EmailLog[] | null; error: unknown }>;
+      });
+
+      if (rows.length === 0) {
+        toast.info('No email logs found for selected range');
+        return;
+      }
+
+      const exportRows = rows.map(l => ({
+        'Timestamp': format(new Date(l.created_at), 'dd MMM yyyy HH:mm:ss'),
+        'Event': EVENT_LABELS[l.event_type] || l.event_type,
+        'Recipient Name': l.recipient_name || '',
+        'Recipient Email': l.recipient_email,
+        'Subject': l.subject || '',
+        'Status': l.status,
+        'Provider': l.provider || '',
+        'Error': l.error_message || '',
+        'Metadata': l.metadata ? JSON.stringify(l.metadata) : '',
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(exportRows);
+      ws['!cols'] = [
+        { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 30 }, { wch: 40 },
+        { wch: 12 }, { wch: 14 }, { wch: 40 }, { wch: 50 },
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Email Logs');
+      const fromStr = format(downloadRange.from, 'yyyy-MM-dd');
+      const toStr = format(downloadRange.to, 'yyyy-MM-dd');
+      XLSX.writeFile(wb, `Email_Logs_${fromStr}_to_${toStr}.xlsx`);
+      toast.success(`Exported ${rows.length} email log${rows.length === 1 ? '' : 's'}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to download email logs');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader title="Email Logs" description="Track all system-generated emails" />
@@ -159,7 +233,7 @@ export default function EmailLogs() {
       {/* Filters */}
       <Card>
         <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-col lg:flex-row gap-3">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input placeholder="Search by recipient or subject..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
@@ -183,6 +257,35 @@ export default function EmailLogs() {
               </SelectContent>
             </Select>
             <Button variant="outline" size="icon" onClick={() => refetch()}><RefreshCw className="h-4 w-4" /></Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className={cn('justify-start gap-2 min-w-[240px]', !downloadRange && 'text-muted-foreground')}>
+                  <CalendarIcon className="h-4 w-4" />
+                  {downloadRange?.from ? (
+                    downloadRange.to ? (
+                      <>{format(downloadRange.from, 'dd MMM yyyy')} – {format(downloadRange.to, 'dd MMM yyyy')}</>
+                    ) : (
+                      format(downloadRange.from, 'dd MMM yyyy')
+                    )
+                  ) : (
+                    <span>Select date range</span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar
+                  mode="range"
+                  selected={downloadRange}
+                  onSelect={setDownloadRange}
+                  numberOfMonths={2}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+            <Button onClick={handleDownload} disabled={downloading} className="gap-2">
+              {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              Download Excel
+            </Button>
           </div>
         </CardContent>
       </Card>

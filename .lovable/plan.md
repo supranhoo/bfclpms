@@ -1,28 +1,29 @@
-# Fix: KRA Rollover "Failed to send a request to the Edge Function"
+## Add Download Excel Button to Email Logs
 
-## Root Cause
-`supabase/functions/auto-rollover-kpis/index.ts` fails to boot:
+Add a "Download Excel" button to the Email Logs page that exports filtered email logs for a user-selected date range — without loading the data into the UI table.
 
-```
-Uncaught SyntaxError: Identifier 'supabaseUrl' has already been declared at index.ts:552
-```
+### UI changes (`src/pages/admin/EmailLogs.tsx`)
 
-`supabaseUrl` is declared twice inside the same `Deno.serve` try-block:
-- Line 168: `const supabaseUrl = Deno.env.get('SUPABASE_URL')!;` (used to create the supabase client)
-- Line 533: `const supabaseUrl = Deno.env.get('SUPABASE_URL')!;` (re-declared before the email-notification fetch)
+Add to the filter row (next to refresh button):
+- **Date range picker** (From / To dates, defaults to last 7 days)
+- **Download Excel button** (with download icon)
 
-Because the module fails to compile, every invocation — preview, individual employee rollover, and "All Employees" — returns the generic "Failed to send a request to the Edge Function" toast seen in the screenshot.
+The button respects existing Status and Event Type filters (but uses the date range, not the 500-row UI cap).
 
-## Fix
-Remove the duplicate declaration at line 533. The outer `supabaseUrl` (line 168) is already in scope and can be reused for the `${supabaseUrl}/functions/v1/send-email-notification` fetch. Keep the `anonKey` declaration since it isn't declared elsewhere.
+### Download behavior
 
-## Files
-- `supabase/functions/auto-rollover-kpis/index.ts` — delete the duplicate `const supabaseUrl = ...` line inside the rolledOver loop block.
+On click:
+1. Query `email_logs` directly via Supabase using:
+   - `created_at >= fromDate AND created_at <= toDate`
+   - Apply current `statusFilter` and `eventFilter` if not "all"
+   - Use `fetchAll` paged helper (`src/lib/fetchAll.ts`) to bypass 1000-row limit
+   - Order by `created_at DESC`
+2. Build XLSX with `xlsx` library (already used in project — see `OrgKpiBulkExport.tsx`)
+3. Columns: Timestamp, Event, Recipient Name, Recipient Email, Subject, Status, Provider, Error Message, Metadata (JSON string)
+4. Filename: `Email_Logs_{from}_to_{to}.xlsx`
+5. Show toast on success/failure; show loading state on button while fetching.
 
-## Risk
-Minimal. Pure syntax fix; no logic, schema, RLS, or workflow change. Restores rollover for both single-employee and All Employees modes.
-
-## Verification
-- Edge function boots cleanly (no more `worker boot error` in logs).
-- "Check & Preview" returns preview data.
-- Individual employee rollover completes and the consolidated notification + email path still receives the same `supabaseUrl`.
+### Notes
+- No change to the existing 500-row UI query — the download path fetches independently on demand.
+- Reuse `EVENT_LABELS` for human-readable event names in the export.
+- Use shadcn `Popover` + `Calendar` for date range selection (already in project).
