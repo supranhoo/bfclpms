@@ -1,0 +1,18 @@
+---
+name: engineering-standards
+description: Mandatory engineering discipline — SSOT/Policy sync, RCA, separation of concerns, RLS-first, pre-implementation risk report
+type: preference
+---
+Apply on every code change, bug fix, and feature:
+
+1. **SSOT & Policy Sync** — DOCUMENTATION.md is the technical source of truth. Any code change driven by or affecting a business rule must update POLICY.md (or the doc's Policy section) in the SAME step. Append to "Version History" at the end of DOCUMENTATION.md for every architectural/policy shift.
+
+2. **RCA, no band-aids** — On bug reports, identify root cause (Policy conflict / schema mismatch / logic error) before patching. Every bug fix must ship with a regression test (extend src/test/bugBountyFixes.test.ts where applicable) and any mock-data updates needed to lock the scenario.
+
+3. **Separation of concerns** — Business logic (KPI calculations, KRA weighting, HR workflows, scoring, workflow resolution) lives in hooks/utility/service files. UI components stay lean — rendering only. No silent TODOs for error states: every async path needs try/catch + user-facing toast/modal.
+
+4. **RLS-first & audit trail** — Every DB migration includes an RLS review. HR/sensitive data is role-scoped (Admin / Manager / Employee / etc.). Mutations on sensitive fields (ratings, scores, salary segments, status transitions) write to the canonical audit log.
+
+5. **Pre-implementation Risk & Impact Report** — Before writing code for any new feature or non-trivial change, present a brief report covering: Data Impact (schema/RLS/historical integrity), Workflow Impact (process or permission changes), UI/UX Consistency (hierarchy, responsiveness, navigation), Regression Risk (unrelated features that could break), Mitigation Plan (tests, conditional logic, feature flags). Skip only for trivial single-file edits.
+
+**Why:** User mandate — these rules govern how every change is designed, scoped, validated, and documented in this project.
