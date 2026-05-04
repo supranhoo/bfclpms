@@ -126,11 +126,11 @@ export function MultimonthWorkflowDriftCard() {
 
       <ConfirmDestructiveDialog
         open={showConfirm}
-        onOpenChange={setShowConfirm}
         title="Apply multi-month workflow drift repair?"
         description={`This will write BACKFILL_MULTIMONTH_PERCOLATION_V5 audit entries for ${dry?.detected ?? 0} sibling row(s) so the Review Journey renders the terminal month's chain. Final scores are NOT changed.`}
         confirmLabel="Apply repair"
         onConfirm={runApply}
+        onCancel={() => setShowConfirm(false)}
       />
     </>
   );
