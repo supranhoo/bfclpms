@@ -30,6 +30,7 @@ import { ManagerCombobox, formatManagerLabel } from '@/components/admin/ManagerC
 import { OrgFilterCombobox } from '@/components/admin/OrgFilterCombobox';
 
 import { ALL_APP_ROLES, type AppRole } from '@/lib/roles';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 
 const roleColors: Record<AppRole, string> = {
   admin: 'bg-destructive/10 text-destructive',
@@ -142,12 +143,18 @@ export default function UserManagement() {
   } | null>(null);
 
   // Filtered and paginated profiles
+  // POLICY §120: debounce the search term so the 2,533-row in-memory filter
+  // does not recompute on every keystroke. Other filters (role/dept/status)
+  // are categorical and recompute immediately.
+  const debouncedSearch = useDebouncedValue(searchQuery, 300);
   const filteredProfiles = useMemo(() => {
+    const q = debouncedSearch.toLowerCase();
     const filtered = profiles?.filter(p => {
       const matchesSearch = 
-        p.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.employee_code?.toLowerCase().includes(searchQuery.toLowerCase());
+        !q ||
+        p.full_name?.toLowerCase().includes(q) ||
+        p.email?.toLowerCase().includes(q) ||
+        p.employee_code?.toLowerCase().includes(q);
       
       const role = (p.user_roles as any)?.[0]?.role || 'employee';
       const matchesRole = roleFilter === 'all' || role === roleFilter;
@@ -168,7 +175,7 @@ export default function UserManagement() {
       if (aActive !== bActive) return aActive - bActive;
       return (a.full_name || '').localeCompare(b.full_name || '');
     });
-  }, [profiles, searchQuery, roleFilter, departmentFilter, statusFilter]);
+  }, [profiles, debouncedSearch, roleFilter, departmentFilter, statusFilter]);
 
   // Helper: derive division ID from a department ID
   const deriveDivisionFromDept = (deptId: string | null): string => {
