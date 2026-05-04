@@ -6,6 +6,7 @@
 import { useState, useMemo } from 'react';
 import { useAllKpis, useReviewSubmissions, useKpiQueries, RatingLevel, KPI, ReviewSubmission, KpiQuery } from '@/hooks/useKpis';
 import { useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 
 export interface ReviewDialogState {
   reviewDialogOpen: boolean;
@@ -36,6 +37,9 @@ export function useReviewPageState(options: UseReviewPageStateOptions) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>(defaultStatusFilter);
   const [searchQuery, setSearchQuery] = useState('');
+  // POLICY §120: debounce the search term to avoid recomputing the period KPI
+  // filter on every keystroke. The raw `searchQuery` still drives the input UI.
+  const debouncedSearch = useDebouncedValue(searchQuery, 300);
 
   // Dialog state
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
@@ -94,8 +98,8 @@ export function useReviewPageState(options: UseReviewPageStateOptions) {
     if (statusFilter) {
       filtered = filtered.filter(kpi => kpi.status === statusFilter);
     }
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+    if (debouncedSearch) {
+      const query = debouncedSearch.toLowerCase();
       filtered = filtered.filter(kpi => {
         const employee = kpi.profiles as any;
         return (
@@ -107,7 +111,7 @@ export function useReviewPageState(options: UseReviewPageStateOptions) {
       });
     }
     return filtered;
-  }, [periodFilteredKpis, selectedCategory, statusFilter, searchQuery]);
+  }, [periodFilteredKpis, selectedCategory, statusFilter, debouncedSearch]);
 
   // Open review dialog with pre-populated data
   const openReviewDialog = (
