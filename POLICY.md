@@ -2564,3 +2564,27 @@ Rationale: the previous full-org load shipped thousands of rows on every visit a
 - **v2.66.7.27 (2026-05-02):** §88I clause 12 added. KPI History card and KPI Tracker Sheet are now canonical-aware — they aggregate alias-renamed monthly rows alongside the canonical row. New `src/lib/canonicalRelatedKpis.ts` helper (+ tests) consolidates the resolver + matcher + period-dedup logic so future surfaces stay consistent.
 - **v2.66.7.28 (2026-05-02):** §88I clause 13 added. Duplicate scanner is now fuzzy-aware (`pg_trgm` similarity + tunable threshold + Exact/Fuzzy badges). Fixes the case where same-KPI/single-KRA leftovers and near-identical names like "PM10" vs "PM10/AQI" never grouped under the legacy strict-equality rule. New `gin_trgm_ops` index on `LOWER(TRIM(kpi_name))`; `BuildRegistryTab` adds a Match Sensitivity selector and per-variant match badges; `dedupeScannerGroups` preserves `match_type` / `similarity`.
 - **v2.66.7.30 (2026-05-02):** §88I clauses 15 + 16 added — Phase 5c. RCA on "KPI Standardization edits don't reflect on the user dashboard": (a) `useEditDefinition` now ALWAYS propagates canonical text to May-2026+ linked rows (`EditDefinitionDialog` radio removed); (b) `KpiHeaderSection` prefers canonical pair over literal row text via `useCanonicalVariantPairs`; (c) one-shot SQL migration retroactively links 508 unlinked May-2026+ rows to existing canonical definitions; (d) `kpi_standardization_actions_action_type_check` extended to allow `backfill_definition_links`, `skip_group`, and `unskip_group`.
+
+---
+
+## §120 — Lean-Load Policy (Performance & Resource Efficiency)
+
+Codified 2026-05-04 after the workspace-wide "Lean-Load" performance audit.
+
+1. **Pagination/lean-projection is the default.** New list/grid/report queries MUST paginate via `.range()` with `count: 'exact'` and select an explicit column list. Bulk reads hardcoded to fetch everything are forbidden unless they are (a) admin config tables ≤200 rows, or (b) registered full-org sites under §94 (`profiles-query-policy`, `fetchAllPaged`).
+
+2. **Intentional full-org reads are documented.** The 25 sanctioned `fetchAllPaged` sites (employee pickers, KPI Mapping Matrix, scoring engines) MUST stay registered in `mem/architecture/profiles-query-policy`. Adding a new full-org site requires a brief justification in that memory.
+
+3. **`useAllKpis` projection is slim.** The shared hook MUST select only the column set defined by `SLIM_KPI_SELECT` in `src/hooks/useKpis.ts`. Heavy text columns (`evidence_url`, `remarks`, long descriptions) are fetched only on row open.
+
+4. **Search/filter inputs MUST be debounced.** Any text input that drives an in-memory `.filter()` over more than ~200 rows or triggers a network call MUST wrap its value in `useDebouncedValue(value, 300)` (`src/hooks/useDebouncedValue.ts`) before feeding `useMemo` deps or query keys. Categorical filters (role, status, dept) are exempt.
+
+5. **Skeletons stay scoped.** `Skeleton` (`src/components/ui/skeleton.tsx`) is the canonical loading placeholder for **page-level** and **list/grid** loads. `Loader2` remains correct inside buttons/inline mutation states — do not blanket-replace.
+
+6. **No blanket `select('*')` rewrite.** `select('*', { count: 'exact', head: true })` is a count-only call (zero rows returned) and is **not** a violation. Removal of true `select('*')` row reads is allowed only when it does not break `src/integrations/supabase/types.ts` inference for the consuming code.
+
+### Compliant sites (extend when adding new ones)
+- Debounced inputs: `src/pages/admin/UserManagement.tsx` (search), `src/hooks/useReviewPageState.ts` (search), `src/components/admin/OrgKpiEntryCard.tsx`, `src/hooks/useMentionSearch.ts`, `src/pages/admin/KpiWeightageDashboard.tsx`, `src/hooks/useSafetyRealtimeSync.ts`.
+- Slim projection: `useAllKpis` / `useKpisByPeriod` via `SLIM_KPI_SELECT`.
+- Regression tests: `src/test/useDebouncedValue.test.tsx` (5 tests).
+

@@ -13,9 +13,11 @@ Notification triggers must guard non-login recipients (no auth.users row) — pr
 Safety lists: no auto-fetch — Search button triggers query; every table paginates server-side via `useManualQuery` + `<SafetyFilterBar>` + `<SafetyDataTable>` (POLICY §113 / ADR-050).
 Agent safety: zero destructive autonomy, stop-and-ask on errors, propose-don't-act, least-privilege. See safety-directives.
 Engineering: SSOT+POLICY.md sync, RCA with regression test, lean UI / logic in hooks, RLS-first, pre-impl Risk & Impact Report. See engineering-standards.
+Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with `.range()`; `useAllKpis` slim projection; full-org reads only via sanctioned `fetchAllPaged` sites. See lean-load-policy (POLICY §120).
 
 ## Memories
 - [Page loading overlay pattern](mem://design/page-loading-overlay-pattern) — Centered PageLoadingOverlay wired in DashboardLayout (Suspense + RouteDataLoadingGate), rocket+chart art
+- [Lean-Load Policy](mem://architecture/performance/lean-load-policy) — Debounced inputs, slim KPI projection, paginated lists; rejects blanket select('*') rewrite & 20-row picker caps (POLICY §120)
 - [Notification recipient guard](mem://architecture/database/notification-recipient-guard) — Non-login user FK guard for notification trigger inserts (BUG-037 / POLICY §108)
 - [KPI audit logs canonical](mem://architecture/database/kpi-audit-logs-canonical) — Canonical table & status vocabulary for workflow-transition aggregations (BUG-031)
 - [Per-employee workflow resolution](mem://architecture/database/per-employee-workflow-resolution) — Use canonical resolver in reports; never hardcode stage arrays (BUG-033)

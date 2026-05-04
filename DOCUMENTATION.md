@@ -6425,3 +6425,32 @@ The `/admin/kpi-standardization` page now has 7 tabs. **History & Undo** is the 
 - **`correct_may_kpis` v2** — same signature, now also captures a complete before-image (affected `kpi.id`s + prior `kpi_definition_id`) into the action payload so each rename can be reverted exactly.
 
 Policy: **§88I**. Locked by `src/hooks/useStandardizationHistory.test.ts` (10 tests).
+
+---
+
+## Performance Architecture (Lean-Load)
+
+Anchored by **POLICY §120**. Audit baseline (2026-05-04): 754 `.select(...)` calls across 211 files; only ~11 raw `select('*')` for actual row reads (the rest are zero-row count calls); 499 `useMemo` / 128 `useCallback` already in place; 94 lazy route splits; 317 Skeleton usages; 25 sanctioned full-org `fetchAllPaged` sites.
+
+### Conventions
+- **Debounced inputs** — wrap text-input search/filter values in `useDebouncedValue(value, 300)` (`src/hooks/useDebouncedValue.ts`) before they reach `useMemo` deps or React Query keys. Categorical filters (role/status/dept) recompute immediately.
+- **Slim KPI projection** — `useAllKpis` and `useKpisByPeriod` select only `SLIM_KPI_SELECT` (id, status, scoring fields, lightweight refs); heavy text (`evidence_url`, `remarks`) is loaded on open.
+- **Pagination first** — new lists use `.range(...)` with `count: 'exact'` (`SafetyAudits`, `KpiWeightageDashboard`, `EmailLogs`, `AffectedKpisTable` are reference patterns).
+- **Skeletons over spinners** for page/list loads; `Loader2` stays inside buttons.
+
+### Sanctioned full-fetch sites
+Documented in `mem/architecture/profiles-query-policy`. Capping these to 20 rows would silently hide the majority of the 2,533-employee roster from pickers and break weighted scoring math. Examples: CopyKrasDialog, OrgKpiAddEmployeeDialog, KPI Mapping Matrix, KPI Employee Matrix, multi-period aggregations.
+
+### Why we did NOT do
+- **Global `select('*')` rewrite** — 162 hits are dominated by `count: 'exact', head: true` (zero-row reads). Hand-listing columns across 211 files would risk breaking `types.ts` inference with no measurable runtime gain.
+- **Blanket 20-row caps** — break PMS pickers and scoring engines (POLICY §94 / §120.2).
+- **Blanket spinner→skeleton swap** — degrades UX on mutation buttons.
+
+### Regression tests
+- `src/test/useDebouncedValue.test.tsx` — 5 tests, verifies initial value, delay, latest-wins coalescing, custom delay, unmount cleanup.
+- `src/test/kpiWeightageDashboardPagination.test.ts` — guards employee-paginated dashboards.
+- `src/components/admin/__tests__/employeePickerPaging.test.ts` — guards full-org picker contract.
+
+## Version History
+- **v2.66.7.45+lean-load (2026-05-04):** POLICY §120 Lean-Load Policy added. Shared `useDebouncedValue` hook introduced (`src/hooks/useDebouncedValue.ts`) with 5 unit tests. Wired into `UserManagement` (2,533-row in-memory filter) and `useReviewPageState` (period-scoped KPI filter). `useAllKpis` slim projection (`SLIM_KPI_SELECT`) confirmed and codified. Audit findings document why blanket `select('*')` removal, 20-row caps on pickers, and blanket spinner→skeleton swaps were rejected.
+
