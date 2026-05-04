@@ -26,6 +26,7 @@ import {
   isAllowedPair,
   isRenamedFromCurrent,
 } from '@/lib/prevMonthCanonicalMatch';
+import { resolveEffectiveChain, isPercolatedSiblingSubmission } from '@/lib/multimonthCycle';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -785,7 +786,13 @@ export function KpiJourneySection({
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-3 pt-2">
               {prevMonthsData.map(({ period, kpi: prevKpi, submission: prevSub, workflowStages: prevWf, isRenamedVariant }) => {
-                const prevStages = getVisibleStagesForLevel(viewLevel, prevWf);
+                // POLICY §54 v5: percolated siblings render the TERMINAL's chain,
+                // never the sibling's local workflow_config — otherwise empty
+                // stage cards (e.g. HR PMS N/A) appear when the terminal used
+                // a different chain (e.g. Audit).
+                const effectiveWf = resolveEffectiveChain(prevSub as Record<string, unknown> | null, prevWf);
+                const prevStages = getVisibleStagesForLevel(viewLevel, effectiveWf);
+                const isPercolated = isPercolatedSiblingSubmission(prevSub as { auto_advance_reason?: string | null } | null);
                 const prevStatus = prevKpi.status || 'kra_set';
                 const prevIsNA = prevSub?.is_na || false;
                 const prevGridCols = prevStages.length <= 4 ? 'grid-cols-2 lg:grid-cols-4' : prevStages.length <= 6 ? 'grid-cols-2 lg:grid-cols-3 xl:grid-cols-6' : 'grid-cols-2 lg:grid-cols-4';
@@ -808,6 +815,25 @@ export function KpiJourneySection({
                       <Badge variant="outline" className="text-[10px] text-muted-foreground">
                         {statusLabels[prevStatus] || prevStatus.replace(/_/g, ' ')}
                       </Badge>
+                      {isPercolated && (
+                        <TooltipProvider delayDuration={150}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge variant="outline" className="text-[10px] text-muted-foreground gap-1">
+                                <Info className="h-3 w-3" />
+                                <span>Cycle reviewed via terminal month</span>
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p className="text-xs">
+                                Multi-month KPI: scores are entered once on the cycle's
+                                terminal month and propagated here. The chain shown
+                                reflects the terminal month's reviewers.
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
                       {isRenamedVariant && (
                         <TooltipProvider delayDuration={150}>
                           <Tooltip>
