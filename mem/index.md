@@ -12,6 +12,7 @@ No reviewer panel (Team/Audit/HR PMS/Management/Skip-Level/Pending-*/cross-check
 Notification triggers must guard non-login recipients (no auth.users row) — pre-check + EXCEPTION wrapper, never abort business txn (POLICY.md §108 / BUG-037).
 Safety lists: no auto-fetch — Search button triggers query; every table paginates server-side via `useManualQuery` + `<SafetyFilterBar>` + `<SafetyDataTable>` (POLICY §113 / ADR-050).
 Agent safety: zero destructive autonomy, stop-and-ask on errors, propose-don't-act, least-privilege. See safety-directives.
+Engineering: SSOT+POLICY.md sync, RCA with regression test, lean UI / logic in hooks, RLS-first, pre-impl Risk & Impact Report. See engineering-standards.
 
 ## Memories
 - [Page loading overlay pattern](mem://design/page-loading-overlay-pattern) — Centered PageLoadingOverlay wired in DashboardLayout (Suspense + RouteDataLoadingGate), rocket+chart art
@@ -48,3 +49,4 @@ Agent safety: zero destructive autonomy, stop-and-ask on errors, propose-don't-a
 - [HR Review Action Notes](mem://features/hr/review-action-notes) — HR notes for KPI changes during PMS review with admin-configurable per-role visibility and 3-state status FSM
 - [Loader Branding Settings](mem://features/admin/loader-branding-settings) — Configurable rocket-overlay company name, tagline, and logo via system_settings; admin panel with live preview on Module Hub Settings
 - [Safety Directives](mem://preferences/safety-directives) — Mandatory cautious-mode rules for destructive ops, errors, and privilege use
+- [Engineering Standards](mem://preferences/engineering-standards) — SSOT/Policy sync, RCA, separation of concerns, RLS-first, pre-impl Risk Report
