@@ -152,7 +152,7 @@ export function useUpsertOrgKpiValue() {
         .from('org_kpi_values')
         .insert(value)
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) {
         if (error.code === '23505') {
@@ -183,7 +183,7 @@ export function useUpsertOrgKpiValue() {
             retryQuery = retryQuery.is('employee_id', null);
           }
 
-          const { data: retryData, error: retryError } = await retryQuery.select().single();
+          const { data: retryData, error: retryError } = await retryQuery.select().maybeSingle();
           if (retryError) throw retryError;
           return retryData;
         }
@@ -291,7 +291,7 @@ export function useBulkUpsertOrgKpiValues() {
             .from('org_kpi_values')
             .insert(value)
             .select()
-            .single();
+            .maybeSingle();
           if (error) {
             if (error.code === '23505') {
               // Record was created between our SELECT and INSERT – retry as UPDATE
@@ -331,13 +331,13 @@ export function useBulkUpsertOrgKpiValues() {
                 retryQuery = retryQuery.is('employee_id', null);
               }
 
-              const { data: retryData, error: retryError } = await retryQuery.select().single();
+              const { data: retryData, error: retryError } = await retryQuery.select().maybeSingle();
               if (retryError) throw retryError;
-              results.push(retryData);
+              if (retryData) results.push(retryData);
             } else {
               throw error;
             }
-          } else {
+          } else if (data) {
             results.push(data);
           }
         }
@@ -349,8 +349,12 @@ export function useBulkUpsertOrgKpiValues() {
       queryClient.invalidateQueries({ queryKey: ['org-kpi-value'] });
       toast({ title: `${data.length} values saved successfully` });
     },
-    onError: (error: Error) => {
-      toast({ title: 'Failed to save values', description: error.message, variant: 'destructive' });
+    onError: (error: any) => {
+      const friendly =
+        error?.code === 'PGRST116'
+          ? 'Could not save this KPI — please refresh the page and try again. (The KPI name may have been updated by another user.)'
+          : error?.message || 'Unknown error';
+      toast({ title: 'Failed to save values', description: friendly, variant: 'destructive' });
     },
   });
 }
