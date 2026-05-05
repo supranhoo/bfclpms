@@ -1,60 +1,57 @@
+## Issue Reported by Vivek Kumar Dansena
 
-## Fix: CRLF/LF Mismatch Breaking Org KPI Propagation
+The screenshot shows the "Confirm propagation" dialog for an Org KPI:
+- **Total matched: 8**, **0 will advance**, **8 will skip**
+- All 8 employees show `self_review` status with reason "Already past initial stage"
 
-### Root Cause
-`propagate_org_kpi_value` matches per-employee KPIs to the Org KPI by exact text equality on `(category_id, kra_name, kpi_name, review_period, review_year)`. Binod's and Santosh's April `kpis.kpi_name` rows store the SOP/SMP KPI text with `\r\n` line endings (350 chars); the corresponding `org_kpi_values.kpi_name` stores it with `\n` (347 chars). The byte mismatch causes the propagate eligibility check to mark them as `not_in_kra_set`, silently skipping them — so no `review_submissions` row is created and the UI shows an empty row.
+After clicking **Propagate anyway**, the user gets a red destructive toast:
+> "Partial propagation: 0/8 employees updated. 8 employee(s) may have mismatched KPI names. Check the Pending Report for details."
 
-System-wide audit:
-- 8,587 of 12,031 `kpis` rows contain CRLF in `kpi_name`.
-- 2,217 `org_kpi_values` rows contain CRLF in `kpi_name`.
-- Any KPI whose newline style drifts from its sibling rows or its OKV counterpart will silently fail propagation, scope-cascade, forward-sync, registry alias matching, and rollover dedup.
+This message is **wrong and misleading**. The 8 employees do NOT have mismatched KPI names — they have all already self-reviewed (advanced past the data-owner `kra_set` stage). Per POLICY §88, re-propagation is intentionally blocked once an employee has self-reviewed. The earlier code path at `OrgKpiDataEntry.tsx:718-722` correctly identifies this as "Already propagated" (benign skip), but a second validation block at lines **732-739** then unconditionally fires the destructive "mismatched KPI names" toast whenever `totalPropagated < expectedCount`, ignoring the fact that all skips were benign (`not_in_kra_set`).
 
-### Plan
+## Root Cause
 
-1. **Database migration: normalize newlines retroactively (one-shot)**
-   - Update `kpis.kpi_name`, `kpis.kra_name`, `org_kpi_values.kpi_name`, `org_kpi_values.kra_name`, `kra_library.kpi_name`, `kra_library.kra_name`, and `org_kpi_master.kpi_name`/`kra_name` to replace `\r\n` and bare `\r` with `\n`. Trim trailing whitespace.
-   - Same normalization for `kpi_standardization_registry` canonical + alias text.
-   - Audit log a single `KPI_TEXT_NEWLINE_NORMALIZED` row with affected counts and `performed_by = NULL`.
+`src/pages/admin/OrgKpiDataEntry.tsx` lines 732-739 — the PA3 "Propagation completeness validation" block:
 
-2. **Database migration: forward guard triggers**
-   - Add `BEFORE INSERT OR UPDATE` triggers on `kpis`, `org_kpi_values`, `kra_library`, and `org_kpi_master` that run a `normalize_kpi_text()` PL/pgSQL helper:
-     - `regexp_replace(NEW.kpi_name, E'\\r\\n?', E'\\n', 'g')`
-     - same for `kra_name`
-     - rtrim
-   - Idempotent — only writes back if the value actually changed (avoids spurious `UPDATE` audit noise).
-   - Skip on tables that already have triggers performing this work (verified none currently).
+```ts
+if (propagatedScopeIds.length > 0 && expectedCount > 0 && totalPropagated < expectedCount) {
+  toast({ title: `Partial propagation: ${totalPropagated}/${expectedCount} employees updated`,
+          description: `${expectedCount - totalPropagated} employee(s) may have mismatched KPI names...`,
+          variant: 'destructive' });
+}
+```
 
-3. **Re-run propagation for the broken April rows**
-   - After normalization, the existing `propagated` OKV rows for Binod (`14a4415f-…`) and Santosh (`08cb3564-…`) will signature-match their KPIs.
-   - Migration calls `propagate_org_kpi_value` for the SOP/SMP April category once more to insert the missing `review_submissions` rows and advance their `kpis.status` to `self_review`, mirroring what Umesh/Satyendra already received.
-   - No-op for already-propagated employees (idempotent — handled by RPC's existing `not_in_kra_set` / `already advanced` skip).
+It does not consult `totalSkippedBenign` vs `totalSkippedHard`, so benign "already self-reviewed" skips get reported as KPI-name mismatches.
 
-4. **Tests**
-   - Unit test: pure helper `normalizeKpiText()` in `src/lib/kpiTextNormalization.ts` confirms `\r\n`, `\r`, mixed, and trailing-whitespace inputs collapse to canonical LF.
-   - DB regression test in `src/test/orgKpiPropagationCrlf.test.ts`: insert two synthetic OKV + KPI rows that differ only in newline style, call propagate, assert both employees receive a `review_submissions` row.
+## Fix
 
-5. **Documentation & memory**
-   - `DOCUMENTATION.md` Version History: add "v2.66.9 — KPI text canonicalization (CRLF→LF) + insert/update guard triggers".
-   - `POLICY.md` §88.2 (new): "All KPI/KRA text columns are stored in LF-only canonical form. Inserts and updates are normalized at the DB layer before signature equality is evaluated."
-   - Update `mem/features/admin/org-kpi-management-suite` with a new bullet (16) covering the canonicalization rule.
-   - Update `mem/features/admin/kpi-standardization-registry` to note newline canonicalization is now enforced server-side, not just client-side.
-   - Append to `CHANGELOG_2026.md` under May W1.
+1. **Make the PA3 validation skip-aware.** Only emit the destructive "mismatched KPI names" toast when `totalSkippedHard > 0` OR there is an unexplained gap (`expectedCount - totalPropagated - totalSkippedBenign - totalSkippedHard > 0`). When the entire shortfall is `not_in_kra_set` (benign), suppress this toast — the earlier "Already propagated" toast at lines 718-722 already informed the user correctly.
 
-### Risk & Impact
+2. **Tighten the wording** when a true gap exists, distinguishing:
+   - All benign → no destructive toast (info already shown).
+   - Some hard skips → "Partial propagation: X updated, Y could not be advanced (refresh and retry)."
+   - Truly unaccounted gap (rare) → keep the existing "may have mismatched KPI names" wording but only for the unaccounted count.
 
-- **Data Impact:** Modifies `kpi_name` / `kra_name` text in ~10.8k rows. Change is purely whitespace canonicalization — display strings render identically (newlines remain), historical scores untouched. Audit row records the operation.
-- **Workflow Impact:** None for already-completed reviews. Unblocks propagation, scope-cascade, forward-sync, and registry alias matching for any KPI previously stuck due to newline drift.
-- **UI/UX:** No visual change. Cards continue to render multi-line text; only the byte representation is normalized.
-- **Regression Risk:** Low. The only consumers comparing KPI text by equality are DB triggers/RPCs, which now see consistent input. Client-side `nk` normalization (lowercase+trim+collapse-whitespace) already tolerates either form, so React components are unaffected.
-- **Mitigation:** New unit + integration tests guard the normalizer and the propagation path. Triggers are idempotent and only write on change. Migration runs in a single transaction; rollback restores by re-importing from `kpi_audit_logs` snapshot if ever needed.
+3. **Regression test** in `src/test/orgKpiPropagationToast.test.ts`: pure-logic test of the new branching predicate (inputs: propagated, expected, benign, hard → expected toast variant/title), guarding against regressions of this specific UX bug.
 
-### Files Touched
+4. **Docs sync (per project SSOT rule):**
+   - `DOCUMENTATION.md` Version History → "v2.66.10 — Skip-aware partial-propagation toast (no longer mislabels benign already-self-reviewed skips as KPI-name mismatches)."
+   - `POLICY.md` §88.x → clarify that already-advanced KPIs are reported as benign, not as mismatches.
+   - `CHANGELOG_2026.md` → entry under May W1.
+   - `mem/features/admin/org-kpi-management-suite` → add bullet noting toast classification rules.
 
-- `supabase/migrations/<ts>_kpi_text_canonicalization.sql` (new)
-- `src/lib/kpiTextNormalization.ts` (new)
-- `src/test/kpiTextNormalization.test.ts` (new)
-- `src/test/orgKpiPropagationCrlf.test.ts` (new)
+## Risk & Impact
+
+- **Data Impact:** None. UI-only change to a toast branch.
+- **Workflow Impact:** Eliminates a false-alarm destructive toast. Users will no longer be misdirected to the Pending Report for benign cases.
+- **UI/UX:** Reduces noise. Existing "Already propagated" toast remains the canonical notice for this case.
+- **Regression Risk:** Low. New unit test locks the branch table.
+
+## Files Touched
+
+- `src/pages/admin/OrgKpiDataEntry.tsx` (lines ~732-739 — replace block)
+- `src/test/orgKpiPropagationToast.test.ts` (new, pure-logic)
 - `DOCUMENTATION.md`, `POLICY.md`, `CHANGELOG_2026.md`
-- `mem/features/admin/org-kpi-management-suite`, `mem/features/admin/kpi-standardization-registry`
+- `mem/features/admin/org-kpi-management-suite`
 
 Approve to implement.
