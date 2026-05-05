@@ -1674,6 +1674,16 @@ UI surfaces MUST classify this skip as **informational** ("Already propagated"),
 
 `destructive` toast variant remains correct for hard failures: `reason: 'kpi_not_found'` or `reason: 'race_lost_during_advance'`.
 
+### §88.2 — PA3 Partial-Propagation Toast Must Be Skip-Aware (v2.66.10)
+
+The PA3 "propagation completeness" guard in `OrgKpiDataEntry.executeSaveAndPropagate` compares `totalPropagated` to `expectedCount` after a per-scope batch and may emit a destructive toast when the two diverge. That guard MUST inspect the aggregated skip totals (`totalSkippedBenign`, `totalSkippedHard`) before classifying the gap:
+
+1. **All shortfall is benign** (`not_in_kra_set` — already past initial stage) → emit **no** PA3 toast. The "Already propagated" summary toast (§88.1) is the canonical, non-destructive notice.
+2. **Any hard skip** (`kpi_not_found`, `race_lost_during_advance`) → emit `Partial propagation: X/Y updated` describing the hard-skip count, with retry guidance.
+3. **Truly unaccounted gap** (`expected − propagated − benign − hard > 0`) → only then is the legacy "may have mismatched KPI names" wording appropriate, scoped to the unaccounted count.
+
+Re-introducing the unconditional "mismatched KPI names" toast for benign skips is **forbidden** under this policy — it misdirects Data Owners to the Pending Report for cases the system intentionally protected (§88), and was the cause of the 2026-05-05 false-alarm report.
+
 ---
 
 ## §89 — Per-KPI Audit Granularity for Org KPI Propagation (v2.66.7.3)
