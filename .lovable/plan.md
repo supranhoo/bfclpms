@@ -1,57 +1,58 @@
-## Issue Reported by Vivek Kumar Dansena
+# Fix: "Data Owners" dialog shows empty for some Org KPIs
 
-The screenshot shows the "Confirm propagation" dialog for an Org KPI:
-- **Total matched: 8**, **0 will advance**, **8 will skip**
-- All 8 employees show `self_review` status with reason "Already past initial stage"
+## Root Cause (verified against DB)
 
-After clicking **Propagate anyway**, the user gets a red destructive toast:
-> "Partial propagation: 0/8 employees updated. 8 employee(s) may have mismatched KPI names. Check the Pending Report for details."
+A `Data Owner` (Biswajit Sahoo) IS assigned for the highlighted "Consumable cost per MW" KPI — the assignment exists in `org_kpi_data_owners`. The dialog renders empty because of a **line-ending mismatch** between two storage points of `kpi_name`:
 
-This message is **wrong and misleading**. The 8 employees do NOT have mismatched KPI names — they have all already self-reviewed (advanced past the data-owner `kra_set` stage). Per POLICY §88, re-propagation is intentionally blocked once an employee has self-reviewed. The earlier code path at `OrgKpiDataEntry.tsx:718-722` correctly identifies this as "Already propagated" (benign skip), but a second validation block at lines **732-739** then unconditionally fires the destructive "mismatched KPI names" toast whenever `totalPropagated < expectedCount`, ignoring the fact that all skips were benign (`not_in_kra_set`).
+- `org_kpi_data_owners.kpi_name` for the MW card stores it with **CRLF** (`\r\n`, hex `0d0a`)
+- The current `kpis.kpi_name` (passed by the card to the dialog) uses **LF only** (`\n`, hex `0a`)
 
-## Root Cause
-
-`src/pages/admin/OrgKpiDataEntry.tsx` lines 732-739 — the PA3 "Propagation completeness validation" block:
-
+The dialog and ownership-map queries do strict equality:
 ```ts
-if (propagatedScopeIds.length > 0 && expectedCount > 0 && totalPropagated < expectedCount) {
-  toast({ title: `Partial propagation: ${totalPropagated}/${expectedCount} employees updated`,
-          description: `${expectedCount - totalPropagated} employee(s) may have mismatched KPI names...`,
-          variant: 'destructive' });
-}
+.eq('kpi_name', kpiName)               // useOrgKpiOwners
+key = `${cat}||${kra}||${kpi.toLowerCase()}`  // useOrgKpiOwnershipMap / Names
 ```
+…so the CRLF row never matches and the dialog reports "No data owners assigned." The sibling KW/Hour KPI was inserted with LF and matches correctly — which is exactly the asymmetry visible in your screenshot (MW = empty, KW = has owner).
 
-It does not consult `totalSkippedBenign` vs `totalSkippedHard`, so benign "already self-reviewed" skips get reported as KPI-name mismatches.
+This is the same class of issue covered in the existing memory **`copy-kras-org-kpi-integrity`**: text from import/copy paths can carry stray `\r` that breaks downstream string matching.
 
-## Fix
+## Risk & Impact Report
 
-1. **Make the PA3 validation skip-aware.** Only emit the destructive "mismatched KPI names" toast when `totalSkippedHard > 0` OR there is an unexplained gap (`expectedCount - totalPropagated - totalSkippedBenign - totalSkippedHard > 0`). When the entire shortfall is `not_in_kra_set` (benign), suppress this toast — the earlier "Already propagated" toast at lines 718-722 already informed the user correctly.
+- **Data Impact**: One-time UPDATE to `org_kpi_data_owners` to strip `\r`. No deletes, idempotent. Same normalization applied (defensively) on `kpis.kpi_name` so future inserts via either path stay aligned.
+- **Workflow Impact**: None — only display/lookup correctness restored. RLS unchanged.
+- **UI/UX**: Dialog now lists previously hidden owners; "Data Owner: X" badges on scorecards reappear for affected rows.
+- **Regression Risk**: Low. Normalization is `replace(kpi_name, E'\r', '')`. Same hardening added on the client (`nk()` already collapses whitespace — extend to also strip `\r`).
+- **Mitigation**: Unit test asserting `nk('Foo\r\nBar') === nk('Foo\nBar')`; DB trigger on insert/update of `org_kpi_data_owners` and `kpis` to strip `\r` from `kra_name` and `kpi_name`.
 
-2. **Tighten the wording** when a true gap exists, distinguishing:
-   - All benign → no destructive toast (info already shown).
-   - Some hard skips → "Partial propagation: X updated, Y could not be advanced (refresh and retry)."
-   - Truly unaccounted gap (rare) → keep the existing "may have mismatched KPI names" wording but only for the unaccounted count.
+## Plan
 
-3. **Regression test** in `src/test/orgKpiPropagationToast.test.ts`: pure-logic test of the new branching predicate (inputs: propagated, expected, benign, hard → expected toast variant/title), guarding against regressions of this specific UX bug.
+### 1. DB migration (one-time + guard trigger)
+- `UPDATE org_kpi_data_owners SET kpi_name = replace(kpi_name, E'\r', ''), kra_name = replace(kra_name, E'\r', '') WHERE kpi_name LIKE '%' || E'\r' || '%' OR kra_name LIKE '%' || E'\r' || '%';`
+- Same UPDATE on `public.kpis` (kpi_name, kra_name) — defensive cleanup.
+- BEFORE INSERT/UPDATE trigger `trg_strip_cr_kpi_text` on both tables that nulls out `\r` in `kpi_name` and `kra_name`.
 
-4. **Docs sync (per project SSOT rule):**
-   - `DOCUMENTATION.md` Version History → "v2.66.10 — Skip-aware partial-propagation toast (no longer mislabels benign already-self-reviewed skips as KPI-name mismatches)."
-   - `POLICY.md` §88.x → clarify that already-advanced KPIs are reported as benign, not as mismatches.
-   - `CHANGELOG_2026.md` → entry under May W1.
-   - `mem/features/admin/org-kpi-management-suite` → add bullet noting toast classification rules.
+### 2. Client hardening
+- `src/hooks/useOrgKpiDataOwner.ts`: in `useOrgKpiOwners` and `useIsOrgKpiDataOwner`, strip `\r` from `kraName` / `kpiName` before the `.eq()` filters. In `useOrgKpiOwnershipMap` and `useOrgKpiDataOwnerNames`, strip `\r` when building both the map key and the lookup key.
+- Existing `nk()` helper extended: `s => s.replace(/\r/g, '').toLowerCase().replace(/\s+/g, ' ').trim()`.
 
-## Risk & Impact
+### 3. Tests
+- New `src/test/orgKpiOwnerLineEndingMatch.test.ts`: verifies CRLF and LF variants of the same KPI name resolve to the same ownership map key and that `useOrgKpiOwners` filters tolerate stray `\r`.
 
-- **Data Impact:** None. UI-only change to a toast branch.
-- **Workflow Impact:** Eliminates a false-alarm destructive toast. Users will no longer be misdirected to the Pending Report for benign cases.
-- **UI/UX:** Reduces noise. Existing "Already propagated" toast remains the canonical notice for this case.
-- **Regression Risk:** Low. New unit test locks the branch table.
+### 4. SSOT updates
+- `POLICY.md` §88.x: add normalization rule — all `kpi_name` / `kra_name` writes MUST strip `\r` (DB trigger enforced, client defensive).
+- `DOCUMENTATION.md` v2.66.11: bug fix note.
+- `CHANGELOG_2026.md` May W1: entry.
+- `mem://features/admin/copy-kras-org-kpi-integrity`: append rule that `\r` stripping is now trigger-enforced on `org_kpi_data_owners` and `kpis`.
 
-## Files Touched
+## Files
 
-- `src/pages/admin/OrgKpiDataEntry.tsx` (lines ~732-739 — replace block)
-- `src/test/orgKpiPropagationToast.test.ts` (new, pure-logic)
-- `DOCUMENTATION.md`, `POLICY.md`, `CHANGELOG_2026.md`
-- `mem/features/admin/org-kpi-management-suite`
+**Created**
+- `supabase/migrations/<ts>_strip_cr_from_kpi_text.sql`
+- `src/test/orgKpiOwnerLineEndingMatch.test.ts`
 
-Approve to implement.
+**Edited**
+- `src/hooks/useOrgKpiDataOwner.ts`
+- `POLICY.md`, `DOCUMENTATION.md`, `CHANGELOG_2026.md`
+- `mem/features/admin/copy-kras-org-kpi-integrity`
+
+Approve to apply.
