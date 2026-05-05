@@ -657,33 +657,78 @@ export function useSubmitSelfReview() {
       self_evidence_urls?: string[];
       is_na?: boolean;
     }) => {
-      // First upsert the submission
-      const { error: submissionError } = await supabase
-        .from('review_submissions')
-        .upsert({
-          kpi_id,
-          achieved_value: is_na ? null : achieved_value,
-          self_rating: is_na ? null : self_rating,
-          self_score: is_na ? null : self_score,
-          self_remarks,
-          self_evidence_url,
-          self_evidence_urls: self_evidence_urls || [],
-          is_na,
-          na_marked_by_role: is_na ? 'employee' : null,
-          kpi_status: 'submitted' as const,
-        }, {
-          onConflict: 'kpi_id',
-        });
+      // Transient-error retry for Lovable Cloud overload windows.
+      // Codes:
+      //   57014 = statement timeout
+      //   08006/08000 = connection failure
+      //   XX000 = "the database system is not accepting connections"
+      const isTransient = (err: any): boolean => {
+        if (!err) return false;
+        const code = String(err.code || '');
+        const msg = String(err.message || '').toLowerCase();
+        return (
+          code === '57014' ||
+          code === '08006' ||
+          code === '08000' ||
+          code === 'XX000' ||
+          msg.includes('statement timeout') ||
+          msg.includes('timed out') ||
+          msg.includes('not accepting connections') ||
+          msg.includes('fetch failed')
+        );
+      };
 
-      if (submissionError) throw submissionError;
+      const friendly = (err: any): Error => {
+        const wrapped: any = new Error(
+          'The server is busy right now. Please wait a moment and try again.'
+        );
+        wrapped.code = err?.code;
+        wrapped.cause = err;
+        return wrapped;
+      };
+
+      const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+      const runWithRetry = async <T,>(op: () => Promise<{ error: any } & T>) => {
+        const delays = [0, 1000, 2000];
+        let lastErr: any = null;
+        for (const d of delays) {
+          if (d > 0) await sleep(d);
+          const res = await op();
+          if (!res.error) return res;
+          lastErr = res.error;
+          if (!isTransient(res.error)) throw res.error;
+        }
+        throw friendly(lastErr);
+      };
+
+      // First upsert the submission (with retry on transient errors)
+      await runWithRetry(() =>
+        supabase
+          .from('review_submissions')
+          .upsert({
+            kpi_id,
+            achieved_value: is_na ? null : achieved_value,
+            self_rating: is_na ? null : self_rating,
+            self_score: is_na ? null : self_score,
+            self_remarks,
+            self_evidence_url,
+            self_evidence_urls: self_evidence_urls || [],
+            is_na,
+            na_marked_by_role: is_na ? 'employee' : null,
+            kpi_status: 'submitted' as const,
+          }, {
+            onConflict: 'kpi_id',
+          }) as any
+      );
 
       // Then update KPI status to self_review (employee has submitted, awaiting manager)
-      const { error: kpiError } = await supabase
-        .from('kpis')
-        .update({ status: 'self_review' as const })
-        .eq('id', kpi_id);
-
-      if (kpiError) throw kpiError;
+      await runWithRetry(() =>
+        supabase
+          .from('kpis')
+          .update({ status: 'self_review' as const })
+          .eq('id', kpi_id) as any
+      );
 
       // Fire-and-forget audit log for recall eligibility tracking
       supabase.auth.getUser().then(({ data }) => {

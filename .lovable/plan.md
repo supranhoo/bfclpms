@@ -1,66 +1,112 @@
-# Fix: "record \"v_src\" is not assigned yet" on department → employee scope change
 
-## Root Cause (verified)
+## Issue
+When Piyush Bansal clicked **Submit Self Review** (no evidence files attached, score Yes / R5), the button got stuck on "Saving…" and a red toast appeared:
 
-The error originates in the DB function `migrate_okv_on_scope_change` (migration `20260421181848`, lines 60–355).
+> Upload failed — The connection to the database timed out
 
-`v_src` is declared as a generic PL/pgSQL `record`:
-```sql
-v_src record;
+The submission was never persisted.
+
+## RCA — what is actually happening
+
+Despite the wording "Upload failed", **no file upload is involved** here (Evidence Attachments = 0/5). The toast is the standard supabase-js error from `useSubmitSelfReview` being re-titled as "Upload failed" by the calling sheet's catch block. The real underlying error from Postgres is a **statement timeout** on the `review_submissions` upsert.
+
+Live Postgres logs (last ~30 min) confirm a system-wide timeout storm, not an app bug in isolation:
+
+| Count | Error |
+|------:|-------|
+| 30 | `canceling statement due to statement timeout` |
+| 9  | `the database system is not accepting connections` |
+| 4  | `invalid input syntax for type uuid: "null"` |
+| 2  | `record "v_src" is not assigned yet` (already fixed in last turn) |
+| 1  | RLS violation on `kpi_mention_access` |
+| 1  | duplicate key on `org_kpi_data_owners_…_key` |
+
+### Why Submit Self Review specifically times out
+
+`useSubmitSelfReview` (src/hooks/useKpis.ts:636) does an `upsert` on `review_submissions` and then an `update` on `kpis.status`. That single upsert fans out into a heavy trigger cascade on `review_submissions`:
+
+```
+review_submissions UPSERT
+  ├─ BEFORE: prevent_locked_submission_updates
+  │           └─ check_review_period_permission   (5-tier scan of review_period_locks)
+  ├─ BEFORE: auto_compute_rating_and_clamp_scores
+  ├─ BEFORE: enforce_on_behalf_score_or_na
+  ├─ BEFORE: sync_kpi_status_from_submission     → UPDATE kpis (re-entrant)
+  │           └─ kpis triggers fire (15+):
+  │                 notify_on_kpi_status_change
+  │                 log_kpi_status_transition
+  │                 percolate_multimonth_score    (writes siblings + audit rows)
+  │                 fn_sync_org_status_to_future_open_periods
+  │                 trg_clear_send_back_marker_on_advance
+  │                 trg_expire_rollback_on_status_change
+  │                 trg_sync_submission_on_kra_set
+  │                 …etc
+  ├─ AFTER:  enqueue_pms_compression_jobs        (6× EXECUTE format() per row, even if URL arrays empty)
+  ├─ AFTER:  log_untracked_submission_changes
+  ├─ AFTER:  trg_repercolate_on_submission_update
+  └─ AFTER:  update_review_submissions_updated_at
 ```
 
-A `record` variable has **no row type until its first `SELECT INTO` succeeds**. In the SPLIT path:
+Combined with the Cloud DB already being **flooded** by other concurrent timed-out queries, even this normally-fast write blows past the 8s `statement_timeout`. The “database not accepting connections” lines indicate the instance is at or above its connection ceiling — classic **compute/load** problem, not a bug in the self-review code.
 
-- For `organization → employee` / `organization → department`, line 221 does `SELECT * INTO v_src FROM org_kpi_values …` — assigns a row type, fine.
-- For `department → employee` (your screenshot), line 233 explicitly does `v_src := NULL;` and the org-wide SELECT is skipped.
+So the issue has **two layers**:
 
-Later in the per-employee loop, the audit insert (lines 278–288) builds:
-```sql
-CASE WHEN p_old_scope = 'organization' THEN v_src.id ELSE NULL END
-CASE WHEN p_old_scope = 'organization' THEN to_jsonb(v_src) ELSE NULL END
-```
-PL/pgSQL must resolve the **field reference `v_src.id`** at execution time, even though the CASE branch is never taken. Since `v_src` was never assigned a row, PostgreSQL raises:
-
-> record "v_src" is not assigned yet
-
-That's exactly the toast you see. So the dept → employee split aborts before any data changes — no rows are corrupted, but the scope change fails entirely.
-
-## Risk & Impact Report
-
-- **Data Impact**: None (the function aborts cleanly; transaction rolls back). Fix is purely a typing change in the function body.
-- **Workflow Impact**: Restores ability to split department-scope Org KPIs into per-employee scope (the case visible in your screenshot, which also affected the cascade to May 2026).
-- **UI/UX**: None.
-- **Regression Risk**: Low. The fix is a `DECLARE` change from `record` to `public.org_kpi_values%ROWTYPE`, which makes `v_src.id` and `to_jsonb(v_src)` always type-resolvable (NULL fields when unassigned). All existing SELECT INTO usages remain valid.
-- **Mitigation**: Add a regression migration; update tests; document the PL/pgSQL `record` vs `%ROWTYPE` rule in `mem://architecture/database/plpgsql-standards`.
+1. **Engineering layer (deterministic fix):** the trigger pipeline on `review_submissions` is too eager and does meaningful work even when nothing relevant has changed. `enqueue_pms_compression_jobs` runs even when no evidence array changed; `log_untracked_submission_changes` writes audit rows on every score change including unchanged self_score; `repercolate_on_submission_update` already has a guard but the order is suboptimal.
+2. **Capacity layer (operational):** the Lovable Cloud instance is overloaded — many concurrent statement-timeout errors + "not accepting connections" — so even the engineered fix won’t fully eliminate the symptom under current load.
 
 ## Plan
 
-### 1. DB migration — `fix_v_src_unassigned_in_okv_migration.sql`
-Recreate `public.migrate_okv_on_scope_change(...)` (same signature) with:
-```sql
-v_src public.org_kpi_values%ROWTYPE;
-```
-…instead of `v_src record;`. All other logic untouched. Removes the `v_src := NULL;` line (record%ROWTYPE defaults to all-NULL fields, which is what we want).
+### 1. Make `Submit Self Review` resilient (frontend)
+- In `src/hooks/useKpis.ts → useSubmitSelfReview`:
+  - Wrap the `review_submissions` upsert + `kpis.status` update in a single retry loop (2 retries, 1s + 2s backoff) **only** for transient errors (`57014` statement timeout, `08006`/`08000` connection errors, `XX000` "not accepting connections").
+  - Map the technical error to a clearer toast: *"The server is busy. Please try again in a moment."* instead of "Upload failed / connection to the database timed out".
+- In `src/components/review/SelfReviewSheet.tsx`:
+  - Change the catch-block toast title from "Submission Failed" → keep, but use the friendly message above when `error.code` matches a transient class. Stop calling it "Upload failed" anywhere — only the file-upload path should use that title (already correct in `MultiFileUpload.tsx`; verify nothing else mislabels it).
 
-### 2. SSOT updates
-- `POLICY.md` §88.x: add rule — "PL/pgSQL functions that conditionally access fields of a row variable MUST declare it as `%ROWTYPE`, never as bare `record`."
-- `DOCUMENTATION.md` v2.66.12: bug fix entry.
-- `CHANGELOG_2026.md` May W1: entry.
-- `mem://architecture/database/plpgsql-standards`: append the `record` vs `%ROWTYPE` rule.
-- `mem://features/admin/org-kpi-management-suite`: note the dept→employee split is now functional.
+### 2. Trim the trigger cascade on `review_submissions` (DB migration)
+- `enqueue_pms_compression_jobs`: short-circuit when **none** of the six `*_evidence_urls` arrays changed (`OLD.x IS NOT DISTINCT FROM NEW.x` for all). Currently it runs the EXECUTE-format loop unconditionally.
+- `log_untracked_submission_changes`: short-circuit when no score field actually changed (it already checks distinct, but it also fires for self_score changes that are already audited by the application — narrow it to manager/auditor/management/final to remove duplicate work on self submissions).
+- Add a partial index to speed up `prevent_locked_submission_updates`'s lookup of locks: `CREATE INDEX IF NOT EXISTS idx_rpl_active ON review_period_locks(review_period_id, lock_type) WHERE is_locked = true;` (only if not already present).
 
-### 3. Test
-- New `src/test/orgKpiScopeChangeDeptToEmployee.test.ts`: integration-style assertion that calling `change_org_kpi_scope_cascading` with `current_only`, `old_scope='department'`, `new_scope='employee'` returns success and no `v_src` error string.
+### 3. Rule out the lingering "uuid: null" noise
+- The 4× `invalid input syntax for type uuid: "null"` errors in the same window mean somewhere the client is sending the literal string `"null"` for a uuid column. Grep for `.eq('…id', 'null')` / `?id=eq.null` patterns in the affected hooks (`useOrgKpiDataOwner`, `useReviewSubmissions`) and guard with early-return when the id is missing. Not the cause of Piyush's toast, but it's contributing to the error volume.
 
-## Files
+### 4. Capacity guidance for the user (operational)
+The "database not accepting connections" log line is the tell-tale sign the Lovable Cloud instance is at its connection/CPU ceiling under current PMS load. After the engineering fixes above are deployed, if timeouts persist:
 
-**Created**
-- `supabase/migrations/<ts>_fix_v_src_unassigned_in_okv_migration.sql`
-- `src/test/orgKpiScopeChangeDeptToEmployee.test.ts`
+> Open the project → Lovable Cloud → Advanced settings → **Upgrade instance** so the backend can handle more concurrent traffic and heavier review-submission writes.
+> Docs: https://docs.lovable.dev/features/cloud#advanced-settings-upgrade-instance
 
-**Edited**
-- `POLICY.md`, `DOCUMENTATION.md`, `CHANGELOG_2026.md`
-- `mem/architecture/database/plpgsql-standards`
-- `mem/features/admin/org-kpi-management-suite`
+We will tell Piyush this explicitly in the response after applying the fixes.
 
-Approve to apply.
+### 5. Tests / regression protection
+- `src/test/submitSelfReviewRetry.test.ts` — mocks supabase to return 57014 once then succeed, asserts the hook retries and resolves; second test asserts a permanent error surfaces the friendly message, not "Upload failed".
+- `src/test/triggerShortCircuit.test.ts` — SQL-shape assertion that `enqueue_pms_compression_jobs` body contains an `OLD … IS NOT DISTINCT FROM NEW` short-circuit and that `log_untracked_submission_changes` no longer reacts to self_score-only diffs.
+
+### 6. Docs / Memory / Changelog
+- `DOCUMENTATION.md`: add a "Submit Self Review resilience" section under Review module.
+- `POLICY.md`: add §X — *Trigger cascades on hot tables (`review_submissions`, `kpis`) MUST short-circuit when their target columns did not change.*
+- `CHANGELOG_2026.md`: v2.66.13 — Self-review submission resilience + trigger cascade trimming.
+- Update memory: `mem://infrastructure/resource-and-performance-optimization` — add note about transient-error retry policy and DB-trigger short-circuit rule for `review_submissions`.
+
+## Risk & Impact
+
+| Area | Impact |
+|------|--------|
+| Data | None — pure short-circuit and retry; no schema or RLS change. |
+| Workflow | None — same final state for the submission. |
+| UI/UX | Toast wording improves; behaviour identical on success. |
+| Regression | Low — triggers only stop work when target columns are unchanged. New unit tests guard this. |
+| Mitigation | Both unit tests above + manual verification by re-submitting a self review. |
+
+## Files to add / change
+
+- **Edit** `src/hooks/useKpis.ts` (retry + friendly error in `useSubmitSelfReview`)
+- **Edit** `src/components/review/SelfReviewSheet.tsx` (toast title + message mapping)
+- **New** `supabase/migrations/<ts>_trim_review_submissions_trigger_cascade.sql`
+- **New** `src/test/submitSelfReviewRetry.test.ts`
+- **New** `src/test/triggerShortCircuit.test.ts`
+- **Edit** `DOCUMENTATION.md`, `POLICY.md`, `CHANGELOG_2026.md`
+- **Edit** `mem://infrastructure/resource-and-performance-optimization`
+
+Approve to proceed.
