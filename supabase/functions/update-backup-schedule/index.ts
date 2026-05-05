@@ -80,7 +80,39 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { frequency, day, hour, dayOfMonth, enabled } = await req.json();
+    const body = await req.json();
+    const { frequency: rawFrequency, day: rawDay, hour: rawHour, dayOfMonth: rawDom, enabled } = body ?? {};
+
+    // ---- Strict input validation (defence-in-depth on top of admin auth) ----
+    const ALLOWED_FREQUENCIES = ["daily", "weekly", "monthly"] as const;
+    const ALLOWED_DAYS = Object.keys(DAY_MAP);
+
+    const frequency = ALLOWED_FREQUENCIES.includes(rawFrequency)
+      ? rawFrequency
+      : "weekly";
+
+    const hourNum = Number(rawHour);
+    if (!Number.isInteger(hourNum) || hourNum < 0 || hourNum > 23) {
+      return new Response(
+        JSON.stringify({ error: "Invalid 'hour' — must be integer 0-23" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const hour = hourNum;
+
+    const day = typeof rawDay === "string" && ALLOWED_DAYS.includes(rawDay) ? rawDay : "sunday";
+
+    let dayOfMonth: number = 1;
+    if (rawDom !== undefined && rawDom !== null) {
+      const domNum = Number(rawDom);
+      if (!Number.isInteger(domNum) || domNum < 1 || domNum > 31) {
+        return new Response(
+          JSON.stringify({ error: "Invalid 'dayOfMonth' — must be integer 1-31" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      dayOfMonth = domNum;
+    }
 
     // Connect directly to Postgres to manage cron jobs
     const sql = postgres(dbUrl, { ssl: "require" });
