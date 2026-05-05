@@ -78,6 +78,8 @@ export function useOrgKpiDataOwners() {
  */
 export function useIsOrgKpiDataOwner(categoryId: string, kraName: string, kpiName: string) {
   const { user, effectiveRole } = useAuth();
+  const cleanKra = (kraName || '').replace(/\r/g, '');
+  const cleanKpi = (kpiName || '').replace(/\r/g, '');
 
   return useQuery({
     queryKey: ['org-kpi-owner-check', categoryId, kraName, kpiName, user?.id],
@@ -96,8 +98,8 @@ export function useIsOrgKpiDataOwner(categoryId: string, kraName: string, kpiNam
         .from('org_kpi_data_owners')
         .select('id')
         .eq('category_id', categoryId)
-        .eq('kra_name', kraName)
-        .eq('kpi_name', kpiName)
+        .eq('kra_name', cleanKra)
+        .eq('kpi_name', cleanKpi)
         .eq('owner_id', user.id)
         .maybeSingle();
 
@@ -111,8 +113,10 @@ export function useIsOrgKpiDataOwner(categoryId: string, kraName: string, kpiNam
  * Get owners for a specific KPI
  */
 export function useOrgKpiOwners(categoryId: string, kraName: string, kpiName: string) {
+  const cleanKra = (kraName || '').replace(/\r/g, '');
+  const cleanKpi = (kpiName || '').replace(/\r/g, '');
   return useQuery({
-    queryKey: ['org-kpi-owners', categoryId, kraName, kpiName],
+    queryKey: ['org-kpi-owners', categoryId, cleanKra, cleanKpi],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('org_kpi_data_owners')
@@ -121,8 +125,8 @@ export function useOrgKpiOwners(categoryId: string, kraName: string, kpiName: st
           owner:profiles!org_kpi_data_owners_owner_id_fkey(id, full_name, email)
         `)
         .eq('category_id', categoryId)
-        .eq('kra_name', kraName)
-        .eq('kpi_name', kpiName);
+        .eq('kra_name', cleanKra)
+        .eq('kpi_name', cleanKpi);
 
       if (error) throw error;
       return data as OrgKpiDataOwner[];
@@ -143,7 +147,7 @@ export function useOrgKpiOwnershipMap() {
   
   if (owners) {
     owners.forEach(owner => {
-      const nk = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+      const nk = (s: string) => s.replace(/\r/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
       const key = `${owner.category_id}||${nk(owner.kra_name)}||${nk(owner.kpi_name)}`;
       const existing = ownershipMap.get(key) || { owners: [], canEdit: effectiveRole === 'admin' };
       existing.owners.push(owner);
@@ -260,8 +264,9 @@ export function useOrgKpiDataOwnerNames() {
       if (error) throw error;
 
       const map = new Map<string, string[]>();
+      const nk = (s: string) => s.replace(/\r/g, '').toLowerCase();
       for (const row of data || []) {
-        const key = `${row.category_id}||${row.kra_name.toLowerCase()}||${row.kpi_name.toLowerCase()}`;
+        const key = `${row.category_id}||${nk(row.kra_name)}||${nk(row.kpi_name)}`;
         const ownerName = (row.owner as any)?.full_name || 'Unknown';
         const existing = map.get(key) || [];
         if (!existing.includes(ownerName)) {
@@ -283,6 +288,7 @@ export function getOwnerNamesForKpi(
   kpi: { category_id: string; kra_name: string; kpi_name: string }
 ): string[] {
   if (!map) return [];
-  const key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}`;
+  const nk = (s: string) => s.replace(/\r/g, '').toLowerCase();
+  const key = `${kpi.category_id}||${nk(kpi.kra_name)}||${nk(kpi.kpi_name)}`;
   return map.get(key) || [];
 }
