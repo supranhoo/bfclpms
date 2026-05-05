@@ -1,0 +1,65 @@
+# 📅 BFCL PMS — Development Roadmap & Changelog
+
+> **Coverage:** February 2026 → present.
+> **Status:** Living document. Append new ships under the **current week's row**, in the same step that you update `DOCUMENTATION.md` Version History.
+> **Sources:** `DOCUMENTATION.md` Version History, `supabase/migrations/`, `mem/*`.
+
+---
+
+## 🌱 February 2026
+
+> ⚠️ The running Version History in `DOCUMENTATION.md` effectively begins **2026-03-28**.
+> February rows below are reconstructed from migration filenames + `mem/` indices and are intentionally coarse.
+> Status `🟡` flags partial reconstruction — refine as ADRs surface.
+
+| 🗓 Week | 🧩 Feature / Module | 🛠 Development Highlights | 📌 Status | 🚀 Impact |
+|---|---|---|---|---|
+| **W1** Feb 1–7 | 🏗 Platform foundations | • Initial Feb migration set (`20260203…`–`20260205…`, 8 migrations): early schema hardening on `kpis`, `review_submissions`, profiles, and core RLS scaffolding<br>• Baseline reviewer panel and KPI scorecard wiring | 🟡 Iterating | Established the schema + RLS baseline the rest of Q1 builds on |
+| **W2** Feb 8–14 | 🧮 Scoring engine + 🔐 RLS hardening | • Heavy migration cluster (`20260209…`–`20260214…`, 47 migrations) — scoring helpers, status convention work, profile cache invalidation precursors, audit-log shape<br>• `Workflow Status Convention` (status = last completed stage) memorialised in memory | 🟡 Iterating | Locked in the canonical workflow-status convention used by every reviewer surface |
+| **W3** Feb 15–21 | 🔁 Multi-month KPI groundwork + 📥 KRA rollover | • Migrations `20260215…`–`20260221…` (21 files): early multi-month percolation scaffolding, frequency-cycle helpers, KRA rollover prep<br>• `Enhanced KRA Rollover System` and `Multi-Month KPI Cycle UX` precursors | 🟡 Iterating | First version of full-cycle KRA rollover + multi-month sibling handling |
+| **W4** Feb 22–28 | 🏢 Org KPI + 💰 Incentive seed | • Migrations `20260222…`–`20260228…` (18 files): Org KPI scope groundwork, Incentive engine seed (slabs, mappings), reviewer dashboards prep<br>• `Org KPI Management Suite` and `Incentive Core Engine` memory entries seeded | 🟡 Iterating | Prepared the Org-KPI cascade + Incentive engine that ship hardens through Mar–Apr |
+
+---
+
+## 🌿 March 2026
+
+| 🗓 Week | 🧩 Feature / Module | 🛠 Development Highlights | 📌 Status | 🚀 Impact |
+|---|---|---|---|---|
+| **W4** Mar 22–28 | 📊 Reports & Scoring integrity | • **v2.6.7** Team-vs-Manager Score query fix<br>• **v2.7.0** Approved-KPI `final_score` drift from admin data entry — fixed<br>• **v2.8.0** Out-of-workflow admin data entry no longer auto-approves<br>• **v2.9.0** Data repair: 100750 Jan 2026 `final_score`<br>• **v2.10.0** KPI Detail report — workflow-aware score column filtering | 🟢 Completed | Score integrity restored across reviewer panels and exports |
+| **W5** Mar 29–31 | 🩺 Scoring Health Check + 🔁 Rollback + 🏢 Org KPI + 💰 Incentive | • **v2.13.0/.4/.6/.1** Scoring Health Check (description-vs-threshold + threshold-vs-target detection)<br>• **v2.12.0** Cycle-aware reconciliation with rollback awareness<br>• **v2.11.0 / v2.15.2** Rollback cascade clears downstream reviewer data + Re-review badge<br>• **v2.13.7** Atomic `final_score` sync on approval<br>• **v2.13.8/.9, v2.14.0–.2** Org KPI propagation: scoped table + sent-back indicator + multi-select propagate + value-history audit<br>• **v2.15.4** Sortable column headers in KPI Details<br>• **v2.15.5/.6** `final_score` recompute decoupled from `advance_status` + already-approved KPI fix<br>• **v2.15.7** KPI Scorecard Detail report<br>• **v2.15.8** N/A blast-radius bug fix in admin data entry<br>• **v2.15.10–.13** Incentive: vessel-rates port, DB-driven slab categories, unified employee mapping with multi-select, slab category CRUD<br>• **v2.15.14–.16** Email templates UI + observation counts on dashboard rows + query notification copy<br>• **v2.15.18** Enhanced Incentive Report (filters + Excel export) | 🟢 Completed | Closed dozens of scoring + Org KPI + Incentive edge cases — the system's stability inflection point |
+
+---
+
+## 🌳 April 2026
+
+| 🗓 Week | 🧩 Feature / Module | 🛠 Development Highlights | 📌 Status | 🚀 Impact |
+|---|---|---|---|---|
+| **W2** Apr 8–14 | 📈 Multi-Period Scorecard + 🛡 Compliance + 🔐 Auth | • **v2.36.0** Multi-Period Scorecard Display (YTD / QTD / Custom)<br>• **v2.35.0** Target & level-wise actuals in KPI Scorecard Detail export<br>• **v2.33.7** Employee Self-Review Compliance Penalty<br>• **v2.33.8** Multi-Factor Compliance KPI data entry + all-level visibility<br>• **v2.33.9** Compliance sub-factors save handler bug fix<br>• **v2.34.0 / v2.35.0** Password Rollout + Reset Password + Update Email — 401 fixes<br>• **v2.36.0** Observation deep-link opens KPI Details Sheet | 🟢 Completed | Reviewers gain period-over-period view; auth flows finally stable cluster-wide |
+| **W3** Apr 15–21 | 📋 Custom Reports + 👥 Reviewer Grids + 🏢 Org KPI Phase A/B | • **v2.37.0** Configurable SLA target + 0%/100% inconsistency fix<br>• **v2.38.0** Incentive Report — pagination & Select-All<br>• **v2.39.0** Sticky table headers (Menu Access + Profile tables)<br>• **v2.63.0** Custom Report Builder<br>• **v2.64.0–.11** Reviewer panel — Smart Period auto-switch disclosure, flicker fix, pagination, panel-typing teleport fix, denominator tooltips<br>• **v2.66.0–.4** Atomic Org KPI propagation RPC + pre-flight preview + reviewer Request-Revision + late-joiner auto-pull + Phase A1/A2 execution report<br>• **v2.66.5** Org KPI Scope Cascade + OKV migration + auto-pull activation<br>• **v2.66.6** Auto-inherit Org KPI status on KPI creation | 🟢 Completed | Massive scale-out for 2,500-employee reviewer ops; Org KPI now atomic + auditable end-to-end |
+| **W4** Apr 22–28 | 🩹 Bug-Bounty Sprint + 📤 KPI Journey | • **v2.66.7.3** Design Decisions & Rejected Refactors (doc-only)<br>• **v2.66.7.9** Profiles Query Policy — paged fetches for all list reads<br>• **v2.66.7.19** Manager Approve crash — `audit_lead` enum typo<br>• **v2.66.7.21** Reviewer Dashboard "all zeros" regression<br>• **v2.66.7.24** Reviewer roster score-signature seed (BUG-022)<br>• **v2.66.7.25** Org KPI Self column — tooltipped dash instead of "N/A" (BUG-023)<br>• **v2.66.7.26** KPI Journey Excel — Assigned Workflow Chain column<br>• **v2.66.7.27** TNI Detection splits skill-gaps from compliance failures (BUG-025)<br>• **v2.66.7.28** TNI Report — multi-period & assessment-year (Jul–Jun) filter<br>• **v2.66.7.29** Org KPI ↔ Normal KPI scope toggle restored (BUG-027)<br>• **v2.66.7.30** KPI Journey Excel — "Month" column showed Status (BUG-028)<br>• **v2.66.7.33** KPI Journey timeline blank — wrong audit table & status vocabulary (BUG-031)<br>• **v2.66.7.45** KPI Mapping Matrix coverage truncation (BUG-043) | 🟢 Completed | Closed BUG-022 → BUG-043 cluster; KPI Journey export now production-grade |
+| **W5** Apr 29–30 | 🔐 Identity & Access Console (IAC) + 🦺 Safety + ⚡ Cache Policy | • **v2.66.7.51** Profile Cache Invalidation Contract + `useProfilesVersion` realtime counter<br>• **v2.66.7.52** Safety Manual-Fetch & Pagination Policy (filters-first, click-to-load)<br>• **v2.66.7.50** IAC Phase 1 — capability-based RBAC at `/admin/iac`<br>• **v2.66.7.51** IAC Phase 2 — compatibility shims, leaver flow, expiry cron<br>• **v2.66.7.52** IAC Bulk — round-trip download/upload + per-row error CSV | 🟢 Completed | Per-module role enums replaced by hub-level capability model; admins can bulk-edit access at scale |
+
+---
+
+## 🌟 May 2026
+
+| 🗓 Week | 🧩 Feature / Module | 🛠 Development Highlights | 📌 Status | 🚀 Impact |
+|---|---|---|---|---|
+| **W1** May 1–7 | 🏷 KPI Standardization & Canonical Registry (§KPI_STANDARD) | • **Phase 2a–2c** Cross-month canonical resolver, soft enforcement (May 2026+ only), registry health & coverage<br>• **Phase 3a–3c** Registry visibility in creation flows, canonical-aware cross-period lookup, read-only Registry Browser<br>• **Phase 4a–4c** Auto-merge suggestions + transactional merge engine + registry audit<br>• **Phase 5/5b** Definition split, History & Undo tab, inline canonical-name edit with optional propagation<br>• Idempotent **Approve as Canonical** (no more `23505` duplicate-key crash) | 🟢 Completed | One canonical name per KPI concept across months — clean cross-month dashboards, accurate trends |
+| **W1** May 1–7 | 📊 KPI Weightage Dashboard | • Server-side employee pagination (25 / 50 / 100)<br>• Variance summary decoupled from page (honest totals)<br>• Debounced 300 ms employee search<br>• **v5.1.1** — list shows **only employees mapped with KRAs** (~2,533 → ~mapped count) | 🟢 Completed | Fast cold-load at 2.5k headcount; admins see real KRA-mapping progress, not the full directory |
+| **W1** May 1–7 | 🔁 Multi-Month Percolation (POLICY §54 v5) | • `MultimonthWorkflowDriftCard` admin tool + `repair_multimonth_workflow_drift_v5` RPC (dry-run by default)<br>• Sibling rows render terminal-month workflow chain (no phantom HR PMS cards) via `src/lib/multimonthCycle.ts`<br>• **Data fix:** Atul "Accuracy in MIS data" January cycle reconciled<br>• **Hotfix:** percolate trigger phantom `resolve_employee_workflow(...)` swapped to canonical `get_employee_workflow_info(...)` with `EXCEPTION` guard + regression test | 🟢 Completed | Unblocks every Auditor / Mgmt terminal submission on Bi-Monthly / Quarterly / Half-Yearly / Yearly KPIs |
+| **W1** May 1–7 | 🔐 IAC Bulk + 📝 HR Review Notes + ⚡ Lean-Load (POLICY §120) | • IAC Bulk download / upload round-trip + 5-bucket preview + per-row error CSV<br>• HR Review Notes inline edit (subject locked post-creation, `applicable_from` snapped to 1st of month)<br>• Shared `useDebouncedValue` hook (5 unit tests) wired into `UserManagement` + `useReviewPageState`<br>• `SLIM_KPI_SELECT` projection codified for `useAllKpis` / `useKpisByPeriod` | 🟢 Completed | Snappier filters on 2.5k-row lists; HR can correct notes without delete-recreate; reduced KPI hot-path payload |
+| **W2** May 8–14 | _TBD_ | _Append entries here as work ships._ | 🔵 Planned | — |
+| **W3** May 15–21 | _TBD_ | _Append entries here as work ships._ | 🔵 Planned | — |
+| **W4** May 22–28 | _TBD_ | _Append entries here as work ships._ | 🔵 Planned | — |
+
+---
+
+## 🛡 Maintenance Protocol
+
+1. **SSOT rule** — every shipped change appends one row to the **current week** here in the same step that you update `DOCUMENTATION.md` Version History (per project Atomic Sync rule).
+2. **Status legend** — 🟢 Completed · 🟡 Iterating / partial · 🔵 Planned · 🔴 Blocked.
+3. **Week boundaries** — W1 = 1–7 · W2 = 8–14 · W3 = 15–21 · W4 = 22–28 · W5 = 29–end.
+4. **Granularity** — group small follow-ups under the parent feature row (sub-bullets); don't multiply rows.
+5. **Monthly rollover** — at month end, archive the month section to `docs/changelogs/2026-MM.md` if the file gets too long.
+6. **Export** — file lives at repo root → easy to `cat`, paste into email, or convert to PDF/PPT for execs.

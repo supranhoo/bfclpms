@@ -1,0 +1,6 @@
+---
+name: changelog-protocol
+description: CHANGELOG_2026.md is the executive weekly roadmap — append every shipped change to the current week's row in the same step as DOCUMENTATION.md Version History
+type: preference
+---
+`CHANGELOG_2026.md` (repo root) is the executive-facing weekly roadmap, grouped by Month → Week (W1=1–7, W2=8–14, W3=15–21, W4=22–28, W5=29–end). Every shipped change MUST append a row (or sub-bullet under an existing row) to the **current week** in the **same generation step** that updates `DOCUMENTATION.md` Version History. Status legend: 🟢 Completed · 🟡 Iterating / partial · 🔵 Planned · 🔴 Blocked. Group follow-ups under the parent feature row; don't multiply rows for sub-fixes.
