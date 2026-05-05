@@ -993,7 +993,12 @@ const handler = async (req: Request): Promise<Response> => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json();
-    console.log("Received request:", JSON.stringify(body));
+  // Redact sensitive fields before logging (passwords, tokens, etc.)
+  const safeBody = {
+    ...body,
+    generated_password: body?.generated_password ? "[REDACTED]" : undefined,
+  };
+  console.log("Received request:", JSON.stringify(safeBody));
 
     // Helper: fire-and-forget email log insert
     const logEmail = async (logData: {

@@ -255,6 +255,28 @@ const handler = async (req: Request): Promise<Response> => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+    // ---- Authentication: require a logged-in user ----
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: userErr } = await userClient.auth.getUser();
+    if (userErr || !user) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const { pip_id }: PIPLetterRequest = await req.json();
@@ -262,6 +284,14 @@ const handler = async (req: Request): Promise<Response> => {
     if (!pip_id) {
       return new Response(
         JSON.stringify({ error: "pip_id is required" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Validate pip_id is a UUID
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pip_id)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid pip_id format" }),
         { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
@@ -280,6 +310,34 @@ const handler = async (req: Request): Promise<Response> => {
       return new Response(
         JSON.stringify({ error: "PIP not found" }),
         { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // ---- Authorization: only admin, HR PMS, the initiating manager, or the employee themselves ----
+    const { data: roleRows } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id);
+    const roles = new Set((roleRows ?? []).map((r: any) => r.role));
+    const isPrivileged = roles.has("admin") || roles.has("hr_pms") || roles.has("management");
+    const isInitiator = pip.initiated_by === user.id;
+    const isEmployee = pip.employee_id === user.id;
+
+    // Also allow direct reporting manager
+    let isReportingManager = false;
+    if (!isPrivileged && !isInitiator && !isEmployee) {
+      const { data: empProfile } = await supabase
+        .from("profiles")
+        .select("reporting_manager_id")
+        .eq("id", pip.employee_id)
+        .maybeSingle();
+      isReportingManager = empProfile?.reporting_manager_id === user.id;
+    }
+
+    if (!isPrivileged && !isInitiator && !isEmployee && !isReportingManager) {
+      return new Response(
+        JSON.stringify({ error: "Forbidden" }),
+        { status: 403, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
