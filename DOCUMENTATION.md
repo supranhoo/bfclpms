@@ -6454,4 +6454,5 @@ Documented in `mem/architecture/profiles-query-policy`. Capping these to 20 rows
 
 ## Version History
 - **v2.66.7.45+lean-load (2026-05-04):** POLICY §120 Lean-Load Policy added. Shared `useDebouncedValue` hook introduced (`src/hooks/useDebouncedValue.ts`) with 5 unit tests. Wired into `UserManagement` (2,533-row in-memory filter) and `useReviewPageState` (period-scoped KPI filter). `useAllKpis` slim projection (`SLIM_KPI_SELECT`) confirmed and codified. Audit findings document why blanket `select('*')` removal, 20-row caps on pickers, and blanket spinner→skeleton swaps were rejected.
+- **changelog-2026 (2026-05-05):** Created `CHANGELOG_2026.md` at repo root — executive weekly roadmap grouped by Month → Week, populated Feb→May 2026 from this Version History + migrations + `mem/`. Maintenance protocol pinned in `mem/preferences/changelog-protocol`: every future shipped change appends to the current week's row in the same step as a Version History entry.
 
