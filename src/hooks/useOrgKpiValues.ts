@@ -152,7 +152,7 @@ export function useUpsertOrgKpiValue() {
         .from('org_kpi_values')
         .insert(value)
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) {
         if (error.code === '23505') {
@@ -183,7 +183,7 @@ export function useUpsertOrgKpiValue() {
             retryQuery = retryQuery.is('employee_id', null);
           }
 
-          const { data: retryData, error: retryError } = await retryQuery.select().single();
+          const { data: retryData, error: retryError } = await retryQuery.select().maybeSingle();
           if (retryError) throw retryError;
           return retryData;
         }
