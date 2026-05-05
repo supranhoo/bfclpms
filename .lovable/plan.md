@@ -1,112 +1,59 @@
+## Fix: Org KPI text-normalization mismatch (Samir & Vivek)
 
-## Issue
-When Piyush Bansal clicked **Submit Self Review** (no evidence files attached, score Yes / R5), the button got stuck on "Saving…" and a red toast appeared:
+### Root Cause
+- `org_kpi_data_owners` and `org_kpi_values` rows were written with raw text (extra whitespace, stray `\r`, punctuation variants) before the KPI Standardization Registry normalized canonical names. They no longer match `kpis.is_org_level=true` rows on exact text.
+  - **Samir:** ownership row's `kra_name`/`kpi_name` doesn't match any current canonical Org KPI → card hidden in UI.
+  - **Vivek:** `useBulkUpsertOrgKpiValues` does a raw-text SELECT → INSERT → SELECT-with-`.single()` ladder. When normalization triggers rewrite the inserted text, the retry SELECT finds nothing and `.single()` throws `PGRST116` → "Cannot coerce... to a single JSON object".
 
-> Upload failed — The connection to the database timed out
+### Plan
 
-The submission was never persisted.
+**1. DB migration — atomic upsert RPC + backfill**
+- Create `public.upsert_org_kpi_value(category_id, kra_name, kpi_name, period, year, achieved_value, sub_factors, owner_id)` as `SECURITY DEFINER`:
+  - Normalize inputs (`btrim`, collapse whitespace, strip `\r`).
+  - `INSERT ... ON CONFLICT (category_id, kra_name, kpi_name, review_period, review_year) DO UPDATE` returning the row.
+  - RLS check: caller must be admin OR owner in `org_kpi_data_owners` for that signature.
+- Backfill reconciliation:
+  - Update `org_kpi_data_owners.kra_name/kpi_name` and `org_kpi_values.kra_name/kpi_name` to match the canonical text from `kpis` where `is_org_level=true` (join on normalized text).
+  - Log every row touched into `kpi_audit_logs` as `ORG_KPI_TEXT_RECONCILED` with `performed_by = NULL`.
+- Add unique index (if missing) on `org_kpi_values (category_id, kra_name, kpi_name, review_period, review_year)` to back the ON CONFLICT.
 
-## RCA — what is actually happening
+**2. Frontend — kill the lookup-retry ladder**
+- `src/hooks/useOrgKpiValues.ts`:
+  - Replace `useBulkUpsertOrgKpiValues` body with a single `supabase.rpc('upsert_org_kpi_value', …)` call per row, batched via `Promise.allSettled`.
+  - Remove all `.single()` calls on lookup paths; use `.maybeSingle()` everywhere as a defensive net.
+  - Map `PGRST116` to friendly toast "Could not save KPI — please refresh and retry" instead of raw Postgres text.
+- `src/hooks/useOrgKpiDataOwner.ts`:
+  - Apply consistent `normalizeKpiText` (`s.replace(/\r/g,'').toLowerCase().replace(/\s+/g,' ').trim()`) in `useOrgKpiOwnershipMap`, `useOrgKpiDataOwnerNames`, `getOwnerNamesForKpi`, `useIsOrgKpiDataOwner`, `useOrgKpiOwners` (currently inconsistent — some use full nk, some only `.toLowerCase()`).
+- `src/pages/admin/OrgKpiDataEntry.tsx`:
+  - Filter `ownershipFilteredKpis` using the same `normalizeKpiText` so Samir's mapped KPIs render even if registry text drifts again.
+- New helper `src/lib/kpiTextNormalize.ts` exporting one shared `normalizeKpiText` to stop drift.
 
-Despite the wording "Upload failed", **no file upload is involved** here (Evidence Attachments = 0/5). The toast is the standard supabase-js error from `useSubmitSelfReview` being re-titled as "Upload failed" by the calling sheet's catch block. The real underlying error from Postgres is a **statement timeout** on the `review_submissions` upsert.
+**3. Tests**
+- `src/test/orgKpiUpsertRpc.test.ts` — mocks RPC: success path, RLS-denied path, mapping of PGRST116 → friendly message.
+- `src/test/orgKpiOwnershipNormalize.test.ts` — feeds owners with `\r`, double spaces, and trailing whitespace; asserts ownership map keys + filter still match canonical KPI signatures.
 
-Live Postgres logs (last ~30 min) confirm a system-wide timeout storm, not an app bug in isolation:
+**4. Docs / Memory**
+- `docs/adr/ADR-051.md` — "Normalized text is mandatory for all Org KPI lookups; client never does INSERT-then-SELECT."
+- `POLICY.md` — add §90: Org KPI writes go through `upsert_org_kpi_value` RPC only.
+- `DOCUMENTATION.md` — Version History entry v2.66.14.
+- `CHANGELOG_2026.md` — v2.66.14 entry.
+- Update `mem://features/admin/org-kpi-management-suite` with the RPC + shared normalizer rule.
+- Update `mem://features/admin/kpi-standardization-registry` noting the backfill reconciler.
 
-| Count | Error |
-|------:|-------|
-| 30 | `canceling statement due to statement timeout` |
-| 9  | `the database system is not accepting connections` |
-| 4  | `invalid input syntax for type uuid: "null"` |
-| 2  | `record "v_src" is not assigned yet` (already fixed in last turn) |
-| 1  | RLS violation on `kpi_mention_access` |
-| 1  | duplicate key on `org_kpi_data_owners_…_key` |
-
-### Why Submit Self Review specifically times out
-
-`useSubmitSelfReview` (src/hooks/useKpis.ts:636) does an `upsert` on `review_submissions` and then an `update` on `kpis.status`. That single upsert fans out into a heavy trigger cascade on `review_submissions`:
-
-```
-review_submissions UPSERT
-  ├─ BEFORE: prevent_locked_submission_updates
-  │           └─ check_review_period_permission   (5-tier scan of review_period_locks)
-  ├─ BEFORE: auto_compute_rating_and_clamp_scores
-  ├─ BEFORE: enforce_on_behalf_score_or_na
-  ├─ BEFORE: sync_kpi_status_from_submission     → UPDATE kpis (re-entrant)
-  │           └─ kpis triggers fire (15+):
-  │                 notify_on_kpi_status_change
-  │                 log_kpi_status_transition
-  │                 percolate_multimonth_score    (writes siblings + audit rows)
-  │                 fn_sync_org_status_to_future_open_periods
-  │                 trg_clear_send_back_marker_on_advance
-  │                 trg_expire_rollback_on_status_change
-  │                 trg_sync_submission_on_kra_set
-  │                 …etc
-  ├─ AFTER:  enqueue_pms_compression_jobs        (6× EXECUTE format() per row, even if URL arrays empty)
-  ├─ AFTER:  log_untracked_submission_changes
-  ├─ AFTER:  trg_repercolate_on_submission_update
-  └─ AFTER:  update_review_submissions_updated_at
-```
-
-Combined with the Cloud DB already being **flooded** by other concurrent timed-out queries, even this normally-fast write blows past the 8s `statement_timeout`. The “database not accepting connections” lines indicate the instance is at or above its connection ceiling — classic **compute/load** problem, not a bug in the self-review code.
-
-So the issue has **two layers**:
-
-1. **Engineering layer (deterministic fix):** the trigger pipeline on `review_submissions` is too eager and does meaningful work even when nothing relevant has changed. `enqueue_pms_compression_jobs` runs even when no evidence array changed; `log_untracked_submission_changes` writes audit rows on every score change including unchanged self_score; `repercolate_on_submission_update` already has a guard but the order is suboptimal.
-2. **Capacity layer (operational):** the Lovable Cloud instance is overloaded — many concurrent statement-timeout errors + "not accepting connections" — so even the engineered fix won’t fully eliminate the symptom under current load.
-
-## Plan
-
-### 1. Make `Submit Self Review` resilient (frontend)
-- In `src/hooks/useKpis.ts → useSubmitSelfReview`:
-  - Wrap the `review_submissions` upsert + `kpis.status` update in a single retry loop (2 retries, 1s + 2s backoff) **only** for transient errors (`57014` statement timeout, `08006`/`08000` connection errors, `XX000` "not accepting connections").
-  - Map the technical error to a clearer toast: *"The server is busy. Please try again in a moment."* instead of "Upload failed / connection to the database timed out".
-- In `src/components/review/SelfReviewSheet.tsx`:
-  - Change the catch-block toast title from "Submission Failed" → keep, but use the friendly message above when `error.code` matches a transient class. Stop calling it "Upload failed" anywhere — only the file-upload path should use that title (already correct in `MultiFileUpload.tsx`; verify nothing else mislabels it).
-
-### 2. Trim the trigger cascade on `review_submissions` (DB migration)
-- `enqueue_pms_compression_jobs`: short-circuit when **none** of the six `*_evidence_urls` arrays changed (`OLD.x IS NOT DISTINCT FROM NEW.x` for all). Currently it runs the EXECUTE-format loop unconditionally.
-- `log_untracked_submission_changes`: short-circuit when no score field actually changed (it already checks distinct, but it also fires for self_score changes that are already audited by the application — narrow it to manager/auditor/management/final to remove duplicate work on self submissions).
-- Add a partial index to speed up `prevent_locked_submission_updates`'s lookup of locks: `CREATE INDEX IF NOT EXISTS idx_rpl_active ON review_period_locks(review_period_id, lock_type) WHERE is_locked = true;` (only if not already present).
-
-### 3. Rule out the lingering "uuid: null" noise
-- The 4× `invalid input syntax for type uuid: "null"` errors in the same window mean somewhere the client is sending the literal string `"null"` for a uuid column. Grep for `.eq('…id', 'null')` / `?id=eq.null` patterns in the affected hooks (`useOrgKpiDataOwner`, `useReviewSubmissions`) and guard with early-return when the id is missing. Not the cause of Piyush's toast, but it's contributing to the error volume.
-
-### 4. Capacity guidance for the user (operational)
-The "database not accepting connections" log line is the tell-tale sign the Lovable Cloud instance is at its connection/CPU ceiling under current PMS load. After the engineering fixes above are deployed, if timeouts persist:
-
-> Open the project → Lovable Cloud → Advanced settings → **Upgrade instance** so the backend can handle more concurrent traffic and heavier review-submission writes.
-> Docs: https://docs.lovable.dev/features/cloud#advanced-settings-upgrade-instance
-
-We will tell Piyush this explicitly in the response after applying the fixes.
-
-### 5. Tests / regression protection
-- `src/test/submitSelfReviewRetry.test.ts` — mocks supabase to return 57014 once then succeed, asserts the hook retries and resolves; second test asserts a permanent error surfaces the friendly message, not "Upload failed".
-- `src/test/triggerShortCircuit.test.ts` — SQL-shape assertion that `enqueue_pms_compression_jobs` body contains an `OLD … IS NOT DISTINCT FROM NEW` short-circuit and that `log_untracked_submission_changes` no longer reacts to self_score-only diffs.
-
-### 6. Docs / Memory / Changelog
-- `DOCUMENTATION.md`: add a "Submit Self Review resilience" section under Review module.
-- `POLICY.md`: add §X — *Trigger cascades on hot tables (`review_submissions`, `kpis`) MUST short-circuit when their target columns did not change.*
-- `CHANGELOG_2026.md`: v2.66.13 — Self-review submission resilience + trigger cascade trimming.
-- Update memory: `mem://infrastructure/resource-and-performance-optimization` — add note about transient-error retry policy and DB-trigger short-circuit rule for `review_submissions`.
-
-## Risk & Impact
-
+### Risk & Impact
 | Area | Impact |
 |------|--------|
-| Data | None — pure short-circuit and retry; no schema or RLS change. |
-| Workflow | None — same final state for the submission. |
-| UI/UX | Toast wording improves; behaviour identical on success. |
-| Regression | Low — triggers only stop work when target columns are unchanged. New unit tests guard this. |
-| Mitigation | Both unit tests above + manual verification by re-submitting a self review. |
+| Data | Backfill is text-only; original values archived in audit log; no score mutation. |
+| Workflow | None — same write semantics, just atomic. |
+| RLS | RPC enforces same admin-or-owner rule already in policies. |
+| Regression | Low; covered by 2 new tests + existing `orgKpiPropagationToast.test.ts`. |
+| Mitigation | Dry-run backfill count printed in migration NOTICE before commit; RPC additive (old code paths replaced, not removed at DB level). |
 
-## Files to add / change
-
-- **Edit** `src/hooks/useKpis.ts` (retry + friendly error in `useSubmitSelfReview`)
-- **Edit** `src/components/review/SelfReviewSheet.tsx` (toast title + message mapping)
-- **New** `supabase/migrations/<ts>_trim_review_submissions_trigger_cascade.sql`
-- **New** `src/test/submitSelfReviewRetry.test.ts`
-- **New** `src/test/triggerShortCircuit.test.ts`
-- **Edit** `DOCUMENTATION.md`, `POLICY.md`, `CHANGELOG_2026.md`
-- **Edit** `mem://infrastructure/resource-and-performance-optimization`
-
-Approve to proceed.
+### Files
+- **New** `supabase/migrations/<ts>_org_kpi_upsert_rpc_and_text_reconcile.sql`
+- **New** `src/lib/kpiTextNormalize.ts`
+- **Edit** `src/hooks/useOrgKpiValues.ts`, `src/hooks/useOrgKpiDataOwner.ts`, `src/pages/admin/OrgKpiDataEntry.tsx`
+- **New** `src/test/orgKpiUpsertRpc.test.ts`, `src/test/orgKpiOwnershipNormalize.test.ts`
+- **New** `docs/adr/ADR-051.md`
+- **Edit** `POLICY.md`, `DOCUMENTATION.md`, `CHANGELOG_2026.md`
+- **Edit** `mem://features/admin/org-kpi-management-suite`, `mem://features/admin/kpi-standardization-registry`
