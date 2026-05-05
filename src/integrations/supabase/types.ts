@@ -8226,6 +8226,7 @@ export type Database = {
         Returns: Json
       }
       month_name_to_index: { Args: { p_month: string }; Returns: number }
+      normalize_kpi_text_value: { Args: { txt: string }; Returns: string }
       preview_org_kpi_propagation: {
         Args: { p_kpi_ids: string[] }
         Returns: Json
