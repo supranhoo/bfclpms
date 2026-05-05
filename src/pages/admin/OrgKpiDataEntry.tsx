@@ -729,13 +729,27 @@ export default function OrgKpiDataEntry() {
       }
     }
 
-    // Propagation completeness validation (PA3)
+    // Propagation completeness validation (PA3) — v2.66.10 skip-aware
+    // Only flag a true gap. Benign skips (already past initial stage) are
+    // already surfaced by the "Already propagated" toast above and must NOT
+    // be reported as KPI-name mismatches.
     if (propagatedScopeIds.length > 0 && expectedCount > 0 && totalPropagated < expectedCount) {
-      toast({
-        title: `Partial propagation: ${totalPropagated}/${expectedCount} employees updated`,
-        description: `${expectedCount - totalPropagated} employee(s) may have mismatched KPI names. Check the Pending Report for details.`,
-        variant: 'destructive',
-      });
+      const accountedSkips = totalSkippedBenign + totalSkippedHard;
+      const unaccounted = Math.max(0, expectedCount - totalPropagated - accountedSkips);
+      if (totalSkippedHard > 0) {
+        toast({
+          title: `Partial propagation: ${totalPropagated}/${expectedCount} updated`,
+          description: `${totalSkippedHard} could not be advanced (missing rows or race condition). Please refresh and retry.`,
+          variant: 'destructive',
+        });
+      } else if (unaccounted > 0) {
+        toast({
+          title: `Partial propagation: ${totalPropagated}/${expectedCount} employees updated`,
+          description: `${unaccounted} employee(s) may have mismatched KPI names. Check the Pending Report for details.`,
+          variant: 'destructive',
+        });
+      }
+      // else: entire shortfall is benign (already self-reviewed) — no extra toast
     }
 
     // v2.65.6 — Half-propagation forward-guard
