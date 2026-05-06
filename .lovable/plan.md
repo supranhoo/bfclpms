@@ -1,52 +1,76 @@
-## Org KPI Data Entry — Combined Plan (Layer B/C/D + Self-ID RCA)
 
-### Part 1 — Why-Why RCA (your own ID showing empty list)
+## Problem
 
-Confirmed from DB + code read:
+On `/admin/org-kpi-data`, "Budget saving" is tagged **Entered** on the card, but the Propagate dialog reports **0 will advance, 1 reviewer-locked** (Ashish Kataria already at `manager_check`, self_score 4).
 
-| # | Why | Evidence |
-|---|---|---|
-| 1 | Why does the page show "No org-level KPIs found" for April 2026? | `filteredKpis` is empty even though April 2026 has 171 unique org KPI definitions (861 child rows). |
-| 2 | Why is `filteredKpis` empty? | It is derived from `ownershipFilteredKpis`. When `isAdmin=false`, only KPIs whose `ownershipMap[key].canEdit === true` survive. |
-| 3 | Why is `isAdmin=false` for an admin? | `isAdmin = effectiveRole === 'admin'`. `effectiveRole` returns `naturalRole` whenever `role==='admin' && isAdminMode===false`. The Admin-Mode toggle is persisted in `localStorage` per browser — toggling it off on **any** machine flips an admin into "Manager/Employee view" silently. Many of you have hit "Switch to Manager view" once and forgotten. |
-| 4 | Why does the masked admin then see zero KPIs (instead of the ones they actually own)? | Two compounding bugs in `OrgKpiDataEntry.tsx`: **(a)** `useOrgKpiOwnershipMap` is **NOT** gated on `isReady && !!user` (POLICY §96 violation) — on cold mount it returns an empty map until the second tick, so every KPI fails the `canEdit` check and the memo collapses to `[]`. **(b)** Even after the map loads, key matching in `ownershipFilteredKpis` uses `kpiKey()` which lower-cases + collapses whitespace, but the ownership-map builder in `useOrgKpiOwnershipMap` only does `replace(/\r/g,'').toLowerCase()` (no whitespace collapse). KPI names that contain double spaces, tabs, or trailing spaces (we have several in the HR/Compliance set) produce **different keys on the two sides**, so the lookup misses. |
-| 5 | Why does refreshing "sometimes" fix it? | After the map finally arrives in the cache, a manual reload re-hydrates with the data already present, so the first `useMemo` pass already sees a populated map. This is the same race we patched for `useOrgLevelKpis` (ADR-052) — the ownership hook was missed. |
-| 6 | Why did propagation appear to do nothing for Vivek even after the new `pre_review_only` policy? | Of his 234 owner rows, **29** do not match any current April 2026 KPI definition because owner-table KRA/KPI strings differ from `kpis` strings by whitespace / `\r` only. The RPC joins by literal text, so those rows are silently skipped. Same root cause as #4(b). |
-| 7 | Why has this gotten worse over time? | Each migration (KPI Standardization Registry, KRA Library Master, Copy-KRAs) has rewritten KRA/KPI strings in `kpis` but **not** retroactively normalised `org_kpi_data_owners`. The drift accumulates monthly — April has 29 mismatches, May has 33. |
+Two different "truths" are being shown for the same KPI because the card and the propagate preview read from two different sources:
 
-### Part 2 — Risk & Impact Report
-- **Data**: No schema change for the bug fixes; one cleanup UPDATE normalises whitespace/CR in `org_kpi_data_owners` (~30 rows, fully reversible — old values logged to `kpi_audit_logs`).
-- **Workflow**: Visibility fix only. Propagation behaviour unchanged beyond the already-shipped policy tier.
-- **UI/UX**: Adds a "Mismatched Values" badge + "Admin view masked" banner. Non-breaking.
-- **Regression risk**: Low. All key-builder changes are colocated and covered by new unit tests.
+| Surface | Source of truth |
+|---|---|
+| Card chip ("Pending / Entered / Propagated / Stuck") | `org_kpi_values.status` only |
+| Propagate dialog | Real per-employee `kpis.status` |
 
-### Part 3 — Fix Plan
+When `org_kpi_values.status` is `draft`/`sent_back` but every mapped child has already advanced past `kra_set` (e.g. to `self_review`/`manager_check`/...), the card wrongly says "Entered (still to propagate)" while in reality there is nothing to propagate — every child is reviewer-locked.
 
-#### A. Race & key-mismatch fixes (root cause of your empty list)
-1. Gate `useOrgKpiOwnershipMap` and `useOrgKpiDataOwnerNames` on `isReady && !!user` and include `user?.id` in their query keys (mirror ADR-052). Add the keys to AuthContext's first-ready invalidation set.
-2. Centralise key normalisation in `src/lib/orgKpiKey.ts` (`normalizeKpiKey(catId, kra, kpi)` → lowercase + `\r` strip + `\s+`-collapse + trim). Replace the 4 ad-hoc copies in `useOrgLevelKpis.ts`, `useOrgKpiDataOwner.ts`, `OrgKpiDataEntry.tsx`, and the propagation RPC's audit emit. Unit tests for whitespace/CR/case parity.
-3. In `OrgKpiDataEntry.tsx`, add a banner when `role==='admin' && !isAdminMode`: "You are viewing as <natural role>. Switch to Admin view to see all KPIs you can edit."
+## Root Cause
 
-#### B. Layer B — UI surfacing for the propagation policy
-4. `OrgKpiEntryCard.tsx`: new "Value mismatch" badge when OKV is `propagated/approved` but at least one child `review_submissions.self_score` differs from `OKV.derived_self_score`. Roll counts up into the page header chip "Mismatched Values: N".
-5. `PropagationPreviewDialog.tsx`: show per-employee diff (`Old → New`) and warn rows that will be skipped because the child is locked at `manager_check`+.
+`getKpiStatus()` in `src/pages/admin/OrgKpiDataEntry.tsx` (lines 207-275) treats `OKV.status ∉ {propagated, approved}` as "Entered" without consulting child KPI state. `kraSetEmpIdsByKey` is consulted **only** when OKV.status is already `propagated/approved` (the "stuck" branch). The "everything advanced past kra_set already" case falls through to "Entered".
 
-#### C. Layer C — One-shot data cleanup (May 2026 cutoff per Migration Governance)
-6. Migration `<ts>_normalize_org_kpi_owner_keys.sql`:
-   - For each `org_kpi_data_owners` row, write back `kra_name`/`kpi_name` after `regexp_replace(...,'\s+',' ','g')` + `replace(...,E'\r','')` + `trim`. Audit each change to `kpi_audit_logs` action `OWNER_KEY_NORMALIZED`.
-   - Re-run `propagate_org_kpi_value(..., 'force_pre_terminal')` for the ~14 mismatched April rows in Vivek's scope and any equivalent rows surfaced for other owners by query #4 above. Bounded ≤ 50 rows total.
-   - Soft-delete the 7 phantom May "entered" OKV rows for *Timely execution of new HR interventions* with `achieved_value IS NULL`.
+This stale-OKV state happens whenever:
+- The KPI was propagated under an earlier flow that didn't flip `org_kpi_values.status`
+- The OKV row was edited (saved as `draft`) after propagation completed
+- A `sent_back` cycle reverted OKV to a non-propagated status while children kept moving
 
-#### D. Layer D — Tests, docs, memory
-7. New `src/test/orgKpiPropagationOverwrite.test.ts` (kra_set / self_review-no-action / manager_check-skip / terminal-skip / force overwrite / audit row).
-8. New `src/test/orgKpiKeyNormalization.test.ts` covering whitespace/CR parity between owner map and KPI list.
-9. ADR-053 (Tiered overwrite policy) + ADR-054 (Owner-key normalisation contract).
-10. POLICY §88.2 update; POLICY §96 expanded to list the three newly-gated query keys.
-11. CHANGELOG_2026 W2 row.
-12. Memory: update `mem://architecture/auth-readiness-query-gate` (add owner-map keys) and create `mem://features/admin/org-kpi-key-normalization`.
+## Fix (UI-only, no schema change)
 
-### Part 4 — Files
-- New: `src/lib/orgKpiKey.ts`, `src/lib/orgKpiKey.test.ts`, `src/test/orgKpiPropagationOverwrite.test.ts`, `src/test/orgKpiKeyNormalization.test.ts`, `supabase/migrations/<ts>_normalize_org_kpi_owner_keys.sql`, `docs/adr/ADR-053.md`, `docs/adr/ADR-054.md`, `mem://features/admin/org-kpi-key-normalization`.
-- Edit: `src/contexts/AuthContext.tsx`, `src/hooks/useOrgKpiDataOwner.ts`, `src/hooks/useOrgLevelKpis.ts`, `src/pages/admin/OrgKpiDataEntry.tsx`, `src/components/admin/OrgKpiEntryCard.tsx`, `src/components/admin/PropagationPreviewDialog.tsx`, `POLICY.md`, `DOCUMENTATION.md`, `CHANGELOG_2026.md`, `mem://architecture/auth-readiness-query-gate`, `mem://index.md`.
+Make the card status **fact-based** by combining OKV state with real child-KPI advancement:
 
-Approve to implement A→B→C→D in that order.
+1. In `useOrgLevelKpisWithEmployees` (already gives us `kraSetEmpIdsByKey`), additionally return:
+   - `mappedEmpIdsByKey` — set of all employee_ids mapped to each org KPI definition (already computed as `countMap`, just expose it)
+
+   `kraSetEmpIds` ⊂ `mappedEmpIds`. So `mappedEmpIds.size - kraSetEmpIds.size = #children already advanced`.
+
+2. Rewrite `getKpiStatus` decision tree (employee scope shown; mirror for department/org):
+
+   ```
+   hasOkv?  →  no  → 'pending'
+            →  yes →
+              allMappedAdvancedPastKraSet =
+                kraSetEmpIds.size === 0 && mappedEmpIds.size > 0
+
+              if okv.status ∈ {propagated, approved}:
+                stuck if any kra_set child remains  → existing logic
+              else (okv.status is draft / sent_back / …):
+                if allMappedAdvancedPastKraSet:
+                  // Children already moved on. Nothing to propagate. Treat as Propagated.
+                  return 'propagated'   // optionally a new 'locked' chip
+                else:
+                  return 'entered'      // genuine pending re-push
+   ```
+
+3. Tooltip on the chip when this fallback fires: "OKV row is `<status>` but all mapped employees have already advanced past data-owner stage — nothing left to propagate."
+
+4. Optional, low-risk follow-up (separate, off by default flag): a one-shot reconciler in Data Repair that flips `org_kpi_values.status` to `propagated` for rows where every mapped child is past `kra_set`. Not required to fix the display; included only so future loads are consistent at the source. Audit log: `ORG_KPI_STATUS_RECONCILED`.
+
+## Files to touch
+
+- `src/hooks/useOrgLevelKpis.ts` — also return `mappedEmpIdsByKey` (already computed in `countMap`).
+- `src/pages/admin/OrgKpiDataEntry.tsx` — extend `getKpiStatus`; add tooltip on chip; thread the new map through the existing memo deps and the per-card status block around line 1087.
+- `src/test/orgKpiTileStatus.test.ts` (new) — cases: (a) OKV draft + all children advanced → propagated, (b) OKV draft + some children still kra_set → entered, (c) OKV propagated + kra_set child → stuck (regression), (d) OKV propagated + no kra_set → propagated (regression).
+- `mem/features/admin/org-kpi-management-suite` — append clause (16): "Tile status MUST be derived from OKV.status combined with real child kpis.status; OKV.status alone is insufficient."
+- `docs/adr/ADR-055.md` — "Fact-based Org KPI tile status".
+- `CHANGELOG_2026.md` — entry.
+
+## Risk & Impact Report
+
+- **Data Impact:** none. Read-only display change. Optional reconciler is opt-in and audit-logged.
+- **Workflow Impact:** none. Propagate button continues to call the same RPC; preview output unchanged.
+- **UI/UX Consistency:** chip semantics get sharper — KPIs that were misleadingly "Entered" will now correctly show "Propagated" with a tooltip explaining why.
+- **Regression Risk:** low. The new branch is only entered when `OKV.status ∉ {propagated, approved}` AND `kraSetEmpIds.size === 0 && mappedEmpIds.size > 0`. All existing branches are preserved verbatim.
+- **Mitigation:** unit tests above; manual QA on (a) Budget saving (the reported case), (b) any KPI with `sent_back` OKV but partial advancement (must still show Entered).
+
+## Out of scope (intentionally)
+
+- Changing `propagate_org_kpi_value` semantics — already correct.
+- Editing `review_submissions` snapshots — POLICY §88 immutability.
+- Backfilling historical OKV.status in bulk — covered by optional reconciler only if you ask for it.
