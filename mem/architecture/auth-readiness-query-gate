@@ -11,6 +11,6 @@ How to apply:
 1. `const { isReady, user } = useAuth();`
 2. `enabled: isReady && !!user && <other gates>`
 3. Include `user?.id` in the query key so cache is per-user.
-4. AuthContext invalidates `org-level-kpis*`, `org-kpi-values`, `org-kpi-data-owners*`, `kpis*`, `my-kpis` on the not-ready → ready transition to evict any caches that raced (defence-in-depth).
+4. AuthContext invalidates `org-level-kpis*`, `org-kpi-values`, `org-kpi-data-owners*`, `org-kpi-data-owner-names`, `org-kpi-owners`, `org-kpi-owner-check`, `kpis*`, `my-kpis` on the not-ready → ready transition to evict any caches that raced (defence-in-depth).
 
 Reference: ADR-052, POLICY §96. Triggered by Chandan Pandit (Org KPI Data Entry blank-until-refresh bug, May 2026).

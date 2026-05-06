@@ -36,19 +36,14 @@ import { differenceInDays, parse } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { GovernanceLockBanner } from '@/components/review/GovernanceLockBanner';
+import { normalizeText, normalizeKpiKey } from '@/lib/orgKpiKey';
 
 /**
- * Normalize a string for KPI key matching:
- * lowercase, collapse whitespace, trim.
+ * Local aliases that delegate to the canonical helpers in src/lib/orgKpiKey.ts.
+ * Keeping the short names avoids touching ~50+ call sites in this file.
  */
-function nk(s: string): string {
-  return s.toLowerCase().replace(/\s+/g, ' ').trim();
-}
-
-/** Build a normalized key for KPI lookups */
-function kpiKey(categoryId: string, kraName: string, kpiName: string): string {
-  return `${categoryId}||${nk(kraName)}||${nk(kpiName)}`;
-}
+const nk = normalizeText;
+const kpiKey = normalizeKpiKey;
 
 // Helper to get previous period
 function getPreviousPeriod(period: string, year: number): { period: string; year: number } {
@@ -59,7 +54,7 @@ function getPreviousPeriod(period: string, year: number): { period: string; year
 }
 
 export default function OrgKpiDataEntry() {
-  const { profile, role } = useAuth();
+  const { profile, role, isAdminMode, naturalRole, toggleAdminMode } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
@@ -915,7 +910,14 @@ export default function OrgKpiDataEntry() {
     });
 
     try {
-      const result = await previewPropagation.mutateAsync({ kpiIds: candidateIds });
+      const newAchieved = values.isNa ? null : (values.achievedValue ?? null);
+      const newSelfScore = values.isNa ? null : ((values as any).selfScore ?? null);
+      const result = await previewPropagation.mutateAsync({
+        kpiIds: candidateIds,
+        newAchieved: typeof newAchieved === 'number' ? newAchieved : null,
+        newSelfScore: typeof newSelfScore === 'number' ? newSelfScore : null,
+        overwritePolicy: 'pre_review_only',
+      });
       setPreviewState((s) => ({ ...s, loading: false, result }));
     } catch (err: any) {
       setPreviewState({ open: false, loading: false, result: null, pendingExec: null });
@@ -1178,6 +1180,30 @@ export default function OrgKpiDataEntry() {
       {/* Governance Lock Banner */}
       {!governancePerms.isLoading && governanceLocked && (
         <GovernanceLockBanner permissions={governancePerms} viewLevel="employee" />
+      )}
+
+      {/* Masked-admin banner: an admin currently viewing as their natural role
+          will only see KPIs they personally own. Common cause of the
+          "No org-level KPIs found" report. */}
+      {role === 'admin' && !isAdminMode && (
+        <Card className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/30">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-start gap-3">
+              <Info className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-foreground">
+                  Viewing as {naturalRole === 'manager' ? 'Manager' : 'Employee'}
+                </p>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Only KPIs assigned to you as a Data Owner are shown. Switch to Admin view to see and edit all org-level KPIs.
+                </p>
+              </div>
+              <Button size="sm" variant="outline" onClick={toggleAdminMode}>
+                Switch to Admin view
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* No KPIs warning */}

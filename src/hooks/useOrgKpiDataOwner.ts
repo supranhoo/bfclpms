@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { normalizeKpiKey, normalizeText } from '@/lib/orgKpiKey';
 
 /**
  * Check if current user is a data owner for any org-level KPI
@@ -79,7 +80,7 @@ export function useOrgKpiDataOwners() {
  * Check if current user can edit a specific org-level KPI
  */
 export function useIsOrgKpiDataOwner(categoryId: string, kraName: string, kpiName: string) {
-  const { user, effectiveRole } = useAuth();
+  const { user, effectiveRole, isReady } = useAuth();
   const cleanKra = (kraName || '').replace(/\r/g, '');
   const cleanKpi = (kpiName || '').replace(/\r/g, '');
 
@@ -107,7 +108,7 @@ export function useIsOrgKpiDataOwner(categoryId: string, kraName: string, kpiNam
 
       return { canEdit: !!data, isOwner: !!data, isAdmin: false };
     },
-    enabled: !!categoryId && !!kraName && !!kpiName,
+    enabled: isReady && !!user && !!categoryId && !!kraName && !!kpiName,
   });
 }
 
@@ -115,10 +116,11 @@ export function useIsOrgKpiDataOwner(categoryId: string, kraName: string, kpiNam
  * Get owners for a specific KPI
  */
 export function useOrgKpiOwners(categoryId: string, kraName: string, kpiName: string) {
+  const { isReady, user } = useAuth();
   const cleanKra = (kraName || '').replace(/\r/g, '');
   const cleanKpi = (kpiName || '').replace(/\r/g, '');
   return useQuery({
-    queryKey: ['org-kpi-owners', categoryId, cleanKra, cleanKpi],
+    queryKey: ['org-kpi-owners', categoryId, cleanKra, cleanKpi, user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('org_kpi_data_owners')
@@ -133,7 +135,7 @@ export function useOrgKpiOwners(categoryId: string, kraName: string, kpiName: st
       if (error) throw error;
       return data as OrgKpiDataOwner[];
     },
-    enabled: !!categoryId && !!kraName && !!kpiName,
+    enabled: isReady && !!user && !!categoryId && !!kraName && !!kpiName,
   });
 }
 
@@ -149,8 +151,7 @@ export function useOrgKpiOwnershipMap() {
   
   if (owners) {
     owners.forEach(owner => {
-      const nk = (s: string) => s.replace(/\r/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
-      const key = `${owner.category_id}||${nk(owner.kra_name)}||${nk(owner.kpi_name)}`;
+      const key = normalizeKpiKey(owner.category_id, owner.kra_name, owner.kpi_name);
       const existing = ownershipMap.get(key) || { owners: [], canEdit: effectiveRole === 'admin' };
       existing.owners.push(owner);
       if (owner.owner_id === user?.id) {
@@ -251,8 +252,9 @@ export function useRemoveOrgKpiOwner() {
  * Used across scorecards to show "Data Owner: X, Y" badges.
  */
 export function useOrgKpiDataOwnerNames() {
+  const { isReady, user } = useAuth();
   return useQuery({
-    queryKey: ['org-kpi-data-owner-names'],
+    queryKey: ['org-kpi-data-owner-names', user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('org_kpi_data_owners')
@@ -266,9 +268,8 @@ export function useOrgKpiDataOwnerNames() {
       if (error) throw error;
 
       const map = new Map<string, string[]>();
-      const nk = (s: string) => s.replace(/\r/g, '').toLowerCase();
       for (const row of data || []) {
-        const key = `${row.category_id}||${nk(row.kra_name)}||${nk(row.kpi_name)}`;
+        const key = normalizeKpiKey(row.category_id, row.kra_name, row.kpi_name);
         const ownerName = (row.owner as any)?.full_name || 'Unknown';
         const existing = map.get(key) || [];
         if (!existing.includes(ownerName)) {
@@ -278,6 +279,7 @@ export function useOrgKpiDataOwnerNames() {
       }
       return map;
     },
+    enabled: isReady && !!user,
     staleTime: 5 * 60 * 1000,
   });
 }
@@ -290,7 +292,6 @@ export function getOwnerNamesForKpi(
   kpi: { category_id: string; kra_name: string; kpi_name: string }
 ): string[] {
   if (!map) return [];
-  const nk = (s: string) => s.replace(/\r/g, '').toLowerCase();
-  const key = `${kpi.category_id}||${nk(kpi.kra_name)}||${nk(kpi.kpi_name)}`;
+  const key = normalizeKpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
   return map.get(key) || [];
 }

@@ -3482,6 +3482,48 @@ export type Database = {
           },
         ]
       }
+      org_kpi_owner_key_backup: {
+        Row: {
+          action: string
+          category_id: string
+          created_at: string
+          id: string
+          new_kpi_name: string
+          new_kra_name: string
+          old_kpi_name: string
+          old_kra_name: string
+          owner_id: string
+          owner_row_id: string
+          reason: string
+        }
+        Insert: {
+          action: string
+          category_id: string
+          created_at?: string
+          id?: string
+          new_kpi_name: string
+          new_kra_name: string
+          old_kpi_name: string
+          old_kra_name: string
+          owner_id: string
+          owner_row_id: string
+          reason?: string
+        }
+        Update: {
+          action?: string
+          category_id?: string
+          created_at?: string
+          id?: string
+          new_kpi_name?: string
+          new_kra_name?: string
+          old_kpi_name?: string
+          old_kra_name?: string
+          owner_id?: string
+          owner_row_id?: string
+          reason?: string
+        }
+        Relationships: []
+      }
       org_kpi_value_history: {
         Row: {
           category_id: string
@@ -8228,10 +8270,17 @@ export type Database = {
       month_name_to_index: { Args: { p_month: string }; Returns: number }
       normalize_kpi_text: { Args: { p: string }; Returns: string }
       normalize_kpi_text_value: { Args: { txt: string }; Returns: string }
-      preview_org_kpi_propagation: {
-        Args: { p_kpi_ids: string[] }
-        Returns: Json
-      }
+      preview_org_kpi_propagation:
+        | { Args: { p_kpi_ids: string[] }; Returns: Json }
+        | {
+            Args: {
+              p_kpi_ids: string[]
+              p_new_self_score?: number
+              p_new_value?: number
+              p_overwrite_policy?: string
+            }
+            Returns: Json
+          }
       preview_split_definition: {
         Args: { p_move_alias_ids: string[]; p_source_id: string }
         Returns: Json
