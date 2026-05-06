@@ -9,7 +9,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { CheckCircle2, XCircle, Loader2, Lock, AlertTriangle } from 'lucide-react';
 import { PropagationPreviewResult } from '@/hooks/usePreviewOrgKpiPropagation';
 import { summarisePropagationPreview } from '@/lib/orgKpiStatus';
@@ -106,9 +105,9 @@ export function PropagationPreviewDialog({
                   )}
 
                   {preview && preview.breakdown.length > 0 && (
-                    <ScrollArea className="max-h-64 rounded-md border">
+                    <div className="max-h-72 overflow-y-auto rounded-md border">
                       <table className="w-full text-xs">
-                        <thead className="sticky top-0 bg-muted/60">
+                        <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
                           <tr className="text-left">
                             <th className="px-2 py-1.5 font-medium">Employee</th>
                             <th className="px-2 py-1.5 font-medium">Current status</th>
@@ -157,7 +156,7 @@ export function PropagationPreviewDialog({
                           ))}
                         </tbody>
                       </table>
-                    </ScrollArea>
+                    </div>
                   )}
                 </>
               )}
