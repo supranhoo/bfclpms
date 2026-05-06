@@ -59,31 +59,21 @@ export const WEIGHTAGE_DEFAULT_PAGE_SIZE = 25;
 /**
  * Returns the distinct set of employee IDs that have at least one KPI mapped
  * in either review_year of the given fiscal cycle (and optional category).
- * Used to restrict the Weightage Dashboard to employees who actually have KRAs.
+ * Backed by the `rpc_weightage_eligible_employees` Postgres function — one
+ * round trip instead of paginating the full `kpis` table client-side.
  */
 async function fetchEmployeesWithKpis(
   fiscalStartYear: number,
   categoryId?: string,
 ): Promise<Set<string>> {
+  const { data, error } = await supabase.rpc('rpc_weightage_eligible_employees', {
+    p_fiscal_start_year: fiscalStartYear,
+    p_category_id: categoryId ?? null,
+  });
+  if (error) throw error;
   const ids = new Set<string>();
-  const PAGE = 1000;
-  for (const year of [fiscalStartYear, fiscalStartYear + 1]) {
-    let pg = 0;
-    while (pg < 200) {
-      let q = supabase
-        .from('kpis')
-        .select('employee_id')
-        .eq('review_year', year)
-        .not('employee_id', 'is', null)
-        .range(pg * PAGE, (pg + 1) * PAGE - 1);
-      if (categoryId) q = q.eq('category_id', categoryId);
-      const { data, error } = await q;
-      if (error) throw error;
-      const rows = data || [];
-      for (const r of rows) if (r.employee_id) ids.add(r.employee_id as string);
-      if (rows.length < PAGE) break;
-      pg++;
-    }
+  for (const row of (data || []) as Array<{ employee_id: string }>) {
+    if (row?.employee_id) ids.add(row.employee_id);
   }
   return ids;
 }
