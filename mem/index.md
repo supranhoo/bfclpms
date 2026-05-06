@@ -55,3 +55,5 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Changelog Protocol](mem://preferences/changelog-protocol) — Append shipped changes to CHANGELOG_2026.md current-week row in same step as DOCUMENTATION.md Version History
 
 - [Auth-Readiness Query Gate](mem://architecture/auth-readiness-query-gate) — Gate RLS-dependent hooks on isReady to prevent empty-cache cold-load race
+
+- [Org KPI Key Normalization](mem://features/admin/org-kpi-key-normalization) — Canonical owner/KPI key helper + tiered propagation overwrite policy
