@@ -1,43 +1,115 @@
-# Fix "type workflow_status does not exist" on Propagate (ADR-059)
+# RCA & Fix Plan — Org KPI "Missing employees" + FK save error
 
-## RCA (5-Why)
-1. **Symptom** — Ankan clicks **Propagate** on the IT Awareness KPI and gets the toast `Failed to propagate values — type "workflow_status" does not exist`.
-2. **Why does the toast appear?** — `propagate_org_kpi_value(jsonb, boolean, text, text)` raises a Postgres error when executing `UPDATE kpis SET status = v_target_status::workflow_status`.
-3. **Why does that cast fail?** — There is no enum named `workflow_status` in the database. The actual enum on `public.kpis.status` is `public.review_status` (verified via `information_schema.columns`: `udt_name = review_status`).
-4. **Why was the wrong type used?** — Migration `20260506065308_..._policy_aware_propagation.sql` (ADR-054 follow-up) was authored against the wrong enum name; the cast was never executed in CI because the function only fires when an admin/data-owner clicks Propagate on a `kra_set`/`self_review` row.
-5. **Root cause** — Naming drift between the documented "workflow status" concept and the canonical enum `review_status`. No regression test pins the propagate RPC's enum cast, so the typo shipped.
+## What we observed (screenshots)
 
-## Fix
-Replace the bad cast with the real enum (`public.review_status`) inside `public.propagate_org_kpi_value(jsonb, boolean, text, text)`. No other call sites use `workflow_status`.
+1. **Dialog says** "50 will advance" / "Propagate to 50 employees", but the underlying **scoped table only shows 25 employees** ("25/25 entered"). The two surfaces disagree.
+2. Saving fires:
+   `insert or update on table "org_kpi_values" violates foreign key constraint "org_kpi_values_employee_id_fkey"`
+   (FK → `profiles(id)`).
+
+## Why-why analysis
+
+### Issue 1 — Only 25 of 50 employees rendered
+
+- `OrgKpiDataEntry` builds `scopedRows` for the employee scope as:
+  ```ts
+  filteredEmps = allProfiles.filter(emp => mappedEmpIds.has(emp.id))
+  ```
+  - `mappedEmpIds` comes from the `kpis` table fetch in `useOrgLevelKpisWithEmployees` (RLS = "kpi owner / admin"), which returns **all 50** mapped employees.
+  - `allProfiles` comes from `useProfiles()`, which fetches `profiles` with `is_active = true` and is then trimmed by **profiles RLS**. For a data-owner like Ankan, the only matching policy is `Authenticated users can view org kpi data owner profiles` (visibility limited to *other data-owner* profiles) plus `is_data_owner_for_employee` (which checks for KPIs they own). Result: Ankan can see fewer profiles than the kpi rows mapped to him.
+  - Silent intersection → 50 mapped IDs ∩ 25 visible profiles = 25 rendered rows. The other 25 are dropped with **no warning**.
+
+- The propagation preview RPC (`preview_org_kpi_propagation`) runs `SECURITY DEFINER`, so it sees all 50 kpi rows ⇒ "50 will advance".
+
+**Root cause:** RLS on `profiles` is not aligned with the data-owner contract. A user authorised to enter data for a KPI cannot read every employee mapped to that KPI.
+
+### Issue 2 — `org_kpi_values_employee_id_fkey` violated
+
+- `handleCardSave` builds `toSave` rows with `employee_id: sv.scopeId` for every entry in `scopedValuesRef.current`.
+- `scopedValuesRef` is hydrated from `data.scopedRows` (the 25 visible rows). Since each `scopeId` came from `allProfiles`, it *should* satisfy the FK.
+- But on the failing tile, `scopedValues` contains an `employee_id` that no longer exists in `profiles`. Two ways this happens today:
+  1. **Stale state across KPI navigation** — `scopedValues` is keyed by `kpiIdentityRef`; if a profile was deleted between selectors but the in-memory `scopedRows` weren't refetched, the stale UUID is sent.
+  2. **Default to all profiles** — when `mappedEmpIds` is `undefined` (no mapping cached yet), the code falls through to `filteredEmps = allProfiles` (line 441). For org-level scope this can include profiles outside the KPI mapping; the `kpis` row may not exist for that employee, but more importantly there's no validation that `employee_id` still resolves in `profiles` at submit time.
+
+**Root cause:** No guard rail. We trust an in-memory `scopeId` that may be stale or unmapped, then send it straight to a FK-constrained upsert.
+
+## Risk & impact report
+
+- **Data:** No schema break. We tighten an RLS policy and add a pre-save guard. Historical OKV rows untouched.
+- **Workflow:** Data owners gain read access to *only* the employee profiles for KPIs they own. They were already authorised to enter values for these employees.
+- **UI/UX:** Tile counts will finally match the dialog. Save errors become user-friendly toasts instead of raw FK strings.
+- **Regression:** Low. New RLS policy is additive (`OR is_org_kpi_data_owner_for_profile(...)`). Save guard fails closed by skipping the offending row with a toast, not by aborting the whole batch.
+- **Mitigation:** New unit tests for the helper + RLS guard test for the new policy.
+
+## Fix plan
+
+### 1. Database (migration)
+
+Add a SECURITY DEFINER helper and a profiles RLS policy so any data owner of an org KPI can read every employee mapped to that KPI.
 
 ```sql
--- inside CREATE OR REPLACE FUNCTION public.propagate_org_kpi_value(...)
-UPDATE public.kpis
-   SET status = v_target_status::public.review_status
- WHERE id = v_kpi_id;
+CREATE OR REPLACE FUNCTION public.is_org_kpi_data_owner_for_profile(p_profile_id uuid)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM kpis k
+    JOIN org_kpi_data_owners o
+      ON o.category_id = k.category_id
+     AND o.kra_name    = k.kra_name
+     AND o.kpi_name    = k.kpi_name
+    WHERE k.employee_id = p_profile_id
+      AND k.is_org_level = true
+      AND o.owner_id    = auth.uid()
+  );
+$$;
+
+CREATE POLICY "Org KPI data owners can view their mapped employee profiles"
+ON public.profiles FOR SELECT TO authenticated
+USING (public.is_org_kpi_data_owner_for_profile(id));
 ```
 
-Everything else in the function body (policy gating, audit log writes, `review_submissions` upsert) stays exactly as it is — we are only correcting the enum name.
+(Existing `is_data_owner_for_employee` keeps working — this is a sibling policy that operates from the auth user's perspective and lets `useProfiles()` page through them too.)
 
-## Regression guard
-Add `src/test/orgKpiPropagateEnumGuard.test.ts` that greps the live migration set and asserts:
-- 0 occurrences of the literal `workflow_status` in `supabase/migrations/**` (the type does not exist).
-- the propagate migration body contains the canonical `::review_status` cast.
+### 2. Frontend save guard (`OrgKpiDataEntry.tsx`)
 
-This is a cheap source-level guard that will fail fast if the wrong enum name ever returns.
+Before calling `bulkUpsert`, drop any `toSave` row whose `employee_id` is not present in the live `allProfiles` set, accumulate them into a single toast:
 
-## Deliverables
-- **New migration** `supabase/migrations/<ts>_fix_propagate_org_kpi_value_enum_cast.sql` — `CREATE OR REPLACE` of the 4-arg `propagate_org_kpi_value` with the corrected `::review_status` cast (function signature unchanged, so PostgREST contract and ADR-058's single-overload guarantee are preserved).
-- **New test** `src/test/orgKpiPropagateEnumGuard.test.ts` — source-level guard described above.
-- **ADR-059** `docs/adr/ADR-059.md` documenting the typo, why `review_status` is the canonical enum, and the regression guard.
-- **CHANGELOG_2026.md** — append an entry under today's date.
-- **Memory update** — append a one-liner to `mem/features/admin/org-kpi-management-suite` noting that the propagate RPC must cast to `public.review_status`.
+```ts
+const knownIds = new Set((allProfiles ?? []).map(p => p.id));
+const orphan = toSave.filter(r => r.employee_id && !knownIds.has(r.employee_id));
+if (orphan.length) {
+  toast({
+    title: `${orphan.length} employee row(s) skipped`,
+    description: 'Profile no longer exists or you lost access. Refresh and retry.',
+    variant: 'destructive',
+  });
+}
+const safeToSave = toSave.filter(r => !r.employee_id || knownIds.has(r.employee_id));
+if (safeToSave.length > 0) await bulkUpsert.mutateAsync(safeToSave);
+```
 
-## Risk & Impact
-- **Data impact:** none — function body and write semantics are identical; we only correct a cast that currently aborts the transaction before any row is written.
-- **Workflow impact:** Propagate dialog starts working again for data owners and admins. No permission or RLS change.
-- **UI/UX:** unchanged.
-- **Regression risk:** very low — single-line cast change inside an already-isolated SECURITY DEFINER function. Guard test prevents the typo from coming back.
-- **Mitigation:** keep the 4-arg signature byte-identical to ADR-058's contract so `usePreviewOrgKpiPropagation` and the propagate hook keep working without code edits.
+### 3. Visibility-mismatch banner (`OrgKpiEntryCard.tsx`)
 
-Approve to ship the migration, ADR-059, the guard test, and the changelog/memory updates.
+When `scopedRows.length < employeeCount`, render an info banner above the table:
+
+> Showing N of M mapped employees. The remaining M − N profiles are not visible to your role; values for them must be propagated rather than entered individually.
+
+Prevents the silent dialog/table mismatch from recurring even if RLS is later restricted.
+
+### 4. Tests + docs
+
+- `src/test/orgKpiVisibilityParity.test.ts` — pure helper that asserts dialog `expectedCount` ≤ `scopedRows.length` OR a banner is rendered.
+- `src/test/orgKpiSaveOrphanGuard.test.ts` — pure predicate `splitSavePayload(toSave, knownIds)` returns `{safe, orphans}`.
+- `docs/adr/ADR-060.md` — document RLS extension + save guard.
+- Append entry to `CHANGELOG_2026.md` and update `mem/features/admin/org-kpi-management-suite`.
+
+## Out of scope (explicitly)
+
+- We are **not** widening profile access for non-data-owners.
+- We are **not** changing `propagate_org_kpi_value` or any RPC — they already operate correctly under SECURITY DEFINER.
+- No UI redesign of the propagation dialog beyond the new banner.
+
+## Approve to proceed
+
+Once approved I will: run the migration → patch `OrgKpiDataEntry.tsx` and `OrgKpiEntryCard.tsx` → add the two unit tests → write ADR-060 → update changelog and memory.

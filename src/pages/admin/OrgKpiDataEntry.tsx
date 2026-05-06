@@ -582,13 +582,33 @@ export default function OrgKpiDataEntry() {
       });
     }
 
-    if (toSave.length > 0) {
-      await bulkUpsert.mutateAsync(toSave);
+    // ADR-060 — Guard against FK violation on org_kpi_values.employee_id.
+    // Drop rows whose employee_id is no longer present in the visible profile
+    // set (deleted user, RLS gap, stale in-memory state) and surface a single
+    // toast instead of letting Postgres raise an opaque FK error.
+    const knownProfileIds = new Set((allProfiles ?? []).map((p) => p.id));
+    const orphanRows = toSave.filter(
+      (r) => r.employee_id && !knownProfileIds.has(r.employee_id),
+    );
+    const safeToSave = toSave.filter(
+      (r) => !r.employee_id || knownProfileIds.has(r.employee_id),
+    );
+    if (orphanRows.length > 0) {
+      toast({
+        title: `${orphanRows.length} employee row(s) skipped`,
+        description:
+          'Profile no longer exists or you lost access. Refresh the page and retry — the others were saved.',
+        variant: 'destructive',
+      });
+    }
+
+    if (safeToSave.length > 0) {
+      await bulkUpsert.mutateAsync(safeToSave);
     }
     if (auditEntries.length > 0) {
       try { await insertAuditLogs.mutateAsync(auditEntries); } catch { /* non-blocking */ }
     }
-  }, [existingValuesMap, selectedPeriod, selectedYear, profile?.id, bulkUpsert, insertAuditLogs]);
+  }, [existingValuesMap, selectedPeriod, selectedYear, profile?.id, bulkUpsert, insertAuditLogs, allProfiles, toast]);
 
   // Save & Propagate handler — internal executor (called after preview confirmation)
   const executeSaveAndPropagate = useCallback(async (

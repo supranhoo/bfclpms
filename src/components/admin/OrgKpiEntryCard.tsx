@@ -540,6 +540,19 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
 
           {/* Scoped entry table for dept/employee */}
           {data.scope !== 'organization' && data.scopeLabel && !isNa && (
+            <>
+            {data.scope === 'employee' && typeof data.employeeCount === 'number' && data.employeeCount > scopedValues.length && (
+              <Alert variant="default" className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/30 py-2 mb-2">
+                <AlertTriangle className="h-4 w-4 text-amber-700 dark:text-amber-400" />
+                <AlertDescription className="text-xs text-amber-800 dark:text-amber-300">
+                  Showing <strong>{scopedValues.length}</strong> of{' '}
+                  <strong>{data.employeeCount}</strong> mapped employees. The remaining{' '}
+                  {data.employeeCount - scopedValues.length} profile(s) are not visible to your role —
+                  values for them must be propagated rather than entered individually. Contact an admin
+                  if you need direct access.
+                </AlertDescription>
+              </Alert>
+            )}
             <OrgKpiScopedEntryTable
               rows={scopedValues}
               onValueChange={handleScopedChange}
@@ -557,6 +570,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               isComplianceKpi={isCompliance}
               submissionDates={submissionDates}
             />
+            </>
           )}
 
           {/* Lock banner */}

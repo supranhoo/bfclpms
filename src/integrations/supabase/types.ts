@@ -8252,6 +8252,10 @@ export type Database = {
         Args: { _profile_id: string }
         Returns: boolean
       }
+      is_org_kpi_data_owner_for_profile: {
+        Args: { p_profile_id: string }
+        Returns: boolean
+      }
       is_period_locked: {
         Args: { _period_name: string; _review_year: number }
         Returns: boolean
