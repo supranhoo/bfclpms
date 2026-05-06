@@ -224,7 +224,10 @@ export default function OrgKpiDataEntry() {
       const val = existingValuesMap.get(key);
       const hasValue = (val?.achieved_value !== null && val?.achieved_value !== undefined) || val?.is_na;
       if (!hasValue) return 'pending';
-      if (!isPropagatedOrApproved(val?.status)) return 'entered';
+      if (!isPropagatedOrApproved(val?.status)) {
+        if (everyChildAdvanced) return 'propagated';
+        return 'entered';
+      }
       // OKV claims propagated — only now does a kra_set child mean stuck.
       return kraSetEmpIds.size > 0 ? 'stuck' : 'propagated';
     }
