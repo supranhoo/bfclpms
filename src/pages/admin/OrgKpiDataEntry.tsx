@@ -212,6 +212,13 @@ export default function OrgKpiDataEntry() {
     const isPropagatedOrApproved = (status: string | null | undefined) =>
       status === 'propagated' || status === 'approved';
 
+    // Fact-based fallback (ADR-055): if every mapped employee has already advanced
+    // past kra_set, there is nothing left to propagate even when org_kpi_values.status
+    // is still draft/sent_back. Treat as 'propagated' to keep the tile honest.
+    const mappedEmpIds = mappedEmployeesMap.get(defKey) || new Set<string>();
+    const everyChildAdvanced =
+      mappedEmpIds.size > 0 && kraSetEmpIds.size === 0;
+
     if (scope === 'organization') {
       const key = `${defKey}||null||null`;
       const val = existingValuesMap.get(key);
@@ -246,7 +253,13 @@ export default function OrgKpiDataEntry() {
     if (matching.length === 0) return 'pending';
 
     const allPropagated = matching.every(([, v]) => isPropagatedOrApproved(v.status));
-    if (!allPropagated) return 'entered';
+    if (!allPropagated) {
+      // Fact-based override: OKV is draft/sent_back but no child is in kra_set
+      // anymore — propagation has effectively already happened (or is impossible
+      // because everyone is reviewer-locked). Show the real state, not the stale flag.
+      if (everyChildAdvanced) return 'propagated';
+      return 'entered';
+    }
 
     // Scope-aware stuck check: only the relevant child kpis rows matter.
     if (scope === 'employee') {
