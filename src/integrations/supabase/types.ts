@@ -8341,6 +8341,20 @@ export type Database = {
         Args: { _action: string; _user_id: string }
         Returns: boolean
       }
+      rpc_distinct_kpi_periods: {
+        Args: never
+        Returns: {
+          review_period: string
+          review_year: number
+        }[]
+      }
+      rpc_open_query_counts: {
+        Args: { p_kpi_ids: string[] }
+        Returns: {
+          kpi_id: string
+          open_count: number
+        }[]
+      }
       rpc_weightage_eligible_employees: {
         Args: { p_category_id?: string; p_fiscal_start_year: number }
         Returns: {

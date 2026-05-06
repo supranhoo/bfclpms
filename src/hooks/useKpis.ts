@@ -1256,32 +1256,43 @@ export function useKpiQueries(kpiIds: string[]) {
 // Lightweight hook: returns a Map<kpi_id, open_query_count> via a single aggregate query
 export function useOpenQueryCounts(kpiIds: string[]) {
   return useQuery({
-    queryKey: ['open-query-counts', kpiIds],
+    queryKey: ['open-query-counts', kpiIds.length, kpiIds[0] ?? null, kpiIds[kpiIds.length - 1] ?? null],
     queryFn: async () => {
       if (kpiIds.length === 0) return new Map<string, number>();
-
-      // Single query with grouping via RPC is not available, so use a filtered select
-      // and aggregate client-side from a minimal payload (only id + kpi_id, head:false)
-      const batchSize = 500; // larger batches since we only need kpi_id
       const countMap = new Map<string, number>();
-
-      for (let i = 0; i < kpiIds.length; i += batchSize) {
-        const batch = kpiIds.slice(i, i + batchSize);
-        const { data, error } = await supabase
-          .from('kpi_queries')
-          .select('kpi_id')
-          .in('kpi_id', batch)
-          .eq('status', 'open')
-          .eq('query_type', 'query');
-
-        if (error) throw error;
-        data?.forEach(row => {
-          countMap.set(row.kpi_id, (countMap.get(row.kpi_id) || 0) + 1);
-        });
+      // Server-side aggregation via rpc_open_query_counts. Chunk huge id sets
+      // to keep RPC payloads sane.
+      const CHUNK = 2000;
+      try {
+        for (let i = 0; i < kpiIds.length; i += CHUNK) {
+          const slice = kpiIds.slice(i, i + CHUNK);
+          const { data, error } = await supabase.rpc('rpc_open_query_counts', { p_kpi_ids: slice });
+          if (error) throw error;
+          for (const row of (data || []) as Array<{ kpi_id: string; open_count: number }>) {
+            countMap.set(row.kpi_id, (countMap.get(row.kpi_id) || 0) + Number(row.open_count || 0));
+          }
+        }
+        return countMap;
+      } catch (err) {
+        console.warn('[useOpenQueryCounts] RPC failed, falling back to client aggregation', err);
+        const batchSize = 500;
+        for (let i = 0; i < kpiIds.length; i += batchSize) {
+          const batch = kpiIds.slice(i, i + batchSize);
+          const { data, error } = await supabase
+            .from('kpi_queries')
+            .select('kpi_id')
+            .in('kpi_id', batch)
+            .eq('status', 'open')
+            .eq('query_type', 'query');
+          if (error) throw error;
+          data?.forEach(row => {
+            countMap.set(row.kpi_id, (countMap.get(row.kpi_id) || 0) + 1);
+          });
+        }
+        return countMap;
       }
-
-      return countMap;
     },
+    staleTime: 60_000,
     enabled: kpiIds.length > 0,
   });
 }
@@ -1290,16 +1301,8 @@ export function useOpenQueryCounts(kpiIds: string[]) {
 export function useDistinctKpiPeriods() {
   return useQuery({
     queryKey: ['distinct-kpi-periods'],
+    staleTime: 10 * 60 * 1000,
     queryFn: async () => {
-      // Fetch only the two columns we need, then dedupe client-side
-      const { data, error } = await supabase
-        .from('kpis')
-        .select('review_period, review_year')
-        .not('review_period', 'is', null)
-        .not('review_year', 'is', null);
-
-      if (error) throw error;
-
       const monthOrder = [
         'January', 'February', 'March', 'April', 'May', 'June',
         'July', 'August', 'September', 'October', 'November', 'December',
@@ -1307,10 +1310,26 @@ export function useDistinctKpiPeriods() {
 
       const periodSet = new Set<string>();
       const yearSet = new Set<number>();
-      data?.forEach(row => {
-        if (row.review_period) periodSet.add(row.review_period);
-        if (row.review_year) yearSet.add(row.review_year);
-      });
+      try {
+        const { data, error } = await supabase.rpc('rpc_distinct_kpi_periods');
+        if (error) throw error;
+        for (const row of (data || []) as Array<{ review_period: string; review_year: number }>) {
+          if (row.review_period) periodSet.add(row.review_period);
+          if (row.review_year != null) yearSet.add(Number(row.review_year));
+        }
+      } catch (err) {
+        console.warn('[useDistinctKpiPeriods] RPC failed, falling back to client scan', err);
+        const { data, error } = await supabase
+          .from('kpis')
+          .select('review_period, review_year')
+          .not('review_period', 'is', null)
+          .not('review_year', 'is', null);
+        if (error) throw error;
+        data?.forEach(row => {
+          if (row.review_period) periodSet.add(row.review_period);
+          if (row.review_year) yearSet.add(row.review_year);
+        });
+      }
 
       const periods = Array.from(periodSet).sort(
         (a, b) => monthOrder.indexOf(a) - monthOrder.indexOf(b),
