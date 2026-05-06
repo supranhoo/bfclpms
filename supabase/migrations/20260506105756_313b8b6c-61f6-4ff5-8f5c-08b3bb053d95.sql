@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS public.preview_org_kpi_propagation(uuid[]);
