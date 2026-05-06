@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2, Lock, AlertTriangle } from 'lucide-react';
 import { PropagationPreviewResult } from '@/hooks/usePreviewOrgKpiPropagation';
 
 interface PropagationPreviewDialogProps {
@@ -24,8 +24,14 @@ interface PropagationPreviewDialogProps {
 const REASON_LABEL: Record<string, string> = {
   eligible: 'Will advance',
   not_in_kra_set: 'Already past initial stage',
+  reviewer_locked: 'Reviewer-locked',
+  self_review_existing: 'Already in self-review',
   kpi_not_found: 'KPI row missing',
 };
+
+function fmt(v: number | null | undefined) {
+  return v === null || v === undefined ? '—' : String(v);
+}
 
 export function PropagationPreviewDialog({
   open,
@@ -38,6 +44,10 @@ export function PropagationPreviewDialog({
   const willSkip = preview?.will_skip ?? 0;
   const total = preview?.total ?? 0;
   const allSkipped = total > 0 && willAdvance === 0;
+  const lockedCount =
+    preview?.breakdown.filter((r) => r.reason === 'reviewer_locked').length ?? 0;
+  const overwriteCount =
+    preview?.breakdown.filter((r) => r.will_advance && r.value_changes && r.current_self_score !== null && r.current_self_score !== undefined).length ?? 0;
 
   return (
     <AlertDialog open={open} onOpenChange={(v) => !v && onCancel()}>
@@ -68,6 +78,18 @@ export function PropagationPreviewDialog({
                         <span>{willSkip} will skip</span>
                       </Badge>
                     )}
+                    {lockedCount > 0 && (
+                      <Badge variant="outline" className="gap-1 border-amber-500 text-amber-700">
+                        <Lock className="h-3 w-3" />
+                        <span>{lockedCount} reviewer-locked</span>
+                      </Badge>
+                    )}
+                    {overwriteCount > 0 && (
+                      <Badge variant="outline" className="gap-1 border-amber-500 text-amber-700">
+                        <AlertTriangle className="h-3 w-3" />
+                        <span>{overwriteCount} will overwrite existing self-review</span>
+                      </Badge>
+                    )}
                   </div>
 
                   {allSkipped && (
@@ -85,6 +107,7 @@ export function PropagationPreviewDialog({
                           <tr className="text-left">
                             <th className="px-2 py-1.5 font-medium">Employee</th>
                             <th className="px-2 py-1.5 font-medium">Current status</th>
+                            <th className="px-2 py-1.5 font-medium">Self-score Old → New</th>
                             <th className="px-2 py-1.5 font-medium">Outcome</th>
                           </tr>
                         </thead>
@@ -106,6 +129,11 @@ export function PropagationPreviewDialog({
                               </td>
                               <td className="px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
                                 {row.current_status}
+                              </td>
+                              <td className="px-2 py-1.5 font-mono text-[11px]">
+                                <span className={row.value_changes ? 'text-amber-700' : 'text-muted-foreground'}>
+                                  {fmt(row.current_self_score)} → {fmt(row.new_self_score)}
+                                </span>
                               </td>
                               <td className="px-2 py-1.5">
                                 {row.will_advance ? (
