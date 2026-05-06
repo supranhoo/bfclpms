@@ -41,10 +41,12 @@ export function useOrgKpiImpact(
   reviewPeriod: string | null,
   reviewYear: number | null,
   simulatedValue?: number | null,
-  enabled = false
+  enabled = false,
+  expectedEmployeeIds?: string[]
 ) {
+  const expectedKey = expectedEmployeeIds ? [...expectedEmployeeIds].sort().join(',') : '';
   return useQuery({
-    queryKey: ['org-kpi-impact', categoryId, kraName, kpiName, reviewPeriod, reviewYear, simulatedValue],
+    queryKey: ['org-kpi-impact', categoryId, kraName, kpiName, reviewPeriod, reviewYear, simulatedValue, expectedKey],
     queryFn: async (): Promise<ImpactSummary> => {
       // Fetch all matching employee KPIs
       const { data: kpis, error: kpisError } = await supabase
@@ -61,7 +63,7 @@ export function useOrgKpiImpact(
           qualitative_options,
           threshold_mode,
           profiles!kpis_employee_id_fkey(
-            id, full_name, employee_code, department_id, designation,
+            id, full_name, employee_code, department_id, designation, is_active,
             departments(id, name)
           )
         `)
@@ -77,8 +79,19 @@ export function useOrgKpiImpact(
         return { totalEmployees: 0, byDepartment: {}, employees: [], increased: 0, decreased: 0, unchanged: 0 };
       }
 
+      // ADR-064 addendum — anchor scope to the canonical mapping passed by the
+      // caller (the same `mappedEmpIdsByKey` that drives the card badge).
+      // Prevents the Impact sheet's count from drifting when RLS hides a
+      // profile or an inactive row sneaks in via the join.
+      const expectedSet = expectedEmployeeIds && expectedEmployeeIds.length > 0
+        ? new Set(expectedEmployeeIds)
+        : null;
+      const scopedKpis = expectedSet
+        ? kpis.filter(k => k.employee_id && expectedSet.has(k.employee_id))
+        : kpis;
+
       // Fetch current submissions for these KPIs
-      const kpiIds = kpis.map(k => k.id);
+      const kpiIds = scopedKpis.map(k => k.id);
       const { data: submissions } = await supabase
         .from('review_submissions')
         .select('kpi_id, achieved_value, self_score, self_rating')
@@ -91,9 +104,11 @@ export function useOrgKpiImpact(
       const byDepartment: Record<string, { count: number; departmentName: string }> = {};
       let increased = 0, decreased = 0, unchanged = 0;
 
-      for (const kpi of kpis) {
+      for (const kpi of scopedKpis) {
         const profile = kpi.profiles as any;
         if (!profile) continue;
+        // Drop inactive employees so the badge and the sheet agree.
+        if (profile.is_active === false) continue;
 
         const deptName = profile.departments?.name || 'Unassigned';
         const deptId = profile.department_id || 'unassigned';
