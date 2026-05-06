@@ -513,7 +513,7 @@ Deno.serve(async (req) => {
       // suppressing per-KPI notification triggers
       const { data: insertedCount, error: insertError } = await supabase
         .rpc('batch_insert_kpis_with_rollover_flag', {
-          kpis_json: JSON.stringify(batch),
+          kpis_json: batch,
         });
 
       if (insertError) {
