@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { CheckCircle2, XCircle, Loader2, Lock, AlertTriangle } from 'lucide-react';
 import { PropagationPreviewResult } from '@/hooks/usePreviewOrgKpiPropagation';
+import { summarisePropagationPreview } from '@/lib/orgKpiStatus';
 
 interface PropagationPreviewDialogProps {
   open: boolean;
@@ -40,14 +41,10 @@ export function PropagationPreviewDialog({
   onConfirm,
   onCancel,
 }: PropagationPreviewDialogProps) {
-  const willAdvance = preview?.will_advance ?? 0;
-  const willSkip = preview?.will_skip ?? 0;
-  const total = preview?.total ?? 0;
+  // Single shared verdict — same predicate the tile chip uses (ADR-056).
+  const verdict = summarisePropagationPreview(preview?.breakdown ?? []);
+  const { total, willAdvance, willSkip, lockedCount, overwriteCount, effectivelyPropagated } = verdict;
   const allSkipped = total > 0 && willAdvance === 0;
-  const lockedCount =
-    preview?.breakdown.filter((r) => r.reason === 'reviewer_locked').length ?? 0;
-  const overwriteCount =
-    preview?.breakdown.filter((r) => r.will_advance && r.value_changes && r.current_self_score !== null && r.current_self_score !== undefined).length ?? 0;
 
   return (
     <AlertDialog open={open} onOpenChange={(v) => !v && onCancel()}>
@@ -97,6 +94,14 @@ export function PropagationPreviewDialog({
                       All matching KPIs are already past the initial stage. Propagating
                       now will <strong>not</strong> advance any employee. The org KPI
                       definition will also <strong>not</strong> be marked as propagated.
+                    </div>
+                  )}
+
+                  {effectivelyPropagated && (
+                    <div className="rounded-md border border-amber-500/40 bg-amber-50 p-3 text-xs text-amber-800">
+                      Tile shows <strong>Propagated</strong> for this reason — every mapped
+                      employee has already advanced past the data-owner stage, so no row can
+                      be advanced from here.
                     </div>
                   )}
 
