@@ -188,6 +188,13 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
       const kraSetEmpIdsByKey: Record<string, string[]> = {};
       kraSetEmpIdsMap.forEach((val, key) => { kraSetEmpIdsByKey[key] = Array.from(val); });
 
+      // All employee_ids mapped to each org KPI definition (whether kra_set or already advanced).
+      // The page combines this with kraSetEmpIdsByKey to derive a fact-based tile status:
+      // if every mapped child has advanced past kra_set, there is nothing left to propagate
+      // even if org_kpi_values.status is still draft/sent_back. (ADR-055)
+      const mappedEmpIdsByKey: Record<string, string[]> = {};
+      countMap.forEach((val, key) => { mappedEmpIdsByKey[key] = Array.from(val); });
+
       return {
         kpis: result,
         unmappedCount,
@@ -196,6 +203,7 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
         employeeKpiIdsMap: employeeKpiIds,
         kraSetKpiRowsByKey,
         kraSetEmpIdsByKey,
+        mappedEmpIdsByKey,
       };
     },
     enabled: isReady && !!user && !!reviewPeriod && !!reviewYear,
