@@ -18,6 +18,14 @@ interface OrgKpiImpactSheetProps {
   reviewPeriod: string;
   reviewYear: number;
   currentAchievedValue?: number | null;
+  /**
+   * Canonical employee ids for this KPI (from the card's `mappedEmpIdsByKey`).
+   * When provided, the Impact sheet:
+   *   - intersects its query with this set, and
+   *   - displays its length as "Total Affected" so the sheet can never
+   *     disagree with the card badge (ADR-064 addendum).
+   */
+  expectedEmployeeIds?: string[];
 }
 
 export function OrgKpiImpactSheet({
@@ -29,14 +37,22 @@ export function OrgKpiImpactSheet({
   reviewPeriod,
   reviewYear,
   currentAchievedValue,
+  expectedEmployeeIds,
 }: OrgKpiImpactSheetProps) {
   const [simulatedValue, setSimulatedValue] = useState<number | null>(currentAchievedValue ?? null);
 
   const { data: impact, isLoading } = useOrgKpiImpact(
     categoryId, kraName, kpiName, reviewPeriod, reviewYear,
     simulatedValue,
-    open
+    open,
+    expectedEmployeeIds,
   );
+
+  const expectedCount = expectedEmployeeIds?.length ?? null;
+  const displayedTotal = expectedCount ?? impact?.totalEmployees ?? 0;
+  const hiddenCount = expectedCount !== null && impact
+    ? Math.max(0, expectedCount - impact.employees.length)
+    : 0;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -78,6 +94,11 @@ export function OrgKpiImpactSheet({
                       <span className="text-sm text-muted-foreground">Total Affected</span>
                     </div>
                     <p className="text-2xl font-bold mt-1">{impact.totalEmployees}</p>
+                    {hiddenCount > 0 && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {hiddenCount} hidden by access policy
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
                 <Card>
@@ -123,7 +144,7 @@ export function OrgKpiImpactSheet({
 
               {/* Employee Table */}
               <div>
-                <h4 className="text-sm font-medium mb-2">Affected Employees ({impact.totalEmployees})</h4>
+                <h4 className="text-sm font-medium mb-2">Affected Employees ({displayedTotal})</h4>
                 <div className="border rounded-md max-h-[400px] overflow-y-auto">
                   <Table>
                     <TableHeader>
