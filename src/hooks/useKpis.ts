@@ -155,16 +155,51 @@ export function useMyKpis() {
 }
 
 // Slim column selection for bulk queries — avoids fetching unused columns
+// NOTE: joins to kra_categories / profiles are intentionally NOT embedded here
+// (PostgREST replans wide joins per page → statement timeouts). Resolve them
+// via separate `.in('id', [...])` lookups after fetching.
 const SLIM_KPI_SELECT = `
   id, employee_id, category_id, kra_name, kpi_name, status, weightage,
   review_period, review_year, frequency, is_org_level, org_level_scope,
   uom, uom_type, criteria, target_value, r5, r4, r3, r2, r1, r0,
   sub_frequency, frequency_cycle_start, source_template_id, threshold_mode,
   source_of_data, qualitative_options, is_issued, ref_code,
-  is_frequency_locked, require_resubmit_reason, day_count_type, created_at, updated_at,
-  kra_categories (id, name, color, weightage),
-  profiles:employee_id (id, full_name, email, employee_code, department_id, reporting_manager_id)
+  is_frequency_locked, require_resubmit_reason, day_count_type, created_at, updated_at
 `;
+
+// Hydrate KPI rows with kra_categories + profiles via separate id-batched lookups.
+// Mirrors the embedded-join shape so existing consumers (`kpi.profiles`,
+// `kpi.kra_categories`) keep working unchanged.
+async function hydrateKpiRelations(kpis: any[]): Promise<any[]> {
+  if (!kpis || kpis.length === 0) return kpis;
+
+  const categoryIds = Array.from(new Set(kpis.map(k => k.category_id).filter(Boolean)));
+  const employeeIds = Array.from(new Set(kpis.map(k => k.employee_id).filter(Boolean)));
+
+  const [catsRes, profsRes] = await Promise.all([
+    categoryIds.length
+      ? supabase.from('kra_categories').select('id, name, color, weightage').in('id', categoryIds)
+      : Promise.resolve({ data: [], error: null } as any),
+    employeeIds.length
+      ? supabase
+          .from('profiles')
+          .select('id, full_name, email, employee_code, department_id, reporting_manager_id')
+          .in('id', employeeIds)
+      : Promise.resolve({ data: [], error: null } as any),
+  ]);
+
+  if (catsRes.error) throw catsRes.error;
+  if (profsRes.error) throw profsRes.error;
+
+  const catMap = new Map((catsRes.data || []).map((c: any) => [c.id, c]));
+  const profMap = new Map((profsRes.data || []).map((p: any) => [p.id, p]));
+
+  return kpis.map(k => ({
+    ...k,
+    kra_categories: catMap.get(k.category_id) || null,
+    profiles: profMap.get(k.employee_id) || null,
+  }));
+}
 
 export function useAllKpis(options?: { enabled?: boolean }) {
   return useQuery({
