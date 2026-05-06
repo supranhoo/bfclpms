@@ -1,0 +1,16 @@
+---
+name: Auth-Readiness Query Gate
+description: RLS-gated hooks must wait for auth bootstrap before querying to avoid empty-cache race
+type: preference
+---
+RLS-gated React Query hooks (anything depending on auth.uid()) MUST gate `enabled` on `isReady && !!user` from `useAuth()`, not just on input params.
+
+Why: cold mounts can fire PostgREST requests before Supabase rehydrates the session from localStorage. Without a token, RLS returns 0 rows and React Query caches the empty result for the staleTime, requiring a manual refresh to recover.
+
+How to apply:
+1. `const { isReady, user } = useAuth();`
+2. `enabled: isReady && !!user && <other gates>`
+3. Include `user?.id` in the query key so cache is per-user.
+4. AuthContext invalidates `org-level-kpis*`, `org-kpi-values`, `org-kpi-data-owners*`, `kpis*`, `my-kpis` on the not-ready → ready transition to evict any caches that raced (defence-in-depth).
+
+Reference: ADR-052, POLICY §96. Triggered by Chandan Pandit (Org KPI Data Entry blank-until-refresh bug, May 2026).
