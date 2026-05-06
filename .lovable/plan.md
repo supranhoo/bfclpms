@@ -1,56 +1,70 @@
-## Two unrelated bugs from the same screenshot
+## Why "50 employees" vs "55 Employees"
 
-### Issue 1 — Ankan: red "Profile no longer exists" toast still appears even though save succeeded (ADR-063)
+The two numbers come from **two different sources** that should — but don't — agree:
 
-**RCA**
-- The DB-side fix (ADR-062, normalized RLS helper) is verified: `is_org_kpi_data_owner_for_profile` now grants Ankan visibility to 76 distinct mapped profiles, and the specific "Completion of Mandated Training Hours" KPI returns 55 active mapped rows for May 2026.
-- The visibility-aware "visible-missed vs hidden-missed" split that we added in the previous turn was added **only to the propagate path** in `executeSaveAndPropagate`. The earlier Save path (`handleCardSave`, lines 585–603) still emits a single destructive toast for *every* `employee_id` not present in the local `allProfiles` set — including the benign case where those profiles are simply outside the data-owner's RLS window (e.g. employees mapped to *other* KPIs picked up by the propagation preview, or a brief cache desync after the policy migration).
-- That stale-by-design destructive toast is exactly what Ankan is seeing now; it is not blocking the save (the visible 27/27 are persisted), but it's misleading and identical in copy to a real corruption case.
+```text
+Header badge:  "50 employees"    ← data.employeeCount
+Section bar:   "55 Employees"    ← scopedRows.length (rows actually rendered)
+                                   = filteredEmps from allProfiles
+```
 
-**Fix**
-1. In `src/pages/admin/OrgKpiDataEntry.tsx::handleCardSave`, mirror the propagate-path split:
-   - `visibleMissed` (employee_id in `allProfiles` ∩ not in profile fetch) → keep the existing destructive toast (real RLS / FK gap).
-   - `hiddenMissed` (employee_id mapped via the org-KPI signature but absent from `allProfiles`) → emit a single neutral/info toast: *"X mapped employee(s) outside your visibility scope were skipped — they will be entered by an Admin or another data owner."* (No `variant: 'destructive'`.)
-2. Detect the "all skipped rows are hidden" case and suppress the destructive toast entirely.
-3. Add `mappedEmpIdsByKey` (already on the orgLevelData hook) to the dependency list so the split can use the authoritative mapping rather than re-deriving from `toSave`.
+### Pipeline
 
-**Regression guard**
-- New unit test `src/test/orgKpiSaveHiddenMissedToast.test.ts`: feeds a save payload with one orphan + one RLS-hidden id and asserts (a) only the visible row hits `bulkUpsert`, (b) the destructive toast fires only when there's a truly visible orphan, (c) the hidden-only case fires the neutral toast.
-- Add row to `mem://features/admin/org-kpi-management-suite` (point 21) and append ADR-063.
+1. `useOrgLevelKpisWithEmployees` reads `kpis` rows for the period and groups distinct `employee_id`s per (category, KRA, KPI) → **`employeeCount` = 50** and `employeeIds` (set of 50).
+2. In `OrgKpiDataEntry.buildCardData` (employee scope):
+   ```ts
+   const mappedEmpIds = mappedEmployeesMap.get(kk2);   // 50 ids
+   const filteredEmps = mappedEmpIds
+     ? allProfiles.filter(emp => mappedEmpIds.has(emp.id))
+     : allProfiles;
+   scopedRows = filteredEmps.map(...)                  // 55 rows
+   ```
+3. `OrgKpiScopedEntryTable` shows `{rows.length} Employees` → **55**.
+4. The header badge keeps `data.employeeCount` → **50**.
 
-### Issue 2 — Vivek (Admin) sees 0 employees on Team Reviews
+### Root cause (most likely)
 
-**Investigation needed before patch (read-only — no code changes yet):**
-1. Add a one-shot diagnostic console log in `EmployeeSelectorGrid` (`useEffect` on mount) that prints: `role`, `isFullAccess`, `viewLevel`, `allProfiles?.length`, `teamMembers?.length`, `skipLevelMembers?.length`, `requiredStage`, `statusFilter`, and the resolved `baseMembers?.length`. This will tell us in one preview reload whether:
-   - the role isn't resolving to `admin` (Admin View toggle vs natural role mismatch — see `mem://features/admin/admin-role-switch`), OR
-   - `useProfiles()` is returning empty for Admin View (RLS regression from the recent profiles policy work), OR
-   - `requiredStage` / `statusFilter` is silently zeroing the list.
-2. Once the log identifies the failing branch, apply the targeted fix:
-   - **If role-switch related:** ensure `useUserRole` returns `admin` while Admin View is ON regardless of natural role mask.
-   - **If `useProfiles` empty under admin RLS:** verify the `Admins can view all profiles` policy still evaluates true; check whether the recent migration churn dropped/replaced it.
-   - **If filter related:** reset `statusFilter` default for `team` viewLevel.
-3. Remove the diagnostic log after the fix lands.
+`mappedEmployeesMap.get(kk2)` is returning **`undefined`** for this KPI definition, so the `filteredEmps` branch falls through to `allProfiles` (2,532 rows) — but that would render thousands, not 55. The 55 number indicates a **second filter is silently being applied to `scopedRows` somewhere**, OR (more likely given the gap) the **map key mismatch is partial**:
 
-**Regression guard (after RCA confirmed):**
-- Targeted unit test in `src/test/teamReviewsAdminVisibility.test.ts` that mocks role=admin + non-empty `allProfiles` and asserts `baseMembers.length > 0` for `viewLevel='team'`.
+- `employeeCount` is computed from the *raw* `kpis` rows for this exact period (50).
+- `mappedEmployeesMap` is built with the **same key** (`normalizeKpiKey(category_id, kra_name, kpi_name)`), so it should also be 50.
+- BUT `kpis` table may contain **duplicate `kpis` rows for the same employee** under slightly different `kra_name`/`kpi_name` whitespace — `countMap` uses a `Set<employee_id>` (dedup → 50), while a different code path that expands employees may not dedupe. Looking at the screenshot, the row list itself spans multiple departments (FAD‑Production, Furnace‑Mech, …) and the table includes employees the badge doesn't count (e.g. the 5 extras are in departments that exist in `employeeIds` of a *sibling* KPI definition that got merged at render time).
 
-### Risk & Impact
+The 5-row gap is therefore one of:
+- **(A) Whitespace/case duplicates in `kpis.kra_name` / `kpi_name`** — the dedupe `uniqueMap` keeps the *first* row, but `countMap` is keyed on the normalized key so it merges. Two near‑identical defs collapse on the badge side but the renderer reads `scopedRows` from the merged-superset → 55 vs 50. (Same family of bug as ADR-054/062.)
+- **(B) Stale React Query cache** for `org-level-kpis-with-employees` (key includes `user.id`) showing an older `employeeCount` while `mappedEmployeesMap` already reflects new mapping additions made via "Add Employees".
+- **(C) Inactive / soft‑deleted profiles** still in `kpis.employee_id` — counted by Set but rendered/excluded inconsistently. (Core memory: "Always filter out is_active: false users.")
 
-| Area | Issue 1 | Issue 2 |
-|------|---------|---------|
-| Data | None (toast copy / classification only) | None until fix scope known |
-| Workflow | Removes false-alarm error for data owners | Restores admin Team Reviews access |
-| RLS | No DB change | Possible RLS audit if `useProfiles` is the culprit |
-| Regression | Low — same predicate already proven in propagate path | Diagnostic phase first, then surgical fix |
+### Plan to confirm + fix
 
-### Files
+1. **Diagnose (read-only DB)**
+   - Run a SQL query against `kpis` for the affected (period, year, category, KRA, KPI) to:
+     - count distinct `employee_id`,
+     - list distinct `(kra_name, kpi_name)` raw strings (look for whitespace/case variants),
+     - join `profiles` and flag `is_active = false`.
+   - Compare against the `employeeIds` array surfaced by the hook (add a one‑shot console log in `buildCardData`).
 
-**Issue 1 (immediate):**
-- `src/pages/admin/OrgKpiDataEntry.tsx` — refactor orphan split in `handleCardSave`
-- `src/test/orgKpiSaveHiddenMissedToast.test.ts` (new)
-- `docs/adr/ADR-063.md` (new)
-- `CHANGELOG_2026.md`, `mem/features/admin/org-kpi-management-suite`
+2. **Fix in code (single source of truth)**
+   - Make `scopedRows` and `employeeCount` come from the **same** `employeeIds` array — drive the badge off `scopedRows.length` (or vice‑versa). Today they come from two derivations of the same map, which is fragile.
+   - In `useOrgLevelKpisWithEmployees`, **filter out `is_active = false`** profiles from the count and the `employeeIds` set in the same step (currently `profiles` query selects only `id, department_id`).
+   - If duplicates exist in `kpis`, normalize keys consistently — already done via `normalizeKpiKey`, but verify there isn't a residual non‑normalized lookup in the renderer.
 
-**Issue 2 (diagnostic first):**
-- `src/components/review/EmployeeSelectorGrid.tsx` — temporary `console.log` block (removed after RCA)
-- Follow-up patch + test once the failing branch is confirmed in the next preview reload.
+3. **Regression guard**
+   - Add a unit test asserting `employeeCount === scopedRows.length` for any built card.
+   - Add a console assertion (dev only) when they diverge.
+
+4. **UI clarification (interim)**
+   - While diagnosing, change the header badge to read `"{scopedRows.length} mapped · {employeeCount} active"` so the user can see *which* number is which instead of two unlabelled counts.
+
+### Files to touch
+- `src/hooks/useOrgLevelKpis.ts` — include `is_active` in profile select; exclude inactive from count + ids.
+- `src/pages/admin/OrgKpiDataEntry.tsx` — derive `employeeCount` from `scopedRows.length` (single source).
+- `src/components/admin/OrgKpiEntryCard.tsx` — dev-only assertion; optional dual-label badge.
+- `src/test/orgKpiEmployeeCountParity.test.ts` — new.
+
+### Risk & impact
+- Low: changes are read-side; no migrations.
+- Affects every Org KPI card's header badge — verify visually after fix.
+- Reduces user confusion; no policy/RLS change.
+
+**Approve to run the diagnostic SQL first, then apply the parity fix.**
