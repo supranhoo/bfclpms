@@ -8246,12 +8246,15 @@ export type Database = {
         }
         Returns: Json
       }
-      propagate_org_kpi_value:
-        | { Args: { p_is_na?: boolean; p_kpi_ratings: Json }; Returns: Json }
-        | {
-            Args: { p_is_na?: boolean; p_kpi_ratings: Json; p_remarks?: string }
-            Returns: Json
-          }
+      propagate_org_kpi_value: {
+        Args: {
+          p_is_na?: boolean
+          p_kpi_ratings: Json
+          p_overwrite_policy?: string
+          p_remarks?: string
+        }
+        Returns: Json
+      }
       reconcile_org_kpi_inheritance: {
         Args: { p_dry_run?: boolean }
         Returns: Json
