@@ -347,62 +347,23 @@ export function useWeightageVarianceSummary(
         return { varianceCount: 0, acknowledgedCount: 0, totalEmployees: 0 };
       }
 
-      // Pull only the columns we need for variance detection.
-      const fetchYear = async (year: number) => {
-        const out: any[] = [];
-        // Chunk employee IDs for IN() to keep URL length sane.
-        const CHUNK = 200;
-        for (let i = 0; i < empIds.length; i += CHUNK) {
-          const slice = empIds.slice(i, i + CHUNK);
-          let q = supabase
-            .from('kpis')
-            .select('employee_id, kra_name, kpi_name, weightage, weightage_variance_acknowledged, review_period, category_id')
-            .eq('review_year', year)
-            .in('employee_id', slice);
-          if (filters?.categoryId) q = q.eq('category_id', filters.categoryId);
-          // Inner page loop (1000 cap)
-          let inner = 0;
-          while (inner < 100) {
-            const { data, error } = await q.range(inner * 1000, (inner + 1) * 1000 - 1);
-            if (error) throw error;
-            const rows = data || [];
-            out.push(...rows);
-            if (rows.length < 1000) break;
-            inner++;
-          }
-        }
-        return out;
+      // Server-side aggregation — replaces the previous fan-out that pulled
+      // every KPI row across both review years just to compute two integers.
+      const { data: summary, error: rpcErr } = await supabase.rpc(
+        'rpc_weightage_variance_summary',
+        {
+          p_fiscal_start_year: fiscalStartYear,
+          p_employee_ids: empIds,
+          p_category_id: filters?.categoryId ?? null,
+        },
+      );
+      if (rpcErr) throw rpcErr;
+      const row = Array.isArray(summary) ? summary[0] : summary;
+      return {
+        varianceCount: Number(row?.variance_count ?? 0),
+        acknowledgedCount: Number(row?.acknowledged_count ?? 0),
+        totalEmployees,
       };
-
-      const [a, b] = await Promise.all([fetchYear(fiscalStartYear), fetchYear(fiscalStartYear + 1)]);
-      const allKpis = [...a, ...b];
-
-      // Group by (employee, kra, kpi) → months
-      type Key = string;
-      const groups = new Map<Key, { months: Record<string, number | null>; ackCount: number; total: number }>();
-      for (const k of allKpis) {
-        const key = `${k.employee_id}|${k.kra_name}|${k.kpi_name}`;
-        const g = groups.get(key) || { months: {}, ackCount: 0, total: 0 };
-        g.months[k.review_period || 'Unknown'] = k.weightage != null ? Number(k.weightage) : null;
-        if (k.weightage_variance_acknowledged === true) g.ackCount++;
-        g.total++;
-        groups.set(key, g);
-      }
-
-      let varianceCount = 0;
-      let acknowledgedCount = 0;
-      for (const g of groups.values()) {
-        const firstMonth = MONTH_ORDER.find((m) => g.months[m] != null);
-        const baseline = firstMonth ? g.months[firstMonth] : null;
-        if (baseline == null) continue;
-        const hasMismatch = Object.values(g.months).some((w) => w != null && w !== baseline);
-        if (!hasMismatch) continue;
-        const isAck = g.total > 0 && g.ackCount === g.total;
-        if (isAck) acknowledgedCount++;
-        else varianceCount++;
-      }
-
-      return { varianceCount, acknowledgedCount, totalEmployees };
     },
     staleTime: 5 * 60 * 1000,
   });
