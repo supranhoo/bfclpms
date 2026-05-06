@@ -93,7 +93,7 @@ export function OrgKpiImpactSheet({
                       <Users className="h-4 w-4 text-primary" />
                       <span className="text-sm text-muted-foreground">Total Affected</span>
                     </div>
-                    <p className="text-2xl font-bold mt-1">{impact.totalEmployees}</p>
+                    <p className="text-2xl font-bold mt-1">{displayedTotal}</p>
                     {hiddenCount > 0 && (
                       <p className="text-xs text-muted-foreground mt-1">
                         {hiddenCount} hidden by access policy
