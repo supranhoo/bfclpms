@@ -291,6 +291,24 @@ export function EmployeeSelectorGrid({
 
   const isFullAccess = role === 'admin' || role === 'auditor' || role === 'management' || role === 'hr_pms';
 
+  // ADR-063 RCA — diagnostic for Vivek's empty Team Reviews. Will be removed
+  // once the failing branch is identified.
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log('[TeamReviews RCA]', {
+      role,
+      isFullAccess,
+      viewLevel,
+      allProfiles_len: allProfiles?.length ?? null,
+      teamMembers_len: teamMembers?.length ?? null,
+      skipLevelMembers_len: skipLevelMembers?.length ?? null,
+      requiredStage,
+      statusFilter,
+      profilesLoading,
+      teamLoading,
+    });
+  }, [role, isFullAccess, viewLevel, allProfiles, teamMembers, skipLevelMembers, requiredStage, statusFilter, profilesLoading, teamLoading]);
+
   // Fix 2: Derive employee IDs from the full visible list, not just periodKpis.
   // This ensures workflowMap has stages for ALL panel employees, not only those with KPIs in the selected range.
   const allEmployeeIds = useMemo(() => {
