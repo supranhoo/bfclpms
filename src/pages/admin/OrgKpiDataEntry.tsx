@@ -54,7 +54,7 @@ function getPreviousPeriod(period: string, year: number): { period: string; year
 }
 
 export default function OrgKpiDataEntry() {
-  const { profile, role } = useAuth();
+  const { profile, role, isAdminMode, naturalRole, toggleAdminMode } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
