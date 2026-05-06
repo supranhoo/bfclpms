@@ -1,78 +1,97 @@
-## Goal
+## Why-Why RCA — Org KPI Data Entry blank for data owner
 
-Make the Org KPI tile chip and the Propagate dialog derive their "is there anything left to propagate?" verdict from one shared, pure helper. Today the two surfaces compute the same idea in two different places (tile uses `getKpiStatus` over `mappedEmpIds` + `kraSetEmpIds` + OKV.status; dialog summarises the RPC `breakdown[]`). Any future tweak risks them diverging again — exactly the bug ADR-055 just fixed.
+**Symptom**  
+Admin sees Ankan listed as data owner with 1 pending KPI for April 2026.  
+Logged in as Ankan, `/admin/org-kpi-data` shows "No Organization-Level KPIs Found" + empty grid.
 
-## Design
+### 5-Why chain
 
-Introduce `src/lib/orgKpiStatus.ts` as the single source of truth. Pure functions, no React, no Supabase imports — fully unit-testable and reusable in both surfaces.
+1. **Why is the page blank?** `useOrgLevelKpisWithEmployees` returns 0 rows for Ankan.
+2. **Why 0 rows?** PostgREST `select * from kpis where is_org_level=true and review_period='April' and review_year=2026` returns nothing under his JWT.
+3. **Why nothing?** RLS policy `Data owners can view assigned org-level KPIs` is the only one that could pass for an `employee` role, and its `EXISTS` subquery returns false for every row.
+4. **Why does EXISTS return false?** It compares `org_kpi_data_owners.kra_name = kpis.kra_name` and `…kpi_name = kpis.kpi_name` with **strict `=`** (case-sensitive, whitespace-sensitive, CR-sensitive).
+5. **Why doesn't strict `=` match?** The owner-table rows and the `kpis` rows for the same KPI differ by whitespace (e.g. `Completion of Mandated  Training Hours` vs `Completion of Mandated Training Hours`), embedded `\r`, and a description suffix appended in one table but not the other. Verified live:  
+   - exact `=` join: **0** owned KPIs for April 2026  
+   - normalized join (lower + collapse whitespace): **69** owned KPIs
 
-```ts
-// src/lib/orgKpiStatus.ts
-export type OrgKpiTileStatus = 'pending' | 'entered' | 'propagated' | 'stuck';
+### Why this slipped past prior fixes
 
-export type OkvLike = { status?: string | null; achieved_value?: number | null; is_na?: boolean | null };
+ADR-053/054 normalised joins on the **client** (`normalizeKpiKey`) and in the propagation **RPCs** (server functions running as `SECURITY DEFINER`, bypassing RLS). The raw `SELECT … FROM kpis` issued by the React Query hook still goes through RLS, which was never updated. Admins/auditors hit a different, role-based policy first, so they never reproduced the bug.
 
-export interface DeriveTileStatusInput {
-  scope: 'employee' | 'department' | 'organization';
-  okvRows: OkvLike[];                 // matched OKV rows in the current scope
-  mappedEmpIds: Set<string>;          // all employees mapped to this org KPI def
-  kraSetEmpIds: Set<string>;          // mapped employees whose child kpis row is still 'kra_set'
-  // for stuck detection in employee/department scope:
-  matchedEmpIds?: Set<string>;        // employees that have a propagated OKV row (employee scope)
-  matchedDeptEmpIds?: Set<string>;    // employees in the propagated departments (dept scope)
-}
+### Blast radius
 
-export function deriveOrgKpiTileStatus(input: DeriveTileStatusInput): OrgKpiTileStatus;
+Same exact-equality predicate exists on at least:
+- `kpis` — `Data owners can view assigned org-level KPIs` (root cause here)
+- `org_kpi_values` — equivalent owner-read/insert/update policies
+- `kpi_audit_logs` / observation policies that key off the same triple
 
-// Mirror summary used by PropagationPreviewDialog so its headline ("0 will advance —
-// nothing left to propagate") is computed from the SAME predicate.
-export interface PreviewBreakdownRow {
-  will_advance: boolean;
-  reason: string;             // 'eligible' | 'not_in_kra_set' | 'reviewer_locked' | ...
-  value_changes?: boolean;
-  current_self_score?: number | null;
-}
-export interface PreviewVerdict {
-  total: number;
-  willAdvance: number;
-  willSkip: number;
-  lockedCount: number;
-  overwriteCount: number;
-  effectivelyPropagated: boolean;   // true iff total > 0 && willAdvance === 0
-                                    // && every skip reason is in {not_in_kra_set, reviewer_locked, self_review_existing}
-}
-export function summarisePropagationPreview(rows: PreviewBreakdownRow[]): PreviewVerdict;
+All three need the same normalisation, otherwise the next blank-screen will be on the value/audit side.
+
+---
+
+## Fix Plan
+
+### 1. SQL helper (idempotent, immutable)
+
+Create `public.normalize_kpi_text(text)` returning `lower(regexp_replace(replace(coalesce($1,''),E'\r',''), '\s+',' ','g'))` trimmed — mirrors the JS `normalizeText` in `src/lib/orgKpiKey.ts`. Mark `IMMUTABLE STRICT PARALLEL SAFE` so it can be used in expression indexes and policy predicates without performance regression.
+
+Add supporting expression indexes:
+
+```text
+org_kpi_data_owners (category_id, normalize_kpi_text(kra_name), normalize_kpi_text(kpi_name), owner_id)
+kpis                (category_id, normalize_kpi_text(kra_name), normalize_kpi_text(kpi_name)) WHERE is_org_level
+org_kpi_values      (category_id, normalize_kpi_text(kra_name), normalize_kpi_text(kpi_name))
 ```
 
-Both helpers share a small private predicate `isAlreadyAdvancedPastKraSet(...)` so the rules cannot drift.
+### 2. Replace the affected RLS policies
 
-## Wiring
+For each of the policies below, drop and recreate the predicate using `normalize_kpi_text()` on **both** sides of the kra_name/kpi_name comparison. `category_id` stays a UUID equality.
 
-1. **`src/pages/admin/OrgKpiDataEntry.tsx`** — replace the 70-line inline `getKpiStatus` body with a thin wrapper that builds the input from the existing maps and calls `deriveOrgKpiTileStatus`. Keep the `useCallback` and the existing tooltip copy.
-2. **`src/components/admin/PropagationPreviewDialog.tsx`** — replace the four ad-hoc counters (`willAdvance`, `willSkip`, `lockedCount`, `overwriteCount`, `allSkipped`) with `summarisePropagationPreview(preview.breakdown)`. Use `verdict.effectivelyPropagated` to render the existing red "all skipped" banner, and add one new line directly under the badges: *"Tile shows Propagated for this reason — no employee can be advanced."* — so the two surfaces visibly agree.
-3. **`src/hooks/useOrgLevelKpis.ts`** — no change to the query, but export the `Set` builders that the page already does inline so the page can hand them straight to the helper without re-shaping.
+- `kpis` → `Data owners can view assigned org-level KPIs`
+- `org_kpi_values` → all owner-scoped SELECT/INSERT/UPDATE policies
+- (audit policies confirmed during migration drafting; only patch ones that join on the same triple)
 
-## Tests
+### 3. Defensive cleanup of owner table
 
-- **`src/test/orgKpiStatusShared.test.ts`** (new): the eight cases that currently live duplicated in `orgKpiTileStatus.test.ts` plus three preview-summary cases (all eligible, all reviewer-locked, mixed). Drive both helpers from the same fixture rows to prove parity.
-- Keep `src/test/orgKpiTileStatus.test.ts` as a thin re-export that calls the shared helper, so the existing regression net stays green.
-- No new dialog snapshot test — the verdict object is asserted directly.
+One-shot UPDATE inside the same migration to canonicalise `org_kpi_data_owners.kra_name` / `kpi_name` to the trimmed/CR-stripped form (lossless — only strips `\r` and collapses whitespace; preserves original casing for display). Snapshot original to a backup table mirroring the existing `org_kpi_owner_key_backup` pattern from ADR-054 before mutating. This makes the new indexes maximally selective and protects future joins that don't yet use the helper.
 
-## Files
+### 4. Frontend — no behaviour change required
 
-- New: `src/lib/orgKpiStatus.ts`, `src/test/orgKpiStatusShared.test.ts`, `docs/adr/ADR-056.md`.
-- Edit: `src/pages/admin/OrgKpiDataEntry.tsx`, `src/components/admin/PropagationPreviewDialog.tsx`, `src/test/orgKpiTileStatus.test.ts`, `mem/features/admin/org-kpi-management-suite`, `CHANGELOG_2026.md`.
-- No DB migration. No RPC change. RLS unaffected.
+`normalizeKpiKey` already produces the same canonical form, so once RLS opens up, all existing hooks (`useOrgLevelKpisWithEmployees`, `useOrgKpiOwnershipMap`, `useOrgKpiValues`, `usePropagateOrgKpiValue` preview) will start returning Ankan's rows automatically. No component edits needed.
 
-## Risk & Impact
+Add one tiny UX safety net: in `OrgKpiDataEntry.tsx`, when `ownershipFilteredKpis.length === 0` AND the user is non-admin AND `useIsAnyOrgKpiDataOwner()` returned true, show "We couldn't load your assigned KPIs. Please refresh or contact admin." instead of the generic empty state — so a future RLS regression is visible, not silent.
 
-- **Data:** none. Pure refactor of derivation logic; same inputs, same outputs.
-- **Workflow:** none. Propagate button still calls the same RPC.
-- **UI/UX:** tile semantics unchanged; dialog gains one explanatory line when `effectivelyPropagated` is true so users see *why* the tile says Propagated.
-- **Regression risk:** low — the new helper is covered by the migrated tests plus parity tests. The page and dialog become thinner, not richer.
-- **Mitigation:** parity test fixtures drive both helpers from one source; old `orgKpiTileStatus.test.ts` kept as a guardrail.
+### 5. Tests / Regression guard
 
-## Out of scope
+- New SQL test `supabase/migrations/.../README` note + `src/test/orgKpiOwnerRls.test.ts` (vitest) that:
+  - inserts an owner row with whitespace-mangled `kra_name`/`kpi_name`
+  - inserts a `kpis` row with the canonical form
+  - asserts the owner JWT can `select` the kpi (uses anon key + `auth.uid()` mock via existing test harness if available; otherwise pure SQL via `supabase--read_query` doc).
+- Extend `src/test/orgKpiKeyNormalization.test.ts` with a parity case proving `normalizeText('A  B\r')` matches the SQL helper output.
 
-- Changing the RPC, OKV.status backfill, or any propagation semantics.
-- Visual redesign of the dialog beyond the one consistency line.
+### 6. Docs
+
+- `docs/adr/ADR-057.md` — "Normalised RLS join for Org-KPI ownership" — records the why, the helper contract, and the migration order.
+- `CHANGELOG_2026.md` — v2.66.13 entry.
+- `mem/architecture/auth-readiness-query-gate` is unrelated; update `mem/features/admin/org-kpi-key-normalization` to add a §"RLS predicates" rule: any policy joining the org-KPI triple **must** wrap kra_name / kpi_name in `normalize_kpi_text()`.
+
+---
+
+## Risk & Impact Report
+
+- **Data impact:** No row deletions. Owner-table values are canonicalised in-place (whitespace/CR only); originals snapshotted. Expression indexes are additive.
+- **Workflow impact:** Data owners regain the access they were always intended to have — no other role's visibility changes (admin/auditor/manager policies untouched).
+- **UI/UX:** Identical layout; tile that was hidden simply becomes visible. Empty-state copy improvement is additive.
+- **Regression risk:** Low. The new policy predicate is a strict superset of the old one (anything matching exact-equal also matches normalised-equal). Worst case: a hypothetical owner row whose stored name differs only by case from another KPI would now match both — verified with `select count(*) … group by normalised_triple having count > 1` in the migration's pre-flight query; abort if any duplicates appear in the same category.
+- **Mitigation:** Migration runs the duplicate-check first and raises if violated. Tests lock the contract. The non-admin empty-state fallback ensures a silent re-regression becomes a loud, user-visible message.
+
+---
+
+## Deliverables (in order)
+
+1. `supabase/migrations/<ts>_normalize_kpi_text_and_rls.sql` — helper, indexes, owner-table canonicalisation + backup, policy replacement, duplicate guard.
+2. `src/pages/admin/OrgKpiDataEntry.tsx` — empty-state fallback copy.
+3. `src/test/orgKpiOwnerRls.test.ts` + extension to `orgKpiKeyNormalization.test.ts`.
+4. `docs/adr/ADR-057.md`, `CHANGELOG_2026.md`, `mem/features/admin/org-kpi-key-normalization` updates.
+
+Approve and I'll ship in that order, migration first so we can verify Ankan's tiles appear before touching anything else.

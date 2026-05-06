@@ -3524,6 +3524,36 @@ export type Database = {
         }
         Relationships: []
       }
+      org_kpi_owner_key_backup_2026_05: {
+        Row: {
+          assigned_by: string | null
+          category_id: string | null
+          created_at: string | null
+          id: string | null
+          kpi_name: string | null
+          kra_name: string | null
+          owner_id: string | null
+        }
+        Insert: {
+          assigned_by?: string | null
+          category_id?: string | null
+          created_at?: string | null
+          id?: string | null
+          kpi_name?: string | null
+          kra_name?: string | null
+          owner_id?: string | null
+        }
+        Update: {
+          assigned_by?: string | null
+          category_id?: string | null
+          created_at?: string | null
+          id?: string | null
+          kpi_name?: string | null
+          kra_name?: string | null
+          owner_id?: string | null
+        }
+        Relationships: []
+      }
       org_kpi_value_history: {
         Row: {
           category_id: string
