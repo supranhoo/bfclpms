@@ -3482,6 +3482,48 @@ export type Database = {
           },
         ]
       }
+      org_kpi_owner_key_backup: {
+        Row: {
+          action: string
+          category_id: string
+          created_at: string
+          id: string
+          new_kpi_name: string
+          new_kra_name: string
+          old_kpi_name: string
+          old_kra_name: string
+          owner_id: string
+          owner_row_id: string
+          reason: string
+        }
+        Insert: {
+          action: string
+          category_id: string
+          created_at?: string
+          id?: string
+          new_kpi_name: string
+          new_kra_name: string
+          old_kpi_name: string
+          old_kra_name: string
+          owner_id: string
+          owner_row_id: string
+          reason?: string
+        }
+        Update: {
+          action?: string
+          category_id?: string
+          created_at?: string
+          id?: string
+          new_kpi_name?: string
+          new_kra_name?: string
+          old_kpi_name?: string
+          old_kra_name?: string
+          owner_id?: string
+          owner_row_id?: string
+          reason?: string
+        }
+        Relationships: []
+      }
       org_kpi_value_history: {
         Row: {
           category_id: string
