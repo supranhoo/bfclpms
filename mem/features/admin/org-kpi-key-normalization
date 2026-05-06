@@ -1,0 +1,15 @@
+---
+name: Org KPI Key Normalization
+description: Canonical owner/KPI key normalization helper and tiered overwrite policy for Org KPI propagation
+type: feature
+---
+All joins on `(category_id, kra_name, kpi_name)` between `kpis`, `org_kpi_data_owners`, and `org_kpi_values` MUST use `normalizeKpiKey` from `src/lib/orgKpiKey.ts` (lowercase + `\r` strip + `\s+`-collapse + trim). Never re-implement inline.
+
+Propagation overwrite policy (`propagate_org_kpi_value.p_overwrite_policy`):
+- `safe` — legacy, only `kra_set`
+- `pre_review_only` (default) — also `self_review` rows
+- `force_pre_terminal` — admin escalation, anything pre-`manager_check`
+
+Every overwrite emits `ORG_KPI_VALUE_OVERWRITTEN` audit. `preview_org_kpi_propagation` mirrors the policy and returns Old→New self_score for the dialog diff.
+
+Reference: ADR-053, ADR-054. Owner-table cleanup snapshotted to `org_kpi_owner_key_backup` (admin-read RLS).
