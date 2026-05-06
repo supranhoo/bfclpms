@@ -72,7 +72,7 @@ export default function OrgKpiDataEntry() {
 
   // Impact sheet state
   const [impactOpen, setImpactOpen] = useState(false);
-  const [impactTarget, setImpactTarget] = useState<{ categoryId: string; kraName: string; kpiName: string; achievedValue: number | null } | null>(null);
+  const [impactTarget, setImpactTarget] = useState<{ categoryId: string; kraName: string; kpiName: string; achievedValue: number | null; expectedEmployeeIds?: string[] } | null>(null);
 
   // Data queries - use the new hook that filters by employee mapping
   const { data: orgLevelData, isLoading: kpisLoading } = useOrgLevelKpisWithEmployees(selectedPeriod, selectedYear);
@@ -1580,11 +1580,15 @@ export default function OrgKpiDataEntry() {
                       onOpenImpact={() => {
                         const key = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||null||null`;
                         const val = existingValuesMap.get(key);
+                        const mapKey = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
+                        const empSet = mappedEmployeesMap.get(mapKey);
+                        const expectedEmployeeIds = empSet ? Array.from(empSet) : undefined;
                         setImpactTarget({
                           categoryId: kpi.category_id,
                           kraName: kpi.kra_name,
                           kpiName: kpi.kpi_name,
                           achievedValue: val?.achieved_value ?? null,
+                          expectedEmployeeIds,
                         });
                         setImpactOpen(true);
                       }}
@@ -1665,6 +1669,7 @@ export default function OrgKpiDataEntry() {
           reviewPeriod={selectedPeriod}
           reviewYear={selectedYear}
           currentAchievedValue={impactTarget.achievedValue}
+          expectedEmployeeIds={impactTarget.expectedEmployeeIds}
         />
       )}
 
