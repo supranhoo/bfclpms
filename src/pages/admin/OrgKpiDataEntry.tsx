@@ -582,23 +582,40 @@ export default function OrgKpiDataEntry() {
       });
     }
 
-    // ADR-060 — Guard against FK violation on org_kpi_values.employee_id.
+    // ADR-060 / ADR-063 — Guard against FK violation on org_kpi_values.employee_id.
     // Drop rows whose employee_id is no longer present in the visible profile
-    // set (deleted user, RLS gap, stale in-memory state) and surface a single
-    // toast instead of letting Postgres raise an opaque FK error.
+    // set and split skipped rows into two cohorts:
+    //  * visibleMissed → genuinely orphaned (FK gap / deleted user) → red toast.
+    //  * hiddenMissed  → mapped via the org-KPI signature but outside the
+    //    data-owner's RLS window → neutral info toast (the hidden profiles
+    //    will be entered by an admin or another data owner).
     const knownProfileIds = new Set((allProfiles ?? []).map((p) => p.id));
-    const orphanRows = toSave.filter(
-      (r) => r.employee_id && !knownProfileIds.has(r.employee_id),
+    const mappedKey = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
+    const mappedEmpIds = new Set<string>(
+      (orgLevelData?.mappedEmpIdsByKey?.[mappedKey] as string[]) ?? [],
     );
     const safeToSave = toSave.filter(
       (r) => !r.employee_id || knownProfileIds.has(r.employee_id),
     );
-    if (orphanRows.length > 0) {
+    const missed = toSave.filter(
+      (r) => r.employee_id && !knownProfileIds.has(r.employee_id),
+    );
+    const hiddenMissed = missed.filter((r) => mappedEmpIds.has(r.employee_id));
+    const visibleMissed = missed.filter((r) => !mappedEmpIds.has(r.employee_id));
+    if (visibleMissed.length > 0) {
       toast({
-        title: `${orphanRows.length} employee row(s) skipped`,
+        title: `${visibleMissed.length} employee row(s) skipped`,
         description:
           'Profile no longer exists or you lost access. Refresh the page and retry — the others were saved.',
         variant: 'destructive',
+      });
+    }
+    if (hiddenMissed.length > 0) {
+      toast({
+        title: `${hiddenMissed.length} mapped employee(s) outside your visibility scope`,
+        description: isAdmin
+          ? 'These rows are mapped to this KPI but were not in the visible profile set. Use Data Repair if this is unexpected.'
+          : 'They will be entered by an admin or another data owner — your visible rows have been saved.',
       });
     }
 
@@ -608,7 +625,7 @@ export default function OrgKpiDataEntry() {
     if (auditEntries.length > 0) {
       try { await insertAuditLogs.mutateAsync(auditEntries); } catch { /* non-blocking */ }
     }
-  }, [existingValuesMap, selectedPeriod, selectedYear, profile?.id, bulkUpsert, insertAuditLogs, allProfiles, toast]);
+  }, [existingValuesMap, selectedPeriod, selectedYear, profile?.id, bulkUpsert, insertAuditLogs, allProfiles, toast, orgLevelData, isAdmin]);
 
   // Save & Propagate handler — internal executor (called after preview confirmation)
   const executeSaveAndPropagate = useCallback(async (
