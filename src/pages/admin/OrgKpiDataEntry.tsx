@@ -36,19 +36,14 @@ import { differenceInDays, parse } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { GovernanceLockBanner } from '@/components/review/GovernanceLockBanner';
+import { normalizeText, normalizeKpiKey } from '@/lib/orgKpiKey';
 
 /**
- * Normalize a string for KPI key matching:
- * lowercase, collapse whitespace, trim.
+ * Local aliases that delegate to the canonical helpers in src/lib/orgKpiKey.ts.
+ * Keeping the short names avoids touching ~50+ call sites in this file.
  */
-function nk(s: string): string {
-  return s.toLowerCase().replace(/\s+/g, ' ').trim();
-}
-
-/** Build a normalized key for KPI lookups */
-function kpiKey(categoryId: string, kraName: string, kpiName: string): string {
-  return `${categoryId}||${nk(kraName)}||${nk(kpiName)}`;
-}
+const nk = normalizeText;
+const kpiKey = normalizeKpiKey;
 
 // Helper to get previous period
 function getPreviousPeriod(period: string, year: number): { period: string; year: number } {
