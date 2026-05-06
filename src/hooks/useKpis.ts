@@ -206,6 +206,7 @@ export function useAllKpis(options?: { enabled?: boolean }) {
     queryKey: ['all-kpis'],
     placeholderData: keepPreviousData,
     enabled: options?.enabled !== false,
+    staleTime: 5 * 60_000,
     queryFn: async () => {
       // Fetch all KPIs by paginating through results (Supabase default limit is 1000)
       const allKpis: any[] = [];
@@ -231,7 +232,7 @@ export function useAllKpis(options?: { enabled?: boolean }) {
         }
       }
 
-      return allKpis;
+      return hydrateKpiRelations(allKpis);
     },
   });
 }
@@ -241,43 +242,76 @@ export function useKpisByPeriod(selectedPeriod: string | undefined, selectedYear
     queryKey: ['kpis-by-period', selectedPeriod, selectedYear],
     enabled: !!selectedPeriod && !!selectedYear,
     placeholderData: keepPreviousData,
+    staleTime: 5 * 60_000,
     queryFn: async () => {
-      const allKpis: any[] = [];
-      let from = 0;
       const pageSize = 1000;
-      let hasMore = true;
-
-      while (hasMore) {
-      let query = supabase
-          .from('kpis')
-          .select(SLIM_KPI_SELECT)
-          .eq('review_year', selectedYear as number);
-
-      // Only filter by review_period server-side for non-month values (e.g. Q3, H1).
-      // When a month is selected, fetch ALL KPIs for the year so the client-side
-      // filter can resolve non-monthly KPIs that cover that month.
       const isMonthPeriod = MONTH_NAMES.includes(selectedPeriod as any);
-      if (!isMonthPeriod && selectedPeriod !== 'all') {
-        query = query.eq('review_period', selectedPeriod as string);
-      }
 
-      const { data, error } = await query
-          .order('created_at', { ascending: false })
-          .order('id', { ascending: true })
-          .range(from, from + pageSize - 1);
-
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-          allKpis.push(...data);
+      // Helper to fully paginate a query builder.
+      const paginate = async (build: () => any) => {
+        const out: any[] = [];
+        let from = 0;
+        // Hard safety: 50 pages
+        for (let i = 0; i < 50; i++) {
+          const { data, error } = await build()
+            .order('created_at', { ascending: false })
+            .order('id', { ascending: true })
+            .range(from, from + pageSize - 1);
+          if (error) throw error;
+          const rows = data ?? [];
+          out.push(...rows);
+          if (rows.length < pageSize) break;
           from += pageSize;
-          hasMore = data.length === pageSize;
-        } else {
-          hasMore = false;
         }
+        return out;
+      };
+
+      let rows: any[];
+      if (isMonthPeriod) {
+        // Split fetch: server-side month match + non-monthly frequencies that
+        // need client-side coverage resolution. Avoids the year-wide scan that
+        // was hitting statement_timeout.
+        const NON_MONTHLY = ['Quarterly', 'Half-Yearly', 'Yearly', 'Bi-Monthly', 'Custom'];
+        const [monthRows, nonMonthlyRows] = await Promise.all([
+          paginate(() =>
+            supabase
+              .from('kpis')
+              .select(SLIM_KPI_SELECT)
+              .eq('review_year', selectedYear as number)
+              .eq('review_period', selectedPeriod as string),
+          ),
+          paginate(() =>
+            supabase
+              .from('kpis')
+              .select(SLIM_KPI_SELECT)
+              .eq('review_year', selectedYear as number)
+              .in('frequency', NON_MONTHLY),
+          ),
+        ]);
+        // Dedupe by id (a row could match both, e.g. Custom with month period)
+        const seen = new Set<string>();
+        rows = [];
+        for (const r of [...monthRows, ...nonMonthlyRows]) {
+          if (!seen.has(r.id)) {
+            seen.add(r.id);
+            rows.push(r);
+          }
+        }
+      } else if (selectedPeriod === 'all') {
+        rows = await paginate(() =>
+          supabase.from('kpis').select(SLIM_KPI_SELECT).eq('review_year', selectedYear as number),
+        );
+      } else {
+        rows = await paginate(() =>
+          supabase
+            .from('kpis')
+            .select(SLIM_KPI_SELECT)
+            .eq('review_year', selectedYear as number)
+            .eq('review_period', selectedPeriod as string),
+        );
       }
 
-      return allKpis;
+      return hydrateKpiRelations(rows);
     },
   });
 }
