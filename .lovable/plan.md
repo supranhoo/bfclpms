@@ -1,69 +1,56 @@
-## Root cause (confirmed against the live DB)
+## Two unrelated bugs from the same screenshot
 
-Ankan owns the KPI **"Completion of Mandated Training Hours…"**. The KPI is mapped to **214 active employees** (the screenshot shows the 50 he tried to propagate this month). He only sees ~25 in the table because **`is_org_kpi_data_owner_for_profile` returns FALSE for the other rows**.
+### Issue 1 — Ankan: red "Profile no longer exists" toast still appears even though save succeeded (ADR-063)
 
-The reason is purely a string mismatch between two tables:
+**RCA**
+- The DB-side fix (ADR-062, normalized RLS helper) is verified: `is_org_kpi_data_owner_for_profile` now grants Ankan visibility to 76 distinct mapped profiles, and the specific "Completion of Mandated Training Hours" KPI returns 55 active mapped rows for May 2026.
+- The visibility-aware "visible-missed vs hidden-missed" split that we added in the previous turn was added **only to the propagate path** in `executeSaveAndPropagate`. The earlier Save path (`handleCardSave`, lines 585–603) still emits a single destructive toast for *every* `employee_id` not present in the local `allProfiles` set — including the benign case where those profiles are simply outside the data-owner's RLS window (e.g. employees mapped to *other* KPIs picked up by the propagation preview, or a brief cache desync after the policy migration).
+- That stale-by-design destructive toast is exactly what Ankan is seeing now; it is not blocking the save (the visible 27/27 are persisted), but it's misleading and identical in copy to a real corruption case.
 
-- `org_kpi_data_owners.kpi_name` → stored as a single line with `" - "` separators (length 385).
-- `public.kpis.kpi_name` → stored with real newlines `"\n- "` (length 377).
+**Fix**
+1. In `src/pages/admin/OrgKpiDataEntry.tsx::handleCardSave`, mirror the propagate-path split:
+   - `visibleMissed` (employee_id in `allProfiles` ∩ not in profile fetch) → keep the existing destructive toast (real RLS / FK gap).
+   - `hiddenMissed` (employee_id mapped via the org-KPI signature but absent from `allProfiles`) → emit a single neutral/info toast: *"X mapped employee(s) outside your visibility scope were skipped — they will be entered by an Admin or another data owner."* (No `variant: 'destructive'`.)
+2. Detect the "all skipped rows are hidden" case and suppress the destructive toast entirely.
+3. Add `mappedEmpIdsByKey` (already on the orgLevelData hook) to the dependency list so the split can use the authoritative mapping rather than re-deriving from `toSave`.
 
-`o.kpi_name = k.kpi_name` therefore fails. The SECURITY DEFINER helper added in ADR-060 returns 0, so the new profiles SELECT policy admits 0 employees, and `useProfiles()` truncates the scoped table. Save/propagate then only attempts whatever rows another (older) policy happened to expose.
+**Regression guard**
+- New unit test `src/test/orgKpiSaveHiddenMissedToast.test.ts`: feeds a save payload with one orphan + one RLS-hidden id and asserts (a) only the visible row hits `bulkUpsert`, (b) the destructive toast fires only when there's a truly visible orphan, (c) the hidden-only case fires the neutral toast.
+- Add row to `mem://features/admin/org-kpi-management-suite` (point 21) and append ADR-063.
 
-The same brittleness affects every owner-driven join we do server-side; the client side already normalizes via `normalizeKpiKey` (lowercase + trim + collapse whitespace), but the DB does not.
+### Issue 2 — Vivek (Admin) sees 0 employees on Team Reviews
 
-## Fix plan
+**Investigation needed before patch (read-only — no code changes yet):**
+1. Add a one-shot diagnostic console log in `EmployeeSelectorGrid` (`useEffect` on mount) that prints: `role`, `isFullAccess`, `viewLevel`, `allProfiles?.length`, `teamMembers?.length`, `skipLevelMembers?.length`, `requiredStage`, `statusFilter`, and the resolved `baseMembers?.length`. This will tell us in one preview reload whether:
+   - the role isn't resolving to `admin` (Admin View toggle vs natural role mismatch — see `mem://features/admin/admin-role-switch`), OR
+   - `useProfiles()` is returning empty for Admin View (RLS regression from the recent profiles policy work), OR
+   - `requiredStage` / `statusFilter` is silently zeroing the list.
+2. Once the log identifies the failing branch, apply the targeted fix:
+   - **If role-switch related:** ensure `useUserRole` returns `admin` while Admin View is ON regardless of natural role mask.
+   - **If `useProfiles` empty under admin RLS:** verify the `Admins can view all profiles` policy still evaluates true; check whether the recent migration churn dropped/replaced it.
+   - **If filter related:** reset `statusFilter` default for `team` viewLevel.
+3. Remove the diagnostic log after the fix lands.
 
-### 1. Database — normalize the owner⇄kpi join (single migration)
+**Regression guard (after RCA confirmed):**
+- Targeted unit test in `src/test/teamReviewsAdminVisibility.test.ts` that mocks role=admin + non-empty `allProfiles` and asserts `baseMembers.length > 0` for `viewLevel='team'`.
 
-Add an immutable helper and rewrite the visibility function to use it:
+### Risk & Impact
 
-```sql
-CREATE OR REPLACE FUNCTION public.normalize_kpi_text(t text)
-RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
-  SELECT lower(btrim(regexp_replace(coalesce(t,''), '\s+', ' ', 'g')))
-$$;
+| Area | Issue 1 | Issue 2 |
+|------|---------|---------|
+| Data | None (toast copy / classification only) | None until fix scope known |
+| Workflow | Removes false-alarm error for data owners | Restores admin Team Reviews access |
+| RLS | No DB change | Possible RLS audit if `useProfiles` is the culprit |
+| Regression | Low — same predicate already proven in propagate path | Diagnostic phase first, then surgical fix |
 
-CREATE OR REPLACE FUNCTION public.is_org_kpi_data_owner_for_profile(p_profile_id uuid)
-RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
-  SELECT EXISTS (
-    SELECT 1
-    FROM public.kpis k
-    JOIN public.org_kpi_data_owners o
-      ON o.category_id = k.category_id
-     AND public.normalize_kpi_text(o.kra_name) = public.normalize_kpi_text(k.kra_name)
-     AND public.normalize_kpi_text(o.kpi_name) = public.normalize_kpi_text(k.kpi_name)
-    WHERE k.employee_id   = p_profile_id
-      AND k.is_org_level  = true
-      AND o.owner_id      = auth.uid()
-  );
-$$;
-```
+### Files
 
-The existing profiles SELECT policy keeps its USING clause; nothing else changes. Other owner-aware RPCs already do the right thing because they look up by `category_id + kra_name + kpi_name` against `kpis` only — the breakage is specifically the owner-table join. We will spot-audit `propagate_org_kpi_value` and `preview_org_kpi_propagation` and add the same `normalize_kpi_text` comparison if (and only if) they currently join `org_kpi_data_owners`.
+**Issue 1 (immediate):**
+- `src/pages/admin/OrgKpiDataEntry.tsx` — refactor orphan split in `handleCardSave`
+- `src/test/orgKpiSaveHiddenMissedToast.test.ts` (new)
+- `docs/adr/ADR-063.md` (new)
+- `CHANGELOG_2026.md`, `mem/features/admin/org-kpi-management-suite`
 
-### 2. Frontend — keep the propagation loop honest
-
-`OrgKpiDataEntry.handleCardSave` / `executeSaveAndPropagate` already iterate over `allProfiles`. Once RLS returns the full 214 (or 50 for the active mapping), the existing loop will save and propagate every row — no logic change needed. Verify by:
-
-- Adding a tiny dev assertion: when `scopedRows.length < employeeCount`, log a single console warning with the gap (we already render the amber banner). No behavioral change for users.
-
-### 3. Tests / regression guards
-
-- New SQL guard test `src/test/orgKpiOwnerJoinNormalization.test.ts` — calls `is_org_kpi_data_owner_for_profile` against a synthetic owner row whose `kpi_name` differs only in whitespace from `kpis.kpi_name`, and asserts TRUE. This locks the normalization in place forever.
-- Extend `orgKpiSaveOrphanGuard.test.ts` to cover a 50-row mapping where every employee passes the safe-vs-orphan split (i.e. the orphans toast does NOT fire).
-
-### 4. Docs & memory
-
-- ADR-062 — "Org KPI owner⇄kpi join must be whitespace-normalized" (supersedes the silent-truncation footnote in ADR-060).
-- Update `mem://features/admin/org-kpi-management-suite` rule (20) to add: *"Server-side joins between `org_kpi_data_owners` and `kpis` MUST use `public.normalize_kpi_text()` on `kra_name` and `kpi_name`. Raw equality silently truncates owner visibility because import paths store `\n` while UI inserts collapse to spaces."*
-- Append an entry to `CHANGELOG_2026.md`.
-
-## Risk & impact
-
-- **Data**: read-only RLS broadening for *registered Org KPI data owners only*. No other role gains visibility.
-- **Workflow**: data owners can finally save/propagate for every mapped employee (the intended behavior).
-- **Regression risk**: very low — the helper is only referenced by the new profiles policy added in ADR-060. We will run the linter post-migration.
-
-## Out of scope
-
-- No UI redesign, no schema changes to `org_kpi_data_owners` (a global text-normalization migration would be a separate, larger cleanup).
+**Issue 2 (diagnostic first):**
+- `src/components/review/EmployeeSelectorGrid.tsx` — temporary `console.log` block (removed after RCA)
+- Follow-up patch + test once the failing branch is confirmed in the next preview reload.
