@@ -304,7 +304,9 @@ export function usePropagateOrgKpiValue() {
         targetKpis, params.achievedValue, !!params.isNa, params.evidenceUrl
       );
 
-      const result = await callPropagationRpc(kpiRatings, profileMap, !!params.isNa, params.remarks);
+      const result = await callPropagationRpc(
+        kpiRatings, profileMap, !!params.isNa, params.remarks, params.overwritePolicy ?? 'pre_review_only'
+      );
 
       // Fire-and-forget: log to kpi_audit_logs for Review Timeline visibility
       logPropagationAudit(kpiRatings, params.isNa).catch(() => {});
@@ -323,10 +325,13 @@ export function usePropagateOrgKpiValue() {
       // v2.66.8 — caller-driven silence (batch loops emit one summary toast)
       if ((result as any).__silent) return;
       if (result.propagatedCount > 0) {
+        const overwroteMsg = result.overwrittenCount && result.overwrittenCount > 0
+          ? ` (${result.overwrittenCount} prior self-review value${result.overwrittenCount === 1 ? '' : 's'} overwritten)`
+          : '';
         toast({
-          title: `Propagated to ${result.propagatedCount} employee KPI(s)`,
+          title: `Propagated to ${result.propagatedCount} employee KPI(s)${overwroteMsg}`,
           description: result.skippedCount && result.skippedCount > 0
-            ? `Review submissions updated. ${result.skippedCount} KPI(s) skipped (already past initial stage).`
+            ? `Review submissions updated. ${result.skippedCount} KPI(s) skipped (locked by reviewer).`
             : 'Review submissions updated with org-level values',
         });
       } else if (result.skippedCount && result.skippedCount > 0) {
@@ -335,12 +340,12 @@ export function usePropagateOrgKpiValue() {
         // immutability). This is NOT a failure — surface as informational.
         const skipped = result.skipped || [];
         const allBenign = skipped.length > 0 && skipped.every(
-          s => s.reason === 'not_in_kra_set'
+          s => s.reason === 'not_in_kra_set' || s.reason === 'reviewer_locked'
         );
         if (allBenign) {
           toast({
-            title: 'Already propagated',
-            description: `All ${result.skippedCount} matching KPI(s) have already advanced past the data-owner stage. The previously propagated values remain in place — re-propagation is blocked once an employee has self-reviewed.`,
+            title: 'Locked by reviewer',
+            description: `All ${result.skippedCount} matching KPI(s) have moved into manager/auditor/management review and cannot be overwritten by the data owner.`,
           });
         } else {
           toast({
