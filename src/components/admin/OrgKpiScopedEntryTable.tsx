@@ -157,9 +157,9 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
         <CollapsibleTrigger asChild>
           <Button variant="ghost" size="sm" className="justify-start gap-2 text-sm flex-shrink-0">
             {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            {rows.length} {scopeLabel}s
+            {effectiveTotal} {scopeLabel}s
             <span className={allEntered ? 'text-green-600 dark:text-green-400 font-medium' : 'text-muted-foreground'}>
-              ({enteredCount} / {rows.length} entered{naCount > 0 ? `, ${naCount} N/A` : ''})
+              ({enteredCount} / {hasHidden ? `${rows.length} visible` : rows.length} entered{naCount > 0 ? `, ${naCount} N/A` : ''})
             </span>
             {sentBackCount > 0 && (
               <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-400 gap-0.5">
