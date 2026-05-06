@@ -129,26 +129,43 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
       countMap.forEach(empSet => empSet.forEach(id => allEmployeeIds.add(id)));
       
       const deptMap = new Map<string, Set<string>>();
-      
+      const activeEmpIds = new Set<string>();
+
       if (allEmployeeIds.size > 0) {
         const empArray = Array.from(allEmployeeIds);
         // Fetch profiles in batches of 500
-        const profiles: Array<{ id: string; department_id: string | null }> = [];
+        const profiles: Array<{ id: string; department_id: string | null; is_active: boolean | null }> = [];
         for (let i = 0; i < empArray.length; i += 500) {
           const batch = empArray.slice(i, i + 500);
           const { data: batchProfiles } = await supabase
             .from('profiles')
-            .select('id, department_id')
+            .select('id, department_id, is_active')
             .in('id', batch);
           if (batchProfiles) profiles.push(...batchProfiles);
         }
-        
-        const profileMap = new Map(profiles.map(p => [p.id, p.department_id]));
-        
+
+        // ADR-064 — Drop inactive profiles from both the count and the
+        // department mapping so the badge, the rendered list and the saved
+        // payload all agree. Mirrors the global "Always filter is_active"
+        // core rule.
+        const profileMap = new Map<string, string | null>();
+        profiles.forEach(p => {
+          if (p.is_active !== false) {
+            profileMap.set(p.id, p.department_id);
+            activeEmpIds.add(p.id);
+          }
+        });
+
         // Build department mapping per KPI
         countMap.forEach((empSet, key) => {
+          // Strip inactive employee_ids in place so downstream consumers
+          // (employeeCount, employeeIds, mappedEmpIdsByKey) stay consistent.
+          const filtered = new Set<string>();
+          empSet.forEach(id => { if (activeEmpIds.has(id)) filtered.add(id); });
+          countMap.set(key, filtered);
+
           const deptIds = new Set<string>();
-          empSet.forEach(empId => {
+          filtered.forEach(empId => {
             const deptId = profileMap.get(empId);
             if (deptId) deptIds.add(deptId);
           });
