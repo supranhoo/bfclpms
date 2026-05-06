@@ -770,13 +770,33 @@ export default function OrgKpiDataEntry() {
           const missed = (allOrgKpiRows || []).filter(r => !propagatedSet.has(r.employee_id));
           missedEmployeeIds = missed.map(r => r.employee_id);
           if (missed.length > 0) {
-            const names = missed.slice(0, 5).map((r: any) => r.profiles?.full_name || r.employee_id).join(', ');
-            const suffix = missed.length > 5 ? ` +${missed.length - 5} more` : '';
-            toast({
-              title: `${missed.length} employee KPI(s) skipped during propagation`,
-              description: `Not in current view — their org_kpi_values.status was NOT updated to keep state consistent. Missed: ${names}${suffix}. Use Data Repair → "Repair Orphaned Propagations" to fix historical rows.`,
-              variant: 'destructive',
-            });
+            // v2.66.13 — Distinguish "hidden by RLS" (benign for data owners)
+            // from a true propagation gap. If every missed employee is simply
+            // not visible to the current user's role, this isn't an error —
+            // values for those employees must be entered by an admin or
+            // another data owner with broader visibility.
+            const visibleIds = new Set((allProfiles ?? []).map((p) => p.id));
+            const hiddenMissed = missed.filter((r: any) => !visibleIds.has(r.employee_id));
+            const visibleMissed = missed.filter((r: any) => visibleIds.has(r.employee_id));
+
+            if (visibleMissed.length > 0) {
+              const names = visibleMissed.slice(0, 5).map((r: any) => r.profiles?.full_name || r.employee_id).join(', ');
+              const suffix = visibleMissed.length > 5 ? ` +${visibleMissed.length - 5} more` : '';
+              toast({
+                title: `${visibleMissed.length} employee KPI(s) could not be advanced`,
+                description: `Please retry propagation. Affected: ${names}${suffix}.`,
+                variant: 'destructive',
+              });
+            }
+
+            if (hiddenMissed.length > 0) {
+              toast({
+                title: `${hiddenMissed.length} mapped employee(s) not in your view`,
+                description: isAdmin
+                  ? `These employees are mapped but no value was entered for them. Use Data Repair → "Repair Orphaned Propagations" if their org_kpi_values rows already exist.`
+                  : `Values for these employees must be entered by an admin or another data owner with broader visibility — they are mapped to this KPI but hidden from your role.`,
+              });
+            }
           }
         }
       } catch (err) {
