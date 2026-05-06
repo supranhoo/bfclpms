@@ -103,7 +103,6 @@ export interface PreviewBreakdownRow {
   reason: string;
   value_changes?: boolean;
   current_self_score?: number | null;
-  [k: string]: unknown;
 }
 
 export interface PreviewVerdict {
