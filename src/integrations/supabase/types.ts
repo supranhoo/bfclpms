@@ -8355,6 +8355,15 @@ export type Database = {
           open_count: number
         }[]
       }
+      rpc_org_kpi_filled_keys: {
+        Args: { p_period: string; p_year: number }
+        Returns: {
+          category_id: string
+          employee_id: string
+          kpi_name: string
+          kra_name: string
+        }[]
+      }
       rpc_weightage_eligible_employees: {
         Args: { p_category_id?: string; p_fiscal_start_year: number }
         Returns: {
