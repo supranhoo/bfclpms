@@ -11,6 +11,7 @@ export interface PropagationDetail {
   oldScore: number | null;
   newScore: number | null;
   change: number | null;
+  priorStatus?: string | null;
 }
 
 export interface PropagationResultWithDetails {
@@ -18,6 +19,7 @@ export interface PropagationResultWithDetails {
   details: PropagationDetail[];
   skippedCount?: number;
   skipped?: Array<{ kpi_id: string; current_status: string; reason: string }>;
+  overwrittenCount?: number;
 }
 
 interface PropagateParams {
@@ -40,6 +42,13 @@ interface PropagateParams {
    * can emit ONE summary toast instead of N stacked ones.
    */
   silent?: boolean;
+  /**
+   * Overwrite policy passed to the RPC. Defaults to 'pre_review_only' which lets
+   * data owners overwrite employee self-reviewed values that no manager/auditor
+   * has yet acted on. Use 'force_pre_terminal' (admin) to overwrite any
+   * non-terminal stage. 'safe' keeps the legacy kra_set-only behaviour.
+   */
+  overwritePolicy?: 'safe' | 'pre_review_only' | 'force_pre_terminal';
 }
 
 /**
@@ -211,21 +220,27 @@ async function callPropagationRpc(
   kpiRatings: any[],
   profileMap: Map<string, any>,
   isNa: boolean,
-  remarks?: string | null
+  remarks?: string | null,
+  overwritePolicy: 'safe' | 'pre_review_only' | 'force_pre_terminal' = 'pre_review_only'
 ): Promise<PropagationResultWithDetails> {
   const { data, error } = await supabase.rpc('propagate_org_kpi_value', {
     p_kpi_ratings: kpiRatings,
     p_is_na: isNa,
     p_remarks: remarks || null,
+    p_overwrite_policy: overwritePolicy,
   });
 
   if (error) throw error;
 
   const rpcResult = data as any;
+  let overwrittenCount = 0;
   const details: PropagationDetail[] = (rpcResult.details || []).map((d: any) => {
     const info = profileMap.get(d.kpi_id);
     const newScore = d.new_score ?? null;
     const oldScore = d.old_score ?? null;
+    if (oldScore !== null && newScore !== null && oldScore !== newScore) {
+      overwrittenCount += 1;
+    }
     return {
       employeeName: info?.fullName || 'Unknown',
       employeeCode: info?.employeeCode || null,
@@ -233,6 +248,7 @@ async function callPropagationRpc(
       oldScore,
       newScore,
       change: oldScore !== null && newScore !== null ? newScore - oldScore : null,
+      priorStatus: d.prior_status ?? null,
     };
   });
 
@@ -241,6 +257,7 @@ async function callPropagationRpc(
     details,
     skippedCount: rpcResult.skipped_count ?? 0,
     skipped: rpcResult.skipped ?? [],
+    overwrittenCount,
   };
 }
 
@@ -287,7 +304,9 @@ export function usePropagateOrgKpiValue() {
         targetKpis, params.achievedValue, !!params.isNa, params.evidenceUrl
       );
 
-      const result = await callPropagationRpc(kpiRatings, profileMap, !!params.isNa, params.remarks);
+      const result = await callPropagationRpc(
+        kpiRatings, profileMap, !!params.isNa, params.remarks, params.overwritePolicy ?? 'pre_review_only'
+      );
 
       // Fire-and-forget: log to kpi_audit_logs for Review Timeline visibility
       logPropagationAudit(kpiRatings, params.isNa).catch(() => {});
@@ -306,10 +325,13 @@ export function usePropagateOrgKpiValue() {
       // v2.66.8 — caller-driven silence (batch loops emit one summary toast)
       if ((result as any).__silent) return;
       if (result.propagatedCount > 0) {
+        const overwroteMsg = result.overwrittenCount && result.overwrittenCount > 0
+          ? ` (${result.overwrittenCount} prior self-review value${result.overwrittenCount === 1 ? '' : 's'} overwritten)`
+          : '';
         toast({
-          title: `Propagated to ${result.propagatedCount} employee KPI(s)`,
+          title: `Propagated to ${result.propagatedCount} employee KPI(s)${overwroteMsg}`,
           description: result.skippedCount && result.skippedCount > 0
-            ? `Review submissions updated. ${result.skippedCount} KPI(s) skipped (already past initial stage).`
+            ? `Review submissions updated. ${result.skippedCount} KPI(s) skipped (locked by reviewer).`
             : 'Review submissions updated with org-level values',
         });
       } else if (result.skippedCount && result.skippedCount > 0) {
@@ -318,12 +340,12 @@ export function usePropagateOrgKpiValue() {
         // immutability). This is NOT a failure — surface as informational.
         const skipped = result.skipped || [];
         const allBenign = skipped.length > 0 && skipped.every(
-          s => s.reason === 'not_in_kra_set'
+          s => s.reason === 'not_in_kra_set' || s.reason === 'reviewer_locked'
         );
         if (allBenign) {
           toast({
-            title: 'Already propagated',
-            description: `All ${result.skippedCount} matching KPI(s) have already advanced past the data-owner stage. The previously propagated values remain in place — re-propagation is blocked once an employee has self-reviewed.`,
+            title: 'Locked by reviewer',
+            description: `All ${result.skippedCount} matching KPI(s) have moved into manager/auditor/management review and cannot be overwritten by the data owner.`,
           });
         } else {
           toast({
@@ -378,7 +400,8 @@ export function useBulkPropagateOrgKpiValues() {
 
       if (allRatings.length === 0) return { propagatedCount: 0, details: [] };
 
-      const result = await callPropagationRpc(allRatings, globalProfileMap, hasNa, null);
+      const policy = values.find(v => v.overwritePolicy)?.overwritePolicy ?? 'pre_review_only';
+      const result = await callPropagationRpc(allRatings, globalProfileMap, hasNa, null, policy);
 
       // Fire-and-forget: log to kpi_audit_logs for Review Timeline visibility
       logPropagationAudit(allRatings, hasNa).catch(() => {});
@@ -393,22 +416,25 @@ export function useBulkPropagateOrgKpiValues() {
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
       if (result.propagatedCount > 0) {
+        const overwroteMsg = result.overwrittenCount && result.overwrittenCount > 0
+          ? ` (${result.overwrittenCount} prior value${result.overwrittenCount === 1 ? '' : 's'} overwritten)`
+          : '';
         toast({
-          title: `Propagated to ${result.propagatedCount} employee KPI(s)`,
+          title: `Propagated to ${result.propagatedCount} employee KPI(s)${overwroteMsg}`,
           description: result.skippedCount && result.skippedCount > 0
-            ? `${result.skippedCount} KPI(s) skipped (already past initial stage).`
+            ? `${result.skippedCount} KPI(s) skipped (locked by reviewer).`
             : undefined,
         });
       } else if (result.skippedCount && result.skippedCount > 0) {
         // v2.66.8 — see usePropagateOrgKpiValue.onSuccess for rationale.
         const skipped = result.skipped || [];
         const allBenign = skipped.length > 0 && skipped.every(
-          s => s.reason === 'not_in_kra_set'
+          s => s.reason === 'not_in_kra_set' || s.reason === 'reviewer_locked'
         );
         if (allBenign) {
           toast({
-            title: 'Already propagated',
-            description: `All ${result.skippedCount} KPI(s) have already advanced past the data-owner stage. Previously propagated values remain in place.`,
+            title: 'Locked by reviewer',
+            description: `All ${result.skippedCount} KPI(s) have moved into manager/auditor/management review and cannot be overwritten by the data owner.`,
           });
         } else {
           toast({

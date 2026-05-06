@@ -1,70 +1,83 @@
-## Why-Why Root Cause Analysis — "Org KPI Data not visible without multiple refreshes" (Chandan Pandit)
+## Why-Why RCA — "Propagation issues" reported by Vivek Kumar Dansena (admin / Org KPI data owner for HR)
 
-### Confirmed facts (from DB + code inspection)
-- Chandan Pandit (`5412bfa9-…`, role = **manager**, active) IS a designated `org_kpi_data_owners` row for ~50 Safety KPIs (category `3e6001d2-…`).
-- RLS on `org_kpi_values` (SELECT = `true` for authenticated) and `kpis` (data owners can view assigned org-level KPIs) is correct — *if* `auth.uid()` is populated when the request fires.
-- Current month (May 2026) has **886** org-level kpi rows and **311** org_kpi_values rows.
+### Confirmed evidence (from `kpi_audit_logs`, `kpis`, `org_kpi_values`)
 
-### Why #1 — Page sometimes renders blank until refresh
-Because `useOrgLevelKpisWithEmployees`, `useOrgKpiValues`, and `useOrgKpiOwnershipMap` all fire on first mount **without waiting for the Supabase session to be restored**.
+In the last 2 days of April 2026 propagations triggered by Vivek (`ca3897d0…`), every single push produced a `PROPAGATION_PARTIAL` audit row alongside `ORG_KPI_PROPAGATED`. Concrete examples for the same employees the RPC **skipped**:
 
-### Why #2 — Why does that produce empty data?
-If the session hasn't rehydrated from `localStorage` yet, the PostgREST request goes out with **no Bearer token** (or with `auth.uid() = null`). RLS on `kpis` requires a real `auth.uid()` to evaluate the data-owner EXISTS clause → **0 rows returned**. React Query then caches that empty result for `staleTime` (5 min in some hooks).
+| Employee | Period | child `kpis.status` | `review_submissions.self_score` | What Vivek pushed |
+|---|---|---|---|---|
+| Mandan Mishra | Apr | `self_review` | **5.00** | 0 |
+| Preetam Sagar | Apr | `manager_check` | **5.00** | 0 |
+| Prabhat Kr. Singh | Apr | `self_review` | **5.00** | 0 |
+| Abhas Luharuwalla | Apr | `self_review` | **0.00** | 5 |
+| Anil Kr. Pathak | Apr | `self_review` | **2.00** | 3 |
 
-### Why #3 — Why does refreshing fix it?
-On a hard refresh, `supabase.auth.getSession()` resolves synchronously from localStorage before the queries fire (browser warm cache + faster JS), so `auth.uid()` is present and RLS returns rows.
+So the official Org KPI value **never reaches** these employees' submissions — managers/auditors review the employee's own self-entered number, not the data-owner's authoritative value.
 
-### Why #4 — Why is no hook gated by auth-readiness?
-Only `useIsAnyOrgKpiDataOwner` uses `enabled: !!user?.id`. The three heavy hooks on this page use only `enabled: !!reviewPeriod && !!reviewYear`, so they race the auth bootstrap. There is no shared `useAuthReady` gate.
+### Why #1 — Why does propagation appear to "do nothing" for some employees?
+The server RPC `public.propagate_org_kpi_value` skips any child whose `kpis.status <> 'kra_set'` and only inserts a `review_submissions` row when it can advance from `kra_set → self_review`.
 
-### Why #5 — Why is the empty result "sticky"?
-- React Query default behaviour caches the empty array.
-- `useRealtimeKpiSync` debounces invalidations 1500 ms and only re-fires on table changes — not on auth state change.
-- `AuthContext` does not invalidate KPI/org-kpi caches when the session finishes restoring → the empty cache persists until manual refresh.
+### Why #2 — Why are children no longer in `kra_set`?
+For Vivek's HR KRAs (Compliance, People Management, etc.), employees frequently complete their **self-review BEFORE the data owner pushes the official Org value**. Once the employee submits, the row moves to `self_review`/`manager_check`/`hr_pms_review`, and the RPC's `kra_set`-only guard refuses to overwrite.
 
-### Secondary contributing factors
-1. **PostgREST 1000-row cap**: the `kpis` query inside `useOrgLevelKpisWithEmployees` has no `.range()` pagination. May 2026 = 886 rows (close to limit); a future month above 1000 will silently truncate even when auth is fine.
-2. **Stale duplicate query**: page also calls `useOrgLevelKpis` (unfiltered) and `useOrgKpiValues` for both current + previous period — quadruples the race surface.
-3. **Console log shows React `forwardRef` warning on AllKpis** — unrelated, but confirms the AlertDialog ref pattern is wrong elsewhere; not the cause here.
+### Why #3 — Why was the guard written that way?
+The guard was added in May (POLICY §88.2 "benign skip" rule) to stop the propagation from clobbering a manager/auditor decision that was already in-flight. However the rule was scoped too aggressively: it also blocks the case where only the **employee** has self-reviewed but no reviewer has acted — which is precisely the data-owner's window to publish the canonical value.
+
+### Why #4 — Why doesn't the UI tell Vivek that 80%+ of his "successful" propagations had no effect?
+The toast counts `propagated_count` (status flipped) but `skipped` rows are reported as a single benign chip. There is no per-employee diff or red flag when a data-owner push silently leaves the employee's *wrong* `self_score` intact.
+
+### Why #5 — Why is the result inconsistent across months?
+- **Jan / Feb / Mar 2026** — Vivek's owned KPIs show `child_kra_set = 0` and 200+ propagated rows ⇒ data flow worked when employees were still in `kra_set`.
+- **April 2026** — `child_kra_set = 14` of 107 still pending push; **95 OKV rows are status `propagated`** but several children have already moved to `self_review/manager_check` with mismatched scores → mid-cycle race.
+- **May 2026** — `okv_status = 'draft'` for 59 rows over **3,481** child KPIs; nothing has been propagated yet because the OKV is still draft.
+
+### Secondary findings
+1. **Stale "entered" OKV rows for May** — KRA *Timely execution of new HR interventions* has 7 OKV rows with `status='entered'` but `achieved_value = NULL` (inserted by Jitendra Bharti). These confuse the dashboard's "Entered/Pending" count.
+2. **Stuck-detection drift** — Page's "stuck" counter relies on OKV claiming `propagated/approved` while children still `kra_set`. The opposite case (OKV `propagated` but children in `self_review` with **wrong score**) is not surfaced anywhere.
+3. **No idempotent re-push** — once OKV is `propagated`, Vivek can't re-trigger overwrite for late-self-reviewed employees without the admin manually using the Force-Overwrite path (`PA3`), which is hidden behind a confirm step.
 
 ---
 
-## Fix Plan (3 layers)
+## Risk & Impact Report
+- **Data Impact**: Currently approved `final_score` rows that propagated cleanly are unaffected. The exposure is for KPIs still in `self_review`/`manager_check` where the employee number ≠ data-owner number.
+- **Workflow Impact**: Reviewers will (or already did) approve incorrect employee-self values for ~200 HR KPIs. Need a "diff & overwrite" path that respects auditor/management decisions.
+- **UI/UX**: Add a clear "Mismatched Values" badge per OKV; existing toast colour convention preserved.
+- **Regression risk**: Medium — RPC change must keep "respect manager/auditor decisions" guarantee. Mitigate with new unit test + dry-run preview.
 
-### Layer A — Auth-readiness gate (root fix)
-1. Add `isReady` flag to `AuthContext` set to `true` only after the first `supabase.auth.getSession()` resolves.
-2. Create `useAuthReady()` helper exposing `{ user, isReady }`.
-3. Update the three hooks used by `OrgKpiDataEntry`:
-   - `useOrgLevelKpisWithEmployees` → `enabled: isReady && !!user && !!period && !!year`
-   - `useOrgKpiValues` → same gate
-   - `useOrgKpiOwnershipMap` (via `useOrgKpiDataOwners`) → same gate
-4. In `AuthContext`, when the session transitions from "not-ready → ready" call `queryClient.invalidateQueries({ queryKey: ['org-level-kpis-with-employees'] })` plus the org-kpi keys to evict any stale empty cache from racy mounts.
+---
 
-### Layer B — Pagination safety
-- Refactor the `kpis` fetch inside `useOrgLevelKpisWithEmployees` to use `fetchAllPaged` (helper already exists in `src/lib/fetchAll.ts`) so months > 1000 rows do not silently truncate.
+## Fix Plan
 
-### Layer C — Diagnostics & guardrails
-- Add a one-time console warn if a query returns 0 rows while `isReady === false` (helps catch future regressions).
-- Add unit test `src/test/orgKpiDataEntryAuthRace.test.tsx` that mounts the page with a delayed session and asserts queries do NOT fire until `isReady`.
-- Update `mem://architecture/profile-cache-invalidation` and POLICY.md with the new "Auth-Readiness Query Gate" rule.
+### Layer A — RPC: add a controlled overwrite tier (`policy = 'pre_review_only'` default)
+Modify `propagate_org_kpi_value` (signature stable, add `p_overwrite_policy text DEFAULT 'pre_review_only'`):
+- `pre_review_only` (new default): allow overwrite when `kpis.status IN ('kra_set','self_review')` **AND** `review_submissions.self_submitted_at IS NULL OR <data-owner is admin and OKV is authoritative>`. Always skip if status ∈ (`manager_check`, `auditor_check`, `management_review`, `final`).
+- `force_pre_terminal`: admin-only — overwrite anywhere status not terminal/approved (used by the existing PA3 force path).
+- `safe`: current `kra_set`-only behaviour (kept for compatibility).
+
+In all overwrite paths the RPC also writes a `kpi_audit_logs` row `ORG_KPI_VALUE_OVERWRITTEN` with `{old_self_score, new_self_score, overwrite_policy}` so the change is auditable.
+
+### Layer B — Dashboard surfacing
+- New **"Value mismatch"** badge on the OKV card when `OKV.status = propagated` and at least one child `review_submissions.self_score <> OKV.derived_self_score`. Counts roll up into the existing Stuck/Pending header chips.
+- Toast post-propagation lists per-employee diffs (`old → new`) in the existing Propagation Preview dialog component, not just a count.
+
+### Layer C — Cleanup migration (one-shot, May 2026 cutoff per migration governance)
+- Backfill: for **April 2026** OKV rows owned by Vivek where `OKV.status = 'propagated'` AND child still `self_review` with mismatched `self_score`, run the new RPC in `force_pre_terminal` mode and write audit rows. This is bounded (~14 rows) and reversible via `ORG_KPI_VALUE_OVERWRITTEN` log.
+- Quarantine the 7 phantom May "entered" OKV rows (`Timely execution of new HR interventions`, `achieved_value IS NULL`) — soft-delete with audit trail.
+
+### Layer D — Tests & docs
+- New `src/test/orgKpiPropagationOverwrite.test.ts` covering: kra_set, self_review-no-reviewer-action, manager_check (skip), terminal (skip), force-overwrite admin path, audit-row emission.
+- Update `mem://features/admin/copy-kras-org-kpi-integrity` and POLICY §88.2 with the new tiered policy.
+- ADR-053 + CHANGELOG_2026 W2 row.
 
 ---
 
 ## Files to edit / create
-- `src/contexts/AuthContext.tsx` — expose `isReady`, invalidate on ready.
-- `src/hooks/useAuthReady.ts` *(new tiny re-export for ergonomics)*.
-- `src/hooks/useOrgLevelKpis.ts` — gate + paginate.
-- `src/hooks/useOrgKpiValues.ts` — gate.
-- `src/hooks/useOrgKpiDataOwner.ts` — gate `useOrgKpiDataOwners`.
-- `src/test/orgKpiDataEntryAuthRace.test.tsx` *(new)*.
-- `DOCUMENTATION.md`, `POLICY.md`, `CHANGELOG_2026.md`, new `docs/adr/ADR-052.md`.
-- `mem/architecture/auth-readiness-query-gate` *(new memory)*.
-
-## Risk & Impact Report
-- **Data Impact**: None — RLS unchanged, no schema changes.
-- **Workflow Impact**: None — only affects when queries fire.
-- **UI/UX**: Initial render may show spinner ~50–200 ms longer on cold load; eliminates the "blank screen" bug.
-- **Regression Risk**: Low. The `enabled` gate only blocks the *first* race; subsequent renders are unaffected. The pagination change is additive and backed by an existing helper used elsewhere.
-- **Mitigation**: New unit test + manual QA logging in as Chandan after deploy.
+- `supabase/migrations/<ts>_org_kpi_propagation_overwrite_policy.sql` — new RPC overload, audit action, optional cleanup block.
+- `src/hooks/usePropagateOrgKpiValue.ts` — pass `overwrite_policy`, surface diff list in result.
+- `src/components/admin/PropagationPreviewDialog.tsx` — show old → new per employee, mismatch warnings.
+- `src/components/admin/OrgKpiEntryCard.tsx` — "Value mismatch" badge wiring.
+- `src/pages/admin/OrgKpiDataEntry.tsx` — header chip for "Mismatched Values".
+- `src/test/orgKpiPropagationOverwrite.test.ts` *(new)*.
+- `docs/adr/ADR-053.md`, `DOCUMENTATION.md`, `POLICY.md`, `CHANGELOG_2026.md`, memory update.
 
 Approve to implement.
