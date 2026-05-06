@@ -1,76 +1,78 @@
+## Goal
 
-## Problem
+Make the Org KPI tile chip and the Propagate dialog derive their "is there anything left to propagate?" verdict from one shared, pure helper. Today the two surfaces compute the same idea in two different places (tile uses `getKpiStatus` over `mappedEmpIds` + `kraSetEmpIds` + OKV.status; dialog summarises the RPC `breakdown[]`). Any future tweak risks them diverging again — exactly the bug ADR-055 just fixed.
 
-On `/admin/org-kpi-data`, "Budget saving" is tagged **Entered** on the card, but the Propagate dialog reports **0 will advance, 1 reviewer-locked** (Ashish Kataria already at `manager_check`, self_score 4).
+## Design
 
-Two different "truths" are being shown for the same KPI because the card and the propagate preview read from two different sources:
+Introduce `src/lib/orgKpiStatus.ts` as the single source of truth. Pure functions, no React, no Supabase imports — fully unit-testable and reusable in both surfaces.
 
-| Surface | Source of truth |
-|---|---|
-| Card chip ("Pending / Entered / Propagated / Stuck") | `org_kpi_values.status` only |
-| Propagate dialog | Real per-employee `kpis.status` |
+```ts
+// src/lib/orgKpiStatus.ts
+export type OrgKpiTileStatus = 'pending' | 'entered' | 'propagated' | 'stuck';
 
-When `org_kpi_values.status` is `draft`/`sent_back` but every mapped child has already advanced past `kra_set` (e.g. to `self_review`/`manager_check`/...), the card wrongly says "Entered (still to propagate)" while in reality there is nothing to propagate — every child is reviewer-locked.
+export type OkvLike = { status?: string | null; achieved_value?: number | null; is_na?: boolean | null };
 
-## Root Cause
+export interface DeriveTileStatusInput {
+  scope: 'employee' | 'department' | 'organization';
+  okvRows: OkvLike[];                 // matched OKV rows in the current scope
+  mappedEmpIds: Set<string>;          // all employees mapped to this org KPI def
+  kraSetEmpIds: Set<string>;          // mapped employees whose child kpis row is still 'kra_set'
+  // for stuck detection in employee/department scope:
+  matchedEmpIds?: Set<string>;        // employees that have a propagated OKV row (employee scope)
+  matchedDeptEmpIds?: Set<string>;    // employees in the propagated departments (dept scope)
+}
 
-`getKpiStatus()` in `src/pages/admin/OrgKpiDataEntry.tsx` (lines 207-275) treats `OKV.status ∉ {propagated, approved}` as "Entered" without consulting child KPI state. `kraSetEmpIdsByKey` is consulted **only** when OKV.status is already `propagated/approved` (the "stuck" branch). The "everything advanced past kra_set already" case falls through to "Entered".
+export function deriveOrgKpiTileStatus(input: DeriveTileStatusInput): OrgKpiTileStatus;
 
-This stale-OKV state happens whenever:
-- The KPI was propagated under an earlier flow that didn't flip `org_kpi_values.status`
-- The OKV row was edited (saved as `draft`) after propagation completed
-- A `sent_back` cycle reverted OKV to a non-propagated status while children kept moving
+// Mirror summary used by PropagationPreviewDialog so its headline ("0 will advance —
+// nothing left to propagate") is computed from the SAME predicate.
+export interface PreviewBreakdownRow {
+  will_advance: boolean;
+  reason: string;             // 'eligible' | 'not_in_kra_set' | 'reviewer_locked' | ...
+  value_changes?: boolean;
+  current_self_score?: number | null;
+}
+export interface PreviewVerdict {
+  total: number;
+  willAdvance: number;
+  willSkip: number;
+  lockedCount: number;
+  overwriteCount: number;
+  effectivelyPropagated: boolean;   // true iff total > 0 && willAdvance === 0
+                                    // && every skip reason is in {not_in_kra_set, reviewer_locked, self_review_existing}
+}
+export function summarisePropagationPreview(rows: PreviewBreakdownRow[]): PreviewVerdict;
+```
 
-## Fix (UI-only, no schema change)
+Both helpers share a small private predicate `isAlreadyAdvancedPastKraSet(...)` so the rules cannot drift.
 
-Make the card status **fact-based** by combining OKV state with real child-KPI advancement:
+## Wiring
 
-1. In `useOrgLevelKpisWithEmployees` (already gives us `kraSetEmpIdsByKey`), additionally return:
-   - `mappedEmpIdsByKey` — set of all employee_ids mapped to each org KPI definition (already computed as `countMap`, just expose it)
+1. **`src/pages/admin/OrgKpiDataEntry.tsx`** — replace the 70-line inline `getKpiStatus` body with a thin wrapper that builds the input from the existing maps and calls `deriveOrgKpiTileStatus`. Keep the `useCallback` and the existing tooltip copy.
+2. **`src/components/admin/PropagationPreviewDialog.tsx`** — replace the four ad-hoc counters (`willAdvance`, `willSkip`, `lockedCount`, `overwriteCount`, `allSkipped`) with `summarisePropagationPreview(preview.breakdown)`. Use `verdict.effectivelyPropagated` to render the existing red "all skipped" banner, and add one new line directly under the badges: *"Tile shows Propagated for this reason — no employee can be advanced."* — so the two surfaces visibly agree.
+3. **`src/hooks/useOrgLevelKpis.ts`** — no change to the query, but export the `Set` builders that the page already does inline so the page can hand them straight to the helper without re-shaping.
 
-   `kraSetEmpIds` ⊂ `mappedEmpIds`. So `mappedEmpIds.size - kraSetEmpIds.size = #children already advanced`.
+## Tests
 
-2. Rewrite `getKpiStatus` decision tree (employee scope shown; mirror for department/org):
+- **`src/test/orgKpiStatusShared.test.ts`** (new): the eight cases that currently live duplicated in `orgKpiTileStatus.test.ts` plus three preview-summary cases (all eligible, all reviewer-locked, mixed). Drive both helpers from the same fixture rows to prove parity.
+- Keep `src/test/orgKpiTileStatus.test.ts` as a thin re-export that calls the shared helper, so the existing regression net stays green.
+- No new dialog snapshot test — the verdict object is asserted directly.
 
-   ```
-   hasOkv?  →  no  → 'pending'
-            →  yes →
-              allMappedAdvancedPastKraSet =
-                kraSetEmpIds.size === 0 && mappedEmpIds.size > 0
+## Files
 
-              if okv.status ∈ {propagated, approved}:
-                stuck if any kra_set child remains  → existing logic
-              else (okv.status is draft / sent_back / …):
-                if allMappedAdvancedPastKraSet:
-                  // Children already moved on. Nothing to propagate. Treat as Propagated.
-                  return 'propagated'   // optionally a new 'locked' chip
-                else:
-                  return 'entered'      // genuine pending re-push
-   ```
+- New: `src/lib/orgKpiStatus.ts`, `src/test/orgKpiStatusShared.test.ts`, `docs/adr/ADR-056.md`.
+- Edit: `src/pages/admin/OrgKpiDataEntry.tsx`, `src/components/admin/PropagationPreviewDialog.tsx`, `src/test/orgKpiTileStatus.test.ts`, `mem/features/admin/org-kpi-management-suite`, `CHANGELOG_2026.md`.
+- No DB migration. No RPC change. RLS unaffected.
 
-3. Tooltip on the chip when this fallback fires: "OKV row is `<status>` but all mapped employees have already advanced past data-owner stage — nothing left to propagate."
+## Risk & Impact
 
-4. Optional, low-risk follow-up (separate, off by default flag): a one-shot reconciler in Data Repair that flips `org_kpi_values.status` to `propagated` for rows where every mapped child is past `kra_set`. Not required to fix the display; included only so future loads are consistent at the source. Audit log: `ORG_KPI_STATUS_RECONCILED`.
+- **Data:** none. Pure refactor of derivation logic; same inputs, same outputs.
+- **Workflow:** none. Propagate button still calls the same RPC.
+- **UI/UX:** tile semantics unchanged; dialog gains one explanatory line when `effectivelyPropagated` is true so users see *why* the tile says Propagated.
+- **Regression risk:** low — the new helper is covered by the migrated tests plus parity tests. The page and dialog become thinner, not richer.
+- **Mitigation:** parity test fixtures drive both helpers from one source; old `orgKpiTileStatus.test.ts` kept as a guardrail.
 
-## Files to touch
+## Out of scope
 
-- `src/hooks/useOrgLevelKpis.ts` — also return `mappedEmpIdsByKey` (already computed in `countMap`).
-- `src/pages/admin/OrgKpiDataEntry.tsx` — extend `getKpiStatus`; add tooltip on chip; thread the new map through the existing memo deps and the per-card status block around line 1087.
-- `src/test/orgKpiTileStatus.test.ts` (new) — cases: (a) OKV draft + all children advanced → propagated, (b) OKV draft + some children still kra_set → entered, (c) OKV propagated + kra_set child → stuck (regression), (d) OKV propagated + no kra_set → propagated (regression).
-- `mem/features/admin/org-kpi-management-suite` — append clause (16): "Tile status MUST be derived from OKV.status combined with real child kpis.status; OKV.status alone is insufficient."
-- `docs/adr/ADR-055.md` — "Fact-based Org KPI tile status".
-- `CHANGELOG_2026.md` — entry.
-
-## Risk & Impact Report
-
-- **Data Impact:** none. Read-only display change. Optional reconciler is opt-in and audit-logged.
-- **Workflow Impact:** none. Propagate button continues to call the same RPC; preview output unchanged.
-- **UI/UX Consistency:** chip semantics get sharper — KPIs that were misleadingly "Entered" will now correctly show "Propagated" with a tooltip explaining why.
-- **Regression Risk:** low. The new branch is only entered when `OKV.status ∉ {propagated, approved}` AND `kraSetEmpIds.size === 0 && mappedEmpIds.size > 0`. All existing branches are preserved verbatim.
-- **Mitigation:** unit tests above; manual QA on (a) Budget saving (the reported case), (b) any KPI with `sent_back` OKV but partial advancement (must still show Entered).
-
-## Out of scope (intentionally)
-
-- Changing `propagate_org_kpi_value` semantics — already correct.
-- Editing `review_submissions` snapshots — POLICY §88 immutability.
-- Backfilling historical OKV.status in bulk — covered by optional reconciler only if you ask for it.
+- Changing the RPC, OKV.status backfill, or any propagation semantics.
+- Visual redesign of the dialog beyond the one consistency line.
