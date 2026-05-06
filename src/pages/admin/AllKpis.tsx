@@ -110,35 +110,22 @@ export default function AllKpis() {
   const { data: orgKpiFilledSet } = useQuery({
     queryKey: ['org-kpi-filled-set', selectedPeriod, selectedYear],
     queryFn: async () => {
-      // Paginate to avoid the silent 1000-row Supabase ceiling that would
-      // otherwise under-report "filled" org KPIs for high-volume periods.
+      // Server-side aggregation via SECURITY DEFINER RPC. Returns only the
+      // (category, kra, kpi, employee) tuples — keys only, not full rows —
+      // so payload + statement cost stay bounded.
       const filled = new Set<string>();
-      const PAGE = 1000;
-      let from = 0;
-      // Safety cap: 100k rows
-      while (from < 100_000) {
-        let query = supabase
-          .from('org_kpi_values')
-          .select('category_id, kra_name, kpi_name, employee_id, achieved_value, is_na')
-          .not('employee_id', 'is', null)
-          .range(from, from + PAGE - 1);
-        if (selectedPeriod !== 'all') query = query.eq('review_period', selectedPeriod);
-        if (selectedYear !== 'all') query = query.eq('review_year', parseInt(selectedYear));
-        const { data, error } = await query;
-        if (error) throw error;
-        const rows = data || [];
-        for (const row of rows) {
-          if (row.achieved_value !== null || row.is_na) {
-            filled.add(`${row.category_id}||${row.kra_name}||${row.kpi_name}||${row.employee_id}`);
-          }
-        }
-        if (rows.length < PAGE) break;
-        from += PAGE;
+      const { data, error } = await supabase.rpc('rpc_org_kpi_filled_keys', {
+        p_period: selectedPeriod === 'all' ? null : selectedPeriod,
+        p_year: selectedYear === 'all' ? null : parseInt(selectedYear),
+      });
+      if (error) throw error;
+      for (const row of data || []) {
+        filled.add(`${row.category_id}||${row.kra_name}||${row.kpi_name}||${row.employee_id}`);
       }
       return filled;
     },
     enabled: !!kpis && kpis.length > 0,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
   });
 
   // Dialog states
@@ -393,7 +380,9 @@ export default function AllKpis() {
     toast({ title: 'Report downloaded successfully' });
   }, [employeeData, selectedPeriod, selectedYear, toast]);
 
-  const isLoading = kpisLoading || profilesLoading;
+  // Don't block first paint on the full ~2.5k profiles fetch — manager/department
+  // labels hydrate ~200ms later (they fall back to '-' which is the existing UX).
+  const isLoading = kpisLoading;
 
   if (isLoading) {
     return (
