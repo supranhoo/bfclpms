@@ -1,59 +1,50 @@
-## Confirmed Root Cause
+# KPI Weightage Dashboard — Performance Fix
 
-The "Rollover Failed — Edge Function returned a non-2xx status code" toast is the UI surfacing this Postgres error from `auto-rollover-kpis` (visible in edge logs):
+## Risk & Impact Report
+- **Data Impact**: None. Adds two read-only Postgres RPCs (`SECURITY DEFINER` with admin role check). No schema or RLS change.
+- **Workflow Impact**: None — purely a read-path optimization.
+- **UI/UX**: Same UI; just faster. Badge numbers and pagination behavior unchanged.
+- **Regression Risk**: Low. We keep the existing client-side matrix builder for the page slice; only the *eligible-employee discovery* and *variance summary* move server-side. We add a unit test asserting summary parity vs. the current logic on a mock dataset.
+- **Mitigation**: Feature-flag fallback path retained — if the RPC errors, the hook falls back to the current client-side code with a console warning.
 
-```
-Insert failed: column "status" is of type review_status but expression is of type text
-```
+## Root Cause (RCA)
+On `/admin/kpi-weightage-dashboard` two hooks fire in parallel and each does heavy client-side fan-out:
 
-The RPC `public.batch_insert_kpis_with_rollover_flag` (introduced in migration `20260501050203`) inserts:
+1. `fetchEmployeesWithKpis` paginates `kpis` 1000 rows at a time across **both** review_years just to collect distinct `employee_id`s. With ~12k KPI rows that's ~24 round trips, run **twice** (once per hook).
+2. `useWeightageVarianceSummary` then re-pulls **every** KPI for the full filtered employee set (chunked `IN (...)` of 200 at a time × 2 years × inner 1000-row pages) only to compute two integer badges client-side.
+3. Both hooks duplicate the eligibility query and the per-year fetch loops, so the page issues dozens of serial-ish requests before the matrix renders.
 
-```sql
-COALESCE(kpi->>'status', 'kra_set')   -- text
-```
+Result: spinner stays up for many seconds even when only a handful of employees match the filter (e.g. "Ankit").
 
-into `kpis.status`, which is the `review_status` enum. Recent Postgres no longer implicitly coerces `text → enum` in INSERT … SELECT, so every rollover insert batch now fails — including Ankit's April → May rollover with 9 KPIs.
+## Plan
 
-This is a server-side regression only; no data was written for the failing batch.
+### 1. New Postgres RPCs (migration)
+- `rpc_weightage_eligible_employees(p_fiscal_start_year int, p_category_id uuid)` → `setof uuid`
+  - `SELECT DISTINCT employee_id FROM kpis WHERE review_year IN (y, y+1) AND employee_id IS NOT NULL [AND category_id = p_category_id]`.
+  - One round trip instead of paginated scan.
+- `rpc_weightage_variance_summary(p_fiscal_start_year int, p_employee_ids uuid[], p_category_id uuid)` → `table(variance_count int, acknowledged_count int)`
+  - Groups by `(employee_id, kra_name, kpi_name)`, picks fiscal-ordered baseline, returns mismatch + ack counts entirely in SQL.
+  - `SECURITY DEFINER`, `set search_path = public`, guarded by `has_role(auth.uid(),'admin')`.
 
-## Fix Plan
+### 2. Hook refactor (`src/hooks/useKpiWeightageMatrix.ts`)
+- Replace `fetchEmployeesWithKpis` with a single `supabase.rpc('rpc_weightage_eligible_employees', …)` call, exposed via its own React Query key so both hooks share the cache.
+- `useKpiWeightageMatrix`: keep the page-slice path (profiles `.range()` + KPIs `.in(pageIds)`), but source eligibility from the shared query.
+- `useWeightageVarianceSummary`: stop fetching raw KPIs. Resolve filtered employee IDs via the existing profiles query (already small after filters), then call `rpc_weightage_variance_summary`.
+- Fallback: on RPC error, log and fall back to the existing client logic so badges still render.
 
-**1. DB migration — recreate the RPC with an explicit enum cast**
+### 3. Tests
+- `src/test/kpiWeightageDashboardPagination.test.ts`: extend to cover the new RPC mock and assert variance/ack parity with the legacy client computation on a fixture.
+- Add a small unit test for the fallback path (RPC throws → client path runs).
 
-New migration: `supabase/migrations/<ts>_fix_batch_insert_kpis_rollover_status_cast.sql`
-
-- `CREATE OR REPLACE FUNCTION public.batch_insert_kpis_with_rollover_flag(jsonb)` identical to today's body, but the `status` projection becomes:
-
-  ```sql
-  COALESCE(NULLIF(kpi->>'status',''), 'kra_set')::public.review_status
-  ```
-
-- Same `SECURITY DEFINER`, same `search_path = public`, same return type, same notification-suppression flag — purely a cast fix, no behavior change.
-
-**2. Verification**
-
-- After migration, retry Ankit's April → May rollover from the same dialog. Expect `Ready (1 employee, 9 KPIs) → Proceed → Success` toast and 9 new rows in `kpis` for May 2026.
-- Check `kra_rollover_logs` no longer records a `failed` row for that batch.
-- Edge log line `Insert failed: column "status"…` should not reappear.
-
-**3. Regression guard**
-
-Add `src/test/rolloverStatusEnumCast.test.ts` that mocks the RPC and asserts the edge-function code path surfaces a friendly toast on a Postgres `42804` error (already friendly today, but lock it in).
-
-## Risk & Impact
-
-| Area | Impact |
-|------|--------|
-| Data | None. Cast-only change; the failing batches never wrote rows. |
-| Workflow | Restores the broken KRA Rollover flow — no behavioral change beyond "it works again". |
-| RLS | Untouched. |
-| Regression | Very low — single function body change, additive cast. |
-| Mitigation | New unit test + manual rerun of Ankit's rollover. |
+### 4. Docs / Memory
+- Update `mem/features/admin/kpi-weightage-dashboard.md` to note: eligibility + variance summary are now server-side RPCs; client only builds the visible page matrix.
+- Append entry to `CHANGELOG_2026.md` and bump `DOCUMENTATION.md` Version History.
 
 ## Files
+- `supabase/migrations/<new>.sql` — two RPCs + grants.
+- `src/hooks/useKpiWeightageMatrix.ts` — refactor both hooks.
+- `src/test/kpiWeightageDashboardPagination.test.ts` — new assertions.
+- `mem/features/admin/kpi-weightage-dashboard.md`, `CHANGELOG_2026.md`, `DOCUMENTATION.md` — docs sync.
 
-- **New** `supabase/migrations/<ts>_fix_batch_insert_kpis_rollover_status_cast.sql`
-- **New** `src/test/rolloverStatusEnumCast.test.ts`
-- **Edit** `CHANGELOG_2026.md`, `DOCUMENTATION.md` (Version History entry)
-
-Approve to apply the migration and ship the test.
+## Expected Outcome
+Initial load drops from dozens of requests / multi-second spinner to ~3 fast queries (eligibility RPC + profiles page + variance RPC), regardless of org size.

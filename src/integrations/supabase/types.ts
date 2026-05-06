@@ -8341,6 +8341,23 @@ export type Database = {
         Args: { _action: string; _user_id: string }
         Returns: boolean
       }
+      rpc_weightage_eligible_employees: {
+        Args: { p_category_id?: string; p_fiscal_start_year: number }
+        Returns: {
+          employee_id: string
+        }[]
+      }
+      rpc_weightage_variance_summary: {
+        Args: {
+          p_category_id?: string
+          p_employee_ids: string[]
+          p_fiscal_start_year: number
+        }
+        Returns: {
+          acknowledged_count: number
+          variance_count: number
+        }[]
+      }
       run_safety_sla_escalations: { Args: never; Returns: Json }
       scan_kpi_duplicate_groups: {
         Args: { p_fuzzy_threshold?: number; p_include_skipped?: boolean }
