@@ -13,3 +13,17 @@ Propagation overwrite policy (`propagate_org_kpi_value.p_overwrite_policy`):
 Every overwrite emits `ORG_KPI_VALUE_OVERWRITTEN` audit. `preview_org_kpi_propagation` mirrors the policy and returns Old→New self_score for the dialog diff.
 
 Reference: ADR-053, ADR-054. Owner-table cleanup snapshotted to `org_kpi_owner_key_backup` (admin-read RLS).
+## RLS predicates (ADR-057, May 2026)
+
+Any RLS policy that joins on the org-KPI triple `(category_id, kra_name, kpi_name)` MUST wrap `kra_name` and `kpi_name` in `public.normalize_kpi_text(...)` on **both** sides of the comparison. Strict `=` is forbidden — owner-table rows and `kpis`/`org_kpi_values` rows can drift by case, embedded `\r`, or collapsed whitespace.
+
+Helper contract (must stay in sync with JS `normalizeText` in `src/lib/orgKpiKey.ts`):
+`btrim(regexp_replace(replace(lower(coalesce(p,'')), E'\r',''), '\s+',' ','g'))`
+
+Affected policies brought into compliance:
+- `kpis` → "Data owners can view assigned org-level KPIs"
+- `org_kpi_values` → "Data owners can insert their assigned org_kpi_values"
+- `org_kpi_values` → "Data owners can update their assigned org_kpi_values"
+
+Backup of pre-canonicalization owner rows: `org_kpi_owner_key_backup_2026_05` (admin-read RLS).
+Parity test: `src/test/orgKpiOwnerNormalization.test.ts`.
