@@ -11,6 +11,7 @@ export interface PropagationDetail {
   oldScore: number | null;
   newScore: number | null;
   change: number | null;
+  priorStatus?: string | null;
 }
 
 export interface PropagationResultWithDetails {
@@ -18,6 +19,7 @@ export interface PropagationResultWithDetails {
   details: PropagationDetail[];
   skippedCount?: number;
   skipped?: Array<{ kpi_id: string; current_status: string; reason: string }>;
+  overwrittenCount?: number;
 }
 
 interface PropagateParams {
@@ -40,6 +42,13 @@ interface PropagateParams {
    * can emit ONE summary toast instead of N stacked ones.
    */
   silent?: boolean;
+  /**
+   * Overwrite policy passed to the RPC. Defaults to 'pre_review_only' which lets
+   * data owners overwrite employee self-reviewed values that no manager/auditor
+   * has yet acted on. Use 'force_pre_terminal' (admin) to overwrite any
+   * non-terminal stage. 'safe' keeps the legacy kra_set-only behaviour.
+   */
+  overwritePolicy?: 'safe' | 'pre_review_only' | 'force_pre_terminal';
 }
 
 /**
@@ -211,21 +220,27 @@ async function callPropagationRpc(
   kpiRatings: any[],
   profileMap: Map<string, any>,
   isNa: boolean,
-  remarks?: string | null
+  remarks?: string | null,
+  overwritePolicy: 'safe' | 'pre_review_only' | 'force_pre_terminal' = 'pre_review_only'
 ): Promise<PropagationResultWithDetails> {
   const { data, error } = await supabase.rpc('propagate_org_kpi_value', {
     p_kpi_ratings: kpiRatings,
     p_is_na: isNa,
     p_remarks: remarks || null,
+    p_overwrite_policy: overwritePolicy,
   });
 
   if (error) throw error;
 
   const rpcResult = data as any;
+  let overwrittenCount = 0;
   const details: PropagationDetail[] = (rpcResult.details || []).map((d: any) => {
     const info = profileMap.get(d.kpi_id);
     const newScore = d.new_score ?? null;
     const oldScore = d.old_score ?? null;
+    if (oldScore !== null && newScore !== null && oldScore !== newScore) {
+      overwrittenCount += 1;
+    }
     return {
       employeeName: info?.fullName || 'Unknown',
       employeeCode: info?.employeeCode || null,
@@ -233,6 +248,7 @@ async function callPropagationRpc(
       oldScore,
       newScore,
       change: oldScore !== null && newScore !== null ? newScore - oldScore : null,
+      priorStatus: d.prior_status ?? null,
     };
   });
 
@@ -241,6 +257,7 @@ async function callPropagationRpc(
     details,
     skippedCount: rpcResult.skipped_count ?? 0,
     skipped: rpcResult.skipped ?? [],
+    overwrittenCount,
   };
 }
 
