@@ -1,70 +1,54 @@
-## Why "50 employees" vs "55 Employees"
+# Fix: Impact Analysis shows 50, card shows 55
 
-The two numbers come from **two different sources** that should — but don't — agree:
+## Root Cause
 
-```text
-Header badge:  "50 employees"    ← data.employeeCount
-Section bar:   "55 Employees"    ← scopedRows.length (rows actually rendered)
-                                   = filteredEmps from allProfiles
-```
+The Org KPI card badge ("55 Employees") and the Impact Analysis sheet ("Total Affected: 50") are computed from **two different queries**:
 
-### Pipeline
+| Source | Where | Filter applied | Result |
+|---|---|---|---|
+| Card badge | `OrgKpiDataEntry` → `scopedRows.length` (built from `mappedEmployeesMap` ∩ `useProfiles()` which forces `is_active = true`) | active employees only, deduped | **55** |
+| Impact sheet | `useOrgKpiImpact` → fresh `kpis` query joined to `profiles!kpis_employee_id_fkey` | **no `is_active` filter**, drops rows where the embedded profile is null (RLS-hidden), no dedup against the card's mapping | **50** |
 
-1. `useOrgLevelKpisWithEmployees` reads `kpis` rows for the period and groups distinct `employee_id`s per (category, KRA, KPI) → **`employeeCount` = 50** and `employeeIds` (set of 50).
-2. In `OrgKpiDataEntry.buildCardData` (employee scope):
-   ```ts
-   const mappedEmpIds = mappedEmployeesMap.get(kk2);   // 50 ids
-   const filteredEmps = mappedEmpIds
-     ? allProfiles.filter(emp => mappedEmpIds.has(emp.id))
-     : allProfiles;
-   scopedRows = filteredEmps.map(...)                  // 55 rows
-   ```
-3. `OrgKpiScopedEntryTable` shows `{rows.length} Employees` → **55**.
-4. The header badge keeps `data.employeeCount` → **50**.
+The 5-employee gap is caused by `useOrgKpiImpact`:
+1. Not filtering `profiles.is_active = true`, so inactive employees can sneak in or be dropped depending on join.
+2. Silently skipping `kpis` rows when the embedded profile join returns null (`if (!profile) continue;`) — RLS or a missing department FK can hide them.
+3. Not using the canonical `mappedEmpIdsByKey` already computed by `useOrgLevelKpisWithEmployees` (the same source the card uses).
 
-### Root cause (most likely)
+This violates ADR-064 (single source of truth for the Org KPI employee count).
 
-`mappedEmployeesMap.get(kk2)` is returning **`undefined`** for this KPI definition, so the `filteredEmps` branch falls through to `allProfiles` (2,532 rows) — but that would render thousands, not 55. The 55 number indicates a **second filter is silently being applied to `scopedRows` somewhere**, OR (more likely given the gap) the **map key mismatch is partial**:
+## Plan
 
-- `employeeCount` is computed from the *raw* `kpis` rows for this exact period (50).
-- `mappedEmployeesMap` is built with the **same key** (`normalizeKpiKey(category_id, kra_name, kpi_name)`), so it should also be 50.
-- BUT `kpis` table may contain **duplicate `kpis` rows for the same employee** under slightly different `kra_name`/`kpi_name` whitespace — `countMap` uses a `Set<employee_id>` (dedup → 50), while a different code path that expands employees may not dedupe. Looking at the screenshot, the row list itself spans multiple departments (FAD‑Production, Furnace‑Mech, …) and the table includes employees the badge doesn't count (e.g. the 5 extras are in departments that exist in `employeeIds` of a *sibling* KPI definition that got merged at render time).
+### 1. Pass the canonical employee id list to the Impact sheet
+In `OrgKpiDataEntry.tsx`, when opening `OrgKpiImpactSheet`, pass the already-computed scoped employee id list for that KPI (from `mappedEmployeesMap` / `scopedRows`) as a new prop, e.g. `expectedEmployeeIds: string[]`.
 
-The 5-row gap is therefore one of:
-- **(A) Whitespace/case duplicates in `kpis.kra_name` / `kpi_name`** — the dedupe `uniqueMap` keeps the *first* row, but `countMap` is keyed on the normalized key so it merges. Two near‑identical defs collapse on the badge side but the renderer reads `scopedRows` from the merged-superset → 55 vs 50. (Same family of bug as ADR-054/062.)
-- **(B) Stale React Query cache** for `org-level-kpis-with-employees` (key includes `user.id`) showing an older `employeeCount` while `mappedEmployeesMap` already reflects new mapping additions made via "Add Employees".
-- **(C) Inactive / soft‑deleted profiles** still in `kpis.employee_id` — counted by Set but rendered/excluded inconsistently. (Core memory: "Always filter out is_active: false users.")
+### 2. Make the Impact hook honor that list
+Update `useOrgKpiImpact` to:
+- Accept an optional `expectedEmployeeIds` argument.
+- Add `.eq('profiles.is_active', true)` to the embedded join (or filter post-fetch on `profile.is_active !== false`).
+- After fetching, **intersect** the returned KPI rows with `expectedEmployeeIds` when provided so the sheet can never under- or over-report compared to the card.
+- Keep the "skip if no profile" guard but log a dev-only warning when the count diverges from `expectedEmployeeIds.length`, so future drifts are caught.
 
-### Plan to confirm + fix
+### 3. Anchor the sheet's display counts
+In `OrgKpiImpactSheet.tsx`, derive `Total Affected` and the `Affected Employees (N)` heading from `expectedEmployeeIds.length` when provided, falling back to `impact.totalEmployees` only for legacy callers. The table still renders whatever `impact.employees` returns; if they differ, show a small inline note ("X hidden by access policy") instead of silently disagreeing.
 
-1. **Diagnose (read-only DB)**
-   - Run a SQL query against `kpis` for the affected (period, year, category, KRA, KPI) to:
-     - count distinct `employee_id`,
-     - list distinct `(kra_name, kpi_name)` raw strings (look for whitespace/case variants),
-     - join `profiles` and flag `is_active = false`.
-   - Compare against the `employeeIds` array surfaced by the hook (add a one‑shot console log in `buildCardData`).
+### 4. Regression test
+Add `src/test/orgKpiImpactCountParity.test.ts` covering:
+- Active-only filtering removes inactive employees from the count.
+- When `expectedEmployeeIds` is passed, `Total Affected` equals its length even if a profile join returned null.
+- Falls back gracefully when `expectedEmployeeIds` is omitted.
 
-2. **Fix in code (single source of truth)**
-   - Make `scopedRows` and `employeeCount` come from the **same** `employeeIds` array — drive the badge off `scopedRows.length` (or vice‑versa). Today they come from two derivations of the same map, which is fragile.
-   - In `useOrgLevelKpisWithEmployees`, **filter out `is_active = false`** profiles from the count and the `employeeIds` set in the same step (currently `profiles` query selects only `id, department_id`).
-   - If duplicates exist in `kpis`, normalize keys consistently — already done via `normalizeKpiKey`, but verify there isn't a residual non‑normalized lookup in the renderer.
+### 5. Docs / ADR
+Extend ADR-064 with a short addendum: "The Impact Analysis sheet must reuse the same `mappedEmpIdsByKey` snapshot as the card; never re-derive employee scope from a fresh `kpis` query."
 
-3. **Regression guard**
-   - Add a unit test asserting `employeeCount === scopedRows.length` for any built card.
-   - Add a console assertion (dev only) when they diverge.
+## Files to touch
+- `src/hooks/useOrgKpiImpact.ts` — accept `expectedEmployeeIds`, add `is_active` filter, intersect results.
+- `src/components/admin/OrgKpiImpactSheet.tsx` — accept and forward the new prop, anchor counts to it.
+- `src/pages/admin/OrgKpiDataEntry.tsx` — pass the scoped employee id list when opening the sheet.
+- `src/test/orgKpiImpactCountParity.test.ts` — new regression test.
+- `docs/adr/ADR-064.md` — addendum.
 
-4. **UI clarification (interim)**
-   - While diagnosing, change the header badge to read `"{scopedRows.length} mapped · {employeeCount} active"` so the user can see *which* number is which instead of two unlabelled counts.
-
-### Files to touch
-- `src/hooks/useOrgLevelKpis.ts` — include `is_active` in profile select; exclude inactive from count + ids.
-- `src/pages/admin/OrgKpiDataEntry.tsx` — derive `employeeCount` from `scopedRows.length` (single source).
-- `src/components/admin/OrgKpiEntryCard.tsx` — dev-only assertion; optional dual-label badge.
-- `src/test/orgKpiEmployeeCountParity.test.ts` — new.
-
-### Risk & impact
-- Low: changes are read-side; no migrations.
-- Affects every Org KPI card's header badge — verify visually after fix.
-- Reduces user confusion; no policy/RLS change.
-
-**Approve to run the diagnostic SQL first, then apply the parity fix.**
+## Risk & Impact
+- **Data impact:** none — read-only fix.
+- **Workflow impact:** none — only the count and labels in the Impact sheet change.
+- **UI/UX:** the sheet will now show **55 / 55** matching the card; if RLS truly hides a profile, the inline note explains the divergence instead of showing the wrong number.
+- **Regression risk:** low — change is scoped to one hook + one sheet; covered by new parity test.
