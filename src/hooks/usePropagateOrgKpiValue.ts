@@ -400,7 +400,8 @@ export function useBulkPropagateOrgKpiValues() {
 
       if (allRatings.length === 0) return { propagatedCount: 0, details: [] };
 
-      const result = await callPropagationRpc(allRatings, globalProfileMap, hasNa, null);
+      const policy = values.find(v => v.overwritePolicy)?.overwritePolicy ?? 'pre_review_only';
+      const result = await callPropagationRpc(allRatings, globalProfileMap, hasNa, null, policy);
 
       // Fire-and-forget: log to kpi_audit_logs for Review Timeline visibility
       logPropagationAudit(allRatings, hasNa).catch(() => {});
@@ -415,22 +416,25 @@ export function useBulkPropagateOrgKpiValues() {
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
       if (result.propagatedCount > 0) {
+        const overwroteMsg = result.overwrittenCount && result.overwrittenCount > 0
+          ? ` (${result.overwrittenCount} prior value${result.overwrittenCount === 1 ? '' : 's'} overwritten)`
+          : '';
         toast({
-          title: `Propagated to ${result.propagatedCount} employee KPI(s)`,
+          title: `Propagated to ${result.propagatedCount} employee KPI(s)${overwroteMsg}`,
           description: result.skippedCount && result.skippedCount > 0
-            ? `${result.skippedCount} KPI(s) skipped (already past initial stage).`
+            ? `${result.skippedCount} KPI(s) skipped (locked by reviewer).`
             : undefined,
         });
       } else if (result.skippedCount && result.skippedCount > 0) {
         // v2.66.8 — see usePropagateOrgKpiValue.onSuccess for rationale.
         const skipped = result.skipped || [];
         const allBenign = skipped.length > 0 && skipped.every(
-          s => s.reason === 'not_in_kra_set'
+          s => s.reason === 'not_in_kra_set' || s.reason === 'reviewer_locked'
         );
         if (allBenign) {
           toast({
-            title: 'Already propagated',
-            description: `All ${result.skippedCount} KPI(s) have already advanced past the data-owner stage. Previously propagated values remain in place.`,
+            title: 'Locked by reviewer',
+            description: `All ${result.skippedCount} KPI(s) have moved into manager/auditor/management review and cannot be overwritten by the data owner.`,
           });
         } else {
           toast({
