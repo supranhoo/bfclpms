@@ -56,8 +56,9 @@ export interface OrgKpiDataOwner {
  * Fetch all data owners for org-level KPIs
  */
 export function useOrgKpiDataOwners() {
+  const { isReady, user } = useAuth();
   return useQuery({
-    queryKey: ['org-kpi-data-owners'],
+    queryKey: ['org-kpi-data-owners', user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('org_kpi_data_owners')
@@ -70,6 +71,7 @@ export function useOrgKpiDataOwners() {
       if (error) throw error;
       return data as OrgKpiDataOwner[];
     },
+    enabled: isReady && !!user,
   });
 }
 
