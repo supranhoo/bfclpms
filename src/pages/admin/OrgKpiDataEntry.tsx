@@ -471,6 +471,22 @@ export default function OrgKpiDataEntry() {
         });
     }
 
+    // ADR-064 — Single source of truth for the "X employees" badge.
+    // Previously `employeeCount` came from `employeeCountMap` (built off the
+    // raw `kpis` rows snapshot at hook-fetch time) while the rendered list
+    // came from `scopedRows` (built off `mappedEmployeesMap` filtered by
+    // `allProfiles`). These two derivations could disagree when:
+    //   - a data owner's RLS view of `kpis` differed from the cached snapshot
+    //   - new employees were just added via OrgKpiAddEmployeeDialog and one
+    //     side refreshed before the other
+    //   - a profile was deactivated since the KPI rows were created
+    // Anchoring the badge to `scopedRows.length` for scoped KPIs guarantees
+    // the header count and the table count never drift.
+    const headerEmployeeCount =
+      (scope === 'employee' || scope === 'department') && scopedRows
+        ? scopedRows.length
+        : empCount;
+
       return {
       categoryId: kpi.category_id,
       categoryName: catName,
@@ -493,7 +509,7 @@ export default function OrgKpiDataEntry() {
       status,
       scopedRows,
       scopeLabel,
-      employeeCount: empCount,
+      employeeCount: headerEmployeeCount,
       isNa: existing?.is_na ?? false,
       uomType: (kpi as any).uom_type || 'numeric',
       qualitativeOptions: (kpi as any).qualitative_options || null,
