@@ -910,7 +910,14 @@ export default function OrgKpiDataEntry() {
     });
 
     try {
-      const result = await previewPropagation.mutateAsync({ kpiIds: candidateIds });
+      const newAchieved = values.isNa ? null : (values.achievedValue ?? null);
+      const newSelfScore = values.isNa ? null : ((values as any).selfScore ?? null);
+      const result = await previewPropagation.mutateAsync({
+        kpiIds: candidateIds,
+        newAchieved: typeof newAchieved === 'number' ? newAchieved : null,
+        newSelfScore: typeof newSelfScore === 'number' ? newSelfScore : null,
+        overwritePolicy: 'pre_review_only',
+      });
       setPreviewState((s) => ({ ...s, loading: false, result }));
     } catch (err: any) {
       setPreviewState({ open: false, loading: false, result: null, pendingExec: null });
