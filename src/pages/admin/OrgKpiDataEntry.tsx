@@ -5,6 +5,7 @@ import { useKraCategories, useDepartments, useProfiles } from '@/hooks/useOrgani
 import { useOrgKpiValues, useBulkUpsertOrgKpiValues, useClearOrgKpiEntry, OrgKpiValue } from '@/hooks/useOrgKpiValues';
 import { useOrgLevelKpisWithEmployees, useOrgLevelKpis } from '@/hooks/useOrgLevelKpis';
 import { useOrgKpiOwnershipMap } from '@/hooks/useOrgKpiDataOwner';
+import { useIsAnyOrgKpiDataOwner } from '@/hooks/useOrgKpiDataOwner';
 import { useUnmarkAsOrgLevel } from '@/hooks/useMarkAsOrgLevel';
 import { usePropagateOrgKpiValue } from '@/hooks/usePropagateOrgKpiValue';
 import { usePreviewOrgKpiPropagation, PropagationPreviewResult } from '@/hooks/usePreviewOrgKpiPropagation';
@@ -110,6 +111,9 @@ export default function OrgKpiDataEntry() {
   const { data: allProfiles } = useProfiles();
   const { data: existingOrgValues } = useOrgKpiValues(undefined, selectedPeriod, selectedYear);
   const { ownershipMap, isAdmin } = useOrgKpiOwnershipMap();
+  // ADR-057 — if the user is a registered data owner but RLS returned zero
+  // KPIs, surface a louder error instead of the generic "no KPIs" empty state.
+  const { data: isAnyOrgKpiOwner } = useIsAnyOrgKpiDataOwner();
   const bulkUpsert = useBulkUpsertOrgKpiValues();
   const propagate = usePropagateOrgKpiValue();
   const previewPropagation = usePreviewOrgKpiPropagation();
@@ -1181,7 +1185,7 @@ export default function OrgKpiDataEntry() {
       )}
 
       {/* No KPIs warning */}
-      {orgLevelData && orgLevelData.totalOrgKpis === 0 && (
+      {orgLevelData && orgLevelData.totalOrgKpis === 0 && !(isAnyOrgKpiOwner && !isAdmin) && (
         <Card className="border-destructive/50 bg-destructive/5">
           <CardContent className="pt-6">
             <div className="flex items-start gap-3">
@@ -1190,6 +1194,25 @@ export default function OrgKpiDataEntry() {
                 <p className="font-medium text-foreground">No Organization-Level KPIs Found</p>
                 <p className="text-sm text-muted-foreground mt-1">
                   Mark individual KPIs as "Organization-Level" in the Admin KPI Editor, or check the Suggestions tab.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ADR-057 — registered data owner but RLS returned 0 rows: louder explainer */}
+      {orgLevelData && orgLevelData.totalOrgKpis === 0 && isAnyOrgKpiOwner && !isAdmin && (
+        <Card className="border-destructive/50 bg-destructive/5">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-destructive mt-0.5" />
+              <div>
+                <p className="font-medium text-foreground">We couldn't load your assigned KPIs</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  You're a registered data owner but no KPIs are visible for {selectedPeriod} {selectedYear}.
+                  Try refreshing the page. If the issue persists, contact an administrator —
+                  the KPI name on file may not exactly match the assigned KPI.
                 </p>
               </div>
             </div>
