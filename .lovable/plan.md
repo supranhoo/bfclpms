@@ -1,41 +1,69 @@
-## Issue (from Ankan's screenshot)
-After saving/propagating an org KPI mapped to 50 employees, a destructive toast fires:
+## Root cause (confirmed against the live DB)
 
-> "50 employee KPI(s) skipped during propagation … Use Data Repair → Repair Orphaned Propagations"
+Ankan owns the KPI **"Completion of Mandated Training Hours…"**. The KPI is mapped to **214 active employees** (the screenshot shows the 50 he tried to propagate this month). He only sees ~25 in the table because **`is_org_kpi_data_owner_for_profile` returns FALSE for the other rows**.
 
-Yet the 25 visible rows did get values written. The 25 hidden rows (RLS) never get propagated, and the toast misrepresents the situation.
+The reason is purely a string mismatch between two tables:
 
-## Root cause
-1. **Per-scope propagate loop** in `OrgKpiDataEntry.tsx` (lines 666–698) iterates over `values.scopedValues`, which is built **only from the visible profiles** (`allProfiles.filter(...)`). Hidden employees are never sent to `propagate_org_kpi_value`, so 25 of 50 KPIs really are skipped.
-2. **Half-propagation guard** (lines 753–786) then re-queries `kpis` directly (no profile join — it sees all 50), compares against `propagatedScopeIds` (25), and emits the alarming red toast for every hidden employee. The wording also points users at "Repair Orphaned Propagations" even when nothing is actually orphaned — those rows simply weren't attempted yet.
-3. The `org_kpi_values.status='propagated'` write at lines 789–826 only updates rows whose `department_id` / `employee_id` is in `propagatedScopeIds`, so hidden employees are also left with stale status — feeding the next-time "Already past initial stage" misclassification.
+- `org_kpi_data_owners.kpi_name` → stored as a single line with `" - "` separators (length 385).
+- `public.kpis.kpi_name` → stored with real newlines `"\n- "` (length 377).
 
-## Fix plan (no UX redesign — just correctness)
+`o.kpi_name = k.kpi_name` therefore fails. The SECURITY DEFINER helper added in ADR-060 returns 0, so the new profiles SELECT policy admits 0 employees, and `useProfiles()` truncates the scoped table. Save/propagate then only attempts whatever rows another (older) policy happened to expose.
 
-### A. Propagate every mapped employee, not just the visible ones
-For `scope === 'employee'`:
-- After the visible-scope loop, fetch the **full mapped employee list** for this `(category_id, kra_name, kpi_name, period, year, is_org_level=true)` from `kpis` (we already do this in the guard).
-- For each `employee_id` not yet in `propagatedScopeIds`, derive the value to send:
-  - If the data owner entered a single org-wide value (rare here), reuse it.
-  - Otherwise reuse the value already stored in `org_kpi_values` for that employee (the data owner saved it earlier via `bulkUpsert`, even when their profile row was hidden — `org_kpi_values` is FK-checked, not RLS-blocked for owners).
-- Call `propagate.mutateAsync({ scope: 'employee', employeeId, ... , silent: true })` for those rows so they advance server-side. Aggregate the count into `totalPropagated`.
-- The `propagate_org_kpi_value` RPC already runs `SECURITY DEFINER`, so it can advance KPIs whose profile rows are hidden from the owner.
+The same brittleness affects every owner-driven join we do server-side; the client side already normalizes via `normalizeKpiKey` (lowercase + trim + collapse whitespace), but the DB does not.
 
-### B. Replace the half-propagation toast with an accurate summary
-- Remove the destructive "skipped during propagation / Repair Orphaned" toast.
-- After step A, recompute `missed = mappedKpis − propagatedScopeIds`. If `missed.length === 0` (the new normal), say nothing extra. Only show a destructive toast if a true RPC failure leaves `missed > 0`, and word it as: *"N employee KPI(s) could not be advanced — please retry."* (no Data Repair pointer).
+## Fix plan
 
-### C. Status update covers all propagated rows
-- Change the `org_kpi_values` status update for `scope === 'employee'` to use the union of `propagatedScopeIds` (visible) **and** the just-advanced hidden IDs from step A, so all 50 rows flip to `propagated`.
+### 1. Database — normalize the owner⇄kpi join (single migration)
 
-### D. Tests
-- `src/test/orgKpiPropagateHiddenProfiles.test.ts` — unit test that, given a payload with 25 visible + 25 hidden employee IDs and a stub RPC, verifies (i) every employee is sent to `propagate_org_kpi_value`, (ii) the misleading "skipped/Repair Orphaned" toast is no longer emitted on the happy path, (iii) status update covers all 50.
-- Extend `orgKpiSaveOrphanGuard.test.ts` to assert the hidden rows are still saved through the existing FK-safe path.
+Add an immutable helper and rewrite the visibility function to use it:
 
-### E. Docs
-- ADR-061 ("Org KPI propagation parity for RLS-hidden employees") describing the bug, fix, and that the prior "Repair Orphaned Propagations" toast was a false alarm in this configuration.
-- Update `mem://features/admin/org-kpi-management-suite` and `CHANGELOG_2026.md`.
+```sql
+CREATE OR REPLACE FUNCTION public.normalize_kpi_text(t text)
+RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
+  SELECT lower(btrim(regexp_replace(coalesce(t,''), '\s+', ' ', 'g')))
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_org_kpi_data_owner_for_profile(p_profile_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.kpis k
+    JOIN public.org_kpi_data_owners o
+      ON o.category_id = k.category_id
+     AND public.normalize_kpi_text(o.kra_name) = public.normalize_kpi_text(k.kra_name)
+     AND public.normalize_kpi_text(o.kpi_name) = public.normalize_kpi_text(k.kpi_name)
+    WHERE k.employee_id   = p_profile_id
+      AND k.is_org_level  = true
+      AND o.owner_id      = auth.uid()
+  );
+$$;
+```
+
+The existing profiles SELECT policy keeps its USING clause; nothing else changes. Other owner-aware RPCs already do the right thing because they look up by `category_id + kra_name + kpi_name` against `kpis` only — the breakage is specifically the owner-table join. We will spot-audit `propagate_org_kpi_value` and `preview_org_kpi_propagation` and add the same `normalize_kpi_text` comparison if (and only if) they currently join `org_kpi_data_owners`.
+
+### 2. Frontend — keep the propagation loop honest
+
+`OrgKpiDataEntry.handleCardSave` / `executeSaveAndPropagate` already iterate over `allProfiles`. Once RLS returns the full 214 (or 50 for the active mapping), the existing loop will save and propagate every row — no logic change needed. Verify by:
+
+- Adding a tiny dev assertion: when `scopedRows.length < employeeCount`, log a single console warning with the gap (we already render the amber banner). No behavioral change for users.
+
+### 3. Tests / regression guards
+
+- New SQL guard test `src/test/orgKpiOwnerJoinNormalization.test.ts` — calls `is_org_kpi_data_owner_for_profile` against a synthetic owner row whose `kpi_name` differs only in whitespace from `kpis.kpi_name`, and asserts TRUE. This locks the normalization in place forever.
+- Extend `orgKpiSaveOrphanGuard.test.ts` to cover a 50-row mapping where every employee passes the safe-vs-orphan split (i.e. the orphans toast does NOT fire).
+
+### 4. Docs & memory
+
+- ADR-062 — "Org KPI owner⇄kpi join must be whitespace-normalized" (supersedes the silent-truncation footnote in ADR-060).
+- Update `mem://features/admin/org-kpi-management-suite` rule (20) to add: *"Server-side joins between `org_kpi_data_owners` and `kpis` MUST use `public.normalize_kpi_text()` on `kra_name` and `kpi_name`. Raw equality silently truncates owner visibility because import paths store `\n` while UI inserts collapse to spaces."*
+- Append an entry to `CHANGELOG_2026.md`.
+
+## Risk & impact
+
+- **Data**: read-only RLS broadening for *registered Org KPI data owners only*. No other role gains visibility.
+- **Workflow**: data owners can finally save/propagate for every mapped employee (the intended behavior).
+- **Regression risk**: very low — the helper is only referenced by the new profiles policy added in ADR-060. We will run the linter post-migration.
 
 ## Out of scope
-- Schema changes — not needed; RLS already lets data owners write `org_kpi_values` for hidden profiles, and the RPC already advances `kpis`/`review_submissions` server-side.
-- UI redesign of the propagation preview dialog (already addressed in the previous turn).
+
+- No UI redesign, no schema changes to `org_kpi_data_owners` (a global text-normalization migration would be a separate, larger cleanup).
