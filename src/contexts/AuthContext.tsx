@@ -36,6 +36,14 @@ interface AuthContextType {
   /** Toggle admin mode on/off (only relevant for admin users) */
   toggleAdminMode: () => void;
   loading: boolean;
+  /**
+   * True once the initial Supabase session bootstrap has completed (whether
+   * a user is signed-in or not). Hooks that issue RLS-gated queries MUST
+   * gate their `enabled` flag on this to avoid the cold-load race where
+   * PostgREST receives requests before `auth.uid()` is available, which
+   * silently returns 0 rows under RLS. See ADR-052 / POLICY §96.
+   */
+  isReady: boolean;
   /** True when auth bootstrap finished but profile could not be loaded */
   profileError: boolean;
   signIn: (email: string, password: string, rememberMe?: boolean) => Promise<{ error: Error | null }>;
@@ -64,6 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const initializedRef = useRef(false);
+  const prevReadyRef = useRef(false);
 
   // Derive effectiveRole
   const effectiveRole: AppRole | null = role === 'admin' && !isAdminMode && naturalRole
@@ -240,6 +249,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Auth-Readiness Query Gate (POLICY §96):
+  // When the bootstrap finishes for the first time AND a user is present,
+  // invalidate query caches that depend on auth.uid() so any racy first-mount
+  // query that returned an empty result is re-fetched with a valid session.
+  const isReady = !loading;
+  useEffect(() => {
+    if (!isReady) return;
+    if (prevReadyRef.current) return;
+    prevReadyRef.current = true;
+    if (!user?.id) return;
+    // Evict caches likely to have raced the auth bootstrap (Org KPI Data Entry,
+    // KPI lists, ownership maps, profile-derived data).
+    queryClient.invalidateQueries({ queryKey: ['org-level-kpis-with-employees'] });
+    queryClient.invalidateQueries({ queryKey: ['org-level-kpis'] });
+    queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
+    queryClient.invalidateQueries({ queryKey: ['org-kpi-data-owners'] });
+    queryClient.invalidateQueries({ queryKey: ['org-kpi-data-owner-names'] });
+    queryClient.invalidateQueries({ queryKey: ['is-any-org-kpi-owner'] });
+    queryClient.invalidateQueries({ queryKey: ['kpis'] });
+    queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
+    queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
+  }, [isReady, user?.id, queryClient]);
+
   const signIn = async (email: string, password: string, rememberMe: boolean = true) => {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -331,7 +363,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{
       user, session, profile, role, effectiveRole, naturalRole,
-      isAdminMode, toggleAdminMode, loading, profileError, signIn, signUp, signOut, fetchProfile,
+      isAdminMode, toggleAdminMode, loading, isReady, profileError, signIn, signUp, signOut, fetchProfile,
     }}>
       {children}
     </AuthContext.Provider>
