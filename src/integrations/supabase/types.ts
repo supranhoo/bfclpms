@@ -8270,10 +8270,17 @@ export type Database = {
       month_name_to_index: { Args: { p_month: string }; Returns: number }
       normalize_kpi_text: { Args: { p: string }; Returns: string }
       normalize_kpi_text_value: { Args: { txt: string }; Returns: string }
-      preview_org_kpi_propagation: {
-        Args: { p_kpi_ids: string[] }
-        Returns: Json
-      }
+      preview_org_kpi_propagation:
+        | { Args: { p_kpi_ids: string[] }; Returns: Json }
+        | {
+            Args: {
+              p_kpi_ids: string[]
+              p_new_self_score?: number
+              p_new_value?: number
+              p_overwrite_policy?: string
+            }
+            Returns: Json
+          }
       preview_split_definition: {
         Args: { p_move_alias_ids: string[]; p_source_id: string }
         Returns: Json
