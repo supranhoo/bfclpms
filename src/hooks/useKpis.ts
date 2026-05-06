@@ -375,7 +375,7 @@ export function useKpisByPeriodRanges(periodRanges: Array<{ month: string; year:
         }
       }
 
-      return allKpis;
+      return hydrateKpiRelations(allKpis);
     },
   });
 }
