@@ -53,3 +53,5 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Safety Directives](mem://preferences/safety-directives) — Mandatory cautious-mode rules for destructive ops, errors, and privilege use
 - [Engineering Standards](mem://preferences/engineering-standards) — SSOT/Policy sync, RCA, separation of concerns, RLS-first, pre-impl Risk Report
 - [Changelog Protocol](mem://preferences/changelog-protocol) — Append shipped changes to CHANGELOG_2026.md current-week row in same step as DOCUMENTATION.md Version History
+
+- [Auth-Readiness Query Gate](mem://architecture/auth-readiness-query-gate) — Gate RLS-dependent hooks on isReady to prevent empty-cache cold-load race
