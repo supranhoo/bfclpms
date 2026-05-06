@@ -1,46 +1,43 @@
-# Fix: "Could not preview propagation" overload ambiguity
+# Fix "type workflow_status does not exist" on Propagate (ADR-059)
 
-## RCA (5 Whys)
-
-1. **Symptom**: Ankan clicked Propagate on "IT Awareness & Training Programs" and got the toast: *"Could not choose the best candidate function between: public.preview_org_kpi_propagation(p_kpi_ids ⇒ uuid[]), public.preview_org_kpi_propagation(p_kpi_ids ⇒ uuid[], p_new_value ⇒ numeric, p_new_self_score ⇒ numeric, p_overwrite_policy ⇒ text)."*
-2. **Why?** PostgREST sent the 4-arg form (`p_kpi_ids`, `p_new_value`, `p_new_self_score`, `p_overwrite_policy`) but the database has **two** functions with the same name.
-3. **Why two?** The original ADR-053 migration created `preview_org_kpi_propagation(uuid[])`. ADR-054 added the richer signature `preview_org_kpi_propagation(uuid[], numeric, numeric, text)` with all-default parameters but **never dropped** the legacy one.
-4. **Why ambiguous?** Because `p_new_value`, `p_new_self_score`, `p_overwrite_policy` all have `DEFAULT NULL`/`'pre_review_only'`, a call passing only `p_kpi_ids` is valid against both overloads. PostgREST cannot pick one and aborts.
-5. **Why now?** The frontend (`usePreviewOrgKpiPropagation`) **always** passes all four parameters, but PostgREST's resolver still considers both candidates because every extra arg matches the defaults of the legacy form by name (it ignores nothing — the conflict is the defaults make both signatures applicable).
-
-Confirmed via `pg_proc`:
-```
-preview_org_kpi_propagation(p_kpi_ids uuid[])                                            -- legacy, ADR-053
-preview_org_kpi_propagation(p_kpi_ids uuid[], p_new_value numeric DEFAULT NULL,
-                            p_new_self_score numeric DEFAULT NULL,
-                            p_overwrite_policy text DEFAULT 'pre_review_only')           -- ADR-054 (current)
-```
+## RCA (5-Why)
+1. **Symptom** — Ankan clicks **Propagate** on the IT Awareness KPI and gets the toast `Failed to propagate values — type "workflow_status" does not exist`.
+2. **Why does the toast appear?** — `propagate_org_kpi_value(jsonb, boolean, text, text)` raises a Postgres error when executing `UPDATE kpis SET status = v_target_status::workflow_status`.
+3. **Why does that cast fail?** — There is no enum named `workflow_status` in the database. The actual enum on `public.kpis.status` is `public.review_status` (verified via `information_schema.columns`: `udt_name = review_status`).
+4. **Why was the wrong type used?** — Migration `20260506065308_..._policy_aware_propagation.sql` (ADR-054 follow-up) was authored against the wrong enum name; the cast was never executed in CI because the function only fires when an admin/data-owner clicks Propagate on a `kra_set`/`self_review` row.
+5. **Root cause** — Naming drift between the documented "workflow status" concept and the canonical enum `review_status`. No regression test pins the propagate RPC's enum cast, so the typo shipped.
 
 ## Fix
-
-Single migration that drops the obsolete 1-arg overload. The 4-arg version already covers every call site (`src/hooks/usePreviewOrgKpiPropagation.ts` is the only caller and always sends all four).
+Replace the bad cast with the real enum (`public.review_status`) inside `public.propagate_org_kpi_value(jsonb, boolean, text, text)`. No other call sites use `workflow_status`.
 
 ```sql
-DROP FUNCTION IF EXISTS public.preview_org_kpi_propagation(uuid[]);
+-- inside CREATE OR REPLACE FUNCTION public.propagate_org_kpi_value(...)
+UPDATE public.kpis
+   SET status = v_target_status::public.review_status
+ WHERE id = v_kpi_id;
 ```
 
-No code changes required in the frontend — the hook is already correct. Tile / dialog status logic (ADR-055/056) is unaffected.
+Everything else in the function body (policy gating, audit log writes, `review_submissions` upsert) stays exactly as it is — we are only correcting the enum name.
 
-## Risk & Impact
+## Regression guard
+Add `src/test/orgKpiPropagateEnumGuard.test.ts` that greps the live migration set and asserts:
+- 0 occurrences of the literal `workflow_status` in `supabase/migrations/**` (the type does not exist).
+- the propagate migration body contains the canonical `::review_status` cast.
 
-- **Data**: None. Read-only function, no schema/RLS changes.
-- **Workflow**: None. The 4-arg form is a strict superset.
-- **Regression**: Only consumer is `usePreviewOrgKpiPropagation` which uses the 4-arg form. Verified by repo grep — no other callers.
-- **Mitigation**: Add a unit/integration guard test that asserts only one overload exists (queries `pg_proc`) so future migrations don't reintroduce the ambiguity.
+This is a cheap source-level guard that will fail fast if the wrong enum name ever returns.
 
 ## Deliverables
+- **New migration** `supabase/migrations/<ts>_fix_propagate_org_kpi_value_enum_cast.sql` — `CREATE OR REPLACE` of the 4-arg `propagate_org_kpi_value` with the corrected `::review_status` cast (function signature unchanged, so PostgREST contract and ADR-058's single-overload guarantee are preserved).
+- **New test** `src/test/orgKpiPropagateEnumGuard.test.ts` — source-level guard described above.
+- **ADR-059** `docs/adr/ADR-059.md` documenting the typo, why `review_status` is the canonical enum, and the regression guard.
+- **CHANGELOG_2026.md** — append an entry under today's date.
+- **Memory update** — append a one-liner to `mem/features/admin/org-kpi-management-suite` noting that the propagate RPC must cast to `public.review_status`.
 
-1. `supabase/migrations/<ts>_drop_legacy_preview_org_kpi_propagation.sql` — single `DROP FUNCTION` statement.
-2. `src/test/orgKpiPreviewOverloadGuard.test.ts` — parity test stub asserting the hook signature stays in sync with the surviving overload.
-3. `docs/adr/ADR-058.md` — short note recording the cleanup and pointing back to ADR-053/054.
-4. `CHANGELOG_2026.md` + `mem/features/admin/org-kpi-management-suite` — one-line entries.
+## Risk & Impact
+- **Data impact:** none — function body and write semantics are identical; we only correct a cast that currently aborts the transaction before any row is written.
+- **Workflow impact:** Propagate dialog starts working again for data owners and admins. No permission or RLS change.
+- **UI/UX:** unchanged.
+- **Regression risk:** very low — single-line cast change inside an already-isolated SECURITY DEFINER function. Guard test prevents the typo from coming back.
+- **Mitigation:** keep the 4-arg signature byte-identical to ADR-058's contract so `usePreviewOrgKpiPropagation` and the propagate hook keep working without code edits.
 
-## Verification
-
-- After migration, re-run propagation preview for any KPI; the red toast disappears and `PropagationPreviewDialog` opens normally.
-- `select count(*) from pg_proc where proname = 'preview_org_kpi_propagation'` returns `1`.
+Approve to ship the migration, ADR-059, the guard test, and the changelog/memory updates.
