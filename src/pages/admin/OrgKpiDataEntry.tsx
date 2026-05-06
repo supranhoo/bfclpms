@@ -1175,6 +1175,30 @@ export default function OrgKpiDataEntry() {
         <GovernanceLockBanner permissions={governancePerms} viewLevel="employee" />
       )}
 
+      {/* Masked-admin banner: an admin currently viewing as their natural role
+          will only see KPIs they personally own. Common cause of the
+          "No org-level KPIs found" report. */}
+      {role === 'admin' && !isAdminMode && (
+        <Card className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/30">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-start gap-3">
+              <Info className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-foreground">
+                  Viewing as {naturalRole === 'manager' ? 'Manager' : 'Employee'}
+                </p>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Only KPIs assigned to you as a Data Owner are shown. Switch to Admin view to see and edit all org-level KPIs.
+                </p>
+              </div>
+              <Button size="sm" variant="outline" onClick={toggleAdminMode}>
+                Switch to Admin view
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* No KPIs warning */}
       {orgLevelData && orgLevelData.totalOrgKpis === 0 && (
         <Card className="border-destructive/50 bg-destructive/5">
