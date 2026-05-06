@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface OrgKpiValue {
   id: string;
@@ -37,8 +38,9 @@ export interface OrgKpiValue {
 }
 
 export function useOrgKpiValues(categoryId?: string, reviewPeriod?: string, reviewYear?: number) {
+  const { isReady, user } = useAuth();
   return useQuery({
-    queryKey: ['org-kpi-values', categoryId, reviewPeriod, reviewYear],
+    queryKey: ['org-kpi-values', categoryId, reviewPeriod, reviewYear, user?.id],
     queryFn: async () => {
       let query = supabase
         .from('org_kpi_values')
@@ -63,7 +65,7 @@ export function useOrgKpiValues(categoryId?: string, reviewPeriod?: string, revi
         entered_by_name: row.entered_by_profile?.full_name || null,
       })) as OrgKpiValue[];
     },
-    enabled: !!categoryId || !!reviewPeriod || !!reviewYear,
+    enabled: isReady && !!user && (!!categoryId || !!reviewPeriod || !!reviewYear),
   });
 }
 

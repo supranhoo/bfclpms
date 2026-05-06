@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { KPI } from '@/hooks/useKpis';
+import { useAuth } from '@/contexts/AuthContext';
+import { fetchAllPaged } from '@/lib/fetchAll';
 
 /** Normalize a string for consistent key matching: lowercase, collapse whitespace, trim */
 const nk = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
@@ -8,8 +10,9 @@ const mkKey = (catId: string, kra: string, kpi: string) => `${catId}||${nk(kra)}
 
 // Hook to get unique org-level KPIs (where is_org_level = true) for a period
 export function useOrgLevelKpis(reviewPeriod?: string, reviewYear?: number) {
+  const { isReady, user } = useAuth();
   return useQuery({
-    queryKey: ['org-level-kpis', reviewPeriod, reviewYear],
+    queryKey: ['org-level-kpis', reviewPeriod, reviewYear, user?.id],
     queryFn: async () => {
       let query = supabase
         .from('kpis')
@@ -43,7 +46,7 @@ export function useOrgLevelKpis(reviewPeriod?: string, reviewYear?: number) {
       
       return Array.from(uniqueMap.values()) as unknown as (KPI & { kra_categories: { id: string; name: string; color: string; weightage: number } })[];
     },
-    enabled: !!reviewPeriod && !!reviewYear,
+    enabled: isReady && !!user && !!reviewPeriod && !!reviewYear,
   });
 }
 
@@ -57,21 +60,26 @@ export interface OrgLevelKpiWithEmployees {
 }
 
 export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?: number) {
+  const { isReady, user } = useAuth();
   return useQuery({
-    queryKey: ['org-level-kpis-with-employees', reviewPeriod, reviewYear],
+    queryKey: ['org-level-kpis-with-employees', reviewPeriod, reviewYear, user?.id],
     queryFn: async () => {
-      // 1. Get all org-level KPIs (unique definitions)
-      const { data: allOrgKpis, error: err1 } = await supabase
-        .from('kpis')
-        .select(`*, kra_categories (id, name, color, weightage)`)
-        .eq('is_org_level', true)
-        .eq('review_period', reviewPeriod!)
-        .eq('review_year', reviewYear!)
-        .order('category_id')
-        .order('kra_name')
-        .order('kpi_name');
-
-      if (err1) throw err1;
+      // 1. Get all org-level KPIs (unique definitions). Use paginated fetch
+      // because per-period org KPI counts can exceed the 1000-row PostgREST
+      // cap (e.g. May 2026 ≈ 886 rows and growing). Without this, RLS-trimmed
+      // results were silently truncated.
+      const allOrgKpis = await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('kpis')
+          .select(`*, kra_categories (id, name, color, weightage)`)
+          .eq('is_org_level', true)
+          .eq('review_period', reviewPeriod!)
+          .eq('review_year', reviewYear!)
+          .order('category_id')
+          .order('kra_name')
+          .order('kpi_name')
+          .range(from, to)
+      );
 
       // Dedupe
       const uniqueMap = new Map<string, typeof allOrgKpis[0]>();
@@ -193,6 +201,6 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
         kraSetEmpIdsByKey,
       };
     },
-    enabled: !!reviewPeriod && !!reviewYear,
+    enabled: isReady && !!user && !!reviewPeriod && !!reviewYear,
   });
 }
