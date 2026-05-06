@@ -70,9 +70,15 @@ interface OrgKpiScopedEntryTableProps {
   isComplianceKpi?: boolean;
   /** Bulk submission date data per employee */
   submissionDates?: Map<string, { complete: boolean; date: string | null; pendingCount: number }>;
+  /**
+   * Canonical mapped employee count for this KPI (ADR-064). When set and
+   * larger than `rows.length`, the header shows "X of Y" so the visible
+   * subset cannot be confused with the true mapped total.
+   */
+  totalCount?: number;
 }
 
-export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds = [], onSelectionChange, onPropagateRow, isPropagating, isComplianceKpi = false, submissionDates }: OrgKpiScopedEntryTableProps) {
+export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds = [], onSelectionChange, onPropagateRow, isPropagating, isComplianceKpi = false, submissionDates, totalCount }: OrgKpiScopedEntryTableProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [bulkFillValue, setBulkFillValue] = useState('');
 
@@ -81,6 +87,8 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
   const enteredCount = rows.filter(r => r.achievedValue !== null || r.isNa).length;
   const allEntered = rows.length > 0 && enteredCount === rows.length;
   const sentBackCount = sentBackMap?.size ?? 0;
+  const effectiveTotal = typeof totalCount === 'number' && totalCount > rows.length ? totalCount : rows.length;
+  const hasHidden = effectiveTotal > rows.length;
 
   const hasSelectionFeature = !!onSelectionChange;
   const hasRowPropagation = !!onPropagateRow;
