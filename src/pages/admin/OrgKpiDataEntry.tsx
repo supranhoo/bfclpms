@@ -471,21 +471,14 @@ export default function OrgKpiDataEntry() {
         });
     }
 
-    // ADR-064 — Single source of truth for the "X employees" badge.
-    // Previously `employeeCount` came from `employeeCountMap` (built off the
-    // raw `kpis` rows snapshot at hook-fetch time) while the rendered list
-    // came from `scopedRows` (built off `mappedEmployeesMap` filtered by
-    // `allProfiles`). These two derivations could disagree when:
-    //   - a data owner's RLS view of `kpis` differed from the cached snapshot
-    //   - new employees were just added via OrgKpiAddEmployeeDialog and one
-    //     side refreshed before the other
-    //   - a profile was deactivated since the KPI rows were created
-    // Anchoring the badge to `scopedRows.length` for scoped KPIs guarantees
-    // the header count and the table count never drift.
-    const headerEmployeeCount =
-      (scope === 'employee' || scope === 'department') && scopedRows
-        ? scopedRows.length
-        : empCount;
+    // ADR-064 (revised) — Canonical "X employees" badge is the MAPPED count
+    // (employeeCountMap / mappedEmpIdsByKey), not scopedRows.length. The
+    // expanded scoped table renders the visible subset; if RLS hides some
+    // mapped profiles from the current user, the existing amber banner
+    // (ADR-060) explains the visibility gap. Conflating mapped vs visible
+    // counts is what caused the badge / expanded list / Impact sheet to
+    // disagree across periods.
+    const headerEmployeeCount = empCount;
 
       return {
       categoryId: kpi.category_id,

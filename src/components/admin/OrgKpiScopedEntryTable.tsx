@@ -70,9 +70,15 @@ interface OrgKpiScopedEntryTableProps {
   isComplianceKpi?: boolean;
   /** Bulk submission date data per employee */
   submissionDates?: Map<string, { complete: boolean; date: string | null; pendingCount: number }>;
+  /**
+   * Canonical mapped employee count for this KPI (ADR-064). When set and
+   * larger than `rows.length`, the header shows "X of Y" so the visible
+   * subset cannot be confused with the true mapped total.
+   */
+  totalCount?: number;
 }
 
-export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds = [], onSelectionChange, onPropagateRow, isPropagating, isComplianceKpi = false, submissionDates }: OrgKpiScopedEntryTableProps) {
+export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds = [], onSelectionChange, onPropagateRow, isPropagating, isComplianceKpi = false, submissionDates, totalCount }: OrgKpiScopedEntryTableProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [bulkFillValue, setBulkFillValue] = useState('');
 
@@ -81,6 +87,8 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
   const enteredCount = rows.filter(r => r.achievedValue !== null || r.isNa).length;
   const allEntered = rows.length > 0 && enteredCount === rows.length;
   const sentBackCount = sentBackMap?.size ?? 0;
+  const effectiveTotal = typeof totalCount === 'number' && totalCount > rows.length ? totalCount : rows.length;
+  const hasHidden = effectiveTotal > rows.length;
 
   const hasSelectionFeature = !!onSelectionChange;
   const hasRowPropagation = !!onPropagateRow;
@@ -149,9 +157,9 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
         <CollapsibleTrigger asChild>
           <Button variant="ghost" size="sm" className="justify-start gap-2 text-sm flex-shrink-0">
             {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            {rows.length} {scopeLabel}s
+            {effectiveTotal} {scopeLabel}s
             <span className={allEntered ? 'text-green-600 dark:text-green-400 font-medium' : 'text-muted-foreground'}>
-              ({enteredCount} / {rows.length} entered{naCount > 0 ? `, ${naCount} N/A` : ''})
+              ({enteredCount} / {hasHidden ? `${rows.length} visible` : rows.length} entered{naCount > 0 ? `, ${naCount} N/A` : ''})
             </span>
             {sentBackCount > 0 && (
               <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-400 gap-0.5">

@@ -22,6 +22,7 @@ import { Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, Bar
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useSentBackOrgKpiEmployees, type SentBackInfo } from '@/hooks/useSentBackOrgKpiEmployees';
 import { isComplianceKpi, useBulkEmployeeSubmissionDates } from '@/hooks/useComplianceSubFactors';
+import { scopedRowsSignature } from '@/lib/orgKpiCounts';
 
 export interface OrgKpiCardData {
   categoryId: string;
@@ -229,7 +230,15 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
         (isNaN(currentNumeric as number) && data.achievedValue === null);
       const sameRemarks = remarks === data.remarks;
       const sameEvidence = evidenceUrl === data.evidenceUrl;
-      if (sameValue && sameRemarks && sameEvidence) return;
+      // ADR-064 (revised) — also detect when the upstream scopedRows
+      // snapshot has shifted (e.g. period changed and the same KPI now
+      // maps a different employee set). Without this, the table would
+      // keep the previous period's row list while the badge shows the
+      // new mapped count.
+      const sameScopedSignature =
+        scopedRowsSignature(scopedValuesRef.current as any) ===
+        scopedRowsSignature(data.scopedRows as any);
+      if (sameValue && sameRemarks && sameEvidence && sameScopedSignature) return;
     }
 
     kpiIdentityRef.current = newIdentity;
@@ -240,7 +249,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
     setSaveStatus('idle');
     isDirtyRef.current = false;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.achievedValue, data.remarks, data.evidenceUrl, data.categoryId, data.kraName, data.kpiName, reviewPeriod, reviewYear]);
+  }, [data.achievedValue, data.remarks, data.evidenceUrl, data.categoryId, data.kraName, data.kpiName, reviewPeriod, reviewYear, data.scopedRows]);
 
   // Secondary effect: merge subFactors (and achievedValue) from DB when scopedRows update after initial load
   useEffect(() => {
@@ -557,6 +566,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               rows={scopedValues}
               onValueChange={handleScopedChange}
               scopeLabel={data.scopeLabel}
+              totalCount={data.employeeCount}
               ratingThresholds={{ r5: data.r5, r4: data.r4, r3: data.r3, r2: data.r2, r1: data.r1 }}
               targetValue={data.targetValue}
               uom={data.uom}
