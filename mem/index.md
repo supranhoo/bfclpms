@@ -57,3 +57,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Auth-Readiness Query Gate](mem://architecture/auth-readiness-query-gate) — Gate RLS-dependent hooks on isReady to prevent empty-cache cold-load race
 
 - [Org KPI Key Normalization](mem://features/admin/org-kpi-key-normalization) — Canonical owner/KPI key helper + tiered propagation overwrite policy
+- [Org KPI Data Entry Empty State](mem://features/admin/org-kpi-data-entry-empty-state) — Loading guard, deriveOrgKpiEmptyState classifier, stale-filter self-heal, admin diagnostics (POLICY §98)
