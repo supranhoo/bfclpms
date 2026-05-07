@@ -39,6 +39,7 @@ import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { GovernanceLockBanner } from '@/components/review/GovernanceLockBanner';
 import { normalizeText, normalizeKpiKey } from '@/lib/orgKpiKey';
 import { deriveOrgKpiTileStatus, OkvLike } from '@/lib/orgKpiStatus';
+import { deriveOrgKpiEmptyState } from '@/lib/orgKpiEmptyState';
 
 /**
  * Local aliases that delegate to the canonical helpers in src/lib/orgKpiKey.ts.
@@ -56,7 +57,7 @@ function getPreviousPeriod(period: string, year: number): { period: string; year
 }
 
 export default function OrgKpiDataEntry() {
-  const { profile, role, isAdminMode, naturalRole, toggleAdminMode } = useAuth();
+  const { profile, role, isAdminMode, naturalRole, toggleAdminMode, isReady, loading: authLoading } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
@@ -110,7 +111,7 @@ export default function OrgKpiDataEntry() {
   const { data: departments } = useDepartments();
   const { data: allProfiles } = useProfiles();
   const { data: existingOrgValues } = useOrgKpiValues(undefined, selectedPeriod, selectedYear);
-  const { ownershipMap, isAdmin } = useOrgKpiOwnershipMap();
+  const { ownershipMap, isAdmin, isLoading: ownershipLoading } = useOrgKpiOwnershipMap();
   // ADR-057 — if the user is a registered data owner but RLS returned zero
   // KPIs, surface a louder error instead of the generic "no KPIs" empty state.
   const { data: isAnyOrgKpiOwner } = useIsAnyOrgKpiDataOwner();
