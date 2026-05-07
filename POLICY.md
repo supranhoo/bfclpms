@@ -2171,6 +2171,18 @@ When a profile (`public.profiles`) row is inserted, updated, or deleted — thro
 
 ---
 
+## §97 — Pending-KRA Issue Classification for Org and Multi-Month KPIs
+
+Unified Issues / pending-KRA compliance surfaces may only flag `kra_set` KPIs that are actually awaiting employee action.
+
+1. **Org KPI exclusion.** `kpis.is_org_level = true` rows MUST be excluded from employee pending-KRA issue flags. Their `kra_set` state means the source Org KPI value is still pending Data Owner entry/propagation, not that the employee failed to accept or submit the KPI.
+2. **Multi-month placeholder exclusion.** Non-terminal months for Bi-Monthly, Quarterly, Half-Yearly and Yearly KPIs MUST be excluded from pending-KRA issue flags. Only the terminal cycle month is actionable; placeholder sibling rows exist for visibility and score inheritance.
+3. **Regular KPI behavior unchanged.** Non-org monthly/daily/weekly KPIs at `kra_set` past the configured SLA remain valid pending-KRA issues.
+
+**Regression coverage**: `BUG-048` in `src/test/bugBountyFixes.test.ts`.
+
+---
+
 ## §54 v3 — Multi-Month KPI Score Inheritance (Apr 29, 2026 amendment)
 
 **Reverses the §54 stage-guard added on 2026-04-05.** For multi-month KPIs (`Bi-Monthly`, `Quarterly`, `Half-Yearly`, `Yearly`), only the chronologically terminal month of each cycle traverses the workflow (Self → … → Management → Approved). All non-terminal sibling months are placeholders.
