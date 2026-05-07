@@ -183,14 +183,23 @@ async function processOneUser(
           app_name: appName,
         };
 
+        // IMPORTANT: Lovable Cloud rejects requests where `Authorization` and
+        // `apikey` carry different keys ("Conflicting API keys"). Send the
+        // anon/publishable key in BOTH headers so the gateway accepts the call
+        // and `send-email-notification`'s validateCaller authorizes via the
+        // matching anon key path.
+        const anonKey =
+          Deno.env.get("SUPABASE_ANON_KEY") ??
+          Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ??
+          serviceRoleKey;
         const emailResponse = await fetch(
           `${supabaseUrl}/functions/v1/send-email-notification`,
           {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${serviceRoleKey}`,
-              apikey: Deno.env.get("SUPABASE_ANON_KEY") ?? serviceRoleKey,
+              Authorization: `Bearer ${anonKey}`,
+              apikey: anonKey,
             },
             body: JSON.stringify(emailBody),
           }
