@@ -1545,11 +1545,35 @@ export default function OrgKpiDataEntry() {
       {/* Card-Based Entry */}
       {activeTab === 'entry' && (
         <div className="space-y-6">
-          {groupedKpis.length === 0 && (
+          {groupedKpis.length === 0 && orgKpiEmptyKind !== 'loading' && (
             <Card>
-              <CardContent className="py-12 text-center text-muted-foreground">
-                <Building2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p>No org-level KPIs found for the selected filters</p>
+              <CardContent className="py-12 text-center text-muted-foreground space-y-3">
+                <Building2 className="h-12 w-12 mx-auto mb-1 opacity-50" />
+                {orgKpiEmptyKind === 'no-backend-rows' && (
+                  <p>No organization-level KPIs exist for {selectedPeriod} {selectedYear}.</p>
+                )}
+                {orgKpiEmptyKind === 'masked-admin' && (
+                  <div className="space-y-2">
+                    <p>You're viewing as {naturalRole === 'manager' ? 'Manager' : 'Employee'} and don't own any org-level KPIs.</p>
+                    <Button size="sm" variant="outline" onClick={toggleAdminMode}>Switch to Admin view</Button>
+                  </div>
+                )}
+                {orgKpiEmptyKind === 'all-frequency-locked' && (
+                  <p>All {ownershipFilteredKpis.length} org-level KPI{ownershipFilteredKpis.length === 1 ? '' : 's'} are locked for {selectedPeriod} (multi-month cycle). They will become editable in their active month.</p>
+                )}
+                {orgKpiEmptyKind === 'filtered-out' && (
+                  <div className="space-y-2">
+                    <p>
+                      {frequencyFilteredKpis.length} KPI{frequencyFilteredKpis.length === 1 ? '' : 's'} available for {selectedPeriod} {selectedYear}, but the active filters hide them all.
+                    </p>
+                    <Button size="sm" variant="outline" onClick={clearAllOrgKpiFilters}>Clear filters</Button>
+                  </div>
+                )}
+                {isAdmin && (
+                  <p className="text-xs text-muted-foreground/70 pt-2">
+                    Diagnostics — backend: {orgLevelData?.totalOrgKpis ?? 0} · ownership: {ownershipFilteredKpis.length} · frequency: {frequencyFilteredKpis.length} · grouped: {groupedKpis.length}
+                  </p>
+                )}
               </CardContent>
             </Card>
           )}
