@@ -1,68 +1,54 @@
 ## Problem
 
-On `/admin/org-kpi-data`, the Per-Employee scoped row renders as **"Employee 2ddb6a"** under **"No Department"** instead of the real name (Sanjeeb Kumar Jena) and department.
+Editing **Tarkeshwar Kumar (100597)**'s email in User Management fails with toast **"Failed to update email — User not found"**. The edge function `update-user-email` calls `auth.admin.updateUserById(...)`, which raises "User not found" because the employee has a `profiles` row but no `auth.users` row yet (non-login user provisioned via master backfill).
 
-## Root Cause (verified against DB)
+This is the exact "profile-without-auth" state already documented in `mem/features/admin/non-login-user-provisioning` and BUG-044. The Password Rollout edge function handles it; `update-user-email` does not.
 
-1. The mapped employee `2ddb6a…` exists, is active, has a department, and is correctly returned by the snapshot RPC (`get_org_kpi_data_entry_snapshot`, which runs `SECURITY DEFINER` and bypasses `profiles` RLS).
-2. The page enriches display labels (`full_name`, `employee_code`, department name) by looking the employee up in `useProfiles()`, which runs as the **caller** under normal `profiles` RLS.
-3. For this admin's session, `useProfiles()` does not return Sanjeeb's row (RLS scope or paged result race), so `buildCardData` falls through to the `Employee {id-prefix}` / `No Department` fallback introduced in ADR-061.
+## Root Cause
 
-ADR-061 was correct to render the row from the snapshot — without it the editor was hidden entirely. But it left enrichment dependent on a query that can legitimately omit the same employee the snapshot just authorised.
+`supabase/functions/update-user-email/index.ts` blindly calls `updateUserById` with no probe / create-if-missing branch. As soon as the target employee has never had a login provisioned, the call fails and the entire edit is aborted (the rest of the profile fields don't save either, because `handleSaveUser` returns on email failure).
 
-## Fix — Enrich at the snapshot, not on the client (ADR-062)
+Verified directly:
+- `profiles.id = 379ddb35-…-c29be654adb4`, `email IS NULL`, `employee_code = 100597`
+- No matching row in `auth.users`
 
-Make the snapshot the source of truth for **everything** the scoped editor needs to render a row, including display labels. The client stops depending on `useProfiles` visibility for mapped-employee identity.
+## Fix — Apply the canonical Non-Login User pattern (POLICY §113)
 
-### 1. SQL migration — extend `get_org_kpi_data_entry_snapshot`
+### 1. `supabase/functions/update-user-email/index.ts`
 
-Add two new top-level maps to the returned JSON (keyed by employee_id / department_id), populated from the same `SECURITY DEFINER` join the function already does:
+Mirror `password-rollout`:
 
-- `employeeDisplayMap`: `{ [employee_id]: { full_name, employee_code, designation, department_id, department_name, department_code, is_active } }`
-- `departmentDisplayMap`: `{ [department_id]: { name, code } }`
+1. Load the target `profiles` row (`id`, `full_name`, `employee_code`) for metadata.
+2. `getUserById(userId)`:
+   - **Missing** → `auth.admin.createUser({ id: userId, email: newEmail, email_confirm: true, user_metadata: { full_name, employee_code } })`. Reuse the profile id verbatim so all FKs keyed on it stay intact.
+   - **Present** → existing `auth.admin.updateUserById(userId, { email: newEmail, email_confirm: true })`.
+3. Sync `profiles.email = newEmail` (existing step).
+4. Return `{ success: true, auth_action: 'created' | 'updated' }` so the UI can distinguish first-time provisioning from a normal email change.
+5. Friendlier validation error if the target email already belongs to another auth user (`AuthApiError: email_exists` → 409 with clear message).
 
-Both are restricted to employees/departments actually mapped in this snapshot (no extra cost, no PII broadening — admin/auditor/management/hr_pms already see all profiles; data-owner role only gets enrichment for employees whose KPIs they own).
+### 2. `src/pages/admin/UserManagement.tsx`
 
-Index review: existing `idx_kpis_org_period_status` already covers the join; no new indexes.
+- When `auth_action === 'created'`, show toast: **"Login provisioned — user can now sign in once a password is set."** (Password Rollout remains the canonical password path.)
+- Existing failure toast preserved.
+- No change to the rest of `handleSaveUser`.
 
-### 2. Client — `src/hooks/useOrgLevelKpis.ts`
+### 3. Documentation
 
-Surface the two new maps from the RPC payload and return them alongside the existing maps. No re-keying needed (UUIDs).
-
-### 3. Client — `src/pages/admin/OrgKpiDataEntry.tsx → buildCardData`
-
-In the Per-Employee branch, prefer `employeeDisplayMap[empId]` for `displayName`, `employeeCode`, `designation`, `departmentId/Name`. Fall back to `useProfiles` enrichment only when the snapshot map omits the employee (e.g. `data_owner` who lost ownership mid-session). Final fallback to `Employee {id-prefix}` is preserved but should now only fire for genuine orphans.
-
-Same change in the Per-Department branch using `departmentDisplayMap`.
-
-### 4. Component — `OrgKpiScopedEntryTable` row grouping
-
-Already groups by `departmentId` / `departmentName`. No structural change needed; the values now arrive populated.
-
-### 5. Tests
-
-- `src/test/orgKpiEmptyState.test.ts` — extend with a `buildCardData` regression: when `allProfiles` is `undefined`/empty but `employeeDisplayMap` contains the mapped employee, the scoped row uses the snapshot label, not the `Employee {id-prefix}` fallback.
-- New test confirming department grouping uses `departmentDisplayMap` when `useDepartments` hasn't resolved.
-
-### 6. Documentation
-
-- `docs/adr/ADR-062.md` — new ADR documenting the snapshot-as-display-truth decision and the RLS divergence it solves.
-- Update `mem/features/admin/org-kpi-data-entry-snapshot.md` to list the two new maps in the RPC contract.
-- `POLICY.md` / `DOCUMENTATION.md` — note that the Org KPI Data Entry editor must not depend on the caller's `profiles` RLS for mapped-employee identity.
+- Update `mem/features/admin/non-login-user-provisioning` to add `update-user-email` to the list of admin tools that follow the canonical pattern.
+- New ADR-063 documenting the bug, the fix, and the rule that **every** admin edge function mutating `auth.users` for a profile id MUST probe-then-branch.
+- Append POLICY §113 with `update-user-email` reference.
 
 ## Risk & Impact
 
-- **Data Impact**: read-only RPC; no schema change beyond the function body. No historical data touched.
-- **Workflow Impact**: none — Save/Propagate keys off `scopeId` (UUID), already supplied.
-- **UI/UX**: scoped rows now show the correct name/department on first render for all roles authorised to enter org-KPI data.
-- **Regression Risk**: low. The new maps are additive; existing consumers continue to work unchanged. ADR-061's fallback path remains as a safety net.
-- **Security**: enrichment is scoped to employees/departments already exposed by the snapshot's existing access rules — no broader visibility than before.
+- **Data Impact**: none — uses existing profile id; no orphaned FKs.
+- **Workflow Impact**: admins can now set/change email for backfilled employees without bouncing through Password Rollout first.
+- **Security**: edge function still gated by `requireAdminUser`; new `createUser` path uses `email_confirm: true` so no verification email is sent (matches existing update behaviour).
+- **Regression Risk**: low — the existing "auth user already exists" path is unchanged.
+- **Mitigation**: explicit unit-style assertion in the function (`if (!getErr && existing?.user) update; else create;`) plus a new test that mocks both branches.
 
 ## Files Touched
 
-- `supabase/migrations/2026xxxx_org_kpi_snapshot_enrichment.sql` (new)
-- `src/hooks/useOrgLevelKpis.ts`
-- `src/pages/admin/OrgKpiDataEntry.tsx` (`buildCardData` only)
-- `src/test/orgKpiEmptyState.test.ts`
-- `docs/adr/ADR-062.md` (new)
-- `mem/features/admin/org-kpi-data-entry-snapshot.md`
+- `supabase/functions/update-user-email/index.ts`
+- `src/pages/admin/UserManagement.tsx` (toast copy only)
+- `mem/features/admin/non-login-user-provisioning`
+- `docs/adr/ADR-063.md` (new)

@@ -477,12 +477,14 @@ export default function UserManagement() {
     const emailChanged = (editEmail.trim().toLowerCase()) !== (selectedUser.email?.trim().toLowerCase() || '');
     if (emailChanged) {
       try {
-        const result = await invokeAdminEdgeFunction<{ success: boolean; message?: string; warning?: string }>(
+        const result = await invokeAdminEdgeFunction<{ success: boolean; message?: string; warning?: string; auth_action?: 'created' | 'updated' }>(
           'update-user-email',
           { userId: selectedUser.id, newEmail: editEmail.trim() },
         );
         if (result?.warning) {
           toast({ title: 'Email updated with warning', description: result.warning, variant: 'destructive' });
+        } else if (result?.auth_action === 'created') {
+          toast({ title: 'Login provisioned', description: 'User can now sign in once a password is set via Password Rollout.' });
         }
       } catch (err: any) {
         toast({ title: 'Failed to update email', description: err.message, variant: 'destructive' });
