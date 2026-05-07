@@ -6,6 +6,7 @@ import { useTrainingNeeds } from './useTNI';
 import { usePIPs } from './usePIP';
 import { useSlaThresholds } from './useWorkflowSettings';
 import { format } from 'date-fns';
+import { isKpiLockedForPeriod } from '@/lib/frequencyUtils';
 
 export type IssueType = 'query' | 'training_need' | 'pip' | 'pip_milestone' | 'stalled_kpi' | 'pending_kra';
 export type IssuePriority = 'critical' | 'high' | 'medium' | 'low';
@@ -86,6 +87,33 @@ function getStatus(
   if (baseStatus === 'in_progress' || baseStatus === 'training_planned' || baseStatus === 'active') return 'in_progress';
   
   return 'open';
+}
+
+export function shouldCreatePendingKraIssue(
+  kpi: {
+    status?: string | null;
+    is_org_level?: boolean | null;
+    frequency?: string | null;
+    review_period?: string | null;
+    review_year?: number | null;
+    frequency_cycle_start?: string | null;
+  },
+  ageInDays: number,
+  warningThreshold: number,
+): boolean {
+  if (kpi.status !== 'kra_set') return false;
+  if (kpi.is_org_level) return false;
+
+  if (
+    kpi.frequency &&
+    kpi.review_period &&
+    kpi.review_year &&
+    isKpiLockedForPeriod(kpi.frequency, kpi.review_period, kpi.review_year, kpi.frequency_cycle_start)
+  ) {
+    return false;
+  }
+
+  return ageInDays >= warningThreshold;
 }
 
 export function useSystemIssues() {
@@ -287,9 +315,8 @@ export function useSystemIssues() {
   // 6. Pending KRA Acceptance (kra_set status > 7 days)
   kpis
     .filter(kpi => {
-      if (kpi.status !== 'kra_set') return false;
       const ageInDays = calculateAge(kpi.created_at);
-      return ageInDays >= AGE_THRESHOLDS.pending_kra.warning;
+      return shouldCreatePendingKraIssue(kpi, ageInDays, AGE_THRESHOLDS.pending_kra.warning);
     })
     .forEach(kpi => {
       const employee = profileMap.get(kpi.employee_id);
