@@ -11,7 +11,9 @@ import { MentionedKpiSheet } from '@/components/review/MentionedKpiSheet';
 import { ViewModeToggle, ViewMode } from '@/components/review/ViewModeToggle';
 import { EmployeeSelectorGrid } from '@/components/review/EmployeeSelectorGrid';
 import { UnifiedScorecard } from '@/components/review/UnifiedScorecard';
-import { AlertCircle, RefreshCw, LogOut } from 'lucide-react';
+import { AlertCircle, RefreshCw, LogOut, Plus } from 'lucide-react';
+import { useDashboardKraPermissions } from '@/hooks/useDashboardKraPermissions';
+import { AdminKpiCreateDialog } from '@/components/admin/AdminKpiCreateDialog';
 
 interface EmployeeProfile {
   id: string;
@@ -74,6 +76,8 @@ export default function Dashboard() {
   const [autoOpenKpiId, setAutoOpenKpiId] = useState<string | null>(null);
   const [mentionedKpi, setMentionedKpi] = useState<{ kpiId: string; employeeId: string } | null>(null);
   const deepLinkProcessedRef = useRef(false);
+  const [addKraOpen, setAddKraOpen] = useState(false);
+  const { canAdd: canAddKra } = useDashboardKraPermissions();
 
   // Detect skip-level subordinates
   const { data: skipLevelMembers } = useSkipLevelTeamMembers(profile?.id);
@@ -360,6 +364,13 @@ export default function Dashboard() {
               onModeChange={handleModeChange}
             />
           )}
+          {canAddKra && (
+            <div className="flex justify-end">
+              <Button size="sm" onClick={() => setAddKraOpen(true)} className="gap-1.5">
+                <Plus className="h-4 w-4" /> Add KRA
+              </Button>
+            </div>
+          )}
           <UnifiedScorecard
             viewLevel={viewLevelForScorecard as any}
             employee={selectedEmployee}
@@ -377,6 +388,15 @@ export default function Dashboard() {
             autoOpenKpiId={autoOpenKpiId}
             exploreMode={exploreMode}
           />
+          {canAddKra && (
+            <AdminKpiCreateDialog
+              isOpen={addKraOpen}
+              onClose={() => setAddKraOpen(false)}
+              defaultEmployeeId={selectedEmployee.id}
+              defaultReviewPeriod={periodSelection.selectedMonth}
+              defaultReviewYear={periodSelection.selectedYear}
+            />
+          )}
         </div>
       );
     }
@@ -410,6 +430,13 @@ export default function Dashboard() {
           onModeChange={handleModeChange}
         />
       )}
+      {canAddKra && (
+        <div className="flex justify-end">
+          <Button size="sm" onClick={() => setAddKraOpen(true)} className="gap-1.5">
+            <Plus className="h-4 w-4" /> Add KRA
+          </Button>
+        </div>
+      )}
       <UnifiedScorecard
         viewLevel="self"
         employee={{
@@ -425,6 +452,15 @@ export default function Dashboard() {
         onPeriodSelectionChange={setPeriodSelection}
         autoOpenKpiId={autoOpenKpiId}
       />
+      {canAddKra && (
+        <AdminKpiCreateDialog
+          isOpen={addKraOpen}
+          onClose={() => setAddKraOpen(false)}
+          defaultEmployeeId={profile.id}
+          defaultReviewPeriod={periodSelection.selectedMonth}
+          defaultReviewYear={periodSelection.selectedYear}
+        />
+      )}
       {mentionedKpi && (
         <MentionedKpiSheet
           kpiId={mentionedKpi.kpiId}
