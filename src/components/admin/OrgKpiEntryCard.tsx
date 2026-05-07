@@ -556,7 +556,11 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               {!isLocked && (
                 <OrgKpiFileUpload
                   existingUrl={evidenceUrl}
-                  onUploadComplete={(url) => { setEvidenceUrl(url); triggerAutoSave(); }}
+                  onUploadComplete={(url) => {
+                    orgEvidenceTouchedRef.current = true;
+                    setEvidenceUrl(url);
+                    triggerAutoSave();
+                  }}
                 />
               )}
             </div>
