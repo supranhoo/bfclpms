@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { KPI } from '@/hooks/useKpis';
 import { useAuth } from '@/contexts/AuthContext';
-import { fetchAllPaged } from '@/lib/fetchAll';
 import { normalizeKpiKey as mkKey } from '@/lib/orgKpiKey';
 
 // Hook to get unique org-level KPIs (where is_org_level = true) for a period
