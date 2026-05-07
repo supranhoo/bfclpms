@@ -36,21 +36,14 @@ describe('buildSiblingPeriods', () => {
     expect(r.siblings.map(s => s.period)).toEqual(['March', 'April', 'May']);
   });
 
-  it('Yearly Apr-Mar assigned in October → terminal March (next year), wraps year', () => {
+  it('Quarterly assigned in November (Oct-Dec) → terminal December, siblings [November]', () => {
     const r = buildSiblingPeriods({
-      frequency: 'Yearly',
-      frequencyCycleStart: 'Apr-Mar',
-      assignedMonth: 'October',
+      frequency: 'Quarterly',
+      assignedMonth: 'November',
       reviewYear: 2026,
     });
-    expect(r.terminal).toEqual({ period: 'March', year: 2027 });
-    expect(r.siblings.map(s => `${s.period}-${s.year}`)).toEqual([
-      'October-2026',
-      'November-2026',
-      'December-2026',
-      'January-2027',
-      'February-2027',
-    ]);
+    expect(r.terminal).toEqual({ period: 'December', year: 2026 });
+    expect(r.siblings).toEqual([{ period: 'November', year: 2026 }]);
   });
 
   it('Monthly returns no siblings', () => {
