@@ -10,7 +10,7 @@ Employees imported via the master backfill exist in `public.profiles` from day o
 
 ## Canonical pattern (POLICY §113)
 
-For the `password-rollout` edge function (and any future equivalent):
+For `password-rollout`, `update-user-email`, and any future admin edge function that mutates `auth.users` for a profile id:
 
 1. Probe `supabaseAdmin.auth.admin.getUserById(profile.id)`.
 2. **Missing** → call `auth.admin.createUser({ id: profile.id, email, password, email_confirm: true, user_metadata: { full_name, employee_code } })`. The profile id MUST be passed verbatim so all FKs keyed on the profile id (user_roles, kpi assignments, audit logs, KRA records) remain intact.
