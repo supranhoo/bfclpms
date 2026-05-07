@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ALL_APP_ROLES } from '@/lib/roles';
+import { shouldCreatePendingKraIssue } from '@/hooks/useSystemIssues';
 
 // BUG-001: Role completeness test
 describe('BUG-001: Role coverage', () => {
@@ -1192,5 +1193,33 @@ describe('BUG-047: HR PMS on-behalf score-or-N/A guardrail', () => {
     // System-attributed audit row (per memory rule)
     expect(sql).toContain("'BUG_047_DATA_REPAIR'");
     expect(sql).toMatch(/NULL,\s*--\s*system-attributed/);
+  });
+});
+
+// BUG-048: Org KPI rows still at kra_set are waiting for Data Owner entry/propagation,
+// not employee KRA acceptance. They must not appear as employee pending-KRA flags.
+describe('BUG-048: pending-KRA issue excludes Org KPI and locked multi-month placeholders', () => {
+  it('does not flag an Org KPI row at kra_set even when older than the SLA', () => {
+    expect(shouldCreatePendingKraIssue({ status: 'kra_set', is_org_level: true }, 30, 7)).toBe(false);
+  });
+
+  it('still flags an old regular monthly KPI at kra_set', () => {
+    expect(shouldCreatePendingKraIssue({ status: 'kra_set', is_org_level: false, frequency: 'Monthly' }, 30, 7)).toBe(true);
+  });
+
+  it('does not flag non-terminal multi-month placeholder rows', () => {
+    expect(
+      shouldCreatePendingKraIssue(
+        {
+          status: 'kra_set',
+          is_org_level: false,
+          frequency: 'Quarterly',
+          review_period: 'May',
+          review_year: 2026,
+        },
+        30,
+        7,
+      ),
+    ).toBe(false);
   });
 });
