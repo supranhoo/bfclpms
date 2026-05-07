@@ -1,57 +1,68 @@
-## Problem (RCA)
+## Problem
 
-Vivek's screenshot shows the Per-Employee KPI card "Adherence to Electrical Maintenance Budget" with the **"1 employee"** badge and the **N/A toggle**, but the **scoped entry table is missing** — there is no `1 Employees (0/1 entered)` expand button, so there is literally no place to type a value. The card jumps straight from the N/A toggle to the footer (History / Impact / Edit Scope / Data Owners / Remove / Propagate).
+On `/admin/org-kpi-data`, the Per-Employee scoped row renders as **"Employee 2ddb6a"** under **"No Department"** instead of the real name (Sanjeeb Kumar Jena) and department.
 
-Why this regressed after the snapshot refactor:
+## Root Cause (verified against DB)
 
-1. The new snapshot RPC (`get_org_kpi_data_entry_snapshot`) supplies `employeeCount`, `employeeIds`, `mappedEmpIdsByKey`, `perEmployeeTargetMap` — the header badge ("1 employee") therefore renders correctly.
-2. The card's actual entry table is built in `OrgKpiDataEntry.tsx → buildCardData`, where for `scope === 'employee'` we set `scopeLabel` and `scopedRows` **only inside** `if (scope === 'employee' && allProfiles)` (line ~484), and we then filter `allProfiles.filter(emp => mappedEmpIds.has(emp.id))`.
-3. Render-time gate at `OrgKpiEntryCard.tsx:551` is `data.scope !== 'organization' && data.scopeLabel && !isNa`. So the entire scoped editor disappears whenever:
-   - `useProfiles()` (the paged 1000-row fetch in `useOrganization.ts`) is still loading, **or**
-   - the mapped employee isn't in the returned `allProfiles` set (RLS / pagination / inactive flag drift between snapshot and `useProfiles`).
-4. With the snapshot RPC now serving the page much faster than the paged profiles query, this race window is hit far more often than before — admins land on the page, see the badges, but `scopedRows` is `undefined` so the input area is gone. Same for `scope === 'department'` if `useDepartments()` lags.
+1. The mapped employee `2ddb6a…` exists, is active, has a department, and is correctly returned by the snapshot RPC (`get_org_kpi_data_entry_snapshot`, which runs `SECURITY DEFINER` and bypasses `profiles` RLS).
+2. The page enriches display labels (`full_name`, `employee_code`, department name) by looking the employee up in `useProfiles()`, which runs as the **caller** under normal `profiles` RLS.
+3. For this admin's session, `useProfiles()` does not return Sanjeeb's row (RLS scope or paged result race), so `buildCardData` falls through to the `Employee {id-prefix}` / `No Department` fallback introduced in ADR-061.
 
-This is a **read-path regression** introduced by the snapshot work. Data is intact; only the input UI is hidden.
+ADR-061 was correct to render the row from the snapshot — without it the editor was hidden entirely. But it left enrichment dependent on a query that can legitimately omit the same employee the snapshot just authorised.
 
-## Fix Plan (frontend only)
+## Fix — Enrich at the snapshot, not on the client (ADR-062)
 
-**Goal:** the scoped entry table for Per-Employee / Per-Department KPIs must always render whenever the snapshot says `employeeCount > 0`, independent of the paged `useProfiles` / `useDepartments` queries.
+Make the snapshot the source of truth for **everything** the scoped editor needs to render a row, including display labels. The client stops depending on `useProfiles` visibility for mapped-employee identity.
 
-### 1. `src/pages/admin/OrgKpiDataEntry.tsx → buildCardData`
-- Remove the hard `&& allProfiles` and `&& departments` gates inside the `scope === 'employee'` and `scope === 'department'` branches.
-- Always set `scopeLabel = 'Employee' | 'Department'` based on `scope` alone.
-- Build `scopedRows` **from the snapshot maps** (`mappedEmployeesMap` / `mappedDepartmentsMap` + `perEmployeeTargetMap`), not from `allProfiles`.
-- Use `allProfiles` and `departments` **only to enrich** display fields (full name, designation, department name, dept grouping). When a profile is not yet in `allProfiles`, fall back to `scopeName = 'Employee {short id}'` and `departmentName = undefined` so the row still renders and can accept input.
-- Keep the existing sort (department → name) but make the comparator tolerant of missing department names.
-- Update the `useCallback` dependency array accordingly.
+### 1. SQL migration — extend `get_org_kpi_data_entry_snapshot`
 
-### 2. `src/components/admin/OrgKpiEntryCard.tsx`
-- Loosen the render gate at line 551 so the table renders whenever `data.scope !== 'organization' && !isNa` and `data.scopedRows` is an array (even if empty), using the snapshot-derived `employeeCount` for the header count.
-- Keep the existing amber "Showing X of Y mapped employees…" banner for the case where some profiles are still hidden by RLS — but it must no longer hide the editor itself.
+Add two new top-level maps to the returned JSON (keyed by employee_id / department_id), populated from the same `SECURITY DEFINER` join the function already does:
 
-### 3. `src/components/admin/OrgKpiScopedEntryTable.tsx`
-- No structural change. Just confirm the trigger renders correctly when `rows.length === 0 && totalCount > 0` (it already does — `effectiveTotal` handles this and shows `"X Scope (0 / 0 visible entered)"`).
+- `employeeDisplayMap`: `{ [employee_id]: { full_name, employee_code, designation, department_id, department_name, department_code, is_active } }`
+- `departmentDisplayMap`: `{ [department_id]: { name, code } }`
 
-### 4. Regression tests (`src/test/`)
-- New `orgKpiBuildCardData.test.ts` (or extend an existing test) covering:
-  - Per-Employee KPI with `mappedEmpIds = [E1]` and `allProfiles = undefined` → `scopedRows.length === 1`, `scopeLabel === 'Employee'`, row uses `scopeId = E1` and a fallback display name.
-  - Per-Employee KPI where `allProfiles` is loaded but the mapped employee is missing from it → still produces 1 scoped row (fallback name), not zero.
-  - Per-Department KPI with `departments = undefined` → `scopedRows` built from `mappedDepartmentsMap`, `scopeLabel === 'Department'`.
+Both are restricted to employees/departments actually mapped in this snapshot (no extra cost, no PII broadening — admin/auditor/management/hr_pms already see all profiles; data-owner role only gets enrichment for employees whose KPIs they own).
 
-### 5. Documentation / Memory sync (per project SSOT rule)
-- Add **ADR-061**: "Scoped Org KPI editor must render from snapshot maps, not from `useProfiles`/`useDepartments`."
-- Update `mem/features/admin/org-kpi-data-entry-snapshot.md` with a new rule:
-  > The scoped entry table renders from `mappedEmployeesMap` / `mappedDepartmentsMap` + `perEmployeeTargetMap`. `useProfiles` / `useDepartments` are display enrichments only and must NOT gate the editor.
-- Append a Version History entry in `DOCUMENTATION.md` and a §99 sub-rule in `POLICY.md` mirroring the same constraint.
+Index review: existing `idx_kpis_org_period_status` already covers the join; no new indexes.
+
+### 2. Client — `src/hooks/useOrgLevelKpis.ts`
+
+Surface the two new maps from the RPC payload and return them alongside the existing maps. No re-keying needed (UUIDs).
+
+### 3. Client — `src/pages/admin/OrgKpiDataEntry.tsx → buildCardData`
+
+In the Per-Employee branch, prefer `employeeDisplayMap[empId]` for `displayName`, `employeeCode`, `designation`, `departmentId/Name`. Fall back to `useProfiles` enrichment only when the snapshot map omits the employee (e.g. `data_owner` who lost ownership mid-session). Final fallback to `Employee {id-prefix}` is preserved but should now only fire for genuine orphans.
+
+Same change in the Per-Department branch using `departmentDisplayMap`.
+
+### 4. Component — `OrgKpiScopedEntryTable` row grouping
+
+Already groups by `departmentId` / `departmentName`. No structural change needed; the values now arrive populated.
+
+### 5. Tests
+
+- `src/test/orgKpiEmptyState.test.ts` — extend with a `buildCardData` regression: when `allProfiles` is `undefined`/empty but `employeeDisplayMap` contains the mapped employee, the scoped row uses the snapshot label, not the `Employee {id-prefix}` fallback.
+- New test confirming department grouping uses `departmentDisplayMap` when `useDepartments` hasn't resolved.
+
+### 6. Documentation
+
+- `docs/adr/ADR-062.md` — new ADR documenting the snapshot-as-display-truth decision and the RLS divergence it solves.
+- Update `mem/features/admin/org-kpi-data-entry-snapshot.md` to list the two new maps in the RPC contract.
+- `POLICY.md` / `DOCUMENTATION.md` — note that the Org KPI Data Entry editor must not depend on the caller's `profiles` RLS for mapped-employee identity.
 
 ## Risk & Impact
 
-- **Data Impact:** none — read path only. No schema, no RLS, no historical rows touched.
-- **Workflow Impact:** restores the original data-entry workflow for Per-Employee / Per-Department Org KPIs.
-- **UI/UX:** scoped table now appears immediately on page load instead of after `useProfiles` finishes paging. Fallback display names (`"Employee {id-prefix}"`) only appear in the rare RLS-hides-profile case; the existing amber banner already explains it.
-- **Regression Risk:** low. The Save/Propagate handlers already key off `scopeId` (employee/department UUID), not display name — the snapshot IDs are the same UUIDs. New unit tests guard against re-introduction.
-- **Mitigation:** new tests + ADR-061 + memory entry to prevent future refactors from re-coupling the editor to `useProfiles`.
+- **Data Impact**: read-only RPC; no schema change beyond the function body. No historical data touched.
+- **Workflow Impact**: none — Save/Propagate keys off `scopeId` (UUID), already supplied.
+- **UI/UX**: scoped rows now show the correct name/department on first render for all roles authorised to enter org-KPI data.
+- **Regression Risk**: low. The new maps are additive; existing consumers continue to work unchanged. ADR-061's fallback path remains as a safety net.
+- **Security**: enrichment is scoped to employees/departments already exposed by the snapshot's existing access rules — no broader visibility than before.
 
-## Out of scope
-- Snapshot RPC changes.
-- Org-scope (`scope === 'organization'`) UI — already renders an input directly and was not affected.
+## Files Touched
+
+- `supabase/migrations/2026xxxx_org_kpi_snapshot_enrichment.sql` (new)
+- `src/hooks/useOrgLevelKpis.ts`
+- `src/pages/admin/OrgKpiDataEntry.tsx` (`buildCardData` only)
+- `src/test/orgKpiEmptyState.test.ts`
+- `docs/adr/ADR-062.md` (new)
+- `mem/features/admin/org-kpi-data-entry-snapshot.md`
