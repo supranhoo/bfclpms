@@ -144,7 +144,7 @@ export function useOrgKpiOwners(categoryId: string, kraName: string, kpiName: st
  * Key format: categoryId||kraName||kpiName
  */
 export function useOrgKpiOwnershipMap() {
-  const { data: owners } = useOrgKpiDataOwners();
+  const { data: owners, isLoading } = useOrgKpiDataOwners();
   const { user, effectiveRole } = useAuth();
 
   const ownershipMap = new Map<string, { owners: OrgKpiDataOwner[]; canEdit: boolean }>();
@@ -161,7 +161,7 @@ export function useOrgKpiOwnershipMap() {
     });
   }
 
-  return { ownershipMap, isAdmin: effectiveRole === 'admin' };
+  return { ownershipMap, isAdmin: effectiveRole === 'admin', isLoading };
 }
 
 /**

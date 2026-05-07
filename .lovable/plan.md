@@ -1,73 +1,51 @@
-## Problem
+## RCA
+- April 2026 has Org KPI data in the backend: 862 org-level KPI rows, 170 unique definitions, 131 employees.
+- Vivek Kumar Dansena (101784) is active and has the `admin` role.
+- The screenshot shows the generic empty-state card even though data exists, which means the rows are being removed on the frontend by readiness/filter state rather than missing from the database.
+- Likely failure points in `OrgKpiDataEntry.tsx`:
+  1. The page only waits for `kpisLoading`, not auth/role/ownership loading, so it can compute `isAdmin=false`/empty ownership during the first render and show an empty card.
+  2. `selectedOwnerId`, category, search, or status filters can remain stale after refresh/period changes and reduce `groupedKpis` to zero while the message still says “No org-level KPIs found”.
+  3. The page does not show diagnostic counts, so users cannot distinguish “no backend rows” from “hidden by filters/access still loading”.
 
-When an admin assigns a Quarterly (or any multi-month) KPI from the "Assign New KRA" dialog, only **one** row is inserted into `kpis` — at the cycle's **terminal month** (e.g. June for the Apr–Jun quarter). Result:
+## Risk & Impact
+- **Data/RLS impact:** No schema or RLS changes. Backend already returns the data.
+- **Workflow impact:** Only Org KPI Data Entry rendering/filter behavior changes.
+- **UI/UX impact:** Empty state becomes accurate and actionable; no visual redesign.
+- **Regression risk:** Low; keep all existing filters but add loading guards and stale-filter reset.
+- **Mitigation:** Add targeted tests for the empty-state/filter helper and update DOCUMENTATION.md + POLICY.md per SSOT rules.
 
-- Employee opens April / May and sees "no KPI mapped" → believes mapping is incomplete.
-- Final score / weightage calculations for April and May exclude this KPI, distorting the monthly view until June is approved.
-- This conflicts with how Copy-from-Last-Period and the rollover engine already behave (they create rows for every cycle month).
+## Implementation Plan
+1. **Add readiness/loading guards**
+   - In `useOrgKpiDataOwner.ts`, expose loading state from `useOrgKpiOwnershipMap()` by returning `isLoading` from `useOrgKpiDataOwners()`.
+   - In `OrgKpiDataEntry.tsx`, include `loading`, `isReady`, `role`, and ownership loading before rendering the entry area.
+   - Show `TableSkeleton` until auth role and ownership state are ready, avoiding the first-render false empty state.
 
-Root cause: `AdminKpiCreateDialog.handleSubmit` calls `getActiveMonthForCycle(...)` and inserts a single row at `resolvedPeriod`. There is no sibling expansion on insert — only on approval, where `percolate_multimonth_score` writes back to siblings (which therefore must already exist).
+2. **Reset stale filters when scope changes**
+   - Add `useEffect` cleanup in `OrgKpiDataEntry.tsx`:
+     - reset `selectedOwnerId` when that owner is no longer present in owner tiles,
+     - reset `selectedCategoryId` when the selected category has no visible KPIs,
+     - optionally reset `statusFilter` to `all` when selected status count is zero after period/year change.
+   - Keep side effects in `useEffect` per project memory.
 
-## Decision
+3. **Make empty states accurate**
+   - Replace the single generic “No org-level KPIs found for the selected filters” message with specific cases:
+     - backend truly has zero org KPIs for period/year,
+     - admin access/role still loading,
+     - rows exist but current filters hide all cards,
+     - admin is viewing as natural role instead of Admin View.
+   - Add a “Clear filters” button when filters hide all rows.
 
-For multi-month frequencies (`Bi-Monthly`, `Quarterly`, `Half-Yearly`, `Yearly`):
+4. **Add lightweight diagnostics for admins**
+   - On empty filtered results, display counts: backend definitions, after ownership, after frequency, after filters.
+   - This will confirm in-app why Vivek sees zero without needing DB access.
 
-1. Create one **terminal** row (workflow-bearing) at the cycle's last month, exactly as today.
-2. Additionally create **placeholder sibling rows** for every other cycle month that is:
-   - **>= the assigned `Effective Month`** (skip months earlier than what the admin selected — past months stay untouched), AND
-   - **not locked** by `review_period_locks` for that employee's company/year.
-3. Siblings carry identical KPI definition (kra/kpi/uom/criteria/thresholds/weightage/frequency/cycle_start/etc.), `status = 'kra_set'`, and reference the same `source_template_id`. They are functionally placeholders awaiting terminal approval to percolate scores.
+5. **Regression tests**
+   - Add a pure helper for empty-state classification (e.g. `deriveOrgKpiEmptyState`) and tests covering:
+     - backend rows exist + loading ownership → skeleton/loading, not empty,
+     - backend rows exist + stale owner/category/status filter → “filtered out” + clear filters,
+     - backend zero rows → true “no org KPIs” message,
+     - admin masked mode → admin-view prompt.
 
-## Scope of changes
-
-### 1. New shared helper — `src/lib/multimonthAssignment.ts`
-- `buildSiblingPeriods({ frequency, frequencyCycleStart, assignedMonth, reviewYear, terminalMonth }) → Array<{ period: string; year: number }>`
-  - Uses existing `buildCycleScopeLabel` / `getCycleOptionsForFrequency` to enumerate cycle months.
-  - Filters: drop terminal, drop months before `assignedMonth` (calendar order within the cycle, handling Dec→Jan wrap via the array order).
-- Returns terminal + non-terminal list separately so caller can insert terminal first (workflow target) and siblings second.
-
-### 2. `useCreateKpi` (src/hooks/useKpis.ts)
-- After inserting the terminal row, if frequency is multi-month:
-  1. Fetch open `review_period_locks` for `(employee_id's company, year, period IN siblingPeriods)`.
-  2. Filter out locked months.
-  3. Bulk-insert siblings via `supabase.from('kpis').insert([...])` with `status: 'kra_set'`.
-  4. Swallow per-row unique-constraint errors (a sibling could already exist from a prior assignment / rollover) but surface other errors as a non-blocking warning toast — terminal succeeded, siblings partial.
-- Invalidate the existing query keys (already done).
-
-### 3. `AdminKpiCreateDialog.tsx`
-- No logic change to `resolvedPeriod` (terminal stays terminal).
-- Update the existing orange "Quarterly cycle covers …" info banner to clarify behavior:
-  > "Sibling placeholder rows will be created for {forward open months}. Approval in {terminal} will auto-apply the score to all months in the cycle. Past or locked months are skipped."
-- Pass `assignedMonth` (the user-selected `reviewPeriod`) to the hook so it can compute "from-this-month-forward".
-
-### 4. Bulk path (`Issue KRAs — Confirmation` flow)
-- The same dialog underpins single-assign. Confirm `useCreateKpi` is the only insertion point — if the bulk "Confirm & Issue KRAs" path uses a different mutation (`useBulkAssignKpis` / similar), apply the same sibling expansion there. Will verify in implementation phase.
-
-### 5. Tests — `src/test/multimonthAssignment.test.ts`
-- Quarterly assigned in May 2026 (Apr–Jun cycle) → terminal=June, siblings=[May]. April skipped (past).
-- Quarterly assigned in April → terminal=June, siblings=[April, May].
-- Half-Yearly assigned in March (Jan–Jun cycle) → terminal=June, siblings=[March, April, May]. Jan/Feb skipped.
-- Yearly Apr–Mar assigned in October → terminal=March, siblings=[Oct, Nov, Dec, Jan, Feb] across year wrap.
-- Lock filter: simulated lock on May → siblings=[April] only.
-- Monthly / Daily / Weekly → no siblings (early return).
-
-### 6. Documentation & memory
-- Append a new Version History entry in `DOCUMENTATION.md` under "Multi-month KPI assignment".
-- Update `mem://architecture/pms/multimonth-percolation` to note: **siblings are now created at assignment time (not just by historical rollover)**, scoped from `assignedMonth` forward and skipping locked months.
-
-## Risk & impact
-
-| Area | Impact | Mitigation |
-|---|---|---|
-| Data integrity | Multiple new rows per assignment | Unique constraint `(employee_id, kra_name, kpi_name, review_period, review_year)` already prevents duplicates; per-row error swallow |
-| Existing percolation trigger | Now has guaranteed sibling targets at approval | No change needed — already idempotent (force-copy on approve) |
-| Locked period governance | Could violate locks if we inserted into locked months | Explicit lock filter before insert |
-| Score calculations (month view) | Apr/May now show a `kra_set` (unscored) sibling — weighted average already excludes unscored KPIs (per Core memory) | No regression; the KPI just becomes visible as "pending" rather than missing |
-| Rollover engine | Already creates the same shape of rows | Behavior now consistent across both entry points |
-| Send-back / data-entry | Sibling editing is blocked by `enforce_frequency_lock_on_submission` for non-admins | Existing guard remains in force |
-
-## Out of scope
-
-- No DB migration / trigger change — purely client-side expansion.
-- No retroactive backfill for already-assigned multi-month KPIs missing siblings (can be a follow-up repair script if needed).
-- No change to terminal-month workflow, percolation, or scoring logic.
+6. **Documentation and policy sync**
+   - Update `DOCUMENTATION.md` Version History with the Vivek Org KPI visibility RCA and fix.
+   - Update `POLICY.md` with a rule that Org KPI data-entry pages must not render generic empty states until auth/role/ownership data is ready and must distinguish filtered-zero from backend-zero.

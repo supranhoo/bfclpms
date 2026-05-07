@@ -39,6 +39,7 @@ import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { GovernanceLockBanner } from '@/components/review/GovernanceLockBanner';
 import { normalizeText, normalizeKpiKey } from '@/lib/orgKpiKey';
 import { deriveOrgKpiTileStatus, OkvLike } from '@/lib/orgKpiStatus';
+import { deriveOrgKpiEmptyState } from '@/lib/orgKpiEmptyState';
 
 /**
  * Local aliases that delegate to the canonical helpers in src/lib/orgKpiKey.ts.
@@ -56,7 +57,7 @@ function getPreviousPeriod(period: string, year: number): { period: string; year
 }
 
 export default function OrgKpiDataEntry() {
-  const { profile, role, isAdminMode, naturalRole, toggleAdminMode } = useAuth();
+  const { profile, role, isAdminMode, naturalRole, toggleAdminMode, isReady, loading: authLoading } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
@@ -110,7 +111,7 @@ export default function OrgKpiDataEntry() {
   const { data: departments } = useDepartments();
   const { data: allProfiles } = useProfiles();
   const { data: existingOrgValues } = useOrgKpiValues(undefined, selectedPeriod, selectedYear);
-  const { ownershipMap, isAdmin } = useOrgKpiOwnershipMap();
+  const { ownershipMap, isAdmin, isLoading: ownershipLoading } = useOrgKpiOwnershipMap();
   // ADR-057 — if the user is a registered data owner but RLS returned zero
   // KPIs, surface a louder error instead of the generic "no KPIs" empty state.
   const { data: isAnyOrgKpiOwner } = useIsAnyOrgKpiDataOwner();
@@ -331,6 +332,47 @@ export default function OrgKpiDataEntry() {
     });
     return Array.from(map.entries());
   }, [ownerFilteredKpis]);
+
+  // Stale-filter cleanup — when the period/year/scope changes, drop filters
+  // that have nothing to match so users are never stuck on a self-inflicted
+  // empty state. Side-effects only in useEffect (project policy).
+  useEffect(() => {
+    if (selectedCategoryId === 'all') return;
+    const stillVisible = frequencyFilteredKpis.some(k => k.category_id === selectedCategoryId);
+    if (!stillVisible) setSelectedCategoryId('all');
+  }, [frequencyFilteredKpis, selectedCategoryId]);
+
+  useEffect(() => {
+    if (!selectedOwnerId) return;
+    const stillVisible = frequencyFilteredKpis.some(kpi => {
+      const k = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
+      return ownershipMap.get(k)?.owners.some(o => o.owner_id === selectedOwnerId);
+    });
+    if (!stillVisible) setSelectedOwnerId(null);
+  }, [frequencyFilteredKpis, selectedOwnerId, ownershipMap]);
+
+  // Empty-state classifier — declared at component scope so it can be used
+  // both for the "Card-Based Entry" empty card and any diagnostic banner.
+  const hasActiveFilters =
+    selectedCategoryId !== 'all' ||
+    !!searchQuery ||
+    statusFilter !== 'all' ||
+    !!selectedOwnerId;
+  const orgKpiEmptyKind = deriveOrgKpiEmptyState({
+    isLoading: authLoading || !isReady || kpisLoading || ownershipLoading,
+    totalOrgKpis: orgLevelData?.totalOrgKpis ?? 0,
+    ownershipFilteredCount: ownershipFilteredKpis.length,
+    frequencyFilteredCount: frequencyFilteredKpis.length,
+    groupedCount: groupedKpis.length,
+    isMaskedAdmin: role === 'admin' && !isAdminMode,
+    hasActiveFilters,
+  });
+  const clearAllOrgKpiFilters = useCallback(() => {
+    setSelectedCategoryId('all');
+    setSearchQuery('');
+    setStatusFilter('all');
+    setSelectedOwnerId(null);
+  }, []);
 
   // Scope KPIs for progress: respect owner filter
   const progressScopedKpis = useMemo(() => {
@@ -1207,7 +1249,7 @@ export default function OrgKpiDataEntry() {
 
     return rows;
   }, [frequencyFilteredKpis, existingValuesMap, ownershipMap, prevValuesMap, employeeCountMap, departments, allProfiles, mappedDepartmentsMap, mappedEmployeesMap, selectedPeriod, selectedYear, kraSetEmpIdsByKey]);
-  if (kpisLoading) {
+  if (authLoading || !isReady || kpisLoading || ownershipLoading) {
     return <TableSkeleton rows={5} columns={5} />;
   }
 
@@ -1503,11 +1545,35 @@ export default function OrgKpiDataEntry() {
       {/* Card-Based Entry */}
       {activeTab === 'entry' && (
         <div className="space-y-6">
-          {groupedKpis.length === 0 && (
+          {groupedKpis.length === 0 && orgKpiEmptyKind !== 'loading' && (
             <Card>
-              <CardContent className="py-12 text-center text-muted-foreground">
-                <Building2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p>No org-level KPIs found for the selected filters</p>
+              <CardContent className="py-12 text-center text-muted-foreground space-y-3">
+                <Building2 className="h-12 w-12 mx-auto mb-1 opacity-50" />
+                {orgKpiEmptyKind === 'no-backend-rows' && (
+                  <p>No organization-level KPIs exist for {selectedPeriod} {selectedYear}.</p>
+                )}
+                {orgKpiEmptyKind === 'masked-admin' && (
+                  <div className="space-y-2">
+                    <p>You're viewing as {naturalRole === 'manager' ? 'Manager' : 'Employee'} and don't own any org-level KPIs.</p>
+                    <Button size="sm" variant="outline" onClick={toggleAdminMode}>Switch to Admin view</Button>
+                  </div>
+                )}
+                {orgKpiEmptyKind === 'all-frequency-locked' && (
+                  <p>All {ownershipFilteredKpis.length} org-level KPI{ownershipFilteredKpis.length === 1 ? '' : 's'} are locked for {selectedPeriod} (multi-month cycle). They will become editable in their active month.</p>
+                )}
+                {orgKpiEmptyKind === 'filtered-out' && (
+                  <div className="space-y-2">
+                    <p>
+                      {frequencyFilteredKpis.length} KPI{frequencyFilteredKpis.length === 1 ? '' : 's'} available for {selectedPeriod} {selectedYear}, but the active filters hide them all.
+                    </p>
+                    <Button size="sm" variant="outline" onClick={clearAllOrgKpiFilters}>Clear filters</Button>
+                  </div>
+                )}
+                {isAdmin && (
+                  <p className="text-xs text-muted-foreground/70 pt-2">
+                    Diagnostics — backend: {orgLevelData?.totalOrgKpis ?? 0} · ownership: {ownershipFilteredKpis.length} · frequency: {frequencyFilteredKpis.length} · grouped: {groupedKpis.length}
+                  </p>
+                )}
               </CardContent>
             </Card>
           )}

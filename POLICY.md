@@ -2183,6 +2183,20 @@ Unified Issues / pending-KRA compliance surfaces may only flag `kra_set` KPIs th
 
 ---
 
+## §98 — Org KPI Data Entry Empty-State Accuracy
+
+The `/admin/org-kpi-data` page MUST NOT render a generic "no KPIs" empty card when data, ownership, or auth state is still resolving, and the empty card MUST distinguish the four causes below. This codifies the RCA for Vivek Kumar Dansena's April-2026 false empty state (170 backend definitions silently masked).
+
+1. **Loading guard.** The page MUST defer rendering of any empty state until `authLoading || !isReady || kpisLoading || ownershipLoading` are all false. While loading, the `TableSkeleton` is the only acceptable placeholder.
+2. **Cause-specific copy.** When `groupedKpis.length === 0`, the empty card MUST be one of: `no-backend-rows`, `masked-admin`, `all-frequency-locked`, or `filtered-out`. The decision MUST run through the pure helper `deriveOrgKpiEmptyState` (`src/lib/orgKpiEmptyState.ts`) so the contract stays testable.
+3. **Stale-filter self-healing.** Selected category and selected data-owner MUST auto-reset whenever the visible KPI set no longer contains the filter target (period change, year change, ownership refresh).
+4. **Filtered-out affordance.** When filters hide all rows, a Clear-Filters action MUST be present.
+5. **Admin diagnostics.** When `isAdmin`, the empty card MUST display the four-stage funnel counts (backend / ownership / frequency / grouped) so the cause is debuggable in-app.
+
+**Regression coverage**: `src/test/orgKpiEmptyState.test.ts` (7 tests).
+
+---
+
 ## §54 v3 — Multi-Month KPI Score Inheritance (Apr 29, 2026 amendment)
 
 **Reverses the §54 stage-guard added on 2026-04-05.** For multi-month KPIs (`Bi-Monthly`, `Quarterly`, `Half-Yearly`, `Yearly`), only the chronologically terminal month of each cycle traverses the workflow (Self → … → Management → Approved). All non-terminal sibling months are placeholders.
@@ -2584,6 +2598,7 @@ Rationale: the previous full-org load shipped thousands of rows on every visit a
 
 ## Version History
 - **v2.66.7.49 (2026-05-07):** §97 added. Unified Issues pending-KRA classification now excludes Org KPI rows (`is_org_level=true`) and locked non-terminal multi-month placeholders from employee pending-KRA flags. Regression `BUG-048` pins Vivek's false-flag class while keeping regular monthly KPIs actionable.
+- **v2.66.7.50 (2026-05-07):** §98 added. Org KPI Data Entry empty state must wait for auth/ownership readiness, classify via `deriveOrgKpiEmptyState`, self-heal stale category/owner filters, expose Clear Filters, and show admin diagnostics counts. Regression in `src/test/orgKpiEmptyState.test.ts`.
 - **v2.66.7.24 (2026-05-01):** §88I added — Phase 5b Reversible Standardization Actions. New `kpi_standardization_actions` table (append-only, admin RLS), `log_standardization_action` + `reverse_standardization_action` RPCs, extended `correct_may_kpis` to capture before-image, new `useEditDefinition` / `useUnlinkAlias` / `useDeleteDefinition` / `useStandardizationHistory` hooks, `EditDefinitionDialog`, `AffectedKpisTable`, and `HistoryUndoTab` (7th tab on /admin/kpi-standardization). Build Registry now supports inline canonical editing and per-variant KPI drill-in.
 - **v2.66.7.25 (2026-05-02):** §88I clause 9 added. Fixed `scan_kpi_duplicate_groups` row-inflation bug; added `src/lib/scanGroupsDedup.ts` defensive helper + `scanGroupsDedup.test.ts`.
 - **v2.66.7.26 (2026-05-02):** §88I clauses 10 + 11 added. Scanner now filters out alias-linked variants automatically (approved groups no longer reappear on Re-scan). New `kpi_scanner_skips` table + admin RLS; new "Don't merge" / "Restore" actions in Build Registry; new `useScannerSkips` hook with full undo via existing History tab; `skip_group` / `unskip_group` action types added to `reverse_standardization_action`.
