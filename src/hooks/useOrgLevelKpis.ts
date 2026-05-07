@@ -63,19 +63,37 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
     queryFn: async () => {
       // 1. Get all org-level KPIs (unique definitions). Use paginated fetch
       // because per-period org KPI counts can exceed the 1000-row PostgREST
-      // cap (e.g. May 2026 ≈ 886 rows and growing). Without this, RLS-trimmed
-      // results were silently truncated.
+      // cap (e.g. May 2026 ≈ 886 rows and growing).
+      //
+      // BUG-049 — The previous query selected `*` plus a nested
+      // `kra_categories(...)` join. Combined with this table's heavy RLS
+      // policies, that query intermittently exceeded `statement_timeout`
+      // (57014) for admins/data owners, returning an HTTP 500. The page then
+      // displayed "No organization-level KPIs exist" even though the
+      // backend held 800+ rows. Fix: lean explicit projection, no join,
+      // smaller page size to keep each RLS-evaluated page under the
+      // statement timeout. Category metadata is already fetched by the page
+      // via useKraCategories().
+      const ORG_KPI_PAGE_SIZE = 500;
       const allOrgKpis = await fetchAllPaged<any>((from, to) =>
         supabase
           .from('kpis')
-          .select(`*, kra_categories (id, name, color, weightage)`)
+          .select(
+            'id, employee_id, category_id, kra_name, kpi_name, ' +
+            'review_period, review_year, frequency, frequency_cycle_start, ' +
+            'is_org_level, org_level_scope, status, target_value, uom, ' +
+            'criteria, uom_type, qualitative_options, threshold_mode, ' +
+            'r5, r4, r3, r2, r1, r0, weightage, ' +
+            'kra_categories (id, name, color, weightage)'
+          )
           .eq('is_org_level', true)
           .eq('review_period', reviewPeriod!)
           .eq('review_year', reviewYear!)
           .order('category_id')
           .order('kra_name')
           .order('kpi_name')
-          .range(from, to)
+          .range(from, to),
+        ORG_KPI_PAGE_SIZE,
       );
 
       // Dedupe

@@ -76,7 +76,13 @@ export default function OrgKpiDataEntry() {
   const [impactTarget, setImpactTarget] = useState<{ categoryId: string; kraName: string; kpiName: string; achievedValue: number | null; expectedEmployeeIds?: string[] } | null>(null);
 
   // Data queries - use the new hook that filters by employee mapping
-  const { data: orgLevelData, isLoading: kpisLoading } = useOrgLevelKpisWithEmployees(selectedPeriod, selectedYear);
+  const {
+    data: orgLevelData,
+    isLoading: kpisLoading,
+    error: kpisError,
+    refetch: refetchOrgKpis,
+    isFetching: kpisFetching,
+  } = useOrgLevelKpisWithEmployees(selectedPeriod, selectedYear);
   // ALL org-level KPIs (unfiltered) for Data Owners tab
   const { data: allOrgLevelKpis } = useOrgLevelKpis(selectedPeriod, selectedYear);
   const orgLevelKpis = useMemo(() => orgLevelData?.kpis?.map(k => k.kpi) || [], [orgLevelData]);
@@ -366,6 +372,7 @@ export default function OrgKpiDataEntry() {
     groupedCount: groupedKpis.length,
     isMaskedAdmin: role === 'admin' && !isAdminMode,
     hasActiveFilters,
+    hasQueryError: !!kpisError,
   });
   const clearAllOrgKpiFilters = useCallback(() => {
     setSelectedCategoryId('all');
@@ -1551,6 +1558,33 @@ export default function OrgKpiDataEntry() {
                 <Building2 className="h-12 w-12 mx-auto mb-1 opacity-50" />
                 {orgKpiEmptyKind === 'no-backend-rows' && (
                   <p>No organization-level KPIs exist for {selectedPeriod} {selectedYear}.</p>
+                )}
+                {orgKpiEmptyKind === 'query-error' && (
+                  <div className="space-y-2">
+                    <p className="text-destructive font-medium">
+                      Could not load organization-level KPIs for {selectedPeriod} {selectedYear}.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      The backend took too long to respond. Your data is safe — please retry.
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={kpisFetching}
+                      onClick={() => refetchOrgKpis()}
+                    >
+                      {kpisFetching ? (
+                        <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Retrying…</>
+                      ) : (
+                        'Retry'
+                      )}
+                    </Button>
+                    {isAdmin && kpisError && (
+                      <p className="text-[10px] text-muted-foreground/60 pt-1">
+                        {(kpisError as Error)?.message?.slice(0, 200)}
+                      </p>
+                    )}
+                  </div>
                 )}
                 {orgKpiEmptyKind === 'masked-admin' && (
                   <div className="space-y-2">
