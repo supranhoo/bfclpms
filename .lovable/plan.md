@@ -1,83 +1,73 @@
-## RCA: why the same KPI shows 3 different counts
+## Problem
 
-**Observed from the screenshot:**
-- Card badge: **50 employees**
-- Expanded section: **55 Employees (0 / 55 entered)**
-- Impact sheet: **Total Affected 50** and **Affected Employees (50)**
+When an admin assigns a Quarterly (or any multi-month) KPI from the "Assign New KRA" dialog, only **one** row is inserted into `kpis` — at the cycle's **terminal month** (e.g. June for the Apr–Jun quarter). Result:
 
-**Database check for the visible KPI text (`Completion of Mandated Training Hours`, `Training & Development`) shows a period mismatch:**
-- **April 2026:** 50 active mapped employee KPI rows
-- **May 2026:** 55 active mapped employee KPI rows
-- Gap is not inactive users; it is a genuine mapping difference between months.
-- The 5/6 employee delta between April and May is caused by employees added/removed between monthly KPI mappings.
+- Employee opens April / May and sees "no KPI mapped" → believes mapping is incomplete.
+- Final score / weightage calculations for April and May exclude this KPI, distorting the monthly view until June is approved.
+- This conflicts with how Copy-from-Last-Period and the rollover engine already behave (they create rows for every cycle month).
 
-**Primary root cause:**
-The page is mixing **different period snapshots** for one rendered card:
-1. **Card badge / Impact sheet** are tied to the current `useOrgLevelKpisWithEmployees(selectedPeriod, selectedYear)` mapping snapshot, which in the screenshot is resolving to **50**.
-2. **Expanded employee section** is rendered from `OrgKpiEntryCard` internal `scopedValues` state, which can remain at **55** from the previous card/period snapshot because the component sync effect only depends on KPI identity and does **not** include `data.scopedRows`. When the same KPI name exists across periods, React keeps the same card instance while `data.scopedRows` changes; the local table state does not fully reset.
-3. **Impact sheet** directly re-queries `kpis` by period and also receives expected IDs from the parent; it is correctly showing the same **50** as the parent mapping snapshot, but it still highlights that the expanded section is stale.
+Root cause: `AdminKpiCreateDialog.handleSubmit` calls `getActiveMonthForCycle(...)` and inserts a single row at `resolvedPeriod`. There is no sibling expansion on insert — only on approval, where `percolate_multimonth_score` writes back to siblings (which therefore must already exist).
 
-**Secondary issue:**
-The current fix accidentally changed the card badge to `scopedRows.length`. That hides RLS/visibility gaps instead of preserving the canonical mapped count. ADR-060 already says the UI should show a visibility-mismatch banner when visible rows are fewer than mapped rows. Therefore:
-- **Canonical mapped count** should come from `mappedEmpIdsByKey` / `employeeCountMap`.
-- **Visible/rendered row count** should come from `scopedRows.length` / table rows.
-- They should not be treated as the same metric.
+## Decision
 
-## Risk & Impact Report
+For multi-month frequencies (`Bi-Monthly`, `Quarterly`, `Half-Yearly`, `Yearly`):
 
-**Data impact:** No schema change planned. Read-only UI/state correction only.
+1. Create one **terminal** row (workflow-bearing) at the cycle's last month, exactly as today.
+2. Additionally create **placeholder sibling rows** for every other cycle month that is:
+   - **>= the assigned `Effective Month`** (skip months earlier than what the admin selected — past months stay untouched), AND
+   - **not locked** by `review_period_locks` for that employee's company/year.
+3. Siblings carry identical KPI definition (kra/kpi/uom/criteria/thresholds/weightage/frequency/cycle_start/etc.), `status = 'kra_set'`, and reference the same `source_template_id`. They are functionally placeholders awaiting terminal approval to percolate scores.
 
-**Workflow impact:** No permission or propagation workflow changes. The fix only corrects displayed counts and state synchronization.
+## Scope of changes
 
-**UI/UX impact:** Counts will become consistent and explicit: mapped total vs visible rows. If visibility differs, the existing amber warning will explain it.
+### 1. New shared helper — `src/lib/multimonthAssignment.ts`
+- `buildSiblingPeriods({ frequency, frequencyCycleStart, assignedMonth, reviewYear, terminalMonth }) → Array<{ period: string; year: number }>`
+  - Uses existing `buildCycleScopeLabel` / `getCycleOptionsForFrequency` to enumerate cycle months.
+  - Filters: drop terminal, drop months before `assignedMonth` (calendar order within the cycle, handling Dec→Jan wrap via the array order).
+- Returns terminal + non-terminal list separately so caller can insert terminal first (workflow target) and siblings second.
 
-**Regression risk:** Moderate, because Org KPI cards are stateful and auto-save sensitive. Mitigation: only reset scoped table state when the upstream row identity/count changes and no user edit is dirty.
+### 2. `useCreateKpi` (src/hooks/useKpis.ts)
+- After inserting the terminal row, if frequency is multi-month:
+  1. Fetch open `review_period_locks` for `(employee_id's company, year, period IN siblingPeriods)`.
+  2. Filter out locked months.
+  3. Bulk-insert siblings via `supabase.from('kpis').insert([...])` with `status: 'kra_set'`.
+  4. Swallow per-row unique-constraint errors (a sibling could already exist from a prior assignment / rollover) but surface other errors as a non-blocking warning toast — terminal succeeded, siblings partial.
+- Invalidate the existing query keys (already done).
 
-**Mitigation:** Add unit tests for count derivation and state-reset key behavior; update POLICY/DOCUMENTATION/ADR as required.
+### 3. `AdminKpiCreateDialog.tsx`
+- No logic change to `resolvedPeriod` (terminal stays terminal).
+- Update the existing orange "Quarterly cycle covers …" info banner to clarify behavior:
+  > "Sibling placeholder rows will be created for {forward open months}. Approval in {terminal} will auto-apply the score to all months in the cycle. Past or locked months are skipped."
+- Pass `assignedMonth` (the user-selected `reviewPeriod`) to the hook so it can compute "from-this-month-forward".
 
-## Implementation Plan
+### 4. Bulk path (`Issue KRAs — Confirmation` flow)
+- The same dialog underpins single-assign. Confirm `useCreateKpi` is the only insertion point — if the bulk "Confirm & Issue KRAs" path uses a different mutation (`useBulkAssignKpis` / similar), apply the same sibling expansion there. Will verify in implementation phase.
 
-1. **Create a single count contract**
-   - Add a small pure helper, e.g. `src/lib/orgKpiCounts.ts`, defining:
-     - `mappedCount`: canonical mapped employees for this KPI/period.
-     - `visibleCount`: rows the current user can actually see/render.
-     - `enteredCount`: rows with achieved value or N/A.
-     - `hiddenCount`: `mappedCount - visibleCount`, never below 0.
-   - This prevents card, table, pending report, and impact sheet from each inventing its own count rule.
+### 5. Tests — `src/test/multimonthAssignment.test.ts`
+- Quarterly assigned in May 2026 (Apr–Jun cycle) → terminal=June, siblings=[May]. April skipped (past).
+- Quarterly assigned in April → terminal=June, siblings=[April, May].
+- Half-Yearly assigned in March (Jan–Jun cycle) → terminal=June, siblings=[March, April, May]. Jan/Feb skipped.
+- Yearly Apr–Mar assigned in October → terminal=March, siblings=[Oct, Nov, Dec, Jan, Feb] across year wrap.
+- Lock filter: simulated lock on May → siblings=[April] only.
+- Monthly / Daily / Weekly → no siblings (early return).
 
-2. **Fix stale expanded section state**
-   - In `OrgKpiEntryCard`, include a stable `scopedRowsKey` / row-signature in the reset effect.
-   - When `data.scopedRows` changes from 55 rows to 50 rows for the same KPI identity, reset `scopedValues` to the new rows if the user is not actively editing.
-   - Keep the existing dirty-state merge behavior so active user edits are not overwritten.
+### 6. Documentation & memory
+- Append a new Version History entry in `DOCUMENTATION.md` under "Multi-month KPI assignment".
+- Update `mem://architecture/pms/multimonth-percolation` to note: **siblings are now created at assignment time (not just by historical rollover)**, scoped from `assignedMonth` forward and skipping locked months.
 
-3. **Restore canonical card badge behavior**
-   - Change `OrgKpiDataEntry.buildCardData` so `employeeCount` is again the canonical mapped count (`employeeCountMap` / `mappedEmpIdsByKey.length`), not `scopedRows.length`.
-   - Keep `scopedRows.length` as the visible table count.
-   - This aligns with ADR-060: if mapped count > visible count, show the amber visibility warning instead of silently reducing the mapped count.
+## Risk & impact
 
-4. **Make the expanded table label explicit**
-   - Update `OrgKpiScopedEntryTable` to support optional `totalCount` / `hiddenCount` props.
-   - Header should display the same canonical total as the badge, while still rendering only visible rows.
-   - Example when no hidden rows: `50 Employees (0 / 50 entered)`.
-   - Example when hidden rows exist: `50 Employees (0 / 45 visible entered)` plus existing amber banner.
+| Area | Impact | Mitigation |
+|---|---|---|
+| Data integrity | Multiple new rows per assignment | Unique constraint `(employee_id, kra_name, kpi_name, review_period, review_year)` already prevents duplicates; per-row error swallow |
+| Existing percolation trigger | Now has guaranteed sibling targets at approval | No change needed — already idempotent (force-copy on approve) |
+| Locked period governance | Could violate locks if we inserted into locked months | Explicit lock filter before insert |
+| Score calculations (month view) | Apr/May now show a `kra_set` (unscored) sibling — weighted average already excludes unscored KPIs (per Core memory) | No regression; the KPI just becomes visible as "pending" rather than missing |
+| Rollover engine | Already creates the same shape of rows | Behavior now consistent across both entry points |
+| Send-back / data-entry | Sibling editing is blocked by `enforce_frequency_lock_on_submission` for non-admins | Existing guard remains in force |
 
-5. **Keep Impact sheet anchored to the same canonical IDs**
-   - Keep `expectedEmployeeIds` passed from the card mapping.
-   - Ensure the sheet’s `Total Affected`, department badges, and table header all use the same canonical count contract.
-   - If some expected employees cannot be rendered because of access policy, show the existing hidden-count note.
+## Out of scope
 
-6. **Add regression tests**
-   - Test that a same-KPI/same-component `scopedRows` change from 55 to 50 resets the table count when not dirty.
-   - Test mapped vs visible count derivation.
-   - Update the existing Org KPI parity tests so they enforce the correct contract: mapped total is canonical; visible rows are separately tracked.
-
-7. **Update documentation and policy**
-   - Add an ADR-064 addendum clarifying the distinction between mapped count and visible count.
-   - Update `DOCUMENTATION.md` and `POLICY.md` version history with the count contract.
-
-## Expected result after fix
-
-For the screenshot KPI, all three count surfaces will stop conflicting:
-- If viewing **April 2026**, all surfaces should show **50**.
-- If viewing **May 2026**, all surfaces should show **55**.
-- If a role cannot see all mapped employees, the UI will show the canonical mapped total plus an explicit hidden-by-access explanation, instead of showing unexplained different numbers.
+- No DB migration / trigger change — purely client-side expansion.
+- No retroactive backfill for already-assigned multi-month KPIs missing siblings (can be a follow-up repair script if needed).
+- No change to terminal-month workflow, percolation, or scoring logic.
