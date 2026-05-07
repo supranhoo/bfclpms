@@ -76,7 +76,13 @@ export default function OrgKpiDataEntry() {
   const [impactTarget, setImpactTarget] = useState<{ categoryId: string; kraName: string; kpiName: string; achievedValue: number | null; expectedEmployeeIds?: string[] } | null>(null);
 
   // Data queries - use the new hook that filters by employee mapping
-  const { data: orgLevelData, isLoading: kpisLoading } = useOrgLevelKpisWithEmployees(selectedPeriod, selectedYear);
+  const {
+    data: orgLevelData,
+    isLoading: kpisLoading,
+    error: kpisError,
+    refetch: refetchOrgKpis,
+    isFetching: kpisFetching,
+  } = useOrgLevelKpisWithEmployees(selectedPeriod, selectedYear);
   // ALL org-level KPIs (unfiltered) for Data Owners tab
   const { data: allOrgLevelKpis } = useOrgLevelKpis(selectedPeriod, selectedYear);
   const orgLevelKpis = useMemo(() => orgLevelData?.kpis?.map(k => k.kpi) || [], [orgLevelData]);
@@ -366,6 +372,7 @@ export default function OrgKpiDataEntry() {
     groupedCount: groupedKpis.length,
     isMaskedAdmin: role === 'admin' && !isAdminMode,
     hasActiveFilters,
+    hasQueryError: !!kpisError,
   });
   const clearAllOrgKpiFilters = useCallback(() => {
     setSelectedCategoryId('all');
