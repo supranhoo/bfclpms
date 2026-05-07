@@ -49,4 +49,25 @@ describe('deriveOrgKpiEmptyState', () => {
       frequencyFilteredCount: 168, groupedCount: 168,
     })).toBe('ok');
   });
+
+  it('BUG-049: surfaces query-error instead of no-backend-rows on timeout', () => {
+    // Backend timed out → totalOrgKpis is 0 because the query never resolved.
+    // Without the fix this rendered "No organization-level KPIs exist" even
+    // though 862 rows existed for April 2026.
+    expect(deriveOrgKpiEmptyState({
+      ...base, hasQueryError: true,
+    })).toBe('query-error');
+  });
+
+  it('BUG-049: query-error wins over no-backend-rows even with active filters', () => {
+    expect(deriveOrgKpiEmptyState({
+      ...base, hasQueryError: true, hasActiveFilters: true,
+    })).toBe('query-error');
+  });
+
+  it('BUG-049: still returns ok when query erred but stale data is shown', () => {
+    expect(deriveOrgKpiEmptyState({
+      ...base, hasQueryError: true, totalOrgKpis: 10, groupedCount: 5,
+    })).toBe('ok');
+  });
 });
