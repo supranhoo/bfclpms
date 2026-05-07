@@ -1,14 +1,10 @@
-import { useState, useRef, useEffect, useId } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, FileText, X, Loader2, ExternalLink } from 'lucide-react';
 import { openStorageFile, buildEvidenceFileName } from '@/lib/storageDownload';
 import { useUploadLimits } from '@/hooks/useUploadLimits';
-
-// Module-scoped: tracks which row instance is currently armed for paste.
-// Only one row receives a paste at a time, even if multiple think they're armed.
-let activeArmedId: string | null = null;
 
 interface OrgKpiFileUploadProps {
   existingUrl: string | null;
@@ -18,11 +14,9 @@ interface OrgKpiFileUploadProps {
 
 export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: OrgKpiFileUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
-  const [isArmed, setIsArmed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { maxFileSizeMb, maxFileSizeBytes } = useUploadLimits();
-  const instanceId = useId();
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -77,12 +71,27 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (isUploading || disabled || existingUrl || !isArmed) return;
+    if (isUploading || disabled || existingUrl) return;
+    // Resolve the "row" this upload control belongs to: nearest <tr> or
+    // an element marked with [data-org-kpi-row]. Paste is accepted only
+    // when the active element is inside the same row, so the remarks
+    // textarea (and other row inputs) become valid Ctrl+V targets.
+    const rowEl = containerRef.current?.closest('tr, [data-org-kpi-row]') as HTMLElement | null;
     const handler = (e: Event) => {
-      if (activeArmedId !== instanceId) return;
       const ce = e as ClipboardEvent;
       const files = ce.clipboardData?.files;
       if (!files || files.length === 0) return;
+      // Route this paste only if focus is inside the same row as this upload.
+      const active = document.activeElement as HTMLElement | null;
+      if (rowEl) {
+        if (!active || (!rowEl.contains(active) && active !== document.body)) return;
+        // active === document.body is allowed only when there is exactly one
+        // upload control on the page, otherwise we'd double-upload. Check:
+        if (active === document.body) {
+          const all = document.querySelectorAll('tr [data-org-kpi-upload], [data-org-kpi-row] [data-org-kpi-upload]');
+          if (all.length > 1) return;
+        }
+      }
       e.preventDefault();
       e.stopImmediatePropagation();
       const file = files[0];
@@ -109,16 +118,7 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
     };
     window.addEventListener('paste', handler, true);
     return () => window.removeEventListener('paste', handler, true);
-  }, [isUploading, disabled, existingUrl, isArmed, instanceId, maxFileSizeBytes, maxFileSizeMb, onUploadComplete, toast]);
-
-  const arm = () => {
-    activeArmedId = instanceId;
-    setIsArmed(true);
-  };
-  const disarm = () => {
-    if (activeArmedId === instanceId) activeArmedId = null;
-    setIsArmed(false);
-  };
+  }, [isUploading, disabled, existingUrl, maxFileSizeBytes, maxFileSizeMb, onUploadComplete, toast]);
 
   if (existingUrl) {
     return (
@@ -150,17 +150,8 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
   return (
     <div
       ref={containerRef}
-      tabIndex={0}
-      role="button"
-      aria-label="Paste or upload evidence"
-      onMouseEnter={arm}
-      onMouseLeave={disarm}
-      onFocus={arm}
-      onBlur={disarm}
-      onClick={arm}
-      className={`inline-flex items-center gap-1 rounded outline-none transition-shadow ${
-        isArmed ? 'ring-2 ring-ring ring-offset-1' : ''
-      }`}
+      data-org-kpi-upload=""
+      className="inline-flex items-center gap-1 rounded"
     >
       <input
         ref={fileInputRef}
@@ -189,9 +180,7 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
           </>
         )}
       </Button>
-      <span className={`text-[10px] ${isArmed ? 'text-primary font-medium' : 'text-muted-foreground'}`}>
-        {isArmed ? 'Ctrl+V here' : 'or Ctrl+V'}
-      </span>
+      <span className="text-[10px] text-muted-foreground">or Ctrl+V</span>
     </div>
   );
 }

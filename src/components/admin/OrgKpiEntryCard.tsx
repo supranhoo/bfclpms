@@ -463,7 +463,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
 
           {/* Input area - org scope */}
           {data.scope === 'organization' && !isNa && (
-            <div className="space-y-2">
+            <div className="space-y-2" data-org-kpi-row="">
               {data.uomType === 'binary' || (data.uomType === 'tiered' && data.qualitativeOptions?.length) ? (
                 <QualitativeSelect
                   uomType={data.uomType}
