@@ -333,6 +333,47 @@ export default function OrgKpiDataEntry() {
     return Array.from(map.entries());
   }, [ownerFilteredKpis]);
 
+  // Stale-filter cleanup — when the period/year/scope changes, drop filters
+  // that have nothing to match so users are never stuck on a self-inflicted
+  // empty state. Side-effects only in useEffect (project policy).
+  useEffect(() => {
+    if (selectedCategoryId === 'all') return;
+    const stillVisible = frequencyFilteredKpis.some(k => k.category_id === selectedCategoryId);
+    if (!stillVisible) setSelectedCategoryId('all');
+  }, [frequencyFilteredKpis, selectedCategoryId]);
+
+  useEffect(() => {
+    if (!selectedOwnerId) return;
+    const stillVisible = frequencyFilteredKpis.some(kpi => {
+      const k = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
+      return ownershipMap.get(k)?.owners.some(o => o.owner_id === selectedOwnerId);
+    });
+    if (!stillVisible) setSelectedOwnerId(null);
+  }, [frequencyFilteredKpis, selectedOwnerId, ownershipMap]);
+
+  // Empty-state classifier — declared at component scope so it can be used
+  // both for the "Card-Based Entry" empty card and any diagnostic banner.
+  const hasActiveFilters =
+    selectedCategoryId !== 'all' ||
+    !!searchQuery ||
+    statusFilter !== 'all' ||
+    !!selectedOwnerId;
+  const orgKpiEmptyKind = deriveOrgKpiEmptyState({
+    isLoading: authLoading || !isReady || kpisLoading || ownershipLoading,
+    totalOrgKpis: orgLevelData?.totalOrgKpis ?? 0,
+    ownershipFilteredCount: ownershipFilteredKpis.length,
+    frequencyFilteredCount: frequencyFilteredKpis.length,
+    groupedCount: groupedKpis.length,
+    isMaskedAdmin: role === 'admin' && !isAdminMode,
+    hasActiveFilters,
+  });
+  const clearAllOrgKpiFilters = useCallback(() => {
+    setSelectedCategoryId('all');
+    setSearchQuery('');
+    setStatusFilter('all');
+    setSelectedOwnerId(null);
+  }, []);
+
   // Scope KPIs for progress: respect owner filter
   const progressScopedKpis = useMemo(() => {
     if (!selectedOwnerId) return frequencyFilteredKpis;
