@@ -548,7 +548,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
           )}
 
           {/* Scoped entry table for dept/employee */}
-          {data.scope !== 'organization' && data.scopeLabel && !isNa && (
+          {data.scope !== 'organization' && !isNa && (
             <>
             {data.scope === 'employee' && typeof data.employeeCount === 'number' && data.employeeCount > scopedValues.length && (
               <Alert variant="default" className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/30 py-2 mb-2">
