@@ -59,3 +59,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Org KPI Key Normalization](mem://features/admin/org-kpi-key-normalization) — Canonical owner/KPI key helper + tiered propagation overwrite policy
 - [Org KPI Data Entry Empty State](mem://features/admin/org-kpi-data-entry-empty-state) — Loading guard, deriveOrgKpiEmptyState classifier, stale-filter self-heal, admin diagnostics (POLICY §98)
 - [Org KPI Data Entry Snapshot RPC](mem://features/admin/org-kpi-data-entry-snapshot) — Org KPI page reads via get_org_kpi_data_entry_snapshot RPC (SECURITY DEFINER, in-function access); never paged raw kpis fetch
+- [Dashboard KRA Add/Delete](mem://features/admin/dashboard-kra-management) — Allowlist-gated Add/Delete KRA on Dashboard reusing AdminKpiCreateDialog + useAdminDeleteKpi
