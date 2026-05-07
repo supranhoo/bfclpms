@@ -210,8 +210,9 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
         {renderBoldKpiText(displayKpi)}
       </p>
 
-      {isAdmin && (
+      {(isAdmin || canDeleteKra) && (
         <div className="flex justify-end gap-1.5 mt-2">
+          {isAdmin && (
           <Button
             variant="outline"
             size="sm"
@@ -221,6 +222,8 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
             <Settings className="h-3 w-3 sm:h-4 sm:w-4" />
             <span className="hidden sm:inline">Admin KPI Editor</span>
           </Button>
+          )}
+          {isAdmin && (
           <Button
             variant="outline"
             size="sm"
@@ -230,7 +233,8 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
             <ClipboardEdit className="h-3 w-3 sm:h-4 sm:w-4" />
             <span className="hidden sm:inline">Admin Data Entry</span>
           </Button>
-          {getPreviousStatus(status) && (
+          )}
+          {isAdmin && getPreviousStatus(status) && (
             <Button
               variant="outline"
               size="sm"
@@ -239,6 +243,17 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
             >
               <Undo2 className="h-3 w-3 sm:h-4 sm:w-4" />
               <span className="hidden sm:inline">Step Back</span>
+            </Button>
+          )}
+          {(isAdmin || canDeleteKra) && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeleteDialogOpen(true)}
+              className="gap-1 h-6 sm:h-7 px-2 text-xs border-destructive/30 text-destructive"
+            >
+              <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Delete KRA</span>
             </Button>
           )}
         </div>
@@ -275,6 +290,21 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
           workflowStages={workflowStages}
         />
       </>
+    )}
+    {(isAdmin || canDeleteKra) && (
+      <ConfirmDestructiveDialog
+        open={deleteDialogOpen}
+        onCancel={() => setDeleteDialogOpen(false)}
+        onConfirm={() => {
+          deleteKpi.mutate(kpi.id, {
+            onSuccess: () => setDeleteDialogOpen(false),
+          });
+        }}
+        title="Delete this KRA?"
+        description={`This will permanently delete "${displayKra} — ${displayKpi}" for ${employeeProfile?.full_name || 'this employee'}, along with its review submissions and history. This cannot be undone.`}
+        confirmLabel="Delete KRA"
+        isLoading={deleteKpi.isPending}
+      />
     )}
     </>
   );
