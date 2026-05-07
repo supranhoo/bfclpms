@@ -1,44 +1,26 @@
-## Problem (Root Cause)
+## Root Cause
 
-`src/components/admin/OrgKpiFileUpload.tsx` attaches a `paste` listener on the **closest dialog (or `document`)** for every row that has no file yet. With 50 employees, 30+ row instances all listen on the same element. When the user presses Ctrl+V:
-
-- The browser fires `paste` once on the dialog.
-- Every row's listener runs in DOM-registration order.
-- The first one calls `stopImmediatePropagation()` and uploads the file.
-
-Result: the paste lands on the **first empty row in the DOM**, not the row the user intended. It looks "random" because adding/removing rows or evidence shifts which listener registers first. There is no concept of an "active" upload target.
+The previous fix attached the `paste` listener to the row's `<div>` itself. Browsers only dispatch `paste` events to elements that are content-editable or to inputs/textareas with focus. A plain `<div tabIndex={0}>` can receive focus but **will not fire `paste`** — so Ctrl+V now does nothing.
 
 ## Fix
 
-Make paste row-scoped instead of dialog-scoped. Only the row the user is actively interacting with should receive the pasted file.
+Keep the row-scoped "armed" model, but attach the `paste` listener to **`window`** (not the row div) while the row is armed. Only one row is armed at a time (last hovered/focused), so the paste reliably routes to the intended row without the original "first row in DOM wins" bug.
 
-### Changes
+### Changes — `src/components/admin/OrgKpiFileUpload.tsx`
 
-**`src/components/admin/OrgKpiFileUpload.tsx`** (single file, presentation only)
+1. Replace the `target.addEventListener('paste', …)` on `containerRef` with `window.addEventListener('paste', …)`, gated by `isArmed`.
+2. Track the currently-armed row via a module-level `Symbol`/ref so that if two rows somehow think they are armed (rapid mouse movement), only the most-recent one handles the paste. Simple approach: a module-scoped `let activeArmedId` + `useId()` per instance; on `mouseenter/focus` set `activeArmedId = myId`; the window handler bails if `activeArmedId !== myId`.
+3. Keep the visible focus ring + dynamic hint text exactly as today so the user always sees which row will receive the paste.
+4. Also arm on `click` of the container (in addition to hover/focus) for keyboard/touch users.
+5. No changes to upload logic, naming, size validation, callers, or other paste consumers.
 
-1. Wrap the Upload button in a focusable container (`tabIndex={0}`, `role="button"`, `aria-label="Paste or upload evidence"`) with a visible focus ring using existing tokens (`focus-visible:ring-2 ring-ring`).
-2. Replace the dialog-wide paste listener with a **row-local** model:
-   - Track `isArmed` state, set true on `focus` / `mouseenter` / `click` of the container, false on `blur` / `mouseleave`.
-   - Attach the `paste` listener to the container element itself (not document/dialog) only while `isArmed`.
-   - Keep `stopImmediatePropagation` so a textarea paste in the same row doesn't double-fire, but since the listener is on the row container it will only fire when the row is focused/hovered.
-3. Hint text updates: show `or Ctrl+V` only when the row is armed (focused/hovered) so users see which row will receive the paste; otherwise show muted `Paste here`.
-4. Keep file-size + upload logic identical (no business-logic change).
+### Why this is safe
 
-### What stays the same
+- `window`-level listener is added/removed per row only while armed → no global leak.
+- `activeArmedId` guard prevents duplicate uploads if multiple rows briefly overlap arming.
+- Behaviour for already-uploaded rows (`existingUrl`) is unchanged.
+- No schema, RLS, or storage changes.
 
-- Upload path, naming, bucket, size validation, toasts, `onUploadComplete` contract — unchanged.
-- Callers (`OrgKpiScopedEntryTable`, `OrgKpiEntryCard`) — no prop changes required.
-- `existingUrl` view mode — unchanged.
+## Risk
 
-## Risk & Impact
-
-- **Data**: none. No schema, RLS, or storage changes.
-- **Workflow**: none. Same upload outcome, just routed to the correct row.
-- **UI/UX**: small visible focus ring + dynamic hint text. Improves clarity.
-- **Regression risk**: low. Only `OrgKpiFileUpload.tsx` changes; behaviour for the file-already-uploaded branch is untouched. Other paste consumers (`MultiFileUpload`, `EvidenceUpload`, `EmployeeContactCard`) are not modified.
-- **Mitigation**: manual QA with 50-row dialog — focus row A, Ctrl+V → file lands on A; focus row B, Ctrl+V → file lands on B; click outside any row, Ctrl+V → no upload (silent, expected).
-
-## Out of scope
-
-- No changes to `MultiFileUpload`, `EvidenceUpload`, dashboard KRA management rollback, or any business logic.
-- No new admin settings.
+Low. Single-file presentation change. Manual QA: hover row A → Ctrl+V uploads to A; move to row B → Ctrl+V uploads to B; move mouse outside any row → Ctrl+V is a no-op.

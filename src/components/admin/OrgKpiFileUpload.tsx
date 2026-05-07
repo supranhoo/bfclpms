@@ -1,10 +1,14 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useId } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, FileText, X, Loader2, ExternalLink } from 'lucide-react';
 import { openStorageFile, buildEvidenceFileName } from '@/lib/storageDownload';
 import { useUploadLimits } from '@/hooks/useUploadLimits';
+
+// Module-scoped: tracks which row instance is currently armed for paste.
+// Only one row receives a paste at a time, even if multiple think they're armed.
+let activeArmedId: string | null = null;
 
 interface OrgKpiFileUploadProps {
   existingUrl: string | null;
@@ -18,6 +22,7 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { maxFileSizeMb, maxFileSizeBytes } = useUploadLimits();
+  const instanceId = useId();
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -73,9 +78,8 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
 
   useEffect(() => {
     if (isUploading || disabled || existingUrl || !isArmed) return;
-    const target = containerRef.current;
-    if (!target) return;
     const handler = (e: Event) => {
+      if (activeArmedId !== instanceId) return;
       const ce = e as ClipboardEvent;
       const files = ce.clipboardData?.files;
       if (!files || files.length === 0) return;
@@ -103,9 +107,18 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
         setIsUploading(false);
       });
     };
-    target.addEventListener('paste', handler);
-    return () => target.removeEventListener('paste', handler);
-  }, [isUploading, disabled, existingUrl, isArmed, maxFileSizeBytes, maxFileSizeMb, onUploadComplete, toast]);
+    window.addEventListener('paste', handler, true);
+    return () => window.removeEventListener('paste', handler, true);
+  }, [isUploading, disabled, existingUrl, isArmed, instanceId, maxFileSizeBytes, maxFileSizeMb, onUploadComplete, toast]);
+
+  const arm = () => {
+    activeArmedId = instanceId;
+    setIsArmed(true);
+  };
+  const disarm = () => {
+    if (activeArmedId === instanceId) activeArmedId = null;
+    setIsArmed(false);
+  };
 
   if (existingUrl) {
     return (
@@ -140,10 +153,11 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
       tabIndex={0}
       role="button"
       aria-label="Paste or upload evidence"
-      onMouseEnter={() => setIsArmed(true)}
-      onMouseLeave={() => setIsArmed(false)}
-      onFocus={() => setIsArmed(true)}
-      onBlur={() => setIsArmed(false)}
+      onMouseEnter={arm}
+      onMouseLeave={disarm}
+      onFocus={arm}
+      onBlur={disarm}
+      onClick={arm}
       className={`inline-flex items-center gap-1 rounded outline-none transition-shadow ${
         isArmed ? 'ring-2 ring-ring ring-offset-1' : ''
       }`}
