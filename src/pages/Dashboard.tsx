@@ -76,6 +76,8 @@ export default function Dashboard() {
   const [autoOpenKpiId, setAutoOpenKpiId] = useState<string | null>(null);
   const [mentionedKpi, setMentionedKpi] = useState<{ kpiId: string; employeeId: string } | null>(null);
   const deepLinkProcessedRef = useRef(false);
+  const [addKraOpen, setAddKraOpen] = useState(false);
+  const { canAdd: canAddKra } = useDashboardKraPermissions();
 
   // Detect skip-level subordinates
   const { data: skipLevelMembers } = useSkipLevelTeamMembers(profile?.id);
