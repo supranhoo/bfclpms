@@ -446,29 +446,31 @@ export default function OrgKpiDataEntry() {
     let scopedRows: OrgKpiCardData['scopedRows'] = undefined;
     let scopeLabel: string | undefined;
 
-    if (scope === 'department' && departments) {
+    if (scope === 'department') {
+      // ADR-061 — render scoped rows from snapshot mapping; departments
+      // query is enrichment only and must NOT gate the editor.
       scopeLabel = 'Department';
       const kk = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
-      const mappedDeptIds = mappedDepartmentsMap.get(kk);
-      const filteredDepts = mappedDeptIds
-        ? departments.filter(dept => mappedDeptIds.has(dept.id))
-        : departments;
+      const mappedDeptIds = mappedDepartmentsMap.get(kk) || new Set<string>();
+      const deptIdList: string[] = mappedDeptIds.size > 0
+        ? Array.from(mappedDeptIds)
+        : (departments?.map(d => d.id) ?? []);
       const kpiMappedEmpIds = mappedEmployeesMap.get(kk);
-      scopedRows = filteredDepts.map(dept => {
-        const scopeKey = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||${dept.id}||null`;
+      scopedRows = deptIdList.map(deptId => {
+        const dept = departments?.find(d => d.id === deptId);
+        const scopeKey = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||${deptId}||null`;
         const val = existingValuesMap.get(scopeKey);
-        // Build employee names sub-text for this department
         let scopeSubText: string | undefined;
         if (kpiMappedEmpIds && allProfiles) {
           const names = allProfiles
-            .filter(p => kpiMappedEmpIds.has(p.id) && p.department_id === dept.id)
+            .filter(p => kpiMappedEmpIds.has(p.id) && p.department_id === deptId)
             .map(p => (p.full_name || '').split(' ')[0])
             .filter(Boolean);
           if (names.length > 0) scopeSubText = names.join(', ');
         }
         return {
-            scopeId: dept.id,
-            scopeName: dept.name,
+            scopeId: deptId,
+            scopeName: dept?.name || `Dept ${deptId.slice(0, 6)}`,
             scopeSubText,
             achievedValue: val?.achieved_value ?? null,
             remarks: val?.remarks ?? '',
@@ -481,26 +483,30 @@ export default function OrgKpiDataEntry() {
             subFactors: val?.sub_factors ?? undefined,
           };
       });
-    } else if (scope === 'employee' && allProfiles) {
+    } else if (scope === 'employee') {
+      // ADR-061 — render scoped rows from the snapshot's mapped employee
+      // IDs. `allProfiles` (paged useProfiles) is enrichment for display
+      // name / department / designation only and must not hide the editor
+      // when it's still loading or when an RLS-hidden profile is mapped.
       scopeLabel = 'Employee';
       const kk2 = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
-      const mappedEmpIds = mappedEmployeesMap.get(kk2);
-      const filteredEmps = mappedEmpIds
-        ? allProfiles.filter(emp => mappedEmpIds.has(emp.id))
-        : allProfiles;
-      scopedRows = filteredEmps
-        .map(emp => {
-          const dept = departments?.find(d => d.id === emp.department_id);
-          const scopeKey = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||null||${emp.id}`;
+      const mappedEmpIds = mappedEmployeesMap.get(kk2) || new Set<string>();
+      const empIdList: string[] = mappedEmpIds.size > 0
+        ? Array.from(mappedEmpIds)
+        : (allProfiles?.map(e => e.id) ?? []);
+      scopedRows = empIdList
+        .map(empId => {
+          const emp = allProfiles?.find(e => e.id === empId);
+          const dept = emp ? departments?.find(d => d.id === emp.department_id) : undefined;
+          const scopeKey = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||null||${empId}`;
           const val = existingValuesMap.get(scopeKey);
-          // Per-employee target from their individual KPI record
-          const empTargetKey = `${kk2}||${emp.id}`;
+          const empTargetKey = `${kk2}||${empId}`;
           const empTarget = employeeTargetMap?.[empTargetKey];
           return {
-            scopeId: emp.id,
-            scopeName: emp.full_name || emp.email,
+            scopeId: empId,
+            scopeName: emp?.full_name || emp?.email || `Employee ${empId.slice(0, 6)}`,
             departmentName: dept?.name,
-            designation: emp.designation ?? undefined,
+            designation: emp?.designation ?? undefined,
             achievedValue: val?.achieved_value ?? null,
             remarks: val?.remarks ?? '',
             evidenceUrl: val?.evidence_url ?? null,
