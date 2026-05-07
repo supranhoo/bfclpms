@@ -1,5 +1,7 @@
 # PMS — Business Policy Document
 
+> **Version:** 2.21.9 — **§97 Org KPI exclusion from employee Pending-KRA issue flags.** Unified Issues / pending-KRA compliance surfaces MUST NOT classify `kpis.is_org_level = true` rows at `kra_set` as employee pending-KRA acceptance failures. Org KPI `kra_set` means the row is awaiting Data Owner value entry/propagation, not employee self-action. Non-terminal multi-month placeholder rows are also excluded from pending-KRA issue flags because only the terminal month is actionable. **§96 retained:** Org KPIs bypass self-review column scoring.
+>
 > **Version:** 2.21.8 — **§96 Org KPI Self-column rendering.** Org KPIs (`kpis.is_org_level = true`) bypass the self-review stage by design — the achieved value is supplied by the Data Owner via `org_kpi_values`, never via `review_submissions.self_score`. The reviewer scorecard (`KpiDetailsTable`) MUST therefore render the Self column for Org KPIs as a muted em-dash with an explanatory tooltip ("Self-review is not collected for Org KPIs. The achieved value is provided by the Data Owner."), and MUST NOT render the amber "N/A" badge in that cell. Genuine N/A submissions (`review_submissions.is_na = true`) continue to surface as "N/A" and take precedence over the bypass branch. **§95 retained:** reviewer-stage rosters MUST include employees whose `review_submissions` row carries the completed-stage score signature, in addition to those currently AT the stage. **§94 retained:** reviewer dashboards must expose a manual refresh that invalidates employee, KPI, and submission-score caches together. **§93 retained:** Org KPI "Stuck" requires propagated/approved OKV plus an in-scope child still in `kra_set`.
 >
 > **Version:** 2.21.7 — **§95 Reviewer roster score-signature seed.** Any reviewer-stage roster (HR PMS, Audit, Management — and by extension Manager / Skip-Level when surfaced as a "Reviewed" count) MUST include employees whose `review_submissions` row for the selected period carries the completed-stage score signature (`hr_pms_score`, `auditor_score`, `management_score`, `manager_score`, `skip_level_score` respectively), in addition to employees currently AT the stage. Reviewed-stat counters that intersect period KPIs with the visible roster will silently report `0` if this seed is missing, because already-reviewed KPIs belong to employees who have advanced past the stage. **§94 retained:** reviewer dashboards must expose a manual refresh that invalidates employee, KPI, and submission-score caches together. **§93 retained:** Org KPI "Stuck" requires propagated/approved OKV plus an in-scope child still in `kra_set`. **§92 retained:** slim PostgREST selects must be verified against `information_schema.columns`.
@@ -2169,6 +2171,18 @@ When a profile (`public.profiles`) row is inserted, updated, or deleted — thro
 
 ---
 
+## §97 — Pending-KRA Issue Classification for Org and Multi-Month KPIs
+
+Unified Issues / pending-KRA compliance surfaces may only flag `kra_set` KPIs that are actually awaiting employee action.
+
+1. **Org KPI exclusion.** `kpis.is_org_level = true` rows MUST be excluded from employee pending-KRA issue flags. Their `kra_set` state means the source Org KPI value is still pending Data Owner entry/propagation, not that the employee failed to accept or submit the KPI.
+2. **Multi-month placeholder exclusion.** Non-terminal months for Bi-Monthly, Quarterly, Half-Yearly and Yearly KPIs MUST be excluded from pending-KRA issue flags. Only the terminal cycle month is actionable; placeholder sibling rows exist for visibility and score inheritance.
+3. **Regular KPI behavior unchanged.** Non-org monthly/daily/weekly KPIs at `kra_set` past the configured SLA remain valid pending-KRA issues.
+
+**Regression coverage**: `BUG-048` in `src/test/bugBountyFixes.test.ts`.
+
+---
+
 ## §54 v3 — Multi-Month KPI Score Inheritance (Apr 29, 2026 amendment)
 
 **Reverses the §54 stage-guard added on 2026-04-05.** For multi-month KPIs (`Bi-Monthly`, `Quarterly`, `Half-Yearly`, `Yearly`), only the chronologically terminal month of each cycle traverses the workflow (Self → … → Management → Approved). All non-terminal sibling months are placeholders.
@@ -2569,6 +2583,7 @@ Rationale: the previous full-org load shipped thousands of rows on every visit a
 16. **One-shot retroactive link backfill.** A migration (Phase 5c) MUST set `kpis.kpi_definition_id` for any May-2026+ row whose `(category_id, normalized kra_name, normalized kpi_name)` matches either a `kpi_definitions` canonical pair or a `kpi_name_aliases` variant pair, and which is currently `NULL`. Pre-May-2026 rows MUST be excluded. The operation MUST log a single `backfill_definition_links` row into `kpi_standardization_actions` (newly added action_type) with the per-source counts in its payload, so it appears in the History tab. The append-only / admin-only RLS guarantees of §88I are preserved; this action is intentionally NOT reversible (un-linking rows would defeat its purpose).
 
 ## Version History
+- **v2.66.7.49 (2026-05-07):** §97 added. Unified Issues pending-KRA classification now excludes Org KPI rows (`is_org_level=true`) and locked non-terminal multi-month placeholders from employee pending-KRA flags. Regression `BUG-048` pins Vivek's false-flag class while keeping regular monthly KPIs actionable.
 - **v2.66.7.24 (2026-05-01):** §88I added — Phase 5b Reversible Standardization Actions. New `kpi_standardization_actions` table (append-only, admin RLS), `log_standardization_action` + `reverse_standardization_action` RPCs, extended `correct_may_kpis` to capture before-image, new `useEditDefinition` / `useUnlinkAlias` / `useDeleteDefinition` / `useStandardizationHistory` hooks, `EditDefinitionDialog`, `AffectedKpisTable`, and `HistoryUndoTab` (7th tab on /admin/kpi-standardization). Build Registry now supports inline canonical editing and per-variant KPI drill-in.
 - **v2.66.7.25 (2026-05-02):** §88I clause 9 added. Fixed `scan_kpi_duplicate_groups` row-inflation bug; added `src/lib/scanGroupsDedup.ts` defensive helper + `scanGroupsDedup.test.ts`.
 - **v2.66.7.26 (2026-05-02):** §88I clauses 10 + 11 added. Scanner now filters out alias-linked variants automatically (approved groups no longer reappear on Re-scan). New `kpi_scanner_skips` table + admin RLS; new "Don't merge" / "Restore" actions in Build Registry; new `useScannerSkips` hook with full undo via existing History tab; `skip_group` / `unskip_group` action types added to `reverse_standardization_action`.
