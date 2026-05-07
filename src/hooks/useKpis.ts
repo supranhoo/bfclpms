@@ -502,6 +502,14 @@ interface CreateKpiInput {
     resolvedMonth?: string;
     selectedYear?: number;
   };
+  /**
+   * If provided, expand multi-month assignments by inserting placeholder
+   * sibling KPI rows for each open cycle month from `assignedMonth` forward
+   * (excluding the terminal which is the main `payload`). Locked periods are
+   * skipped automatically.
+   */
+  assignedMonth?: string;
+  frequencyCycleStart?: string | null;
 }
 
 export function useCreateKpi() {
@@ -509,7 +517,7 @@ export function useCreateKpi() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ payload }: CreateKpiInput) => {
+    mutationFn: async ({ payload, assignedMonth, frequencyCycleStart }: CreateKpiInput) => {
       const { data, error } = await supabase
         .from('kpis')
         .insert(payload)
@@ -517,6 +525,77 @@ export function useCreateKpi() {
         .single();
 
       if (error) throw error;
+
+      // Multi-month sibling expansion (placeholders for non-terminal months).
+      if (assignedMonth && payload.frequency) {
+        try {
+          const { buildSiblingPeriods } = await import('@/lib/multimonthAssignment');
+          const expansion = buildSiblingPeriods({
+            frequency: payload.frequency,
+            frequencyCycleStart: frequencyCycleStart ?? payload.frequency_cycle_start ?? null,
+            assignedMonth,
+            reviewYear: payload.review_year as number,
+          });
+
+          if (expansion.isMultiMonth && expansion.siblings.length > 0) {
+            // Filter out locked periods. review_period_locks joins through
+            // review_periods (period_name, review_year). Only block global
+            // locks (lock_type = 'global') or locks targeting this employee.
+            const periodNames = Array.from(new Set(expansion.siblings.map(s => s.period)));
+            const years = Array.from(new Set(expansion.siblings.map(s => s.year)));
+
+            const { data: lockedRows } = await supabase
+              .from('review_periods')
+              .select('period_name, review_year, is_locked, review_period_locks!inner(is_locked, lock_type, target_id)')
+              .in('period_name', periodNames)
+              .in('review_year', years);
+
+            const lockedSet = new Set<string>();
+            (lockedRows ?? []).forEach((row: any) => {
+              const periodIsLocked = row.is_locked === true;
+              const hasActiveLock = (row.review_period_locks ?? []).some((l: any) => {
+                if (!l.is_locked) return false;
+                if (l.lock_type === 'global') return true;
+                if (l.target_id && l.target_id === payload.employee_id) return true;
+                return false;
+              });
+              if (periodIsLocked || hasActiveLock) {
+                lockedSet.add(`${row.period_name}|${row.review_year}`);
+              }
+            });
+
+            const openSiblings = expansion.siblings.filter(
+              s => !lockedSet.has(`${s.period}|${s.year}`),
+            );
+
+            if (openSiblings.length > 0) {
+              const siblingRows = openSiblings.map(s => ({
+                ...payload,
+                review_period: s.period,
+                review_year: s.year,
+                status: 'kra_set' as const,
+              }));
+              const { error: sibErr } = await supabase
+                .from('kpis')
+                .insert(siblingRows);
+              // Swallow duplicate-row errors silently — sibling may already
+              // exist from a prior assignment / rollover. Surface other
+              // errors as a non-blocking warning.
+              if (sibErr && !isDuplicateKpiError(sibErr)) {
+                console.warn('[useCreateKpi] sibling insert warning:', sibErr);
+                toast({
+                  title: 'KPI created — sibling months partial',
+                  description: `Terminal saved, but placeholders for ${openSiblings.length} month(s) hit: ${sibErr.message}`,
+                  variant: 'destructive',
+                });
+              }
+            }
+          }
+        } catch (sibCatch: any) {
+          console.warn('[useCreateKpi] sibling expansion error:', sibCatch);
+        }
+      }
+
       return data;
     },
     onSuccess: () => {

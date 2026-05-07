@@ -26,3 +26,5 @@ When the terminal month transitions to `approved`, the `percolate_multimonth_sco
 - `BACKFILL_MULTIMONTH_PERCOLATION` (performed_by = NULL) — one-shot historical repair on 2026-04-29 (142 terminals → 23 siblings)
 
 See POLICY.md §54 v3/v4 and ADR-047.
+
+**Sibling creation at assignment time** (2026-05-07): `useCreateKpi` now expands multi-month assignments by inserting placeholder sibling rows (`status='kra_set'`) for every cycle month from the admin-selected `Effective Month` forward, excluding past months and locked periods (filtered via `review_period_locks` + `review_periods.is_locked`). The terminal row is still inserted first as the workflow target. Helper: `src/lib/multimonthAssignment.ts::buildSiblingPeriods`. This makes the KPI visible to employees in every open cycle month and lets monthly weighted scores treat it as "pending" rather than "missing" until the terminal is approved.

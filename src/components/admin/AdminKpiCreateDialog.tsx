@@ -330,6 +330,8 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
           resolvedMonth: resolvedPeriod,
           selectedYear: reviewYear,
         },
+        assignedMonth: reviewPeriod,
+        frequencyCycleStart: (frequencyCycleStart && frequencyCycleStart !== 'system_default') ? frequencyCycleStart : null,
       });
       handleClose();
     } catch {
@@ -859,6 +861,11 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
+                      </p>
+                      <p className="pt-1 border-t border-amber-500/20 mt-1">
+                        Placeholder rows will be created for each open month in the cycle from{' '}
+                        <strong>{reviewPeriod}</strong> forward, so the employee sees the KPI as
+                        mapped every month. Past or locked months are skipped.
                       </p>
                     </div>
                   )}
