@@ -5,7 +5,7 @@ import { KPI } from '@/hooks/useKpis';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { getCycleLabel } from '@/lib/frequencyUtils';
-import { Clock, Building2, Users, User, Lock, Settings, ClipboardEdit, Undo2 } from 'lucide-react';
+import { Clock, Building2, Users, User, Lock, Settings, ClipboardEdit, Undo2, Trash2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { useWorkflowSetting } from '@/hooks/useWorkflowSettings';
@@ -17,6 +17,9 @@ import { AdminKpiEditDialog } from '@/components/admin/AdminKpiEditDialog';
 import { AdminDataEntryDialog } from '@/components/admin/AdminDataEntryDialog';
 import { AdminStatusStepBackDialog } from '@/components/admin/AdminStatusStepBackDialog';
 import { getPreviousStatus } from '@/hooks/useAdminDataEntry';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
+import { useDashboardKraPermissions } from '@/hooks/useDashboardKraPermissions';
+import { useAdminDeleteKpi } from '@/hooks/useKpis';
 import {
   useCanonicalVariantPairs,
   canonicalPair,
@@ -40,6 +43,9 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [dataEntryDialogOpen, setDataEntryDialogOpen] = useState(false);
   const [stepBackDialogOpen, setStepBackDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const { canDelete: canDeleteKra } = useDashboardKraPermissions();
+  const deleteKpi = useAdminDeleteKpi();
 
   // Phase 5c (POLICY §88I): when this KPI is registered in the canonical
   // registry, prefer the canonical KRA/KPI text over the literal columns on
