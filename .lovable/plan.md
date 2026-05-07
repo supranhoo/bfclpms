@@ -1,54 +1,56 @@
-## Problem
+# Root Cause
 
-Editing **Tarkeshwar Kumar (100597)**'s email in User Management fails with toast **"Failed to update email — User not found"**. The edge function `update-user-email` calls `auth.admin.updateUserById(...)`, which raises "User not found" because the employee has a `profiles` row but no `auth.users` row yet (non-login user provisioned via master backfill).
+Password generation succeeds, but the email dispatch from `password-rollout` → `send-email-notification` is rejected with `{"error":"Invalid authorization"}`.
 
-This is the exact "profile-without-auth" state already documented in `mem/features/admin/non-login-user-provisioning` and BUG-044. The Password Rollout edge function handles it; `update-user-email` does not.
+Edge logs from `send-email-notification` (11:21:57 UTC):
+```
+authHeader present: true   apikey header present: false
+SUPABASE_ANON_KEY len: 46  SERVICE_ROLE_KEY len: 41  PUBLISHABLE_KEY len: 0
+All auth checks failed. Bearer token length: 386
+```
 
-## Root Cause
+What this means:
+- `password-rollout` sends only `Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>` (no `apikey` header).
+- The runtime env `SUPABASE_SERVICE_ROLE_KEY` is **41 chars** (the new asymmetric "secret reference" placeholder), but the actual JWT Supabase mints into the request is **386 chars**. They don't match, so `validKeys.has(token)` fails.
+- `validateCaller` then falls through to `supabase.auth.getUser(token)` — which also fails because a service-role JWT isn't a user JWT.
+- No `apikey` header is sent, so the system_settings fallback (which stores the 208-char publishable key) never runs.
 
-`supabase/functions/update-user-email/index.ts` blindly calls `updateUserById` with no probe / create-if-missing branch. As soon as the target employee has never had a login provisioned, the call fails and the entire edit is aborted (the rest of the profile fields don't save either, because `handleSaveUser` returns on email failure).
+Net effect: every dispatch since the key rotation returns 401, password is set but `email_sent = false`.
 
-Verified directly:
-- `profiles.id = 379ddb35-…-c29be654adb4`, `email IS NULL`, `employee_code = 100597`
-- No matching row in `auth.users`
+The earlier `update-user-email` fix is unrelated; this is a separate auth-key mismatch.
 
-## Fix — Apply the canonical Non-Login User pattern (POLICY §113)
+# Plan
 
-### 1. `supabase/functions/update-user-email/index.ts`
+**1. `supabase/functions/password-rollout/index.ts` — fix dispatch headers**
 
-Mirror `password-rollout`:
+Replace the raw `fetch` with the canonical pattern that always validates:
+- Add `apikey: <SUPABASE_ANON_KEY>` header alongside `Authorization: Bearer <serviceRoleKey>`.
+- Prefer using the existing `adminClient.functions.invoke('send-email-notification', { body })` — it injects the correct `apikey` automatically and handles the new asymmetric-key format.
 
-1. Load the target `profiles` row (`id`, `full_name`, `employee_code`) for metadata.
-2. `getUserById(userId)`:
-   - **Missing** → `auth.admin.createUser({ id: userId, email: newEmail, email_confirm: true, user_metadata: { full_name, employee_code } })`. Reuse the profile id verbatim so all FKs keyed on it stay intact.
-   - **Present** → existing `auth.admin.updateUserById(userId, { email: newEmail, email_confirm: true })`.
-3. Sync `profiles.email = newEmail` (existing step).
-4. Return `{ success: true, auth_action: 'created' | 'updated' }` so the UI can distinguish first-time provisioning from a normal email change.
-5. Friendlier validation error if the target email already belongs to another auth user (`AuthApiError: email_exists` → 409 with clear message).
+Switching to `functions.invoke` removes the brittle string comparison entirely.
 
-### 2. `src/pages/admin/UserManagement.tsx`
+**2. No changes to `send-email-notification`** — its `validateCaller` already accepts a matching `apikey` header; we just have to send one.
 
-- When `auth_action === 'created'`, show toast: **"Login provisioned — user can now sign in once a password is set."** (Password Rollout remains the canonical password path.)
-- Existing failure toast preserved.
-- No change to the rest of `handleSaveUser`.
+**3. Regression guard**
 
-### 3. Documentation
+Add a tiny unit test (or extend `src/test/adminEdgeFunction.test.ts`) asserting that any internal edge-to-edge dispatch helper sends both `Authorization` AND `apikey` headers. This prevents future regressions when other functions copy this pattern.
 
-- Update `mem/features/admin/non-login-user-provisioning` to add `update-user-email` to the list of admin tools that follow the canonical pattern.
-- New ADR-063 documenting the bug, the fix, and the rule that **every** admin edge function mutating `auth.users` for a profile id MUST probe-then-branch.
-- Append POLICY §113 with `update-user-email` reference.
+**4. Docs**
+
+- Append POLICY entry §114: "Edge-to-edge calls must use `adminClient.functions.invoke()` (or include both `Authorization` + `apikey` headers). Bearer-only calls break under the new asymmetric service-role keys."
+- Add `docs/adr/ADR-064.md` summarizing the auth-key length mismatch and the canonical dispatch pattern.
+- Update `mem/architecture/notification-and-dispatch-engine` with the new dispatch rule.
 
 ## Risk & Impact
 
-- **Data Impact**: none — uses existing profile id; no orphaned FKs.
-- **Workflow Impact**: admins can now set/change email for backfilled employees without bouncing through Password Rollout first.
-- **Security**: edge function still gated by `requireAdminUser`; new `createUser` path uses `email_confirm: true` so no verification email is sent (matches existing update behaviour).
-- **Regression Risk**: low — the existing "auth user already exists" path is unchanged.
-- **Mitigation**: explicit unit-style assertion in the function (`if (!getErr && existing?.user) update; else create;`) plus a new test that mocks both branches.
+- **Data**: None. Header-only change.
+- **Workflow**: Restores password rollout email delivery. No change to password generation itself.
+- **UI**: None.
+- **Regression**: Low — `functions.invoke` is already used elsewhere in the codebase. Test added.
+- **Other dispatchers to audit (separate follow-up if you confirm symptoms)**: `send-monthly-review-reminder`, `send-pending-report-reminder`, `send-query-observation-reminders`, `send-scheduled-emails` — any that also call `send-email-notification` via raw fetch with Bearer-only will have the same bug.
 
-## Files Touched
+## Verification
 
-- `supabase/functions/update-user-email/index.ts`
-- `src/pages/admin/UserManagement.tsx` (toast copy only)
-- `mem/features/admin/non-login-user-provisioning`
-- `docs/adr/ADR-063.md` (new)
+1. Re-run "Generate & Send" for one user.
+2. Check `password_rollout_logs` → `email_sent = true`, `email_error IS NULL`.
+3. Check `send-email-notification` logs for `Authorized via apikey header match`.

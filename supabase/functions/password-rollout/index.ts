@@ -190,6 +190,7 @@ async function processOneUser(
             headers: {
               "Content-Type": "application/json",
               Authorization: `Bearer ${serviceRoleKey}`,
+              apikey: Deno.env.get("SUPABASE_ANON_KEY") ?? serviceRoleKey,
             },
             body: JSON.stringify(emailBody),
           }
