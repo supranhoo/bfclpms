@@ -1249,7 +1249,7 @@ export default function OrgKpiDataEntry() {
 
     return rows;
   }, [frequencyFilteredKpis, existingValuesMap, ownershipMap, prevValuesMap, employeeCountMap, departments, allProfiles, mappedDepartmentsMap, mappedEmployeesMap, selectedPeriod, selectedYear, kraSetEmpIdsByKey]);
-  if (kpisLoading) {
+  if (authLoading || !isReady || kpisLoading || ownershipLoading) {
     return <TableSkeleton rows={5} columns={5} />;
   }
 
