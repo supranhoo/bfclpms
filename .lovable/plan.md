@@ -1,26 +1,44 @@
+## Risk & Impact Report
+
+- **Data impact:** No schema, RLS, storage bucket, or historical data changes. This only changes frontend paste routing before the same existing upload call.
+- **Workflow impact:** No permission or review workflow changes. Users can still use the Upload button; Ctrl+V will target the active employee row.
+- **UI/UX consistency:** Minimal UI change. The existing Upload / Ctrl+V hint remains, but the whole editable row will become the paste target instead of only the tiny upload control.
+- **Regression risk:** Low-to-medium because this touches keyboard paste behavior near remark textareas. Mitigation: only intercept paste when the clipboard contains files, so normal text paste into remarks continues normally.
+- **Mitigation plan:** Add a small reusable paste helper and unit tests covering image/file paste, text-only paste, disabled/existing-file states, and target-row routing.
+
 ## Root Cause
 
-The previous fix attached the `paste` listener to the row's `<div>` itself. Browsers only dispatch `paste` events to elements that are content-editable or to inputs/textareas with focus. A plain `<div tabIndex={0}>` can receive focus but **will not fire `paste`** — so Ctrl+V now does nothing.
+The current fix arms Ctrl+V only when the mouse/focus is on the tiny `OrgKpiFileUpload` wrapper. In the screen shown, the user is focused inside the remarks textarea, so the upload wrapper is not armed. When Ctrl+V is pressed, the paste event goes to the textarea, not to the attachment control, so no attachment upload is triggered.
 
-## Fix
+## Implementation Plan
 
-Keep the row-scoped "armed" model, but attach the `paste` listener to **`window`** (not the row div) while the row is armed. Only one row is armed at a time (last hovered/focused), so the paste reliably routes to the intended row without the original "first row in DOM wins" bug.
+1. **Extract paste-upload handling from the tiny upload button**
+   - Keep `OrgKpiFileUpload` responsible for file selection/upload UI.
+   - Add optional props so a parent row can register a pasted file against that same upload logic.
+   - Ensure only clipboard file pastes are intercepted; text-only pastes are ignored and continue into the textarea/input.
 
-### Changes — `src/components/admin/OrgKpiFileUpload.tsx`
+2. **Make the employee row the paste target**
+   - Update `OrgKpiScopedEntryTable.tsx` where employee rows render.
+   - Track the active/hovered/focused row by `scopeId`.
+   - Add a capture-phase row paste handler on the row or row content area.
+   - If clipboard has a file and the row is not N/A / not disabled / has no existing evidence, upload to that row’s `evidenceUrl`.
+   - This makes Ctrl+V work while the cursor is in the remarks field, matching the screenshot.
 
-1. Replace the `target.addEventListener('paste', …)` on `containerRef` with `window.addEventListener('paste', …)`, gated by `isArmed`.
-2. Track the currently-armed row via a module-level `Symbol`/ref so that if two rows somehow think they are armed (rapid mouse movement), only the most-recent one handles the paste. Simple approach: a module-scoped `let activeArmedId` + `useId()` per instance; on `mouseenter/focus` set `activeArmedId = myId`; the window handler bails if `activeArmedId !== myId`.
-3. Keep the visible focus ring + dynamic hint text exactly as today so the user always sees which row will receive the paste.
-4. Also arm on `click` of the container (in addition to hover/focus) for keyboard/touch users.
-5. No changes to upload logic, naming, size validation, callers, or other paste consumers.
+3. **Keep normal typing/pasting safe**
+   - If clipboard contains plain text and no files, do not call `preventDefault`.
+   - Remarks text paste keeps working exactly as before.
+   - If a file is too large, show the existing toast.
 
-### Why this is safe
+4. **Cover the secondary card usage**
+   - Review `OrgKpiEntryCard.tsx` and keep current behavior or wire the same helper where needed so the non-table org KPI entry path does not regress.
 
-- `window`-level listener is added/removed per row only while armed → no global leak.
-- `activeArmedId` guard prevents duplicate uploads if multiple rows briefly overlap arming.
-- Behaviour for already-uploaded rows (`existingUrl`) is unchanged.
-- No schema, RLS, or storage changes.
+5. **Add regression coverage**
+   - Add unit tests for the paste helper:
+     - file paste is accepted and returns the first file;
+     - text-only paste is ignored;
+     - disabled/existing evidence states reject upload;
+     - oversized file triggers the existing size guard path.
 
-## Risk
+## Expected Result
 
-Low. Single-file presentation change. Manual QA: hover row A → Ctrl+V uploads to A; move to row B → Ctrl+V uploads to B; move mouse outside any row → Ctrl+V is a no-op.
+Ctrl+V will upload the pasted attachment to the employee row the user is actively editing/hovering, instead of requiring focus on the tiny Upload button.
