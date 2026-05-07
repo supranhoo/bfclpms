@@ -190,6 +190,14 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
   // hold a stale 0 from a prior Save, preventing silent zero-propagation.
   const touchedScopeIdsRef = useRef<Set<string>>(new Set());
 
+  // Track evidence edits explicitly so a refetch / debounced re-render does
+  // not "restore" an evidence URL that the user just removed. Without this,
+  // clicking the X on an attachment briefly clears local state, and the next
+  // org-kpi-values refetch (which still has the old URL until autosave
+  // commits) merges it back in via the scopedRows merge effect below.
+  const orgEvidenceTouchedRef = useRef(false);
+  const touchedEvidenceScopeIdsRef = useRef<Set<string>>(new Set());
+
   const [isPropagating, setIsPropagating] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -244,10 +252,30 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
     kpiIdentityRef.current = newIdentity;
     setAchievedValue(data.achievedValue?.toString() ?? '');
     setRemarks(data.remarks);
-    setEvidenceUrl(data.evidenceUrl);
-    setScopedValues(data.scopedRows || []);
+    // Don't restore evidence the user intentionally removed this session.
+    if (!orgEvidenceTouchedRef.current) {
+      setEvidenceUrl(data.evidenceUrl);
+    }
+    if (data.scopedRows) {
+      const touched = touchedEvidenceScopeIdsRef.current;
+      setScopedValues(prev => {
+        if (touched.size === 0) return data.scopedRows!;
+        return data.scopedRows!.map(dbRow => {
+          if (!touched.has(dbRow.scopeId)) return dbRow;
+          const localRow = prev.find(r => r.scopeId === dbRow.scopeId);
+          // Preserve the user's local evidenceUrl (incl. null after removal).
+          return { ...dbRow, evidenceUrl: localRow ? localRow.evidenceUrl : dbRow.evidenceUrl };
+        });
+      });
+    } else {
+      setScopedValues([]);
+    }
     setSaveStatus('idle');
     isDirtyRef.current = false;
+    if (identityChanged) {
+      orgEvidenceTouchedRef.current = false;
+      touchedEvidenceScopeIdsRef.current = new Set();
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.achievedValue, data.remarks, data.evidenceUrl, data.categoryId, data.kraName, data.kpiName, reviewPeriod, reviewYear, data.scopedRows]);
 
@@ -262,11 +290,14 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
       const merged = prev.map(row => {
         const dbRow = data.scopedRows!.find(r => r.scopeId === row.scopeId);
         if (!dbRow) return row;
+        // If the user intentionally removed evidence on this row, do NOT
+        // rehydrate the evidenceUrl from a stale DB snapshot.
+        const evidenceTouched = touchedEvidenceScopeIdsRef.current.has(row.scopeId);
         const needsMerge =
           (row.subFactors === undefined && dbRow.subFactors !== undefined) ||
           (row.achievedValue === null && dbRow.achievedValue !== null) ||
           (row.remarks === '' && dbRow.remarks) ||
-          (row.evidenceUrl === null && dbRow.evidenceUrl !== null);
+          (!evidenceTouched && row.evidenceUrl === null && dbRow.evidenceUrl !== null);
         if (needsMerge) {
           changed = true;
           return {
@@ -274,7 +305,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
             subFactors: row.subFactors ?? dbRow.subFactors,
             achievedValue: row.achievedValue ?? dbRow.achievedValue,
             remarks: row.remarks || dbRow.remarks,
-            evidenceUrl: row.evidenceUrl ?? dbRow.evidenceUrl,
+            evidenceUrl: evidenceTouched ? row.evidenceUrl : (row.evidenceUrl ?? dbRow.evidenceUrl),
           };
         }
         return row;
@@ -363,6 +394,9 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
 
   const handleScopedChange = (scopeId: string, field: 'achievedValue' | 'remarks' | 'evidenceUrl' | 'isNa' | 'subFactors', value: string | null) => {
     touchedScopeIdsRef.current.add(scopeId);
+    if (field === 'evidenceUrl') {
+      touchedEvidenceScopeIdsRef.current.add(scopeId);
+    }
     setScopedValues(prev => prev.map(r => {
       if (r.scopeId !== scopeId) return r;
       if (field === 'subFactors') {
