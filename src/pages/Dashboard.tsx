@@ -364,6 +364,13 @@ export default function Dashboard() {
               onModeChange={handleModeChange}
             />
           )}
+          {canAddKra && (
+            <div className="flex justify-end">
+              <Button size="sm" onClick={() => setAddKraOpen(true)} className="gap-1.5">
+                <Plus className="h-4 w-4" /> Add KRA
+              </Button>
+            </div>
+          )}
           <UnifiedScorecard
             viewLevel={viewLevelForScorecard as any}
             employee={selectedEmployee}
@@ -381,6 +388,15 @@ export default function Dashboard() {
             autoOpenKpiId={autoOpenKpiId}
             exploreMode={exploreMode}
           />
+          {canAddKra && (
+            <AdminKpiCreateDialog
+              isOpen={addKraOpen}
+              onClose={() => setAddKraOpen(false)}
+              defaultEmployeeId={selectedEmployee.id}
+              defaultReviewPeriod={periodSelection.selectedMonth}
+              defaultReviewYear={periodSelection.selectedYear}
+            />
+          )}
         </div>
       );
     }
