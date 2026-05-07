@@ -2183,6 +2183,20 @@ Unified Issues / pending-KRA compliance surfaces may only flag `kra_set` KPIs th
 
 ---
 
+## §98 — Org KPI Data Entry Empty-State Accuracy
+
+The `/admin/org-kpi-data` page MUST NOT render a generic "no KPIs" empty card when data, ownership, or auth state is still resolving, and the empty card MUST distinguish the four causes below. This codifies the RCA for Vivek Kumar Dansena's April-2026 false empty state (170 backend definitions silently masked).
+
+1. **Loading guard.** The page MUST defer rendering of any empty state until `authLoading || !isReady || kpisLoading || ownershipLoading` are all false. While loading, the `TableSkeleton` is the only acceptable placeholder.
+2. **Cause-specific copy.** When `groupedKpis.length === 0`, the empty card MUST be one of: `no-backend-rows`, `masked-admin`, `all-frequency-locked`, or `filtered-out`. The decision MUST run through the pure helper `deriveOrgKpiEmptyState` (`src/lib/orgKpiEmptyState.ts`) so the contract stays testable.
+3. **Stale-filter self-healing.** Selected category and selected data-owner MUST auto-reset whenever the visible KPI set no longer contains the filter target (period change, year change, ownership refresh).
+4. **Filtered-out affordance.** When filters hide all rows, a Clear-Filters action MUST be present.
+5. **Admin diagnostics.** When `isAdmin`, the empty card MUST display the four-stage funnel counts (backend / ownership / frequency / grouped) so the cause is debuggable in-app.
+
+**Regression coverage**: `src/test/orgKpiEmptyState.test.ts` (7 tests).
+
+---
+
 ## §54 v3 — Multi-Month KPI Score Inheritance (Apr 29, 2026 amendment)
 
 **Reverses the §54 stage-guard added on 2026-04-05.** For multi-month KPIs (`Bi-Monthly`, `Quarterly`, `Half-Yearly`, `Yearly`), only the chronologically terminal month of each cycle traverses the workflow (Self → … → Management → Approved). All non-terminal sibling months are placeholders.
