@@ -55,6 +55,21 @@ export interface OrgLevelKpiWithEmployees {
   employeeIds: string[];
 }
 
+export interface SnapshotEmployeeDisplay {
+  full_name: string | null;
+  employee_code: string | null;
+  designation: string | null;
+  department_id: string | null;
+  department_name: string | null;
+  department_code: string | null;
+  is_active: boolean | null;
+}
+
+export interface SnapshotDepartmentDisplay {
+  name: string | null;
+  code: string | null;
+}
+
 export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?: number) {
   const { isReady, user } = useAuth();
   return useQuery({
@@ -86,6 +101,8 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
         kraSetKpiRowsByKey?: Record<string, string[]>;
         kraSetEmpIdsByKey?: Record<string, string[]>;
         mappedEmpIdsByKey?: Record<string, string[]>;
+        employeeDisplayMap?: Record<string, SnapshotEmployeeDisplay>;
+        departmentDisplayMap?: Record<string, SnapshotDepartmentDisplay>;
       };
 
       // Re-key target map / id maps to the canonical client `normalizeKpiKey`
@@ -108,6 +125,8 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
         kraSetKpiRowsByKey: rekey(snap.kraSetKpiRowsByKey),
         kraSetEmpIdsByKey: rekey(snap.kraSetEmpIdsByKey),
         mappedEmpIdsByKey: rekey(snap.mappedEmpIdsByKey),
+        employeeDisplayMap: snap.employeeDisplayMap ?? {},
+        departmentDisplayMap: snap.departmentDisplayMap ?? {},
       };
     },
     enabled: isReady && !!user && !!reviewPeriod && !!reviewYear,
