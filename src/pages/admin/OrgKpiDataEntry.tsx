@@ -464,19 +464,27 @@ export default function OrgKpiDataEntry() {
       const kpiMappedEmpIds = mappedEmployeesMap.get(kk);
       scopedRows = deptIdList.map(deptId => {
         const dept = departments?.find(d => d.id === deptId);
+        const deptDisplay = departmentDisplayMap?.[deptId];
+        const deptName = dept?.name ?? deptDisplay?.name ?? `Dept ${deptId.slice(0, 6)}`;
         const scopeKey = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||${deptId}||null`;
         const val = existingValuesMap.get(scopeKey);
         let scopeSubText: string | undefined;
-        if (kpiMappedEmpIds && allProfiles) {
-          const names = allProfiles
-            .filter(p => kpiMappedEmpIds.has(p.id) && p.department_id === deptId)
-            .map(p => (p.full_name || '').split(' ')[0])
-            .filter(Boolean);
+        if (kpiMappedEmpIds) {
+          const names: string[] = [];
+          kpiMappedEmpIds.forEach(eid => {
+            const fromProfiles = allProfiles?.find(p => p.id === eid);
+            const fromSnap = employeeDisplayMap?.[eid];
+            const empDeptId = fromProfiles?.department_id ?? fromSnap?.department_id ?? null;
+            if (empDeptId !== deptId) return;
+            const full = fromProfiles?.full_name ?? fromSnap?.full_name ?? '';
+            const first = (full || '').split(' ')[0];
+            if (first) names.push(first);
+          });
           if (names.length > 0) scopeSubText = names.join(', ');
         }
         return {
             scopeId: deptId,
-            scopeName: dept?.name || `Dept ${deptId.slice(0, 6)}`,
+            scopeName: deptName,
             scopeSubText,
             achievedValue: val?.achieved_value ?? null,
             remarks: val?.remarks ?? '',
@@ -503,16 +511,22 @@ export default function OrgKpiDataEntry() {
       scopedRows = empIdList
         .map(empId => {
           const emp = allProfiles?.find(e => e.id === empId);
-          const dept = emp ? departments?.find(d => d.id === emp.department_id) : undefined;
+          const empSnap = employeeDisplayMap?.[empId];
+          const effDeptId = emp?.department_id ?? empSnap?.department_id ?? null;
+          const dept = effDeptId ? departments?.find(d => d.id === effDeptId) : undefined;
+          const deptDisplay = effDeptId ? departmentDisplayMap?.[effDeptId] : undefined;
+          const departmentName = dept?.name ?? empSnap?.department_name ?? deptDisplay?.name ?? undefined;
+          const fullName = emp?.full_name ?? empSnap?.full_name ?? null;
+          const designation = emp?.designation ?? empSnap?.designation ?? undefined;
           const scopeKey = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||null||${empId}`;
           const val = existingValuesMap.get(scopeKey);
           const empTargetKey = `${kk2}||${empId}`;
           const empTarget = employeeTargetMap?.[empTargetKey];
           return {
             scopeId: empId,
-            scopeName: emp?.full_name || emp?.email || `Employee ${empId.slice(0, 6)}`,
-            departmentName: dept?.name,
-            designation: emp?.designation ?? undefined,
+            scopeName: fullName || emp?.email || `Employee ${empId.slice(0, 6)}`,
+            departmentName,
+            designation,
             achievedValue: val?.achieved_value ?? null,
             remarks: val?.remarks ?? '',
             evidenceUrl: val?.evidence_url ?? null,
