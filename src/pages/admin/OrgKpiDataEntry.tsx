@@ -145,6 +145,12 @@ export default function OrgKpiDataEntry() {
   // Per-employee target map and KPI IDs map from the hook (no separate query needed)
   const employeeTargetMap = orgLevelData?.perEmployeeTargetMap;
   const employeeKpiIdsMap = orgLevelData?.employeeKpiIdsMap;
+  // ADR-062 — snapshot-supplied display maps; prefer these over `useProfiles`
+  // / `useDepartments` for mapped employee/department identity so RLS gaps
+  // in the caller's profile read don't leak into the editor as
+  // "Employee 2ddb6a" / "No Department" fallbacks.
+  const employeeDisplayMap = orgLevelData?.employeeDisplayMap;
+  const departmentDisplayMap = orgLevelData?.departmentDisplayMap;
 
   // Previous period data
   const prev = getPreviousPeriod(selectedPeriod, selectedYear);
