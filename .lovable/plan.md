@@ -1,56 +1,40 @@
-# Root Cause
+## Root Cause
 
-Password generation succeeds, but the email dispatch from `password-rollout` → `send-email-notification` is rejected with `{"error":"Invalid authorization"}`.
+The latest rollout logs show a different error than before:
 
-Edge logs from `send-email-notification` (11:21:57 UTC):
-```
-authHeader present: true   apikey header present: false
-SUPABASE_ANON_KEY len: 46  SERVICE_ROLE_KEY len: 41  PUBLISHABLE_KEY len: 0
-All auth checks failed. Bearer token length: 386
-```
+- Password generation is succeeding (`status: success`).
+- Email delivery is failing because the internal call now sends two different API key formats:
+  - `Authorization: Bearer <service role key>`
+  - `apikey: <publishable/anon key>`
+- Lovable Cloud rejects this as **“Conflicting API keys”** before `send-email-notification` can process the request.
 
-What this means:
-- `password-rollout` sends only `Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>` (no `apikey` header).
-- The runtime env `SUPABASE_SERVICE_ROLE_KEY` is **41 chars** (the new asymmetric "secret reference" placeholder), but the actual JWT Supabase mints into the request is **386 chars**. They don't match, so `validKeys.has(token)` fails.
-- `validateCaller` then falls through to `supabase.auth.getUser(token)` — which also fails because a service-role JWT isn't a user JWT.
-- No `apikey` header is sent, so the system_settings fallback (which stores the 208-char publishable key) never runs.
+## Risk & Impact Report
 
-Net effect: every dispatch since the key rotation returns 401, password is set but `email_sent = false`.
+- **Data Impact:** No schema, RLS, or historical KPI data changes.
+- **Workflow Impact:** Only affects internal password rollout email delivery; password generation remains unchanged.
+- **UI/UX Consistency:** No UI layout changes.
+- **Regression Risk:** Medium, because edge-to-edge email dispatch is used in multiple functions and mixed auth headers can break delivery.
+- **Mitigation Plan:** Centralize the password rollout email dispatch header behavior and add a regression test that prevents sending conflicting key types again.
 
-The earlier `update-user-email` fix is unrelated; this is a separate auth-key mismatch.
+## Implementation Plan
 
-# Plan
+1. **Fix `password-rollout` email dispatch**
+   - Replace the mixed `Authorization: serviceRoleKey` + `apikey: anonKey` request.
+   - Use a single consistent internal auth pattern that Lovable Cloud accepts.
+   - The safest immediate fix is to send the stored publishable key as both `Authorization` and `apikey`, matching the path already accepted by `send-email-notification` logs: “Authorized via Bearer matching system_settings stored key”.
 
-**1. `supabase/functions/password-rollout/index.ts` — fix dispatch headers**
+2. **Preserve existing rollout behavior**
+   - Keep password generation, auth user provisioning, synthetic-email skipping, audit logging, and result payloads unchanged.
+   - Only change the nested email dispatch call.
 
-Replace the raw `fetch` with the canonical pattern that always validates:
-- Add `apikey: <SUPABASE_ANON_KEY>` header alongside `Authorization: Bearer <serviceRoleKey>`.
-- Prefer using the existing `adminClient.functions.invoke('send-email-notification', { body })` — it injects the correct `apikey` automatically and handles the new asymmetric-key format.
+3. **Add regression coverage**
+   - Add or extend a unit test around the password rollout dispatch helper/code path to assert it does not send conflicting key types.
+   - The test should verify both headers use the same intended key when invoking `send-email-notification`.
 
-Switching to `functions.invoke` removes the brittle string comparison entirely.
+4. **Documentation / policy sync**
+   - Update the relevant internal policy/memory note for edge-to-edge function calls: never mix legacy service-role placeholders with publishable/anon keys in the same request.
+   - Add a short changelog/doc entry for this rollout email fix.
 
-**2. No changes to `send-email-notification`** — its `validateCaller` already accepts a matching `apikey` header; we just have to send one.
-
-**3. Regression guard**
-
-Add a tiny unit test (or extend `src/test/adminEdgeFunction.test.ts`) asserting that any internal edge-to-edge dispatch helper sends both `Authorization` AND `apikey` headers. This prevents future regressions when other functions copy this pattern.
-
-**4. Docs**
-
-- Append POLICY entry §114: "Edge-to-edge calls must use `adminClient.functions.invoke()` (or include both `Authorization` + `apikey` headers). Bearer-only calls break under the new asymmetric service-role keys."
-- Add `docs/adr/ADR-064.md` summarizing the auth-key length mismatch and the canonical dispatch pattern.
-- Update `mem/architecture/notification-and-dispatch-engine` with the new dispatch rule.
-
-## Risk & Impact
-
-- **Data**: None. Header-only change.
-- **Workflow**: Restores password rollout email delivery. No change to password generation itself.
-- **UI**: None.
-- **Regression**: Low — `functions.invoke` is already used elsewhere in the codebase. Test added.
-- **Other dispatchers to audit (separate follow-up if you confirm symptoms)**: `send-monthly-review-reminder`, `send-pending-report-reminder`, `send-query-observation-reminders`, `send-scheduled-emails` — any that also call `send-email-notification` via raw fetch with Bearer-only will have the same bug.
-
-## Verification
-
-1. Re-run "Generate & Send" for one user.
-2. Check `password_rollout_logs` → `email_sent = true`, `email_error IS NULL`.
-3. Check `send-email-notification` logs for `Authorized via apikey header match`.
+5. **Deploy and validate**
+   - Deploy `password-rollout`.
+   - Check fresh edge function logs after another test send to confirm the error changes from “Conflicting API keys” to success, or surfaces the next provider-level issue if email provider config is invalid.
