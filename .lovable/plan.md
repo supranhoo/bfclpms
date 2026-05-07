@@ -1,44 +1,42 @@
+## Why the file comes back
+
+The remove button only clears the file URL in local React state, then waits for the debounced auto-save. During the next 2–5 seconds, realtime/query refetches still return the old `evidence_url` from the database, and the card merge logic treats `null` local evidence as “missing data” and restores the database URL.
+
+There is a second risk in the same area: the merge logic in `OrgKpiEntryCard.tsx` explicitly does this for scoped rows:
+
+```text
+row.evidenceUrl === null && dbRow.evidenceUrl !== null → restore db evidenceUrl
+```
+
+That is correct for initial loading, but wrong after a user intentionally clicks remove.
+
 ## Risk & Impact Report
 
-- **Data impact:** No schema, RLS, storage bucket, or historical data changes. This only changes frontend paste routing before the same existing upload call.
-- **Workflow impact:** No permission or review workflow changes. Users can still use the Upload button; Ctrl+V will target the active employee row.
-- **UI/UX consistency:** Minimal UI change. The existing Upload / Ctrl+V hint remains, but the whole editable row will become the paste target instead of only the tiny upload control.
-- **Regression risk:** Low-to-medium because this touches keyboard paste behavior near remark textareas. Mitigation: only intercept paste when the clipboard contains files, so normal text paste into remarks continues normally.
-- **Mitigation plan:** Add a small reusable paste helper and unit tests covering image/file paste, text-only paste, disabled/existing-file states, and target-row routing.
-
-## Root Cause
-
-The current fix arms Ctrl+V only when the mouse/focus is on the tiny `OrgKpiFileUpload` wrapper. In the screen shown, the user is focused inside the remarks textarea, so the upload wrapper is not armed. When Ctrl+V is pressed, the paste event goes to the textarea, not to the attachment control, so no attachment upload is triggered.
+- **Data Impact:** No schema/RLS/storage changes. Existing historical rows remain intact. The fix only changes when `org_kpi_values.evidence_url` is updated to `null`.
+- **Workflow Impact:** File removal will become an intentional saved edit, same as upload. It will not change approvals, propagation, score logic, or permissions.
+- **UI/UX Consistency:** The file will disappear immediately and stay removed after refetch/autosave. Existing upload/view/remove UI remains unchanged.
+- **Regression Risk:** Medium-low. The sensitive part is preserving the existing “merge DB data after refetch” behavior for untouched rows while blocking it only for rows whose evidence was intentionally edited.
+- **Mitigation Plan:** Add explicit evidence-touch tracking and a regression test around merge behavior/removal persistence.
 
 ## Implementation Plan
 
-1. **Extract paste-upload handling from the tiny upload button**
-   - Keep `OrgKpiFileUpload` responsible for file selection/upload UI.
-   - Add optional props so a parent row can register a pasted file against that same upload logic.
-   - Ensure only clipboard file pastes are intercepted; text-only pastes are ignored and continue into the textarea/input.
+1. **Track evidence edits explicitly**
+   - In `OrgKpiEntryCard.tsx`, add tracking for organization-level evidence and per-scoped-row evidence changes.
+   - When `OrgKpiFileUpload` calls `onUploadComplete(null)`, mark that evidence field as intentionally touched before auto-save runs.
 
-2. **Make the employee row the paste target**
-   - Update `OrgKpiScopedEntryTable.tsx` where employee rows render.
-   - Track the active/hovered/focused row by `scopeId`.
-   - Add a capture-phase row paste handler on the row or row content area.
-   - If clipboard has a file and the row is not N/A / not disabled / has no existing evidence, upload to that row’s `evidenceUrl`.
-   - This makes Ctrl+V work while the cursor is in the remarks field, matching the screenshot.
+2. **Stop refetch merge from restoring removed evidence**
+   - Update the scoped-row merge logic so `dbRow.evidenceUrl` is only merged into local state when that row’s evidence has not been touched in the current edit session.
+   - Do the same for organization-scope evidence so an old DB value cannot overwrite a local removal before save completes.
 
-3. **Keep normal typing/pasting safe**
-   - If clipboard contains plain text and no files, do not call `preventDefault`.
-   - Remarks text paste keeps working exactly as before.
-   - If a file is too large, show the existing toast.
+3. **Persist removal immediately through the existing save path**
+   - Keep using the existing `onSave` / `useBulkUpsertOrgKpiValues` flow so `evidence_url: null` is saved to `org_kpi_values`.
+   - Ensure removal sets dirty state and triggers the same debounce/autosave behavior as upload.
 
-4. **Cover the secondary card usage**
-   - Review `OrgKpiEntryCard.tsx` and keep current behavior or wire the same helper where needed so the non-table org KPI entry path does not regress.
+4. **Regression coverage**
+   - Add or update a focused unit test covering:
+     - untouched empty evidence may hydrate from DB,
+     - intentionally removed evidence is not rehydrated by a later DB/refetch snapshot,
+     - saved payload can carry `evidence_url: null`.
 
-5. **Add regression coverage**
-   - Add unit tests for the paste helper:
-     - file paste is accepted and returns the first file;
-     - text-only paste is ignored;
-     - disabled/existing evidence states reject upload;
-     - oversized file triggers the existing size guard path.
-
-## Expected Result
-
-Ctrl+V will upload the pasted attachment to the employee row the user is actively editing/hovering, instead of requiring focus on the tiny Upload button.
+5. **Documentation sync**
+   - Update the relevant internal documentation/policy note for org-KPI evidence removal behavior and add a version-history entry, as required by project instructions.
