@@ -330,6 +330,8 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
           resolvedMonth: resolvedPeriod,
           selectedYear: reviewYear,
         },
+        assignedMonth: reviewPeriod,
+        frequencyCycleStart: (frequencyCycleStart && frequencyCycleStart !== 'system_default') ? frequencyCycleStart : null,
       });
       handleClose();
     } catch {
