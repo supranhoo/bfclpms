@@ -1571,7 +1571,15 @@ export default function OrgKpiDataEntry() {
                       size="sm"
                       variant="outline"
                       disabled={kpisFetching}
-                      onClick={() => refetchOrgKpis()}
+                      onClick={() => {
+                        // v2.66 — Retry must invalidate every related read so the
+                        // page returns to a consistent state, not just the snapshot.
+                        queryClient.invalidateQueries({ queryKey: ['org-level-kpis-with-employees'] });
+                        queryClient.invalidateQueries({ queryKey: ['org-level-kpis'] });
+                        queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
+                        queryClient.invalidateQueries({ queryKey: ['org-kpi-data-owners'] });
+                        refetchOrgKpis();
+                      }}
                     >
                       {kpisFetching ? (
                         <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Retrying…</>

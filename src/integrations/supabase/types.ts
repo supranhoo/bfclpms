@@ -8124,6 +8124,10 @@ export type Database = {
         }
         Returns: Json
       }
+      get_org_kpi_data_entry_snapshot: {
+        Args: { p_period: string; p_year: number }
+        Returns: Json
+      }
       get_profiles_for_audit_display: {
         Args: { p_user_ids: string[] }
         Returns: {

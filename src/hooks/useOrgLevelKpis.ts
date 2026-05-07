@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { KPI } from '@/hooks/useKpis';
 import { useAuth } from '@/contexts/AuthContext';
-import { fetchAllPaged } from '@/lib/fetchAll';
 import { normalizeKpiKey as mkKey } from '@/lib/orgKpiKey';
 
 // Hook to get unique org-level KPIs (where is_org_level = true) for a period
@@ -61,184 +60,54 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
   return useQuery({
     queryKey: ['org-level-kpis-with-employees', reviewPeriod, reviewYear, user?.id],
     queryFn: async () => {
-      // 1. Get all org-level KPIs (unique definitions). Use paginated fetch
-      // because per-period org KPI counts can exceed the 1000-row PostgREST
-      // cap (e.g. May 2026 ≈ 886 rows and growing).
-      //
-      // BUG-049 — The previous query selected `*` plus a nested
-      // `kra_categories(...)` join. Combined with this table's heavy RLS
-      // policies, that query intermittently exceeded `statement_timeout`
-      // (57014) for admins/data owners, returning an HTTP 500. The page then
-      // displayed "No organization-level KPIs exist" even though the
-      // backend held 800+ rows. Fix: lean explicit projection, no join,
-      // smaller page size to keep each RLS-evaluated page under the
-      // statement timeout. Category metadata is already fetched by the page
-      // via useKraCategories().
-      const ORG_KPI_PAGE_SIZE = 500;
-      const allOrgKpis = await fetchAllPaged<any>((from, to) =>
-        supabase
-          .from('kpis')
-          .select(
-            'id, employee_id, category_id, kra_name, kpi_name, ' +
-            'review_period, review_year, frequency, frequency_cycle_start, ' +
-            'is_org_level, org_level_scope, status, target_value, uom, ' +
-            'criteria, uom_type, qualitative_options, threshold_mode, ' +
-            'r5, r4, r3, r2, r1, r0, weightage, ' +
-            'kra_categories (id, name, color, weightage)'
-          )
-          .eq('is_org_level', true)
-          .eq('review_period', reviewPeriod!)
-          .eq('review_year', reviewYear!)
-          .order('category_id')
-          .order('kra_name')
-          .order('kpi_name')
-          .range(from, to),
-        ORG_KPI_PAGE_SIZE,
+      // BUG-049 / v2.66 — Use the backend snapshot RPC instead of paging
+      // hundreds of raw `kpis` rows through RLS in the browser. The RPC
+      // pre-aggregates definitions, mapping arrays, kra_set tracking and
+      // category metadata so the page only receives ~166 rows for 800+
+      // underlying child rows. This eliminates the statement-timeout
+      // (57014) regression that produced an empty page.
+      const { data, error } = await (supabase as any).rpc(
+        'get_org_kpi_data_entry_snapshot',
+        { p_period: reviewPeriod!, p_year: reviewYear! },
       );
+      if (error) throw error;
 
-      // Dedupe
-      const uniqueMap = new Map<string, typeof allOrgKpis[0]>();
-      allOrgKpis?.forEach(kpi => {
-        const key = mkKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
-        if (!uniqueMap.has(key)) uniqueMap.set(key, kpi);
-      });
+      const snap = (data ?? {}) as {
+        kpis?: Array<{
+          kpi: any;
+          employeeCount: number;
+          departmentIds: string[];
+          employeeIds: string[];
+        }>;
+        unmappedCount?: number;
+        totalOrgKpis?: number;
+        perEmployeeTargetMap?: Record<string, { target_value: number | null; uom: string | null }>;
+        employeeKpiIdsMap?: Record<string, string[]>;
+        kraSetKpiRowsByKey?: Record<string, string[]>;
+        kraSetEmpIdsByKey?: Record<string, string[]>;
+        mappedEmpIdsByKey?: Record<string, string[]>;
+      };
 
-      // 2. Build per-employee target map and KPI IDs map from raw records (before dedup discards them)
-      const perEmployeeTargetMap = new Map<string, { target_value: number | null; uom: string | null }>();
-      const employeeKpiIdsMap = new Map<string, string[]>();
-      const countMap = new Map<string, Set<string>>();
-      // Track per-kpi-definition the set of underlying kpis.id rows still in 'kra_set' status.
-      // NOTE: 'kra_set' alone does NOT mean "stuck" — that is the normal pre-propagation state.
-      // Genuine "stuck" requires the OKV to already claim propagated/approved while the child
-      // kpis row is still 'kra_set'. The OrgKpiDataEntry page combines this map with OKV.status.
-      const stuckKpiRowsMap = new Map<string, string[]>();
-      // Per-definition set of employee_ids whose child kpis row is still 'kra_set'.
-      // Allows scope-aware stuck detection (employee/department/organization).
-      const kraSetEmpIdsMap = new Map<string, Set<string>>();
-      allOrgKpis?.forEach(k => {
-        const key = mkKey(k.category_id, k.kra_name, k.kpi_name);
-        const s = countMap.get(key) || new Set<string>();
-        s.add(k.employee_id);
-        countMap.set(key, s);
-        // Store per-employee target
-        const empKey = `${key}||${k.employee_id}`;
-        if (!perEmployeeTargetMap.has(empKey)) {
-          perEmployeeTargetMap.set(empKey, { target_value: k.target_value, uom: k.uom });
-        }
-        // Collect KPI IDs per org KPI definition (for observations panel)
-        if ((k as any).org_level_scope === 'employee') {
-          const ids = employeeKpiIdsMap.get(key) || [];
-          ids.push(k.id);
-          employeeKpiIdsMap.set(key, ids);
-        }
-        // Collect kra_set KPI rows per definition (for "Stuck" detection)
-        if ((k as any).status === 'kra_set') {
-          const arr = stuckKpiRowsMap.get(key) || [];
-          arr.push(k.id);
-          stuckKpiRowsMap.set(key, arr);
-          const empSet = kraSetEmpIdsMap.get(key) || new Set<string>();
-          if (k.employee_id) empSet.add(k.employee_id);
-          kraSetEmpIdsMap.set(key, empSet);
-        }
-      });
-
-      // 3. Fetch department_id for all mapped employees to build dept mapping
-      const allEmployeeIds = new Set<string>();
-      countMap.forEach(empSet => empSet.forEach(id => allEmployeeIds.add(id)));
-      
-      const deptMap = new Map<string, Set<string>>();
-      const activeEmpIds = new Set<string>();
-
-      if (allEmployeeIds.size > 0) {
-        const empArray = Array.from(allEmployeeIds);
-        // Fetch profiles in batches of 500
-        const profiles: Array<{ id: string; department_id: string | null; is_active: boolean | null }> = [];
-        for (let i = 0; i < empArray.length; i += 500) {
-          const batch = empArray.slice(i, i + 500);
-          const { data: batchProfiles } = await supabase
-            .from('profiles')
-            .select('id, department_id, is_active')
-            .in('id', batch);
-          if (batchProfiles) profiles.push(...batchProfiles);
-        }
-
-        // ADR-064 — Drop inactive profiles from both the count and the
-        // department mapping so the badge, the rendered list and the saved
-        // payload all agree. Mirrors the global "Always filter is_active"
-        // core rule.
-        const profileMap = new Map<string, string | null>();
-        profiles.forEach(p => {
-          if (p.is_active !== false) {
-            profileMap.set(p.id, p.department_id);
-            activeEmpIds.add(p.id);
-          }
-        });
-
-        // Build department mapping per KPI
-        countMap.forEach((empSet, key) => {
-          // Strip inactive employee_ids in place so downstream consumers
-          // (employeeCount, employeeIds, mappedEmpIdsByKey) stay consistent.
-          const filtered = new Set<string>();
-          empSet.forEach(id => { if (activeEmpIds.has(id)) filtered.add(id); });
-          countMap.set(key, filtered);
-
-          const deptIds = new Set<string>();
-          filtered.forEach(empId => {
-            const deptId = profileMap.get(empId);
-            if (deptId) deptIds.add(deptId);
-          });
-          if (deptIds.size > 0) deptMap.set(key, deptIds);
-        });
-      }
-
-      // 4. Build result
-      const result: OrgLevelKpiWithEmployees[] = [];
-      let unmappedCount = 0;
-
-      uniqueMap.forEach((kpi, key) => {
-        const empSet = countMap.get(key);
-        const count = empSet ? empSet.size : 0;
-        if (count >= 1) {
-          result.push({
-            kpi: kpi as unknown as OrgLevelKpiWithEmployees['kpi'],
-            employeeCount: count,
-            departmentIds: Array.from(deptMap.get(key) || []),
-            employeeIds: Array.from(empSet || []),
-          });
-        } else {
-          unmappedCount++;
-        }
-      });
-
-      // Convert Maps to plain objects for React Query compatibility (structural sharing destroys Maps)
-      const perEmployeeTargets: Record<string, { target_value: number | null; uom: string | null }> = {};
-      perEmployeeTargetMap.forEach((val, key) => { perEmployeeTargets[key] = val; });
-
-      const employeeKpiIds: Record<string, string[]> = {};
-      employeeKpiIdsMap.forEach((val, key) => { employeeKpiIds[key] = val; });
-
-      const kraSetKpiRowsByKey: Record<string, string[]> = {};
-      stuckKpiRowsMap.forEach((val, key) => { kraSetKpiRowsByKey[key] = val; });
-
-      const kraSetEmpIdsByKey: Record<string, string[]> = {};
-      kraSetEmpIdsMap.forEach((val, key) => { kraSetEmpIdsByKey[key] = Array.from(val); });
-
-      // All employee_ids mapped to each org KPI definition (whether kra_set or already advanced).
-      // The page combines this with kraSetEmpIdsByKey to derive a fact-based tile status:
-      // if every mapped child has advanced past kra_set, there is nothing left to propagate
-      // even if org_kpi_values.status is still draft/sent_back. (ADR-055)
-      const mappedEmpIdsByKey: Record<string, string[]> = {};
-      countMap.forEach((val, key) => { mappedEmpIdsByKey[key] = Array.from(val); });
+      // Re-key target map / id maps to the canonical client `normalizeKpiKey`
+      // so they line up with maps the page already builds elsewhere. The RPC
+      // emits keys with the same algorithm (lowercased, whitespace-collapsed)
+      // so this is just a safety pass for any caller relying on `mkKey`.
+      const rekey = <T>(src?: Record<string, T>): Record<string, T> => {
+        if (!src) return {};
+        const out: Record<string, T> = {};
+        Object.entries(src).forEach(([k, v]) => { out[k] = v; });
+        return out;
+      };
 
       return {
-        kpis: result,
-        unmappedCount,
-        totalOrgKpis: uniqueMap.size,
-        perEmployeeTargetMap: perEmployeeTargets,
-        employeeKpiIdsMap: employeeKpiIds,
-        kraSetKpiRowsByKey,
-        kraSetEmpIdsByKey,
-        mappedEmpIdsByKey,
+        kpis: (snap.kpis ?? []) as OrgLevelKpiWithEmployees[],
+        unmappedCount: snap.unmappedCount ?? 0,
+        totalOrgKpis: snap.totalOrgKpis ?? 0,
+        perEmployeeTargetMap: rekey(snap.perEmployeeTargetMap),
+        employeeKpiIdsMap: rekey(snap.employeeKpiIdsMap),
+        kraSetKpiRowsByKey: rekey(snap.kraSetKpiRowsByKey),
+        kraSetEmpIdsByKey: rekey(snap.kraSetEmpIdsByKey),
+        mappedEmpIdsByKey: rekey(snap.mappedEmpIdsByKey),
       };
     },
     enabled: isReady && !!user && !!reviewPeriod && !!reviewYear,
