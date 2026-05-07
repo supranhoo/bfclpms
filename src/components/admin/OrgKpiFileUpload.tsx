@@ -14,6 +14,7 @@ interface OrgKpiFileUploadProps {
 
 export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: OrgKpiFileUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
+  const [isArmed, setIsArmed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { maxFileSizeMb, maxFileSizeBytes } = useUploadLimits();
@@ -71,9 +72,9 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (isUploading || disabled || existingUrl) return;
-    const dialogContainer = containerRef.current?.closest('[role="dialog"]');
-    const target = dialogContainer || document;
+    if (isUploading || disabled || existingUrl || !isArmed) return;
+    const target = containerRef.current;
+    if (!target) return;
     const handler = (e: Event) => {
       const ce = e as ClipboardEvent;
       const files = ce.clipboardData?.files;
@@ -104,7 +105,7 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
     };
     target.addEventListener('paste', handler);
     return () => target.removeEventListener('paste', handler);
-  }, [isUploading, disabled, existingUrl, maxFileSizeBytes, maxFileSizeMb, onUploadComplete, toast]);
+  }, [isUploading, disabled, existingUrl, isArmed, maxFileSizeBytes, maxFileSizeMb, onUploadComplete, toast]);
 
   if (existingUrl) {
     return (
@@ -134,7 +135,19 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
   }
 
   return (
-    <div ref={containerRef}>
+    <div
+      ref={containerRef}
+      tabIndex={0}
+      role="button"
+      aria-label="Paste or upload evidence"
+      onMouseEnter={() => setIsArmed(true)}
+      onMouseLeave={() => setIsArmed(false)}
+      onFocus={() => setIsArmed(true)}
+      onBlur={() => setIsArmed(false)}
+      className={`inline-flex items-center gap-1 rounded outline-none transition-shadow ${
+        isArmed ? 'ring-2 ring-ring ring-offset-1' : ''
+      }`}
+    >
       <input
         ref={fileInputRef}
         type="file"
@@ -162,7 +175,9 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
           </>
         )}
       </Button>
-      <span className="text-[10px] text-muted-foreground">or Ctrl+V</span>
+      <span className={`text-[10px] ${isArmed ? 'text-primary font-medium' : 'text-muted-foreground'}`}>
+        {isArmed ? 'Ctrl+V here' : 'or Ctrl+V'}
+      </span>
     </div>
   );
 }

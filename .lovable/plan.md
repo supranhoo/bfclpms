@@ -1,85 +1,44 @@
+## Problem (Root Cause)
 
-# Add/Delete KRA on Dashboard + Admin Role Configuration
+`src/components/admin/OrgKpiFileUpload.tsx` attaches a `paste` listener on the **closest dialog (or `document`)** for every row that has no file yet. With 50 employees, 30+ row instances all listen on the same element. When the user presses Ctrl+V:
 
-## Goal
-Let approved roles (configured by Admin) add a new KRA or delete an existing KRA directly from the Dashboard, instead of going to `Admin → All KPIs`. No new business logic — wire existing tested components and hooks.
+- The browser fires `paste` once on the dialog.
+- Every row's listener runs in DOM-registration order.
+- The first one calls `stopImmediatePropagation()` and uploads the file.
 
-## Reuse Inventory (no duplicates)
-- Add dialog: `src/components/admin/AdminKpiCreateDialog.tsx` (already supports `defaultEmployeeId`, `defaultReviewPeriod`, `defaultReviewYear`).
-- Edit dialog (already on KPI rows): `src/components/admin/AdminKpiEditDialog.tsx`.
-- Create mutation: `useCreateKpi` (`src/hooks/useKpis.ts`).
-- Delete mutation: `useAdminDeleteKpi` (`src/hooks/useKpis.ts`).
-- Confirm-destructive dialog (per memory `destructive-action-governance`): `ConfirmDestructiveDialog`.
-- Role allowlist UI pattern: existing `_roles` setting renderer in `WorkflowSettingsTab.tsx` (reused as-is).
-- Settings hook: `useWorkflowSettings.ts` (categories, parsing, mutation).
-- Roles SSOT: `src/lib/roles.ts` (`ALL_APP_ROLES`).
+Result: the paste lands on the **first empty row in the DOM**, not the row the user intended. It looks "random" because adding/removing rows or evidence shifts which listener registers first. There is no concept of an "active" upload target.
 
-No new dialogs, no new mutations, no schema changes to `kpis`.
+## Fix
 
-## Risk & Impact Report
-- **Data Impact**: None to schema. Inserts/deletes already covered by RLS on `kpis` (admin path). The new "Delete KRA" button only appears in the user's own dashboard scorecard — server still enforces RLS, so client gating is UX, not security.
-- **Workflow Impact**: Self-service KRA addition is a policy shift. We mitigate by (a) hiding controls unless the caller's role is in the new `dashboard_kra_management_roles` allowlist; (b) defaulting the allowlist to `["admin"]` (current behavior preserved); (c) Add only auto-fills `defaultEmployeeId = self`, `defaultReviewPeriod`/`defaultReviewYear` = current period — admin can still override inside dialog.
-- **UI/UX Consistency**: Buttons placed in the existing scorecard header action zone (same area used by `KpiHeaderSection` admin actions). Mobile-safe (icon-only at `<sm`).
-- **Regression Risk**: Low — UnifiedScorecard / Dashboard layout untouched except for two buttons. Admin All KPIs page unchanged. Existing `KpiHeaderSection` admin "Edit" button stays for the per-row case; we add a per-row "Delete" only when allowlist matches.
-- **Mitigation**: Unit tests on the allowlist gate util + a smoke render test on the new buttons hidden/shown based on role.
+Make paste row-scoped instead of dialog-scoped. Only the row the user is actively interacting with should receive the pasted file.
 
-## Plan
+### Changes
 
-### 1. New workflow setting (DB-driven, zero hardcoding)
-Add one row to `workflow_settings`:
-- `category = 'validation'` (existing category; avoids enum change). _Alternative considered:_ a new `'dashboard'` category — rejected because `SettingCategory` is an enum string; adding a new value cascades changes through `WorkflowSettingsTab` config. Stay simple.
-- `setting_key = 'dashboard_kra_management_roles'`
-- `setting_value = '["admin"]'`
-- `label = 'Roles allowed to Add/Delete KRA from Dashboard'`
-- `description = 'Members of these roles see Add KRA / Delete KRA buttons on their Dashboard. Admin always allowed.'`
+**`src/components/admin/OrgKpiFileUpload.tsx`** (single file, presentation only)
 
-This is inserted via the migration tool. The existing `_roles` UI branch in `WorkflowSettingsTab.tsx` already renders any `setting_key` ending in `_roles` as a checkbox grid using `ALL_APP_ROLES` — **no new admin UI code required**, the row will appear automatically under "Validation Rules".
+1. Wrap the Upload button in a focusable container (`tabIndex={0}`, `role="button"`, `aria-label="Paste or upload evidence"`) with a visible focus ring using existing tokens (`focus-visible:ring-2 ring-ring`).
+2. Replace the dialog-wide paste listener with a **row-local** model:
+   - Track `isArmed` state, set true on `focus` / `mouseenter` / `click` of the container, false on `blur` / `mouseleave`.
+   - Attach the `paste` listener to the container element itself (not document/dialog) only while `isArmed`.
+   - Keep `stopImmediatePropagation` so a textarea paste in the same row doesn't double-fire, but since the listener is on the row container it will only fire when the row is focused/hovered.
+3. Hint text updates: show `or Ctrl+V` only when the row is armed (focused/hovered) so users see which row will receive the paste; otherwise show muted `Paste here`.
+4. Keep file-size + upload logic identical (no business-logic change).
 
-If a dedicated heading is preferred, we will add a new category `'dashboard'` to `SettingCategory`, `CATEGORY_CONFIG`, `CATEGORY_ORDER`, and treat `_roles` as allowed there too (small one-file diff). Decision left to user; default = use `'validation'`.
+### What stays the same
 
-### 2. Hook: `useDashboardKraPermissions`
-New file `src/hooks/useDashboardKraPermissions.ts`:
-- Reads `workflow_settings` via existing `useWorkflowSettings()` (no new query).
-- Parses `dashboard_kra_management_roles` JSON into `string[]`, defaulting to `['admin']`.
-- Returns `{ canAdd: boolean, canDelete: boolean, allowedRoles: string[] }` based on `useAuth().effectiveRole`.
-- Admin always returns true regardless of list (safety net).
-- Co-located unit test (vitest) covering: admin always-on, role in list, role not in list, malformed JSON fallback, empty list fallback.
+- Upload path, naming, bucket, size validation, toasts, `onUploadComplete` contract — unchanged.
+- Callers (`OrgKpiScopedEntryTable`, `OrgKpiEntryCard`) — no prop changes required.
+- `existingUrl` view mode — unchanged.
 
-### 3. Dashboard "Add KRA" button
-In `src/pages/Dashboard.tsx` (self view block, ~line 404):
-- Gate with `useDashboardKraPermissions().canAdd`.
-- Render a small toolbar above `<UnifiedScorecard viewLevel="self" …>` with a primary "Add KRA" button (lucide `Plus` icon).
-- On click, open `AdminKpiCreateDialog` with:
-  - `defaultEmployeeId = profile.id`
-  - `defaultReviewPeriod = periodSelection.selectedMonth`
-  - `defaultReviewYear = periodSelection.selectedYear`
-- For reviewer modes (`team`, `hr_pms`, `audit`, `management`) when a `selectedEmployee` is open, the same button appears and pre-fills `selectedEmployee.id` so an HR/Manager can add a KRA for the displayed employee (still gated by allowlist).
-- React Query already invalidates the `kpis` keys on create — no extra wiring.
+## Risk & Impact
 
-### 4. Per-row "Delete KRA" in scorecard
-In `src/components/review/KpiHeaderSection.tsx`:
-- Inside the existing `isAdmin && (<div …actions>)` block, change the gate from `isAdmin` to `canDelete || isAdmin` using the new hook.
-- Add a `Trash2` button next to "Step Back".
-- On click, open `ConfirmDestructiveDialog` (memory `destructive-action-governance`) with KRA name + KPI name + employee name in the message.
-- On confirm, call `useAdminDeleteKpi().mutate(kpi.id)` — same path Admin All KPIs uses, so RLS, audit logs, and cascade behavior are identical.
-- Edit and Step Back stay admin-only (unchanged).
+- **Data**: none. No schema, RLS, or storage changes.
+- **Workflow**: none. Same upload outcome, just routed to the correct row.
+- **UI/UX**: small visible focus ring + dynamic hint text. Improves clarity.
+- **Regression risk**: low. Only `OrgKpiFileUpload.tsx` changes; behaviour for the file-already-uploaded branch is untouched. Other paste consumers (`MultiFileUpload`, `EvidenceUpload`, `EmployeeContactCard`) are not modified.
+- **Mitigation**: manual QA with 50-row dialog — focus row A, Ctrl+V → file lands on A; focus row B, Ctrl+V → file lands on B; click outside any row, Ctrl+V → no upload (silent, expected).
 
-### 5. Memory + docs
-- Update `mem/index.md` adding a new entry pointing to `mem://features/admin/dashboard-kra-management` with a one-liner: "Allowlist-gated Add/Delete KRA from Dashboard reusing AdminKpiCreateDialog + useAdminDeleteKpi".
-- Create `mem/features/admin/dashboard-kra-management.md` capturing: setting key, default value, gating rule (admin always-on), reuse of existing dialogs/hooks, location of buttons.
-- Append a Version History entry to `DOCUMENTATION.md` and `POLICY.md` (per workspace SSOT directive) describing the new self-service rule.
-- Add an ADR (`docs/adr/ADR-062.md`) noting the policy decision and that no schema changes were needed.
+## Out of scope
 
-### 6. Tests
-- `src/hooks/useDashboardKraPermissions.test.ts` — gate logic (above).
-- Extend `src/pages/admin/__tests__/AllKpis*.test.tsx` only if exists — skip if not present.
-- Add a render test under `src/components/review/__tests__/KpiHeaderSection.delete.test.tsx` asserting the Delete button only renders when `canDelete` is true and triggers `ConfirmDestructiveDialog`.
-
-## Out of scope (explicit)
-- Bulk delete from dashboard.
-- Editing KRA from the per-row dashboard action (Edit stays admin-only via existing button).
-- Any changes to RLS, `kpis` table, or audit/log tables.
-- Replacing existing Admin → All KPIs flows.
-
-## Open question (won't block plan, will ask before build)
-Should this also apply to **manager-on-team-member** view (Add KRA for a direct report from Dashboard), or strictly self + admin? Default in plan above: yes for any allowed role when an employee is selected; we will confirm before wiring.
+- No changes to `MultiFileUpload`, `EvidenceUpload`, dashboard KRA management rollback, or any business logic.
+- No new admin settings.
