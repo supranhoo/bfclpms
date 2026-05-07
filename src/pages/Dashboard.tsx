@@ -364,13 +364,6 @@ export default function Dashboard() {
               onModeChange={handleModeChange}
             />
           )}
-          {canAddKra && (
-            <div className="flex justify-end">
-              <Button size="sm" onClick={() => setAddKraOpen(true)} className="gap-1.5">
-                <Plus className="h-4 w-4" /> Add KRA
-              </Button>
-            </div>
-          )}
           <UnifiedScorecard
             viewLevel={viewLevelForScorecard as any}
             employee={selectedEmployee}
@@ -387,6 +380,11 @@ export default function Dashboard() {
             }}
             autoOpenKpiId={autoOpenKpiId}
             exploreMode={exploreMode}
+            headerAction={canAddKra ? (
+              <Button size="sm" onClick={() => setAddKraOpen(true)} className="gap-1.5">
+                <Plus className="h-4 w-4" /> Add KRA
+              </Button>
+            ) : null}
           />
           {canAddKra && (
             <AdminKpiCreateDialog
@@ -430,13 +428,6 @@ export default function Dashboard() {
           onModeChange={handleModeChange}
         />
       )}
-      {canAddKra && (
-        <div className="flex justify-end">
-          <Button size="sm" onClick={() => setAddKraOpen(true)} className="gap-1.5">
-            <Plus className="h-4 w-4" /> Add KRA
-          </Button>
-        </div>
-      )}
       <UnifiedScorecard
         viewLevel="self"
         employee={{
@@ -451,6 +442,11 @@ export default function Dashboard() {
         periodSelection={periodSelection}
         onPeriodSelectionChange={setPeriodSelection}
         autoOpenKpiId={autoOpenKpiId}
+        headerAction={canAddKra ? (
+          <Button size="sm" onClick={() => setAddKraOpen(true)} className="gap-1.5">
+            <Plus className="h-4 w-4" /> Add KRA
+          </Button>
+        ) : null}
       />
       {canAddKra && (
         <AdminKpiCreateDialog

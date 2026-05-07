@@ -132,6 +132,8 @@ interface UnifiedScorecardProps {
   autoOpenKpiId?: string | null;
   /** v2.65.0 — Explorer Mode: read-only browsing for auditors outside their scope */
   exploreMode?: boolean;
+  /** Optional action button rendered beside the KPI Details header title */
+  headerAction?: React.ReactNode;
 }
 
 // Static configuration per view level (non-workflow-dependent parts)
@@ -201,6 +203,7 @@ export function UnifiedScorecard({
   onBack,
   autoOpenKpiId,
   exploreMode = false,
+  headerAction,
 }: UnifiedScorecardProps) {
   // Derived values from period selection
   const selectedPeriod = periodSelection.selectedMonth;
@@ -1633,6 +1636,7 @@ export function UnifiedScorecard({
               <CardDescription>Click on a KPI to review and update scores</CardDescription>
             </div>
             <div className="flex items-center gap-2">
+              {headerAction}
               {lastSelfReviewDate && (
                 <span className="hidden sm:inline-flex items-center gap-1 text-xs text-muted-foreground">
                   <CalendarDays className="h-3.5 w-3.5" />
