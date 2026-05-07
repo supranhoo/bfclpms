@@ -83,7 +83,8 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
             'review_period, review_year, frequency, frequency_cycle_start, ' +
             'is_org_level, org_level_scope, status, target_value, uom, ' +
             'criteria, uom_type, qualitative_options, threshold_mode, ' +
-            'r5, r4, r3, r2, r1, r0, weightage'
+            'r5, r4, r3, r2, r1, r0, weightage, ' +
+            'kra_categories (id, name, color, weightage)'
           )
           .eq('is_org_level', true)
           .eq('review_period', reviewPeriod!)
