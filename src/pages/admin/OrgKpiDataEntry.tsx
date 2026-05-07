@@ -1559,6 +1559,33 @@ export default function OrgKpiDataEntry() {
                 {orgKpiEmptyKind === 'no-backend-rows' && (
                   <p>No organization-level KPIs exist for {selectedPeriod} {selectedYear}.</p>
                 )}
+                {orgKpiEmptyKind === 'query-error' && (
+                  <div className="space-y-2">
+                    <p className="text-destructive font-medium">
+                      Could not load organization-level KPIs for {selectedPeriod} {selectedYear}.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      The backend took too long to respond. Your data is safe — please retry.
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={kpisFetching}
+                      onClick={() => refetchOrgKpis()}
+                    >
+                      {kpisFetching ? (
+                        <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Retrying…</>
+                      ) : (
+                        'Retry'
+                      )}
+                    </Button>
+                    {isAdmin && kpisError && (
+                      <p className="text-[10px] text-muted-foreground/60 pt-1">
+                        {(kpisError as Error)?.message?.slice(0, 200)}
+                      </p>
+                    )}
+                  </div>
+                )}
                 {orgKpiEmptyKind === 'masked-admin' && (
                   <div className="space-y-2">
                     <p>You're viewing as {naturalRole === 'manager' ? 'Manager' : 'Employee'} and don't own any org-level KPIs.</p>
