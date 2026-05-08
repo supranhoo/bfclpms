@@ -480,6 +480,7 @@ export default function OrgKpiDataEntry() {
         ? Array.from(mappedDeptIds)
         : (departments?.map(d => d.id) ?? []);
       const kpiMappedEmpIds = mappedEmployeesMap.get(kk);
+      const kk_propagatedEmps = propagatedEmpsByKey.get(kk) || new Set<string>();
       scopedRows = deptIdList.map(deptId => {
         const dept = departments?.find(d => d.id === deptId);
         const deptDisplay = departmentDisplayMap?.[deptId];
@@ -515,8 +516,19 @@ export default function OrgKpiDataEntry() {
         // not just OKV.status which is set out-of-band.
         const deptOkvStatus = (val?.status as string | undefined) ?? null;
         let deptRowStatus: 'pending' | 'entered' | 'propagated' | 'approved' = 'pending';
+        // Authoritative propagation truth (snapshot RPC): if any employee
+        // in this department has a review_submissions row for this KPI,
+        // the department row is considered propagated.
+        const deptHasPropagatedEmp = kpiMappedEmpIds
+          ? Array.from(kpiMappedEmpIds).some(eid => {
+              const fromProfiles = allProfiles?.find(p => p.id === eid);
+              const fromSnap = employeeDisplayMap?.[eid];
+              const empDeptId = fromProfiles?.department_id ?? fromSnap?.department_id ?? null;
+              return empDeptId === deptId && kk_propagatedEmps.has(eid);
+            })
+          : false;
         if (deptOkvStatus === 'approved') deptRowStatus = 'approved';
-        else if (deptFb) deptRowStatus = 'propagated';
+        else if (deptHasPropagatedEmp || deptFb) deptRowStatus = 'propagated';
         else if (okvAchieved !== null || okvIsNa) deptRowStatus = 'entered';
         return {
             scopeId: deptId,
@@ -546,6 +558,7 @@ export default function OrgKpiDataEntry() {
       const empIdList: string[] = mappedEmpIds.size > 0
         ? Array.from(mappedEmpIds)
         : (allProfiles?.map(e => e.id) ?? []);
+      const kk2_propagatedEmps = propagatedEmpsByKey.get(kk2) || new Set<string>();
       scopedRows = empIdList
         .map(empId => {
           const emp = allProfiles?.find(e => e.id === empId);
@@ -582,9 +595,10 @@ export default function OrgKpiDataEntry() {
           // exists for that employee KPI — that is the authoritative
           // proof of propagation.
           const okvStatus = (val?.status as string | undefined) ?? null;
+          const isPropagatedFact = kk2_propagatedEmps.has(empId);
           let rowStatus: 'pending' | 'entered' | 'propagated' | 'approved' = 'pending';
           if (okvStatus === 'approved') rowStatus = 'approved';
-          else if (fb) rowStatus = 'propagated';
+          else if (isPropagatedFact || fb) rowStatus = 'propagated';
           else if (okvHasValue) rowStatus = 'entered';
           return {
             scopeId: empId,
@@ -660,7 +674,7 @@ export default function OrgKpiDataEntry() {
       qualitativeOptions: (kpi as any).qualitative_options || null,
       criteria: (kpi as any).criteria || null,
     };
-  }, [existingValuesMap, prevValuesMap, departments, allProfiles, prev, employeeCountMap, mappedDepartmentsMap, mappedEmployeesMap, employeeTargetMap, employeeDisplayMap, departmentDisplayMap, submissionFallbackMap]);
+  }, [existingValuesMap, prevValuesMap, departments, allProfiles, prev, employeeCountMap, mappedDepartmentsMap, mappedEmployeesMap, employeeTargetMap, employeeDisplayMap, departmentDisplayMap, submissionFallbackMap, propagatedEmpsByKey]);
 
   // Save handler for a single card
   const handleCardSave = useCallback(async (
