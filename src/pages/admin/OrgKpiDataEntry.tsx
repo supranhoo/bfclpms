@@ -976,7 +976,7 @@ export default function OrgKpiDataEntry() {
               const suffix = visibleMissed.length > 5 ? ` +${visibleMissed.length - 5} more` : '';
               toast({
                 title: `${visibleMissed.length} employee KPI(s) could not be advanced`,
-                description: `Please retry propagation. Affected: ${names}${suffix}.`,
+                description: `Use the "Repair Gap" button on the card to inspect and write the missed scorecard rows server-side. Affected: ${names}${suffix}.`,
                 variant: 'destructive',
               });
             }
