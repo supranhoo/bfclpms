@@ -487,14 +487,24 @@ export default function OrgKpiDataEntry() {
           });
           if (names.length > 0) scopeSubText = names.join(', ');
         }
+        // Post-propagation fallback (department-aggregated).
+        const deptFbKey = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||dept||${deptId}`;
+        const deptFb = submissionFallbackMap?.get(deptFbKey);
+        const okvAchieved = val?.achieved_value ?? null;
+        const okvIsNa = val?.is_na ?? false;
+        const deptAchieved = okvAchieved !== null
+          ? okvAchieved
+          : (deptFb ? deptFb.achievedValue : null);
+        const deptIsNa = okvIsNa
+          || (okvAchieved === null && deptFb ? deptFb.isNa : false);
         return {
             scopeId: deptId,
             scopeName: deptName,
             scopeSubText,
-            achievedValue: val?.achieved_value ?? null,
+            achievedValue: deptAchieved,
             remarks: val?.remarks ?? '',
             evidenceUrl: val?.evidence_url ?? null,
-            isNa: val?.is_na ?? false,
+            isNa: deptIsNa,
             targetValue: kpi.target_value ?? null,
             uom: kpi.uom ?? null,
             uomType: (kpi as any).uom_type || 'numeric',
@@ -530,10 +540,15 @@ export default function OrgKpiDataEntry() {
           // Post-propagation fallback (see useOrgKpiSubmissionFallback).
           const fbKey = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||${empId}`;
           const fb = submissionFallbackMap?.get(fbKey);
-          const fallbackAchieved =
-            val?.achieved_value ?? (fb ? fb.achievedValue : null);
-          const fallbackIsNa =
-            (val?.is_na ?? false) || (val == null && fb ? fb.isNa : false);
+          // Treat OKV row with NULL achieved + is_na=false as "value missing"
+          // so we re-read both achievedValue AND isNa from the submission.
+          const okvHasValue = (val?.achieved_value ?? null) !== null || !!val?.is_na;
+          const fallbackAchieved = okvHasValue
+            ? (val?.achieved_value ?? null)
+            : (fb ? fb.achievedValue : null);
+          const fallbackIsNa = okvHasValue
+            ? !!val?.is_na
+            : (fb ? fb.isNa : false);
           return {
             scopeId: empId,
             scopeName: fullName || emp?.email || `Employee ${empId.slice(0, 6)}`,
