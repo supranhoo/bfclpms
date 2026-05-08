@@ -257,7 +257,7 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <RefreshCw className="h-5 w-5" />
-            KRA Rollover
+            {scopedEmployee ? `KRA Rollover — ${scopedEmployee.name}` : 'KRA Rollover'}
             {step !== 'config' && (
               <Badge variant="outline" className="ml-2">
                 {step === 'preview' ? 'Step 2: Preview' : 'Step 3: Results'}
@@ -312,15 +312,26 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
                 </div>
               </div>
 
-              <div className="flex items-center justify-between p-4 rounded-lg border">
-                <div>
-                  <Label className="text-base font-medium">All Employees</Label>
-                  <p className="text-sm text-muted-foreground">Rollover KPIs for all employees with KPIs in the source period.</p>
+              {scopedEmployee ? (
+                <Alert className="border-primary/30 bg-primary/5">
+                  <Users className="h-4 w-4" />
+                  <AlertDescription>
+                    Rolling over KRAs for <span className="font-semibold">{scopedEmployee.name}</span>
+                    {scopedEmployee.code ? <> (<span className="font-mono">{scopedEmployee.code}</span>)</> : null}
+                    {' '}only.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <div className="flex items-center justify-between p-4 rounded-lg border">
+                  <div>
+                    <Label className="text-base font-medium">All Employees</Label>
+                    <p className="text-sm text-muted-foreground">Rollover KPIs for all employees with KPIs in the source period.</p>
+                  </div>
+                  <Switch checked={allEmployees} onCheckedChange={setAllEmployees} />
                 </div>
-                <Switch checked={allEmployees} onCheckedChange={setAllEmployees} />
-              </div>
+              )}
 
-              {!allEmployees && (
+              {!scopedEmployee && !allEmployees && (
                 <div className="space-y-3">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
