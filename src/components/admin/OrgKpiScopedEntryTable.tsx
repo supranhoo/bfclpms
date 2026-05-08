@@ -96,6 +96,12 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
   const effectiveTotal = typeof totalCount === 'number' && totalCount > rows.length ? totalCount : rows.length;
   const hasHidden = effectiveTotal > rows.length;
 
+  // Per-row propagation breakdown (drives the new "X propagated / Y not" hint
+  // next to the entered count).
+  const propagatedCount = rows.filter(r => r.status === 'propagated' || r.status === 'approved').length;
+  const notPropagatedCount = rows.filter(r => (r.status ?? 'pending') === 'entered').length;
+  const showStatusBreakdown = propagatedCount > 0 && notPropagatedCount > 0;
+
   const hasSelectionFeature = !!onSelectionChange;
   const hasRowPropagation = !!onPropagateRow;
   const showActionsColumn = hasSelectionFeature || hasRowPropagation;
@@ -167,6 +173,18 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
             <span className={allEntered ? 'text-green-600 dark:text-green-400 font-medium' : 'text-muted-foreground'}>
               ({enteredCount} / {hasHidden ? `${rows.length} visible` : rows.length} entered{naCount > 0 ? `, ${naCount} N/A` : ''})
             </span>
+            {showStatusBreakdown && (
+              <span className="flex items-center gap-1.5 text-[11px] font-normal">
+                <Badge variant="outline" className="h-4 px-1.5 font-normal border-green-300 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400 gap-0.5">
+                  <ArrowUpRight className="w-2.5 h-2.5" />
+                  {propagatedCount} propagated
+                </Badge>
+                <Badge variant="outline" className="h-4 px-1.5 font-normal border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/30 dark:text-orange-400 gap-0.5">
+                  <CheckCircle2 className="w-2.5 h-2.5" />
+                  {notPropagatedCount} not propagated
+                </Badge>
+              </span>
+            )}
             {sentBackCount > 0 && (
               <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-400 gap-0.5">
                 <Undo2 className="w-2.5 h-2.5" />
