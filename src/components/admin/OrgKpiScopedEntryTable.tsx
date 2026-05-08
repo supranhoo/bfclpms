@@ -36,6 +36,12 @@ export interface ScopedRow {
   uomType?: 'numeric' | 'binary' | 'tiered' | null;
   qualitativeOptions?: Array<{ label: string; rating: number; definition: string }> | null;
   subFactors?: ComplianceSubFactors | null;
+  /**
+   * Per-row OKV status — drives the inline pill so admins can tell at a glance
+   * which rows have been propagated to employee scorecards and which still
+   * need the Propagate action. Defaults to 'pending' when omitted.
+   */
+  status?: 'pending' | 'entered' | 'propagated' | 'approved';
 }
 
 export interface ObservationCounts {
