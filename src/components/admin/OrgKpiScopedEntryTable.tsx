@@ -907,6 +907,9 @@ function DepartmentRow({ row, onValueChange, ratingThresholds, targetValue, uom,
           {row.scopeSubText && (
             <span className="text-xs text-muted-foreground mt-0.5">{row.scopeSubText}</span>
           )}
+          <div className="mt-0.5">
+            <RowStatusPill status={row.status} />
+          </div>
           {isSentBack && (
             <TooltipProvider>
               <Tooltip>
