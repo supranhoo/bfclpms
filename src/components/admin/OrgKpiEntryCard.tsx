@@ -739,6 +739,18 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                 Data Owners
               </Button>
             )}
+            {isAdmin && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs gap-1 border-amber-500/50 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950"
+                onClick={openRepairDialog}
+                title="Inspect entered-but-not-propagated rows and repair them server-side"
+              >
+                <Wrench className="h-3.5 w-3.5" />
+                Repair Gap
+              </Button>
+            )}
             {isPropagated && isAdmin && onUnlock && (
               <Button
                 variant="outline"
