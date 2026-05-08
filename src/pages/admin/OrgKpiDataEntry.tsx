@@ -567,6 +567,8 @@ export default function OrgKpiDataEntry() {
             uomType: (kpi as any).uom_type || 'numeric',
             qualitativeOptions: (kpi as any).qualitative_options || null,
             subFactors: val?.sub_factors ?? undefined,
+            // Per-row OKV status — see OrgKpiScopedEntryTable's RowStatusPill.
+            status: ((val?.status as any) ?? 'pending'),
           };
         })
         .sort((a, b) => {
