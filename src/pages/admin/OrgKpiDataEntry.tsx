@@ -527,15 +527,22 @@ export default function OrgKpiDataEntry() {
           const val = existingValuesMap.get(scopeKey);
           const empTargetKey = `${kk2}||${empId}`;
           const empTarget = employeeTargetMap?.[empTargetKey];
+          // Post-propagation fallback (see useOrgKpiSubmissionFallback).
+          const fbKey = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||${empId}`;
+          const fb = submissionFallbackMap?.get(fbKey);
+          const fallbackAchieved =
+            val?.achieved_value ?? (fb ? fb.achievedValue : null);
+          const fallbackIsNa =
+            (val?.is_na ?? false) || (val == null && fb ? fb.isNa : false);
           return {
             scopeId: empId,
             scopeName: fullName || emp?.email || `Employee ${empId.slice(0, 6)}`,
             departmentName,
             designation,
-            achievedValue: val?.achieved_value ?? null,
+            achievedValue: fallbackAchieved,
             remarks: val?.remarks ?? '',
             evidenceUrl: val?.evidence_url ?? null,
-            isNa: val?.is_na ?? false,
+            isNa: fallbackIsNa,
             targetValue: empTarget?.target_value ?? null,
             uom: empTarget?.uom ?? null,
             uomType: (kpi as any).uom_type || 'numeric',
