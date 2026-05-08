@@ -1123,6 +1123,85 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
         newScope={scopeChangeTarget}
       />
     )}
+    {isAdmin && (
+      <AlertDialog open={showRepairDialog} onOpenChange={setShowRepairDialog}>
+        <AlertDialogContent className="max-w-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Propagation Gap — {data.kpiName.slice(0, 80)}{data.kpiName.length > 80 ? '…' : ''}</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 max-h-[60vh] overflow-y-auto text-left">
+                {diagnoseGap.isPending && !repairRows && (
+                  <p className="text-sm text-muted-foreground">Inspecting mapped employees…</p>
+                )}
+                {repairRows && (
+                  <>
+                    {(() => {
+                      const eligible = repairRows.filter(r => r.classification === 'eligible_to_repair');
+                      const locked = repairRows.filter(r => r.classification === 'reviewer_locked');
+                      const blank = repairRows.filter(r => r.classification === 'staging_value_blank');
+                      const missing = repairRows.filter(r => r.classification === 'missing_staging_value');
+                      const done = repairRows.filter(r => r.classification === 'already_propagated');
+                      return (
+                        <div className="space-y-2 text-xs">
+                          <p className="text-sm">
+                            <strong>{repairRows.length}</strong> mapped employees:
+                            <span className="ml-2 text-green-700 dark:text-green-400">{done.length} already propagated</span>
+                            <span className="mx-1">·</span>
+                            <span className="text-amber-700 dark:text-amber-400">{eligible.length} eligible to repair</span>
+                            <span className="mx-1">·</span>
+                            <span className="text-muted-foreground">{locked.length} reviewer-locked</span>
+                            <span className="mx-1">·</span>
+                            <span className="text-muted-foreground">{blank.length} staging blank</span>
+                            <span className="mx-1">·</span>
+                            <span className="text-muted-foreground">{missing.length} no staging entry</span>
+                          </p>
+                          {eligible.length > 0 && (
+                            <div className="rounded border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-2">
+                              <p className="font-medium text-amber-900 dark:text-amber-300 mb-1">Eligible to repair ({eligible.length}):</p>
+                              <ul className="list-disc pl-4 space-y-0.5">
+                                {eligible.slice(0, 30).map(r => (
+                                  <li key={r.kpi_id}>
+                                    {r.full_name || r.employee_id} {r.department_name ? `— ${r.department_name}` : ''}
+                                    {' '}<span className="text-muted-foreground">(value: {r.okv_is_na ? 'N/A' : r.okv_achieved ?? '—'})</span>
+                                  </li>
+                                ))}
+                              </ul>
+                              {eligible.length > 30 && (
+                                <p className="text-muted-foreground mt-1">+ {eligible.length - 30} more</p>
+                              )}
+                            </div>
+                          )}
+                          {locked.length > 0 && (
+                            <div className="rounded border border-muted p-2">
+                              <p className="font-medium mb-1">Locked by reviewer ({locked.length}):</p>
+                              <p className="text-muted-foreground">
+                                {locked.slice(0, 6).map(r => r.full_name || r.employee_id).join(', ')}
+                                {locked.length > 6 ? ` +${locked.length - 6} more` : ''}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Close</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!repairRows || repairGap.isPending || (repairRows?.filter(r => r.classification === 'eligible_to_repair').length ?? 0) === 0}
+              onClick={async (e) => { e.preventDefault(); await runRepair(); }}
+              className="bg-amber-600 text-white hover:bg-amber-700"
+            >
+              {repairGap.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Wrench className="h-3.5 w-3.5 mr-1" />}
+              Repair eligible rows
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    )}
     </>
   );
 }
