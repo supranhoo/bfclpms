@@ -1,3 +1,21 @@
+
+## §111.3 Propagated Status — Snapshot Truth (RCA 2026-05-08)
+
+Per-row "Propagated" status on the Org KPI Data Entry page MUST be derived
+from the snapshot RPC `get_org_kpi_data_entry_snapshot.propagatedEmpIdsByKey`.
+
+- A row is `propagated` iff the employee id appears in that set, OR
+  `org_kpi_values.status = 'approved'` (approved override).
+- The browser-side `useOrgKpiSubmissionFallback` hook MAY supplement the
+  display value but MUST NOT be the sole source of the badge.
+- The header summary (`X propagated / Y not propagated`) is computed from
+  the same `ScopedRow.status` values and remains visible whenever any
+  row carries a value, including one-sided distributions (50/0).
+
+Rationale: independent browser joins drift from the snapshot whenever
+normalization, RLS, or query coverage diverges, which produced the
+"0 propagated / 50 not propagated" regression even after every employee
+was successfully propagated.
 # PMS — Business Policy Document
 
 > **Version:** 2.21.9 — **§97 Org KPI exclusion from employee Pending-KRA issue flags.** Unified Issues / pending-KRA compliance surfaces MUST NOT classify `kpis.is_org_level = true` rows at `kra_set` as employee pending-KRA acceptance failures. Org KPI `kra_set` means the row is awaiting Data Owner value entry/propagation, not employee self-action. Non-terminal multi-month placeholder rows are also excluded from pending-KRA issue flags because only the terminal month is actionable. **§96 retained:** Org KPIs bypass self-review column scoring.

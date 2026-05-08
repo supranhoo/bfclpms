@@ -18,3 +18,9 @@ type: feature
 **2026-05-08 follow-up (POLICY §111.1, §111.2):**
 - Summary badges ("X propagated / Y not propagated") in `OrgKpiScopedEntryTable` MUST stay visible for one-sided distributions; only suppress when every row is `pending`.
 - All RLS paths (`kpis`, `org_kpi_values`, `review_submissions`) MUST match `org_kpi_data_owners.kra_name`/`kpi_name` via `public.normalize_kpi_text(...)`. Raw equality previously hid propagated submission rows from data owners, surfacing as "all Not propagated".
+
+**2026-05-08 final fix (POLICY §111.3):**
+- Authoritative "Propagated" truth now comes from the snapshot RPC field `propagatedEmpIdsByKey` (set of employee ids per def_key with a `review_submissions` value/is_na). `useOrgKpiSubmissionFallback` is a secondary signal only.
+- `buildCardData` employee branch: `propagated` if `propagatedEmpsByKey.get(defKey).has(empId)` OR fallback map has entry; OKV `approved` overrides. Department branch aggregates the same set across mapped employees in that department.
+- Snapshot mismatch with browser-side joins (RLS/normalization/coverage drift) was the root cause of "0 propagated / 50 not propagated" after a successful Propagate.
+- Regression test: `src/test/orgKpiPropagatedSnapshotTruth.test.ts`.
