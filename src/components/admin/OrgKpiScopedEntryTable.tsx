@@ -385,6 +385,43 @@ const obsStatusConfig: Record<string, { label: string; variant: 'outline' | 'sec
   resolved: { label: 'Resolved', variant: 'default' },
 };
 
+// ---- Per-row propagation status pill ----
+// Mirrors the colour tokens used by OrgKpiEntryCard's header statusConfig so
+// the per-row badge reads consistently with the card-level pill.
+function RowStatusPill({ status }: { status?: ScopedRow['status'] }) {
+  const s = status ?? 'pending';
+  if (s === 'propagated') {
+    return (
+      <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-green-300 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400 gap-0.5">
+        <ArrowUpRight className="w-2.5 h-2.5" />
+        Propagated
+      </Badge>
+    );
+  }
+  if (s === 'approved') {
+    return (
+      <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400 gap-0.5">
+        <CheckCircle2 className="w-2.5 h-2.5" />
+        Approved
+      </Badge>
+    );
+  }
+  if (s === 'entered') {
+    return (
+      <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/30 dark:text-orange-400 gap-0.5">
+        <CheckCircle2 className="w-2.5 h-2.5" />
+        Not propagated
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal text-muted-foreground border-muted-foreground/30 gap-0.5">
+      <Clock className="w-2.5 h-2.5" />
+      Pending
+    </Badge>
+  );
+}
+
 // ---- Per-row propagate cell with confirmation dialog ----
 function PerRowPropagateCell({ canPropagate, isPropagating, employeeName, onConfirm }: {
   canPropagate: boolean;
