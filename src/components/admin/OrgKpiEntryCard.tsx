@@ -202,6 +202,46 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
 
   const [isPropagating, setIsPropagating] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [showRepairDialog, setShowRepairDialog] = useState(false);
+  const [repairRows, setRepairRows] = useState<DiagnoseGapRow[] | null>(null);
+  const diagnoseGap = useDiagnoseOrgKpiGap();
+  const repairGap = useRepairOrgKpiGap();
+  const openRepairDialog = useCallback(async () => {
+    setShowRepairDialog(true);
+    setRepairRows(null);
+    try {
+      const rows = await diagnoseGap.mutateAsync({
+        categoryId: data.categoryId,
+        kraName: data.kraName,
+        kpiName: data.kpiName,
+        reviewPeriod,
+        reviewYear,
+      });
+      setRepairRows(rows);
+    } catch {
+      setRepairRows([]);
+    }
+  }, [diagnoseGap, data.categoryId, data.kraName, data.kpiName, reviewPeriod, reviewYear]);
+  const runRepair = useCallback(async () => {
+    await repairGap.mutateAsync({
+      categoryId: data.categoryId,
+      kraName: data.kraName,
+      kpiName: data.kpiName,
+      reviewPeriod,
+      reviewYear,
+    });
+    // Refresh diagnostic so the dialog reflects the new state
+    try {
+      const rows = await diagnoseGap.mutateAsync({
+        categoryId: data.categoryId,
+        kraName: data.kraName,
+        kpiName: data.kpiName,
+        reviewPeriod,
+        reviewYear,
+      });
+      setRepairRows(rows);
+    } catch { /* ignore */ }
+  }, [repairGap, diagnoseGap, data.categoryId, data.kraName, data.kpiName, reviewPeriod, reviewYear]);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isDirtyRef = useRef(false);
   const kpiIdentityRef = useRef('');
