@@ -40,4 +40,16 @@ describe('scopedRowsSignature', () => {
     const b = scopedRowsSignature([{ scopeId: 'a' }, { scopeId: 'b' }, { scopeId: 'c' }]);
     expect(a).toBe(b);
   });
+
+  it('changes when row status flips entered -> propagated (regression 2026-05-08)', () => {
+    const before = scopedRowsSignature([
+      { scopeId: 'a', status: 'entered' } as any,
+      { scopeId: 'b', status: 'entered' } as any,
+    ]);
+    const after = scopedRowsSignature([
+      { scopeId: 'a', status: 'propagated' } as any,
+      { scopeId: 'b', status: 'propagated' } as any,
+    ]);
+    expect(before).not.toBe(after);
+  });
 });
