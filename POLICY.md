@@ -2648,3 +2648,17 @@ The system stores Org-level KPI data across three places:
 3. The `propagate_org_kpi_value` RPC result mapper in `callPropagationRpc` MUST accept BOTH the live shape (`{ propagated, skipped, results, skipped_details }`) and the legacy shape (`{ propagated_count, skipped_count, details, skipped }`) so a future RPC redeploy cannot silently NaN the per-batch totals again.
 
 Regression: `src/test/orgKpiPropagateResultContract.test.ts`.
+
+## §111.1 — Org KPI propagation summary visibility (codified 2026-05-08)
+
+The "X propagated / Y not propagated" badges in the Org KPI scoped entry table (`OrgKpiScopedEntryTable`) MUST remain visible whenever any row in the group carries an entered or propagated value, including one-sided distributions (all 50 propagated / 0 not, or 0 propagated / all 50 not). They may only be suppressed when every row is still `pending` (no value entered at all).
+
+**Why:** Hiding the summary on one-sided distributions left admins unable to confirm whether the entire group had been propagated — exactly the scenario that triggered the 2026-05-08 RCA (50/50 entered, page silently dropped the summary).
+
+Regression: `src/test/orgKpiRowStatusPill.test.tsx` (4 cases — mixed, all-propagated, all-entered, all-pending).
+
+## §111.2 — Org KPI access-rule normalization (codified 2026-05-08)
+
+Every RLS path that mediates Org KPI visibility (KPI definitions, `org_kpi_values`, `review_submissions`) MUST match `org_kpi_data_owners.kra_name` / `kpi_name` against `kpis.kra_name` / `kpi_name` using `public.normalize_kpi_text(...)`, the same normalizer the snapshot RPC (`get_org_kpi_data_entry_snapshot`) uses.
+
+Raw text equality was the root cause of data owners (and edge cases where master KRA/KPI text drifted by punctuation/whitespace/case from the owner mapping) being able to read the KPI definition but not the corresponding `review_submissions` rows — making truly propagated rows render as "Not propagated" in the UI.
