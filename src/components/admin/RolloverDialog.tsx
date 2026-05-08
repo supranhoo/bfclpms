@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -55,29 +55,62 @@ interface RolloverResponse {
 interface RolloverDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * When provided, locks the dialog to a single employee. Hides the All-Employees
+   * switch and the picker list. Used from the per-employee scorecard header.
+   */
+  scopedEmployee?: { id: string; name: string; code?: string };
+  /** Default target month/year (e.g. the currently-displayed scorecard period). */
+  defaultTargetMonth?: string;
+  defaultTargetYear?: number;
 }
 
 type Step = 'config' | 'preview' | 'results';
 
-export function RolloverDialog({ open, onOpenChange }: RolloverDialogProps) {
+export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTargetMonth, defaultTargetYear }: RolloverDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const now = new Date();
-  const defaultTargetIdx = now.getMonth();
-  const defaultSourceIdx = (defaultTargetIdx + 11) % 12;
+  const initialTargetIdx = defaultTargetMonth && MONTHS.includes(defaultTargetMonth)
+    ? MONTHS.indexOf(defaultTargetMonth)
+    : now.getMonth();
+  const initialTargetYear = defaultTargetYear ?? now.getFullYear();
+  const initialSourceIdx = (initialTargetIdx + 11) % 12;
+  const initialSourceYear = initialTargetIdx === 0 ? initialTargetYear - 1 : initialTargetYear;
 
   const [step, setStep] = useState<Step>('config');
-  const [sourceMonth, setSourceMonth] = useState(MONTHS[defaultSourceIdx]);
-  const [sourceYear, setSourceYear] = useState(defaultSourceIdx === 11 ? now.getFullYear() - 1 : now.getFullYear());
-  const [targetMonth, setTargetMonth] = useState(MONTHS[defaultTargetIdx]);
-  const [targetYear, setTargetYear] = useState(now.getFullYear());
-  const [allEmployees, setAllEmployees] = useState(true);
-  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
+  const [sourceMonth, setSourceMonth] = useState(MONTHS[initialSourceIdx]);
+  const [sourceYear, setSourceYear] = useState(initialSourceYear);
+  const [targetMonth, setTargetMonth] = useState(MONTHS[initialTargetIdx]);
+  const [targetYear, setTargetYear] = useState(initialTargetYear);
+  const [allEmployees, setAllEmployees] = useState(!scopedEmployee);
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>(
+    scopedEmployee ? [scopedEmployee.id] : []
+  );
   const [empSearch, setEmpSearch] = useState('');
   const [previewData, setPreviewData] = useState<RolloverResponse | null>(null);
   const [balanceIds, setBalanceIds] = useState<Set<string>>(new Set());
   const [results, setResults] = useState<RolloverResponse | null>(null);
+
+  // When opened in scoped mode, ensure state stays locked to the scoped employee
+  // and the supplied target period each time the dialog is reopened.
+  useEffect(() => {
+    if (!open) return;
+    if (scopedEmployee) {
+      setAllEmployees(false);
+      setSelectedEmployeeIds([scopedEmployee.id]);
+    }
+    if (defaultTargetMonth && MONTHS.includes(defaultTargetMonth)) {
+      const idx = MONTHS.indexOf(defaultTargetMonth);
+      const yr = defaultTargetYear ?? now.getFullYear();
+      setTargetMonth(MONTHS[idx]);
+      setTargetYear(yr);
+      setSourceMonth(MONTHS[(idx + 11) % 12]);
+      setSourceYear(idx === 0 ? yr - 1 : yr);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, scopedEmployee?.id, defaultTargetMonth, defaultTargetYear]);
 
   // Fetch employees for selector
   const { data: employees = [] } = useQuery({
@@ -94,7 +127,7 @@ export function RolloverDialog({ open, onOpenChange }: RolloverDialogProps) {
         department: e.departments?.name || '',
       }));
     },
-    enabled: open,
+    enabled: open && !scopedEmployee,
   });
 
   const filteredEmployees = useMemo(() => {
