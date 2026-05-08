@@ -510,6 +510,10 @@ export default function OrgKpiDataEntry() {
             uomType: (kpi as any).uom_type || 'numeric',
             qualitativeOptions: (kpi as any).qualitative_options || null,
             subFactors: val?.sub_factors ?? undefined,
+            // Per-row OKV status drives the inline "Propagated / Not propagated"
+            // pill in OrgKpiScopedEntryTable so admins can see exactly which
+            // department rows are still waiting on the Propagate action.
+            status: ((val?.status as any) ?? 'pending'),
           };
       });
     } else if (scope === 'employee') {
