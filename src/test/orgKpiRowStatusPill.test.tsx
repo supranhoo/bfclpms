@@ -45,10 +45,28 @@ describe('Per-row propagation pill', () => {
     expect(screen.getByText(/1 not propagated/)).toBeInTheDocument();
   });
 
-  it('hides the breakdown badges when all rows share one status', () => {
+  it('still shows the breakdown when ALL rows are propagated (regression 2026-05-08)', () => {
     renderTable([
       makeRow({ scopeId: 'a', scopeName: 'Alice', status: 'propagated' }),
       makeRow({ scopeId: 'b', scopeName: 'Bob', status: 'propagated' }),
+    ]);
+    expect(screen.getByText(/2 propagated/)).toBeInTheDocument();
+    expect(screen.getByText(/0 not propagated/)).toBeInTheDocument();
+  });
+
+  it('still shows the breakdown when ALL rows are entered (regression 2026-05-08)', () => {
+    renderTable([
+      makeRow({ scopeId: 'a', scopeName: 'Alice', status: 'entered' }),
+      makeRow({ scopeId: 'b', scopeName: 'Bob', status: 'entered' }),
+    ]);
+    expect(screen.getByText(/0 propagated/)).toBeInTheDocument();
+    expect(screen.getByText(/2 not propagated/)).toBeInTheDocument();
+  });
+
+  it('hides the breakdown when no row carries a value yet (pending only)', () => {
+    renderTable([
+      makeRow({ scopeId: 'a', scopeName: 'Alice', status: 'pending', achievedValue: null }),
+      makeRow({ scopeId: 'b', scopeName: 'Bob', status: 'pending', achievedValue: null }),
     ]);
     expect(screen.queryByText(/not propagated/)).not.toBeInTheDocument();
   });
