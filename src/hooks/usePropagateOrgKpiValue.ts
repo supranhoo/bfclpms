@@ -322,6 +322,7 @@ export function usePropagateOrgKpiValue() {
       queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-submission-fallback'] });
       // v2.66.8 — caller-driven silence (batch loops emit one summary toast)
       if ((result as any).__silent) return;
       if (result.propagatedCount > 0) {
