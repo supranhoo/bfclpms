@@ -1,88 +1,108 @@
-# Optimize `/admin/kpi-standardization`
+# Add per-employee KRA Rollover from the scorecard header
 
-## Problem (RCA)
+## Feasibility
 
-The page glitches because every tab renders **the entire result set at once** with no pagination and no input debouncing — directly violating POLICY §120 Lean-Load.
+**High — minimal new code required.** The existing admin rollover flow already scopes by employee:
 
-| Tab | Symptom | Root cause |
-|---|---|---|
-| Build Registry | Freezes after Scan; typing in search lags | `visibleGroups.map(...)` renders **every** duplicate group (often 200–500+), each group expands into N variant buttons + Select + Collapsible. `search` is undebounced. |
-| Review Registry | Slow to open; sluggish search | `filtered.map(...)` renders **all** `kpi_definitions` rows (1k+ today). No debounce. Each row mounts hover/Collapsible state. |
-| Correct May KPIs | Glitchy & long initial paint | Maps **every** unlinked signature; each row mounts a `Select` whose `SelectContent` renders **every** definition for that category. |
-| Suggestions | Slow load | Renders all merge + alias candidate rows; no paging. |
-| Health & Coverage | Heavy first paint | Wide tables fully rendered. |
-| Tabs container | Mounts unused tabs in dev tools profiler under some Radix versions | Use `forceMount={false}` (default) is fine, but heavy data hooks fire only when each tab mounts — ensure tabs are lazy. |
+- `RolloverDialog` (`src/components/admin/RolloverDialog.tsx`) drives the entire 3-step flow (Configure → Preview → Results) and calls the `auto-rollover-kpis` edge function with an optional `employee_ids: string[]` filter. Single-employee mode is just `employee_ids: [employee.id]`.
+- The "KPI Details" header in `UnifiedScorecard.tsx` already hosts admin-only buttons (`Zero-Score`, `KRA Export`, `Add KRA`), each gated by `isAdmin`. Adding one more button alongside them is the same pattern.
+- The dialog already supports preview, conflict resolution (balance-only), Excel report download, and react-query invalidation of `['kpis']` — all of which we want in the per-employee flow too.
 
-## Goal
+No DB / RLS / RPC changes. UI-only with one small prop addition to the existing dialog.
 
-Make the page snappy regardless of registry size, with consistent pagination & debounced search across tabs. **No business-logic, schema, RLS, or RPC changes.**
+## Plan
 
-## Plan (UI-only)
+### 1. Extend `RolloverDialog` with a "scoped" mode (one extra prop)
 
-### 1. Reusable client-side pagination helper
+Add a new optional prop block to `RolloverDialogProps`:
 
-Add `src/components/admin/kpi-standardization/RegistryPager.tsx`:
-- Props: `page`, `pageSize`, `total`, `onPageChange`, `onPageSizeChange`, options `[25, 50, 100]` (default 25).
-- Renders Prev / Next + `page X of Y` + page-size selector. Mirrors the look of `AffectedKpisTable`'s pager and `useManualQuery` conventions.
+```ts
+scopedEmployee?: { id: string; name: string; code?: string };
+```
 
-### 2. Debounce all search inputs
+When `scopedEmployee` is present, the dialog:
 
-Use existing `useDebouncedValue(value, 300)` (already sanctioned by POLICY §120) in:
-- `BuildRegistryTab.tsx` — `search` → `debouncedSearch` feeds `filteredGroups` `useMemo`.
-- `ReviewRegistryTab.tsx` — `search` → `debouncedSearch` feeds `filtered` `useMemo`.
-- `CorrectMayKpisTab.tsx` — add a search box (KRA / KPI text) with debounce.
-- `SuggestionsTab.tsx` — debounce its current filter input if present.
+- Forces `allEmployees = false` and `selectedEmployeeIds = [scopedEmployee.id]` on open.
+- Hides the "All Employees" switch and the employee picker list (replace with a read-only banner: `Rolling over KRAs for <name> (<code>)`).
+- Defaults `targetMonth/Year` to the currently-displayed scorecard period (passed in via prop).
+- Defaults `sourceMonth/Year` to the previous month of that target.
+- Title becomes `KRA Rollover — <name>`.
 
-### 3. Paginate heavy lists
+Everything else (preview, conflicts, balance-only, results, Excel report) is reused unchanged. Edge-function payload is identical because it already accepts `employee_ids`.
 
-For each tab, wrap the existing filtered array with a `useMemo` slice `[from, from+pageSize]` and render only that slice. State lives in each tab.
+Add two more optional props for the period defaults so the parent can hand them in:
 
-- **BuildRegistryTab**: paginate `visibleGroups` (default 10 / page — groups are large). Reset to page 1 when `debouncedSearch`, `sensitivity`, or `includeSkipped` changes. Keep `processedGroups` behavior.
-- **ReviewRegistryTab**: paginate `filtered` (default 25). Reset to page 1 on search change. Collapse `expandedId` only when its row leaves the page.
-- **CorrectMayKpisTab**: paginate `pendingUnlinked` (default 25). Replace fixed-height `max-h-[500px] overflow-y-auto` with paged slice. Memoize the `definitions.filter(d => d.category_id === sig.category_id)` per category once at tab-level into a `Map<categoryId, KpiDefinition[]>` so each row's `Select` does not re-filter the full list.
-- **SuggestionsTab**: paginate `defMerges` and `aliasCandidates` independently (default 25 each).
+```ts
+defaultTargetMonth?: string;
+defaultTargetYear?: number;
+```
 
-### 4. Lighter rendering
+Backwards-compatible: existing call site in `SystemSettings.tsx` keeps current behavior when these props are omitted.
 
-- Wrap each row component (`RegistryRow`, the per-group card in BuildRegistry, the per-signature row in CorrectMayKpis) in `React.memo` so unchanged rows do not re-render when sibling rows or unrelated state change.
-- In `BuildRegistryTab`, hoist the per-group `sharedBucketOptions` calc (already memoizable) and stop recomputing on every render of every other group via `React.memo`.
-- In `CorrectMayKpisTab`, build the category→definitions map once per `definitions` change.
+### 2. Add an admin-only "Rollover KRAs" button in `UnifiedScorecard`
 
-### 5. Sane defaults & UX
+In the KPI Details header (`src/components/review/UnifiedScorecard.tsx` ~line 1638), insert a new button next to `Zero-Score` / `KRA Export`, gated by `isAdmin && !isSelfMode-not-required` (we'll show it whenever an admin is viewing any scorecard with a concrete `employee` and `selectedPeriod` / `selectedYear`):
 
-- Page size selector with `25 / 50 / 100`, persisted to that tab's local state only (not URL — keeps scope tight).
-- When the user filters/searches, the pager resets to page 1.
-- Show the existing total badge ("X pending / Y skipped / Z total") above the pager so context is preserved.
+```
+{isAdmin && (
+  <Button size="sm" variant="outline" onClick={() => setRolloverOpen(true)}>
+    <RefreshCw className="h-3.5 w-3.5 mr-1" /> Rollover KRAs
+  </Button>
+)}
+```
+
+Render the dialog at the bottom of the component (next to `EmployeeBulkZeroScoreDialog`):
+
+```
+<RolloverDialog
+  open={rolloverOpen}
+  onOpenChange={setRolloverOpen}
+  scopedEmployee={{ id: employee.id, name: employee.full_name, code: employee.employee_code }}
+  defaultTargetMonth={selectedPeriod}
+  defaultTargetYear={selectedYear}
+/>
+```
+
+`isAdmin` is already available in `UnifiedScorecard` (it gates the existing Zero-Score button).
+
+### 3. Visibility & access
+
+- **Admin only.** Same `isAdmin` gate already used for `Zero-Score`. No new role check needed.
+- **All scorecard contexts** (Self / Team / Audit / Skip-level / HR PMS / Management) — wherever the admin sees a KPI Details panel for a single employee, this button appears. This matches the user's request ("This feature will only be used by admin").
+- Self-view: an admin viewing their own scorecard will also see it (consistent with existing Zero-Score button behavior).
+
+### 4. UX details
+
+- Button label: `Rollover KRAs` (matches existing `Zero-Score`, `KRA Export` casing).
+- Icon: `RefreshCw` from `lucide-react` (same icon the dialog already uses for its title).
+- After successful rollover, the dialog already invalidates `['kpis']`; the scorecard auto-refreshes — no extra glue needed.
+- Banner inside the scoped dialog reuses existing `Alert` / `Card` styles for visual continuity.
+
+## Risk & Impact Report
+
+| Area | Impact |
+|---|---|
+| Data | None. Edge function `auto-rollover-kpis` already runs scoped rollovers; no schema, RLS, RPC, or trigger changes. |
+| Workflow | None. Same 3-step preview/confirm/report flow; admin still has to confirm. Conflict + balance-only handling reused as-is. |
+| Permissions | Strictly gated by `isAdmin` in the UI; the edge function enforces its own admin check server-side (unchanged). |
+| UI/UX | One additional small button in an already-busy header. Visual rhythm matches `Zero-Score`. |
+| Regression | Low. `RolloverDialog` change is additive (new optional props, no removal). Existing `SystemSettings` call site behaves identically. |
+| Mitigation | Vitest covering the prop-driven defaults and the "scoped employee replaces picker" branch. Manual smoke: open from a scorecard, preview, run, verify only that employee's KPIs are copied and the scorecard refreshes. |
+
+## Files (preview only — no edits in plan mode)
+
+Edit:
+- `src/components/admin/RolloverDialog.tsx` — add `scopedEmployee`, `defaultTargetMonth`, `defaultTargetYear` props; adjust initial state + Step-1 rendering.
+- `src/components/review/UnifiedScorecard.tsx` — admin-only `Rollover KRAs` button in KPI Details header + mount `RolloverDialog` with scoped props.
+
+Add:
+- `src/test/scopedRolloverDialog.test.tsx` — verifies scoped employee locks the picker and forwards `employee_ids: [id]` in the edge-function payload.
+
+Docs:
+- `mem/features/admin/enhanced-kra-rollover-system` — append a "Per-employee invocation from scorecard" note.
 
 ## Out of scope
 
-- No changes to `useScanDuplicates`, `useKpiDefinitions`, `useKpiAliases`, RPCs, or DB. Today these return acceptable payloads; the bottleneck is render volume, not network.
-- No virtualization library (deferred — pagination delivers the win without adding a dep).
-- No changes to Governance / Health & Coverage / History tabs unless their lists exceed 100 rows; if they do, apply the same RegistryPager.
-
-## Risk & Impact
-
-- **Data**: none. UI-only.
-- **Workflow**: none. Approve / Skip / Apply / Merge / Dismiss flows unchanged.
-- **UI/UX**: search now feels snappier (300 ms debounce); long lists become paged. Familiar Prev/Next pattern (matches `AffectedKpisTable`).
-- **Regression**: low. `processedGroups`, `expandedId`, `mappings`, `corrected` state semantics preserved — pagination only narrows the *displayed* slice.
-- **Mitigation**:
-  - Vitest for the pager helper (page math, clamping, page-1 reset on filter change).
-  - Vitest for the category→definitions index map in CorrectMayKpisTab.
-  - Manual smoke: scan with 200+ groups, switch sensitivity, toggle Include skipped, search.
-
-## Files
-
-New:
-- `src/components/admin/kpi-standardization/RegistryPager.tsx`
-- `src/test/registryPager.test.tsx`
-
-Edited:
-- `src/components/admin/kpi-standardization/BuildRegistryTab.tsx`
-- `src/components/admin/kpi-standardization/ReviewRegistryTab.tsx`
-- `src/components/admin/kpi-standardization/CorrectMayKpisTab.tsx`
-- `src/components/admin/kpi-standardization/SuggestionsTab.tsx`
-
-Docs:
-- `mem/architecture/performance/lean-load-policy` — append KPI Standardization tabs to the compliant debounced/paged sites list.
-- `DOCUMENTATION.md` Version History + brief note under Admin → KPI Standardization.
+- Multi-employee selection from the scorecard (admin can still use System Settings → KRA Rollover for that).
+- Changing the source/target defaults policy or the underlying edge function.
+- Non-admin access (kept admin-only as requested).
