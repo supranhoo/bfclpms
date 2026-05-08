@@ -101,6 +101,7 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
         kraSetKpiRowsByKey?: Record<string, string[]>;
         kraSetEmpIdsByKey?: Record<string, string[]>;
         mappedEmpIdsByKey?: Record<string, string[]>;
+        propagatedEmpIdsByKey?: Record<string, string[]>;
         employeeDisplayMap?: Record<string, SnapshotEmployeeDisplay>;
         departmentDisplayMap?: Record<string, SnapshotDepartmentDisplay>;
       };
@@ -125,6 +126,7 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
         kraSetKpiRowsByKey: rekey(snap.kraSetKpiRowsByKey),
         kraSetEmpIdsByKey: rekey(snap.kraSetEmpIdsByKey),
         mappedEmpIdsByKey: rekey(snap.mappedEmpIdsByKey),
+        propagatedEmpIdsByKey: rekey(snap.propagatedEmpIdsByKey),
         employeeDisplayMap: snap.employeeDisplayMap ?? {},
         departmentDisplayMap: snap.departmentDisplayMap ?? {},
       };
