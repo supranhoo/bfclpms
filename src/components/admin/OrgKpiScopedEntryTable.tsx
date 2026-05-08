@@ -550,6 +550,8 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
                   {row.designation}
                 </Badge>
               )}
+              {/* Per-row propagation status — see RowStatusPill */}
+              <RowStatusPill status={row.status} />
               {/* Sent-back indicator */}
               {isSentBack && (
                 <TooltipProvider>
