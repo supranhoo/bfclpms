@@ -68,7 +68,7 @@ function assertResolvableStatus(
 }
 import { 
   ArrowLeft, Target, CheckCircle2, Clock, 
-  Info, Lock, MessageSquare, Undo2, Check, Eye, ChevronDown, ChevronUp, History, Edit2, Send, Shield, Briefcase, User, CalendarDays, UserCheck, ClipboardCheck, AlertTriangle, X, Ban
+  Info, Lock, MessageSquare, Undo2, Check, Eye, ChevronDown, ChevronUp, History, Edit2, Send, Shield, Briefcase, User, CalendarDays, UserCheck, ClipboardCheck, AlertTriangle, X, Ban, RefreshCw
 } from 'lucide-react';
 import { SelfReviewSheet } from '@/components/review/SelfReviewSheet';
 import { ProfileCard } from '@/components/dashboard/ProfileCard';
@@ -93,6 +93,7 @@ import { usePendingRollbackRequest } from '@/hooks/useKpiRollbackRequests';
 import { useAuditKpiAssignments } from '@/hooks/useAuditKpiAssignments';
 import { KraExportMenu } from '@/components/review/KraExportMenu';
 import { EmployeeBulkZeroScoreDialog } from '@/components/review/EmployeeBulkZeroScoreDialog';
+import { RolloverDialog } from '@/components/admin/RolloverDialog';
 import { useAppSettings } from '@/hooks/useAppSettings';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
 import { useRemarksMandatorySettings } from '@/hooks/useWorkflowSettings';
@@ -212,6 +213,7 @@ export function UnifiedScorecard({
   const { user, effectiveRole } = useAuth();
   const isAdmin = effectiveRole === 'admin';
   const [zeroScoreDialogOpen, setZeroScoreDialogOpen] = useState(false);
+  const [rolloverDialogOpen, setRolloverDialogOpen] = useState(false);
   const { data: allKpis, isLoading } = useKpisByEmployee(employee.id);
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -1653,6 +1655,15 @@ export function UnifiedScorecard({
                   <Ban className="h-3.5 w-3.5 mr-1" /> Zero-Score
                 </Button>
               )}
+              {isAdmin && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setRolloverDialogOpen(true)}
+                >
+                  <RefreshCw className="h-3.5 w-3.5 mr-1" /> Rollover KRAs
+                </Button>
+              )}
               <KraExportMenu
                 kpis={kpis || []}
                 employeeProfile={{
@@ -2206,6 +2217,20 @@ export function UnifiedScorecard({
           reviewYear={selectedYear}
           open={zeroScoreDialogOpen}
           onOpenChange={setZeroScoreDialogOpen}
+        />
+      )}
+      {/* Per-employee KRA Rollover Dialog (Admin only) */}
+      {isAdmin && (
+        <RolloverDialog
+          open={rolloverDialogOpen}
+          onOpenChange={setRolloverDialogOpen}
+          scopedEmployee={{
+            id: employee.id,
+            name: employee.full_name || employee.email,
+            code: employee.employee_code,
+          }}
+          defaultTargetMonth={selectedPeriod}
+          defaultTargetYear={selectedYear}
         />
       )}
     </div>
