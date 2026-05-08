@@ -2680,3 +2680,15 @@ Regression: `src/test/orgKpiRowStatusPill.test.tsx` (4 cases — mixed, all-prop
 Every RLS path that mediates Org KPI visibility (KPI definitions, `org_kpi_values`, `review_submissions`) MUST match `org_kpi_data_owners.kra_name` / `kpi_name` against `kpis.kra_name` / `kpi_name` using `public.normalize_kpi_text(...)`, the same normalizer the snapshot RPC (`get_org_kpi_data_entry_snapshot`) uses.
 
 Raw text equality was the root cause of data owners (and edge cases where master KRA/KPI text drifted by punctuation/whitespace/case from the owner mapping) being able to read the KPI definition but not the corresponding `review_submissions` rows — making truly propagated rows render as "Not propagated" in the UI.
+
+## §111.4 — Org KPI propagation must resolve targets server-side (ADR-062, codified 2026-05-08)
+
+Org-level KPI propagation MUST resolve the set of target `kpis` rows via the SECURITY DEFINER RPC `resolve_org_kpi_target_kpis`. Client code MUST NOT use `supabase.from('kpis').select(...)` to gate the propagate write path.
+
+**Why:** KPI rows are RLS-filtered per user. A data owner whose role/department restricts visibility of department X will silently receive zero rows for employees in X from a client SELECT, even though those employees legitimately carry that org KPI. The propagate RPC then never runs for them, no `review_submissions` row is written, and the UI correctly but permanently shows them as "Not propagated".
+
+**Authorisation contract for the RPC:**
+- `has_role(auth.uid(), 'admin')`, OR
+- An `org_kpi_data_owners` row matching `(category_id, normalize_kpi_text(kra_name), normalize_kpi_text(kpi_name))` for the caller.
+
+**Read/write parity:** Snapshot reads (`get_org_kpi_data_entry_snapshot`) and propagate writes (`resolve_org_kpi_target_kpis` → `propagate_org_kpi_value`) MUST see the same employee universe. Any future RLS change on `kpis` must preserve this parity or be paired with a server-side resolver update.

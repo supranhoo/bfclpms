@@ -24,3 +24,8 @@ type: feature
 - `buildCardData` employee branch: `propagated` if `propagatedEmpsByKey.get(defKey).has(empId)` OR fallback map has entry; OKV `approved` overrides. Department branch aggregates the same set across mapped employees in that department.
 - Snapshot mismatch with browser-side joins (RLS/normalization/coverage drift) was the root cause of "0 propagated / 50 not propagated" after a successful Propagate.
 - Regression test: `src/test/orgKpiPropagatedSnapshotTruth.test.ts`.
+
+**2026-05-08 cross-department fix (ADR-062 / POLICY §111.4):**
+- Org KPI propagation MUST resolve target KPIs server-side via `resolve_org_kpi_target_kpis` (SECURITY DEFINER). Never use a client `supabase.from('kpis').select(...)` to gate the propagate write — RLS hides employees in departments the data owner cannot see, leaving 10/50-style permanent "Not propagated" rows.
+- The resolver authorises via `has_role('admin')` OR a matching `org_kpi_data_owners` row (normalized kra/kpi). It then drives the existing `propagate_org_kpi_value` RPC unchanged.
+- `usePropagateOrgKpiValue.fetchTargetKpis` is now a thin wrapper around the RPC; old ilike fallback chain was deleted.
