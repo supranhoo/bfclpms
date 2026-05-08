@@ -1,154 +1,128 @@
-## RCA: Why the Org KPI propagation record is inconsistent
+# Risk & Impact Report
 
-### Current verified data
-For **Training & Development → Completion of Mandated Training Hours → April 2026**, active mapped employees are **50**.
+- **Data impact**: One backend access-rule mismatch is causing the page to read KPI definitions successfully but fail to read the corresponding propagated submission facts for some users. If fixed correctly, no historical business data needs to be rewritten just to restore truthful display.
+- **Workflow impact**: The current UI can mislead admins/data owners into thinking propagated rows are still pending, which can trigger duplicate propagation attempts and distrust in the process.
+- **UI/UX consistency**: Two regressions exist: the summary badges were hidden unless both counts were non-zero, and per-row status depends on a fallback read path that is not returning the true propagated facts for affected sessions.
+- **Regression risk**: Medium. The Org KPI page already has multiple status sources (`kpis.status`, `org_kpi_values.status`, `review_submissions`, snapshot RPC). Fixing only one surface would reintroduce drift.
+- **Mitigation plan**: Fix the backend access contract first, then simplify the frontend to consume one fact-based source consistently, and lock it with targeted tests for both admin and data-owner paths.
 
-Backend state now shows:
-- **50 / 50** have an `org_kpi_values` value entered.
-- **40 / 50** have `review_submissions` scorecard data.
-- **10 / 50** still have **no scorecard submission row** and their `kpis.status` is still `kra_set`.
-- **Atul Kumar Khaitan** now has scorecard data because he was individually propagated at **2026-05-08 11:43 UTC**.
-- Only Atul’s `org_kpi_values.status` is now `propagated`; the other 49 still show `entered`.
+# What I verified
 
-### Why-Why Analysis
+- **The underlying business data does not support “all not propagated.”** Sample employees visible in your screenshot already have:
+  - `review_submissions` rows present
+  - achieved value `100`
+  - KPI stages advanced beyond `kra_set`
+- **The current page is therefore reading the wrong truth source for your session.**
+- I also confirmed a separate UI regression:
+  - the summary line is intentionally hidden by `showStatusBreakdown = propagatedCount > 0 && notPropagatedCount > 0`
+  - so even a truthful `0 propagated / 50 not propagated` or `50 propagated / 0 not propagated` would disappear
 
-#### Why 1: Why does the UI now say “1 propagated / 49 not propagated”?
-Because the row-level status badge reads from `org_kpi_values.status`, not directly from `review_submissions`.
+# Root Cause Analysis
 
-Current data:
-- Atul’s OKV status = `propagated`
-- Other 49 OKV rows = `entered`
+## Root Cause 1 — backend truth is not readable through the fallback path
+The per-row badge now depends on `useOrgKpiSubmissionFallback`, which reads propagated truth from `review_submissions`.
 
-So the statement is technically matching the OKV status field, but it is **not the full truth** of scorecard propagation.
+But the access rule for data owners on `review_submissions` joins `org_kpi_data_owners` using **exact text equality** on `kra_name` and `kpi_name`, while the Org KPI snapshot and newer KPI visibility logic use **normalized matching**.
 
-#### Why 2: Why do 39 other employees have scorecard data but still show OKV status `entered`?
-Because propagation writes the actual scorecard result into:
-- `kpis.status`
-- `review_submissions`
+That means a user can:
+- see the KPI definition in the Org KPI page
+- but fail to read the corresponding propagated submission rows
 
-Then the frontend separately tries to mark `org_kpi_values.status = 'propagated'` after propagation.
+Result:
+- `submissionFallbackMap` is empty or incomplete for that user
+- rows fall back to `OKV entered`
+- the UI shows **Not propagated** even though the scorecard already contains data
 
-That second status update is not the source of truth and did not happen consistently for historical/previous propagations.
+This matches the live evidence I checked.
 
-#### Why 3: Why were 10 employees still missing from scorecards after “propagate all 50”?
-Because the current propagate flow loops row-by-row in the browser. For employee scope it:
-1. saves all entered rows to `org_kpi_values`,
-2. loops through `scopedValues`,
-3. calls `propagate_org_kpi_value` once per employee,
-4. then separately updates OKV status.
+## Root Cause 2 — summary badges were hidden by UI logic
+The header summary is only rendered when both conditions are true:
+- at least one row is propagated
+- at least one row is not propagated
 
-This is fragile. If any loop exits early, UI state is stale, preview mismatch happens, a row is skipped, or a user only propagates selected/visible rows, the system can leave:
-- OKV value saved,
-- but no `review_submissions` row,
-- and `kpis.status` still `kra_set`.
+So the summary was removed from the UI even though you explicitly need that signal always visible.
 
-That is exactly what the 10 remaining employees show.
+## Root Cause 3 — the current design is still over-coupled
+The page now combines:
+- snapshot RPC for KPI definitions and mapping
+- direct browser reads for `review_submissions`
+- `org_kpi_values.status` as a secondary signal
 
-#### Why 4: Why did the system not clearly report incomplete propagation?
-There is a contract mismatch in the propagation RPC result.
+That creates a fragile multi-source contract. Even if each piece is individually valid, they can disagree under RLS or normalization drift.
 
-Current database function returns keys like:
-- `propagated`
-- `skipped`
-- `results`
-- `skipped_details`
+# Corrective Plan
 
-Frontend expects:
-- `propagated_count`
-- `skipped_count`
-- `details`
-- `skipped`
+## 1. Fix the backend access contract for propagation truth
+Create a backend change so data-owner reads of propagated submission facts use the **same normalized KPI matching** as the snapshot path.
 
-Because of this mismatch, the UI summary/validation can under-report or misinterpret what actually happened. This is a major RCA finding.
+Preferred fix:
+- update the data-owner `review_submissions` visibility rule to use normalized `kra_name` and `kpi_name` matching
+- verify the same normalization is used consistently for insert/update rules if needed
 
-#### Why 5: Why is the process over-complicated?
-Because propagation truth is split across three places:
+Why first:
+- without this, any frontend fix would still be guessing from incomplete data
 
-```text
-org_kpi_values      = entered source value + local UI status
-kpis.status         = workflow stage
-review_submissions = actual employee scorecard value
-```
+## 2. Stop relying on raw browser-side submission joins for row truth
+Refactor the Org KPI page so the propagated-state source comes from a single backend-aligned read model.
 
-The system treats `org_kpi_values.status` as if it proves scorecard propagation, but the real proof is `review_submissions` + `kpis.status != kra_set`.
+Safer options:
+- either extend the existing snapshot RPC to include per-employee propagation fact
+- or replace the direct fallback hook with a backend read path that already respects the same access semantics as the snapshot
 
-### Root Cause
-The root cause is **not just bad data**. It is a process/design issue:
+Goal:
+- the page should not separately reconstruct truth from a second RLS-sensitive path
 
-1. **Propagation source of truth is split.**
-   `org_kpi_values.status` can disagree with actual scorecard data.
+## 3. Restore the summary and make it always visible
+Update the scoped table header so it always shows a factual propagation summary when rows are present:
+- `X propagated`
+- `Y not propagated`
 
-2. **Frontend and backend propagation result contracts are mismatched.**
-   The RPC returns `propagated`, but the frontend reads `propagatedCount`/`propagated_count` style data.
+Rules:
+- show both counts even when one side is zero
+- keep the current entered count separately
+- never hide the summary just because the distribution is one-sided
 
-3. **Propagation is row-by-row from the browser.**
-   A 50-employee propagation should be one atomic backend operation or one well-audited batch, not 50 separate client calls plus separate status updates.
+## 4. Make per-row status derive from one canonical fact contract
+After step 1/2, keep the row logic simple:
+- `approved` stays explicit
+- `propagated` means propagated fact exists
+- `entered` means value exists but propagated fact does not
+- `pending` means no value/no propagated fact
 
-4. **UI status recently became more visible, but it exposed the wrong source of truth.**
-   The “1 propagated / 49 not propagated” statement is true only for OKV status, not true for scorecard data. The more accurate current status is:
-   - **40 have scorecard data**
-   - **10 still missing scorecard data**
-   - **49 OKV rows still incorrectly marked entered**
+This avoids mixing stale helper flags with scorecard truth.
 
-### Employees still missing scorecard data
-These 10 currently have OKV value entered but **no `review_submissions` row**:
-- Anant Shankar Shet
-- Mandala Naga Raju
-- Monu Kumar Soni
-- Mrutyunjaya Mohanty
-- Parshu Ram Shukla
-- S.Lingamurthy Raju
-- Sujeet Kumar Singh
-- Sunkara Satyanarayana
-- V.A.V.S.S. Ganapathi Varma
-- Y R V S Murthy
+## 5. Add regression protection
+Add tests for all failure modes that matter here:
 
-### Risk & Impact Report
-- **Data impact:** Fixing this should not alter historical approved scores. It should only repair open `kra_set` rows that already have OKV values.
-- **Workflow impact:** Propagation should advance only eligible rows from `kra_set`/allowed pre-review state into scorecard data.
-- **UI/UX impact:** UI wording must distinguish “value entered” from “scorecard populated”.
-- **Regression risk:** Medium-high, because Org KPI propagation touches KPI workflow, scorecards, audit logs, and reporting.
-- **Mitigation:** Add regression tests for mixed OKV vs scorecard states and update documentation/POLICY with one authoritative propagation definition.
+### Frontend tests
+- summary is shown for:
+  - mixed rows
+  - all propagated
+  - all not propagated
+- row pill shows propagated when canonical propagated fact exists even if `org_kpi_values.status = 'entered'`
 
-## Proposed implementation plan
+### Backend / contract tests
+- data-owner normalized match can read submission facts when owner text differs only by punctuation/spacing/description formatting
+- snapshot and propagated read model return consistent counts for the same KPI definition
 
-### 1. Fix the status definition
-Change row/header propagation badges to be based on **actual scorecard state**:
-- Propagated = matching `review_submissions` exists with value/N/A and `kpis.status` advanced beyond `kra_set`.
-- Entered only = OKV value exists but scorecard is not populated.
-- Mismatch = OKV status says propagated but scorecard is missing, or scorecard exists but OKV status says entered.
+## 6. Update policy and technical documentation atomically
+Document the corrected rule:
+- propagation truth is read from scorecard/submission fact, not helper flags
+- all access paths for Org KPI truth must use the same normalized KPI identity contract
+- summary counts must always remain visible to admins/data owners
 
-### 2. Fix the RPC/frontend result contract
-Update the propagation result mapper so the frontend correctly understands both old and current backend return keys:
-- `propagated` / `propagated_count`
-- `skipped` / `skipped_count`
-- `results` / `details`
-- `skipped_details` / `skipped`
+# Expected outcome after implementation
 
-This prevents false success/false partial messages.
+For the case you raised, the page should return to a truthful state such as:
+- **40 propagated / 10 not propagated** if 10 are genuinely missing scorecard entries
+- or **50 propagated / 0 not propagated** if all 50 truly already have propagated scorecard data
 
-### 3. Stop relying on OKV status as proof
-Keep `org_kpi_values.status` only as a helper display field, not the proof of propagation. The proof should come from `review_submissions` and `kpis.status`.
+Most importantly, it will stop showing **all Not propagated** for rows that already have scorecard submissions.
 
-### 4. Add a repair action/report
-Add an admin-facing repair/check path for this exact mismatch:
-- “Entered but not in scorecard”
-- “Scorecard populated but OKV status stale”
-- “OKV propagated but scorecard missing”
+# Implementation order
 
-For the current 10, the repair should propagate only eligible open rows and audit the action.
-
-### 5. Add regression tests
-Add tests covering:
-- 50 OKV values entered, 40 scorecards populated, 10 missing → UI must show 40 scorecard populated / 10 pending, not 1/49.
-- RPC result key mismatch is normalized correctly.
-- Atul-style single-row propagation updates the row’s scorecard state.
-
-### 6. Update DOCUMENTATION.md and POLICY.md
-Document the policy clearly:
-- “Propagated” means scorecard populated, not merely OKV status.
-- OKV is the source-entry table; `review_submissions` is the scorecard table.
-- Any propagation UI/report must reconcile both.
-
-### Immediate conclusion
-Your suspicion is valid: the previous statement was incomplete. The process currently over-relies on `org_kpi_values.status`; the real backend state shows **40 scorecards populated and 10 still missing**, not simply “1 propagated / 49 not propagated.”
+1. Backend policy/read-model correction
+2. Frontend canonical truth wiring
+3. Summary visibility restoration
+4. Regression tests
+5. Documentation + policy sync
