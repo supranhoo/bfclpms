@@ -11,23 +11,33 @@ import { useToast } from '@/hooks/use-toast';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { EditDefinitionDialog } from './EditDefinitionDialog';
 import { AffectedKpisTable } from './AffectedKpisTable';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { RegistryPager, pagedSlice } from './RegistryPager';
 
 export function ReviewRegistryTab() {
   const { data: definitions, loading, refetch } = useKpiDefinitions();
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<KpiDefinition | null>(null);
   const { toast } = useToast();
   const { deleteDefinition } = useDeleteDefinition();
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return definitions;
-    const s = search.toLowerCase();
+    if (!debouncedSearch.trim()) return definitions;
+    const s = debouncedSearch.toLowerCase();
     return definitions.filter(d =>
       d.canonical_kra_name.toLowerCase().includes(s) ||
       d.canonical_kpi_name.toLowerCase().includes(s)
     );
-  }, [definitions, search]);
+  }, [definitions, debouncedSearch]);
+
+  const pagedDefs = useMemo(
+    () => pagedSlice(filtered, page, pageSize),
+    [filtered, page, pageSize],
+  );
 
   const handleDelete = async (id: string) => {
     const ok = await deleteDefinition(id);
@@ -75,18 +85,38 @@ export function ReviewRegistryTab() {
                 : 'No results match your search.'}
             </p>
           ) : (
-            <div className="space-y-2">
-              {filtered.map(def => (
-                <RegistryRow
-                  key={def.id}
-                  definition={def}
-                  isExpanded={expandedId === def.id}
-                  onToggle={() => setExpandedId(expandedId === def.id ? null : def.id)}
-                  onDelete={() => handleDelete(def.id)}
-                  onEdit={() => setEditing(def)}
+            <>
+              <RegistryPager
+                page={page}
+                pageSize={pageSize}
+                total={filtered.length}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                resetKey={debouncedSearch}
+                className="mb-3"
+              />
+              <div className="space-y-2">
+                {pagedDefs.map(def => (
+                  <RegistryRow
+                    key={def.id}
+                    definition={def}
+                    isExpanded={expandedId === def.id}
+                    onToggle={() => setExpandedId(expandedId === def.id ? null : def.id)}
+                    onDelete={() => handleDelete(def.id)}
+                    onEdit={() => setEditing(def)}
+                  />
+                ))}
+              </div>
+              <div className="mt-3">
+                <RegistryPager
+                  page={page}
+                  pageSize={pageSize}
+                  total={filtered.length}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
                 />
-              ))}
-            </div>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
