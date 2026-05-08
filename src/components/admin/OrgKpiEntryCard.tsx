@@ -23,6 +23,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useSentBackOrgKpiEmployees, type SentBackInfo } from '@/hooks/useSentBackOrgKpiEmployees';
 import { isComplianceKpi, useBulkEmployeeSubmissionDates } from '@/hooks/useComplianceSubFactors';
 import { scopedRowsSignature } from '@/lib/orgKpiCounts';
+import { useDiagnoseOrgKpiGap, useRepairOrgKpiGap, type DiagnoseGapRow } from '@/hooks/useRepairOrgKpiPropagationGap';
+import { Wrench } from 'lucide-react';
 
 export interface OrgKpiCardData {
   categoryId: string;
