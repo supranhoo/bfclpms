@@ -1,52 +1,46 @@
 ## Risk & Impact Report
 
-- **Data Impact:** No historical data rewritten. New writes will reach employees in departments the data owner cannot see via RLS — which is the intended behaviour for org-level KPIs.
-- **Workflow Impact:** Eligibility ladder (kra_set / self_review / reviewer_locked / not_in_kra_set) is preserved. Authorisation gains an explicit server check.
-- **UI/UX Impact:** None visible, except previously "Not propagated" rows in hidden departments will now flip to "Propagated" after a propagate action.
-- **Regression Risk:** Medium — propagate is a hot path. Mitigated by reusing the existing `propagate_org_kpi_value` core and adding a regression test.
+- **Data Impact:** No existing KPI data will be changed by the schema fix itself. The migration only corrects the resolver function contract so propagation can proceed.
+- **Workflow Impact:** Org KPI propagation will resume for cross-department targets. Authorization remains admin or assigned Org KPI data owner only.
+- **UI/UX Consistency:** No UI layout change. The existing toast should stop showing the backend structure mismatch.
+- **Regression Risk:** Low-to-medium because the resolver feeds rating calculation; incorrect types can break propagation. The fix will lock the function return columns to the actual database column types.
+- **Mitigation Plan:** Add a regression test that checks `resolve_org_kpi_target_kpis` return type matches the selected columns, especially `r5..r0` as text.
 
-## Root Cause (recap)
+## Root Cause
 
-`OrgKpiDataEntry` reads via `get_org_kpi_data_entry_snapshot` (SECURITY DEFINER, sees all 50 employees). But the propagate write path resolves target KPIs through `fetchTargetKpis` → `supabase.from('kpis').select(...)`, which is filtered by RLS. The 10 employees in departments hidden from the data owner are silently dropped before the RPC runs, so no `review_submissions` row is written and the row stays "Not propagated" forever.
+The new `resolve_org_kpi_target_kpis` function declares `r5, r4, r3, r2, r1, r0` as `numeric`, but the live `kpis` table stores those columns as `text`.
+
+Postgres requires every `RETURN QUERY` column to exactly match the declared `RETURNS TABLE` type. Because `k.r5` etc. are text but the function promises numeric, the function fails with:
+
+```text
+structure of query does not match function result type
+```
+
+This happens before the actual propagation RPC runs, so the remaining 10 rows are still not reached.
 
 ## Implementation Plan
 
-1. **New SECURITY DEFINER RPC `resolve_and_propagate_org_kpi`**
-   - Inputs: `p_category_id`, `p_kra_name`, `p_kpi_name`, `p_review_period`, `p_review_year`, `p_scope` (`organization|department|employee`), `p_department_id`, `p_employee_id`, `p_achieved_value`, `p_is_na`, `p_remarks`, `p_evidence_url`, `p_overwrite_policy`.
-   - Authorise: caller must be `admin` OR an active `org_kpi_data_owners` row matching `(category_id, normalized kra_name, normalized kpi_name)`.
-   - Resolve targets directly in SQL: `SELECT id, target_value, weightage, r0..r5, criteria, uom, uom_type, qualitative_options, threshold_mode FROM kpis WHERE is_org_level=true AND category_id=$1 AND normalize(kra_name)=normalize($2) AND normalize(kpi_name)=normalize($3) AND review_period=$4 AND review_year=$5` (no RLS — definer). Apply same case-insensitive + fuzzy fallback chain currently in `fetchTargetKpis`.
-   - Compute self_score / self_rating server-side using existing rating helpers (or accept pre-computed ratings from caller as a fallback path).
-   - Call into the existing `propagate_org_kpi_value` body / share its eligibility ladder so behaviour stays identical.
-   - Return shape: `{ propagated, skipped, results, skipped_details }` — same as today.
+1. **Database migration**
+   - Replace `public.resolve_org_kpi_target_kpis(...)` with a corrected `RETURNS TABLE` signature:
+     - `r5 text, r4 text, r3 text, r2 text, r1 text, r0 text`
+   - Keep the same `SECURITY DEFINER` authorization logic.
+   - Keep server-side target resolution across hidden departments.
+   - Add explicit casts for ambiguous fields where useful so return shape stays stable.
 
-2. **Frontend: `usePropagateOrgKpiValue` & `useBulkPropagateOrgKpiValues`**
-   - Replace `fetchTargetKpis` + `callPropagationRpc` with a single call to `resolve_and_propagate_org_kpi`.
-   - Keep audit log fire-and-forget and toast logic unchanged.
-   - Remove RLS-bound `kpis` SELECT on the propagate path (keep it elsewhere).
+2. **Frontend typing alignment**
+   - No logic rewrite needed in `usePropagateOrgKpiValue.ts` because the rating calculator already consumes threshold values that can be text/numeric-like.
+   - If generated types update automatically after migration, leave auto-generated files untouched.
 
-3. **Preview parity: `preview_org_kpi_propagation`**
-   - Mirror the same definer-side target resolution so the preview dialog count matches actual propagation.
-   - Update `usePreviewOrgKpiPropagation` if its input contract changes (prefer keeping signature compatible).
+3. **Regression protection**
+   - Add/update a test confirming the resolver migration declares threshold columns as `text`, matching `kpis.r5..r0`.
+   - Keep existing propagation result contract tests.
 
-4. **Regression tests**
-   - `src/test/orgKpiPropagationCrossDept.test.ts`: data owner whose visible KPI set excludes department X still successfully propagates to employees in X.
-   - Negative test: non-authorised caller is rejected by the RPC.
-   - Snapshot truth test (existing) still passes.
+4. **Documentation/policy sync**
+   - Update `POLICY.md` and `DOCUMENTATION.md` with the resolver contract: server-side Org KPI target resolution must match the live schema column types.
+   - Update the Org KPI propagation memory to record this exact RCA so future changes do not reintroduce numeric threshold return types.
 
-5. **Docs & policy**
-   - `POLICY.md` §111.4: "Org KPI propagation MUST resolve target KPIs server-side via SECURITY DEFINER. Client-side RLS-bound SELECT MUST NOT gate writes that are conceptually cross-departmental."
-   - `DOCUMENTATION.md`: update the Org KPI Data Entry section with the new RPC and the read/write parity rule.
-   - `docs/adr/ADR-062.md`: record the decision and the May 2026 incident.
-   - `mem://features/admin/org-kpi-propagation-truth.md`: add the cross-department write-path rule.
+5. **Validation**
+   - Re-check the live function definition after migration.
+   - Optionally run the targeted Org KPI tests if build mode permits.
 
-## Technical Details
-
-- Reuse `normalize_text` SQL helper if present; otherwise inline `lower(regexp_replace(coalesce($1,''), '\s+', ' ', 'g'))` and trim, matching `src/lib/orgKpiKey.ts`.
-- Authorisation helper: prefer a small `is_org_kpi_data_owner(_user, _category, _kra, _kpi)` SECURITY DEFINER function for reuse and easier RLS audit.
-- Keep `propagate_org_kpi_value` callable as-is for back-compat; the new RPC is a thin resolver + delegator.
-- No change to `org_kpi_values` semantics; status pill truth stays driven by the snapshot's `propagatedEmpIdsByKey`.
-
-## Out of Scope
-
-- Backfilling the 10 currently-stuck rows (user can re-click Propagate after the fix; we can offer a one-shot admin script if requested).
-- UI changes to the data entry table.
+After approval, I’ll apply the migration and code/docs/test updates.
