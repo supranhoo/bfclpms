@@ -582,6 +582,17 @@ export default function OrgKpiDataEntry() {
     // disagree across periods.
     const headerEmployeeCount = empCount;
 
+    // Post-propagation fallback for the organization-scope card header.
+    const orgFbKey = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||org`;
+    const orgFb = submissionFallbackMap?.get(orgFbKey);
+    const okvOrgHasValue = (existing?.achieved_value ?? null) !== null || !!existing?.is_na;
+    const headerAchieved = okvOrgHasValue
+      ? (existing?.achieved_value ?? null)
+      : (scope === 'organization' && orgFb ? orgFb.achievedValue : null);
+    const headerIsNa = okvOrgHasValue
+      ? !!existing?.is_na
+      : (scope === 'organization' && orgFb ? orgFb.isNa : false);
+
       return {
       categoryId: kpi.category_id,
       categoryName: catName,
@@ -596,7 +607,7 @@ export default function OrgKpiDataEntry() {
       r2: kpi.r2 ?? null,
       r1: kpi.r1 ?? null,
       scope,
-      achievedValue: existing?.achieved_value ?? null,
+      achievedValue: headerAchieved,
       remarks: existing?.remarks ?? '',
       evidenceUrl: existing?.evidence_url ?? null,
       previousValue,
@@ -605,7 +616,7 @@ export default function OrgKpiDataEntry() {
       scopedRows,
       scopeLabel,
       employeeCount: headerEmployeeCount,
-      isNa: existing?.is_na ?? false,
+      isNa: headerIsNa,
       uomType: (kpi as any).uom_type || 'numeric',
       qualitativeOptions: (kpi as any).qualitative_options || null,
       criteria: (kpi as any).criteria || null,
