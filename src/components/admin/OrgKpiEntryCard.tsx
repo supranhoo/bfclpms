@@ -417,7 +417,29 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
     triggerAutoSave();
   };
 
-  const statusInfo = statusConfig[data.status] ?? statusConfig.pending;
+  // For scoped KPIs (department / employee) the card-level `status` is a
+  // single bucket but the underlying rows can be in a mix of states. Derive
+  // an aggregate status so the header pill never misleadingly says
+  // "Value Entered" when most rows are already propagated (and vice versa).
+  const aggregateStatus = (() => {
+    const rows = data.scopedRows;
+    if (!rows || rows.length === 0) return data.status;
+    const propagated = rows.filter(r => r.status === 'propagated' || r.status === 'approved').length;
+    const entered = rows.filter(r => r.status === 'entered').length;
+    if (propagated > 0 && entered > 0) return 'partial' as const;
+    if (propagated === rows.length && propagated > 0) return 'propagated';
+    if (entered > 0 && propagated === 0) return 'entered';
+    return data.status;
+  })();
+  const partialConfig = {
+    label: 'Partially Propagated',
+    icon: ArrowUpRight,
+    variant: 'secondary' as const,
+    className: 'text-orange-700 bg-orange-50 border-orange-300 dark:text-orange-300 dark:bg-orange-950/40 dark:border-orange-800',
+  };
+  const statusInfo = aggregateStatus === 'partial'
+    ? partialConfig
+    : (statusConfig[aggregateStatus] ?? statusConfig.pending);
   const StatusIcon = statusInfo.icon;
   const ScopeIcon = scopeIcons[data.scope];
 
