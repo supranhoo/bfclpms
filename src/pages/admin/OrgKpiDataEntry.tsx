@@ -595,7 +595,7 @@ export default function OrgKpiDataEntry() {
       qualitativeOptions: (kpi as any).qualitative_options || null,
       criteria: (kpi as any).criteria || null,
     };
-  }, [existingValuesMap, prevValuesMap, departments, allProfiles, prev, employeeCountMap, mappedDepartmentsMap, mappedEmployeesMap, employeeTargetMap, employeeDisplayMap, departmentDisplayMap]);
+  }, [existingValuesMap, prevValuesMap, departments, allProfiles, prev, employeeCountMap, mappedDepartmentsMap, mappedEmployeesMap, employeeTargetMap, employeeDisplayMap, departmentDisplayMap, submissionFallbackMap]);
 
   // Save handler for a single card
   const handleCardSave = useCallback(async (
