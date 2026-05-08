@@ -118,6 +118,10 @@ export default function OrgKpiDataEntry() {
   const { data: departments } = useDepartments();
   const { data: allProfiles } = useProfiles();
   const { data: existingOrgValues } = useOrgKpiValues(undefined, selectedPeriod, selectedYear);
+  // Post-propagation fallback: surface review_submissions values when the
+  // per-employee org_kpi_values row is missing/null (prevents the table
+  // from going blank while Impact still shows the propagated number).
+  const { data: submissionFallbackMap } = useOrgKpiSubmissionFallback(selectedPeriod, selectedYear);
   const { ownershipMap, isAdmin, isLoading: ownershipLoading } = useOrgKpiOwnershipMap();
   // ADR-057 — if the user is a registered data owner but RLS returned zero
   // KPIs, surface a louder error instead of the generic "no KPIs" empty state.
