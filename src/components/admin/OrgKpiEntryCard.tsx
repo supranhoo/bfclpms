@@ -257,11 +257,14 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
           setScopedValues(prev => prev.map(row => {
             const dbRow = data.scopedRows!.find(r => r.scopeId === row.scopeId);
             if (!dbRow) return row;
+            // Always sync non-editable propagation status from snapshot
+            // truth, even while the user is editing other rows.
+            const nextStatus = dbRow.status ?? row.status;
             // If local achievedValue is null but DB has a real value, take DB value
             if (row.achievedValue === null && dbRow.achievedValue !== null) {
-              return { ...row, achievedValue: dbRow.achievedValue };
+              return { ...row, achievedValue: dbRow.achievedValue, status: nextStatus };
             }
-            return row;
+            return nextStatus !== row.status ? { ...row, status: nextStatus } : row;
           }));
         }
         // For org-scope: merge achieved value from DB if local is null
@@ -335,15 +338,25 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
         // If the user intentionally removed evidence on this row, do NOT
         // rehydrate the evidenceUrl from a stale DB snapshot.
         const evidenceTouched = touchedEvidenceScopeIdsRef.current.has(row.scopeId);
-        const needsMerge =
+        // RCA 2026-05-08 (follow-up) — propagation status is non-editable
+        // metadata derived from the snapshot/scorecard truth. It MUST flow
+        // from the latest `data.scopedRows` into the local copy regardless
+        // of whether other editable fields needed merging — otherwise the
+        // header "X propagated / Y not propagated" badge stays stuck on the
+        // old value after a successful Propagate.
+        const statusChanged = (row.status ?? 'pending') !== (dbRow.status ?? 'pending');
+        const needsValueMerge =
           (row.subFactors === undefined && dbRow.subFactors !== undefined) ||
           (row.achievedValue === null && dbRow.achievedValue !== null) ||
           (row.remarks === '' && dbRow.remarks) ||
           (!evidenceTouched && row.evidenceUrl === null && dbRow.evidenceUrl !== null);
-        if (needsMerge) {
+        if (statusChanged || needsValueMerge) {
           changed = true;
           return {
             ...row,
+            // Refreshable, non-editable metadata from snapshot truth.
+            status: dbRow.status ?? row.status,
+            // Editable fields — only fill in when local is empty.
             subFactors: row.subFactors ?? dbRow.subFactors,
             achievedValue: row.achievedValue ?? dbRow.achievedValue,
             remarks: row.remarks || dbRow.remarks,

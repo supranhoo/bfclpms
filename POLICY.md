@@ -11,6 +11,14 @@ from the snapshot RPC `get_org_kpi_data_entry_snapshot.propagatedEmpIdsByKey`.
 - The header summary (`X propagated / Y not propagated`) is computed from
   the same `ScopedRow.status` values and remains visible whenever any
   row carries a value, including one-sided distributions (50/0).
+- Any local copy of `data.scopedRows` (e.g. `OrgKpiEntryCard.scopedValues`)
+  MUST sync the non-editable `status` field from the latest snapshot on
+  every refetch, even while the user is editing other fields. The row
+  identity guard (`scopedRowsSignature`) MUST therefore include `status`
+  so an `entered → propagated` flip is detected as a real change. Without
+  this, a successful Propagate leaves the header stuck at
+  "0 propagated / N not propagated" because the id set is unchanged.
+  Regression: `src/test/orgKpiCounts.test.ts` ("status flips entered -> propagated").
 
 Rationale: independent browser joins drift from the snapshot whenever
 normalization, RLS, or query coverage diverges, which produced the
