@@ -416,6 +416,7 @@ export function useBulkPropagateOrgKpiValues() {
       queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-submission-fallback'] });
       if (result.propagatedCount > 0) {
         const overwroteMsg = result.overwrittenCount && result.overwrittenCount > 0
           ? ` (${result.overwrittenCount} prior value${result.overwrittenCount === 1 ? '' : 's'} overwritten)`
