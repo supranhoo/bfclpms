@@ -4,11 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Wrench, CheckCircle2, AlertTriangle, ArrowRight, Eye } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Loader2, Wrench, CheckCircle2, AlertTriangle, ArrowRight, Eye, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useKpiDefinitions, useCorrectMayKpis, KpiDefinition } from '@/hooks/useKpiRegistry';
 import { useToast } from '@/hooks/use-toast';
 import { AffectedKpisTable } from './AffectedKpisTable';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { RegistryPager, pagedSlice } from './RegistryPager';
 
 interface UnlinkedSignature {
   kra_name: string;
@@ -32,6 +35,10 @@ export function CorrectMayKpisTab() {
   const [mappings, setMappings] = useState<Record<string, string>>({});
   const [corrected, setCorrected] = useState<Set<string>>(new Set());
   const [viewingKey, setViewingKey] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const fetchUnlinked = useCallback(async () => {
     setLoading(true);
@@ -134,6 +141,32 @@ export function CorrectMayKpisTab() {
     return !corrected.has(key);
   });
 
+  const filteredUnlinked = useMemo(() => {
+    if (!debouncedSearch.trim()) return pendingUnlinked;
+    const s = debouncedSearch.toLowerCase();
+    return pendingUnlinked.filter(sig =>
+      sig.kra_name.toLowerCase().includes(s) ||
+      sig.kpi_name.toLowerCase().includes(s)
+    );
+  }, [pendingUnlinked, debouncedSearch]);
+
+  const pagedUnlinked = useMemo(
+    () => pagedSlice(filteredUnlinked, page, pageSize),
+    [filteredUnlinked, page, pageSize],
+  );
+
+  // Build category → definitions index ONCE per definitions change so each
+  // row's <Select> does not re-filter the full registry on every render.
+  const defsByCategory = useMemo(() => {
+    const m = new Map<string, KpiDefinition[]>();
+    for (const d of definitions) {
+      const arr = m.get(d.category_id);
+      if (arr) arr.push(d);
+      else m.set(d.category_id, [d]);
+    }
+    return m;
+  }, [definitions]);
+
   return (
     <div className="space-y-4">
       <Card>
@@ -176,6 +209,18 @@ export function CorrectMayKpisTab() {
             </Badge>
           </div>
 
+          {pendingUnlinked.length > 0 && (
+            <div className="relative mb-3">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by KRA or KPI name..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+          )}
+
           {loading || defsLoading ? (
             <div className="text-center py-8">
               <Loader2 className="h-6 w-6 animate-spin mx-auto" />
@@ -186,11 +231,22 @@ export function CorrectMayKpisTab() {
               <p className="font-medium">All KPIs for {period} {year} are linked!</p>
             </div>
           ) : (
-            <div className="space-y-3 max-h-[500px] overflow-y-auto">
-              {pendingUnlinked.map(sig => {
+            <>
+            <RegistryPager
+              page={page}
+              pageSize={pageSize}
+              total={filteredUnlinked.length}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              resetKey={`${period}|${year}|${debouncedSearch}`}
+              className="mb-3"
+            />
+            <div className="space-y-3">
+              {pagedUnlinked.map(sig => {
                 const key = `${sig.category_id}::${sig.kra_name}::${sig.kpi_name}`;
                 const selectedDefId = mappings[key];
                 const selectedDef = definitions.find(d => d.id === selectedDefId);
+                const categoryDefs = defsByCategory.get(sig.category_id) ?? [];
 
                 return (
                   <div key={key} className="border rounded-lg p-3 space-y-2">
@@ -214,13 +270,11 @@ export function CorrectMayKpisTab() {
                           <SelectValue placeholder="Select canonical definition..." />
                         </SelectTrigger>
                         <SelectContent>
-                          {definitions
-                            .filter(d => d.category_id === sig.category_id)
-                            .map(d => (
-                              <SelectItem key={d.id} value={d.id} className="text-xs">
-                                {d.canonical_kra_name} → {d.canonical_kpi_name.slice(0, 80)}
-                              </SelectItem>
-                            ))}
+                          {categoryDefs.map(d => (
+                            <SelectItem key={d.id} value={d.id} className="text-xs">
+                              {d.canonical_kra_name} → {d.canonical_kpi_name.slice(0, 80)}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <Button
@@ -271,6 +325,7 @@ export function CorrectMayKpisTab() {
                 );
               })}
             </div>
+            </>
           )}
         </CardContent>
       </Card>
