@@ -12,6 +12,8 @@ import { useToast } from '@/hooks/use-toast';
 import { AffectedKpisTable } from './AffectedKpisTable';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { RegistryPager, pagedSlice } from './RegistryPager';
 import {
   BucketId,
   SKIP_BUCKET,
@@ -38,8 +40,11 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
   const { createDefinitionWithAliases, createMultipleDefinitionsWithAliases, saving } = useBuildRegistry();
   const { skipGroup, unskipGroup, saving: skipSaving } = useScannerSkips();
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [includeSkipped, setIncludeSkipped] = useState(false);
   const [sensitivity, setSensitivity] = useState<string>('balanced');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   // Per-group bucket assignments: groupKey -> variantIndex -> bucketId.
   const [bucketAssignments, setBucketAssignments] = useState<Record<string, Record<number, BucketId>>>({});
   // Per-group, per-bucket canonical text overrides: groupKey -> bucketId -> {kra,kpi}.
@@ -71,18 +76,23 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
   }, [includeSkipped, currentThreshold]);
 
   const filteredGroups = useMemo(() => {
-    if (!search.trim()) return groups;
-    const s = search.toLowerCase();
+    if (!debouncedSearch.trim()) return groups;
+    const s = debouncedSearch.toLowerCase();
     return groups.filter(g =>
       g.normalized_kpi.includes(s) ||
       g.category_name?.toLowerCase().includes(s) ||
       g.variants.some(v => v.kra_name.toLowerCase().includes(s))
     );
-  }, [groups, search]);
+  }, [groups, debouncedSearch]);
 
   const visibleGroups = filteredGroups.filter(g => !processedGroups.has(groupKey(g)));
   const skippedCount = filteredGroups.filter(g => g.is_skipped).length;
   const pendingCount = visibleGroups.filter(g => !g.is_skipped).length;
+  const pagedGroups = useMemo(
+    () => pagedSlice(visibleGroups, page, pageSize),
+    [visibleGroups, page, pageSize],
+  );
+  const resetKey = `${debouncedSearch}|${sensitivity}|${includeSkipped ? 1 : 0}`;
 
   const setBucketFor = (key: string, idx: number, bucket: BucketId) => {
     setBucketAssignments(prev => ({
@@ -235,7 +245,18 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
         </div>
       )}
 
-      {visibleGroups.map((group) => {
+      {visibleGroups.length > 0 && (
+        <RegistryPager
+          page={page}
+          pageSize={pageSize}
+          total={visibleGroups.length}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          resetKey={resetKey}
+        />
+      )}
+
+      {pagedGroups.map((group) => {
         const key = groupKey(group);
         const drillIdx = drillIn[key];
         const isSkipped = !!group.is_skipped;

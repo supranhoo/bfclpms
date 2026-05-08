@@ -19,6 +19,7 @@ import {
 } from '@/hooks/useRegistrySuggestions';
 import { usePromoteSignature } from '@/hooks/useCanonicalAutolink';
 import { format } from 'date-fns';
+import { RegistryPager, pagedSlice } from './RegistryPager';
 
 /**
  * Phase 4b: Auto-merge suggestion review surface.
@@ -48,6 +49,20 @@ export function SuggestionsTab() {
   // linked KPIs, but always lets the admin flip it before confirming.
   const [pendingMerge, setPendingMerge] = useState<DefinitionMergeSuggestion | null>(null);
   const [keepLeft, setKeepLeft] = useState(true);
+
+  const [defPage, setDefPage] = useState(1);
+  const [defPageSize, setDefPageSize] = useState(25);
+  const [aliasPage, setAliasPage] = useState(1);
+  const [aliasPageSize, setAliasPageSize] = useState(25);
+
+  const pagedDefMerges = useMemo(
+    () => pagedSlice(defMerges, defPage, defPageSize),
+    [defMerges, defPage, defPageSize],
+  );
+  const pagedAliasCandidates = useMemo(
+    () => pagedSlice(aliasCandidates, aliasPage, aliasPageSize),
+    [aliasCandidates, aliasPage, aliasPageSize],
+  );
 
   const openMergeDialog = (row: DefinitionMergeSuggestion, keep: 'left' | 'right') => {
     setKeepLeft(keep === 'left');
@@ -139,7 +154,17 @@ export function SuggestionsTab() {
           ) : defMerges.length === 0 ? (
             <EmptyState message="No merge candidates at the current similarity threshold." />
           ) : (
-            <div className="rounded-md border overflow-auto max-h-[520px]">
+            <>
+            <RegistryPager
+              page={defPage}
+              pageSize={defPageSize}
+              total={defMerges.length}
+              onPageChange={setDefPage}
+              onPageSizeChange={setDefPageSize}
+              resetKey={String(defMergeThreshold)}
+              className="mb-2"
+            />
+            <div className="rounded-md border overflow-auto">
               <Table>
                 <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow>
@@ -153,7 +178,7 @@ export function SuggestionsTab() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {defMerges.map((row) => (
+                  {pagedDefMerges.map((row) => (
                     <TableRow key={`${row.left_id}-${row.right_id}`}>
                       <TableCell className="text-xs text-muted-foreground">{row.category_name}</TableCell>
                       <TableCell className="text-xs">
@@ -217,6 +242,7 @@ export function SuggestionsTab() {
                 </TableBody>
               </Table>
             </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -238,7 +264,17 @@ export function SuggestionsTab() {
           ) : aliasCandidates.length === 0 ? (
             <EmptyState message="No alias candidates at the current similarity threshold." />
           ) : (
-            <div className="rounded-md border overflow-auto max-h-[520px]">
+            <>
+            <RegistryPager
+              page={aliasPage}
+              pageSize={aliasPageSize}
+              total={aliasCandidates.length}
+              onPageChange={setAliasPage}
+              onPageSizeChange={setAliasPageSize}
+              resetKey={String(aliasThreshold)}
+              className="mb-2"
+            />
+            <div className="rounded-md border overflow-auto">
               <Table>
                 <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow>
@@ -253,7 +289,7 @@ export function SuggestionsTab() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {aliasCandidates.map((row) => (
+                  {pagedAliasCandidates.map((row) => (
                     <AliasCandidateRow
                       key={`${row.signature_id}-${row.definition_id}`}
                       row={row}
@@ -277,6 +313,7 @@ export function SuggestionsTab() {
                 </TableBody>
               </Table>
             </div>
+            </>
           )}
         </CardContent>
       </Card>
