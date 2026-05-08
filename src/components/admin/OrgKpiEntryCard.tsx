@@ -257,11 +257,14 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
           setScopedValues(prev => prev.map(row => {
             const dbRow = data.scopedRows!.find(r => r.scopeId === row.scopeId);
             if (!dbRow) return row;
+            // Always sync non-editable propagation status from snapshot
+            // truth, even while the user is editing other rows.
+            const nextStatus = dbRow.status ?? row.status;
             // If local achievedValue is null but DB has a real value, take DB value
             if (row.achievedValue === null && dbRow.achievedValue !== null) {
-              return { ...row, achievedValue: dbRow.achievedValue };
+              return { ...row, achievedValue: dbRow.achievedValue, status: nextStatus };
             }
-            return row;
+            return nextStatus !== row.status ? { ...row, status: nextStatus } : row;
           }));
         }
         // For org-scope: merge achieved value from DB if local is null
