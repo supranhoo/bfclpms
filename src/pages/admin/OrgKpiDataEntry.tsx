@@ -497,6 +497,14 @@ export default function OrgKpiDataEntry() {
           : (deptFb ? deptFb.achievedValue : null);
         const deptIsNa = okvIsNa
           || (okvAchieved === null && deptFb ? deptFb.isNa : false);
+        // RCA-2026-05-08 — see employee branch. Department row badge
+        // reflects whether ANY contributing employee scorecard exists,
+        // not just OKV.status which is set out-of-band.
+        const deptOkvStatus = (val?.status as string | undefined) ?? null;
+        let deptRowStatus: 'pending' | 'entered' | 'propagated' | 'approved' = 'pending';
+        if (deptOkvStatus === 'approved') deptRowStatus = 'approved';
+        else if (deptFb) deptRowStatus = 'propagated';
+        else if (okvAchieved !== null || okvIsNa) deptRowStatus = 'entered';
         return {
             scopeId: deptId,
             scopeName: deptName,
@@ -510,10 +518,8 @@ export default function OrgKpiDataEntry() {
             uomType: (kpi as any).uom_type || 'numeric',
             qualitativeOptions: (kpi as any).qualitative_options || null,
             subFactors: val?.sub_factors ?? undefined,
-            // Per-row OKV status drives the inline "Propagated / Not propagated"
-            // pill in OrgKpiScopedEntryTable so admins can see exactly which
-            // department rows are still waiting on the Propagate action.
-            status: ((val?.status as any) ?? 'pending'),
+            // Scorecard-truth status — see RCA note above.
+            status: deptRowStatus,
           };
       });
     } else if (scope === 'employee') {
