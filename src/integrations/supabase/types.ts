@@ -8405,6 +8405,41 @@ export type Database = {
         Args: { p_frequency: string; p_month_idx: number }
         Returns: string
       }
+      resolve_org_kpi_target_kpis: {
+        Args: {
+          p_category_id: string
+          p_department_id?: string
+          p_employee_id?: string
+          p_kpi_name: string
+          p_kra_name: string
+          p_review_period: string
+          p_review_year: number
+          p_scope?: string
+        }
+        Returns: {
+          criteria: string
+          department_id: string
+          department_name: string
+          employee_code: string
+          employee_id: string
+          full_name: string
+          id: string
+          is_org_level: boolean
+          org_level_scope: string
+          qualitative_options: Json
+          r0: number
+          r1: number
+          r2: number
+          r3: number
+          r4: number
+          r5: number
+          target_value: number
+          threshold_mode: string
+          uom: string
+          uom_type: string
+          weightage: number
+        }[]
+      }
       resolve_terminal_period: {
         Args: {
           p_frequency: string
