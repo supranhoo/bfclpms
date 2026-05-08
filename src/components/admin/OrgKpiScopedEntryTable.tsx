@@ -36,6 +36,12 @@ export interface ScopedRow {
   uomType?: 'numeric' | 'binary' | 'tiered' | null;
   qualitativeOptions?: Array<{ label: string; rating: number; definition: string }> | null;
   subFactors?: ComplianceSubFactors | null;
+  /**
+   * Per-row OKV status — drives the inline pill so admins can tell at a glance
+   * which rows have been propagated to employee scorecards and which still
+   * need the Propagate action. Defaults to 'pending' when omitted.
+   */
+  status?: 'pending' | 'entered' | 'propagated' | 'approved';
 }
 
 export interface ObservationCounts {
@@ -89,6 +95,12 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
   const sentBackCount = sentBackMap?.size ?? 0;
   const effectiveTotal = typeof totalCount === 'number' && totalCount > rows.length ? totalCount : rows.length;
   const hasHidden = effectiveTotal > rows.length;
+
+  // Per-row propagation breakdown (drives the new "X propagated / Y not" hint
+  // next to the entered count).
+  const propagatedCount = rows.filter(r => r.status === 'propagated' || r.status === 'approved').length;
+  const notPropagatedCount = rows.filter(r => (r.status ?? 'pending') === 'entered').length;
+  const showStatusBreakdown = propagatedCount > 0 && notPropagatedCount > 0;
 
   const hasSelectionFeature = !!onSelectionChange;
   const hasRowPropagation = !!onPropagateRow;
@@ -161,6 +173,18 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
             <span className={allEntered ? 'text-green-600 dark:text-green-400 font-medium' : 'text-muted-foreground'}>
               ({enteredCount} / {hasHidden ? `${rows.length} visible` : rows.length} entered{naCount > 0 ? `, ${naCount} N/A` : ''})
             </span>
+            {showStatusBreakdown && (
+              <span className="flex items-center gap-1.5 text-[11px] font-normal">
+                <Badge variant="outline" className="h-4 px-1.5 font-normal border-green-300 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400 gap-0.5">
+                  <ArrowUpRight className="w-2.5 h-2.5" />
+                  {propagatedCount} propagated
+                </Badge>
+                <Badge variant="outline" className="h-4 px-1.5 font-normal border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/30 dark:text-orange-400 gap-0.5">
+                  <CheckCircle2 className="w-2.5 h-2.5" />
+                  {notPropagatedCount} not propagated
+                </Badge>
+              </span>
+            )}
             {sentBackCount > 0 && (
               <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-400 gap-0.5">
                 <Undo2 className="w-2.5 h-2.5" />
@@ -361,6 +385,43 @@ const obsStatusConfig: Record<string, { label: string; variant: 'outline' | 'sec
   resolved: { label: 'Resolved', variant: 'default' },
 };
 
+// ---- Per-row propagation status pill ----
+// Mirrors the colour tokens used by OrgKpiEntryCard's header statusConfig so
+// the per-row badge reads consistently with the card-level pill.
+function RowStatusPill({ status }: { status?: ScopedRow['status'] }) {
+  const s = status ?? 'pending';
+  if (s === 'propagated') {
+    return (
+      <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-green-300 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400 gap-0.5">
+        <ArrowUpRight className="w-2.5 h-2.5" />
+        Propagated
+      </Badge>
+    );
+  }
+  if (s === 'approved') {
+    return (
+      <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400 gap-0.5">
+        <CheckCircle2 className="w-2.5 h-2.5" />
+        Approved
+      </Badge>
+    );
+  }
+  if (s === 'entered') {
+    return (
+      <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/30 dark:text-orange-400 gap-0.5">
+        <CheckCircle2 className="w-2.5 h-2.5" />
+        Not propagated
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal text-muted-foreground border-muted-foreground/30 gap-0.5">
+      <Clock className="w-2.5 h-2.5" />
+      Pending
+    </Badge>
+  );
+}
+
 // ---- Per-row propagate cell with confirmation dialog ----
 function PerRowPropagateCell({ canPropagate, isPropagating, employeeName, onConfirm }: {
   canPropagate: boolean;
@@ -489,6 +550,8 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
                   {row.designation}
                 </Badge>
               )}
+              {/* Per-row propagation status — see RowStatusPill */}
+              <RowStatusPill status={row.status} />
               {/* Sent-back indicator */}
               {isSentBack && (
                 <TooltipProvider>
@@ -844,6 +907,9 @@ function DepartmentRow({ row, onValueChange, ratingThresholds, targetValue, uom,
           {row.scopeSubText && (
             <span className="text-xs text-muted-foreground mt-0.5">{row.scopeSubText}</span>
           )}
+          <div className="mt-0.5">
+            <RowStatusPill status={row.status} />
+          </div>
           {isSentBack && (
             <TooltipProvider>
               <Tooltip>
