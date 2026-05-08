@@ -1,42 +1,78 @@
-## Why the file comes back
 
-The remove button only clears the file URL in local React state, then waits for the debounced auto-save. During the next 2–5 seconds, realtime/query refetches still return the old `evidence_url` from the database, and the card merge logic treats `null` local evidence as “missing data” and restores the database URL.
+## Problem
 
-There is a second risk in the same area: the merge logic in `OrgKpiEntryCard.tsx` explicitly does this for scoped rows:
+For the "On-Time Completion of HR Interventions" KPI (April 2026, scope=`employee`), after the user enters values for Avinash (20) and Debadutta (0) and clicks **Propagate**:
+
+- Propagation succeeds — `review_submissions.achieved_value` is updated and `kpis.status` advances to `self_review` (verified in DB).
+- The entry table re-renders showing **"—" everywhere** and the header drops back to "0 / 2 entered".
+- The **Impact** sheet still shows the correct propagated values (it reads from `review_submissions` / `kpis`).
+
+This is the inconsistency in the screenshots. It looks to the data‑entry user as if the data has vanished, even though it actually went through.
+
+## Root cause
+
+`OrgKpiDataEntry.tsx` builds the entry table's `scopedRows` (lines ~511–540) **only** from `existingValuesMap`, which is `org_kpi_values` keyed on `(category_id, kra_name, kpi_name, period, year, dept_id, emp_id)`.
+
+For this KPI in April 2026, only a legacy **org‑scope** OKV row exists (`employee_id = NULL`, `status = 'pending'`, `achieved_value = NULL`). No per‑employee OKV rows exist for April. So:
+
+- `existingValuesMap.get('…||null||<empId>')` → `undefined`
+- Each scoped row is rendered with `achievedValue = null` → "—" in the cell
+- The entered count drops to `0 / 2`
+
+The Impact sheet reads from `review_submissions`, where propagation actually wrote `20` and `0`, so it stays correct. Two surfaces, two truths — exactly the kind of drift ADR‑055 / ADR‑056 were written to prevent for the tile chip.
+
+## Fix (UI / read‑model only — no schema changes)
+
+Make the entry table mirror the same source of truth as Impact when the OKV row is missing after propagation.
+
+### 1. Add a per‑KPI `review_submissions` snapshot to the page
+
+In `src/pages/admin/OrgKpiDataEntry.tsx`:
+
+- For the currently visible employee‑scoped Org KPIs, fetch a slim `(kpi_id → { achieved_value, is_na })` map from `review_submissions`, keyed via `employeeKpiIdsMap` already exposed by `useOrgLevelKpisWithEmployees`.
+- Cache via React Query, scoped to `(selectedPeriod, selectedYear, visible kpi ids)`. No new policies; reuses existing read access.
+
+### 2. Fallback hydration in `scopedRows`
+
+In the `scope === 'employee'` branch (and the equivalent `department` branch), when building each scoped row:
 
 ```text
-row.evidenceUrl === null && dbRow.evidenceUrl !== null → restore db evidenceUrl
+achievedValue =
+   org_kpi_values.achieved_value
+   ?? review_submissions.achieved_value   // NEW fallback
+   ?? null
+isNa =
+   org_kpi_values.is_na
+   ?? review_submissions.is_na
+   ?? false
 ```
 
-That is correct for initial loading, but wrong after a user intentionally clicks remove.
+This makes the row show the propagated value even when its per‑employee OKV row was never written (legacy data) or is briefly stale.
 
-## Risk & Impact Report
+### 3. Status reconciliation for the header chip
 
-- **Data Impact:** No schema/RLS/storage changes. Existing historical rows remain intact. The fix only changes when `org_kpi_values.evidence_url` is updated to `null`.
-- **Workflow Impact:** File removal will become an intentional saved edit, same as upload. It will not change approvals, propagation, score logic, or permissions.
-- **UI/UX Consistency:** The file will disappear immediately and stay removed after refetch/autosave. Existing upload/view/remove UI remains unchanged.
-- **Regression Risk:** Medium-low. The sensitive part is preserving the existing “merge DB data after refetch” behavior for untouched rows while blocking it only for rows whose evidence was intentionally edited.
-- **Mitigation Plan:** Add explicit evidence-touch tracking and a regression test around merge behavior/removal persistence.
+Reuse `deriveOrgKpiTileStatus` (ADR‑056) — it already cross‑checks `kpis.status` and will report `propagated` correctly for this KPI. Just ensure the row counter ("X / Y entered") considers the fallback value above so it shows `2 / 2` instead of `0 / 2` after propagation.
 
-## Implementation Plan
+### 4. Backfill safety net (optional, behind existing Data Repair)
 
-1. **Track evidence edits explicitly**
-   - In `OrgKpiEntryCard.tsx`, add tracking for organization-level evidence and per-scoped-row evidence changes.
-   - When `OrgKpiFileUpload` calls `onUploadComplete(null)`, mark that evidence field as intentionally touched before auto-save runs.
+Add a small repair action under `Data Repair` that, for any employee‑scope KPI where `kpis.status` is past `kra_set` but no per‑employee `org_kpi_values` row exists, inserts one with `status = 'propagated'` copying `achieved_value` from `review_submissions`. This is purely cleanup for legacy rows; the UI fix above does not depend on it.
 
-2. **Stop refetch merge from restoring removed evidence**
-   - Update the scoped-row merge logic so `dbRow.evidenceUrl` is only merged into local state when that row’s evidence has not been touched in the current edit session.
-   - Do the same for organization-scope evidence so an old DB value cannot overwrite a local removal before save completes.
+### 5. Tests
 
-3. **Persist removal immediately through the existing save path**
-   - Keep using the existing `onSave` / `useBulkUpsertOrgKpiValues` flow so `evidence_url: null` is saved to `org_kpi_values`.
-   - Ensure removal sets dirty state and triggers the same debounce/autosave behavior as upload.
+- `src/test/orgKpiPostPropagationHydration.test.ts`
+   - OKV row missing + RS has value → row shows the RS value, counter increments.
+   - OKV row present with value → OKV wins (no regression).
+   - OKV row present with `null` + RS has value → RS fallback used.
+   - `is_na` from RS surfaces correctly.
 
-4. **Regression coverage**
-   - Add or update a focused unit test covering:
-     - untouched empty evidence may hydrate from DB,
-     - intentionally removed evidence is not rehydrated by a later DB/refetch snapshot,
-     - saved payload can carry `evidence_url: null`.
+## Risk & impact
 
-5. **Documentation sync**
-   - Update the relevant internal documentation/policy note for org-KPI evidence removal behavior and add a version-history entry, as required by project instructions.
+- **Data**: read‑only change in the page; no schema, RLS, or storage changes. Optional repair is opt‑in.
+- **Workflow**: none — propagation logic untouched. Only the entry table's read model changes.
+- **UI/UX**: removes the "values vanished" surprise; entry table and Impact agree.
+- **Regression**: low. Fallback only fires when OKV is missing/null; OKV remains the primary source.
+- **Mitigation**: covered by the new tests plus the existing `orgKpiTileStatus` / `orgKpiStatusShared` guards.
+
+## Out of scope
+
+- Changing `propagate_org_kpi_value` to also upsert per‑employee `org_kpi_values` rows. That is a deeper change and is what the optional Data Repair action would clean up retroactively; we can take it as a follow‑up ADR if desired.

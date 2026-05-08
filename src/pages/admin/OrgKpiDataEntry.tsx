@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKraCategories, useDepartments, useProfiles } from '@/hooks/useOrganization';
 import { useOrgKpiValues, useBulkUpsertOrgKpiValues, useClearOrgKpiEntry, OrgKpiValue } from '@/hooks/useOrgKpiValues';
+import { useOrgKpiSubmissionFallback } from '@/hooks/useOrgKpiSubmissionFallback';
 import { useOrgLevelKpisWithEmployees, useOrgLevelKpis } from '@/hooks/useOrgLevelKpis';
 import { useOrgKpiOwnershipMap } from '@/hooks/useOrgKpiDataOwner';
 import { useIsAnyOrgKpiDataOwner } from '@/hooks/useOrgKpiDataOwner';
@@ -117,6 +118,10 @@ export default function OrgKpiDataEntry() {
   const { data: departments } = useDepartments();
   const { data: allProfiles } = useProfiles();
   const { data: existingOrgValues } = useOrgKpiValues(undefined, selectedPeriod, selectedYear);
+  // Post-propagation fallback: surface review_submissions values when the
+  // per-employee org_kpi_values row is missing/null (prevents the table
+  // from going blank while Impact still shows the propagated number).
+  const { data: submissionFallbackMap } = useOrgKpiSubmissionFallback(selectedPeriod, selectedYear);
   const { ownershipMap, isAdmin, isLoading: ownershipLoading } = useOrgKpiOwnershipMap();
   // ADR-057 — if the user is a registered data owner but RLS returned zero
   // KPIs, surface a louder error instead of the generic "no KPIs" empty state.
@@ -522,15 +527,22 @@ export default function OrgKpiDataEntry() {
           const val = existingValuesMap.get(scopeKey);
           const empTargetKey = `${kk2}||${empId}`;
           const empTarget = employeeTargetMap?.[empTargetKey];
+          // Post-propagation fallback (see useOrgKpiSubmissionFallback).
+          const fbKey = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||${empId}`;
+          const fb = submissionFallbackMap?.get(fbKey);
+          const fallbackAchieved =
+            val?.achieved_value ?? (fb ? fb.achievedValue : null);
+          const fallbackIsNa =
+            (val?.is_na ?? false) || (val == null && fb ? fb.isNa : false);
           return {
             scopeId: empId,
             scopeName: fullName || emp?.email || `Employee ${empId.slice(0, 6)}`,
             departmentName,
             designation,
-            achievedValue: val?.achieved_value ?? null,
+            achievedValue: fallbackAchieved,
             remarks: val?.remarks ?? '',
             evidenceUrl: val?.evidence_url ?? null,
-            isNa: val?.is_na ?? false,
+            isNa: fallbackIsNa,
             targetValue: empTarget?.target_value ?? null,
             uom: empTarget?.uom ?? null,
             uomType: (kpi as any).uom_type || 'numeric',
@@ -583,7 +595,7 @@ export default function OrgKpiDataEntry() {
       qualitativeOptions: (kpi as any).qualitative_options || null,
       criteria: (kpi as any).criteria || null,
     };
-  }, [existingValuesMap, prevValuesMap, departments, allProfiles, prev, employeeCountMap, mappedDepartmentsMap, mappedEmployeesMap, employeeTargetMap, employeeDisplayMap, departmentDisplayMap]);
+  }, [existingValuesMap, prevValuesMap, departments, allProfiles, prev, employeeCountMap, mappedDepartmentsMap, mappedEmployeesMap, employeeTargetMap, employeeDisplayMap, departmentDisplayMap, submissionFallbackMap]);
 
   // Save handler for a single card
   const handleCardSave = useCallback(async (
