@@ -1,108 +1,71 @@
-# Add per-employee KRA Rollover from the scorecard header
+## What the user is seeing
 
-## Feasibility
+After a successful Propagate on `/admin/org-kpi-data`:
+- **Impact** sheet shows the propagated value (it reads `review_submissions`).
+- **Entry table** for the same KPI shows blank ("—") for every scope row.
 
-**High — minimal new code required.** The existing admin rollover flow already scopes by employee:
+This is the same class of bug we fixed in May for **employee-scope** KPIs via `useOrgKpiSubmissionFallback` (ADR pending) — but the fix was only wired into the **employee** branch of `buildCardData`. The **department** and **organization** branches still read OKV only, so the values look "vanished" on those scopes.
 
-- `RolloverDialog` (`src/components/admin/RolloverDialog.tsx`) drives the entire 3-step flow (Configure → Preview → Results) and calls the `auto-rollover-kpis` edge function with an optional `employee_ids: string[]` filter. Single-employee mode is just `employee_ids: [employee.id]`.
-- The "KPI Details" header in `UnifiedScorecard.tsx` already hosts admin-only buttons (`Zero-Score`, `KRA Export`, `Add KRA`), each gated by `isAdmin`. Adding one more button alongside them is the same pattern.
-- The dialog already supports preview, conflict resolution (balance-only), Excel report download, and react-query invalidation of `['kpis']` — all of which we want in the per-employee flow too.
+That matches both reports:
+- Ankan (101967 / 101962) — Training & Development KPI is employee-scope but one OKV row has `achieved_value = NULL` with `is_na = false` (DB confirmed). Fallback resolution edge case isn't bullet-proof when `val` exists with NULL achieved.
+- Vivek's "SOP KPI" — almost certainly department- or organization-scope (SOP adherence KPIs are typically org-wide), so the existing employee-only fallback never runs.
 
-No DB / RLS / RPC changes. UI-only with one small prop addition to the existing dialog.
+## RCA (single source of truth)
 
-## Plan
+`src/pages/admin/OrgKpiDataEntry.tsx → buildCardData`:
 
-### 1. Extend `RolloverDialog` with a "scoped" mode (one extra prop)
+| scope | line | fallback applied? |
+|---|---|---|
+| `employee` | 533–536 | ✅ uses `submissionFallbackMap` |
+| `department` | 494 | ❌ `val?.achieved_value ?? null` |
+| `organization` | 584 | ❌ `existing?.achieved_value ?? null` |
 
-Add a new optional prop block to `RolloverDialogProps`:
+Also for the employee branch, `fallbackIsNa` short-circuits when `val` exists, so a row written by Propagate with `achieved_value = NULL, is_na = false` correctly reads the fallback for `achievedValue` but never re-checks `is_na` from the submission.
 
-```ts
-scopedEmployee?: { id: string; name: string; code?: string };
-```
+## Fix (UI / hook only — no DB, no RPC change)
 
-When `scopedEmployee` is present, the dialog:
+### 1. Broaden `useOrgKpiSubmissionFallback`
+`src/hooks/useOrgKpiSubmissionFallback.ts`:
+- Drop `.eq('org_level_scope', 'employee')` so the index covers `employee`, `department`, and `organization` rows.
+- Continue keying employee-scope entries `${defKey}||${employeeId}`.
+- Add a department-aggregated key `${defKey}||dept||${departmentId}` resolved as the **non-null mode** (most common) of `review_submissions.achieved_value` across the department's mapped employee KPIs. If all employees agree, that's the propagated value; if they diverge, prefer the most recent submission.
+- Add an organization-aggregated key `${defKey}||org` using the same mode rule across all mapped employee KPIs for that definition.
+- Both aggregates also report `isNa` (true only if every contributing submission is NA).
 
-- Forces `allEmployees = false` and `selectedEmployeeIds = [scopedEmployee.id]` on open.
-- Hides the "All Employees" switch and the employee picker list (replace with a read-only banner: `Rolling over KRAs for <name> (<code>)`).
-- Defaults `targetMonth/Year` to the currently-displayed scorecard period (passed in via prop).
-- Defaults `sourceMonth/Year` to the previous month of that target.
-- Title becomes `KRA Rollover — <name>`.
+### 2. Wire the fallback into the missing scopes in `buildCardData`
+- **department** branch: replace line 494 with the same `val?.achieved_value ?? fb.achievedValue` pattern, looking up `${kpiKey}||dept||${deptId}`. Mirror the `isNa` logic.
+- **organization** branch: replace line 584 with `existing?.achieved_value ?? fb.achievedValue` using `${kpiKey}||org`.
+- Add `submissionFallbackMap` to the `useCallback` dep array (already present for the employee branch).
 
-Everything else (preview, conflicts, balance-only, results, Excel report) is reused unchanged. Edge-function payload is identical because it already accepts `employee_ids`.
+### 3. Tighten employee-branch `isNa` fallback
+- When OKV row exists with `achieved_value = NULL` AND `is_na = false`, treat as "value missing" and read both `achievedValue` and `isNa` from the fallback. Prevents the "row exists but blank" edge case Ankan hit on his March entry.
 
-Add two more optional props for the period defaults so the parent can hand them in:
+### 4. Refresh after Propagate
+Confirm `usePropagateOrgKpiValue.onSuccess` already invalidates `org-kpi-submission-fallback` (it does — line 325/419). No change needed.
 
-```ts
-defaultTargetMonth?: string;
-defaultTargetYear?: number;
-```
+### 5. Tests
+- Extend `src/test/orgKpiPostPropagationHydration.test.ts` with three new locked cases:
+  - department scope row resolves from fallback when OKV achieved is NULL,
+  - organization scope row resolves from fallback when OKV row absent,
+  - employee row with `val.achieved_value=null, val.is_na=false` resolves both `achievedValue` AND `isNa` from fallback.
 
-Backwards-compatible: existing call site in `SystemSettings.tsx` keeps current behavior when these props are omitted.
+## Risk & impact
 
-### 2. Add an admin-only "Rollover KRAs" button in `UnifiedScorecard`
+- **Data:** read-only; no schema, no RLS, no RPC change. Snapshot immutability (POLICY §88) preserved — fallback only feeds the entry-table display, never writes.
+- **Workflow:** no change to Propagate, save, or scoring engine.
+- **UI/UX:** entry table now matches Impact sheet on every scope. Eliminates the "vanished data" confusion for data-entry users.
+- **Regression risk:** low. Fallback is additive and gated on `val.achieved_value` being null/missing, so OKV-authoritative rows are unchanged.
+- **Mitigation:** unit tests above + the existing employee-scope tests act as regression guardrails.
 
-In the KPI Details header (`src/components/review/UnifiedScorecard.tsx` ~line 1638), insert a new button next to `Zero-Score` / `KRA Export`, gated by `isAdmin && !isSelfMode-not-required` (we'll show it whenever an admin is viewing any scorecard with a concrete `employee` and `selectedPeriod` / `selectedYear`):
+## Files touched
 
-```
-{isAdmin && (
-  <Button size="sm" variant="outline" onClick={() => setRolloverOpen(true)}>
-    <RefreshCw className="h-3.5 w-3.5 mr-1" /> Rollover KRAs
-  </Button>
-)}
-```
-
-Render the dialog at the bottom of the component (next to `EmployeeBulkZeroScoreDialog`):
-
-```
-<RolloverDialog
-  open={rolloverOpen}
-  onOpenChange={setRolloverOpen}
-  scopedEmployee={{ id: employee.id, name: employee.full_name, code: employee.employee_code }}
-  defaultTargetMonth={selectedPeriod}
-  defaultTargetYear={selectedYear}
-/>
-```
-
-`isAdmin` is already available in `UnifiedScorecard` (it gates the existing Zero-Score button).
-
-### 3. Visibility & access
-
-- **Admin only.** Same `isAdmin` gate already used for `Zero-Score`. No new role check needed.
-- **All scorecard contexts** (Self / Team / Audit / Skip-level / HR PMS / Management) — wherever the admin sees a KPI Details panel for a single employee, this button appears. This matches the user's request ("This feature will only be used by admin").
-- Self-view: an admin viewing their own scorecard will also see it (consistent with existing Zero-Score button behavior).
-
-### 4. UX details
-
-- Button label: `Rollover KRAs` (matches existing `Zero-Score`, `KRA Export` casing).
-- Icon: `RefreshCw` from `lucide-react` (same icon the dialog already uses for its title).
-- After successful rollover, the dialog already invalidates `['kpis']`; the scorecard auto-refreshes — no extra glue needed.
-- Banner inside the scoped dialog reuses existing `Alert` / `Card` styles for visual continuity.
-
-## Risk & Impact Report
-
-| Area | Impact |
-|---|---|
-| Data | None. Edge function `auto-rollover-kpis` already runs scoped rollovers; no schema, RLS, RPC, or trigger changes. |
-| Workflow | None. Same 3-step preview/confirm/report flow; admin still has to confirm. Conflict + balance-only handling reused as-is. |
-| Permissions | Strictly gated by `isAdmin` in the UI; the edge function enforces its own admin check server-side (unchanged). |
-| UI/UX | One additional small button in an already-busy header. Visual rhythm matches `Zero-Score`. |
-| Regression | Low. `RolloverDialog` change is additive (new optional props, no removal). Existing `SystemSettings` call site behaves identically. |
-| Mitigation | Vitest covering the prop-driven defaults and the "scoped employee replaces picker" branch. Manual smoke: open from a scorecard, preview, run, verify only that employee's KPIs are copied and the scorecard refreshes. |
-
-## Files (preview only — no edits in plan mode)
-
-Edit:
-- `src/components/admin/RolloverDialog.tsx` — add `scopedEmployee`, `defaultTargetMonth`, `defaultTargetYear` props; adjust initial state + Step-1 rendering.
-- `src/components/review/UnifiedScorecard.tsx` — admin-only `Rollover KRAs` button in KPI Details header + mount `RolloverDialog` with scoped props.
-
-Add:
-- `src/test/scopedRolloverDialog.test.tsx` — verifies scoped employee locks the picker and forwards `employee_ids: [id]` in the edge-function payload.
-
-Docs:
-- `mem/features/admin/enhanced-kra-rollover-system` — append a "Per-employee invocation from scorecard" note.
+- `src/hooks/useOrgKpiSubmissionFallback.ts` (broaden scope, add dept/org aggregates)
+- `src/pages/admin/OrgKpiDataEntry.tsx` (`buildCardData` department + organization + employee isNa)
+- `src/test/orgKpiPostPropagationHydration.test.ts` (new cases)
+- `docs/adr/ADR-062.md` (new — extends ADR-055/056 fallback policy to all three scopes)
+- `mem/features/admin/org-kpi-data-entry-snapshot.md` (note that scope-aware fallback is mandatory on all three branches)
 
 ## Out of scope
 
-- Multi-employee selection from the scorecard (admin can still use System Settings → KRA Rollover for that).
-- Changing the source/target defaults policy or the underlying edge function.
-- Non-admin access (kept admin-only as requested).
+- Backfilling NULL `org_kpi_values.achieved_value` rows from `review_submissions` (data-repair job — separate ticket).
+- Changing the propagation RPC to also update OKV.achieved_value when only RS is touched (would need POLICY §88 review).

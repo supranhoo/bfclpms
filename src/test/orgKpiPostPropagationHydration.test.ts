@@ -74,3 +74,70 @@ describe('Org KPI post-propagation hydration', () => {
     expect(k).toMatch(/\|\|emp-1$/);
   });
 });
+
+/**
+ * Locks the broadened fallback contract used in v2.66.9 (May 2026):
+ *   - department branch: key `${defKey}||dept||${deptId}`
+ *   - organization branch: key `${defKey}||org`
+ *   - employee branch: when val exists with achieved=null && is_na=false,
+ *     re-read BOTH achievedValue AND isNa from the fallback.
+ */
+
+function resolveScoped(
+  okv: { achieved: number | null | undefined; isNa: boolean | undefined } | null,
+  fb: { achievedValue: number | null; isNa: boolean } | undefined,
+) {
+  const okvHasValue = (okv?.achieved ?? null) !== null || !!okv?.isNa;
+  const achievedValue = okvHasValue
+    ? (okv?.achieved ?? null)
+    : (fb ? fb.achievedValue : null);
+  const isNa = okvHasValue
+    ? !!okv?.isNa
+    : (fb ? fb.isNa : false);
+  return { achievedValue, isNa };
+}
+
+describe('Org KPI scoped fallback (department / organization / employee-NULL)', () => {
+  it('department row resolves from fallback when OKV achieved is NULL', () => {
+    const out = resolveScoped(
+      { achieved: null, isNa: false },
+      { achievedValue: 88, isNa: false },
+    );
+    expect(out.achievedValue).toBe(88);
+    expect(out.isNa).toBe(false);
+  });
+
+  it('organization row resolves from fallback when OKV row absent', () => {
+    const out = resolveScoped(null, { achievedValue: 42, isNa: false });
+    expect(out.achievedValue).toBe(42);
+  });
+
+  it('employee row with OKV achieved=null, is_na=false re-reads both from fallback', () => {
+    const out = resolveScoped(
+      { achieved: null, isNa: false },
+      { achievedValue: 100, isNa: false },
+    );
+    expect(out.achievedValue).toBe(100);
+    expect(out.isNa).toBe(false);
+  });
+
+  it('all-NA fallback is honoured when OKV is empty', () => {
+    const out = resolveScoped(null, { achievedValue: null, isNa: true });
+    expect(out.isNa).toBe(true);
+    expect(out.achievedValue).toBeNull();
+  });
+
+  it('OKV authoritative value still wins over fallback', () => {
+    const out = resolveScoped(
+      { achieved: 75, isNa: false },
+      { achievedValue: 99, isNa: false },
+    );
+    expect(out.achievedValue).toBe(75);
+  });
+
+  it('canonical scoped key shapes', () => {
+    const def = normalizeKpiKey('cat-1', 'KRA  A', 'KPI x');
+    expect(`${def}||dept||dept-1`).toMatch(/\|\|dept\|\|dept-1$/);
+    expect(`${def}||org`).toMatch(/\|\|org$/);
+  });
+});
