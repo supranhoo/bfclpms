@@ -96,11 +96,16 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
   const effectiveTotal = typeof totalCount === 'number' && totalCount > rows.length ? totalCount : rows.length;
   const hasHidden = effectiveTotal > rows.length;
 
-  // Per-row propagation breakdown (drives the new "X propagated / Y not" hint
-  // next to the entered count).
+  // Per-row propagation breakdown (drives the "X propagated / Y not propagated"
+  // hint next to the entered count).
+  // RCA 2026-05-08 — the summary must remain visible even when the
+  // distribution is one-sided (all propagated OR all not propagated). Hiding
+  // it when one count was zero left admins unable to confirm whether their
+  // 50/50 set was actually propagated. We still suppress it for empty
+  // tables and for rows that carry no value at all (pending only).
   const propagatedCount = rows.filter(r => r.status === 'propagated' || r.status === 'approved').length;
   const notPropagatedCount = rows.filter(r => (r.status ?? 'pending') === 'entered').length;
-  const showStatusBreakdown = propagatedCount > 0 && notPropagatedCount > 0;
+  const showStatusBreakdown = rows.length > 0 && (propagatedCount + notPropagatedCount) > 0;
 
   const hasSelectionFeature = !!onSelectionChange;
   const hasRowPropagation = !!onPropagateRow;
