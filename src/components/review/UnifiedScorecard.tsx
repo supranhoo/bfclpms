@@ -2219,6 +2219,20 @@ export function UnifiedScorecard({
           onOpenChange={setZeroScoreDialogOpen}
         />
       )}
+      {/* Per-employee KRA Rollover Dialog (Admin only) */}
+      {isAdmin && (
+        <RolloverDialog
+          open={rolloverDialogOpen}
+          onOpenChange={setRolloverDialogOpen}
+          scopedEmployee={{
+            id: employee.id,
+            name: employee.full_name || employee.email,
+            code: employee.employee_code,
+          }}
+          defaultTargetMonth={selectedPeriod}
+          defaultTargetYear={selectedYear}
+        />
+      )}
     </div>
   );
 }
