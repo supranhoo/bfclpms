@@ -58,7 +58,14 @@ export function deriveOrgKpiCounts(input: OrgKpiCountInputs): OrgKpiCountResult 
  */
 export function scopedRowsSignature(rows: ReadonlyArray<{ scopeId: string }> | null | undefined): string {
   if (!rows || rows.length === 0) return '0:';
-  // Length first for fast reject, then sorted ids for stability.
-  const ids = rows.map(r => r.scopeId).sort();
-  return `${rows.length}:${ids.join(',')}`;
+  // Length first for fast reject, then sorted ids + per-row status for
+  // stability. Including `status` here is critical: without it, a successful
+  // propagation that flips every row from `entered` to `propagated` keeps
+  // the same id set and the local copy in OrgKpiEntryCard never picks up
+  // the new row metadata, leaving the header stuck on
+  // "0 propagated / N not propagated" even though the scorecard is populated.
+  const tagged = rows
+    .map(r => `${r.scopeId}:${(r as { status?: string }).status ?? 'pending'}`)
+    .sort();
+  return `${rows.length}:${tagged.join(',')}`;
 }
