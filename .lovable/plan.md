@@ -1,78 +1,88 @@
+# Optimize `/admin/kpi-standardization`
 
-## Problem
+## Problem (RCA)
 
-For the "On-Time Completion of HR Interventions" KPI (April 2026, scope=`employee`), after the user enters values for Avinash (20) and Debadutta (0) and clicks **Propagate**:
+The page glitches because every tab renders **the entire result set at once** with no pagination and no input debouncing — directly violating POLICY §120 Lean-Load.
 
-- Propagation succeeds — `review_submissions.achieved_value` is updated and `kpis.status` advances to `self_review` (verified in DB).
-- The entry table re-renders showing **"—" everywhere** and the header drops back to "0 / 2 entered".
-- The **Impact** sheet still shows the correct propagated values (it reads from `review_submissions` / `kpis`).
+| Tab | Symptom | Root cause |
+|---|---|---|
+| Build Registry | Freezes after Scan; typing in search lags | `visibleGroups.map(...)` renders **every** duplicate group (often 200–500+), each group expands into N variant buttons + Select + Collapsible. `search` is undebounced. |
+| Review Registry | Slow to open; sluggish search | `filtered.map(...)` renders **all** `kpi_definitions` rows (1k+ today). No debounce. Each row mounts hover/Collapsible state. |
+| Correct May KPIs | Glitchy & long initial paint | Maps **every** unlinked signature; each row mounts a `Select` whose `SelectContent` renders **every** definition for that category. |
+| Suggestions | Slow load | Renders all merge + alias candidate rows; no paging. |
+| Health & Coverage | Heavy first paint | Wide tables fully rendered. |
+| Tabs container | Mounts unused tabs in dev tools profiler under some Radix versions | Use `forceMount={false}` (default) is fine, but heavy data hooks fire only when each tab mounts — ensure tabs are lazy. |
 
-This is the inconsistency in the screenshots. It looks to the data‑entry user as if the data has vanished, even though it actually went through.
+## Goal
 
-## Root cause
+Make the page snappy regardless of registry size, with consistent pagination & debounced search across tabs. **No business-logic, schema, RLS, or RPC changes.**
 
-`OrgKpiDataEntry.tsx` builds the entry table's `scopedRows` (lines ~511–540) **only** from `existingValuesMap`, which is `org_kpi_values` keyed on `(category_id, kra_name, kpi_name, period, year, dept_id, emp_id)`.
+## Plan (UI-only)
 
-For this KPI in April 2026, only a legacy **org‑scope** OKV row exists (`employee_id = NULL`, `status = 'pending'`, `achieved_value = NULL`). No per‑employee OKV rows exist for April. So:
+### 1. Reusable client-side pagination helper
 
-- `existingValuesMap.get('…||null||<empId>')` → `undefined`
-- Each scoped row is rendered with `achievedValue = null` → "—" in the cell
-- The entered count drops to `0 / 2`
+Add `src/components/admin/kpi-standardization/RegistryPager.tsx`:
+- Props: `page`, `pageSize`, `total`, `onPageChange`, `onPageSizeChange`, options `[25, 50, 100]` (default 25).
+- Renders Prev / Next + `page X of Y` + page-size selector. Mirrors the look of `AffectedKpisTable`'s pager and `useManualQuery` conventions.
 
-The Impact sheet reads from `review_submissions`, where propagation actually wrote `20` and `0`, so it stays correct. Two surfaces, two truths — exactly the kind of drift ADR‑055 / ADR‑056 were written to prevent for the tile chip.
+### 2. Debounce all search inputs
 
-## Fix (UI / read‑model only — no schema changes)
+Use existing `useDebouncedValue(value, 300)` (already sanctioned by POLICY §120) in:
+- `BuildRegistryTab.tsx` — `search` → `debouncedSearch` feeds `filteredGroups` `useMemo`.
+- `ReviewRegistryTab.tsx` — `search` → `debouncedSearch` feeds `filtered` `useMemo`.
+- `CorrectMayKpisTab.tsx` — add a search box (KRA / KPI text) with debounce.
+- `SuggestionsTab.tsx` — debounce its current filter input if present.
 
-Make the entry table mirror the same source of truth as Impact when the OKV row is missing after propagation.
+### 3. Paginate heavy lists
 
-### 1. Add a per‑KPI `review_submissions` snapshot to the page
+For each tab, wrap the existing filtered array with a `useMemo` slice `[from, from+pageSize]` and render only that slice. State lives in each tab.
 
-In `src/pages/admin/OrgKpiDataEntry.tsx`:
+- **BuildRegistryTab**: paginate `visibleGroups` (default 10 / page — groups are large). Reset to page 1 when `debouncedSearch`, `sensitivity`, or `includeSkipped` changes. Keep `processedGroups` behavior.
+- **ReviewRegistryTab**: paginate `filtered` (default 25). Reset to page 1 on search change. Collapse `expandedId` only when its row leaves the page.
+- **CorrectMayKpisTab**: paginate `pendingUnlinked` (default 25). Replace fixed-height `max-h-[500px] overflow-y-auto` with paged slice. Memoize the `definitions.filter(d => d.category_id === sig.category_id)` per category once at tab-level into a `Map<categoryId, KpiDefinition[]>` so each row's `Select` does not re-filter the full list.
+- **SuggestionsTab**: paginate `defMerges` and `aliasCandidates` independently (default 25 each).
 
-- For the currently visible employee‑scoped Org KPIs, fetch a slim `(kpi_id → { achieved_value, is_na })` map from `review_submissions`, keyed via `employeeKpiIdsMap` already exposed by `useOrgLevelKpisWithEmployees`.
-- Cache via React Query, scoped to `(selectedPeriod, selectedYear, visible kpi ids)`. No new policies; reuses existing read access.
+### 4. Lighter rendering
 
-### 2. Fallback hydration in `scopedRows`
+- Wrap each row component (`RegistryRow`, the per-group card in BuildRegistry, the per-signature row in CorrectMayKpis) in `React.memo` so unchanged rows do not re-render when sibling rows or unrelated state change.
+- In `BuildRegistryTab`, hoist the per-group `sharedBucketOptions` calc (already memoizable) and stop recomputing on every render of every other group via `React.memo`.
+- In `CorrectMayKpisTab`, build the category→definitions map once per `definitions` change.
 
-In the `scope === 'employee'` branch (and the equivalent `department` branch), when building each scoped row:
+### 5. Sane defaults & UX
 
-```text
-achievedValue =
-   org_kpi_values.achieved_value
-   ?? review_submissions.achieved_value   // NEW fallback
-   ?? null
-isNa =
-   org_kpi_values.is_na
-   ?? review_submissions.is_na
-   ?? false
-```
-
-This makes the row show the propagated value even when its per‑employee OKV row was never written (legacy data) or is briefly stale.
-
-### 3. Status reconciliation for the header chip
-
-Reuse `deriveOrgKpiTileStatus` (ADR‑056) — it already cross‑checks `kpis.status` and will report `propagated` correctly for this KPI. Just ensure the row counter ("X / Y entered") considers the fallback value above so it shows `2 / 2` instead of `0 / 2` after propagation.
-
-### 4. Backfill safety net (optional, behind existing Data Repair)
-
-Add a small repair action under `Data Repair` that, for any employee‑scope KPI where `kpis.status` is past `kra_set` but no per‑employee `org_kpi_values` row exists, inserts one with `status = 'propagated'` copying `achieved_value` from `review_submissions`. This is purely cleanup for legacy rows; the UI fix above does not depend on it.
-
-### 5. Tests
-
-- `src/test/orgKpiPostPropagationHydration.test.ts`
-   - OKV row missing + RS has value → row shows the RS value, counter increments.
-   - OKV row present with value → OKV wins (no regression).
-   - OKV row present with `null` + RS has value → RS fallback used.
-   - `is_na` from RS surfaces correctly.
-
-## Risk & impact
-
-- **Data**: read‑only change in the page; no schema, RLS, or storage changes. Optional repair is opt‑in.
-- **Workflow**: none — propagation logic untouched. Only the entry table's read model changes.
-- **UI/UX**: removes the "values vanished" surprise; entry table and Impact agree.
-- **Regression**: low. Fallback only fires when OKV is missing/null; OKV remains the primary source.
-- **Mitigation**: covered by the new tests plus the existing `orgKpiTileStatus` / `orgKpiStatusShared` guards.
+- Page size selector with `25 / 50 / 100`, persisted to that tab's local state only (not URL — keeps scope tight).
+- When the user filters/searches, the pager resets to page 1.
+- Show the existing total badge ("X pending / Y skipped / Z total") above the pager so context is preserved.
 
 ## Out of scope
 
-- Changing `propagate_org_kpi_value` to also upsert per‑employee `org_kpi_values` rows. That is a deeper change and is what the optional Data Repair action would clean up retroactively; we can take it as a follow‑up ADR if desired.
+- No changes to `useScanDuplicates`, `useKpiDefinitions`, `useKpiAliases`, RPCs, or DB. Today these return acceptable payloads; the bottleneck is render volume, not network.
+- No virtualization library (deferred — pagination delivers the win without adding a dep).
+- No changes to Governance / Health & Coverage / History tabs unless their lists exceed 100 rows; if they do, apply the same RegistryPager.
+
+## Risk & Impact
+
+- **Data**: none. UI-only.
+- **Workflow**: none. Approve / Skip / Apply / Merge / Dismiss flows unchanged.
+- **UI/UX**: search now feels snappier (300 ms debounce); long lists become paged. Familiar Prev/Next pattern (matches `AffectedKpisTable`).
+- **Regression**: low. `processedGroups`, `expandedId`, `mappings`, `corrected` state semantics preserved — pagination only narrows the *displayed* slice.
+- **Mitigation**:
+  - Vitest for the pager helper (page math, clamping, page-1 reset on filter change).
+  - Vitest for the category→definitions index map in CorrectMayKpisTab.
+  - Manual smoke: scan with 200+ groups, switch sensitivity, toggle Include skipped, search.
+
+## Files
+
+New:
+- `src/components/admin/kpi-standardization/RegistryPager.tsx`
+- `src/test/registryPager.test.tsx`
+
+Edited:
+- `src/components/admin/kpi-standardization/BuildRegistryTab.tsx`
+- `src/components/admin/kpi-standardization/ReviewRegistryTab.tsx`
+- `src/components/admin/kpi-standardization/CorrectMayKpisTab.tsx`
+- `src/components/admin/kpi-standardization/SuggestionsTab.tsx`
+
+Docs:
+- `mem/architecture/performance/lean-load-policy` — append KPI Standardization tabs to the compliant debounced/paged sites list.
+- `DOCUMENTATION.md` Version History + brief note under Admin → KPI Standardization.
