@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKraCategories, useDepartments, useProfiles } from '@/hooks/useOrganization';
 import { useOrgKpiValues, useBulkUpsertOrgKpiValues, useClearOrgKpiEntry, OrgKpiValue } from '@/hooks/useOrgKpiValues';
+import { useOrgKpiSubmissionFallback } from '@/hooks/useOrgKpiSubmissionFallback';
 import { useOrgLevelKpisWithEmployees, useOrgLevelKpis } from '@/hooks/useOrgLevelKpis';
 import { useOrgKpiOwnershipMap } from '@/hooks/useOrgKpiDataOwner';
 import { useIsAnyOrgKpiDataOwner } from '@/hooks/useOrgKpiDataOwner';
