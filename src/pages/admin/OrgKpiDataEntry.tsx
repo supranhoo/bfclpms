@@ -112,6 +112,19 @@ export default function OrgKpiDataEntry() {
     });
     return map;
   }, [orgLevelData]);
+  // RCA 2026-05-08 — Canonical "Propagated" truth comes from the snapshot
+  // RPC (review_submissions presence per employee KPI). Browser-side
+  // fallback joins drift from this set whenever normalization, RLS or
+  // grouping diverges, which is exactly what made "0 propagated /
+  // 50 not propagated" surface even after every employee was propagated.
+  const propagatedEmpsByKey = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    const raw = (orgLevelData as any)?.propagatedEmpIdsByKey || {};
+    Object.entries(raw).forEach(([k, ids]) => {
+      map.set(k, new Set(ids as string[]));
+    });
+    return map;
+  }, [orgLevelData]);
   const unmappedCount = orgLevelData?.unmappedCount || 0;
 
   const { data: categories } = useKraCategories();
