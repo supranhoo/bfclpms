@@ -8012,6 +8012,30 @@ export type Database = {
         }
         Returns: number
       }
+      diagnose_org_kpi_propagation_gap: {
+        Args: {
+          p_category_id: string
+          p_kpi_name: string
+          p_kra_name: string
+          p_review_period: string
+          p_review_year: number
+        }
+        Returns: {
+          classification: string
+          department_name: string
+          employee_code: string
+          employee_id: string
+          full_name: string
+          has_review_submission: boolean
+          kpi_id: string
+          kpi_status: string
+          okv_achieved: number
+          okv_is_na: boolean
+          okv_status: string
+          reason: string
+          rs_self_score: number
+        }[]
+      }
       dismiss_suggestion: {
         Args: {
           p_kind: string
@@ -8376,6 +8400,16 @@ export type Database = {
       }
       repair_org_kpi_cycle_anchors: {
         Args: { p_dry_run?: boolean }
+        Returns: Json
+      }
+      repair_org_kpi_entered_unpropagated_rows: {
+        Args: {
+          p_category_id: string
+          p_kpi_name: string
+          p_kra_name: string
+          p_review_period: string
+          p_review_year: number
+        }
         Returns: Json
       }
       repair_sibling_frequency_drift_v5: {
