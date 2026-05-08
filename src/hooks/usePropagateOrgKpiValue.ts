@@ -234,7 +234,24 @@ async function callPropagationRpc(
 
   const rpcResult = data as any;
   let overwrittenCount = 0;
-  const details: PropagationDetail[] = (rpcResult.details || []).map((d: any) => {
+  // RCA-2026-05-08 / RPC contract reconciliation.
+  // The live `propagate_org_kpi_value` RPC currently returns:
+  //   { propagated, skipped, results, skipped_details }
+  // while an older migration returned:
+  //   { propagated_count, skipped_count, details, skipped }
+  // Reading only the legacy keys produced `propagatedCount = undefined`,
+  // which silently broke the per-batch summary toast and the half-
+  // propagation guard ("X / Y employees updated"). Read both shapes so
+  // either RPC version produces correct counts.
+  const detailsRaw = rpcResult.details ?? rpcResult.results ?? [];
+  const skippedRaw = Array.isArray(rpcResult.skipped)
+    ? rpcResult.skipped
+    : (rpcResult.skipped_details ?? []);
+  const propagatedCount = (rpcResult.propagated_count ?? rpcResult.propagated ?? 0) as number;
+  const skippedCount = (rpcResult.skipped_count
+    ?? (typeof rpcResult.skipped === 'number' ? rpcResult.skipped : skippedRaw.length)
+    ?? 0) as number;
+  const details: PropagationDetail[] = detailsRaw.map((d: any) => {
     const info = profileMap.get(d.kpi_id);
     const newScore = d.new_score ?? null;
     const oldScore = d.old_score ?? null;
@@ -253,10 +270,10 @@ async function callPropagationRpc(
   });
 
   return {
-    propagatedCount: rpcResult.propagated_count,
+    propagatedCount,
     details,
-    skippedCount: rpcResult.skipped_count ?? 0,
-    skipped: rpcResult.skipped ?? [],
+    skippedCount,
+    skipped: skippedRaw,
     overwrittenCount,
   };
 }

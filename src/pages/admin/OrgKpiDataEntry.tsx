@@ -497,6 +497,14 @@ export default function OrgKpiDataEntry() {
           : (deptFb ? deptFb.achievedValue : null);
         const deptIsNa = okvIsNa
           || (okvAchieved === null && deptFb ? deptFb.isNa : false);
+        // RCA-2026-05-08 — see employee branch. Department row badge
+        // reflects whether ANY contributing employee scorecard exists,
+        // not just OKV.status which is set out-of-band.
+        const deptOkvStatus = (val?.status as string | undefined) ?? null;
+        let deptRowStatus: 'pending' | 'entered' | 'propagated' | 'approved' = 'pending';
+        if (deptOkvStatus === 'approved') deptRowStatus = 'approved';
+        else if (deptFb) deptRowStatus = 'propagated';
+        else if (okvAchieved !== null || okvIsNa) deptRowStatus = 'entered';
         return {
             scopeId: deptId,
             scopeName: deptName,
@@ -510,10 +518,8 @@ export default function OrgKpiDataEntry() {
             uomType: (kpi as any).uom_type || 'numeric',
             qualitativeOptions: (kpi as any).qualitative_options || null,
             subFactors: val?.sub_factors ?? undefined,
-            // Per-row OKV status drives the inline "Propagated / Not propagated"
-            // pill in OrgKpiScopedEntryTable so admins can see exactly which
-            // department rows are still waiting on the Propagate action.
-            status: ((val?.status as any) ?? 'pending'),
+            // Scorecard-truth status — see RCA note above.
+            status: deptRowStatus,
           };
       });
     } else if (scope === 'employee') {
@@ -553,6 +559,20 @@ export default function OrgKpiDataEntry() {
           const fallbackIsNa = okvHasValue
             ? !!val?.is_na
             : (fb ? fb.isNa : false);
+          // RCA-2026-05-08 — Per-row "Propagated" badge must reflect the
+          // SCORECARD truth (review_submissions exists), not the OKV
+          // status field. OKV.status is only set after a successful
+          // propagate AND a separate UPDATE; older propagations never
+          // ran that UPDATE, leaving rows with scorecard data but
+          // status='entered'. The submission fallback map is populated
+          // only when a review_submissions row with a value or is_na
+          // exists for that employee KPI — that is the authoritative
+          // proof of propagation.
+          const okvStatus = (val?.status as string | undefined) ?? null;
+          let rowStatus: 'pending' | 'entered' | 'propagated' | 'approved' = 'pending';
+          if (okvStatus === 'approved') rowStatus = 'approved';
+          else if (fb) rowStatus = 'propagated';
+          else if (okvHasValue) rowStatus = 'entered';
           return {
             scopeId: empId,
             scopeName: fullName || emp?.email || `Employee ${empId.slice(0, 6)}`,
@@ -567,8 +587,8 @@ export default function OrgKpiDataEntry() {
             uomType: (kpi as any).uom_type || 'numeric',
             qualitativeOptions: (kpi as any).qualitative_options || null,
             subFactors: val?.sub_factors ?? undefined,
-            // Per-row OKV status — see OrgKpiScopedEntryTable's RowStatusPill.
-            status: ((val?.status as any) ?? 'pending'),
+            // Scorecard-truth status — see RCA note above.
+            status: rowStatus,
           };
         })
         .sort((a, b) => {
