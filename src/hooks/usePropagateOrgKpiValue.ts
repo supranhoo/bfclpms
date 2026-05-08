@@ -135,82 +135,53 @@ function buildRatingsPayload(
 }
 
 /**
- * Fetch matching org-level KPIs and filter by scope.
- * Falls back to category_id + kra_name matching if exact kpi_name match returns 0 results.
+ * Resolve all matching org-level KPI rows via the SECURITY DEFINER RPC
+ * `resolve_org_kpi_target_kpis`. This bypasses per-department RLS so that
+ * data owners can propagate to employees in departments they cannot
+ * directly see (ADR-062 — May 2026 cross-department propagation fix).
+ *
+ * The RPC enforces its own authorisation: caller must be admin OR an
+ * assigned data owner for (category, kra, kpi).
  */
-/**
- * Escape special PostgREST ilike characters.
- */
-function escapeIlike(val: string): string {
-  return val.replace(/[%_]/g, '\\$&');
-}
-
 async function fetchTargetKpis(params: PropagateParams) {
   const { categoryId, kraName, kpiName, reviewPeriod, reviewYear, scope, departmentId, employeeId } = params;
 
-  const baseSelect = `
-    id, employee_id, target_value, weightage,
-    r5, r4, r3, r2, r1, r0, criteria, uom, uom_type,
-    qualitative_options, threshold_mode, is_org_level, org_level_scope,
-    profiles!kpis_employee_id_fkey(id, full_name, employee_code, department_id, departments(name))
-  `;
-
-  const escapedKra = escapeIlike(kraName);
-  const escapedKpi = escapeIlike(kpiName);
-
-  // Try case-insensitive exact match first (RC1 fix)
-  const { data: kpis, error } = await supabase
-    .from('kpis')
-    .select(baseSelect)
-    .eq('category_id', categoryId)
-    .ilike('kra_name', escapedKra)
-    .ilike('kpi_name', escapedKpi)
-    .eq('review_period', reviewPeriod)
-    .eq('review_year', reviewYear)
-    .eq('is_org_level', true);
+  const { data, error } = await supabase.rpc('resolve_org_kpi_target_kpis', {
+    p_category_id: categoryId,
+    p_kra_name: kraName,
+    p_kpi_name: kpiName,
+    p_review_period: reviewPeriod,
+    p_review_year: reviewYear,
+    p_scope: scope,
+    p_department_id: departmentId ?? null,
+    p_employee_id: employeeId ?? null,
+  });
 
   if (error) throw error;
 
-  let targetKpis = kpis || [];
-
-  // Fallback 1: category + case-insensitive kra matching (if exact kpi_name returns 0)
-  if (targetKpis.length === 0) {
-    const { data: fallbackKpis, error: fallbackError } = await supabase
-      .from('kpis')
-      .select(baseSelect)
-      .eq('category_id', categoryId)
-      .ilike('kra_name', escapedKra)
-      .eq('review_period', reviewPeriod)
-      .eq('review_year', reviewYear)
-      .eq('is_org_level', true);
-
-    if (fallbackError) throw fallbackError;
-    targetKpis = fallbackKpis || [];
-  }
-
-  // Fallback 2 (RC3): fuzzy KRA name — master kra_name as substring match
-  if (targetKpis.length === 0) {
-    const { data: fuzzyKpis, error: fuzzyError } = await supabase
-      .from('kpis')
-      .select(baseSelect)
-      .eq('category_id', categoryId)
-      .ilike('kra_name', `%${escapedKra}%`)
-      .eq('review_period', reviewPeriod)
-      .eq('review_year', reviewYear)
-      .eq('is_org_level', true);
-
-    if (fuzzyError) throw fuzzyError;
-    targetKpis = fuzzyKpis || [];
-  }
-
-  if (targetKpis.length === 0) return [];
-
-  if (scope === 'department' && departmentId) {
-    return targetKpis.filter(k => (k.profiles as any)?.department_id === departmentId);
-  } else if (scope === 'employee' && employeeId) {
-    return targetKpis.filter(k => k.employee_id === employeeId);
-  }
-  return targetKpis;
+  // Reshape the flat RPC rows into the {profiles: {...}} structure that
+  // buildRatingsPayload expects, so the rest of the pipeline is untouched.
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    employee_id: row.employee_id,
+    target_value: row.target_value,
+    weightage: row.weightage,
+    r5: row.r5, r4: row.r4, r3: row.r3, r2: row.r2, r1: row.r1, r0: row.r0,
+    criteria: row.criteria,
+    uom: row.uom,
+    uom_type: row.uom_type,
+    qualitative_options: row.qualitative_options,
+    threshold_mode: row.threshold_mode,
+    is_org_level: row.is_org_level,
+    org_level_scope: row.org_level_scope,
+    profiles: {
+      id: row.employee_id,
+      full_name: row.full_name,
+      employee_code: row.employee_code,
+      department_id: row.department_id,
+      departments: row.department_name ? { name: row.department_name } : null,
+    },
+  }));
 }
 
 /**
