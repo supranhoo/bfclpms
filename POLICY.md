@@ -2629,3 +2629,22 @@ Codified 2026-05-04 after the workspace-wide "Lean-Load" performance audit.
 - Slim projection: `useAllKpis` / `useKpisByPeriod` via `SLIM_KPI_SELECT`.
 - Regression tests: `src/test/useDebouncedValue.test.tsx` (5 tests).
 
+
+## §111 — Org KPI propagation source of truth (codified 2026-05-08)
+
+The system stores Org-level KPI data across three places:
+
+- `org_kpi_values` — the data-owner's entered value (source data, not proof of scorecard population).
+- `kpis.status` — the workflow stage of each employee KPI row.
+- `review_submissions` — the actual employee scorecard data.
+
+**Rule:** "Propagated" means a `review_submissions` row exists with a non-NULL `achieved_value` OR `is_na = true` for the employee's KPI. It does NOT mean `org_kpi_values.status = 'propagated'`.
+
+**Why:** The OKV status flag is set by a separate post-RPC `UPDATE` from the client. Historical propagations (and any flow that exits early after the RPC succeeds) leave OKV status at `'entered'` even though the scorecard is fully populated. Treating OKV.status as proof produces UI badges and reports that contradict the actual scorecard state.
+
+**Enforcement:**
+1. Per-row "Propagated / Not propagated" badges in `OrgKpiScopedEntryTable` MUST derive their status from scorecard presence (via `useOrgKpiSubmissionFallback`), with `OKV.status === 'approved'` as the only OKV-driven override.
+2. Any propagation reconciliation tool (Pending Report, Data Repair) MUST treat OKV.status only as an indicator, and use `review_submissions` + `kpis.status != 'kra_set'` as the authoritative check.
+3. The `propagate_org_kpi_value` RPC result mapper in `callPropagationRpc` MUST accept BOTH the live shape (`{ propagated, skipped, results, skipped_details }`) and the legacy shape (`{ propagated_count, skipped_count, details, skipped }`) so a future RPC redeploy cannot silently NaN the per-batch totals again.
+
+Regression: `src/test/orgKpiPropagateResultContract.test.ts`.
