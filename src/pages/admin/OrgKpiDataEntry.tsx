@@ -481,6 +481,7 @@ export default function OrgKpiDataEntry() {
         : (departments?.map(d => d.id) ?? []);
       const kpiMappedEmpIds = mappedEmployeesMap.get(kk);
       const kk_propagatedEmps = propagatedEmpsByKey.get(kk) || new Set<string>();
+      const kk_kraSetEmps = kraSetEmpIdsByKey.get(kk) || new Set<string>();
       scopedRows = deptIdList.map(deptId => {
         const dept = departments?.find(d => d.id === deptId);
         const deptDisplay = departmentDisplayMap?.[deptId];
@@ -527,9 +528,29 @@ export default function OrgKpiDataEntry() {
               return empDeptId === deptId && kk_propagatedEmps.has(eid);
             })
           : false;
-        if (deptOkvStatus === 'approved') deptRowStatus = 'approved';
-        else if (deptHasPropagatedEmp || deptFb) deptRowStatus = 'propagated';
-        else if (okvAchieved !== null || okvIsNa) deptRowStatus = 'entered';
+        // RCA-2026-05-09 — ADR-055 parity: a department row is also
+        // effectively propagated when every contributing employee's
+        // child kpis row has advanced past 'kra_set', regardless of
+        // whether OKV.status was ever flipped or the snapshot RPC's
+        // propagated set caught it.
+        const deptEmpIdsForDept = kpiMappedEmpIds
+          ? Array.from(kpiMappedEmpIds).filter(eid => {
+              const fromProfiles = allProfiles?.find(p => p.id === eid);
+              const fromSnap = employeeDisplayMap?.[eid];
+              const empDeptId = fromProfiles?.department_id ?? fromSnap?.department_id ?? null;
+              return empDeptId === deptId;
+            })
+          : [];
+        const deptIsPastKraSet =
+          deptEmpIdsForDept.length > 0 &&
+          deptEmpIdsForDept.every(eid => !kk_kraSetEmps.has(eid));
+        deptRowStatus = deriveScopedRowStatus({
+          okvStatus: deptOkvStatus,
+          okvHasValue: okvAchieved !== null || okvIsNa,
+          isInPropagatedSet: deptHasPropagatedEmp,
+          hasSubmissionFallback: !!deptFb,
+          isPastKraSet: deptIsPastKraSet,
+        });
         return {
             scopeId: deptId,
             scopeName: deptName,
