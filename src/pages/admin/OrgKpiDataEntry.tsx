@@ -39,7 +39,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { GovernanceLockBanner } from '@/components/review/GovernanceLockBanner';
 import { normalizeText, normalizeKpiKey } from '@/lib/orgKpiKey';
-import { deriveOrgKpiTileStatus, OkvLike } from '@/lib/orgKpiStatus';
+import { deriveOrgKpiTileStatus, deriveScopedRowStatus, OkvLike } from '@/lib/orgKpiStatus';
 import { deriveOrgKpiEmptyState } from '@/lib/orgKpiEmptyState';
 
 /**
