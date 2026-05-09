@@ -580,6 +580,7 @@ export default function OrgKpiDataEntry() {
         ? Array.from(mappedEmpIds)
         : (allProfiles?.map(e => e.id) ?? []);
       const kk2_propagatedEmps = propagatedEmpsByKey.get(kk2) || new Set<string>();
+      const kk2_kraSetEmps = kraSetEmpIdsByKey.get(kk2) || new Set<string>();
       scopedRows = empIdList
         .map(empId => {
           const emp = allProfiles?.find(e => e.id === empId);
@@ -616,11 +617,18 @@ export default function OrgKpiDataEntry() {
           // exists for that employee KPI — that is the authoritative
           // proof of propagation.
           const okvStatus = (val?.status as string | undefined) ?? null;
-          const isPropagatedFact = kk2_propagatedEmps.has(empId);
-          let rowStatus: 'pending' | 'entered' | 'propagated' | 'approved' = 'pending';
-          if (okvStatus === 'approved') rowStatus = 'approved';
-          else if (isPropagatedFact || fb) rowStatus = 'propagated';
-          else if (okvHasValue) rowStatus = 'entered';
+          // RCA-2026-05-09 — Use the unified scoped-row helper so the
+          // per-row pill agrees with the card-level pill (ADR-055).
+          // `isPastKraSet` (child kpis.status !== 'kra_set') dominates
+          // the OKV.status / fallback signals, eliminating drift when
+          // propagation happened via a path that didn't update OKV.
+          const rowStatus = deriveScopedRowStatus({
+            okvStatus,
+            okvHasValue,
+            isInPropagatedSet: kk2_propagatedEmps.has(empId),
+            hasSubmissionFallback: !!fb,
+            isPastKraSet: !kk2_kraSetEmps.has(empId),
+          });
           return {
             scopeId: empId,
             scopeName: fullName || emp?.email || `Employee ${empId.slice(0, 6)}`,
