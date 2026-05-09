@@ -39,7 +39,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { GovernanceLockBanner } from '@/components/review/GovernanceLockBanner';
 import { normalizeText, normalizeKpiKey } from '@/lib/orgKpiKey';
-import { deriveOrgKpiTileStatus, OkvLike } from '@/lib/orgKpiStatus';
+import { deriveOrgKpiTileStatus, deriveScopedRowStatus, OkvLike } from '@/lib/orgKpiStatus';
 import { deriveOrgKpiEmptyState } from '@/lib/orgKpiEmptyState';
 
 /**
@@ -481,6 +481,7 @@ export default function OrgKpiDataEntry() {
         : (departments?.map(d => d.id) ?? []);
       const kpiMappedEmpIds = mappedEmployeesMap.get(kk);
       const kk_propagatedEmps = propagatedEmpsByKey.get(kk) || new Set<string>();
+      const kk_kraSetEmps = kraSetEmpIdsByKey.get(kk) || new Set<string>();
       scopedRows = deptIdList.map(deptId => {
         const dept = departments?.find(d => d.id === deptId);
         const deptDisplay = departmentDisplayMap?.[deptId];
@@ -527,9 +528,29 @@ export default function OrgKpiDataEntry() {
               return empDeptId === deptId && kk_propagatedEmps.has(eid);
             })
           : false;
-        if (deptOkvStatus === 'approved') deptRowStatus = 'approved';
-        else if (deptHasPropagatedEmp || deptFb) deptRowStatus = 'propagated';
-        else if (okvAchieved !== null || okvIsNa) deptRowStatus = 'entered';
+        // RCA-2026-05-09 — ADR-055 parity: a department row is also
+        // effectively propagated when every contributing employee's
+        // child kpis row has advanced past 'kra_set', regardless of
+        // whether OKV.status was ever flipped or the snapshot RPC's
+        // propagated set caught it.
+        const deptEmpIdsForDept = kpiMappedEmpIds
+          ? Array.from(kpiMappedEmpIds).filter(eid => {
+              const fromProfiles = allProfiles?.find(p => p.id === eid);
+              const fromSnap = employeeDisplayMap?.[eid];
+              const empDeptId = fromProfiles?.department_id ?? fromSnap?.department_id ?? null;
+              return empDeptId === deptId;
+            })
+          : [];
+        const deptIsPastKraSet =
+          deptEmpIdsForDept.length > 0 &&
+          deptEmpIdsForDept.every(eid => !kk_kraSetEmps.has(eid));
+        deptRowStatus = deriveScopedRowStatus({
+          okvStatus: deptOkvStatus,
+          okvHasValue: okvAchieved !== null || okvIsNa,
+          isInPropagatedSet: deptHasPropagatedEmp,
+          hasSubmissionFallback: !!deptFb,
+          isPastKraSet: deptIsPastKraSet,
+        });
         return {
             scopeId: deptId,
             scopeName: deptName,
@@ -559,6 +580,7 @@ export default function OrgKpiDataEntry() {
         ? Array.from(mappedEmpIds)
         : (allProfiles?.map(e => e.id) ?? []);
       const kk2_propagatedEmps = propagatedEmpsByKey.get(kk2) || new Set<string>();
+      const kk2_kraSetEmps = kraSetEmpIdsByKey.get(kk2) || new Set<string>();
       scopedRows = empIdList
         .map(empId => {
           const emp = allProfiles?.find(e => e.id === empId);
@@ -595,11 +617,18 @@ export default function OrgKpiDataEntry() {
           // exists for that employee KPI — that is the authoritative
           // proof of propagation.
           const okvStatus = (val?.status as string | undefined) ?? null;
-          const isPropagatedFact = kk2_propagatedEmps.has(empId);
-          let rowStatus: 'pending' | 'entered' | 'propagated' | 'approved' = 'pending';
-          if (okvStatus === 'approved') rowStatus = 'approved';
-          else if (isPropagatedFact || fb) rowStatus = 'propagated';
-          else if (okvHasValue) rowStatus = 'entered';
+          // RCA-2026-05-09 — Use the unified scoped-row helper so the
+          // per-row pill agrees with the card-level pill (ADR-055).
+          // `isPastKraSet` (child kpis.status !== 'kra_set') dominates
+          // the OKV.status / fallback signals, eliminating drift when
+          // propagation happened via a path that didn't update OKV.
+          const rowStatus = deriveScopedRowStatus({
+            okvStatus,
+            okvHasValue,
+            isInPropagatedSet: kk2_propagatedEmps.has(empId),
+            hasSubmissionFallback: !!fb,
+            isPastKraSet: !kk2_kraSetEmps.has(empId),
+          });
           return {
             scopeId: empId,
             scopeName: fullName || emp?.email || `Employee ${empId.slice(0, 6)}`,
@@ -674,7 +703,7 @@ export default function OrgKpiDataEntry() {
       qualitativeOptions: (kpi as any).qualitative_options || null,
       criteria: (kpi as any).criteria || null,
     };
-  }, [existingValuesMap, prevValuesMap, departments, allProfiles, prev, employeeCountMap, mappedDepartmentsMap, mappedEmployeesMap, employeeTargetMap, employeeDisplayMap, departmentDisplayMap, submissionFallbackMap, propagatedEmpsByKey]);
+  }, [existingValuesMap, prevValuesMap, departments, allProfiles, prev, employeeCountMap, mappedDepartmentsMap, mappedEmployeesMap, employeeTargetMap, employeeDisplayMap, departmentDisplayMap, submissionFallbackMap, propagatedEmpsByKey, kraSetEmpIdsByKey]);
 
   // Save handler for a single card
   const handleCardSave = useCallback(async (

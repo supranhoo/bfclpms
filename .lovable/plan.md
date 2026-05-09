@@ -1,71 +1,92 @@
-## Confirmed finding
 
-For the KPI shown in your screenshot — **Training & Development / Completion of Mandated Average Training Hours / April 2026** — I checked the live backend data directly:
+## What you are seeing
 
-- **13 active employee KPI rows exist**
-- **13 / 13 have scorecard `review_submissions` data**
-- **0 / 13 remain in `kra_set`**
+Three surfaces, three different verdicts for the **same** employee (Y R V S Murthy / Create & Implement New SOP / April 2026):
 
-So I do **not** think this is a data propagation failure anymore. The backend data and employee dashboard/Impact view are consistent: these employees are propagated.
+| # | Surface | What it says | Where it gets its truth |
+|---|---|---|---|
+| 1 | Org KPI card header (Org KPI Data Entry) | Stage = **Manager Check**, Achieved 13, Rating 5 | **Card-level** status — ADR-055 fact-based: "every mapped child KPI is past `kra_set`" → effectively propagated |
+| 2 | Per-employee row in the same scoped table | **Not propagated** (orange pill) | **Per-row** status — derived from `propagatedEmpIdsByKey` (snapshot RPC) + `submissionFallbackMap`. Falls back to `entered` whenever the row's employee_id is missing from BOTH sets, even if the child `kpis` row already advanced. |
+| 3 | Audit Review (View KPI Details) | Self 13 / Rating 5, Manager 14 / Rating 5, stage Manager Check | Reads `review_submissions` directly — the actual scorecard truth. |
 
-## Why the screen still says “13 not propagated”
+So the data is correct end-to-end — the **child `kpis` row is in `manager_check` and `review_submissions` exists**. Only the per-row pill in the scoped table disagrees.
 
-The incorrect statement is coming from stale frontend row state inside `OrgKpiEntryCard`:
+## Where the gap is
 
-1. `OrgKpiDataEntry.buildCardData()` now correctly rebuilds `data.scopedRows` using scorecard truth from the snapshot/fallback.
-2. But `OrgKpiEntryCard` copies `data.scopedRows` into local state as `scopedValues`.
-3. The reset guard uses `scopedRowsSignature()`, which currently only compares **row IDs**, not row propagation `status`.
-4. After propagation, the same 13 employee IDs remain, so the signature appears “same”.
-5. The component therefore does **not** replace local `scopedValues`, and the scoped table keeps rendering old `status: 'entered'` rows.
-6. `OrgKpiScopedEntryTable` counts `status === 'entered'` as “not propagated”, so it shows **0 propagated / 13 not propagated** even though the backend has 13/13 propagated.
+`src/pages/admin/OrgKpiDataEntry.tsx` lines ~561-602 build each `ScopedRow.status` from **two narrow proxies for "propagated"**:
 
-In short: **the data is propagated; the expanded card’s local display state is stale.**
+```ts
+const isPropagatedFact = kk2_propagatedEmps.has(empId);   // snapshot RPC
+const fb = submissionFallbackMap?.get(`${kpiKey}||${empId}`); // submissions fallback
+if (isPropagatedFact || fb) rowStatus = 'propagated';
+else if (okvHasValue) rowStatus = 'entered';   // ← the orange "Not propagated" pill
+```
 
-## Risk & Impact Report
+Meanwhile the **card** pill (and the Propagate dialog) use a much simpler, authoritative predicate from `src/lib/orgKpiStatus.ts` / ADR-055:
 
-- **Data Impact:** None expected. This fix should be frontend/read-model only; no schema, no RLS, no historical data rewrite.
-- **Workflow Impact:** None. Propagation, repair, rollback, and reviewer locks should remain unchanged.
-- **UI/UX Impact:** Only the propagation count/badges in the expanded Org KPI employee table should update correctly after refetch/propagation.
-- **Regression Risk:** Medium if we reset local rows too aggressively, because Org KPI entry rows also preserve unsaved edits/evidence removal.
-- **Mitigation:** Merge non-editable row metadata (`status`, target/uom display fields, `isNa` fallback) without overwriting active user-entered values; add regression tests for status-only row changes.
+```ts
+isAlreadyAdvancedPastKraSet(mappedEmpIds, kraSetEmpIds)
+// i.e. employee's child kpis.status !== 'kra_set'  →  propagated
+```
 
-## Implementation plan
+`kraSetEmpIdsByKey` is **already in scope** in `OrgKpiDataEntry.tsx` (line 227) — it is the same data the card uses. The per-row code path simply never consults it, so any employee whose `kpis.status` advanced through a path that didn't populate `propagatedEmpIdsByKey` (legacy propagation, repair RPC, sibling percolation, manual admin save) shows as "Not propagated" while the card above shows propagated and the scorecard shows Manager Check. That is the **drift** you are seeing.
 
-1. **Fix scoped row state synchronization**
-   - Update the row-sync logic in `OrgKpiEntryCard` so backend/refetched `data.scopedRows[].status` always flows into local `scopedValues`.
-   - Preserve editable local fields while dirty: achieved value, remarks, evidence removals, and sub-factor edits must not be overwritten.
-   - Allow non-editable/refetched fields to update: `status`, `targetValue`, `uom`, `uomType`, `qualitativeOptions`, and fallback `isNa` where safe.
+This is the same class of bug ADR-055 fixed at the card level — we just never extended it to the scoped table rows.
 
-2. **Strengthen the row signature guard**
-   - Update `scopedRowsSignature()` or add a dedicated metadata signature so it detects status-only changes like:
-     - same employee IDs
-     - same values/remarks/evidence
-     - but `entered → propagated`
-   - This prevents the exact stale “13 not propagated” state from surviving a refetch.
+## Fix (frontend only — no DB changes, no policy change)
 
-3. **Add regression coverage**
-   - Extend `src/test/orgKpiCounts.test.ts` or add a focused test proving the signature changes when row `status` changes.
-   - Add/extend a UI-level test around `OrgKpiScopedEntryTable` or the row merge helper so rows changing from `entered` to `propagated` update the header from `0 propagated / 13 not propagated` to `13 propagated / 0 not propagated`.
+### 1. Single source of truth for "propagated" — per row
 
-4. **Policy/documentation sync**
-   - Update `POLICY.md §111.3` to clarify that not only the parent `data.scopedRows`, but also any local component copy of scoped rows, must sync propagation status from scorecard truth.
-   - Update `DOCUMENTATION.md` Version History with this RCA: “stale local scoped row status after successful propagation”.
+Add one helper in `src/lib/orgKpiStatus.ts`:
 
-5. **Validation after implementation**
-   - Run the targeted tests for Org KPI row counts/status.
-   - Verify the live query still shows 13/13 propagated and confirm the UI logic now displays `13 propagated / 0 not propagated` after data refresh.
+```ts
+export function deriveScopedRowStatus(input: {
+  okvStatus: string | null;
+  okvHasValue: boolean;
+  isInPropagatedSet: boolean;        // snapshot RPC truth
+  hasSubmissionFallback: boolean;    // review_submissions truth
+  isPastKraSet: boolean;             // ADR-055 fact: kpis.status !== 'kra_set'
+}): 'pending' | 'entered' | 'propagated' | 'approved'
+```
 
-## Not planned
+Order of precedence (matches ADR-055):
+1. `okvStatus === 'approved'` → `approved`
+2. `isPastKraSet || isInPropagatedSet || hasSubmissionFallback` → `propagated`
+3. `okvHasValue` → `entered`
+4. else → `pending`
 
-- No new repair RPC.
-- No data rewrite.
-- No change to propagation business rules.
-- No quick-fix hiding the badge; the badge should remain, but with the correct truth.
+`isPastKraSet` is the **new** signal that closes the gap, and it dominates: if the child KPI has moved on, the row is propagated regardless of whether OKV.status was ever flipped.
 
-<lov-actions>
-  <lov-open-history>View History</lov-open-history>
-</lov-actions>
+### 2. Use it in `OrgKpiDataEntry.tsx`
 
-<lov-actions>
-<lov-link url="https://docs.lovable.dev/tips-tricks/troubleshooting">Troubleshooting docs</lov-link>
-</lov-actions>
+- Import `deriveScopedRowStatus`.
+- In the employee-scope `scopedRows` builder (line 562), pass `isPastKraSet = !kk2_kraSetEmps.has(empId)` where `kk2_kraSetEmps = kraSetEmpIdsByKey.get(kk2)`.
+- Do the same in the department-scope builder (line 484) using the dept's mapped employees.
+
+### 3. Make the table header summary use the same definition
+
+`OrgKpiScopedEntryTable.tsx` (lines 106-108) counts propagated/not-propagated from `row.status`, so once step 2 lands the header counts ("X propagated / Y not propagated") will automatically agree with the per-row pills and with the card pill above. No table changes needed.
+
+### 4. Tests (regression guardrail)
+
+- New unit test `src/test/orgKpiScopedRowStatus.test.ts` — covers the four-input matrix, especially the case the user hit: `okvStatus='entered', okvHasValue=true, isInPropagatedSet=false, hasSubmissionFallback=false, isPastKraSet=true` → `propagated`.
+- Extend `src/test/orgKpiStatusShared.test.ts` so the row-level helper and the card-level helper agree on the "every child advanced" scenario.
+
+### 5. Policy & doc sync (no behavior change, just record the rule)
+
+- `POLICY.md` — extend the §111.x ADR-055 entry: "The fact-based 'past `kra_set`' override applies to BOTH the card-level pill and the per-row pill in the scoped table. Anywhere the UI labels a row 'propagated', it must consult `kraSetEmpIdsByKey` first."
+- `DOCUMENTATION.md` — append RCA-2026-05-09 with the three-surface evidence and the unification.
+- `mem://features/admin/org-kpi-propagation-truth.md` — add row-level rule.
+
+## What this fix does NOT do (intentionally)
+
+- It does not write to the database, does not flip stale `org_kpi_values.status='entered'` rows to `propagated`. The row data already shows correctly in the scorecard; we are aligning the **display**, which is the actual user complaint. Backfilling OKV.status is a separate Data Repair concern (already covered by the existing "Repair Gap" tool).
+- It does not touch `propagate_org_kpi_value`, the snapshot RPC, or any submission write path. Those remain authoritative for *creating* propagation; this fix only makes the *read* model honest.
+- It does not change the Propagate dialog — that already uses ADR-055 via `summarisePropagationPreview` and has been correct.
+
+## Risk & Impact
+
+- **Data**: none — read-only display change.
+- **Workflow**: none.
+- **UI**: rows that were misleadingly labelled "Not propagated" while the child KPI was already in review will now correctly show "Propagated", matching the card and the scorecard. No false-positive risk because `kraSetEmpIdsByKey` comes from the same snapshot RPC used by the card.
+- **Regression**: low — confined to one helper plus two call sites; covered by new unit tests.

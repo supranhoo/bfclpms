@@ -146,3 +146,45 @@ export function summarisePropagationPreview(rows: PreviewBreakdownRow[]): Previe
 
   return { total, willAdvance, willSkip, lockedCount, overwriteCount, effectivelyPropagated };
 }
+
+// =============================================================================
+// Per-row scoped status (Org KPI scoped table)
+// =============================================================================
+
+/**
+ * RCA-2026-05-09 — Unifies the per-row "Propagated / Not propagated" pill
+ * with the card-level fact-based logic (ADR-055). Until now the per-row
+ * pill in `OrgKpiScopedEntryTable` derived its verdict only from
+ * `propagatedEmpIdsByKey` (snapshot RPC) and `submissionFallbackMap`.
+ * Both are *narrower* than the card's predicate: any employee whose child
+ * `kpis.status` advanced through a path that didn't populate those sets
+ * (legacy propagation, repair RPC, sibling percolation, manual admin save)
+ * showed as "Not propagated" while the card and the scorecard correctly
+ * showed Propagated / Manager Check. This helper closes that drift by
+ * promoting `isPastKraSet` (the same `kpis.status !== 'kra_set'` fact the
+ * card uses) to a first-class signal.
+ *
+ * Order of precedence:
+ *   1. okvStatus === 'approved'                       → 'approved'
+ *   2. isPastKraSet || isInPropagatedSet || hasSubmissionFallback → 'propagated'
+ *   3. okvHasValue                                    → 'entered'
+ *   4. otherwise                                       → 'pending'
+ */
+export interface DeriveScopedRowStatusInput {
+  okvStatus: string | null;
+  okvHasValue: boolean;
+  isInPropagatedSet: boolean;
+  hasSubmissionFallback: boolean;
+  isPastKraSet: boolean;
+}
+
+export type ScopedRowStatus = 'pending' | 'entered' | 'propagated' | 'approved';
+
+export function deriveScopedRowStatus(input: DeriveScopedRowStatusInput): ScopedRowStatus {
+  if (input.okvStatus === 'approved') return 'approved';
+  if (input.isPastKraSet || input.isInPropagatedSet || input.hasSubmissionFallback) {
+    return 'propagated';
+  }
+  if (input.okvHasValue) return 'entered';
+  return 'pending';
+}

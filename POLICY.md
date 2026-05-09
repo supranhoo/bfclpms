@@ -19,6 +19,18 @@ from the snapshot RPC `get_org_kpi_data_entry_snapshot.propagatedEmpIdsByKey`.
   this, a successful Propagate leaves the header stuck at
   "0 propagated / N not propagated" because the id set is unchanged.
   Regression: `src/test/orgKpiCounts.test.ts` ("status flips entered -> propagated").
+- **RCA-2026-05-09 — ADR-055 parity per row.** The fact-based "every
+  child has advanced past `kra_set`" override (ADR-055) applies to BOTH
+  the card-level pill AND the per-row pill in the scoped table. Anywhere
+  the UI labels a row "Propagated", it MUST consult `kraSetEmpIdsByKey`
+  first via `deriveScopedRowStatus()` (`src/lib/orgKpiStatus.ts`).
+  `isPastKraSet` (i.e. `kpis.status !== 'kra_set'`) dominates the
+  OKV.status / snapshot-set / submission-fallback signals. Without this,
+  any employee whose child KPI advanced through a path that didn't
+  populate `propagatedEmpIdsByKey` (legacy propagation, repair RPC,
+  sibling percolation, manual admin save) shows as "Not propagated"
+  while the card and the scorecard correctly show Propagated /
+  Manager Check. Regression: `src/test/orgKpiScopedRowStatus.test.ts`.
 
 Rationale: independent browser joins drift from the snapshot whenever
 normalization, RLS, or query coverage diverges, which produced the

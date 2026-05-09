@@ -29,3 +29,9 @@ type: feature
 - Org KPI propagation MUST resolve target KPIs server-side via `resolve_org_kpi_target_kpis` (SECURITY DEFINER). Never use a client `supabase.from('kpis').select(...)` to gate the propagate write — RLS hides employees in departments the data owner cannot see, leaving 10/50-style permanent "Not propagated" rows.
 - The resolver authorises via `has_role('admin')` OR a matching `org_kpi_data_owners` row (normalized kra/kpi). It then drives the existing `propagate_org_kpi_value` RPC unchanged.
 - `usePropagateOrgKpiValue.fetchTargetKpis` is now a thin wrapper around the RPC; old ilike fallback chain was deleted.
+
+**2026-05-09 ADR-055 parity per row (POLICY §111.3 update):**
+- Per-row "Propagated" pill in the Org KPI scoped table now goes through `deriveScopedRowStatus()` (`src/lib/orgKpiStatus.ts`), which promotes `isPastKraSet` (i.e. `kpis.status !== 'kra_set'`, the same fact the card-level pill uses via ADR-055) to a first-class signal. This eliminates the three-surface drift where the card said "Manager Check / propagated", the row said "Not propagated", and the scorecard correctly showed Manager Check.
+- Precedence: `okvStatus === 'approved'` → approved; `isPastKraSet || isInPropagatedSet || hasSubmissionFallback` → propagated; `okvHasValue` → entered; else pending.
+- `kraSetEmpIdsByKey` (already returned by the snapshot RPC) is the data source — no new RPC.
+- Regression: `src/test/orgKpiScopedRowStatus.test.ts`. Display-only fix; no DB writes, no propagation contract change.
