@@ -1,6 +1,4 @@
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import type { KPI } from '@/hooks/useKpis';
 
 /**
@@ -27,7 +25,6 @@ function getBestScore(sub: {
 }
 
 interface SubmissionRow {
-  kpi_id: string;
   final_score: number | null;
   management_score: number | null;
   auditor_score: number | null;
@@ -39,57 +36,20 @@ interface SubmissionRow {
 }
 
 /**
- * Batch-fetches review_submissions for the given periodKpis and computes
- * a weighted average overall score per employee.
- *
- * Returns Map<employeeId, number | null> where the number is rounded to 1 decimal.
+ * v2.66.10.6 — Pure derive (no fetch). Reuses the submission-score map already
+ * loaded by `useReviewSubmissionScoresByKpiIds` to avoid duplicate
+ * `review_submissions` scans, which were the dominant cause of dashboard
+ * statement timeouts (Vivek 101784 regression). Returns
+ * Map<employeeId, number | null> rounded to 1 decimal.
  */
-export function useEmployeeScoresForPeriod(periodKpis: KPI[] | undefined) {
-  // Collect KPI IDs for the query
-  const kpiIds = useMemo(() => {
-    if (!periodKpis || periodKpis.length === 0) return [];
-    return periodKpis.map(k => k.id);
-  }, [periodKpis]);
-
-  // Fetch submissions in batches of 500
-  const { data: submissions } = useQuery({
-    queryKey: ['employee-scores-submissions', kpiIds.slice(0, 20), kpiIds.length],
-    queryFn: async () => {
-      if (kpiIds.length === 0) return [];
-      
-      const BATCH_SIZE = 500;
-      const allSubs: SubmissionRow[] = [];
-      
-      for (let i = 0; i < kpiIds.length; i += BATCH_SIZE) {
-        const batch = kpiIds.slice(i, i + BATCH_SIZE);
-        const { data, error } = await supabase
-          .from('review_submissions')
-          .select('kpi_id, final_score, management_score, auditor_score, hr_pms_score, skip_level_score, manager_score, self_score, is_na')
-          .in('kpi_id', batch);
-        
-        if (error) {
-          console.error('Failed to fetch submissions for scores:', error);
-          continue;
-        }
-        if (data) allSubs.push(...(data as SubmissionRow[]));
-      }
-      
-      return allSubs;
-    },
-    enabled: kpiIds.length > 0,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-  });
-
-  // Compute weighted average per employee
-  const scoreMap = useMemo(() => {
+export function useEmployeeScoresForPeriod(
+  periodKpis: KPI[] | undefined,
+  submissionScoreMap: Map<string, SubmissionRow> | undefined,
+) {
+  return useMemo(() => {
     const map = new Map<string, number | null>();
-    if (!periodKpis || !submissions) return map;
+    if (!periodKpis || !submissionScoreMap) return map;
 
-    // Build kpiId → submission lookup
-    const subMap = new Map<string, SubmissionRow>();
-    submissions.forEach(s => subMap.set(s.kpi_id, s));
-
-    // Group KPIs by employee
     const empKpis = new Map<string, KPI[]>();
     periodKpis.forEach(k => {
       const list = empKpis.get(k.employee_id) || [];
@@ -97,14 +57,13 @@ export function useEmployeeScoresForPeriod(periodKpis: KPI[] | undefined) {
       empKpis.set(k.employee_id, list);
     });
 
-    // Calculate weighted average per employee
     empKpis.forEach((kpis, empId) => {
       let totalWeight = 0;
       let weightedSum = 0;
       let hasAnyScore = false;
 
       kpis.forEach(kpi => {
-        const sub = subMap.get(kpi.id);
+        const sub = submissionScoreMap.get(kpi.id);
         if (!sub || sub.is_na) return; // Exclude N/A and missing submissions
 
         const score = getBestScore(sub);
@@ -126,7 +85,5 @@ export function useEmployeeScoresForPeriod(periodKpis: KPI[] | undefined) {
     });
 
     return map;
-  }, [periodKpis, submissions]);
-
-  return scoreMap;
+  }, [periodKpis, submissionScoreMap]);
 }
