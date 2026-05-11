@@ -1,0 +1,23 @@
+---
+name: Workflow Configuration & Resolution Reports
+description: Two surfaces (admin export + period-aware report) that share one resolver for "who reviews employee X at stage Y for period (P, Y)". Includes N/A-reason taxonomy.
+type: feature
+---
+
+Two surfaces share `src/lib/workflowResolver.ts`:
+
+1. **Workflow Resolution Report** (`/reports/workflow-resolution`) — period-aware, in-app. Filters by period+year+department+search+N/A-by-stage. Calls `get_employee_workflow_info(employee_uuid, p_review_period, p_review_year)` per employee in batches of 25, then resolves each chain stage client-side via `resolveChain`. Excel export mirrors the visible columns. Default access: admin / hr_pms / management / auditor (view), admin / hr_pms (download).
+
+2. **Admin export "All Employees (Resolved)" sheet** on `/admin/workflow-config` — global-only (no period selector on that page). Resolves template via `employee override > department > pms_grade > default` from already-loaded `workflow_config` rows.
+
+**Resolver contract** (do not duplicate elsewhere):
+- Self = the employee row.
+- L1 = `profile.reporting_manager_id` (must exist in active profile pool).
+- Skip-Level = `manager.reporting_manager_id`, with self-loop guard (skipId === mgrId or === employee.id ⇒ `skip_level_loop`).
+- HR PMS / Auditor / Management = pool of users with that role in `user_roles`, filtered to active profiles (Core memory).
+- Stage is N/A if not in `workflow_templates.stages` for the resolved template.
+
+**N/A reason enum** (`NaReason` in `workflowResolver.ts`):
+`stage_not_in_template`, `no_manager_on_profile`, `skip_level_loop`, `resolved_user_inactive`, `role_unassigned`. Add new reason ⇒ also add label + at least one unit-test case in `src/test/workflowResolver.test.ts`.
+
+**Why we did NOT centralise this in a DB function**: `get_bulk_employee_workflows` only returns `stages[]`. Resolving role-pool stages (HR PMS / Auditor / Management) needs `user_roles` joins that already happen on the client for other surfaces; a DB rewrite would duplicate that logic without changing the canonical template-selection RPC. POLICY §122 enforces the single-resolver rule on the client.
