@@ -1,92 +1,92 @@
-# RCA: "32 could not be advanced" + "34 may have mismatched KPI names" after Propagate
+# Workflow Resolution Report
 
-## Short answer
+## Problem
 
-Org KPI propagation is **not actually failing**. The server-side RPC (`propagate_org_kpi_value`) is doing the right thing — it correctly refuses to overwrite employee KPIs that have already advanced past the data-owner stage (POLICY §88). The DB matches what the per-row pills show ("31 Propagated / 4 Not propagated").
+Today the only "Workflow Configuration Report" is the **Export Report** button on `/admin/workflow-config`. Its sheets list:
+- Templates (definitions only)
+- Employee / Department / PMS-Grade **Overrides**
 
-What is failing is the **client-side toast accounting**. Two separate code paths each turn a benign "already past kra_set" condition into a red, alarmist toast. They produce two simultaneous false alarms for the same Propagate click.
+Most employees use the **default template** and have no override row, so they never appear. To anyone reading the export, it looks "blank" — and there is no on-screen view at all to answer questions like *"Why does Tanaaz / April 2026 show N/A for Skip-Level?"*.
 
-## What the screenshots actually mean
+## Goal
 
-For the April 2026 "Fugitive Particulate Matter" KPI, the DB shows 37 employee KPI rows in this state:
+Add a new **in-app**, **period-aware** report that lists every active employee with the **fully-resolved** workflow chain for a chosen month + year, so admins can see at a glance which stages are active, which user fills each stage, and why a stage is N/A.
 
-```
-self_review     :  9
-manager_check   : 23
-hr_pms_review   :  5
-kra_set         :  0
-```
+## Scope
 
-So **none** of the mapped employees are still in `kra_set`. Most have already self-reviewed (or moved further). Per POLICY §88, a data owner cannot overwrite those — that is by design.
+### 1. New page: `/reports/workflow-resolution`
 
-## Toast #1 — "32 employee KPI(s) could not be advanced … Repair Gap"
+- Listed in `ReportsHub` under the "Configuration" / "Workflow" group.
+- Route registered in `src/App.tsx`, lazy-loaded like its siblings.
+- Access: same roles allowed today on `/admin/workflow-config` + Management + HR PMS + Auditor (read-only). No Employee access.
 
-Source: `src/pages/admin/OrgKpiDataEntry.tsx` lines 974‑1011 (the half-propagation forward-guard).
+### 2. Filters (top bar)
 
-It compares every `kpis` row that exists for this org KPI against `propagatedScopeIds` (the per-employee scope IDs the loop actually called). The bug:
+- **Period** (Month dropdown — Jan…Dec) — defaults to current month
+- **Year** (defaults to current fiscal year)
+- **Department** (multi-select)
+- **PMS Grade** (multi-select)
+- **Employee** (search-as-you-type, name / code / email)
+- **Template** (multi-select; populated from active + archived templates)
+- **Stage filter** chip row: "Show only employees with N/A in __" → Self / L1 / Skip-Level / HR PMS / Auditor / Management
+- "Active employees only" toggle (default ON, per Core memory)
 
-- `propagatedScopeIds.push(sv.scopeId)` only runs **after** `propagate.mutateAsync` returns (line 918).
-- Inside the loop, lines 891 and 895 `continue` early for any sub-row that is `null`, or is `0` and not `_touched` this session.
-- Any employee whose sub-row was skipped client-side is therefore never added to `propagatedScopeIds`, so the guard later flags them as "missed" and prints the red Repair-Gap toast — even though there is nothing to repair (the row is already past the data-owner stage).
+### 3. Table columns
 
-## Toast #2 — "Partial propagation: 1/35 employees updated, 34 may have mismatched KPI names"
+| Group | Columns |
+|---|---|
+| Identity | Employee Code, Name, Department, PMS Grade |
+| Resolution | Resolved Template, Source (Employee override / Department / PMS-Grade / Default), Period-Specific (Yes/No) |
+| Resolved chain (period-aware) | Self, L1 Manager, Skip-Level, HR PMS, Auditor, Management |
+| Diagnostics | Stages skipped (chips), N/A reason chip when any stage is N/A |
 
-Source: `src/pages/admin/OrgKpiDataEntry.tsx` lines 950‑965, combined with the early-return in `usePropagateOrgKpiValue.ts` line 289.
+Each chain cell shows the **resolved user's name** + small badge. When N/A, the cell shows the **reason chip** — one of:
+- `Stage not in template`
+- `No manager_id on profile`
+- `Skip-level = manager (loop)`
+- `Resolved user inactive`
+- `Stage role unassigned`
 
-- For each per-employee call, the hook resolves target KPIs first; if the resolver returns 0 rows for that employee (e.g. RLS, name drift, or the row was deleted/moved), the hook returns `{ propagatedCount: 0, details: [] }` **without** any `skipped` field.
-- Back in the page, `result.skipped || []` is empty, so neither `totalSkippedBenign` nor `totalSkippedHard` is incremented.
-- `unaccounted = expectedCount − totalPropagated − accountedSkips` then equals every benignly-skipped employee.
-- The page falls into the `else if (unaccounted > 0)` branch and prints "may have mismatched KPI names" — even though the real reason is "already past the data-owner stage".
+A row click opens a side panel with the full evaluation trace (template stages array, override row id if any, raw `manager_id` / `manager.manager_id` chain, final users at each stage).
 
-## Why both toasts are wrong (and confusing)
+### 4. Resolution logic (single source of truth)
 
-- They tell the user to use **Repair Gap** or check the **Pending Report**, when in reality there is nothing to repair: the employee KPIs the toasts list have a fully populated `review_submissions` row already, just at a later workflow stage.
-- The card chip and per-row pills (which use the ADR-055 `everyChildAdvanced` truth) correctly say "31 Propagated / 4 Not propagated". Only the toast layer is lying.
-- Net effect: data integrity is fine; display copy contradicts itself ("31/35 Propagated" + "32 could not be advanced").
+- All resolution runs through the **same** function the runtime workflow engine uses today (the resolver behind `getEmployeeWorkflow` / `get_bulk_employee_workflows`). The report does **not** re-implement chain logic — that would create the "two standards" problem the user has flagged before.
+- Bulk-resolve in batches of 200 employees per RPC call (per Core memory: handle 1000-row DB limit with batched fetching).
+- Memoized client-side cache keyed by `(period, year)`.
 
-## Plan to fix (display layer only — no DB writes, no policy change)
+### 5. Exports
 
-1. **`usePropagateOrgKpiValue.ts` — close the silent-zero branch.**
-   In the `if (targetKpis.length === 0)` early returns (lines ~289 and ~390), include an explicit `skippedCount` and a synthetic `skipped` entry:
-   ```ts
-   return {
-     propagatedCount: 0,
-     details: [],
-     skippedCount: 1,
-     skipped: [{ kpi_id: '—', current_status: 'unresolved', reason: 'no_target_rows' }],
-   };
-   ```
-   This guarantees the page always sees a typed skip reason instead of an empty array.
+- **Export Excel** button reuses the period-aware resolved rows (not just overrides). Sheet matches the on-screen columns.
+- **Export filtered view** (respects current filters).
 
-2. **`OrgKpiDataEntry.tsx` — recognise benign skip reasons uniformly.**
-   Extend the bucketing on line 915 to treat the workflow-locked reasons as benign:
-   ```ts
-   const BENIGN = new Set(['not_in_kra_set', 'reviewer_locked', 'no_target_rows']);
-   if (BENIGN.has(s.reason)) totalSkippedBenign++;
-   else totalSkippedHard++;
-   ```
-   `reviewer_locked` is what the RPC returns for `manager_check`/`hr_pms_review`/etc. — those are POLICY-§88 expected, not failures.
+### 6. Admin export upgrade (small, additive)
 
-3. **`OrgKpiDataEntry.tsx` — push `propagatedScopeIds` for client-skipped svs too.**
-   In the per-scope loop, when we `continue` at lines 891/895, still push `sv.scopeId` into `propagatedScopeIds` (or use a separate `consideredScopeIds` set in the half-prop guard). This stops the guard from flagging client-skipped rows as "missed" and eliminates the false Repair-Gap toast.
+On `/admin/workflow-config`, the existing `WorkflowConfigExport` gets one new sheet **"All Employees (Resolved)"** that calls the same resolver for the currently-selected period in the page header (or "Global" if none). The existing 4 sheets are left unchanged. This eliminates the "blank report" perception even for users who never visit the new page.
 
-4. **`OrgKpiDataEntry.tsx` — soften the unaccounted-shortfall toast.**
-   When `unaccounted > 0` but `propagatedScopeIds.length === expectedCount` AND every mapped child is past `kra_set` (already known via `orgLevelData.mappedEmpIdsByKey` + `kraSetEmpIdsByKey`), suppress the red toast and emit a single neutral "Already propagated — N rows past data-owner stage (POLICY §88)" toast instead.
+### 7. Tests + mocks (per workspace SSOT rule)
 
-5. **Tests — regression coverage.**
-   - Extend `src/test/orgKpiPropagationToast.test.ts` with three cases: (a) all rows past `kra_set` → single "Already propagated" toast, no Repair Gap; (b) mixed (1 propagated + 34 reviewer-locked) → one summary toast, no false "mismatched names"; (c) genuine name mismatch (resolver returns 0 AND no kpis row exists) → keep showing the existing diagnostic.
-   - New unit test on the bucketing helper to ensure `reviewer_locked` and `no_target_rows` are classified benign.
+- Unit test: resolver wrapper returns same chain for an employee on `/admin/workflow-config` page and on the new report (parity test — guards against future drift).
+- Unit test: each of the 5 N/A reason chips fires for the correct fixture.
+- Mock data: include Tanaaz / Ravi-Naidu-style fixture (manager_id NULL → `No manager_id on profile`) and a self-loop fixture.
 
-6. **Docs / Policy / Memory sync (atomic with the code change).**
-   - `POLICY.md` — add §111.6 "Propagation toast classification" explaining benign vs hard skip reasons.
-   - `DOCUMENTATION.md` — version note 2.66.10.3 with the RCA summary.
-   - `mem/features/admin/org-kpi-propagation-truth.md` — append a 2026-05-11 bullet describing the toast-layer fix and the BENIGN reason set.
-   - `docs/adr/ADR-055.md` — short follow-up note ("toast accounting now agrees with chip/pill").
+### 8. Documentation + memory sync
+
+- Update `DOCUMENTATION.md` (new section "Workflow Resolution Report" + bump version).
+- Update `POLICY.md` to record: report is read-only, period-aware, uses canonical resolver, must never diverge from runtime workflow engine.
+- Update `mem://features/admin/workflow-configuration-report` to cover the new on-screen report and N/A-reason chip taxonomy.
+- New ADR entry under `docs/adr/` documenting the "single resolver" decision.
 
 ## Risk & Impact Report
 
-- **Data Impact**: None. No DB schema, RLS, or RPC changes. Only client-side toast logic.
-- **Workflow Impact**: None. POLICY §88 (no overwrite past kra_set) remains enforced server-side.
-- **UI/UX Consistency**: Removes contradiction between chip ("31/35 Propagated") and toast ("32 could not be advanced"). Brings toast layer in line with ADR-055 truth used by chip + per-row pill.
-- **Regression Risk**: Low — the bucketing change is additive; the `propagatedScopeIds` widening only affects guard math; the early-return now emits a benign reason instead of nothing.
-- **Mitigation**: New tests in step 5 cover both the false-alarm and the genuine-failure cases, so a future regression of either direction is caught.
+- **Data Impact**: Read-only. No schema, no RLS changes. Resolver is the existing one.
+- **Workflow Impact**: None — pure reporting surface.
+- **UI/UX Consistency**: New page mirrors styling of `KpiStatusTracker` / `BottleneckReport` for filters + table. Added to `ReportsHub` group, sidebar entry under Reports.
+- **Regression Risk**: Low. The only existing-file edit is one extra sheet appended to `WorkflowConfigExport.tsx` (additive). Parity unit test guards against the resolver ever drifting.
+- **Mitigation**: Single shared resolver call, parity unit test, and a feature flag (`reports.workflow_resolution.enabled`, default ON) so it can be toggled from admin settings without a redeploy.
+
+## Out of scope
+
+- No edits to the workflow engine or chain-resolution logic itself.
+- No changes to RLS or template definitions.
+- No bulk re-assignment / fix actions (read-only report). A follow-up plan can add "Fix" deep-links from N/A chips to the relevant admin screen.
