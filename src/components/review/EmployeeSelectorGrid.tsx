@@ -332,6 +332,13 @@ export function EmployeeSelectorGrid({
   }, [viewLevel, requiredStage, stageFilteredProfiles, isFullAccess, allProfiles, teamMembers, skipLevelMembers]);
 
   const { data: workflowMap } = useBulkEmployeeWorkflows(allEmployeeIds, selectedPeriod, selectedYear);
+  // BUG-051: Org KPI tile on Team Reviews — only fetched for full-access roles
+  // who actually see the tile. Cached 60s; ~896 rows max per period.
+  const { data: orgKpiCounts } = useOrgKpiPeriodCounts(
+    selectedPeriod,
+    selectedYear,
+    isFullAccess && viewLevel === 'team',
+  );
 
   // Helper: get workflow stages for an employee (with fallback)
   const getStages = (employeeId: string): string[] => {
