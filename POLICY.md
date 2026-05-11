@@ -2746,3 +2746,6 @@ N/A reasons are an enum (`stage_not_in_template`, `no_manager_on_profile`, `skip
 
 ## §123 — Reviewer Dashboard Failure Modes
 Reviewer roster queries (`useProfiles`, `useTeamMembers`, `useSkipLevelTeamMembers`, `useProfilesByWorkflowStage`, `useKpisByPeriodRanges`) MUST surface `isError` to the consuming dashboard. Reviewer dashboards (`EmployeeSelectorGrid` and any successor) MUST render a distinct error state with a Retry CTA when any of these queries fails — they MUST NOT render the generic "No employees found" empty state on query failure, because admin viewers (e.g. employee 101784) are most exposed to org-wide statement timeouts and cannot otherwise distinguish a load failure from an empty roster.
+
+## §124 — Reporting RPC Return-Type Contract
+Backend reporting RPCs that surface `kpis`, `review_submissions`, or any table with enum / `varchar` columns MUST cast every such column to its declared `RETURNS TABLE` type (`::text` for enums and varchars, `::numeric` where appropriate). PostgREST returns HTTP 400 `structure of query does not match function result type` on the first mismatch, which collapses the entire reviewer dashboard to zero counters with no user-visible error. New or edited RPCs of this kind MUST be regression-tested against the actual column types — not just the declared signature — before shipping.
