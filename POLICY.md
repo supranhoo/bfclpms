@@ -2775,3 +2775,17 @@ On the merged Team Reviews dashboard (`/dashboard?view=team`), the Direct Pendin
 - Any status not in `{'kra_set', 'self_review'}` and not skip-pending → **Reviewed**.
 
 Manager/non-full-access flows continue to use the direct/skip membership classifier unchanged. Implementation: `src/components/review/EmployeeSelectorGrid.tsx` `stats` `useMemo`, `viewLevel === 'team'` branch.
+
+## §127 — Team Reviews Tile Composition (v2.66.11.7)
+The Team Reviews header on `/dashboard?view=team` MUST show the following six tiles, in this order, so the visible numbers fully account for the `Total KPIs` denominator and surface the missing "KRA Set / awaiting self-review" bucket:
+
+1. **Total Employees** — `demographicFilteredMembers.length`.
+2. **KRA Set** — KPIs with `status === 'kra_set'` (KRA assigned, employee hasn't submitted self-review yet). Counted for full-access viewers across the visible roster, and for managers across their direct reports.
+3. **Direct Pending** — KPIs with `status === 'self_review'` (awaiting manager review).
+4. **Skip-Level Pending** — KPIs whose status is in `resolveReviewableStatuses('skip_level', stages)` for the employee's resolved workflow.
+5. **Reviewed (ratio)** — `value = reviewed`, `denominator = totalKpis`. Renders as `Reviewed / Total` with a progress bar and `% — of total KPIs` subtitle. "Reviewed" means status moved past `kra_set`/`self_review`.
+6. **Org KPIs** — `value = entered + propagated`, `denominator = total org_kpi_values for period`, sub-line shows `pending` count. Full-access viewers ONLY (managers don't see this tile). Source: `useOrgKpiPeriodCounts(period, year, enabled)` — single paged read on `org_kpi_values`, React Query cache `staleTime: 60_000`, gated by `isFullAccess && viewLevel === 'team'` so it never fires for managers.
+
+Sum invariant: `KRA Set + Direct Pending + Skip-Level Pending + Reviewed === Total KPIs` (within a 1-row tolerance for in-flight transitions). The Reviewed tile is the visible expression of this invariant via its denominator.
+
+The standalone "Total KPIs" tile is REMOVED — its number now lives as the denominator of the Reviewed tile to keep the row at six tiles. Implementation: `src/components/review/EmployeeSelectorGrid.tsx` `renderStatsCards()` team branch + `StatCard.denominator` prop. Tile grid uses `grid-cols-2 md:grid-cols-3 xl:grid-cols-6`. Regression: `src/test/teamReviewsFullAccessTiles.test.ts` (sum invariant + `kraSetPending` case).

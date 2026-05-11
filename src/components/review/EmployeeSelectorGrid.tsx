@@ -11,6 +11,7 @@ import { useKpisByPeriodRanges, useReviewSubmissionScoresByKpiIds, KPI } from '@
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
 import { useEmployeeScoresForPeriod } from '@/hooks/useEmployeeScoresForPeriod';
+import { useOrgKpiPeriodCounts } from '@/hooks/useOrgKpiPeriodCounts';
 import { resolvePendingStatuses, resolveReviewableStatuses, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { getScoreBadgeClass } from '@/lib/reviewConstants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,6 +25,7 @@ import { EmployeeContactCard } from '@/components/review/EmployeeContactCard';
 import { supabase } from '@/integrations/supabase/client';
 import { formatEmployeeName } from '@/lib/utils';
 import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2, Download, ChevronDown, ChevronUp, Loader2, Info, Eye, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Hourglass, Building2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { ViewMode } from './ViewModeToggle';
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
@@ -57,6 +59,7 @@ interface EmployeeSelectorGridProps {
 const STATUS_OPTIONS_BY_LEVEL: Record<Exclude<ViewMode, 'self'>, Array<{ value: string; label: string }>> = {
   team: [
     { value: 'all', label: 'All Employees' },
+    { value: 'pending_kra_set', label: 'KRA Set (No Self-Review)' },
     { value: 'pending_direct', label: 'Pending (Direct)' },
     { value: 'pending_skip', label: 'Pending (Skip-Level)' },
     { value: 'reviewed', label: 'Reviewed' },
@@ -329,6 +332,13 @@ export function EmployeeSelectorGrid({
   }, [viewLevel, requiredStage, stageFilteredProfiles, isFullAccess, allProfiles, teamMembers, skipLevelMembers]);
 
   const { data: workflowMap } = useBulkEmployeeWorkflows(allEmployeeIds, selectedPeriod, selectedYear);
+  // BUG-051: Org KPI tile on Team Reviews — only fetched for full-access roles
+  // who actually see the tile. Cached 60s; ~896 rows max per period.
+  const { data: orgKpiCounts } = useOrgKpiPeriodCounts(
+    selectedPeriod,
+    selectedYear,
+    isFullAccess && viewLevel === 'team',
+  );
 
   // Helper: get workflow stages for an employee (with fallback)
   const getStages = (employeeId: string): string[] => {
@@ -726,12 +736,21 @@ export function EmployeeSelectorGrid({
         const reviewableStatuses = resolveReviewableStatuses(engineLevel, stages);
         
         if (viewLevel === 'team') {
-          if (statusFilter === 'pending_direct' && isDirect && kpi.status === 'self_review') {
+          if (statusFilter === 'pending_kra_set' && kpi.status === 'kra_set' && (isFullAccess || isDirect)) {
             employeeIds.add(kpi.employee_id);
-          } else if (statusFilter === 'pending_skip' && isIndirect && reviewableStatuses.includes(kpi.status || '')) {
+          } else if (statusFilter === 'pending_direct' && (isFullAccess || isDirect) && kpi.status === 'self_review') {
             employeeIds.add(kpi.employee_id);
+          } else if (statusFilter === 'pending_skip') {
+            // For full-access roles we don't have indirect membership; resolve
+            // skip-reviewable statuses from the employee's own workflow stages.
+            const skipReviewable = isIndirect
+              ? reviewableStatuses
+              : (isFullAccess ? resolveReviewableStatuses('skip_level', stages) : []);
+            if ((isFullAccess || isIndirect) && skipReviewable.includes(kpi.status || '')) {
+              employeeIds.add(kpi.employee_id);
+            }
           } else if (statusFilter === 'reviewed') {
-            if (isDirect && !['kra_set', 'self_review'].includes(kpi.status || '')) {
+            if ((isFullAccess || isDirect) && !['kra_set', 'self_review'].includes(kpi.status || '')) {
               employeeIds.add(kpi.employee_id);
             } else if (isIndirect) {
               const slIdx = stages.indexOf('skip_level_check');
@@ -921,7 +940,7 @@ export function EmployeeSelectorGrid({
   // Calculate stats using per-employee workflow-aware resolution
   const stats = useMemo(() => {
     if (!periodKpis || !demographicFilteredMembers) {
-      return { totalEmployees: 0, stat1: 0, stat2: 0, stat3: 0, stat4: 0, stat5: 0, totalKpis: 0 };
+      return { totalEmployees: 0, stat0: 0, stat1: 0, stat2: 0, stat3: 0, stat4: 0, stat5: 0, totalKpis: 0 };
     }
 
     const memberIds = new Set(demographicFilteredMembers.map(m => m.id));
@@ -931,7 +950,7 @@ export function EmployeeSelectorGrid({
 
     if (viewLevel === 'team') {
       // Merged view: separate direct pending, skip-level pending, and reviewed counts
-      let directPending = 0, skipPending = 0, reviewed = 0;
+      let directPending = 0, skipPending = 0, reviewed = 0, kraSetPending = 0;
       relevantKpis.forEach(k => {
         const isIndirect = skipIds.has(k.employee_id);
         const isDirect = directIds.has(k.employee_id);
@@ -943,7 +962,9 @@ export function EmployeeSelectorGrid({
         // matching the per-employee badge logic so tiles and card badges agree.
         if (isFullAccess && !isDirect && !isIndirect) {
           const status = k.status || '';
-          if (status === 'self_review') {
+          if (status === 'kra_set') {
+            kraSetPending++;
+          } else if (status === 'self_review') {
             directPending++;
           } else if (hasResolvedWorkflow(k.employee_id)) {
             const stages = getStages(k.employee_id);
@@ -965,13 +986,15 @@ export function EmployeeSelectorGrid({
             if (slIdx >= 0 && stages.slice(slIdx).includes(k.status || '')) reviewed++;
           }
         } else if (isDirect) {
-          if (k.status === 'self_review') directPending++;
+          if (k.status === 'kra_set') kraSetPending++;
+          else if (k.status === 'self_review') directPending++;
           else if (!['kra_set', 'self_review'].includes(k.status || '')) reviewed++;
         }
         // Employees with no reporting relationship (undefined) are excluded from direct/skip counts
       });
       return {
         totalEmployees: demographicFilteredMembers.length,
+        stat0: kraSetPending,
         stat1: directPending,
         stat2: skipPending,
         stat3: reviewed,
@@ -1010,7 +1033,7 @@ export function EmployeeSelectorGrid({
       });
       // v2.64.11: Total Employees = unique employees with any KPI in period
       // (workflow-filtered roster); reviewed counted via audit_score signature.
-      return { totalEmployees: periodEmployeeIds.size, stat1: pending, stat2: inAudit, stat3: forwarded, stat4: reviewed, stat5: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: periodEmployeeIds.size, stat0: 0, stat1: pending, stat2: inAudit, stat3: forwarded, stat4: reviewed, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'skip_level') {
       let pending = 0, reviewed = 0;
       const periodEmployeeIds = new Set<string>();
@@ -1024,7 +1047,7 @@ export function EmployeeSelectorGrid({
           if (slIdx >= 0 && stages.slice(slIdx).includes(k.status || '')) reviewed++;
         }
       });
-      return { totalEmployees: periodEmployeeIds.size, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: periodEmployeeIds.size, stat0: 0, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'hr_pms') {
       let pending = 0, inReview = 0, forwarded = 0;
       const periodEmployeeIds = new Set<string>();
@@ -1061,26 +1084,26 @@ export function EmployeeSelectorGrid({
       });
       // v2.64.11: Total Employees = unique employees with any KPI in period
       // (workflow-filtered roster). Stat3 = reviewed via hr_pms_score signature.
-      return { totalEmployees: periodEmployeeIds.size, stat1: pending, stat2: inReview, stat3: reviewed, stat4: relevantKpis.length, stat5: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: periodEmployeeIds.size, stat0: 0, stat1: pending, stat2: inReview, stat3: reviewed, stat4: relevantKpis.length, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'pending_self_review') {
       const pendingKpis = relevantKpis.filter(k => k.status === 'kra_set');
       const pendingCount = pendingKpis.length;
       const orgKpiCount = pendingKpis.filter(k => k.is_org_level).length;
       const nonMonthlyCount = pendingKpis.filter(k => k.frequency && !['monthly','daily','weekly'].includes(k.frequency.toLowerCase())).length;
       const regularCount = pendingKpis.filter(k => !k.is_org_level && (!k.frequency || ['monthly','daily','weekly'].includes(k.frequency.toLowerCase()))).length;
-      return { totalEmployees: demographicFilteredMembers.length, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: demographicFilteredMembers.length, stat0: 0, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'pending_manager_review') {
       const pendingKpis = relevantKpis.filter(k => k.status === 'self_review');
       const orgKpiCount = pendingKpis.filter(k => k.is_org_level).length;
       const nonMonthlyCount = pendingKpis.filter(k => k.frequency && !['monthly','daily','weekly'].includes(k.frequency.toLowerCase())).length;
       const regularCount = pendingKpis.filter(k => !k.is_org_level && (!k.frequency || ['monthly','daily','weekly'].includes(k.frequency.toLowerCase()))).length;
-      return { totalEmployees: demographicFilteredMembers.length, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: demographicFilteredMembers.length, stat0: 0, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'pending_skip_review') {
       const pendingKpis = relevantKpis.filter(k => k.status === 'manager_check');
       const orgKpiCount = pendingKpis.filter(k => k.is_org_level).length;
       const nonMonthlyCount = pendingKpis.filter(k => k.frequency && !['monthly','daily','weekly'].includes(k.frequency.toLowerCase())).length;
       const regularCount = pendingKpis.filter(k => !k.is_org_level && (!k.frequency || ['monthly','daily','weekly'].includes(k.frequency.toLowerCase()))).length;
-      return { totalEmployees: demographicFilteredMembers.length, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: demographicFilteredMembers.length, stat0: 0, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else {
       // Management view (default branch): Total Employees = those with at
       // v2.64.11: Total Employees = unique employees with any KPI in period
@@ -1097,6 +1120,7 @@ export function EmployeeSelectorGrid({
       });
       return {
         totalEmployees: periodEmployeeIds.size,
+        stat0: 0,
         stat1: relevantKpis.filter(k => k.status === 'management_review').length,
         stat2: reviewed > 0 ? reviewed : relevantKpis.filter(k => k.status === 'approved').length,
         stat3: relevantKpis.length,
@@ -1275,13 +1299,46 @@ export function EmployeeSelectorGrid({
 
   const renderStatsCards = () => {
     if (viewLevel === 'team') {
+      const orgEntered = (orgKpiCounts?.entered ?? 0) + (orgKpiCounts?.propagated ?? 0);
+      const orgTotal = orgKpiCounts?.total ?? 0;
+      const orgPending = orgKpiCounts?.pending ?? 0;
       return (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
           <StatCard icon={Users} label={isFullAccess ? 'Total Employees' : 'Team Size'} value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
+          <StatCard
+            icon={Hourglass}
+            label="KRA Set"
+            value={stats.stat0 ?? 0}
+            color="orange"
+            subtitle="Awaiting self-review"
+            onClick={() => toggleStatusFilter('pending_kra_set')}
+            active={statusFilter === 'pending_kra_set'}
+            tooltip="KPIs whose KRA has been assigned but the employee hasn't submitted a self-review yet."
+          />
           <StatCard icon={Clock} label="Direct Pending" value={stats.stat1} color="yellow" subtitle="Awaiting manager review" onClick={() => toggleStatusFilter('pending_direct')} active={statusFilter === 'pending_direct'} />
           <StatCard icon={UserCheck} label="Skip-Level Pending" value={stats.stat2} color="amber" subtitle="Awaiting skip-level review" onClick={() => toggleStatusFilter('pending_skip')} active={statusFilter === 'pending_skip'} />
-          <StatCard icon={CheckCircle2} label="Reviewed" value={stats.stat3} color="green" subtitle="KPIs completed" onClick={() => toggleStatusFilter('reviewed')} active={statusFilter === 'reviewed'} />
-          <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" className="col-span-2 md:col-span-1" />
+          <StatCard
+            icon={CheckCircle2}
+            label="Reviewed"
+            value={stats.stat3}
+            denominator={stats.totalKpis}
+            color="green"
+            subtitle="of total KPIs"
+            onClick={() => toggleStatusFilter('reviewed')}
+            active={statusFilter === 'reviewed'}
+            tooltip="KPIs that have moved past Self-Review (Manager, Skip, HR PMS, Audit, Management or Approved)."
+          />
+          {isFullAccess && (
+            <StatCard
+              icon={Building2}
+              label="Org KPIs"
+              value={orgEntered}
+              denominator={orgTotal}
+              color="purple"
+              subtitle={orgPending > 0 ? `${orgPending} pending entry` : 'All entered'}
+              tooltip="Organisation-level KPIs for this period: Entered + Propagated / Total. Pending = data-owner entry outstanding."
+            />
+          )}
         </div>
       );
     } else if (viewLevel === 'skip_level') {
@@ -2147,6 +2204,8 @@ interface StatCardProps {
   onClick?: () => void;
   active?: boolean;
   tooltip?: string;
+  /** When set, the tile renders `${value} / ${denominator}` and a thin progress bar. */
+  denominator?: number;
 }
 
 const colorMap: Record<StatCardProps['color'], { border: string; bg: string; text: string }> = {
@@ -2163,11 +2222,13 @@ const colorMap: Record<StatCardProps['color'], { border: string; bg: string; tex
 // v2.64.8: forwardRef so Radix Tooltip and other ref-forwarding wrappers can
 // attach refs without React warnings.
 const StatCard = React.forwardRef<HTMLDivElement, StatCardProps>(function StatCard(
-  { icon: Icon, label, value, color, subtitle, className = '', onClick, active, tooltip },
+  { icon: Icon, label, value, color, subtitle, className = '', onClick, active, tooltip, denominator },
   ref,
 ) {
   const colors = colorMap[color];
   const isClickable = !!onClick;
+  const hasRatio = typeof denominator === 'number' && denominator > 0;
+  const pct = hasRatio ? Math.min(100, Math.round((value / denominator!) * 100)) : 0;
 
   const card = (
     <Card
@@ -2182,8 +2243,18 @@ const StatCard = React.forwardRef<HTMLDivElement, StatCardProps>(function StatCa
               {label}
               {tooltip && <Info className="h-3 w-3 opacity-60" />}
             </p>
-            <p className={`text-xl sm:text-3xl font-bold ${color === 'primary' ? '' : colors.text}`}>{value}</p>
-            {subtitle && <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">{subtitle}</p>}
+            <p className={`text-xl sm:text-3xl font-bold ${color === 'primary' ? '' : colors.text}`}>
+              {value}
+              {hasRatio && (
+                <span className="text-sm sm:text-base font-medium text-muted-foreground ml-1">/ {denominator}</span>
+              )}
+            </p>
+            {hasRatio && (
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden mt-1.5 w-24 sm:w-32">
+                <div className={`h-full ${colors.text.replace('text-', 'bg-')}`} style={{ width: `${pct}%` }} />
+              </div>
+            )}
+            {subtitle && <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">{hasRatio ? `${pct}% — ${subtitle}` : subtitle}</p>}
           </div>
           <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-full ${colors.bg} flex items-center justify-center`}>
             <Icon className={`h-5 w-5 sm:h-6 sm:w-6 ${colors.text}`} />
