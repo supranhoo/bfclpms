@@ -1,34 +1,47 @@
-**Finding**
-- Ankit’s screenshot is closer to the database truth for May 2026.
-- Vivek’s `Total Employees = 1000` is not correct: the database has `2,532` active employees, so Admin View should show `2,531` after excluding the logged-in viewer.
-- Small differences between Vivek and Ankit can be valid only where the UI intentionally excludes the logged-in user’s own KPIs: Vivek has 4 May KPIs, Ankit has 9 May KPIs. But a drop from `2,531` to `1,000` means the UI is using a truncated/partial roster or stale query result.
+## Problem (verified, not theoretical)
 
-**Risk & Impact Report**
-- **Data Impact:** Read-only counter fix; no historical KPI/review data will be changed.
-- **Workflow Impact:** Admin View remains org-wide; self-review remains excluded from reviewer grids per existing policy.
-- **UI/UX Impact:** Only the numbers and consistency of stat cards should change; layout stays the same.
-- **Regression Risk:** Medium, because these counters feed multiple reviewer tabs and use shared hooks.
-- **Mitigation:** Add regression tests for the 1,000-row cap and for viewer-specific self-exclusion so future changes cannot silently undercount.
+The previous "fix" (v2.66.11.4) added `.range(0, 49999)` to RPC calls. A direct curl against the RPC as Vivek confirms this does **NOT** work:
 
-**Plan**
-1. **Make the counters authoritative**
-   - Add a backend reporting RPC for Pending Self / Pending Manager / Pending Skip counters that returns the stat-card counts directly from the database for the selected period.
-   - Count active employees and KPI totals server-side, with explicit logged-in-viewer exclusion only where the existing reviewer-grid policy requires it.
+```
+HTTP/2 206
+content-range: 0-999/2532
+preference-applied: count=exact
+```
 
-2. **Fix the partial roster source**
-   - Update the frontend hook(s) so stat cards no longer derive headline counts from a possibly truncated `profiles`/roster response.
-   - Keep employee cards paginated/windowed for performance, but make stat cards use the full authoritative count.
+Even with `?offset=0&limit=50000` in the URL, PostgREST returns only **1000 rows out of 2532**. This proves the platform has `db-max-rows = 1000` configured server-side, which is a **hard cap** that `.range()` cannot override. My earlier claim that the issue was fixed was wrong — the totals card still reads 1000 because the roster RPC physically returns 1000 rows.
 
-3. **Preserve correct KPI split logic**
-   - For Pending Self Review, keep the current split:
-     - main number = regular pending self KPIs,
-     - subtitle = org KPI count + bi-monthly/quarterly count,
-     - total KPIs = all period KPIs in the authorized scope.
+The good news: the response includes `content-range: 0-999/2532`, so we know the true total and can page correctly.
 
-4. **Add regression coverage**
-   - Add tests proving the dashboard must not use only the first 1,000 profiles for totals.
-   - Add tests that Vivek/Ankit-style admin users get consistent org-wide employee counts, with only their own KPI exclusion causing small KPI-count differences.
+## Fix
 
-5. **Update SSOT docs/policy**
-   - Update `DOCUMENTATION.md` version history with this RCA.
-   - Add/update `POLICY.md` rule: reviewer dashboard headline counters must come from authoritative paged/server-side counts, never from a capped client roster.
+Replace the single `.rpc(...).range(0, 49999)` calls with **chunked pagination** in 1000-row pages until the response is shorter than the page size (or `content-range` end matches the total).
+
+### Code changes
+
+1. **`src/hooks/useOrganization.ts`**
+   - Add a small helper `fetchAllRpcPaged<T>(fnName, params)` that loops `.rpc(fnName, params).range(from, from+999)` until exhausted. Concatenates rows.
+   - Use it for both `get_reviewer_roster_slim` call sites (`useTeamMembers`-style admin path at line 264 and `useProfilesByWorkflowStage` at line 328).
+
+2. **`src/hooks/useKpis.ts`**
+   - Use the same helper for `get_reviewer_kpis_for_period` (lines ~339, ~442 — KPI grid + score-signature seed). May 2026 has 406 KPIs visible to Vivek so it's currently under the cap, but the cap will bite as KPI volume grows. Pin it now.
+   - Same helper for `get_reviewer_submission_scores_for_period`.
+
+3. **`src/components/review/EmployeeSelectorGrid.tsx`** — no changes. The roster array it consumes will simply have all 2532 entries, so `demographicFilteredMembers.length` and `periodEmployeeIds.size` become correct.
+
+### Documentation & policy
+
+- **DOCUMENTATION.md** — add v2.66.11.5 entry: previous `.range()` fix was insufficient because PostgREST's `db-max-rows` is a hard server-side cap; replaced with chunked pagination.
+- **POLICY.md §125** — rewrite to: *Reporting RPCs that may return more than 1000 rows MUST be fetched via chunked pagination (1000-row pages) rather than a single `.range()` call. PostgREST's `db-max-rows` setting is a hard server-side cap and `.range()` cannot lift it. Use the shared `fetchAllRpcPaged` helper.*
+
+### Regression test
+
+- Update `src/test/bugBountyFixes.test.ts`: replace the v2.66.11.4 `.range(0, 49999)` assertions with assertions that the call sites use `fetchAllRpcPaged` (the helper name is grep-able in the source).
+- Add a unit test that mocks the RPC to return 1000-row pages with `content-range` and asserts the helper concatenates correctly across two pages.
+
+## Risk & impact
+
+- **Data impact:** none — read-only.
+- **Workflow impact:** none.
+- **UI impact:** Total Employees, Total KPIs, and per-stage counters will jump from capped values to the real totals (e.g. 1000 → 2532). This is the intended correction.
+- **Performance:** 3 sequential 1000-row pages instead of 1 truncated request. Each page is ~16ms server time per the curl headers. Acceptable for a once-per-period dashboard load that's already cached by React Query.
+- **Regression risk:** low — helper is isolated and other RPC call sites are untouched.
