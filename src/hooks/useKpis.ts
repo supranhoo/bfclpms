@@ -333,13 +333,14 @@ export function useKpisByPeriodRanges(periodRanges: Array<{ month: string; year:
       // overhead and lift statement_timeout to 30s. Direct PostgREST query
       // on `kpis` for a full month was timing out at 8s (Vivek 101784).
       const fetchSinglePeriod = async (month: string, year: number): Promise<any[]> => {
-        // v2.66.11.4 — Lift PostgREST's default 1000-row cap on RPC
-        // responses so org-wide periods (2,000+ KPIs) are not truncated.
-        const { data, error } = await (supabase as any)
-          .rpc('get_reviewer_kpis_for_period', { p_period: month, p_year: year })
-          .range(0, 99999);
-        if (error) throw error;
-        return (data || []) as any[];
+        // v2.66.11.5 — Chunked pagination (POLICY §125). PostgREST's
+        // server-side `db-max-rows = 1000` is a hard cap that single
+        // `.range(0, 99999)` cannot lift; verified via direct curl.
+        return await fetchAllRpcPaged<any>((from, to) =>
+          (supabase as any)
+            .rpc('get_reviewer_kpis_for_period', { p_period: month, p_year: year })
+            .range(from, to),
+        );
       };
 
       // Run all period fetches in parallel
@@ -434,13 +435,22 @@ export function useReviewSubmissionScoresByKpiIds(
       if (periodRanges && periodRanges.length > 0) {
         try {
           const results = await Promise.all(
-            periodRanges.map(({ month, year }) =>
-              (supabase as any)
-                .rpc('get_reviewer_submission_scores_for_period', {
-                  p_period: month,
-                  p_year: year,
-                })
-                .range(0, 99999)
+            periodRanges.map(async ({ month, year }) => {
+              try {
+                // v2.66.11.5 — Chunked pagination (POLICY §125).
+                const data = await fetchAllRpcPaged<any>((from, to) =>
+                  (supabase as any)
+                    .rpc('get_reviewer_submission_scores_for_period', {
+                      p_period: month,
+                      p_year: year,
+                    })
+                    .range(from, to),
+                );
+                return { data, error: null as any };
+              } catch (error) {
+                return { data: null, error };
+              }
+            },
             )
           );
           let anyError = false;
