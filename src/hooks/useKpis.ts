@@ -371,7 +371,10 @@ export function useKpisByPeriodRanges(periodRanges: Array<{ month: string; year:
  * Returns Map<kpi_id, { manager_score, skip_level_score, hr_pms_score,
  * auditor_score, management_score, final_score }>.
  */
-export function useReviewSubmissionScoresByKpiIds(kpiIds: string[]) {
+export function useReviewSubmissionScoresByKpiIds(
+  kpiIds: string[],
+  periodRanges?: Array<{ month: string; year: number }>,
+) {
   // v2.66.7.24 (BUG-022): deterministic hash of sorted ids prevents stale cache hits
   // when two periods happen to share `length` and `firstId`. FNV-1a 32-bit on the
   // sorted, joined id list — short string, no collisions in practice for our scale.
@@ -386,8 +389,11 @@ export function useReviewSubmissionScoresByKpiIds(kpiIds: string[]) {
     }
     return `${kpiIds.length}:${hash.toString(16)}`;
   })();
+  const periodKey = periodRanges && periodRanges.length > 0
+    ? periodRanges.map(p => `${p.month}-${p.year}`).sort().join('|')
+    : '';
   return useQuery({
-    queryKey: ['review-submission-scores-by-kpi-ids', stableKey],
+    queryKey: ['review-submission-scores-by-kpi-ids', stableKey, periodKey],
     enabled: kpiIds.length > 0,
     placeholderData: keepPreviousData,
     queryFn: async () => {
@@ -402,6 +408,49 @@ export function useReviewSubmissionScoresByKpiIds(kpiIds: string[]) {
         self_score: number | null;
         weightage: number | null;
       }>();
+      const wantedIds = new Set(kpiIds);
+      const setRow = (r: any) => {
+        if (!wantedIds.has(r.kpi_id)) return;
+        map.set(r.kpi_id, {
+          manager_score: r.manager_score,
+          skip_level_score: r.skip_level_score,
+          hr_pms_score: r.hr_pms_score,
+          auditor_score: r.auditor_score,
+          management_score: r.management_score,
+          final_score: r.final_score,
+          is_na: r.is_na,
+          self_score: r.self_score,
+          weightage: null,
+        });
+      };
+
+      // v2.66.11.2 — Fast path: when caller provides period ranges, fetch
+      // submission-score signatures via the SECURITY DEFINER RPC. This avoids
+      // the heavy multi-batch `.in('kpi_id', ...)` scan on review_submissions
+      // that was timing out for reviewer dashboards (HR PMS / Audit /
+      // Management) under load (Vivek 101784 regression).
+      if (periodRanges && periodRanges.length > 0) {
+        try {
+          const results = await Promise.all(
+            periodRanges.map(({ month, year }) =>
+              (supabase as any).rpc('get_reviewer_submission_scores_for_period', {
+                p_period: month,
+                p_year: year,
+              })
+            )
+          );
+          let anyError = false;
+          for (const res of results) {
+            if (res.error) { anyError = true; break; }
+            (res.data || []).forEach(setRow);
+          }
+          if (!anyError) return map;
+          // fall through to legacy batched path on RPC failure
+        } catch (e) {
+          console.warn('[useReviewSubmissionScoresByKpiIds] RPC path failed, falling back', e);
+        }
+      }
+
       const BATCH_SIZE = 500;
       for (let i = 0; i < kpiIds.length; i += BATCH_SIZE) {
         const batch = kpiIds.slice(i, i + BATCH_SIZE);
@@ -415,19 +464,7 @@ export function useReviewSubmissionScoresByKpiIds(kpiIds: string[]) {
           // the explicit error panel instead of a misleading empty state.
           throw error;
         }
-        (data || []).forEach((r: any) => {
-          map.set(r.kpi_id, {
-            manager_score: r.manager_score,
-            skip_level_score: r.skip_level_score,
-            hr_pms_score: r.hr_pms_score,
-            auditor_score: r.auditor_score,
-            management_score: r.management_score,
-            final_score: r.final_score,
-            is_na: r.is_na,
-            self_score: r.self_score,
-            weightage: null,
-          });
-        });
+        (data || []).forEach(setRow);
       }
       return map;
     },

@@ -8238,6 +8238,20 @@ export type Database = {
           reporting_manager_id: string
         }[]
       }
+      get_reviewer_submission_scores_for_period: {
+        Args: { p_period: string; p_year: number }
+        Returns: {
+          auditor_score: number
+          final_score: number
+          hr_pms_score: number
+          is_na: boolean
+          kpi_id: string
+          management_score: number
+          manager_score: number
+          self_score: number
+          skip_level_score: number
+        }[]
+      }
       get_safety_setting: { Args: { p_key: string }; Returns: Json }
       get_skip_level_manager: {
         Args: { employee_uuid: string }

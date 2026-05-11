@@ -287,7 +287,7 @@ export function EmployeeSelectorGrid({
   // Audit / Management dashboards can detect "reviewed at this stage".
   const periodKpiIds = useMemo(() => (periodKpis || []).map(k => k.id), [periodKpis]);
   const { data: submissionScoreMap, isError: submissionScoresError, refetch: refetchSubmissionScores } =
-    useReviewSubmissionScoresByKpiIds(periodKpiIds);
+    useReviewSubmissionScoresByKpiIds(periodKpiIds, periodSelection.periodRanges);
 
   // Compute overall weighted scores per employee for this period
   const employeeScoreMap = useEmployeeScoresForPeriod(periodKpis, submissionScoreMap);
