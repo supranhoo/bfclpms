@@ -2035,19 +2035,71 @@ export function EmployeeSelectorGrid({
                 </div>
               )}
             </>
-          ) : (
-            <div className="text-center py-12 text-muted-foreground">
-              <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p className="font-medium">{isFullAccess ? 'No employees found' : 'No team members found'}</p>
-              <p className="text-sm mt-1">
-                {searchQuery || selectedDepartment || selectedDesignation || selectedGrade || selectedManager
-                  ? 'Try adjusting your filters' 
-                  : isFullAccess 
-                    ? 'No employees in the system yet' 
-                    : "You don't have any direct reports assigned"}
-              </p>
-            </div>
-          )}
+          ) : (() => {
+            // BUG-101784 — Distinguish "data failed to load" from "no results".
+            // When org-wide PostgREST queries time out (statement timeout) the
+            // grid previously rendered "No employees found" with no recourse.
+            // Now we surface an explicit error block with retry so admins
+            // (incl. Vivek 101784 case) can recover without a full page reload.
+            const dataError =
+              profilesError || teamError || skipError || stageFilteredError || periodKpisError;
+            if (dataError) {
+              return (
+                <div className="text-center py-12 text-muted-foreground">
+                  <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-destructive/70" />
+                  <p className="font-medium text-foreground">Couldn't load this dashboard</p>
+                  <p className="text-sm mt-1 max-w-md mx-auto">
+                    The roster query did not respond in time. This usually clears
+                    after a refresh. If it keeps failing, narrow the period or
+                    contact your administrator.
+                  </p>
+                  <div className="mt-4 flex justify-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        refetchProfiles();
+                        refetchTeam();
+                        refetchSkip();
+                        refetchStageFiltered();
+                        refetchPeriodKpis();
+                        handleRefresh();
+                      }}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-1.5" /> Retry
+                    </Button>
+                  </div>
+                </div>
+              );
+            }
+            const hasActiveFilters =
+              !!searchQuery || !!selectedDepartment || !!selectedDesignation ||
+              !!selectedGrade || !!selectedManager || statusFilter !== 'all';
+            return (
+              <div className="text-center py-12 text-muted-foreground">
+                <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p className="font-medium">
+                  {hasActiveFilters
+                    ? 'No employees match the current filters'
+                    : isFullAccess ? 'No employees found' : 'No team members found'}
+                </p>
+                <p className="text-sm mt-1">
+                  {hasActiveFilters
+                    ? 'Try clearing filters or changing the period.'
+                    : isFullAccess
+                      ? 'No employees in the system yet'
+                      : "You don't have any direct reports assigned"}
+                </p>
+                {hasActiveFilters && (
+                  <div className="mt-4">
+                    <Button variant="outline" size="sm" onClick={clearAllFilters}>
+                      Clear filters
+                    </Button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </CardContent>
       </Card>
 
