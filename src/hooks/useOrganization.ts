@@ -253,32 +253,32 @@ export function useProfiles() {
   return useQuery({
     queryKey: ['profiles'],
     queryFn: async () => {
-      // Fetch ALL profiles in 1000-row pages to bypass PostgREST's default row cap.
-      // Without paging, the dataset silently truncates at 1000 rows even though the
-      // DB may have many more (e.g. after bulk imports).
-      const profiles = await fetchAllPaged<any>((from, to) =>
-        supabase
-          .from('profiles')
-          .select(`*, departments (id, name, code)`)
-          .eq('is_active', true)
-          .order('full_name')
-          .range(from, to)
-      );
+      // v2.66.10.6 — Drop embedded `departments(...)` join. PostgREST rewrites
+      // it as a LATERAL LEFT JOIN per row, which on a 2,500+ active roster
+      // hits statement_timeout (Vivek 101784 dashboard regression). We fetch
+      // departments once and hydrate client-side.
+      const [profiles, deptsRes, rolesRes] = await Promise.all([
+        fetchAllPaged<any>((from, to) =>
+          supabase
+            .from('profiles')
+            .select('*')
+            .eq('is_active', true)
+            .order('full_name')
+            .range(from, to),
+        ),
+        supabase.from('departments').select('id, name, code'),
+        supabase.from('user_roles').select('user_id, role'),
+      ]);
 
-      // Fetch all user roles separately (no FK relationship)
-      const { data: roles, error: rolesError } = await supabase
-        .from('user_roles')
-        .select('user_id, role');
+      if (deptsRes.error) throw deptsRes.error;
+      if (rolesRes.error) throw rolesRes.error;
 
-      if (rolesError) throw rolesError;
-
-      // Merge roles into profiles
-      const profilesWithRoles = profiles?.map(profile => ({
-        ...profile,
-        user_roles: roles?.filter(r => r.user_id === profile.id) || []
+      const deptMap = new Map((deptsRes.data || []).map((d: any) => [d.id, d]));
+      return (profiles || []).map((p: any) => ({
+        ...p,
+        departments: p.department_id ? deptMap.get(p.department_id) || null : null,
+        user_roles: (rolesRes.data || []).filter((r: any) => r.user_id === p.id),
       }));
-
-      return profilesWithRoles;
     },
     placeholderData: keepPreviousData,
   });
@@ -325,15 +325,25 @@ export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: 
     queryFn: async () => {
       if (!stage) return null;
 
-      // 1. Fetch all profiles (paged to bypass PostgREST 1000-row cap)
-      const profiles = await fetchAllPaged<any>((from, to) =>
-        supabase
-          .from('profiles')
-          .select('*, departments(id, name, code)')
-          .eq('is_active', true)
-          .order('full_name')
-          .range(from, to)
-      );
+      // 1. Fetch all profiles (paged) WITHOUT the embedded departments join —
+      //    PostgREST's LATERAL rewrite times out at this scale. Departments
+      //    are hydrated client-side from a single small fetch.
+      const [profiles, deptsRes] = await Promise.all([
+        fetchAllPaged<any>((from, to) =>
+          supabase
+            .from('profiles')
+            .select('*')
+            .eq('is_active', true)
+            .order('full_name')
+            .range(from, to),
+        ),
+        supabase.from('departments').select('id, name, code'),
+      ]);
+      if (deptsRes.error) throw deptsRes.error;
+      const deptMap = new Map((deptsRes.data || []).map((d: any) => [d.id, d]));
+      for (const p of profiles) {
+        p.departments = p.department_id ? deptMap.get(p.department_id) || null : null;
+      }
 
       if (!profiles || profiles.length === 0) return [];
 
