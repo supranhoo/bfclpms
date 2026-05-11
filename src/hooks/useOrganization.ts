@@ -319,22 +319,16 @@ export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: 
     queryFn: async () => {
       if (!stage) return null;
 
-      // 1. Fetch all profiles (paged) WITHOUT the embedded departments join —
-      //    PostgREST's LATERAL rewrite times out at this scale. Departments
-      //    are hydrated client-side from a single small fetch.
-      const [profiles, deptsRes] = await Promise.all([
-        fetchAllPaged<any>((from, to) =>
-          supabase
-            .from('profiles')
-            .select('*')
-            .eq('is_active', true)
-            .order('full_name')
-            .range(from, to),
-        ),
+      // v2.66.11.0 — Use SECURITY DEFINER RPC to dodge per-row RLS cost
+      // and lift statement_timeout to 30s.
+      const [rpcRes, deptsRes] = await Promise.all([
+        supabase.rpc('get_reviewer_roster_slim'),
         supabase.from('departments').select('id, name, code'),
       ]);
+      if (rpcRes.error) throw rpcRes.error;
       if (deptsRes.error) throw deptsRes.error;
       const deptMap = new Map((deptsRes.data || []).map((d: any) => [d.id, d]));
+      const profiles = (rpcRes.data || []) as any[];
       for (const p of profiles) {
         p.departments = p.department_id ? deptMap.get(p.department_id) || null : null;
       }
