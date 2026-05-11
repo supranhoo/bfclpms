@@ -1026,7 +1026,7 @@ export function EmployeeSelectorGrid({
       });
       // v2.64.11: Total Employees = unique employees with any KPI in period
       // (workflow-filtered roster); reviewed counted via audit_score signature.
-      return { totalEmployees: periodEmployeeIds.size, stat1: pending, stat2: inAudit, stat3: forwarded, stat4: reviewed, stat5: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: periodEmployeeIds.size, stat0: 0, stat1: pending, stat2: inAudit, stat3: forwarded, stat4: reviewed, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'skip_level') {
       let pending = 0, reviewed = 0;
       const periodEmployeeIds = new Set<string>();
@@ -1040,7 +1040,7 @@ export function EmployeeSelectorGrid({
           if (slIdx >= 0 && stages.slice(slIdx).includes(k.status || '')) reviewed++;
         }
       });
-      return { totalEmployees: periodEmployeeIds.size, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: periodEmployeeIds.size, stat0: 0, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'hr_pms') {
       let pending = 0, inReview = 0, forwarded = 0;
       const periodEmployeeIds = new Set<string>();
@@ -1077,26 +1077,26 @@ export function EmployeeSelectorGrid({
       });
       // v2.64.11: Total Employees = unique employees with any KPI in period
       // (workflow-filtered roster). Stat3 = reviewed via hr_pms_score signature.
-      return { totalEmployees: periodEmployeeIds.size, stat1: pending, stat2: inReview, stat3: reviewed, stat4: relevantKpis.length, stat5: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: periodEmployeeIds.size, stat0: 0, stat1: pending, stat2: inReview, stat3: reviewed, stat4: relevantKpis.length, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'pending_self_review') {
       const pendingKpis = relevantKpis.filter(k => k.status === 'kra_set');
       const pendingCount = pendingKpis.length;
       const orgKpiCount = pendingKpis.filter(k => k.is_org_level).length;
       const nonMonthlyCount = pendingKpis.filter(k => k.frequency && !['monthly','daily','weekly'].includes(k.frequency.toLowerCase())).length;
       const regularCount = pendingKpis.filter(k => !k.is_org_level && (!k.frequency || ['monthly','daily','weekly'].includes(k.frequency.toLowerCase()))).length;
-      return { totalEmployees: demographicFilteredMembers.length, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: demographicFilteredMembers.length, stat0: 0, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'pending_manager_review') {
       const pendingKpis = relevantKpis.filter(k => k.status === 'self_review');
       const orgKpiCount = pendingKpis.filter(k => k.is_org_level).length;
       const nonMonthlyCount = pendingKpis.filter(k => k.frequency && !['monthly','daily','weekly'].includes(k.frequency.toLowerCase())).length;
       const regularCount = pendingKpis.filter(k => !k.is_org_level && (!k.frequency || ['monthly','daily','weekly'].includes(k.frequency.toLowerCase()))).length;
-      return { totalEmployees: demographicFilteredMembers.length, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: demographicFilteredMembers.length, stat0: 0, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'pending_skip_review') {
       const pendingKpis = relevantKpis.filter(k => k.status === 'manager_check');
       const orgKpiCount = pendingKpis.filter(k => k.is_org_level).length;
       const nonMonthlyCount = pendingKpis.filter(k => k.frequency && !['monthly','daily','weekly'].includes(k.frequency.toLowerCase())).length;
       const regularCount = pendingKpis.filter(k => !k.is_org_level && (!k.frequency || ['monthly','daily','weekly'].includes(k.frequency.toLowerCase()))).length;
-      return { totalEmployees: demographicFilteredMembers.length, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: demographicFilteredMembers.length, stat0: 0, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else {
       // Management view (default branch): Total Employees = those with at
       // v2.64.11: Total Employees = unique employees with any KPI in period
