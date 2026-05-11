@@ -285,10 +285,11 @@ export function EmployeeSelectorGrid({
   // not on kpis. Fetch a slim score-signature map keyed by kpi_id so HR PMS /
   // Audit / Management dashboards can detect "reviewed at this stage".
   const periodKpiIds = useMemo(() => (periodKpis || []).map(k => k.id), [periodKpis]);
-  const { data: submissionScoreMap } = useReviewSubmissionScoresByKpiIds(periodKpiIds);
+  const { data: submissionScoreMap, isError: submissionScoresError, refetch: refetchSubmissionScores } =
+    useReviewSubmissionScoresByKpiIds(periodKpiIds);
 
   // Compute overall weighted scores per employee for this period
-  const employeeScoreMap = useEmployeeScoresForPeriod(periodKpis);
+  const employeeScoreMap = useEmployeeScoresForPeriod(periodKpis, submissionScoreMap);
 
   const isFullAccess = role === 'admin' || role === 'auditor' || role === 'management' || role === 'hr_pms';
 
