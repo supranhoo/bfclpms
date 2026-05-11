@@ -1,46 +1,52 @@
-# Fix: Vivek's blank Team Reviews — eliminate full-org scans
+## Problem
 
-## Why Vivek "can't" but Ankit "can"
-Both employees are `admin` and run the same queries on Team Reviews. Live DB logs (last 5 min) show repeated `statement timeout` on three queries that scan the **entire** active organization (2,532 profiles + every KPI for the open period). Ankit got a warm React Query cache from an earlier successful load; Vivek's first cold attempt timed out, and the empty-state error sticks. This is load-flaky, not user-specific — Ankit will hit it too on the next cold load.
+On HR PMS Review (Vivek 101784, March 2026), all stat tiles read **0** even though "978 eligible of 1,000 active employees" is shown. The Pending / In Review / Reviewed counters are blank because a critical underlying query is timing out (HTTP 500, code `57014`).
 
-## Risk & Impact Report
+## Root Cause (confirmed from network capture)
 
-- **Data Impact:** No schema changes. Two new SECURITY DEFINER RPCs (`get_team_reviews_roster_page`, `get_team_reviews_kpi_summary`) for paginated, RLS-aware reads. No write paths change.
-- **Workflow Impact:** None. Same roles see the same employees and KPIs — only the fetch shape changes.
-- **UI/UX Consistency:** Team Reviews keeps the same cards/grid; pagination becomes server-driven (Load more / page controls already supported by the grid).
-- **Regression Risk:** Medium-high — `EmployeeSelectorGrid` is shared by Pending Self / Manager / Skip / HR PMS / Audit / Management views. Mitigation: keep current hooks as fallback when the new RPC errors, ship behind a feature-flag-style guard, and add unit tests on the page-shape.
-- **Mitigation Plan:** Keep the existing `useProfiles` / `useKpisByPeriodRanges` callable but **not** auto-invoked on Team Reviews; reuse them only on small per-employee scorecard fetches.
+`useProfilesByWorkflowStage` (in `src/hooks/useOrganization.ts`, lines ~429–437) issues this query as the "score-signature seed" that powers HR PMS Reviewed / In Review / Pending counts:
 
-## Implementation Plan
+```text
+GET /rest/v1/kpis?select=id,employee_id&review_period=eq.March&review_year=eq.2026&offset=0&limit=1000
+→ 500 { code: "57014", message: "canceling statement due to statement timeout" }
+```
 
-### 1. New paginated roster RPC
-Create `public.get_team_reviews_roster_page(p_period text, p_year int, p_search text, p_dept uuid, p_designation text, p_manager uuid, p_status text, p_limit int, p_offset int)` returning rows with: employee_id, full_name, employee_code, designation, department_id, reporting_manager_id, total_kpis, reviewed_kpis, last_status. Implementation: SECURITY DEFINER, joins `profiles` + aggregated `kpis` + `review_submissions` for **only the requested page**, applies RLS-equivalent role checks internally (admin / manager / skip / hr_pms / management / auditor / report_override), returns at most 50 rows per call.
+This is the **same RLS-on-full-period scan** we just fixed for `useKpisByPeriodRanges`. We routed the wide grid fetch through `get_reviewer_kpis_for_period` yesterday, but missed this second call site, so the HR PMS stat cards still pay the 8 s timeout penalty and silently fall back to empty Sets → counts collapse to 0.
 
-### 2. New per-page KPI summary RPC
-Create `public.get_team_reviews_kpi_summary(p_employee_ids uuid[], p_period text, p_year int)` returning per-employee: pending_count, reviewed_count, weighted_score. Called only with the visible page's employee IDs (≤50). Replaces the org-wide `useKpisByPeriodRanges` + `useReviewSubmissionScoresByKpiIds` for the grid summary.
+The other narrower seed query (`select=employee_id&status=eq.hr_pms_review&...`) returns 200 quickly because the status predicate keeps the row count tiny — that's why the roster lists 978 eligible employees but the counters are zero.
 
-### 3. Wire `EmployeeSelectorGrid.tsx` to the RPCs
-- Replace `useProfiles()` / `useProfilesByWorkflowStage()` / `useKpisByPeriodRanges()` / `useEmployeeScoresForPeriod()` on Team Reviews with one `useTeamReviewsRosterPage(filters, page)` hook.
-- Keep client-side detail hooks (`useKpis(employeeId, period, year)`) for the per-employee scorecard drawer — those are already cheap.
-- Pagination: 50 rows per page, server-side; "Load more" appends.
-- Filters (search, department, designation, manager, status, view-level) are passed to the RPC as parameters so the DB returns only matching rows.
+## Fix
 
-### 4. Distinct-values endpoints
-Replace the `profiles SELECT designation WHERE is_active=true` / department / manager dropdown fetches (also timing out) with three lightweight RPCs returning `DISTINCT` values via indexed scans, cached for 10 minutes.
+Replace the timing-out `fetchAllPaged` block at `src/hooks/useOrganization.ts:429-437` with a single call to the existing `get_reviewer_kpis_for_period(p_period, p_year)` RPC, then project the returned rows down to `{ id, employee_id }`. No new migration is required — the RPC already exists, returns the same data, runs as `SECURITY DEFINER` with `statement_timeout = 30 s`, and is already authorized for `authenticated`.
 
-### 5. Statement-timeout safety net
-- Add `SET LOCAL statement_timeout = '20s'` inside the new RPCs (admin reporting reads only, never on writes).
-- Add a small per-RPC error toast: "Roster too large to load instantly — narrowing filters will help" so admins see actionable guidance instead of a generic retry.
+```ts
+const { data: periodKpis, error: rpcErr } = await (supabase as any).rpc(
+  'get_reviewer_kpis_for_period',
+  { p_period: reviewPeriod, p_year: reviewYear }
+);
+if (rpcErr) throw rpcErr;
+const kpiToEmp = new Map<string, string>();
+for (const k of (periodKpis || []) as Array<{ id: string; employee_id: string }>) {
+  kpiToEmp.set(k.id, k.employee_id);
+}
+```
 
-### 6. Regression coverage
-- Unit tests: roster RPC pagination, filter combinations, role-scoping parity with current RLS.
-- Integration test: `EmployeeSelectorGrid` renders 50/2532 with "Load more", retry path, filter change resets pagination.
-- Manual QA: log in as admin (Vivek), manager, skip-level, HR PMS, auditor; verify same employees appear as before.
+Everything downstream (the `review_submissions` batched lookup keyed by KPI ids) stays unchanged.
 
-### 7. Doc + policy sync
-- `DOCUMENTATION.md` v2.66.11.0 release note.
-- `POLICY.md` §124: "Reviewer dashboards MUST page their roster server-side. No client-side hook may scan the entire active organization in a single request."
-- Update memory `Reviewer Dashboard View Architecture` with the new RPC contract.
+## Risk & Impact
 
-## Expected Result
-Team Reviews loads in <1s for any role, including admins on the full 2,532-employee org, regardless of cache state. Vivek (and any future cold-loaded admin) sees the same data Ankit sees, without the "Couldn't load this dashboard" panel.
+- **Data Impact:** None. RPC returns the exact same row set as the failed PostgREST call.
+- **Workflow Impact:** None — read-only path used to compute reviewer-stat tiles.
+- **UI/UX:** HR PMS / Audit / Management dashboards regain accurate Pending / In Review / Reviewed counts under load.
+- **Regression Risk:** Very low. Same RPC already powers the grid fetch (`useKpisByPeriodRanges`) used directly above this code path.
+- **Mitigation:** After applying, re-test as Vivek on `/dashboard?view=hr_pms` (March 2026) and confirm the four stat tiles populate and no `57014` errors appear in network logs.
+
+## Files Touched
+
+- `src/hooks/useOrganization.ts` — single block edit inside `useProfilesByWorkflowStage`.
+
+## Out of Scope
+
+- No DB migration.
+- No UI / styling changes.
+- No changes to RLS, auth, or other dashboards beyond the score-signature seed they share via this hook.
