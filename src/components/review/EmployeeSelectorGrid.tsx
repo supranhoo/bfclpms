@@ -11,6 +11,7 @@ import { useKpisByPeriodRanges, useReviewSubmissionScoresByKpiIds, KPI } from '@
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
 import { useEmployeeScoresForPeriod } from '@/hooks/useEmployeeScoresForPeriod';
+import { useOrgKpiPeriodCounts } from '@/hooks/useOrgKpiPeriodCounts';
 import { resolvePendingStatuses, resolveReviewableStatuses, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { getScoreBadgeClass } from '@/lib/reviewConstants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
