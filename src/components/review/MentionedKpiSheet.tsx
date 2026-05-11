@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -76,6 +77,13 @@ export function MentionedKpiSheet({ kpiId, employeeId, open, onOpenChange }: Men
   const { data: kpi, isLoading: kpiLoading } = useFullKpiDetails(kpiId);
   const { data: submission, isLoading: subLoading } = useSubmissionForKpi(kpiId);
   const { data: employee } = useEmployeeProfile(employeeId);
+  // ADR-061 / Mention parity: resolve the KPI's actual workflow for THIS employee + period
+  // so the Review Journey hides stages (e.g. Management) that aren't part of the workflow.
+  const { data: resolvedStages, isLoading: wfLoading } = useEmployeeWorkflowStages(
+    employeeId,
+    kpi?.review_period,
+    kpi?.review_year,
+  );
 
   const initials = employee?.full_name
     ?.split(' ')
@@ -84,7 +92,7 @@ export function MentionedKpiSheet({ kpiId, employeeId, open, onOpenChange }: Men
     .toUpperCase()
     .slice(0, 2) || '??';
 
-  const isLoading = kpiLoading || subLoading;
+  const isLoading = kpiLoading || subLoading || wfLoading;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -136,6 +144,7 @@ export function MentionedKpiSheet({ kpiId, employeeId, open, onOpenChange }: Men
                 selectedYear={kpi.review_year || new Date().getFullYear()}
                 employeeName={employee?.full_name || undefined}
                 employeeCode={employee?.employee_code || undefined}
+                workflowStages={resolvedStages ?? undefined}
               />
             ) : (
               <p className="text-sm text-muted-foreground text-center py-8">
