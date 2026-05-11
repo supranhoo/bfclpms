@@ -1299,13 +1299,46 @@ export function EmployeeSelectorGrid({
 
   const renderStatsCards = () => {
     if (viewLevel === 'team') {
+      const orgEntered = (orgKpiCounts?.entered ?? 0) + (orgKpiCounts?.propagated ?? 0);
+      const orgTotal = orgKpiCounts?.total ?? 0;
+      const orgPending = orgKpiCounts?.pending ?? 0;
       return (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
           <StatCard icon={Users} label={isFullAccess ? 'Total Employees' : 'Team Size'} value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
+          <StatCard
+            icon={Hourglass}
+            label="KRA Set"
+            value={stats.stat0 ?? 0}
+            color="orange"
+            subtitle="Awaiting self-review"
+            onClick={() => toggleStatusFilter('pending_kra_set')}
+            active={statusFilter === 'pending_kra_set'}
+            tooltip="KPIs whose KRA has been assigned but the employee hasn't submitted a self-review yet."
+          />
           <StatCard icon={Clock} label="Direct Pending" value={stats.stat1} color="yellow" subtitle="Awaiting manager review" onClick={() => toggleStatusFilter('pending_direct')} active={statusFilter === 'pending_direct'} />
           <StatCard icon={UserCheck} label="Skip-Level Pending" value={stats.stat2} color="amber" subtitle="Awaiting skip-level review" onClick={() => toggleStatusFilter('pending_skip')} active={statusFilter === 'pending_skip'} />
-          <StatCard icon={CheckCircle2} label="Reviewed" value={stats.stat3} color="green" subtitle="KPIs completed" onClick={() => toggleStatusFilter('reviewed')} active={statusFilter === 'reviewed'} />
-          <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" className="col-span-2 md:col-span-1" />
+          <StatCard
+            icon={CheckCircle2}
+            label="Reviewed"
+            value={stats.stat3}
+            denominator={stats.totalKpis}
+            color="green"
+            subtitle="of total KPIs"
+            onClick={() => toggleStatusFilter('reviewed')}
+            active={statusFilter === 'reviewed'}
+            tooltip="KPIs that have moved past Self-Review (Manager, Skip, HR PMS, Audit, Management or Approved)."
+          />
+          {isFullAccess && (
+            <StatCard
+              icon={Building2}
+              label="Org KPIs"
+              value={orgEntered}
+              denominator={orgTotal}
+              color="purple"
+              subtitle={orgPending > 0 ? `${orgPending} pending entry` : 'All entered'}
+              tooltip="Organisation-level KPIs for this period: Entered + Propagated / Total. Pending = data-owner entry outstanding."
+            />
+          )}
         </div>
       );
     } else if (viewLevel === 'skip_level') {
