@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { format, addMonths } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllRpcPaged } from '@/lib/fetchAll';
 import { MONTH_NAMES } from '@/hooks/useAdminReports';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
