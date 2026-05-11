@@ -108,6 +108,7 @@ const KpiDetailReport = lazy(() => import("./pages/reports/KpiDetailReport"));
 const BottleneckReport = lazy(() => import("./pages/reports/BottleneckReport"));
 const KpiStatusTracker = lazy(() => import("./pages/reports/KpiStatusTracker"));
 const KpiJourneyReport = lazy(() => import("./pages/reports/KpiJourneyReport"));
+const WorkflowResolutionReport = lazy(() => import("./pages/reports/WorkflowResolutionReport"));
 const IncentiveReport = lazy(() => import("./pages/reports/IncentiveReport"));
 const VarianceReport = lazy(() => import("./pages/reports/VarianceReport"));
 const ManagerTeamKpiReport = lazy(() => import("./pages/reports/ManagerTeamKpiReport"));
