@@ -258,7 +258,10 @@ export function useProfiles() {
       // the role check once instead of per row. Fixes Vivek 101784
       // dashboard timeout regression.
       const [rpcRes, deptsRes, rolesRes] = await Promise.all([
-        supabase.rpc('get_reviewer_roster_slim'),
+        // v2.66.11.4 — Explicit .range() lifts PostgREST's default 1000-row
+        // cap on RPC responses. Without this, orgs with >1000 active
+        // employees see truncated rosters (Vivek 101784 saw 1000 of 2532).
+        supabase.rpc('get_reviewer_roster_slim').range(0, 49999),
         supabase.from('departments').select('id, name, code'),
         supabase.from('user_roles').select('user_id, role'),
       ]);
@@ -322,7 +325,7 @@ export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: 
       // v2.66.11.0 — Use SECURITY DEFINER RPC to dodge per-row RLS cost
       // and lift statement_timeout to 30s.
       const [rpcRes, deptsRes] = await Promise.all([
-        supabase.rpc('get_reviewer_roster_slim'),
+        supabase.rpc('get_reviewer_roster_slim').range(0, 49999),
         supabase.from('departments').select('id, name, code'),
       ]);
       if (rpcRes.error) throw rpcRes.error;
