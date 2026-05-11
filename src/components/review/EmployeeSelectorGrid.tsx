@@ -160,6 +160,7 @@ export function EmployeeSelectorGrid({
 }: EmployeeSelectorGridProps) {
   const { user, effectiveRole: role } = useAuth();
   const queryClient = useQueryClient();
+  const clearAllFilters = useClearAllFilters();
   // Track in-flight fetches for the data this grid depends on so the refresh
   // button can show a spinner and stay disabled until refetches settle.
   const fetchingProfiles = useIsFetching({ queryKey: ['profiles-by-workflow-stage'] });
