@@ -433,10 +433,9 @@ export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: 
           // 8s statement_timeout that fires on a full-period RLS scan of
           // `kpis`. Without this the HR PMS / Audit / Management stat tiles
           // collapsed to 0 because the score-signature seed silently failed.
-          const { data: rpcKpis, error: rpcErr } = await (supabase as any).rpc(
-            'get_reviewer_kpis_for_period',
-            { p_period: reviewPeriod, p_year: reviewYear }
-          );
+          const { data: rpcKpis, error: rpcErr } = await (supabase as any)
+            .rpc('get_reviewer_kpis_for_period', { p_period: reviewPeriod, p_year: reviewYear })
+            .range(0, 99999);
           if (rpcErr) throw rpcErr;
           const periodKpis = (rpcKpis || []) as Array<{ id: string; employee_id: string }>;
           const kpiToEmp = new Map<string, string>();
