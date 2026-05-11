@@ -405,6 +405,11 @@ const App = () => (
                     <Suspense fallback={<PageFallback />}><KpiJourneyReport /></Suspense>
                   </ReportRoute>
                 } />
+                <Route path="/reports/workflow-resolution" element={
+                  <ReportRoute reportKey="workflow-resolution">
+                    <Suspense fallback={<PageFallback />}><WorkflowResolutionReport /></Suspense>
+                  </ReportRoute>
+                } />
                 <Route path="/admin/pip" element={
                   <ProtectedRoute allowedRoles={['manager', 'admin', 'management']} menuKey="admin-pip">
                     <PIPManagement />
