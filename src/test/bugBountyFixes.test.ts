@@ -1223,3 +1223,29 @@ describe('BUG-048: pending-KRA issue excludes Org KPI and locked multi-month pla
     ).toBe(false);
   });
 });
+
+// BUG-049 (v2.66.11.4): Reviewer dashboard counters were truncated to ~1000
+// rows for admin viewers because PostgREST applies a default `max-rows` cap
+// to RETURNS TABLE responses. Every reporting RPC client call in the
+// reviewer dashboard MUST chain `.range(...)` to lift the cap.
+describe('BUG-049: Reporting RPC calls bypass PostgREST max-rows cap', () => {
+  const orgSrc = fs.readFileSync(path.resolve(__dirname, '../hooks/useOrganization.ts'), 'utf8');
+  const kpisSrc = fs.readFileSync(path.resolve(__dirname, '../hooks/useKpis.ts'), 'utf8');
+
+  it('useProfiles + useProfilesByWorkflowStage chain .range() on get_reviewer_roster_slim', () => {
+    const matches = orgSrc.match(/rpc\(['"]get_reviewer_roster_slim['"]\)\s*\.range\(/g) || [];
+    expect(matches.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('useKpisByPeriodRanges chains .range() on get_reviewer_kpis_for_period', () => {
+    expect(kpisSrc).toMatch(/rpc\(['"]get_reviewer_kpis_for_period['"][\s\S]{0,200}?\.range\(/);
+  });
+
+  it('useReviewSubmissionScoresByKpiIds chains .range() on get_reviewer_submission_scores_for_period', () => {
+    expect(kpisSrc).toMatch(/rpc\(['"]get_reviewer_submission_scores_for_period['"][\s\S]{0,400}?\.range\(/);
+  });
+
+  it('score-signature seed chains .range() on get_reviewer_kpis_for_period in useOrganization', () => {
+    expect(orgSrc).toMatch(/rpc\(['"]get_reviewer_kpis_for_period['"][\s\S]{0,200}?\.range\(/);
+  });
+});
