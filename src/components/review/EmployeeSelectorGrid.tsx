@@ -729,12 +729,14 @@ export function EmployeeSelectorGrid({
         const reviewableStatuses = resolveReviewableStatuses(engineLevel, stages);
         
         if (viewLevel === 'team') {
-          if (statusFilter === 'pending_direct' && isDirect && kpi.status === 'self_review') {
+          if (statusFilter === 'pending_kra_set' && kpi.status === 'kra_set' && (isFullAccess || isDirect)) {
             employeeIds.add(kpi.employee_id);
-          } else if (statusFilter === 'pending_skip' && isIndirect && reviewableStatuses.includes(kpi.status || '')) {
+          } else if (statusFilter === 'pending_direct' && (isFullAccess || isDirect) && kpi.status === 'self_review') {
+            employeeIds.add(kpi.employee_id);
+          } else if (statusFilter === 'pending_skip' && (isFullAccess || isIndirect) && reviewableStatuses.includes(kpi.status || '')) {
             employeeIds.add(kpi.employee_id);
           } else if (statusFilter === 'reviewed') {
-            if (isDirect && !['kra_set', 'self_review'].includes(kpi.status || '')) {
+            if ((isFullAccess || isDirect) && !['kra_set', 'self_review'].includes(kpi.status || '')) {
               employeeIds.add(kpi.employee_id);
             } else if (isIndirect) {
               const slIdx = stages.indexOf('skip_level_check');
