@@ -1,8 +1,7 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { fetchAllPaged } from '@/lib/fetchAll';
-import { fetchAllRpcPaged } from '@/lib/fetchAll';
+import { fetchAllPaged, fetchAllRpcPaged } from '@/lib/fetchAll';
 
 export function useDivisions(companyId?: string) {
   return useQuery({
