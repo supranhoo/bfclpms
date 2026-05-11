@@ -1100,17 +1100,43 @@ export function EmployeeSelectorGrid({
       const regularCount = pendingKpis.filter(k => !k.is_org_level && (!k.frequency || ['monthly','daily','weekly'].includes(k.frequency.toLowerCase()))).length;
       return { totalEmployees: demographicFilteredMembers.length, stat0: 0, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'pending_manager_review') {
-      const pendingKpis = relevantKpis.filter(k => k.status === 'self_review');
-      const orgKpiCount = pendingKpis.filter(k => k.is_org_level).length;
-      const nonMonthlyCount = pendingKpis.filter(k => k.frequency && !['monthly','daily','weekly'].includes(k.frequency.toLowerCase())).length;
-      const regularCount = pendingKpis.filter(k => !k.is_org_level && (!k.frequency || ['monthly','daily','weekly'].includes(k.frequency.toLowerCase()))).length;
-      return { totalEmployees: demographicFilteredMembers.length, stat0: 0, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+      // v2.66.11.8: 6-tile parity with Team Reviews.
+      // pending = at self_review (queue), inReview = at manager_check (active),
+      // reviewed = past manager_check. Sum invariant: pending+inReview+reviewed = total
+      // (excluding pre-self kra_set, which is its own dashboard).
+      const pending = relevantKpis.filter(k => k.status === 'self_review').length;
+      const inReview = relevantKpis.filter(k => k.status === 'manager_check').length;
+      const reviewed = relevantKpis.filter(k => !['kra_set', 'self_review', 'manager_check'].includes(k.status || '')).length;
+      return {
+        totalEmployees: demographicFilteredMembers.length,
+        stat0: 0,
+        stat1: pending,
+        stat2: inReview,
+        stat3: reviewed,
+        stat4: relevantKpis.length,
+        stat5: 0,
+        totalKpis: relevantKpis.length,
+      };
     } else if (viewLevel === 'pending_skip_review') {
-      const pendingKpis = relevantKpis.filter(k => k.status === 'manager_check');
-      const orgKpiCount = pendingKpis.filter(k => k.is_org_level).length;
-      const nonMonthlyCount = pendingKpis.filter(k => k.frequency && !['monthly','daily','weekly'].includes(k.frequency.toLowerCase())).length;
-      const regularCount = pendingKpis.filter(k => !k.is_org_level && (!k.frequency || ['monthly','daily','weekly'].includes(k.frequency.toLowerCase()))).length;
-      return { totalEmployees: demographicFilteredMembers.length, stat0: 0, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+      // v2.66.11.8: 6-tile parity. pending = at manager_check (waiting for skip),
+      // inReview = at skip_level_check, reviewed = past skip_level_check.
+      const pending = relevantKpis.filter(k => k.status === 'manager_check').length;
+      const inReview = relevantKpis.filter(k => k.status === 'skip_level_check').length;
+      const reviewed = relevantKpis.filter(k => {
+        const s = k.status || '';
+        if (['kra_set', 'self_review', 'manager_check', 'skip_level_check'].includes(s)) return false;
+        return true;
+      }).length;
+      return {
+        totalEmployees: demographicFilteredMembers.length,
+        stat0: 0,
+        stat1: pending,
+        stat2: inReview,
+        stat3: reviewed,
+        stat4: relevantKpis.length,
+        stat5: 0,
+        totalKpis: relevantKpis.length,
+      };
     } else {
       // Management view (default branch): Total Employees = those with at
       // v2.64.11: Total Employees = unique employees with any KPI in period
