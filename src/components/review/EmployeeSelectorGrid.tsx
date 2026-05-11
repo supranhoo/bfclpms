@@ -334,10 +334,17 @@ export function EmployeeSelectorGrid({
   const { data: workflowMap } = useBulkEmployeeWorkflows(allEmployeeIds, selectedPeriod, selectedYear);
   // BUG-051: Org KPI tile on Team Reviews — only fetched for full-access roles
   // who actually see the tile. Cached 60s; ~896 rows max per period.
+  // v2.66.11.8: Org KPI tile is now shown on Team, HR PMS, Manager Review,
+  // and Skip Mgr Review dashboards for full-access roles. Same 60s cache.
   const { data: orgKpiCounts } = useOrgKpiPeriodCounts(
     selectedPeriod,
     selectedYear,
-    isFullAccess && viewLevel === 'team',
+    isFullAccess && (
+      viewLevel === 'team' ||
+      viewLevel === 'hr_pms' ||
+      viewLevel === 'pending_manager_review' ||
+      viewLevel === 'pending_skip_review'
+    ),
   );
 
   // Helper: get workflow stages for an employee (with fallback)
