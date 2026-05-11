@@ -1,3 +1,6 @@
+## §111.5 Org KPI Category Chip Parity (RCA 2026-05-11)
+
+The category-header chip aggregator (`OrgKpiDataEntry.tsx`, "X Pending / X Entered / X Propagated") MUST share the ADR-055 fact-based override with the per-row pill (`deriveScopedRowStatus`) for **every** scope — `organization`, `employee`, and `department`. Specifically: when no `org_kpi_values` row carries a value but every mapped child KPI has advanced past `kra_set`, the chip MUST report `'propagated'`, not `'pending'`. Implemented in `src/lib/orgKpiStatus.ts::deriveOrgKpiTileStatus`. Regression: `src/test/orgKpiTileStatusChipParity.test.ts`.
 
 ## §111.3 Propagated Status — Snapshot Truth (RCA 2026-05-08)
 
