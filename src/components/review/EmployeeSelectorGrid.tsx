@@ -24,6 +24,7 @@ import { EmployeeContactCard } from '@/components/review/EmployeeContactCard';
 import { supabase } from '@/integrations/supabase/client';
 import { formatEmployeeName } from '@/lib/utils';
 import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2, Download, ChevronDown, ChevronUp, Loader2, Info, Eye, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Hourglass, Building2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { ViewMode } from './ViewModeToggle';
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
@@ -57,6 +58,7 @@ interface EmployeeSelectorGridProps {
 const STATUS_OPTIONS_BY_LEVEL: Record<Exclude<ViewMode, 'self'>, Array<{ value: string; label: string }>> = {
   team: [
     { value: 'all', label: 'All Employees' },
+    { value: 'pending_kra_set', label: 'KRA Set (No Self-Review)' },
     { value: 'pending_direct', label: 'Pending (Direct)' },
     { value: 'pending_skip', label: 'Pending (Skip-Level)' },
     { value: 'reviewed', label: 'Reviewed' },
