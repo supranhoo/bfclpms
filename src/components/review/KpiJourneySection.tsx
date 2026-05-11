@@ -151,6 +151,18 @@ export function KpiJourneySection({
   const { data: profileData } = useEmployeeProfileForPdf(kpi.employee_id);
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
   const kpiStatus = kpi.status || 'kra_set';
+  // Dev-only guard: every entry point into the Review Journey MUST pass the
+  // per-employee resolved workflow. Falling back to DEFAULT_WORKFLOW_STAGES
+  // causes stages (e.g. Management) to render for KPIs whose workflow doesn't
+  // include them — see RCA "Mention popup showed Management tile" (May 2026).
+  if (import.meta.env.DEV && workflowStages === undefined) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[KpiJourneySection] workflowStages prop is undefined; falling back to DEFAULT_WORKFLOW_STAGES. ' +
+      'Pass the resolved per-employee workflow to keep journey rendering consistent.',
+      { kpiId: kpi.id, employeeId: kpi.employee_id }
+    );
+  }
   const visibleStages = getVisibleStagesForLevel(viewLevel, effectiveStages);
   const globalIsNA = submission?.is_na || false;
   const [prevMonthsOpen, setPrevMonthsOpen] = useState(false);

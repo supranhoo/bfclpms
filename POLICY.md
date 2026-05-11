@@ -2712,3 +2712,6 @@ Org-level KPI propagation MUST resolve the set of target `kpis` rows via the SEC
 - An `org_kpi_data_owners` row matching `(category_id, normalize_kpi_text(kra_name), normalize_kpi_text(kpi_name))` for the caller.
 
 **Read/write parity:** Snapshot reads (`get_org_kpi_data_entry_snapshot`) and propagate writes (`resolve_org_kpi_target_kpis` → `propagate_org_kpi_value`) MUST see the same employee universe. Any future RLS change on `kpis` must preserve this parity or be paired with a server-side resolver update.
+
+## §121 Review Journey Stage Visibility (v2.66.10.1)
+Stage tiles in the Review Journey (Self / Manager / Skip-Level / HR PMS / Auditor / Management) MUST reflect the KPI's resolved per-employee workflow, never the global `DEFAULT_WORKFLOW_STAGES` fallback. Every entry point into `KpiReviewPanel` / `KpiJourneySection` is required to pass `workflowStages` from `useEmployeeWorkflowStages` (or the equivalent server resolver). The default constant is a safety net only and triggers a dev-only console warning when used. Rationale: prevents stale "N/A" tiles (e.g. Management) from appearing in mention popups and other secondary surfaces, eliminating the sync gap between Dashboard KPI Details, View KPI Details, and the @Mention sheet.
