@@ -165,7 +165,8 @@ export function EmployeeSelectorGrid({
   // button can show a spinner and stay disabled until refetches settle.
   const fetchingProfiles = useIsFetching({ queryKey: ['profiles-by-workflow-stage'] });
   const fetchingKpis = useIsFetching({ queryKey: ['kpis-by-period-ranges'] });
-  const fetchingSubmissionScores = useIsFetching({ queryKey: ['review-submission-scores'] });
+  // v2.66.10.6 — query key fix: actual key is `review-submission-scores-by-kpi-ids`.
+  const fetchingSubmissionScores = useIsFetching({ queryKey: ['review-submission-scores-by-kpi-ids'] });
   const fetchingProfilesAll = useIsFetching({ queryKey: ['profiles'] });
   const fetchingTeam = useIsFetching({ queryKey: ['team-members'] });
   const fetchingSkip = useIsFetching({ queryKey: ['skip-level-team-members'] });
@@ -183,7 +184,7 @@ export function EmployeeSelectorGrid({
     [
       'profiles-by-workflow-stage',
       'kpis-by-period-ranges',
-      'review-submission-scores',
+      'review-submission-scores-by-kpi-ids',
       'profiles',
       'team-members',
       'skip-level-team-members',
@@ -2044,7 +2045,7 @@ export function EmployeeSelectorGrid({
             // Now we surface an explicit error block with retry so admins
             // (incl. Vivek 101784 case) can recover without a full page reload.
             const dataError =
-              profilesError || teamError || skipError || stageFilteredError || periodKpisError;
+              profilesError || teamError || skipError || stageFilteredError || periodKpisError || submissionScoresError;
             if (dataError) {
               return (
                 <div className="text-center py-12 text-muted-foreground">
@@ -2065,6 +2066,7 @@ export function EmployeeSelectorGrid({
                         refetchSkip();
                         refetchStageFiltered();
                         refetchPeriodKpis();
+                        refetchSubmissionScores();
                         handleRefresh();
                       }}
                     >
