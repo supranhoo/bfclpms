@@ -332,10 +332,11 @@ export function useKpisByPeriodRanges(periodRanges: Array<{ month: string; year:
       // overhead and lift statement_timeout to 30s. Direct PostgREST query
       // on `kpis` for a full month was timing out at 8s (Vivek 101784).
       const fetchSinglePeriod = async (month: string, year: number): Promise<any[]> => {
-        const { data, error } = await (supabase as any).rpc(
-          'get_reviewer_kpis_for_period',
-          { p_period: month, p_year: year }
-        );
+        // v2.66.11.4 — Lift PostgREST's default 1000-row cap on RPC
+        // responses so org-wide periods (2,000+ KPIs) are not truncated.
+        const { data, error } = await (supabase as any)
+          .rpc('get_reviewer_kpis_for_period', { p_period: month, p_year: year })
+          .range(0, 99999);
         if (error) throw error;
         return (data || []) as any[];
       };
@@ -433,10 +434,12 @@ export function useReviewSubmissionScoresByKpiIds(
         try {
           const results = await Promise.all(
             periodRanges.map(({ month, year }) =>
-              (supabase as any).rpc('get_reviewer_submission_scores_for_period', {
-                p_period: month,
-                p_year: year,
-              })
+              (supabase as any)
+                .rpc('get_reviewer_submission_scores_for_period', {
+                  p_period: month,
+                  p_year: year,
+                })
+                .range(0, 99999)
             )
           );
           let anyError = false;
