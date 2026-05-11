@@ -2164,6 +2164,8 @@ interface StatCardProps {
   onClick?: () => void;
   active?: boolean;
   tooltip?: string;
+  /** When set, the tile renders `${value} / ${denominator}` and a thin progress bar. */
+  denominator?: number;
 }
 
 const colorMap: Record<StatCardProps['color'], { border: string; bg: string; text: string }> = {
@@ -2180,11 +2182,13 @@ const colorMap: Record<StatCardProps['color'], { border: string; bg: string; tex
 // v2.64.8: forwardRef so Radix Tooltip and other ref-forwarding wrappers can
 // attach refs without React warnings.
 const StatCard = React.forwardRef<HTMLDivElement, StatCardProps>(function StatCard(
-  { icon: Icon, label, value, color, subtitle, className = '', onClick, active, tooltip },
+  { icon: Icon, label, value, color, subtitle, className = '', onClick, active, tooltip, denominator },
   ref,
 ) {
   const colors = colorMap[color];
   const isClickable = !!onClick;
+  const hasRatio = typeof denominator === 'number' && denominator > 0;
+  const pct = hasRatio ? Math.min(100, Math.round((value / denominator!) * 100)) : 0;
 
   const card = (
     <Card
@@ -2199,8 +2203,18 @@ const StatCard = React.forwardRef<HTMLDivElement, StatCardProps>(function StatCa
               {label}
               {tooltip && <Info className="h-3 w-3 opacity-60" />}
             </p>
-            <p className={`text-xl sm:text-3xl font-bold ${color === 'primary' ? '' : colors.text}`}>{value}</p>
-            {subtitle && <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">{subtitle}</p>}
+            <p className={`text-xl sm:text-3xl font-bold ${color === 'primary' ? '' : colors.text}`}>
+              {value}
+              {hasRatio && (
+                <span className="text-sm sm:text-base font-medium text-muted-foreground ml-1">/ {denominator}</span>
+              )}
+            </p>
+            {hasRatio && (
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden mt-1.5 w-24 sm:w-32">
+                <div className={`h-full ${colors.bg.replace('/10', '')} ${colors.text.replace('text-', 'bg-')}`} style={{ width: `${pct}%` }} />
+              </div>
+            )}
+            {subtitle && <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">{hasRatio ? `${pct}% — ${subtitle}` : subtitle}</p>}
           </div>
           <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-full ${colors.bg} flex items-center justify-center`}>
             <Icon className={`h-5 w-5 sm:h-6 sm:w-6 ${colors.text}`} />
