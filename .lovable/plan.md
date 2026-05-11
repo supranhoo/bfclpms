@@ -1,52 +1,57 @@
-## Problem
+## Risk & Impact Report
 
-On HR PMS Review (Vivek 101784, March 2026), all stat tiles read **0** even though "978 eligible of 1,000 active employees" is shown. The Pending / In Review / Reviewed counters are blank because a critical underlying query is timing out (HTTP 500, code `57014`).
+- **Data Impact:** No historical data edits. One read-only backend function may be added/updated so the dashboard can fetch review submission score signatures without timing out.
+- **Workflow Impact:** No approval workflow or permissions change. Counts will continue to respect the selected period and period-specific workflow eligibility.
+- **UI/UX Consistency:** No layout changes. The same stat cards and employee badges will populate with accurate numbers.
+- **Regression Risk:** Low-to-medium because HR PMS, Audit, and Management share the same score-signature map. I will keep the existing fallback-chain semantics and avoid changing score calculation rules.
+- **Mitigation Plan:** Replace the remaining heavy `review_submissions` batched client query with a server-side slim RPC, then add/update regression tests that assert the Management view uses `management_score`/approved N/A signatures and does not collapse to zero when submission rows are loaded through the optimized path.
 
-## Root Cause (confirmed from network capture)
+## Confirmed RCA
 
-`useProfilesByWorkflowStage` (in `src/hooks/useOrganization.ts`, lines ~429–437) issues this query as the "score-signature seed" that powers HR PMS Reviewed / In Review / Pending counts:
+The previous fix made the KPI period fetch fast, but the Management numbers still depend on a second heavy path:
 
-```text
-GET /rest/v1/kpis?select=id,employee_id&review_period=eq.March&review_year=eq.2026&offset=0&limit=1000
-→ 500 { code: "57014", message: "canceling statement due to statement timeout" }
-```
+- `EmployeeSelectorGrid` loads all March KPI IDs.
+- Then `useReviewSubmissionScoresByKpiIds` performs multiple client-side `.from('review_submissions').in('kpi_id', batch)` requests.
+- If those submission-score batches fail/timeout/return late, `submissionScoreMap` is empty or unavailable, so Management reviewed/approved signatures are counted as `0` even though March 2026 has data.
 
-This is the **same RLS-on-full-period scan** we just fixed for `useKpisByPeriodRanges`. We routed the wide grid fetch through `get_reviewer_kpis_for_period` yesterday, but missed this second call site, so the HR PMS stat cards still pay the 8 s timeout penalty and silently fall back to empty Sets → counts collapse to 0.
+Database check confirms March 2026 is not actually zero:
 
-The other narrower seed query (`select=employee_id&status=eq.hr_pms_review&...`) returns 200 quickly because the status predicate keeps the row count tiny — that's why the roster lists 978 eligible employees but the counters are zero.
+- 1,756 KPIs exist for March 2026.
+- 1,736 are already `approved`.
+- 24 employees have a workflow that includes `management_review`.
+- 442 KPIs belong to those Management-review workflows, with 429 already approved.
 
-## Fix
+## Implementation Plan
 
-Replace the timing-out `fetchAllPaged` block at `src/hooks/useOrganization.ts:429-437` with a single call to the existing `get_reviewer_kpis_for_period(p_period, p_year)` RPC, then project the returned rows down to `{ id, employee_id }`. No new migration is required — the RPC already exists, returns the same data, runs as `SECURITY DEFINER` with `statement_timeout = 30 s`, and is already authorized for `authenticated`.
+1. **Add an optimized read-only score-signature RPC**
+   - Create `get_reviewer_submission_scores_for_period(p_period, p_year)`.
+   - Return only fields needed by dashboards: `kpi_id`, reviewer score columns, `final_score`, `is_na`, `self_score`.
+   - Join `review_submissions` to period-filtered KPIs inside the database, with `SECURITY DEFINER`, `search_path = public`, and a 30s statement timeout.
+   - Preserve the same role scoping as `get_reviewer_kpis_for_period` so admins/HR PMS/auditors/management get full reviewer visibility, while regular managers only get their scoped employees.
 
-```ts
-const { data: periodKpis, error: rpcErr } = await (supabase as any).rpc(
-  'get_reviewer_kpis_for_period',
-  { p_period: reviewPeriod, p_year: reviewYear }
-);
-if (rpcErr) throw rpcErr;
-const kpiToEmp = new Map<string, string>();
-for (const k of (periodKpis || []) as Array<{ id: string; employee_id: string }>) {
-  kpiToEmp.set(k.id, k.employee_id);
-}
-```
+2. **Switch the frontend score map hook to the RPC**
+   - Update `useReviewSubmissionScoresByKpiIds` in `src/hooks/useKpis.ts` to accept optional period ranges.
+   - For reviewer dashboards, fetch submission signatures by selected period/year via the new RPC instead of client-side KPI-ID batching.
+   - Keep the current batched `.in('kpi_id')` path as a fallback for call sites that only pass KPI IDs.
 
-Everything downstream (the `review_submissions` batched lookup keyed by KPI ids) stays unchanged.
+3. **Wire the Management/HR PMS/Audit grid to period-aware score signatures**
+   - Update `EmployeeSelectorGrid` to pass `periodSelection.periodRanges` into `useReviewSubmissionScoresByKpiIds`.
+   - This makes Management stat cards and employee badges compute from the optimized period score map.
 
-## Risk & Impact
+4. **Add regression coverage**
+   - Update existing dashboard regression tests to assert:
+     - the score hook uses the period RPC path for reviewer grids;
+     - Management approved/reviewed counts are derived from `management_score` and approved N/A signatures;
+     - KPI fallback to `approved` status does not show zero when submission signatures are present.
 
-- **Data Impact:** None. RPC returns the exact same row set as the failed PostgREST call.
-- **Workflow Impact:** None — read-only path used to compute reviewer-stat tiles.
-- **UI/UX:** HR PMS / Audit / Management dashboards regain accurate Pending / In Review / Reviewed counts under load.
-- **Regression Risk:** Very low. Same RPC already powers the grid fetch (`useKpisByPeriodRanges`) used directly above this code path.
-- **Mitigation:** After applying, re-test as Vivek on `/dashboard?view=hr_pms` (March 2026) and confirm the four stat tiles populate and no `57014` errors appear in network logs.
+5. **Documentation / policy sync**
+   - Update the internal plan/policy notes for the reviewer-dashboard performance rule: large reviewer dashboards must use period-scoped backend helpers for KPI and submission score signature reads, not wide client-side RLS scans.
 
-## Files Touched
+## Validation
 
-- `src/hooks/useOrganization.ts` — single block edit inside `useProfilesByWorkflowStage`.
+After implementation:
 
-## Out of Scope
-
-- No DB migration.
-- No UI / styling changes.
-- No changes to RLS, auth, or other dashboards beyond the score-signature seed they share via this hook.
+- Reopen `/dashboard?view=management` for March 2026.
+- Confirm stat cards no longer show all zeros.
+- Confirm employee cards show KPI badges instead of only `No KPIs` where March KPIs exist.
+- Confirm no `57014` timeout or failed `review_submissions` requests appear in network/logs.
