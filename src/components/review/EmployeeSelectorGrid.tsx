@@ -733,8 +733,15 @@ export function EmployeeSelectorGrid({
             employeeIds.add(kpi.employee_id);
           } else if (statusFilter === 'pending_direct' && (isFullAccess || isDirect) && kpi.status === 'self_review') {
             employeeIds.add(kpi.employee_id);
-          } else if (statusFilter === 'pending_skip' && (isFullAccess || isIndirect) && reviewableStatuses.includes(kpi.status || '')) {
-            employeeIds.add(kpi.employee_id);
+          } else if (statusFilter === 'pending_skip') {
+            // For full-access roles we don't have indirect membership; resolve
+            // skip-reviewable statuses from the employee's own workflow stages.
+            const skipReviewable = isIndirect
+              ? reviewableStatuses
+              : (isFullAccess ? resolveReviewableStatuses('skip_level', stages) : []);
+            if ((isFullAccess || isIndirect) && skipReviewable.includes(kpi.status || '')) {
+              employeeIds.add(kpi.employee_id);
+            }
           } else if (statusFilter === 'reviewed') {
             if ((isFullAccess || isDirect) && !['kra_set', 'self_review'].includes(kpi.status || '')) {
               employeeIds.add(kpi.employee_id);
