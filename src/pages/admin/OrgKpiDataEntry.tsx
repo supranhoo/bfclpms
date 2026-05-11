@@ -1141,7 +1141,7 @@ export default function OrgKpiDataEntry() {
     }
     
     queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
-  }, [handleCardSave, propagate, selectedPeriod, selectedYear, queryClient, profile?.id, insertAuditLogs, employeeCountMap, allProfiles, isAdmin, toast]);
+  }, [handleCardSave, propagate, selectedPeriod, selectedYear, queryClient, profile?.id, insertAuditLogs, employeeCountMap, allProfiles, isAdmin, toast, mappedEmployeesMap, kraSetEmpIdsByKey]);
 
   /**
    * Phase A4 — Pre-flight propagation gate.
