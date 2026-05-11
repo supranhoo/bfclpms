@@ -1,92 +1,69 @@
-# Workflow Resolution Report
+## RCA summary
 
-## Problem
+Employee `101784` is not missing from master data:
+- Profile exists and is active: Vivek Kumar Dansena.
+- Role exists: `admin`.
+- KPIs exist: 54 rows across Nov-2025 to May-2026.
 
-Today the only "Workflow Configuration Report" is the **Export Report** button on `/admin/workflow-config`. Its sheets list:
-- Templates (definitions only)
-- Employee / Department / PMS-Grade **Overrides**
+The screenshots show the real failure is in the reviewer dashboard roster layer: every reviewer view renders, but `Total Employees`, `Total KPIs`, and the employee list are all `0` / empty.
 
-Most employees use the **default template** and have no override row, so they never appear. To anyone reading the export, it looks "blank" — and there is no on-screen view at all to answer questions like *"Why does Tanaaz / April 2026 show N/A for Skip-Level?"*.
+Most likely root cause from code + logs:
+1. `EmployeeSelectorGrid` loads multiple heavy org-wide datasets on first paint: all active profiles, period KPIs, workflow-stage profiles, bulk workflow resolution, filter options, and submission score maps.
+2. For HR PMS / Audit / Management / Pending-* views, `useProfilesByWorkflowStage` first fetches all active profiles, then calls `get_bulk_employee_workflows` for the full active employee set.
+3. `EmployeeSelectorGrid` then calls `useBulkEmployeeWorkflows` again for the resolved list, which can be another full-org workflow RPC.
+4. Recent database logs show repeated real client errors: `canceling statement due to statement timeout`. When these queries time out, React Query returns failed/empty data and the dashboard renders “No employees found”.
+5. The current URL also contains persisted filters (`q=Yadav&employee=...`). The UI has a known filter-persistence pattern, so stale URL params can make an already-fragile load look like every dashboard is blank.
 
-## Goal
-
-Add a new **in-app**, **period-aware** report that lists every active employee with the **fully-resolved** workflow chain for a chosen month + year, so admins can see at a glance which stages are active, which user fills each stage, and why a stage is N/A.
-
-## Scope
-
-### 1. New page: `/reports/workflow-resolution`
-
-- Listed in `ReportsHub` under the "Configuration" / "Workflow" group.
-- Route registered in `src/App.tsx`, lazy-loaded like its siblings.
-- Access: same roles allowed today on `/admin/workflow-config` + Management + HR PMS + Auditor (read-only). No Employee access.
-
-### 2. Filters (top bar)
-
-- **Period** (Month dropdown — Jan…Dec) — defaults to current month
-- **Year** (defaults to current fiscal year)
-- **Department** (multi-select)
-- **PMS Grade** (multi-select)
-- **Employee** (search-as-you-type, name / code / email)
-- **Template** (multi-select; populated from active + archived templates)
-- **Stage filter** chip row: "Show only employees with N/A in __" → Self / L1 / Skip-Level / HR PMS / Auditor / Management
-- "Active employees only" toggle (default ON, per Core memory)
-
-### 3. Table columns
-
-| Group | Columns |
-|---|---|
-| Identity | Employee Code, Name, Department, PMS Grade |
-| Resolution | Resolved Template, Source (Employee override / Department / PMS-Grade / Default), Period-Specific (Yes/No) |
-| Resolved chain (period-aware) | Self, L1 Manager, Skip-Level, HR PMS, Auditor, Management |
-| Diagnostics | Stages skipped (chips), N/A reason chip when any stage is N/A |
-
-Each chain cell shows the **resolved user's name** + small badge. When N/A, the cell shows the **reason chip** — one of:
-- `Stage not in template`
-- `No manager_id on profile`
-- `Skip-level = manager (loop)`
-- `Resolved user inactive`
-- `Stage role unassigned`
-
-A row click opens a side panel with the full evaluation trace (template stages array, override row id if any, raw `manager_id` / `manager.manager_id` chain, final users at each stage).
-
-### 4. Resolution logic (single source of truth)
-
-- All resolution runs through the **same** function the runtime workflow engine uses today (the resolver behind `getEmployeeWorkflow` / `get_bulk_employee_workflows`). The report does **not** re-implement chain logic — that would create the "two standards" problem the user has flagged before.
-- Bulk-resolve in batches of 200 employees per RPC call (per Core memory: handle 1000-row DB limit with batched fetching).
-- Memoized client-side cache keyed by `(period, year)`.
-
-### 5. Exports
-
-- **Export Excel** button reuses the period-aware resolved rows (not just overrides). Sheet matches the on-screen columns.
-- **Export filtered view** (respects current filters).
-
-### 6. Admin export upgrade (small, additive)
-
-On `/admin/workflow-config`, the existing `WorkflowConfigExport` gets one new sheet **"All Employees (Resolved)"** that calls the same resolver for the currently-selected period in the page header (or "Global" if none). The existing 4 sheets are left unchanged. This eliminates the "blank report" perception even for users who never visit the new page.
-
-### 7. Tests + mocks (per workspace SSOT rule)
-
-- Unit test: resolver wrapper returns same chain for an employee on `/admin/workflow-config` page and on the new report (parity test — guards against future drift).
-- Unit test: each of the 5 N/A reason chips fires for the correct fixture.
-- Mock data: include Tanaaz / Ravi-Naidu-style fixture (manager_id NULL → `No manager_id on profile`) and a self-loop fixture.
-
-### 8. Documentation + memory sync
-
-- Update `DOCUMENTATION.md` (new section "Workflow Resolution Report" + bump version).
-- Update `POLICY.md` to record: report is read-only, period-aware, uses canonical resolver, must never diverge from runtime workflow engine.
-- Update `mem://features/admin/workflow-configuration-report` to cover the new on-screen report and N/A-reason chip taxonomy.
-- New ADR entry under `docs/adr/` documenting the "single resolver" decision.
+This is a performance/query-shape bug, not an access-rights bug.
 
 ## Risk & Impact Report
 
-- **Data Impact**: Read-only. No schema, no RLS changes. Resolver is the existing one.
-- **Workflow Impact**: None — pure reporting surface.
-- **UI/UX Consistency**: New page mirrors styling of `KpiStatusTracker` / `BottleneckReport` for filters + table. Added to `ReportsHub` group, sidebar entry under Reports.
-- **Regression Risk**: Low. The only existing-file edit is one extra sheet appended to `WorkflowConfigExport.tsx` (additive). Parity unit test guards against the resolver ever drifting.
-- **Mitigation**: Single shared resolver call, parity unit test, and a feature flag (`reports.workflow_resolution.enabled`, default ON) so it can be toggled from admin settings without a redeploy.
+| Area | Impact |
+|---|---|
+| Data | No data mutation needed. Read-only dashboard query changes only. |
+| Workflow | No workflow status or reviewer-chain rule changes. |
+| Permissions | No RLS/menu/role change; 101784 already has admin access. |
+| UI/UX | Same dashboard UI, but loading/error/empty states become accurate. |
+| Regression risk | Medium because reviewer dashboards share one large component; mitigate with targeted tests and no business-rule changes. |
 
-## Out of scope
+## Implementation plan
 
-- No edits to the workflow engine or chain-resolution logic itself.
-- No changes to RLS or template definitions.
-- No bulk re-assignment / fix actions (read-only report). A follow-up plan can add "Fix" deep-links from N/A chips to the relevant admin screen.
+### 1. Stop stale URL filters from making dashboards look blank
+- When switching dashboard tabs, clear `q`, `employee`, `dept`, `desig`, `grade`, `mgr`, `auditor`, `page`, and `status` together.
+- On initial reviewer dashboard load, ignore an `employee=` param unless the selected employee exists in the current resolved roster or came from a valid KPI deep-link.
+- Improve the empty state copy so it distinguishes:
+  - no data in system,
+  - no result due to filters,
+  - data failed to load.
+
+### 2. Reduce duplicate workflow-resolution calls
+- In `EmployeeSelectorGrid`, avoid calling `useBulkEmployeeWorkflows` for the entire full-org roster when `useProfilesByWorkflowStage` already resolved by workflow stage.
+- Only resolve workflows for employees that are needed for visible calculations:
+  - visible page employees,
+  - KPI employee IDs for the selected period,
+  - assigned employees for audit view.
+- Keep the existing workflow engine rules unchanged.
+
+### 3. Make heavy reviewer queries resilient instead of empty
+- Wrap `useProfilesByWorkflowStage` chunk calls so a timed-out chunk does not collapse the whole dashboard to zero.
+- If workflow RPC fails for a chunk, use the existing fallback logic and surface a warning toast rather than showing “No employees found”.
+- Add an explicit error panel with “Refresh” when `profiles`, `periodKpis`, or workflow-stage data fails.
+
+### 4. Add query guards for auth/profile readiness
+- Ensure the reviewer grid does not run org-wide queries until `useAuth().isReady`, `user.id`, and `effectiveRole` are available.
+- Add defensive early returns to hooks that receive user IDs / employee IDs so no query can send a literal `null` UUID.
+
+### 5. Regression protection
+- Add unit tests for:
+  - stale URL `q`/`employee` params are cleared when changing reviewer tabs,
+  - reviewer grid does not render “No employees found” when a data query is still loading or errored,
+  - workflow fallback keeps a non-empty roster when one workflow chunk fails.
+- Add/update mock data for employee `101784` with admin role, no direct reports, and April 2026 KPIs.
+
+### 6. Documentation / policy sync
+- Update `DOCUMENTATION.md` and `POLICY.md` with the dashboard query rule: full-org reviewer dashboards must be period-scoped, paginated/chunked, and must not show a hard empty state on query failure.
+- Update the relevant memory for reviewer dashboard performance/query behavior.
+
+## Expected result
+
+For Vivek (`101784`), the dashboards should stop collapsing to zero. If a query fails, he will see a clear load/error state and a refresh action; otherwise the relevant April 2026 employee/KPI counts will populate normally.
