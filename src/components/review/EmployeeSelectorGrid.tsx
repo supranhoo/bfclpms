@@ -334,10 +334,17 @@ export function EmployeeSelectorGrid({
   const { data: workflowMap } = useBulkEmployeeWorkflows(allEmployeeIds, selectedPeriod, selectedYear);
   // BUG-051: Org KPI tile on Team Reviews — only fetched for full-access roles
   // who actually see the tile. Cached 60s; ~896 rows max per period.
+  // v2.66.11.8: Org KPI tile is now shown on Team, HR PMS, Manager Review,
+  // and Skip Mgr Review dashboards for full-access roles. Same 60s cache.
   const { data: orgKpiCounts } = useOrgKpiPeriodCounts(
     selectedPeriod,
     selectedYear,
-    isFullAccess && viewLevel === 'team',
+    isFullAccess && (
+      viewLevel === 'team' ||
+      viewLevel === 'hr_pms' ||
+      viewLevel === 'pending_manager_review' ||
+      viewLevel === 'pending_skip_review'
+    ),
   );
 
   // Helper: get workflow stages for an employee (with fallback)
@@ -1093,17 +1100,43 @@ export function EmployeeSelectorGrid({
       const regularCount = pendingKpis.filter(k => !k.is_org_level && (!k.frequency || ['monthly','daily','weekly'].includes(k.frequency.toLowerCase()))).length;
       return { totalEmployees: demographicFilteredMembers.length, stat0: 0, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'pending_manager_review') {
-      const pendingKpis = relevantKpis.filter(k => k.status === 'self_review');
-      const orgKpiCount = pendingKpis.filter(k => k.is_org_level).length;
-      const nonMonthlyCount = pendingKpis.filter(k => k.frequency && !['monthly','daily','weekly'].includes(k.frequency.toLowerCase())).length;
-      const regularCount = pendingKpis.filter(k => !k.is_org_level && (!k.frequency || ['monthly','daily','weekly'].includes(k.frequency.toLowerCase()))).length;
-      return { totalEmployees: demographicFilteredMembers.length, stat0: 0, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+      // v2.66.11.8: 6-tile parity with Team Reviews.
+      // pending = at self_review (queue), inReview = at manager_check (active),
+      // reviewed = past manager_check. Sum invariant: pending+inReview+reviewed = total
+      // (excluding pre-self kra_set, which is its own dashboard).
+      const pending = relevantKpis.filter(k => k.status === 'self_review').length;
+      const inReview = relevantKpis.filter(k => k.status === 'manager_check').length;
+      const reviewed = relevantKpis.filter(k => !['kra_set', 'self_review', 'manager_check'].includes(k.status || '')).length;
+      return {
+        totalEmployees: demographicFilteredMembers.length,
+        stat0: 0,
+        stat1: pending,
+        stat2: inReview,
+        stat3: reviewed,
+        stat4: relevantKpis.length,
+        stat5: 0,
+        totalKpis: relevantKpis.length,
+      };
     } else if (viewLevel === 'pending_skip_review') {
-      const pendingKpis = relevantKpis.filter(k => k.status === 'manager_check');
-      const orgKpiCount = pendingKpis.filter(k => k.is_org_level).length;
-      const nonMonthlyCount = pendingKpis.filter(k => k.frequency && !['monthly','daily','weekly'].includes(k.frequency.toLowerCase())).length;
-      const regularCount = pendingKpis.filter(k => !k.is_org_level && (!k.frequency || ['monthly','daily','weekly'].includes(k.frequency.toLowerCase()))).length;
-      return { totalEmployees: demographicFilteredMembers.length, stat0: 0, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+      // v2.66.11.8: 6-tile parity. pending = at manager_check (waiting for skip),
+      // inReview = at skip_level_check, reviewed = past skip_level_check.
+      const pending = relevantKpis.filter(k => k.status === 'manager_check').length;
+      const inReview = relevantKpis.filter(k => k.status === 'skip_level_check').length;
+      const reviewed = relevantKpis.filter(k => {
+        const s = k.status || '';
+        if (['kra_set', 'self_review', 'manager_check', 'skip_level_check'].includes(s)) return false;
+        return true;
+      }).length;
+      return {
+        totalEmployees: demographicFilteredMembers.length,
+        stat0: 0,
+        stat1: pending,
+        stat2: inReview,
+        stat3: reviewed,
+        stat4: relevantKpis.length,
+        stat5: 0,
+        totalKpis: relevantKpis.length,
+      };
     } else {
       // Management view (default branch): Total Employees = those with at
       // v2.64.11: Total Employees = unique employees with any KPI in period
@@ -1351,25 +1384,76 @@ export function EmployeeSelectorGrid({
         </div>
       );
     } else if (viewLevel === 'hr_pms') {
+      // v2.66.11.8: 6-tile parity. Reviewed shows ratio. Org KPIs added for full-access.
+      const orgEntered = (orgKpiCounts?.entered ?? 0) + (orgKpiCounts?.propagated ?? 0);
+      const orgTotal = orgKpiCounts?.total ?? 0;
+      const orgPending = orgKpiCounts?.pending ?? 0;
       return (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
           <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} tooltip="Employees with at least one KPI in this period whose workflow includes the HR PMS stage." />
           <StatCard icon={Clock} label="Pending Review" value={stats.stat1} color="amber" subtitle="Before HR PMS stage" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} tooltip="KPIs at the stage immediately before HR PMS, awaiting your queue." />
           <StatCard icon={FileCheck} label="In HR PMS Review" value={stats.stat2} color="purple" subtitle="Currently in HR PMS" onClick={() => toggleStatusFilter('in_review')} active={statusFilter === 'in_review'} tooltip="KPIs currently sitting in the HR PMS review stage." />
-          <StatCard icon={CheckCircle2} label="HR PMS Reviewed" value={stats.stat3} color="green" subtitle="HR PMS completed" onClick={() => toggleStatusFilter('reviewed')} active={statusFilter === 'reviewed'} tooltip="KPIs with an HR PMS score recorded for this period (regardless of current stage)." />
+          <StatCard icon={CheckCircle2} label="HR PMS Reviewed" value={stats.stat3} denominator={stats.totalKpis} color="green" subtitle="of total KPIs" onClick={() => toggleStatusFilter('reviewed')} active={statusFilter === 'reviewed'} tooltip="KPIs with an HR PMS score recorded for this period (regardless of current stage)." />
           <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" tooltip="All KPIs in this period for employees visible in this view (after filters)." />
+          {isFullAccess && (
+            <StatCard
+              icon={Building2}
+              label="Org KPIs"
+              value={orgEntered}
+              denominator={orgTotal}
+              color="purple"
+              subtitle={orgPending > 0 ? `${orgPending} pending entry` : 'All entered'}
+              tooltip="Organisation-level KPIs for this period: Entered + Propagated / Total."
+            />
+          )}
         </div>
       );
-    } else if (viewLevel === 'pending_self_review' || viewLevel === 'pending_manager_review' || viewLevel === 'pending_skip_review') {
-      const labelMap = { pending_self_review: 'Pending Self Review', pending_manager_review: 'Pending Manager Review', pending_skip_review: 'Pending Skip Mgr Review' };
+    } else if (viewLevel === 'pending_self_review') {
       const pendingSubtitle = (stats.stat2 > 0 || stats.stat3 > 0)
         ? [stats.stat2 > 0 ? `${stats.stat2} org KPI` : '', stats.stat3 > 0 ? `${stats.stat3} bi-monthly/quarterly` : ''].filter(Boolean).join(' · ')
         : 'KPIs at this stage';
       return (
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
-          <StatCard icon={Clock} label={labelMap[viewLevel]} value={stats.stat1} color="amber" subtitle={pendingSubtitle} onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
+          <StatCard icon={Clock} label="Pending Self Review" value={stats.stat1} color="amber" subtitle={pendingSubtitle} onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
           <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" />
+        </div>
+      );
+    } else if (viewLevel === 'pending_manager_review' || viewLevel === 'pending_skip_review') {
+      // v2.66.11.8: 6-tile parity for Manager Review and Skip Mgr Review.
+      const isMgr = viewLevel === 'pending_manager_review';
+      const pendingLabel = isMgr ? 'Pending Mgr Review' : 'Pending Skip Review';
+      const inReviewLabel = isMgr ? 'In Manager Review' : 'In Skip Review';
+      const pendingTip = isMgr
+        ? 'KPIs awaiting manager pickup (status = Self Review).'
+        : 'KPIs awaiting skip pickup (status = Manager Check).';
+      const inReviewTip = isMgr
+        ? 'KPIs currently sitting at the Manager Check stage.'
+        : 'KPIs currently sitting at the Skip-Level Check stage.';
+      const reviewedTip = isMgr
+        ? 'KPIs that have moved past Manager Check.'
+        : 'KPIs that have moved past Skip-Level Check.';
+      const orgEntered = (orgKpiCounts?.entered ?? 0) + (orgKpiCounts?.propagated ?? 0);
+      const orgTotal = orgKpiCounts?.total ?? 0;
+      const orgPending = orgKpiCounts?.pending ?? 0;
+      return (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+          <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
+          <StatCard icon={Clock} label={pendingLabel} value={stats.stat1} color="amber" subtitle="Awaiting pickup" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} tooltip={pendingTip} />
+          <StatCard icon={FileCheck} label={inReviewLabel} value={stats.stat2} color="yellow" subtitle="Active stage" tooltip={inReviewTip} />
+          <StatCard icon={CheckCircle2} label="Reviewed" value={stats.stat3} denominator={stats.totalKpis} color="green" subtitle="of total KPIs" tooltip={reviewedTip} />
+          <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" />
+          {isFullAccess && (
+            <StatCard
+              icon={Building2}
+              label="Org KPIs"
+              value={orgEntered}
+              denominator={orgTotal}
+              color="purple"
+              subtitle={orgPending > 0 ? `${orgPending} pending entry` : 'All entered'}
+              tooltip="Organisation-level KPIs for this period: Entered + Propagated / Total."
+            />
+          )}
         </div>
       );
     } else if (viewLevel === 'audit') {

@@ -2789,3 +2789,22 @@ The Team Reviews header on `/dashboard?view=team` MUST show the following six ti
 Sum invariant: `KRA Set + Direct Pending + Skip-Level Pending + Reviewed === Total KPIs` (within a 1-row tolerance for in-flight transitions). The Reviewed tile is the visible expression of this invariant via its denominator.
 
 The standalone "Total KPIs" tile is REMOVED — its number now lives as the denominator of the Reviewed tile to keep the row at six tiles. Implementation: `src/components/review/EmployeeSelectorGrid.tsx` `renderStatsCards()` team branch + `StatCard.denominator` prop. Tile grid uses `grid-cols-2 md:grid-cols-3 xl:grid-cols-6`. Regression: `src/test/teamReviewsFullAccessTiles.test.ts` (sum invariant + `kraSetPending` case).
+
+## §127.1 — Reviewer-Stage Tile Parity (v2.66.11.8)
+The 6-tile composition rule of §127 extends to all reviewer-stage dashboards. **HR PMS Review**, **Manager Review** (`pending_manager_review`), and **Skip Mgr Review** (`pending_skip_review`) MUST present six tiles using the same `grid-cols-2 md:grid-cols-3 xl:grid-cols-6` layout, in this order:
+
+1. **Total Employees** — roster size after filters.
+2. **Pending Review** — KPIs queued for the stage (status = the stage immediately before this reviewer's stage).
+3. **In Review** — KPIs with `status` equal to this reviewer's active stage.
+4. **Reviewed (ratio)** — KPIs that have moved past this stage. Rendered as `value / totalKpis` with progress bar.
+5. **Total KPIs** — period total for the visible roster.
+6. **Org KPIs** — same definition and gating as §127 #6 (full-access viewers only, sourced from `useOrgKpiPeriodCounts`).
+
+Per-view stage mapping:
+- **HR PMS** — Pending = before `hr_pms_review`; In Review = `hr_pms_review`; Reviewed = `hr_pms_score` recorded.
+- **Manager Review** — Pending = `self_review`; In Review = `manager_check`; Reviewed = past `manager_check`.
+- **Skip Mgr Review** — Pending = `manager_check`; In Review = `skip_level_check`; Reviewed = past `skip_level_check`.
+
+Sum invariant: `Pending + In Review + Reviewed = Total KPIs` (excluding pre-stage rows: `kra_set`, and for skip view also `self_review`). Audit and Management views are intentionally out of scope until a follow-up; their existing 5-tile layouts remain unchanged.
+
+Regression: `src/test/teamReviewsFullAccessTiles.test.ts` includes sum-invariant assertions for Manager and Skip Mgr stages.
