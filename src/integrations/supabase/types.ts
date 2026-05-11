@@ -8181,6 +8181,63 @@ export type Database = {
       }
       get_registry_coverage_stats: { Args: never; Returns: Json }
       get_registry_pending_suggestion_count: { Args: never; Returns: Json }
+      get_reviewer_kpis_for_period: {
+        Args: { p_period: string; p_year: number }
+        Returns: {
+          category_id: string
+          created_at: string
+          criteria: string
+          day_count_type: string
+          employee_id: string
+          frequency: string
+          frequency_cycle_start: string
+          id: string
+          is_frequency_locked: boolean
+          is_issued: boolean
+          is_org_level: boolean
+          kpi_name: string
+          kra_name: string
+          org_level_scope: string
+          qualitative_options: Json
+          r0: number
+          r1: number
+          r2: number
+          r3: number
+          r4: number
+          r5: number
+          ref_code: string
+          require_resubmit_reason: boolean
+          review_period: string
+          review_year: number
+          source_of_data: string
+          source_template_id: string
+          status: string
+          sub_frequency: string
+          target_value: number
+          threshold_mode: string
+          uom: string
+          uom_type: string
+          updated_at: string
+          weightage: number
+        }[]
+      }
+      get_reviewer_roster_slim: {
+        Args: never
+        Returns: {
+          avatar_url: string
+          company_id: string
+          department_id: string
+          designation: string
+          email: string
+          employee_code: string
+          full_name: string
+          id: string
+          is_active: boolean
+          level: string
+          pms_grade: string
+          reporting_manager_id: string
+        }[]
+      }
       get_safety_setting: { Args: { p_key: string }; Returns: Json }
       get_skip_level_manager: {
         Args: { employee_uuid: string }

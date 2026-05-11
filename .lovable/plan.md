@@ -1,83 +1,46 @@
-Do I know what the issue is? Yes.
+# Fix: Vivek's blank Team Reviews — eliminate full-org scans
 
-The previous change only made the dashboard show the timeout error clearly. The underlying failures are still happening. Current evidence shows three concrete timeout sources:
-
-1. `profiles` full-roster queries with embedded `departments` are timing out.
-2. `kpis` period queries for May 2026 are timing out because the current index does not match the filter plus sort pattern.
-3. `review_submissions` score lookups are being executed twice from the dashboard and are still timing out under RLS-heavy access policies.
+## Why Vivek "can't" but Ankit "can"
+Both employees are `admin` and run the same queries on Team Reviews. Live DB logs (last 5 min) show repeated `statement timeout` on three queries that scan the **entire** active organization (2,532 profiles + every KPI for the open period). Ankit got a warm React Query cache from an earlier successful load; Vivek's first cold attempt timed out, and the empty-state error sticks. This is load-flaky, not user-specific — Ankit will hit it too on the next cold load.
 
 ## Risk & Impact Report
 
-- **Data Impact:** No historical KPI/review data will be changed. I will add read-performance indexes and, if needed, a read-only slim RPC/view for dashboard score rows.
-- **Workflow Impact:** No workflow stage rules, reviewer permissions, or score calculations will change.
-- **UI/UX Consistency:** The current dashboard layout stays the same; the goal is to make data load rather than keep showing the error block.
-- **Regression Risk:** Medium, because `useProfiles`, KPI period loading, and submission score hooks are shared across reviewer dashboards.
-- **Mitigation Plan:** Keep the same data contracts, add tests for the dashboard score map/fallback behavior, and update `DOCUMENTATION.md` + `POLICY.md` in the same implementation step.
+- **Data Impact:** No schema changes. Two new SECURITY DEFINER RPCs (`get_team_reviews_roster_page`, `get_team_reviews_kpi_summary`) for paginated, RLS-aware reads. No write paths change.
+- **Workflow Impact:** None. Same roles see the same employees and KPIs — only the fetch shape changes.
+- **UI/UX Consistency:** Team Reviews keeps the same cards/grid; pagination becomes server-driven (Load more / page controls already supported by the grid).
+- **Regression Risk:** Medium-high — `EmployeeSelectorGrid` is shared by Pending Self / Manager / Skip / HR PMS / Audit / Management views. Mitigation: keep current hooks as fallback when the new RPC errors, ship behind a feature-flag-style guard, and add unit tests on the page-shape.
+- **Mitigation Plan:** Keep the existing `useProfiles` / `useKpisByPeriodRanges` callable but **not** auto-invoked on Team Reviews; reuse them only on small per-employee scorecard fetches.
 
 ## Implementation Plan
 
-### 1. Add database performance indexes
-Add targeted indexes for the exact failing query shapes:
+### 1. New paginated roster RPC
+Create `public.get_team_reviews_roster_page(p_period text, p_year int, p_search text, p_dept uuid, p_designation text, p_manager uuid, p_status text, p_limit int, p_offset int)` returning rows with: employee_id, full_name, employee_code, designation, department_id, reporting_manager_id, total_kpis, reviewed_kpis, last_status. Implementation: SECURITY DEFINER, joins `profiles` + aggregated `kpis` + `review_submissions` for **only the requested page**, applies RLS-equivalent role checks internally (admin / manager / skip / hr_pms / management / auditor / report_override), returns at most 50 rows per call.
 
-- `profiles`: active roster sorted by `full_name`.
-- `kpis`: `(review_period, review_year, created_at desc, id)` for dashboard period queries.
-- If query planning still shows RLS-heavy submission scans, add a read-optimized, secured function for dashboard score rows instead of relying on repeated client-side `.in('kpi_id', batch)` calls.
+### 2. New per-page KPI summary RPC
+Create `public.get_team_reviews_kpi_summary(p_employee_ids uuid[], p_period text, p_year int)` returning per-employee: pending_count, reviewed_count, weighted_score. Called only with the visible page's employee IDs (≤50). Replaces the org-wide `useKpisByPeriodRanges` + `useReviewSubmissionScoresByKpiIds` for the grid summary.
 
-### 2. Make profile roster loading lean
-Update `useProfiles()` and `useProfilesByWorkflowStage()` so they do not fetch `profiles.*` with embedded `departments` for every active employee.
+### 3. Wire `EmployeeSelectorGrid.tsx` to the RPCs
+- Replace `useProfiles()` / `useProfilesByWorkflowStage()` / `useKpisByPeriodRanges()` / `useEmployeeScoresForPeriod()` on Team Reviews with one `useTeamReviewsRosterPage(filters, page)` hook.
+- Keep client-side detail hooks (`useKpis(employeeId, period, year)`) for the per-employee scorecard drawer — those are already cheap.
+- Pagination: 50 rows per page, server-side; "Load more" appends.
+- Filters (search, department, designation, manager, status, view-level) are passed to the RPC as parameters so the DB returns only matching rows.
 
-- Fetch only fields the dashboard actually renders.
-- Fetch departments separately once and hydrate client-side.
-- Keep `is_active = true` and full pagination intact.
+### 4. Distinct-values endpoints
+Replace the `profiles SELECT designation WHERE is_active=true` / department / manager dropdown fetches (also timing out) with three lightweight RPCs returning `DISTINCT` values via indexed scans, cached for 10 minutes.
 
-### 3. Remove duplicate `review_submissions` score queries
-Replace the current two score-fetching paths:
+### 5. Statement-timeout safety net
+- Add `SET LOCAL statement_timeout = '20s'` inside the new RPCs (admin reporting reads only, never on writes).
+- Add a small per-RPC error toast: "Roster too large to load instantly — narrowing filters will help" so admins see actionable guidance instead of a generic retry.
 
-- `useReviewSubmissionScoresByKpiIds(periodKpiIds)`
-- `useEmployeeScoresForPeriod(periodKpis)`
+### 6. Regression coverage
+- Unit tests: roster RPC pagination, filter combinations, role-scoping parity with current RLS.
+- Integration test: `EmployeeSelectorGrid` renders 50/2532 with "Load more", retry path, filter change resets pagination.
+- Manual QA: log in as admin (Vivek), manager, skip-level, HR PMS, auditor; verify same employees appear as before.
 
-with one shared slim score-row hook/service that returns all score columns needed for:
-
-- reviewed counters
-- progress bars
-- weighted employee score map
-
-This cuts the biggest duplicated dashboard load.
-
-### 4. Make dashboard error tracking complete
-Update `EmployeeSelectorGrid.tsx` so the error panel includes:
-
-- KPI period query failures
-- submission score query failures
-- employee score aggregation failures
-- profile/stage roster failures
-
-Also fix the refresh spinner key mismatch: it currently watches `review-submission-scores`, but the real query key is `review-submission-scores-by-kpi-ids`.
-
-### 5. Reduce workflow resolution pressure
-Keep workflow resolution period-aware, but avoid resolving workflows for the whole org when a narrower data set is enough.
-
-- For Pending Self/Manager/Skip dashboards, derive visible employees primarily from period KPI rows and the required status.
-- Only call bulk workflow resolution for employees needed by the selected view/page calculations.
-
-### 6. Regression coverage and policy sync
-Add/update tests for:
-
-- one submission score fetch feeding both reviewed stats and weighted score calculation
-- dashboard error state when submission score query fails
-- active-profile roster hydration still preserving department names
-
-Update:
-
-- `DOCUMENTATION.md` version history
-- `POLICY.md` dashboard query performance rule
-- relevant memory if the implementation creates a new invariant
+### 7. Doc + policy sync
+- `DOCUMENTATION.md` v2.66.11.0 release note.
+- `POLICY.md` §124: "Reviewer dashboards MUST page their roster server-side. No client-side hook may scan the entire active organization in a single request."
+- Update memory `Reviewer Dashboard View Architecture` with the new RPC contract.
 
 ## Expected Result
-
-Vivek 101784 should no longer see the persistent “Couldn’t load this dashboard” screen on Pending Self Review / Audit / HR PMS / Management dashboards. The dashboards should load using leaner profile reads, indexed KPI period reads, and a single submission-score fetch path.
-
-<lov-actions>
-  <lov-open-history>View History</lov-open-history>
-  <lov-link url="https://docs.lovable.dev/tips-tricks/troubleshooting">Troubleshooting docs</lov-link>
-</lov-actions>
+Team Reviews loads in <1s for any role, including admins on the full 2,532-employee org, regardless of cache state. Vivek (and any future cold-loaded admin) sees the same data Ankit sees, without the "Couldn't load this dashboard" panel.

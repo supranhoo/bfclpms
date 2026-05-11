@@ -328,34 +328,16 @@ export function useKpisByPeriodRanges(periodRanges: Array<{ month: string; year:
     queryFn: async () => {
       if (periodRanges.length === 0) return [];
 
-      // Fetch all period/year combos in parallel, each paginated
+      // v2.66.11.0 — Route via SECURITY DEFINER RPC to bypass per-row RLS
+      // overhead and lift statement_timeout to 30s. Direct PostgREST query
+      // on `kpis` for a full month was timing out at 8s (Vivek 101784).
       const fetchSinglePeriod = async (month: string, year: number): Promise<any[]> => {
-        const allKpis: any[] = [];
-        let from = 0;
-        const pageSize = 1000;
-        let hasMore = true;
-
-        while (hasMore) {
-          const { data, error } = await supabase
-            .from('kpis')
-            .select(SLIM_KPI_SELECT)
-            .eq('review_period', month)
-            .eq('review_year', year)
-            .order('created_at', { ascending: false })
-            .range(from, from + pageSize - 1);
-
-          if (error) throw error;
-
-          if (data && data.length > 0) {
-            allKpis.push(...data);
-            from += pageSize;
-            hasMore = data.length === pageSize;
-          } else {
-            hasMore = false;
-          }
-        }
-
-        return allKpis;
+        const { data, error } = await (supabase as any).rpc(
+          'get_reviewer_kpis_for_period',
+          { p_period: month, p_year: year }
+        );
+        if (error) throw error;
+        return (data || []) as any[];
       };
 
       // Run all period fetches in parallel
