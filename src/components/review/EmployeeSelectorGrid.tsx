@@ -1113,6 +1113,7 @@ export function EmployeeSelectorGrid({
       });
       return {
         totalEmployees: periodEmployeeIds.size,
+        stat0: 0,
         stat1: relevantKpis.filter(k => k.status === 'management_review').length,
         stat2: reviewed > 0 ? reviewed : relevantKpis.filter(k => k.status === 'approved').length,
         stat3: relevantKpis.length,
