@@ -1,57 +1,45 @@
 ## Risk & Impact Report
 
-- **Data Impact:** No historical data edits. One read-only backend function may be added/updated so the dashboard can fetch review submission score signatures without timing out.
-- **Workflow Impact:** No approval workflow or permissions change. Counts will continue to respect the selected period and period-specific workflow eligibility.
-- **UI/UX Consistency:** No layout changes. The same stat cards and employee badges will populate with accurate numbers.
-- **Regression Risk:** Low-to-medium because HR PMS, Audit, and Management share the same score-signature map. I will keep the existing fallback-chain semantics and avoid changing score calculation rules.
-- **Mitigation Plan:** Replace the remaining heavy `review_submissions` batched client query with a server-side slim RPC, then add/update regression tests that assert the Management view uses `management_score`/approved N/A signatures and does not collapse to zero when submission rows are loaded through the optimized path.
+- **Data Impact:** No business data will be changed. This is a database function signature/body correction only.
+- **Workflow Impact:** No workflow or permission rules change. Existing role scoping remains the same.
+- **UI/UX Consistency:** No visual changes. The existing Management Review cards should populate once KPI data loads correctly.
+- **Regression Risk:** Low, but this function feeds HR PMS, Audit, and Management reviewer dashboards, so a type mismatch can break all three.
+- **Mitigation Plan:** Add a migration that explicitly casts enum/varchar/text-mismatch fields to the declared return types, then add a regression test that pins these casts so future RPC edits do not reintroduce the 400 error.
 
-## Confirmed RCA
+## Root Cause
 
-The previous fix made the KPI period fetch fast, but the Management numbers still depend on a second heavy path:
+The browser network log shows this failing request:
 
-- `EmployeeSelectorGrid` loads all March KPI IDs.
-- Then `useReviewSubmissionScoresByKpiIds` performs multiple client-side `.from('review_submissions').in('kpi_id', batch)` requests.
-- If those submission-score batches fail/timeout/return late, `submissionScoreMap` is empty or unavailable, so Management reviewed/approved signatures are counted as `0` even though March 2026 has data.
+```text
+POST /rpc/get_reviewer_kpis_for_period
+400: Returned type review_status does not match expected type text in column 6
+```
 
-Database check confirms March 2026 is not actually zero:
-
-- 1,756 KPIs exist for March 2026.
-- 1,736 are already `approved`.
-- 24 employees have a workflow that includes `management_review`.
-- 442 KPIs belong to those Management-review workflows, with 429 already approved.
+Because `kpis.status` is a database enum (`review_status`) but the RPC declares `status text`, the entire KPI fetch fails. That leaves `periodKpis` empty, so the dashboard correctly renders 0 employees/KPIs even though data exists.
 
 ## Implementation Plan
 
-1. **Add an optimized read-only score-signature RPC**
-   - Create `get_reviewer_submission_scores_for_period(p_period, p_year)`.
-   - Return only fields needed by dashboards: `kpi_id`, reviewer score columns, `final_score`, `is_na`, `self_score`.
-   - Join `review_submissions` to period-filtered KPIs inside the database, with `SECURITY DEFINER`, `search_path = public`, and a 30s statement timeout.
-   - Preserve the same role scoping as `get_reviewer_kpis_for_period` so admins/HR PMS/auditors/management get full reviewer visibility, while regular managers only get their scoped employees.
+1. **Fix the KPI period RPC**
+   - Create a new migration replacing `public.get_reviewer_kpis_for_period`.
+   - Keep the same access/scoping logic.
+   - Cast mismatched fields explicitly, especially:
+     - `k.status::text`
+     - `k.r5::numeric`, `k.r4::numeric`, etc. only if safe, or change return type to match actual text thresholds if needed
+     - `k.day_count_type::text`
+   - Preserve the 30s statement timeout for this reporting helper.
 
-2. **Switch the frontend score map hook to the RPC**
-   - Update `useReviewSubmissionScoresByKpiIds` in `src/hooks/useKpis.ts` to accept optional period ranges.
-   - For reviewer dashboards, fetch submission signatures by selected period/year via the new RPC instead of client-side KPI-ID batching.
-   - Keep the current batched `.in('kpi_id')` path as a fallback for call sites that only pass KPI IDs.
+2. **Validate the backend function directly**
+   - Run a read-only DB check that the function can return rows for March 2026.
+   - Confirm it no longer throws the enum/text mismatch.
 
-3. **Wire the Management/HR PMS/Audit grid to period-aware score signatures**
-   - Update `EmployeeSelectorGrid` to pass `periodSelection.periodRanges` into `useReviewSubmissionScoresByKpiIds`.
-   - This makes Management stat cards and employee badges compute from the optimized period score map.
+3. **Add regression coverage**
+   - Extend `src/test/bugBountyFixes.test.ts` to assert the latest `get_reviewer_kpis_for_period` migration casts `k.status::text` (and other declared text fields as needed).
+   - This prevents future edits from returning database enum types into text columns again.
 
-4. **Add regression coverage**
-   - Update existing dashboard regression tests to assert:
-     - the score hook uses the period RPC path for reviewer grids;
-     - Management approved/reviewed counts are derived from `management_score` and approved N/A signatures;
-     - KPI fallback to `approved` status does not show zero when submission signatures are present.
+4. **Update SSOT documentation**
+   - Append `DOCUMENTATION.md` version history with the root cause and fix.
+   - Add/update `POLICY.md` reviewer-dashboard rule: backend reporting RPCs must explicitly cast enum/varchar fields to their declared return types and fail visibly, not silently degrade to zero.
 
-5. **Documentation / policy sync**
-   - Update the internal plan/policy notes for the reviewer-dashboard performance rule: large reviewer dashboards must use period-scoped backend helpers for KPI and submission score signature reads, not wide client-side RLS scans.
-
-## Validation
-
-After implementation:
-
-- Reopen `/dashboard?view=management` for March 2026.
-- Confirm stat cards no longer show all zeros.
-- Confirm employee cards show KPI badges instead of only `No KPIs` where March KPIs exist.
-- Confirm no `57014` timeout or failed `review_submissions` requests appear in network/logs.
+5. **Post-fix confirmation**
+   - Re-check the preview network signal for `/rpc/get_reviewer_kpis_for_period` returning 200.
+   - Confirm the Management Review stat cards are no longer caused by an empty KPI dataset.
