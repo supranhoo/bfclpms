@@ -35,3 +35,8 @@ type: feature
 - Precedence: `okvStatus === 'approved'` → approved; `isPastKraSet || isInPropagatedSet || hasSubmissionFallback` → propagated; `okvHasValue` → entered; else pending.
 - `kraSetEmpIdsByKey` (already returned by the snapshot RPC) is the data source — no new RPC.
 - Regression: `src/test/orgKpiScopedRowStatus.test.ts`. Display-only fix; no DB writes, no propagation contract change.
+
+**2026-05-11 chip parity (POLICY §111.5):**
+- Category-header chip aggregator (`OrgKpiDataEntry.tsx`, "X Pending / Entered / Propagated") now shares the ADR-055 `everyChildAdvanced` override with the per-row pill across **all** scopes — `organization`, `employee`, and `department`. Previously the override existed only on the org-scope branch of `deriveOrgKpiTileStatus`, so employee/department-scope KPIs whose OKV row was never back-filled showed "1 Pending" while the card and per-row counters said "Propagated · 34/34".
+- Fix: in `src/lib/orgKpiStatus.ts`, the empty-`matching` early return in employee/department branches is now `everyChildAdvanced ? 'propagated' : 'pending'`.
+- Regression: `src/test/orgKpiTileStatusChipParity.test.ts`.
