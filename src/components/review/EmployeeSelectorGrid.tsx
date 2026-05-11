@@ -2211,7 +2211,7 @@ const StatCard = React.forwardRef<HTMLDivElement, StatCardProps>(function StatCa
             </p>
             {hasRatio && (
               <div className="h-1.5 rounded-full bg-muted overflow-hidden mt-1.5 w-24 sm:w-32">
-                <div className={`h-full ${colors.bg.replace('/10', '')} ${colors.text.replace('text-', 'bg-')}`} style={{ width: `${pct}%` }} />
+                <div className={`h-full ${colors.text.replace('text-', 'bg-')}`} style={{ width: `${pct}%` }} />
               </div>
             )}
             {subtitle && <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">{hasRatio ? `${pct}% — ${subtitle}` : subtitle}</p>}
