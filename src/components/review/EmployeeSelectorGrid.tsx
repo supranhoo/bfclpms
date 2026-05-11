@@ -194,10 +194,10 @@ export function EmployeeSelectorGrid({
     ].forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
   }, [queryClient]);
 
-  const { data: teamMembers, isLoading: teamLoading } = useTeamMembers(user?.id);
-  const { data: allProfiles, isLoading: profilesLoading } = useProfiles();
+  const { data: teamMembers, isLoading: teamLoading, isError: teamError, refetch: refetchTeam } = useTeamMembers(user?.id);
+  const { data: allProfiles, isLoading: profilesLoading, isError: profilesError, refetch: refetchProfiles } = useProfiles();
   // Fetch skip-level members for team view (merged) or standalone skip_level view
-  const { data: skipLevelMembers, isLoading: skipLevelLoading } = useSkipLevelTeamMembers(
+  const { data: skipLevelMembers, isLoading: skipLevelLoading, isError: skipError, refetch: refetchSkip } = useSkipLevelTeamMembers(
     (viewLevel === 'team' || viewLevel === 'skip_level') ? user?.id : undefined
   );
 
@@ -216,7 +216,7 @@ export function EmployeeSelectorGrid({
   // Fetch only employees whose resolved workflow template includes the required stage
   const selectedPeriodForFilter = periodSelection.selectedMonth;
   const selectedYearForFilter = periodSelection.selectedYear;
-  const { data: stageFilteredProfiles, isLoading: stageFilteredLoading } = useProfilesByWorkflowStage(requiredStage, selectedPeriodForFilter, selectedYearForFilter);
+  const { data: stageFilteredProfiles, isLoading: stageFilteredLoading, isError: stageFilteredError, refetch: refetchStageFiltered } = useProfilesByWorkflowStage(requiredStage, selectedPeriodForFilter, selectedYearForFilter);
 
   // Lazy-load PMS Grades only after the user opens the "More filters" popover
   // (or if a grade is already preset via URL ?grade=...)
@@ -278,7 +278,7 @@ export function EmployeeSelectorGrid({
   const { data: auditorWorkloadMap } = useAuditorWorkloadSummary(viewLevel === 'audit');
 
   // Fix 1 & 3: Use multi-period hook so YTD/QTD/custom modes fetch ALL relevant months
-  const { data: periodKpis } = useKpisByPeriodRanges(periodSelection.periodRanges);
+  const { data: periodKpis, isError: periodKpisError, refetch: refetchPeriodKpis } = useKpisByPeriodRanges(periodSelection.periodRanges);
 
   // BUG-020 (v2.66.7.21): reviewer-stage scores live on review_submissions,
   // not on kpis. Fetch a slim score-signature map keyed by kpi_id so HR PMS /
