@@ -984,11 +984,11 @@ export default function OrgKpiDataEntry() {
       } else if (unaccounted > 0) {
         // v2.66.10.3 — Soften: when every mapped child is past kra_set we
         // know the shortfall is benign (POLICY §88 lock), not a name
-        // mismatch. Use the kraSetEmpIdsByKey snapshot if available.
-        const kraSetSet = new Set<string>(
-          (orgLevelData?.kraSetEmpIdsByKey?.[kk] as string[]) ?? [],
-        );
-        const allPastKraSet = mappedEmpIds.size > 0 && [...mappedEmpIds].every((id) => !kraSetSet.has(id));
+        // mismatch. Use the in-scope memoised maps.
+        const mappedEmpIdsForKey = mappedEmployeesMap.get(kk) || new Set<string>();
+        const kraSetSet = kraSetEmpIdsByKey.get(kk) || new Set<string>();
+        const allPastKraSet = mappedEmpIdsForKey.size > 0
+          && [...mappedEmpIdsForKey].every((id) => !kraSetSet.has(id));
         if (allPastKraSet) {
           toast({
             title: 'Already propagated',
