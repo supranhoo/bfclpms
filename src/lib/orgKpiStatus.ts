@@ -70,7 +70,15 @@ export function deriveOrgKpiTileStatus(input: DeriveTileStatusInput): OrgKpiTile
   }
 
   const matching = okvRows.filter(hasOkvValue);
-  if (matching.length === 0) return 'pending';
+  if (matching.length === 0) {
+    // ADR-055 parity (2026-05-11): for employee/department scopes, when no OKV
+    // row carries a value but every mapped child has already advanced past
+    // `kra_set`, the tile MUST agree with the per-row pill (deriveScopedRowStatus)
+    // and the card chip (which use `isPastKraSet`). Returning 'pending' here
+    // produced the "1 Pending" vs "34 propagated" drift on the Org KPI Data
+    // Entry surface.
+    return everyChildAdvanced ? 'propagated' : 'pending';
+  }
 
   const allPropagated = matching.every((v) => isOkvPropagatedOrApproved(v.status));
   if (!allPropagated) {
