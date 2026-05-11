@@ -8199,12 +8199,12 @@ export type Database = {
           kra_name: string
           org_level_scope: string
           qualitative_options: Json
-          r0: number
-          r1: number
-          r2: number
-          r3: number
-          r4: number
-          r5: number
+          r0: string
+          r1: string
+          r2: string
+          r3: string
+          r4: string
+          r5: string
           ref_code: string
           require_resubmit_reason: boolean
           review_period: string
