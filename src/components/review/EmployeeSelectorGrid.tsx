@@ -933,7 +933,7 @@ export function EmployeeSelectorGrid({
   // Calculate stats using per-employee workflow-aware resolution
   const stats = useMemo(() => {
     if (!periodKpis || !demographicFilteredMembers) {
-      return { totalEmployees: 0, stat1: 0, stat2: 0, stat3: 0, stat4: 0, stat5: 0, totalKpis: 0 };
+      return { totalEmployees: 0, stat0: 0, stat1: 0, stat2: 0, stat3: 0, stat4: 0, stat5: 0, totalKpis: 0 };
     }
 
     const memberIds = new Set(demographicFilteredMembers.map(m => m.id));
@@ -943,7 +943,7 @@ export function EmployeeSelectorGrid({
 
     if (viewLevel === 'team') {
       // Merged view: separate direct pending, skip-level pending, and reviewed counts
-      let directPending = 0, skipPending = 0, reviewed = 0;
+      let directPending = 0, skipPending = 0, reviewed = 0, kraSetPending = 0;
       relevantKpis.forEach(k => {
         const isIndirect = skipIds.has(k.employee_id);
         const isDirect = directIds.has(k.employee_id);
@@ -955,7 +955,9 @@ export function EmployeeSelectorGrid({
         // matching the per-employee badge logic so tiles and card badges agree.
         if (isFullAccess && !isDirect && !isIndirect) {
           const status = k.status || '';
-          if (status === 'self_review') {
+          if (status === 'kra_set') {
+            kraSetPending++;
+          } else if (status === 'self_review') {
             directPending++;
           } else if (hasResolvedWorkflow(k.employee_id)) {
             const stages = getStages(k.employee_id);
@@ -977,13 +979,15 @@ export function EmployeeSelectorGrid({
             if (slIdx >= 0 && stages.slice(slIdx).includes(k.status || '')) reviewed++;
           }
         } else if (isDirect) {
-          if (k.status === 'self_review') directPending++;
+          if (k.status === 'kra_set') kraSetPending++;
+          else if (k.status === 'self_review') directPending++;
           else if (!['kra_set', 'self_review'].includes(k.status || '')) reviewed++;
         }
         // Employees with no reporting relationship (undefined) are excluded from direct/skip counts
       });
       return {
         totalEmployees: demographicFilteredMembers.length,
+        stat0: kraSetPending,
         stat1: directPending,
         stat2: skipPending,
         stat3: reviewed,
