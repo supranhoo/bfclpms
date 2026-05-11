@@ -1384,25 +1384,76 @@ export function EmployeeSelectorGrid({
         </div>
       );
     } else if (viewLevel === 'hr_pms') {
+      // v2.66.11.8: 6-tile parity. Reviewed shows ratio. Org KPIs added for full-access.
+      const orgEntered = (orgKpiCounts?.entered ?? 0) + (orgKpiCounts?.propagated ?? 0);
+      const orgTotal = orgKpiCounts?.total ?? 0;
+      const orgPending = orgKpiCounts?.pending ?? 0;
       return (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
           <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} tooltip="Employees with at least one KPI in this period whose workflow includes the HR PMS stage." />
           <StatCard icon={Clock} label="Pending Review" value={stats.stat1} color="amber" subtitle="Before HR PMS stage" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} tooltip="KPIs at the stage immediately before HR PMS, awaiting your queue." />
           <StatCard icon={FileCheck} label="In HR PMS Review" value={stats.stat2} color="purple" subtitle="Currently in HR PMS" onClick={() => toggleStatusFilter('in_review')} active={statusFilter === 'in_review'} tooltip="KPIs currently sitting in the HR PMS review stage." />
-          <StatCard icon={CheckCircle2} label="HR PMS Reviewed" value={stats.stat3} color="green" subtitle="HR PMS completed" onClick={() => toggleStatusFilter('reviewed')} active={statusFilter === 'reviewed'} tooltip="KPIs with an HR PMS score recorded for this period (regardless of current stage)." />
+          <StatCard icon={CheckCircle2} label="HR PMS Reviewed" value={stats.stat3} denominator={stats.totalKpis} color="green" subtitle="of total KPIs" onClick={() => toggleStatusFilter('reviewed')} active={statusFilter === 'reviewed'} tooltip="KPIs with an HR PMS score recorded for this period (regardless of current stage)." />
           <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" tooltip="All KPIs in this period for employees visible in this view (after filters)." />
+          {isFullAccess && (
+            <StatCard
+              icon={Building2}
+              label="Org KPIs"
+              value={orgEntered}
+              denominator={orgTotal}
+              color="purple"
+              subtitle={orgPending > 0 ? `${orgPending} pending entry` : 'All entered'}
+              tooltip="Organisation-level KPIs for this period: Entered + Propagated / Total."
+            />
+          )}
         </div>
       );
-    } else if (viewLevel === 'pending_self_review' || viewLevel === 'pending_manager_review' || viewLevel === 'pending_skip_review') {
-      const labelMap = { pending_self_review: 'Pending Self Review', pending_manager_review: 'Pending Manager Review', pending_skip_review: 'Pending Skip Mgr Review' };
+    } else if (viewLevel === 'pending_self_review') {
       const pendingSubtitle = (stats.stat2 > 0 || stats.stat3 > 0)
         ? [stats.stat2 > 0 ? `${stats.stat2} org KPI` : '', stats.stat3 > 0 ? `${stats.stat3} bi-monthly/quarterly` : ''].filter(Boolean).join(' · ')
         : 'KPIs at this stage';
       return (
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
-          <StatCard icon={Clock} label={labelMap[viewLevel]} value={stats.stat1} color="amber" subtitle={pendingSubtitle} onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
+          <StatCard icon={Clock} label="Pending Self Review" value={stats.stat1} color="amber" subtitle={pendingSubtitle} onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
           <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" />
+        </div>
+      );
+    } else if (viewLevel === 'pending_manager_review' || viewLevel === 'pending_skip_review') {
+      // v2.66.11.8: 6-tile parity for Manager Review and Skip Mgr Review.
+      const isMgr = viewLevel === 'pending_manager_review';
+      const pendingLabel = isMgr ? 'Pending Mgr Review' : 'Pending Skip Review';
+      const inReviewLabel = isMgr ? 'In Manager Review' : 'In Skip Review';
+      const pendingTip = isMgr
+        ? 'KPIs awaiting manager pickup (status = Self Review).'
+        : 'KPIs awaiting skip pickup (status = Manager Check).';
+      const inReviewTip = isMgr
+        ? 'KPIs currently sitting at the Manager Check stage.'
+        : 'KPIs currently sitting at the Skip-Level Check stage.';
+      const reviewedTip = isMgr
+        ? 'KPIs that have moved past Manager Check.'
+        : 'KPIs that have moved past Skip-Level Check.';
+      const orgEntered = (orgKpiCounts?.entered ?? 0) + (orgKpiCounts?.propagated ?? 0);
+      const orgTotal = orgKpiCounts?.total ?? 0;
+      const orgPending = orgKpiCounts?.pending ?? 0;
+      return (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+          <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
+          <StatCard icon={Clock} label={pendingLabel} value={stats.stat1} color="amber" subtitle="Awaiting pickup" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} tooltip={pendingTip} />
+          <StatCard icon={FileCheck} label={inReviewLabel} value={stats.stat2} color="yellow" subtitle="Active stage" tooltip={inReviewTip} />
+          <StatCard icon={CheckCircle2} label="Reviewed" value={stats.stat3} denominator={stats.totalKpis} color="green" subtitle="of total KPIs" tooltip={reviewedTip} />
+          <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" />
+          {isFullAccess && (
+            <StatCard
+              icon={Building2}
+              label="Org KPIs"
+              value={orgEntered}
+              denominator={orgTotal}
+              color="purple"
+              subtitle={orgPending > 0 ? `${orgPending} pending entry` : 'All entered'}
+              tooltip="Organisation-level KPIs for this period: Entered + Propagated / Total."
+            />
+          )}
         </div>
       );
     } else if (viewLevel === 'audit') {
