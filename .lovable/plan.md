@@ -1,69 +1,83 @@
-## RCA summary
+Do I know what the issue is? Yes.
 
-Employee `101784` is not missing from master data:
-- Profile exists and is active: Vivek Kumar Dansena.
-- Role exists: `admin`.
-- KPIs exist: 54 rows across Nov-2025 to May-2026.
+The previous change only made the dashboard show the timeout error clearly. The underlying failures are still happening. Current evidence shows three concrete timeout sources:
 
-The screenshots show the real failure is in the reviewer dashboard roster layer: every reviewer view renders, but `Total Employees`, `Total KPIs`, and the employee list are all `0` / empty.
-
-Most likely root cause from code + logs:
-1. `EmployeeSelectorGrid` loads multiple heavy org-wide datasets on first paint: all active profiles, period KPIs, workflow-stage profiles, bulk workflow resolution, filter options, and submission score maps.
-2. For HR PMS / Audit / Management / Pending-* views, `useProfilesByWorkflowStage` first fetches all active profiles, then calls `get_bulk_employee_workflows` for the full active employee set.
-3. `EmployeeSelectorGrid` then calls `useBulkEmployeeWorkflows` again for the resolved list, which can be another full-org workflow RPC.
-4. Recent database logs show repeated real client errors: `canceling statement due to statement timeout`. When these queries time out, React Query returns failed/empty data and the dashboard renders “No employees found”.
-5. The current URL also contains persisted filters (`q=Yadav&employee=...`). The UI has a known filter-persistence pattern, so stale URL params can make an already-fragile load look like every dashboard is blank.
-
-This is a performance/query-shape bug, not an access-rights bug.
+1. `profiles` full-roster queries with embedded `departments` are timing out.
+2. `kpis` period queries for May 2026 are timing out because the current index does not match the filter plus sort pattern.
+3. `review_submissions` score lookups are being executed twice from the dashboard and are still timing out under RLS-heavy access policies.
 
 ## Risk & Impact Report
 
-| Area | Impact |
-|---|---|
-| Data | No data mutation needed. Read-only dashboard query changes only. |
-| Workflow | No workflow status or reviewer-chain rule changes. |
-| Permissions | No RLS/menu/role change; 101784 already has admin access. |
-| UI/UX | Same dashboard UI, but loading/error/empty states become accurate. |
-| Regression risk | Medium because reviewer dashboards share one large component; mitigate with targeted tests and no business-rule changes. |
+- **Data Impact:** No historical KPI/review data will be changed. I will add read-performance indexes and, if needed, a read-only slim RPC/view for dashboard score rows.
+- **Workflow Impact:** No workflow stage rules, reviewer permissions, or score calculations will change.
+- **UI/UX Consistency:** The current dashboard layout stays the same; the goal is to make data load rather than keep showing the error block.
+- **Regression Risk:** Medium, because `useProfiles`, KPI period loading, and submission score hooks are shared across reviewer dashboards.
+- **Mitigation Plan:** Keep the same data contracts, add tests for the dashboard score map/fallback behavior, and update `DOCUMENTATION.md` + `POLICY.md` in the same implementation step.
 
-## Implementation plan
+## Implementation Plan
 
-### 1. Stop stale URL filters from making dashboards look blank
-- When switching dashboard tabs, clear `q`, `employee`, `dept`, `desig`, `grade`, `mgr`, `auditor`, `page`, and `status` together.
-- On initial reviewer dashboard load, ignore an `employee=` param unless the selected employee exists in the current resolved roster or came from a valid KPI deep-link.
-- Improve the empty state copy so it distinguishes:
-  - no data in system,
-  - no result due to filters,
-  - data failed to load.
+### 1. Add database performance indexes
+Add targeted indexes for the exact failing query shapes:
 
-### 2. Reduce duplicate workflow-resolution calls
-- In `EmployeeSelectorGrid`, avoid calling `useBulkEmployeeWorkflows` for the entire full-org roster when `useProfilesByWorkflowStage` already resolved by workflow stage.
-- Only resolve workflows for employees that are needed for visible calculations:
-  - visible page employees,
-  - KPI employee IDs for the selected period,
-  - assigned employees for audit view.
-- Keep the existing workflow engine rules unchanged.
+- `profiles`: active roster sorted by `full_name`.
+- `kpis`: `(review_period, review_year, created_at desc, id)` for dashboard period queries.
+- If query planning still shows RLS-heavy submission scans, add a read-optimized, secured function for dashboard score rows instead of relying on repeated client-side `.in('kpi_id', batch)` calls.
 
-### 3. Make heavy reviewer queries resilient instead of empty
-- Wrap `useProfilesByWorkflowStage` chunk calls so a timed-out chunk does not collapse the whole dashboard to zero.
-- If workflow RPC fails for a chunk, use the existing fallback logic and surface a warning toast rather than showing “No employees found”.
-- Add an explicit error panel with “Refresh” when `profiles`, `periodKpis`, or workflow-stage data fails.
+### 2. Make profile roster loading lean
+Update `useProfiles()` and `useProfilesByWorkflowStage()` so they do not fetch `profiles.*` with embedded `departments` for every active employee.
 
-### 4. Add query guards for auth/profile readiness
-- Ensure the reviewer grid does not run org-wide queries until `useAuth().isReady`, `user.id`, and `effectiveRole` are available.
-- Add defensive early returns to hooks that receive user IDs / employee IDs so no query can send a literal `null` UUID.
+- Fetch only fields the dashboard actually renders.
+- Fetch departments separately once and hydrate client-side.
+- Keep `is_active = true` and full pagination intact.
 
-### 5. Regression protection
-- Add unit tests for:
-  - stale URL `q`/`employee` params are cleared when changing reviewer tabs,
-  - reviewer grid does not render “No employees found” when a data query is still loading or errored,
-  - workflow fallback keeps a non-empty roster when one workflow chunk fails.
-- Add/update mock data for employee `101784` with admin role, no direct reports, and April 2026 KPIs.
+### 3. Remove duplicate `review_submissions` score queries
+Replace the current two score-fetching paths:
 
-### 6. Documentation / policy sync
-- Update `DOCUMENTATION.md` and `POLICY.md` with the dashboard query rule: full-org reviewer dashboards must be period-scoped, paginated/chunked, and must not show a hard empty state on query failure.
-- Update the relevant memory for reviewer dashboard performance/query behavior.
+- `useReviewSubmissionScoresByKpiIds(periodKpiIds)`
+- `useEmployeeScoresForPeriod(periodKpis)`
 
-## Expected result
+with one shared slim score-row hook/service that returns all score columns needed for:
 
-For Vivek (`101784`), the dashboards should stop collapsing to zero. If a query fails, he will see a clear load/error state and a refresh action; otherwise the relevant April 2026 employee/KPI counts will populate normally.
+- reviewed counters
+- progress bars
+- weighted employee score map
+
+This cuts the biggest duplicated dashboard load.
+
+### 4. Make dashboard error tracking complete
+Update `EmployeeSelectorGrid.tsx` so the error panel includes:
+
+- KPI period query failures
+- submission score query failures
+- employee score aggregation failures
+- profile/stage roster failures
+
+Also fix the refresh spinner key mismatch: it currently watches `review-submission-scores`, but the real query key is `review-submission-scores-by-kpi-ids`.
+
+### 5. Reduce workflow resolution pressure
+Keep workflow resolution period-aware, but avoid resolving workflows for the whole org when a narrower data set is enough.
+
+- For Pending Self/Manager/Skip dashboards, derive visible employees primarily from period KPI rows and the required status.
+- Only call bulk workflow resolution for employees needed by the selected view/page calculations.
+
+### 6. Regression coverage and policy sync
+Add/update tests for:
+
+- one submission score fetch feeding both reviewed stats and weighted score calculation
+- dashboard error state when submission score query fails
+- active-profile roster hydration still preserving department names
+
+Update:
+
+- `DOCUMENTATION.md` version history
+- `POLICY.md` dashboard query performance rule
+- relevant memory if the implementation creates a new invariant
+
+## Expected Result
+
+Vivek 101784 should no longer see the persistent “Couldn’t load this dashboard” screen on Pending Self Review / Audit / HR PMS / Management dashboards. The dashboards should load using leaner profile reads, indexed KPI period reads, and a single submission-score fetch path.
+
+<lov-actions>
+  <lov-open-history>View History</lov-open-history>
+  <lov-link url="https://docs.lovable.dev/tips-tricks/troubleshooting">Troubleshooting docs</lov-link>
+</lov-actions>
