@@ -842,6 +842,13 @@ export default function OrgKpiDataEntry() {
     
     // Track which scope IDs were actually propagated
     const propagatedScopeIds: string[] = [];
+    // v2.66.10.3 — Track scope IDs we *considered* this session (including
+    // those skipped client-side at the `continue` guards below). The half-
+    // propagation forward-guard must use this — not propagatedScopeIds —
+    // otherwise client-skipped rows look like a "missed" gap and trigger
+    // a false Repair-Gap toast even though there is nothing to repair
+    // (those rows are already past the data-owner stage).
+    const consideredScopeIds: string[] = [];
     
     // Track propagation results for completeness validation
     let totalPropagated = 0;
@@ -888,11 +895,17 @@ export default function OrgKpiDataEntry() {
       for (const sv of values.scopedValues) {
         // Skip if filterEmployeeIds provided and this scope isn't in the list
         if (filterEmployeeIds && !filterEmployeeIds.includes(sv.scopeId)) continue;
-        if (sv.achievedValue === null && !sv.isNa) continue;
+        if (sv.achievedValue === null && !sv.isNa) {
+          consideredScopeIds.push(sv.scopeId);
+          continue;
+        }
         // v2.65.4 — Block silent zero-propagation:
         // Skip rows that hold 0 but were not edited this session (stale Save value).
         // Owner must explicitly type a value (or 0) before Propagate writes it.
-        if (!(sv as any)._touched && sv.achievedValue === 0 && !sv.isNa) continue;
+        if (!(sv as any)._touched && sv.achievedValue === 0 && !sv.isNa) {
+          consideredScopeIds.push(sv.scopeId);
+          continue;
+        }
         const result = await propagate.mutateAsync({
           categoryId: kpi.category_id,
           kraName: kpi.kra_name,
@@ -912,10 +925,22 @@ export default function OrgKpiDataEntry() {
         // Aggregate skip reasons for the summary toast
         const skipped = result.skipped || [];
         for (const s of skipped) {
-          if (s.reason === 'not_in_kra_set') totalSkippedBenign++;
-          else totalSkippedHard++;
+          // v2.66.10.3 — `reviewer_locked` (employee already past kra_set/
+          // self_review per POLICY §88) and `no_target_rows` (resolver
+          // returned nothing — already advanced, RLS-hidden, or name drift)
+          // are benign workflow conditions, NOT failures. Bucketing them
+          // as "hard" caused a misleading red toast.
+          if (s.reason === 'not_in_kra_set' || s.reason === 'reviewer_locked' || s.reason === 'no_target_rows') {
+            totalSkippedBenign++;
+          } else {
+            totalSkippedHard++;
+          }
         }
-        propagatedScopeIds.push(sv.scopeId);
+        // Only treat as "propagated" if the server actually wrote a row.
+        if (result.propagatedCount > 0) {
+          propagatedScopeIds.push(sv.scopeId);
+        }
+        consideredScopeIds.push(sv.scopeId);
       }
 
       // v2.66.8 — Single summary toast for the per-scope batch
@@ -947,7 +972,7 @@ export default function OrgKpiDataEntry() {
     // Only flag a true gap. Benign skips (already past initial stage) are
     // already surfaced by the "Already propagated" toast above and must NOT
     // be reported as KPI-name mismatches.
-    if (propagatedScopeIds.length > 0 && expectedCount > 0 && totalPropagated < expectedCount) {
+    if (consideredScopeIds.length > 0 && expectedCount > 0 && totalPropagated < expectedCount) {
       const accountedSkips = totalSkippedBenign + totalSkippedHard;
       const unaccounted = Math.max(0, expectedCount - totalPropagated - accountedSkips);
       if (totalSkippedHard > 0) {
@@ -957,11 +982,25 @@ export default function OrgKpiDataEntry() {
           variant: 'destructive',
         });
       } else if (unaccounted > 0) {
-        toast({
-          title: `Partial propagation: ${totalPropagated}/${expectedCount} employees updated`,
-          description: `${unaccounted} employee(s) may have mismatched KPI names. Check the Pending Report for details.`,
-          variant: 'destructive',
-        });
+        // v2.66.10.3 — Soften: when every mapped child is past kra_set we
+        // know the shortfall is benign (POLICY §88 lock), not a name
+        // mismatch. Use the in-scope memoised maps.
+        const mappedEmpIdsForKey = mappedEmployeesMap.get(kk) || new Set<string>();
+        const kraSetSet = kraSetEmpIdsByKey.get(kk) || new Set<string>();
+        const allPastKraSet = mappedEmpIdsForKey.size > 0
+          && [...mappedEmpIdsForKey].every((id) => !kraSetSet.has(id));
+        if (allPastKraSet) {
+          toast({
+            title: 'Already propagated',
+            description: `${unaccounted} employee(s) are past the data-owner stage (POLICY §88) — their previously propagated values remain in place.`,
+          });
+        } else {
+          toast({
+            title: `Partial propagation: ${totalPropagated}/${expectedCount} employees updated`,
+            description: `${unaccounted} employee(s) may have mismatched KPI names. Check the Pending Report for details.`,
+            variant: 'destructive',
+          });
+        }
       }
       // else: entire shortfall is benign (already self-reviewed) — no extra toast
     }
@@ -1102,7 +1141,7 @@ export default function OrgKpiDataEntry() {
     }
     
     queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
-  }, [handleCardSave, propagate, selectedPeriod, selectedYear, queryClient, profile?.id, insertAuditLogs, employeeCountMap, allProfiles, isAdmin, toast]);
+  }, [handleCardSave, propagate, selectedPeriod, selectedYear, queryClient, profile?.id, insertAuditLogs, employeeCountMap, allProfiles, isAdmin, toast, mappedEmployeesMap, kraSetEmpIdsByKey]);
 
   /**
    * Phase A4 — Pre-flight propagation gate.

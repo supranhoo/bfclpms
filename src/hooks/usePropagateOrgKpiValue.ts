@@ -286,7 +286,20 @@ export function usePropagateOrgKpiValue() {
   return useMutation<PropagationResultWithDetails, Error, PropagateParams>({
     mutationFn: async (params: PropagateParams): Promise<PropagationResultWithDetails> => {
       const targetKpis = await fetchTargetKpis(params);
-      if (targetKpis.length === 0) return { propagatedCount: 0, details: [] };
+      if (targetKpis.length === 0) {
+        // v2.66.10.3 — Emit a typed benign-skip entry so per-scope callers
+        // (OrgKpiDataEntry summary toast + half-prop guard) can distinguish
+        // "resolver returned no rows for this employee" (benign — already
+        // past data-owner stage, RLS-hidden, or name drift) from a true
+        // mismatch. Previously the empty result silently became "may have
+        // mismatched KPI names" via the `unaccounted` math.
+        return {
+          propagatedCount: 0,
+          details: [],
+          skippedCount: 1,
+          skipped: [{ kpi_id: '—', current_status: 'unresolved', reason: 'no_target_rows' }],
+        };
+      }
 
       const { kpiRatings, profileMap } = buildRatingsPayload(
         targetKpis, params.achievedValue, !!params.isNa, params.evidenceUrl
@@ -387,7 +400,15 @@ export function useBulkPropagateOrgKpiValues() {
         if (params.isNa) hasNa = true;
       }
 
-      if (allRatings.length === 0) return { propagatedCount: 0, details: [] };
+      if (allRatings.length === 0) {
+        // v2.66.10.3 — see single-call branch above for rationale.
+        return {
+          propagatedCount: 0,
+          details: [],
+          skippedCount: 1,
+          skipped: [{ kpi_id: '—', current_status: 'unresolved', reason: 'no_target_rows' }],
+        };
+      }
 
       const policy = values.find(v => v.overwritePolicy)?.overwritePolicy ?? 'pre_review_only';
       const result = await callPropagationRpc(allRatings, globalProfileMap, hasNa, null, policy);

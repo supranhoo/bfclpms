@@ -2718,3 +2718,19 @@ Org-level KPI propagation MUST resolve the set of target `kpis` rows via the SEC
 
 ## §121 Review Journey Stage Visibility (v2.66.10.1)
 Stage tiles in the Review Journey (Self / Manager / Skip-Level / HR PMS / Auditor / Management) MUST reflect the KPI's resolved per-employee workflow, never the global `DEFAULT_WORKFLOW_STAGES` fallback. Every entry point into `KpiReviewPanel` / `KpiJourneySection` is required to pass `workflowStages` from `useEmployeeWorkflowStages` (or the equivalent server resolver). The default constant is a safety net only and triggers a dev-only console warning when used. Rationale: prevents stale "N/A" tiles (e.g. Management) from appearing in mention popups and other secondary surfaces, eliminating the sync gap between Dashboard KPI Details, View KPI Details, and the @Mention sheet.
+
+## §111.6 Org KPI Propagation Toast Classification (v2.66.10.3, codified 2026-05-11)
+
+The per-scope Propagate loop in `OrgKpiDataEntry.executeSaveAndPropagate` MUST classify server-returned skip reasons against a single canonical set:
+
+- **Benign** (informational, never destructive toast):
+  `not_in_kra_set`, `reviewer_locked`, `no_target_rows`.
+- **Hard** (destructive toast — refresh / retry):
+  everything else (e.g. `race_lost_during_advance`, `kpi_not_found`).
+
+Additionally:
+1. The half-propagation forward-guard (Repair-Gap toast) MUST compare the existing `kpis` rows against a `consideredScopeIds` set that includes scopes skipped at the client-side `null` / untouched-zero guards, NOT only `propagatedScopeIds`. Otherwise client-skipped rows are misclassified as a server "missed" gap.
+2. `usePropagateOrgKpiValue` MUST emit a synthetic `no_target_rows` skip when `resolve_org_kpi_target_kpis` returns 0 rows for a per-scope call. Empty results without a typed skip caused the page's `unaccounted` math to print a false "may have mismatched KPI names" toast.
+3. When the unaccounted shortfall equals the count of mapped employees who are all past `kra_set`, the page MUST emit the neutral "Already propagated — N rows past data-owner stage (POLICY §88)" toast instead of the destructive name-mismatch one.
+
+Regression: `src/test/orgKpiPropagationBenignReasons.test.ts`, `src/test/orgKpiPropagationToast.test.ts`.
