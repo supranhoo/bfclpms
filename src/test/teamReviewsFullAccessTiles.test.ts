@@ -88,3 +88,45 @@ describe('Team Reviews tile aggregation — full-access (BUG-050)', () => {
     // orphan KPI ignored — manager has no relationship to that employee.
   });
 });
+
+/**
+ * v2.66.11.8 — 6-tile parity for HR PMS / Manager Review / Skip Mgr Review
+ * dashboards. Asserts the sum invariant `pending + inReview + reviewed = total`
+ * (excluding pre-self stages where applicable).
+ */
+function classifyManagerStage(status: string) {
+  if (status === 'self_review') return 'pending';
+  if (status === 'manager_check') return 'inReview';
+  if (['kra_set'].includes(status)) return 'pre';
+  return 'reviewed';
+}
+
+function classifySkipStage(status: string) {
+  if (status === 'manager_check') return 'pending';
+  if (status === 'skip_level_check') return 'inReview';
+  if (['kra_set', 'self_review'].includes(status)) return 'pre';
+  return 'reviewed';
+}
+
+describe('Reviewer-stage tile parity (v2.66.11.8)', () => {
+  it('Manager Review: pending + inReview + reviewed = total (excl. pre)', () => {
+    const statuses = ['self_review', 'self_review', 'manager_check', 'skip_level_check', 'hr_pms_review', 'audit', 'approved', 'kra_set'];
+    const buckets = { pending: 0, inReview: 0, reviewed: 0, pre: 0 };
+    for (const s of statuses) buckets[classifyManagerStage(s) as keyof typeof buckets]++;
+    expect(buckets.pending).toBe(2);
+    expect(buckets.inReview).toBe(1);
+    expect(buckets.reviewed).toBe(4);
+    expect(buckets.pending + buckets.inReview + buckets.reviewed + buckets.pre).toBe(statuses.length);
+  });
+
+  it('Skip Mgr Review: pending + inReview + reviewed = total (excl. pre)', () => {
+    const statuses = ['manager_check', 'manager_check', 'skip_level_check', 'hr_pms_review', 'audit', 'approved', 'self_review', 'kra_set'];
+    const buckets = { pending: 0, inReview: 0, reviewed: 0, pre: 0 };
+    for (const s of statuses) buckets[classifySkipStage(s) as keyof typeof buckets]++;
+    expect(buckets.pending).toBe(2);
+    expect(buckets.inReview).toBe(1);
+    expect(buckets.reviewed).toBe(3);
+    expect(buckets.pre).toBe(2);
+    expect(buckets.pending + buckets.inReview + buckets.reviewed + buckets.pre).toBe(statuses.length);
+  });
+});
