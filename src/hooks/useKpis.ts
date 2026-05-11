@@ -417,17 +417,21 @@ export function useReviewSubmissionScoresByKpiIds(kpiIds: string[]) {
         management_score: number | null;
         final_score: number | null;
         is_na: boolean | null;
+        self_score: number | null;
+        weightage: number | null;
       }>();
       const BATCH_SIZE = 500;
       for (let i = 0; i < kpiIds.length; i += BATCH_SIZE) {
         const batch = kpiIds.slice(i, i + BATCH_SIZE);
         const { data, error } = await supabase
           .from('review_submissions')
-          .select('kpi_id, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score, is_na')
+          .select('kpi_id, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score, is_na, self_score')
           .in('kpi_id', batch);
         if (error) {
           console.error('[useReviewSubmissionScoresByKpiIds] batch failed:', error);
-          continue;
+          // v2.66.10.6 — Surface failure to React Query so dashboards can show
+          // the explicit error panel instead of a misleading empty state.
+          throw error;
         }
         (data || []).forEach((r: any) => {
           map.set(r.kpi_id, {
@@ -438,6 +442,8 @@ export function useReviewSubmissionScoresByKpiIds(kpiIds: string[]) {
             management_score: r.management_score,
             final_score: r.final_score,
             is_na: r.is_na,
+            self_score: r.self_score,
+            weightage: null,
           });
         });
       }
