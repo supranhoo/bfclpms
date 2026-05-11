@@ -253,28 +253,22 @@ export function useProfiles() {
   return useQuery({
     queryKey: ['profiles'],
     queryFn: async () => {
-      // v2.66.10.6 — Drop embedded `departments(...)` join. PostgREST rewrites
-      // it as a LATERAL LEFT JOIN per row, which on a 2,500+ active roster
-      // hits statement_timeout (Vivek 101784 dashboard regression). We fetch
-      // departments once and hydrate client-side.
-      const [profiles, deptsRes, rolesRes] = await Promise.all([
-        fetchAllPaged<any>((from, to) =>
-          supabase
-            .from('profiles')
-            .select('*')
-            .eq('is_active', true)
-            .order('full_name')
-            .range(from, to),
-        ),
+      // v2.66.11.0 — Use SECURITY DEFINER RPC to bypass per-row RLS
+      // evaluation cost. Lifts statement_timeout to 30s and short-circuits
+      // the role check once instead of per row. Fixes Vivek 101784
+      // dashboard timeout regression.
+      const [rpcRes, deptsRes, rolesRes] = await Promise.all([
+        supabase.rpc('get_reviewer_roster_slim'),
         supabase.from('departments').select('id, name, code'),
         supabase.from('user_roles').select('user_id, role'),
       ]);
 
+      if (rpcRes.error) throw rpcRes.error;
       if (deptsRes.error) throw deptsRes.error;
       if (rolesRes.error) throw rolesRes.error;
 
       const deptMap = new Map((deptsRes.data || []).map((d: any) => [d.id, d]));
-      return (profiles || []).map((p: any) => ({
+      return (rpcRes.data || []).map((p: any) => ({
         ...p,
         departments: p.department_id ? deptMap.get(p.department_id) || null : null,
         user_roles: (rolesRes.data || []).filter((r: any) => r.user_id === p.id),
