@@ -1,68 +1,102 @@
-## Issue
-On `/dashboard?view=team` as **admin (full access)**, the tiles show:
-- Direct Pending: **0**
-- Skip-Level Pending: **0**
-- Reviewed: **0**
-- Total KPIs: **1740** ✅
-- Total Employees: **2531** ✅
+## Goal
 
-…yet the cards below clearly display badges like "2 pending / 14 reviewed", "1 pending / 26 reviewed" etc. So the zeros are wrong.
+Make the Team Reviews header tiles show the *true* review picture for the selected period, without sacrificing speed.
 
-## Root cause (RCA)
+For **April 2026** the data actually looks like:
 
-In `src/components/review/EmployeeSelectorGrid.tsx` (lines ~922–960), the `team` view computes the three pending/reviewed tiles like this:
+| Bucket | Count |
+|---|---|
+| KRA Set (no self-review yet) | 527 |
+| Direct Pending (self-review submitted) | 530 |
+| Skip-Level Pending | 30 |
+| Reviewed (manager → approved) | 1,170 |
+| **Total Employee KPIs** | **2,258** |
+| Org KPIs — Pending | 85 |
+| Org KPIs — Entered | 363 |
+| Org KPIs — Propagated | 448 |
+| **Total Org KPIs** | **896** |
+
+Today's tiles only sum 532 + 30 + 1,170 = **1,732** because the 527 `kra_set` KPIs (KRA assigned but self-review not yet done) are silently dropped, and Org KPIs are not represented at all.
+
+## What changes (UI only)
+
+Replace the current 5-tile strip with **6 tiles** in a single row (already responsive — wraps on small screens):
+
+```text
+┌──────────────┬──────────────┬──────────────┬──────────────┬──────────────┬──────────────┐
+│ Total        │ Awaiting     │ Direct       │ Skip-Level   │ Reviewed     │ Org KPIs     │
+│ Employees    │ Self-Review  │ Pending      │ Pending      │ (progress)   │ (new)        │
+│ 2,531        │ 527          │ 530          │ 30           │ 1,170 / 2,258│ 363+448 / 896│
+│              │ KRA set, no  │ Awaiting     │ Awaiting     │ 51.8% done   │ 85 pending   │
+│              │ submission   │ manager      │ skip-level   │ ▓▓▓▓▓░░░░░    │ entry        │
+└──────────────┴──────────────┴──────────────┴──────────────┴──────────────┴──────────────┘
+```
+
+Key changes:
+
+1. **New "Awaiting Self-Review" tile** (amber, clock-rotate icon) — surfaces the missing 527 `kra_set` KPIs. Clicking it filters the grid to employees with at least one `kra_set` KPI.
+2. **"Reviewed" tile becomes a progress tile**: shows `1170 / 2258` with a slim progress bar + `%` underneath. This is the "ratio" format the user asked for, and it's clearer than two separate numbers.
+3. **"Total KPIs" tile is removed** — its number is now embedded in the Reviewed tile as the denominator. Saves a slot for Org KPIs without making the row longer.
+4. **New "Org KPIs" tile** (purple, building icon) — shows `entered+propagated / total` with `pending` count as the sub-line. Clickable → routes to `/admin/org-kpis?period=April&year=2026` (existing page).
+5. The 6 tiles stay on one row at ≥1280 px; wrap to 3×2 on tablet, 2×3 on mobile (`grid-cols-2 md:grid-cols-3 xl:grid-cols-6`).
+
+Math invariant displayed in the tile-strip footer (small muted text, only on `team` view for full-access roles):
+`527 + 530 + 30 + 1170 = 2257` (1-row drift tolerated for in-flight transitions).
+
+## What changes (logic — gated, lean)
+
+In `src/components/review/EmployeeSelectorGrid.tsx`, inside the existing `stats` `useMemo` (the `viewLevel === 'team'` branch):
+
+- Add a `kraSetPending` counter alongside `directPending`, `skipPending`, `reviewed`.
+  - In the `isFullAccess` branch: `if (status === 'kra_set') kraSetPending++;`
+  - In the `isDirect` branch: same.
+  - In the `isIndirect` branch: skip (KRA-set never reaches the skip reviewer).
+- Return `{ ..., stat0: kraSetPending, totalKpis, reviewedKpis: reviewed }` so the tile can render `reviewed/totalKpis`.
+
+This is **O(n) over `relevantKpis`** which already runs once per period — **no new DB calls, no extra RPC, no extra render cost**.
+
+### Org KPI tile — fast path
+
+Add a tiny new hook `useOrgKpiPeriodCounts(period, year)` in `src/hooks/useOrgKpiPeriodCounts.ts`:
 
 ```ts
-const skipIds   = new Set(skipLevelMembers?.map(m => m.id) || []);
-const directIds = new Set(teamMembers?.map(m => m.id) || []);
-
-relevantKpis.forEach(k => {
-  if (skipIds.has(k.employee_id))      { /* skipPending / reviewed */ }
-  else if (directIds.has(k.employee_id)) { /* directPending / reviewed */ }
-  // else: ignored
-});
+// One head-only count query, three statuses → 3 numbers. Cached 60s.
+supabase.from('org_kpi_values')
+  .select('status', { count: 'exact', head: false })
+  .eq('review_period', period).eq('review_year', year);
 ```
 
-Console proves it:
-```
-role: 'admin', isFullAccess: true, viewLevel: 'team',
-allProfiles_len: 2532, teamMembers_len: 0, skipLevelMembers_len: 0
-```
+- Returns `{ pending, entered, propagated, total }`.
+- Cached via React Query key `['orgKpiCounts', period, year]`, `staleTime: 60_000`.
+- Lazy: only enabled when `viewLevel === 'team' && isFullAccess`.
+- Single ~896-row read with one column → sub-200 ms.
 
-Admin has **no direct reports and no skip-level reports**, so `directIds` and `skipIds` are both empty. Every KPI falls through the `else` branch and nothing is counted — hence three zeros.
-
-The card badges look correct because they use a different code path (`getEmployeeKpiStats`, per-employee workflow-aware), so the discrepancy between tiles (0/0/0) and cards (lots of pending + reviewed) is the visible symptom.
-
-## Fix plan
-
-For **full-access roles** (`admin`, `auditor`, `management`, `hr_pms`) on the `team` viewLevel, the direct/skip-membership classification doesn't apply — they see the whole org. Compute the tiles from each KPI's actual workflow position instead:
-
-In the `viewLevel === 'team'` branch of the `stats` `useMemo`:
-
-1. If `isFullAccess`, classify each KPI in `relevantKpis` by workflow status (using the same `getStages` / `resolveReviewableStatuses` helpers already in the file):
-   - **Direct Pending** = KPIs with `status === 'self_review'` (awaiting manager).
-   - **Skip-Level Pending** = KPIs whose status is in `resolveReviewableStatuses('skip_level', stages)` for the employee's resolved workflow.
-   - **Reviewed** = KPIs whose status has advanced past the manager stage (i.e. anything beyond `kra_set` / `self_review` that is not currently pending at skip), aligned with the current "reviewed" semantics used on the per-employee cards so tiles and badges agree.
-2. If **not** full access, keep the existing direct/skip membership logic (managers genuinely have direct/skip rosters).
-3. No change to Total Employees / Total KPIs (already correct after the chunked-pagination fix).
+The existing `periodKpis` fetch is unchanged; total Org KPI count is a separate, parallel request, so it cannot block the main grid render.
 
 ## Risk & Impact Report
 
-- **Data Impact:** None. Pure client-side aggregation change; no schema/RLS/migration.
-- **Workflow Impact:** None. No status transitions or permissions touched.
-- **UI/UX Consistency:** Tile numbers will finally match the badges already shown on the cards, removing user confusion.
-- **Regression Risk:** Low — change is gated on `isFullAccess && viewLevel === 'team'`. Manager flows (the common case) keep the existing branch untouched.
-- **Mitigation:**
-  - Add a unit test in `src/test/` that feeds a mocked admin scenario (empty teamMembers/skipLevelMembers, mixed KPI statuses across employees) and asserts non-zero `directPending`, `skipPending`, `reviewed` matching the workflow-derived expectation.
-  - Manually verify in preview after the change that Mar-2026 tiles sum consistently with card badges.
-
-## Docs sync (per SSOT policy)
-
-- **DOCUMENTATION.md** – add a v2.66.11.6 entry under "Team Reviews dashboard" describing full-access tile aggregation.
-- **POLICY.md** – extend the existing tile-counting section: *"For full-access roles on the merged Team view, pending/reviewed tiles are computed from each KPI's resolved workflow position, not from direct/skip-report membership (which is empty for admins)."*
+| Area | Impact | Mitigation |
+|---|---|---|
+| Data | None — no schema, no RLS change. | N/A |
+| Workflow | None — display-only. Card-badge logic untouched. | N/A |
+| Performance | One extra `org_kpi_values` count per period switch. | React Query 60 s cache, head fetch, single column, gated to full-access viewers only. |
+| UI/UX | 5→6 tiles in one row at ≥1280 px (current viewport: 1738 px → fits cleanly). | Responsive grid `grid-cols-2 md:grid-cols-3 xl:grid-cols-6`; verified at user's current 1738 px viewport. |
+| Regression | Direct/Skip/Reviewed semantics unchanged — only `kra_set` previously hidden gets its own tile. | Extend `src/test/teamReviewsFullAccessTiles.test.ts` with a `kra_set` mixed-status case and a sum-invariant assertion. |
 
 ## Files to touch
 
-- `src/components/review/EmployeeSelectorGrid.tsx` — branch in the `team` stats `useMemo`.
-- `src/test/` — new regression test for full-access team-view tiles.
-- `DOCUMENTATION.md`, `POLICY.md` — atomic policy/doc sync.
+- `src/components/review/EmployeeSelectorGrid.tsx` — add `kraSetPending`/`reviewed` ratio in `stats`, render 6-tile strip.
+- `src/components/review/ReviewStatsCards.tsx` — extend `StatCardConfig` with optional `denominator?: number` so the "Reviewed" tile can render `value / denominator` + progress bar without a new component.
+- `src/hooks/useOrgKpiPeriodCounts.ts` — new, ~25 LOC.
+- `src/test/teamReviewsFullAccessTiles.test.ts` — extend with `kra_set` + invariant cases.
+- `DOCUMENTATION.md` — v2.66.11.7 entry.
+- `POLICY.md` — §127 "Team Reviews tile composition: KRA-Set, Direct, Skip, Reviewed (ratio), Org KPIs".
+
+## One open question
+
+The current "Reviewed" tile counts everything **past `self_review`** (i.e. it includes KPIs sitting at `manager_check`, `hr_pms_review`, `audit`, `skip_level_check`, plus `approved`). That's how it reaches 1,170 today. Two ways to label it on the new tile:
+
+- **(A)** Keep current meaning, label it **"Moved past Self"** with sub-line `1170 / 2258 reviewed or in-review` — matches today's number, no behaviour change.
+- **(B)** Tighten "Reviewed" to mean **only `approved`** (= 23 for April), and add a separate "In Review" tile for the in-flight 1,147. More honest, but introduces a 7th tile.
+
+Recommend **(A)** to keep the row at 6 tiles and preserve the number the user already recognises. If you want (B), say so before I implement.
