@@ -935,7 +935,28 @@ export function EmployeeSelectorGrid({
       relevantKpis.forEach(k => {
         const isIndirect = skipIds.has(k.employee_id);
         const isDirect = directIds.has(k.employee_id);
-        if (isIndirect) {
+        // BUG-050: Full-access roles (admin/auditor/management/hr_pms) have no
+        // direct or skip-level reports — directIds/skipIds are empty — so the
+        // membership-based branch below leaves all three tiles at 0 even when
+        // the visible roster has hundreds of pending/reviewed KPIs. For these
+        // roles, classify each KPI by its resolved workflow position instead,
+        // matching the per-employee badge logic so tiles and card badges agree.
+        if (isFullAccess && !isDirect && !isIndirect) {
+          const status = k.status || '';
+          if (status === 'self_review') {
+            directPending++;
+          } else if (hasResolvedWorkflow(k.employee_id)) {
+            const stages = getStages(k.employee_id);
+            const skipReviewable = resolveReviewableStatuses('skip_level', stages);
+            if (skipReviewable.includes(status)) {
+              skipPending++;
+            } else if (!['kra_set', 'self_review'].includes(status)) {
+              reviewed++;
+            }
+          } else if (!['kra_set', 'self_review'].includes(status)) {
+            reviewed++;
+          }
+        } else if (isIndirect) {
           const stages = getStages(k.employee_id);
           const reviewable = resolveReviewableStatuses('skip_level', stages);
           if (reviewable.includes(k.status || '')) skipPending++;
@@ -1084,7 +1105,7 @@ export function EmployeeSelectorGrid({
         totalKpis: relevantKpis.length,
       };
     }
-  }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipLevelMembers, teamMembers, submissionScoreMap]);
+  }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipLevelMembers, teamMembers, submissionScoreMap, isFullAccess]);
 
 
 

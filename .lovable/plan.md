@@ -1,47 +1,68 @@
-## Problem (verified, not theoretical)
+## Issue
+On `/dashboard?view=team` as **admin (full access)**, the tiles show:
+- Direct Pending: **0**
+- Skip-Level Pending: **0**
+- Reviewed: **0**
+- Total KPIs: **1740** ✅
+- Total Employees: **2531** ✅
 
-The previous "fix" (v2.66.11.4) added `.range(0, 49999)` to RPC calls. A direct curl against the RPC as Vivek confirms this does **NOT** work:
+…yet the cards below clearly display badges like "2 pending / 14 reviewed", "1 pending / 26 reviewed" etc. So the zeros are wrong.
 
+## Root cause (RCA)
+
+In `src/components/review/EmployeeSelectorGrid.tsx` (lines ~922–960), the `team` view computes the three pending/reviewed tiles like this:
+
+```ts
+const skipIds   = new Set(skipLevelMembers?.map(m => m.id) || []);
+const directIds = new Set(teamMembers?.map(m => m.id) || []);
+
+relevantKpis.forEach(k => {
+  if (skipIds.has(k.employee_id))      { /* skipPending / reviewed */ }
+  else if (directIds.has(k.employee_id)) { /* directPending / reviewed */ }
+  // else: ignored
+});
 ```
-HTTP/2 206
-content-range: 0-999/2532
-preference-applied: count=exact
+
+Console proves it:
+```
+role: 'admin', isFullAccess: true, viewLevel: 'team',
+allProfiles_len: 2532, teamMembers_len: 0, skipLevelMembers_len: 0
 ```
 
-Even with `?offset=0&limit=50000` in the URL, PostgREST returns only **1000 rows out of 2532**. This proves the platform has `db-max-rows = 1000` configured server-side, which is a **hard cap** that `.range()` cannot override. My earlier claim that the issue was fixed was wrong — the totals card still reads 1000 because the roster RPC physically returns 1000 rows.
+Admin has **no direct reports and no skip-level reports**, so `directIds` and `skipIds` are both empty. Every KPI falls through the `else` branch and nothing is counted — hence three zeros.
 
-The good news: the response includes `content-range: 0-999/2532`, so we know the true total and can page correctly.
+The card badges look correct because they use a different code path (`getEmployeeKpiStats`, per-employee workflow-aware), so the discrepancy between tiles (0/0/0) and cards (lots of pending + reviewed) is the visible symptom.
 
-## Fix
+## Fix plan
 
-Replace the single `.rpc(...).range(0, 49999)` calls with **chunked pagination** in 1000-row pages until the response is shorter than the page size (or `content-range` end matches the total).
+For **full-access roles** (`admin`, `auditor`, `management`, `hr_pms`) on the `team` viewLevel, the direct/skip-membership classification doesn't apply — they see the whole org. Compute the tiles from each KPI's actual workflow position instead:
 
-### Code changes
+In the `viewLevel === 'team'` branch of the `stats` `useMemo`:
 
-1. **`src/hooks/useOrganization.ts`**
-   - Add a small helper `fetchAllRpcPaged<T>(fnName, params)` that loops `.rpc(fnName, params).range(from, from+999)` until exhausted. Concatenates rows.
-   - Use it for both `get_reviewer_roster_slim` call sites (`useTeamMembers`-style admin path at line 264 and `useProfilesByWorkflowStage` at line 328).
+1. If `isFullAccess`, classify each KPI in `relevantKpis` by workflow status (using the same `getStages` / `resolveReviewableStatuses` helpers already in the file):
+   - **Direct Pending** = KPIs with `status === 'self_review'` (awaiting manager).
+   - **Skip-Level Pending** = KPIs whose status is in `resolveReviewableStatuses('skip_level', stages)` for the employee's resolved workflow.
+   - **Reviewed** = KPIs whose status has advanced past the manager stage (i.e. anything beyond `kra_set` / `self_review` that is not currently pending at skip), aligned with the current "reviewed" semantics used on the per-employee cards so tiles and badges agree.
+2. If **not** full access, keep the existing direct/skip membership logic (managers genuinely have direct/skip rosters).
+3. No change to Total Employees / Total KPIs (already correct after the chunked-pagination fix).
 
-2. **`src/hooks/useKpis.ts`**
-   - Use the same helper for `get_reviewer_kpis_for_period` (lines ~339, ~442 — KPI grid + score-signature seed). May 2026 has 406 KPIs visible to Vivek so it's currently under the cap, but the cap will bite as KPI volume grows. Pin it now.
-   - Same helper for `get_reviewer_submission_scores_for_period`.
+## Risk & Impact Report
 
-3. **`src/components/review/EmployeeSelectorGrid.tsx`** — no changes. The roster array it consumes will simply have all 2532 entries, so `demographicFilteredMembers.length` and `periodEmployeeIds.size` become correct.
+- **Data Impact:** None. Pure client-side aggregation change; no schema/RLS/migration.
+- **Workflow Impact:** None. No status transitions or permissions touched.
+- **UI/UX Consistency:** Tile numbers will finally match the badges already shown on the cards, removing user confusion.
+- **Regression Risk:** Low — change is gated on `isFullAccess && viewLevel === 'team'`. Manager flows (the common case) keep the existing branch untouched.
+- **Mitigation:**
+  - Add a unit test in `src/test/` that feeds a mocked admin scenario (empty teamMembers/skipLevelMembers, mixed KPI statuses across employees) and asserts non-zero `directPending`, `skipPending`, `reviewed` matching the workflow-derived expectation.
+  - Manually verify in preview after the change that Mar-2026 tiles sum consistently with card badges.
 
-### Documentation & policy
+## Docs sync (per SSOT policy)
 
-- **DOCUMENTATION.md** — add v2.66.11.5 entry: previous `.range()` fix was insufficient because PostgREST's `db-max-rows` is a hard server-side cap; replaced with chunked pagination.
-- **POLICY.md §125** — rewrite to: *Reporting RPCs that may return more than 1000 rows MUST be fetched via chunked pagination (1000-row pages) rather than a single `.range()` call. PostgREST's `db-max-rows` setting is a hard server-side cap and `.range()` cannot lift it. Use the shared `fetchAllRpcPaged` helper.*
+- **DOCUMENTATION.md** – add a v2.66.11.6 entry under "Team Reviews dashboard" describing full-access tile aggregation.
+- **POLICY.md** – extend the existing tile-counting section: *"For full-access roles on the merged Team view, pending/reviewed tiles are computed from each KPI's resolved workflow position, not from direct/skip-report membership (which is empty for admins)."*
 
-### Regression test
+## Files to touch
 
-- Update `src/test/bugBountyFixes.test.ts`: replace the v2.66.11.4 `.range(0, 49999)` assertions with assertions that the call sites use `fetchAllRpcPaged` (the helper name is grep-able in the source).
-- Add a unit test that mocks the RPC to return 1000-row pages with `content-range` and asserts the helper concatenates correctly across two pages.
-
-## Risk & impact
-
-- **Data impact:** none — read-only.
-- **Workflow impact:** none.
-- **UI impact:** Total Employees, Total KPIs, and per-stage counters will jump from capped values to the real totals (e.g. 1000 → 2532). This is the intended correction.
-- **Performance:** 3 sequential 1000-row pages instead of 1 truncated request. Each page is ~16ms server time per the curl headers. Acceptable for a once-per-period dashboard load that's already cached by React Query.
-- **Regression risk:** low — helper is isolated and other RPC call sites are untouched.
+- `src/components/review/EmployeeSelectorGrid.tsx` — branch in the `team` stats `useMemo`.
+- `src/test/` — new regression test for full-access team-view tiles.
+- `DOCUMENTATION.md`, `POLICY.md` — atomic policy/doc sync.

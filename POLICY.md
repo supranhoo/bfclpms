@@ -2763,3 +2763,15 @@ const rows = await fetchAllRpcPaged<MyType>((from, to) =>
 ```
 
 Direct `.rpc(...).range(0, N)` for these large-result RPCs is a regression and is blocked by the BUG-049 test suite.
+
+## §126 — Team Reviews Tile Aggregation for Full-Access Roles (v2.66.11.6)
+On the merged Team Reviews dashboard (`/dashboard?view=team`), the Direct Pending / Skip-Level Pending / Reviewed tiles MUST be computed from each KPI's resolved per-employee workflow position when the viewer is a full-access role (`admin`, `auditor`, `management`, `hr_pms`).
+
+**Why:** Full-access roles have no direct or skip-level reports; their `teamMembers` and `skipLevelMembers` rosters are empty. The legacy membership-based classifier (`directIds.has(employee_id)` / `skipIds.has(employee_id)`) silently fell through for every KPI and produced **0 / 0 / 0** tiles even when hundreds of pending and reviewed KPIs were visible on the per-employee cards below.
+
+**Required mapping (full-access only):**
+- `status === 'self_review'` → **Direct Pending**.
+- `status ∈ resolveReviewableStatuses('skip_level', stages)` → **Skip-Level Pending**.
+- Any status not in `{'kra_set', 'self_review'}` and not skip-pending → **Reviewed**.
+
+Manager/non-full-access flows continue to use the direct/skip membership classifier unchanged. Implementation: `src/components/review/EmployeeSelectorGrid.tsx` `stats` `useMemo`, `viewLevel === 'team'` branch.
