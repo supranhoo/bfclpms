@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { fetchAllPaged } from '@/lib/fetchAll';
+import { fetchAllPaged, fetchAllRpcPaged } from '@/lib/fetchAll';
 
 export function useDivisions(companyId?: string) {
   return useQuery({
@@ -257,21 +257,25 @@ export function useProfiles() {
       // evaluation cost. Lifts statement_timeout to 30s and short-circuits
       // the role check once instead of per row. Fixes Vivek 101784
       // dashboard timeout regression.
-      const [rpcRes, deptsRes, rolesRes] = await Promise.all([
-        // v2.66.11.4 — Explicit .range() lifts PostgREST's default 1000-row
-        // cap on RPC responses. Without this, orgs with >1000 active
-        // employees see truncated rosters (Vivek 101784 saw 1000 of 2532).
-        supabase.rpc('get_reviewer_roster_slim').range(0, 49999),
+      const [rosterRows, deptsRes, rolesRes] = await Promise.all([
+        // v2.66.11.5 — Chunked pagination via fetchAllRpcPaged. PostgREST's
+        // server-side `db-max-rows = 1000` is a HARD cap that `.range()` on a
+        // single call cannot lift; it silently returns 206 with
+        // `Content-Range: 0-999/<total>`. Verified against Vivek's session
+        // (2,532 active employees, response truncated to 1,000). See
+        // POLICY §125.
+        fetchAllRpcPaged<any>((from, to) =>
+          supabase.rpc('get_reviewer_roster_slim').range(from, to),
+        ),
         supabase.from('departments').select('id, name, code'),
         supabase.from('user_roles').select('user_id, role'),
       ]);
 
-      if (rpcRes.error) throw rpcRes.error;
       if (deptsRes.error) throw deptsRes.error;
       if (rolesRes.error) throw rolesRes.error;
 
       const deptMap = new Map((deptsRes.data || []).map((d: any) => [d.id, d]));
-      return (rpcRes.data || []).map((p: any) => ({
+      return (rosterRows || []).map((p: any) => ({
         ...p,
         departments: p.department_id ? deptMap.get(p.department_id) || null : null,
         user_roles: (rolesRes.data || []).filter((r: any) => r.user_id === p.id),
@@ -324,14 +328,17 @@ export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: 
 
       // v2.66.11.0 — Use SECURITY DEFINER RPC to dodge per-row RLS cost
       // and lift statement_timeout to 30s.
-      const [rpcRes, deptsRes] = await Promise.all([
-        supabase.rpc('get_reviewer_roster_slim').range(0, 49999),
+      const [rosterRows, deptsRes] = await Promise.all([
+        // v2.66.11.5 — Chunked pagination (POLICY §125). PostgREST caps
+        // single RPC responses at 1000 rows server-side; we must page.
+        fetchAllRpcPaged<any>((from, to) =>
+          supabase.rpc('get_reviewer_roster_slim').range(from, to),
+        ),
         supabase.from('departments').select('id, name, code'),
       ]);
-      if (rpcRes.error) throw rpcRes.error;
       if (deptsRes.error) throw deptsRes.error;
       const deptMap = new Map((deptsRes.data || []).map((d: any) => [d.id, d]));
-      const profiles = (rpcRes.data || []) as any[];
+      const profiles = (rosterRows || []) as any[];
       for (const p of profiles) {
         p.departments = p.department_id ? deptMap.get(p.department_id) || null : null;
       }
@@ -433,11 +440,13 @@ export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: 
           // 8s statement_timeout that fires on a full-period RLS scan of
           // `kpis`. Without this the HR PMS / Audit / Management stat tiles
           // collapsed to 0 because the score-signature seed silently failed.
-          const { data: rpcKpis, error: rpcErr } = await (supabase as any)
-            .rpc('get_reviewer_kpis_for_period', { p_period: reviewPeriod, p_year: reviewYear })
-            .range(0, 99999);
-          if (rpcErr) throw rpcErr;
-          const periodKpis = (rpcKpis || []) as Array<{ id: string; employee_id: string }>;
+          // v2.66.11.5 — Chunked pagination (POLICY §125). Single .range()
+          // cannot lift PostgREST's server-side 1000-row cap.
+          const periodKpis = await fetchAllRpcPaged<{ id: string; employee_id: string }>(
+            (from, to) => (supabase as any)
+              .rpc('get_reviewer_kpis_for_period', { p_period: reviewPeriod, p_year: reviewYear })
+              .range(from, to),
+          );
           const kpiToEmp = new Map<string, string>();
           for (const k of periodKpis || []) kpiToEmp.set(k.id, k.employee_id);
           const kpiIds = Array.from(kpiToEmp.keys());

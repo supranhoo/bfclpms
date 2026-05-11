@@ -2750,5 +2750,16 @@ Reviewer roster queries (`useProfiles`, `useTeamMembers`, `useSkipLevelTeamMembe
 ## §124 — Reporting RPC Return-Type Contract
 Backend reporting RPCs that surface `kpis`, `review_submissions`, or any table with enum / `varchar` columns MUST cast every such column to its declared `RETURNS TABLE` type (`::text` for enums and varchars, `::numeric` where appropriate). PostgREST returns HTTP 400 `structure of query does not match function result type` on the first mismatch, which collapses the entire reviewer dashboard to zero counters with no user-visible error. New or edited RPCs of this kind MUST be regression-tested against the actual column types — not just the declared signature — before shipping.
 
-## §125 — Reporting RPC Row-Cap Bypass
-SECURITY DEFINER reporting RPCs that can return more than 1,000 rows (e.g. `get_reviewer_roster_slim`, `get_reviewer_kpis_for_period`, `get_reviewer_submission_scores_for_period`, or any future org-scope helper) MUST be called from the client with an explicit `.range(0, N)` (N >= expected max rows) appended to the `.rpc(...)` builder. PostgREST applies a default `max-rows` cap (~1,000) to `RETURNS TABLE` responses, and without `.range()` the response is silently truncated. This produced `Total Employees = 1000` of 2,532 for admin viewers (Vivek 101784) while other sessions hit the older non-RPC path and rendered correctly. The cap MUST be at least 5x current expected size to absorb headroom; document the chosen ceiling in code comments.
+## §125 — Reporting RPC Row-Cap Bypass via Chunked Pagination (v2.66.11.5)
+SECURITY DEFINER reporting RPCs that can return more than 1,000 rows (e.g. `get_reviewer_roster_slim`, `get_reviewer_kpis_for_period`, `get_reviewer_submission_scores_for_period`, or any future org-scope helper) MUST be fetched via the shared `fetchAllRpcPaged` helper in `src/lib/fetchAll.ts`, which pages the RPC in 1,000-row chunks until exhausted.
+
+**Why a single `.range(0, 49999)` is NOT sufficient:** PostgREST on Lovable Cloud enforces a hard server-side `db-max-rows = 1000` cap on RPC responses. Even when the client sends `Range: 0-49999`, the server returns HTTP 206 with `Content-Range: 0-999/<total>` and only 1,000 rows. This was verified with a direct curl as Vivek (101784) against `get_reviewer_roster_slim`: response `Content-Range: 0-999/2532`, exactly 1,000 rows in the body. The earlier v2.66.11.4 fix that added `.range(0, 49999)` therefore did NOT solve the truncation — the dashboard still showed `Total Employees = 1000`.
+
+**Required pattern:**
+```ts
+const rows = await fetchAllRpcPaged<MyType>((from, to) =>
+  supabase.rpc('my_reporting_rpc', params).range(from, to),
+);
+```
+
+Direct `.rpc(...).range(0, N)` for these large-result RPCs is a regression and is blocked by the BUG-049 test suite.

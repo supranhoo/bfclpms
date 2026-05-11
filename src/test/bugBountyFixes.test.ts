@@ -1224,28 +1224,52 @@ describe('BUG-048: pending-KRA issue excludes Org KPI and locked multi-month pla
   });
 });
 
-// BUG-049 (v2.66.11.4): Reviewer dashboard counters were truncated to ~1000
-// rows for admin viewers because PostgREST applies a default `max-rows` cap
-// to RETURNS TABLE responses. Every reporting RPC client call in the
-// reviewer dashboard MUST chain `.range(...)` to lift the cap.
-describe('BUG-049: Reporting RPC calls bypass PostgREST max-rows cap', () => {
+// BUG-049 (v2.66.11.5): PostgREST's server-side `db-max-rows = 1000` is a
+// HARD cap that single `.range()` calls cannot lift (verified via direct
+// curl: response is `Content-Range: 0-999/2532` with HTTP 206). Reporting
+// RPCs that may exceed 1000 rows MUST be paginated via `fetchAllRpcPaged`.
+// See POLICY §125.
+describe('BUG-049: Reporting RPCs paginate via fetchAllRpcPaged', () => {
   const orgSrc = fs.readFileSync(path.resolve(__dirname, '../hooks/useOrganization.ts'), 'utf8');
   const kpisSrc = fs.readFileSync(path.resolve(__dirname, '../hooks/useKpis.ts'), 'utf8');
 
-  it('useProfiles + useProfilesByWorkflowStage chain .range() on get_reviewer_roster_slim', () => {
-    const matches = orgSrc.match(/rpc\(['"]get_reviewer_roster_slim['"]\)\s*\.range\(/g) || [];
+  it('useOrganization paginates get_reviewer_roster_slim through fetchAllRpcPaged', () => {
+    expect(orgSrc).toContain('fetchAllRpcPaged');
+    // Both call sites (useProfiles + useProfilesByWorkflowStage) must be wrapped.
+    const matches = orgSrc.match(/fetchAllRpcPaged[\s\S]{0,200}?get_reviewer_roster_slim/g) || [];
     expect(matches.length).toBeGreaterThanOrEqual(2);
+    // No bare single-shot .range() call survives.
+    expect(orgSrc).not.toMatch(/rpc\(['"]get_reviewer_roster_slim['"]\)\s*\.range\(\s*0\s*,\s*\d{4,}\s*\)/);
   });
 
-  it('useKpisByPeriodRanges chains .range() on get_reviewer_kpis_for_period', () => {
-    expect(kpisSrc).toMatch(/rpc\(['"]get_reviewer_kpis_for_period['"][\s\S]{0,200}?\.range\(/);
+  it('useKpisByPeriodRanges paginates get_reviewer_kpis_for_period via fetchAllRpcPaged', () => {
+    expect(kpisSrc).toContain('fetchAllRpcPaged');
+    expect(kpisSrc).toMatch(/fetchAllRpcPaged[\s\S]{0,300}?get_reviewer_kpis_for_period/);
   });
 
-  it('useReviewSubmissionScoresByKpiIds chains .range() on get_reviewer_submission_scores_for_period', () => {
-    expect(kpisSrc).toMatch(/rpc\(['"]get_reviewer_submission_scores_for_period['"][\s\S]{0,400}?\.range\(/);
+  it('useReviewSubmissionScoresByKpiIds paginates get_reviewer_submission_scores_for_period via fetchAllRpcPaged', () => {
+    expect(kpisSrc).toMatch(/fetchAllRpcPaged[\s\S]{0,400}?get_reviewer_submission_scores_for_period/);
   });
 
-  it('score-signature seed chains .range() on get_reviewer_kpis_for_period in useOrganization', () => {
-    expect(orgSrc).toMatch(/rpc\(['"]get_reviewer_kpis_for_period['"][\s\S]{0,200}?\.range\(/);
+  it('score-signature seed paginates get_reviewer_kpis_for_period via fetchAllRpcPaged in useOrganization', () => {
+    expect(orgSrc).toMatch(/fetchAllRpcPaged[\s\S]{0,400}?get_reviewer_kpis_for_period/);
+  });
+});
+
+// v2.66.11.5: fetchAllRpcPaged correctly concatenates multi-page RPC responses.
+describe('fetchAllRpcPaged: multi-page concatenation', () => {
+  it('concatenates two 1000-row pages and stops on a short final page', async () => {
+    const { fetchAllRpcPaged } = await import('@/lib/fetchAll');
+    const page1 = Array.from({ length: 1000 }, (_, i) => ({ id: i }));
+    const page2 = Array.from({ length: 1000 }, (_, i) => ({ id: 1000 + i }));
+    const page3 = Array.from({ length: 532 }, (_, i) => ({ id: 2000 + i }));
+    const pages = [page1, page2, page3];
+    let call = 0;
+    const result = await fetchAllRpcPaged<{ id: number }>(async () => {
+      const data = pages[call++] ?? [];
+      return { data, error: null };
+    });
+    expect(result).toHaveLength(2532);
+    expect(result[2531].id).toBe(2531);
   });
 });
