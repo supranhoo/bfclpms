@@ -2,6 +2,10 @@ import { Button } from '@/components/ui/button';
 import { Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { getStageLabel, type WorkflowTemplate, type WorkflowConfig } from '@/hooks/useWorkflowConfig';
+import { CHAIN_STAGES, CHAIN_STAGE_LABEL, NA_REASON_LABEL, buildResolverContext, resolveChain, type ResolverProfile } from '@/lib/workflowResolver';
+import { supabase } from '@/integrations/supabase/client';
+import { useState } from 'react';
+import { toast } from 'sonner';
 
 interface Profile {
   id: string;
@@ -67,7 +71,11 @@ export function WorkflowConfigExport({
   profiles,
   departments,
 }: WorkflowConfigExportProps) {
-  const handleExport = () => {
+  const [busy, setBusy] = useState(false);
+
+  const handleExport = async () => {
+    setBusy(true);
+    try {
     const allTemplates = [...templates, ...archivedTemplates];
     const templateMap = new Map(allTemplates.map(t => [t.id, t]));
     const deptMap = new Map(departments.map(d => [d.id, d.name]));
@@ -161,13 +169,96 @@ export function WorkflowConfigExport({
     ws4['!cols'] = [{ wch: 14 }, { wch: 16 }, { wch: 22 }, { wch: 50 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 20 }];
     XLSX.utils.book_append_sheet(wb, ws4, 'PMS Grade Assignments');
 
+    // --- Sheet 5: All Employees (Resolved) ---
+    // Period-aware resolution requires a (period, year). Since this export sits
+    // on /admin/workflow-config which has no global period selector, we resolve
+    // GLOBAL templates only (no period-specific overrides) so the sheet always
+    // produces something useful. The new in-app Workflow Resolution Report
+    // (/reports/workflow-resolution) is the period-aware surface.
+    try {
+      const { data: roleRows } = await supabase.from('user_roles').select('user_id, role');
+      const resolverProfiles: ResolverProfile[] = profiles.map(p => ({
+        id: p.id,
+        full_name: p.full_name,
+        email: p.email,
+        employee_code: p.employee_code,
+        pms_grade: p.pms_grade,
+        department_id: p.department_id,
+        reporting_manager_id: p.reporting_manager_id,
+        is_active: true,
+      }));
+      const ctx = buildResolverContext(resolverProfiles, (roleRows as any) || []);
+
+      // Build per-employee global template (employee override > department > grade > default)
+      const empOverride = new Map<string, string>();
+      const deptOverride = new Map<string, string>();
+      const gradeOverride = new Map<string, string>();
+      for (const c of configs) {
+        if (c.review_period) continue; // skip period-specific
+        if (c.config_type === 'employee') empOverride.set(c.config_value, c.workflow_template_id);
+        else if (c.config_type === 'department') deptOverride.set(c.config_value, c.workflow_template_id);
+        else if (c.config_type === 'pms_grade') gradeOverride.set(c.config_value, c.workflow_template_id);
+      }
+      const defaultTpl = allTemplates.find(t => t.is_default && t.is_active) || allTemplates[0];
+
+      const resolvedRows = resolverProfiles.map(p => {
+        let tplId: string | undefined;
+        let source: 'employee' | 'department' | 'pms_grade' | 'default' = 'default';
+        if (empOverride.has(p.id)) { tplId = empOverride.get(p.id); source = 'employee'; }
+        else if (p.department_id && deptOverride.has(p.department_id)) { tplId = deptOverride.get(p.department_id); source = 'department'; }
+        else if (p.pms_grade && gradeOverride.has(p.pms_grade)) { tplId = gradeOverride.get(p.pms_grade); source = 'pms_grade'; }
+        else { tplId = defaultTpl?.id; source = 'default'; }
+        const tpl = tplId ? templateMap.get(tplId) : undefined;
+
+        const chain = resolveChain(p, {
+          templateId: tpl?.id ?? null,
+          templateName: tpl?.display_name ?? null,
+          stages: tpl?.stages ?? [],
+          source,
+        }, ctx);
+
+        const cell = (st: any) => {
+          const s = chain.stages[st];
+          if (!s.inTemplate) return 'N/A — Stage not in template';
+          if (s.naReason) return `N/A — ${NA_REASON_LABEL[s.naReason]}`;
+          return s.users.map(u => u.full_name || u.email).join('; ');
+        };
+
+        return {
+          'Employee Code': p.employee_code || '—',
+          'Employee Name': p.full_name || p.email,
+          'Department': p.department_id ? (deptMap.get(p.department_id) || '—') : '—',
+          'PMS Grade': p.pms_grade || '—',
+          'Resolved Template (Global)': tpl?.display_name || '—',
+          'Source': source,
+          ...Object.fromEntries(CHAIN_STAGES.map(s => [CHAIN_STAGE_LABEL[s], cell(s)])),
+          'Has N/A': chain.hasAnyNa ? 'Yes' : 'No',
+        };
+      });
+
+      const ws5 = XLSX.utils.aoa_to_sheet([]);
+      addHeader(ws5, allTemplates.length, configs.length);
+      XLSX.utils.sheet_add_json(ws5, resolvedRows.length ? resolvedRows : [{ 'Employee Code': 'No employees' }], { origin: 'A4' });
+      ws5['!cols'] = [
+        { wch: 14 }, { wch: 24 }, { wch: 20 }, { wch: 12 }, { wch: 24 }, { wch: 12 },
+        { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 10 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws5, 'All Employees (Resolved)');
+    } catch (e) {
+      console.error('Failed to build resolved sheet', e);
+      toast.error('Resolved-chain sheet skipped (see console). Other sheets exported.');
+    }
+
     XLSX.writeFile(wb, `Workflow_Configuration_Report.xlsx`);
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
-    <Button variant="outline" size="sm" onClick={handleExport} className="gap-1.5">
+    <Button variant="outline" size="sm" onClick={handleExport} disabled={busy} className="gap-1.5">
       <Download className="h-4 w-4" />
-      Export Report
+      {busy ? 'Exporting…' : 'Export Report'}
     </Button>
   );
 }
