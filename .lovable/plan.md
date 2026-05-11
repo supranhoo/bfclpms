@@ -1,102 +1,108 @@
 ## Goal
 
-Make the Team Reviews header tiles show the *true* review picture for the selected period, without sacrificing speed.
+Apply the same 6-tile clarity pattern we shipped for **Team Reviews** (v2.66.11.7) to the three reviewer-stage dashboards — **HR PMS Review**, **Manager Review** (`pending_manager_review`), and **Skip Mgr Review** (`pending_skip_review`) — so the headline numbers reconcile to a single sum invariant and Org KPIs surface as a first-class tile.
 
-For **April 2026** the data actually looks like:
-
-| Bucket | Count |
-|---|---|
-| KRA Set (no self-review yet) | 527 |
-| Direct Pending (self-review submitted) | 530 |
-| Skip-Level Pending | 30 |
-| Reviewed (manager → approved) | 1,170 |
-| **Total Employee KPIs** | **2,258** |
-| Org KPIs — Pending | 85 |
-| Org KPIs — Entered | 363 |
-| Org KPIs — Propagated | 448 |
-| **Total Org KPIs** | **896** |
-
-Today's tiles only sum 532 + 30 + 1,170 = **1,732** because the 527 `kra_set` KPIs (KRA assigned but self-review not yet done) are silently dropped, and Org KPIs are not represented at all.
-
-## What changes (UI only)
-
-Replace the current 5-tile strip with **6 tiles** in a single row (already responsive — wraps on small screens):
+## What's wrong today
 
 ```text
-┌──────────────┬──────────────┬──────────────┬──────────────┬──────────────┬──────────────┐
-│ Total        │ Awaiting     │ Direct       │ Skip-Level   │ Reviewed     │ Org KPIs     │
-│ Employees    │ Self-Review  │ Pending      │ Pending      │ (progress)   │ (new)        │
-│ 2,531        │ 527          │ 530          │ 30           │ 1,170 / 2,258│ 363+448 / 896│
-│              │ KRA set, no  │ Awaiting     │ Awaiting     │ 51.8% done   │ 85 pending   │
-│              │ submission   │ manager      │ skip-level   │ ▓▓▓▓▓░░░░░    │ entry        │
-└──────────────┴──────────────┴──────────────┴──────────────┴──────────────┴──────────────┘
+HR PMS view  : 5 tiles → Total Emp │ Pending │ In HR PMS │ Reviewed │ Total KPIs
+Manager view : 3 tiles → Total Emp │ Pending Manager Review │ Total KPIs
+Skip Mgr view: 3 tiles → Total Emp │ Pending Skip Mgr Review │ Total KPIs
 ```
 
-Key changes:
+Issues:
+1. **No Org KPI tile** on any of these — Org KPIs flowing through the same stage are invisible at a glance, even though `pending_manager_review` already counts `orgKpiCount` internally (`stat2`) but shows it only as a subtitle fragment.
+2. **No ratio / progress bar** on the "Reviewed" tile (HR PMS) and **no "Reviewed" tile at all** on the two pending-stage views — so you cannot see "X of Y done" without doing the math.
+3. **No explicit sum invariant** displayed; numbers don't visibly add up to Total KPIs.
 
-1. **New "Awaiting Self-Review" tile** (amber, clock-rotate icon) — surfaces the missing 527 `kra_set` KPIs. Clicking it filters the grid to employees with at least one `kra_set` KPI.
-2. **"Reviewed" tile becomes a progress tile**: shows `1170 / 2258` with a slim progress bar + `%` underneath. This is the "ratio" format the user asked for, and it's clearer than two separate numbers.
-3. **"Total KPIs" tile is removed** — its number is now embedded in the Reviewed tile as the denominator. Saves a slot for Org KPIs without making the row longer.
-4. **New "Org KPIs" tile** (purple, building icon) — shows `entered+propagated / total` with `pending` count as the sub-line. Clickable → routes to `/admin/org-kpis?period=April&year=2026` (existing page).
-5. The 6 tiles stay on one row at ≥1280 px; wrap to 3×2 on tablet, 2×3 on mobile (`grid-cols-2 md:grid-cols-3 xl:grid-cols-6`).
+## What changes (UI only — same pattern as Team)
 
-Math invariant displayed in the tile-strip footer (small muted text, only on `team` view for full-access roles):
-`527 + 530 + 30 + 1170 = 2257` (1-row drift tolerated for in-flight transitions).
+### A. HR PMS view — extend from 5 → 6 tiles
 
-## What changes (logic — gated, lean)
-
-In `src/components/review/EmployeeSelectorGrid.tsx`, inside the existing `stats` `useMemo` (the `viewLevel === 'team'` branch):
-
-- Add a `kraSetPending` counter alongside `directPending`, `skipPending`, `reviewed`.
-  - In the `isFullAccess` branch: `if (status === 'kra_set') kraSetPending++;`
-  - In the `isDirect` branch: same.
-  - In the `isIndirect` branch: skip (KRA-set never reaches the skip reviewer).
-- Return `{ ..., stat0: kraSetPending, totalKpis, reviewedKpis: reviewed }` so the tile can render `reviewed/totalKpis`.
-
-This is **O(n) over `relevantKpis`** which already runs once per period — **no new DB calls, no extra RPC, no extra render cost**.
-
-### Org KPI tile — fast path
-
-Add a tiny new hook `useOrgKpiPeriodCounts(period, year)` in `src/hooks/useOrgKpiPeriodCounts.ts`:
-
-```ts
-// One head-only count query, three statuses → 3 numbers. Cached 60s.
-supabase.from('org_kpi_values')
-  .select('status', { count: 'exact', head: false })
-  .eq('review_period', period).eq('review_year', year);
+```text
+┌────────────┬────────────┬────────────┬────────────┬────────────┬────────────┐
+│ Total Emp  │ Pending    │ In HR PMS  │ Reviewed   │ Total KPIs │ Org KPIs   │
+│            │ Review     │ Review     │ X / Total  │            │ E+P / Tot  │
+│            │ (amber)    │ (purple)   │ ▓▓▓▓░░ %   │ (blue)     │ (purple)   │
+└────────────┴────────────┴────────────┴────────────┴────────────┴────────────┘
 ```
+- Add `denominator={stats.totalKpis}` + progress bar to **Reviewed** tile (already supported by `StatCard.denominator`).
+- Add new **Org KPIs** tile (`orgEntered / orgTotal`, sub-line = `N pending entry`), shown only for full-access roles, reusing the existing `useOrgKpiPeriodCounts(period, year)` hook.
+- Footer micro-text (muted): `Pending + In HR PMS + Reviewed = Total KPIs` invariant check.
 
-- Returns `{ pending, entered, propagated, total }`.
-- Cached via React Query key `['orgKpiCounts', period, year]`, `staleTime: 60_000`.
-- Lazy: only enabled when `viewLevel === 'team' && isFullAccess`.
-- Single ~896-row read with one column → sub-200 ms.
+### B. Manager Review view (`pending_manager_review`) — 3 → 6 tiles
 
-The existing `periodKpis` fetch is unchanged; total Org KPI count is a separate, parallel request, so it cannot block the main grid render.
+```text
+┌────────────┬────────────┬────────────┬────────────┬────────────┬────────────┐
+│ Total Emp  │ Pending    │ In Manager │ Reviewed   │ Total KPIs │ Org KPIs   │
+│            │ Mgr Review │ Review     │ X / Total  │ (this stg) │ at mgr     │
+│            │ (amber)    │ (yellow)   │ ▓▓▓▓░░ %   │ (blue)     │ (purple)   │
+└────────────┴────────────┴────────────┴────────────┴────────────┴────────────┘
+```
+Where for this view:
+- **Pending** = KPIs with `status = 'self_review'` (current `stat1` regular) — the queue.
+- **In Manager Review** = KPIs with `status = 'manager_check'` — actively being reviewed.
+- **Reviewed** = KPIs past `manager_check` for this view's roster (`approved` chain).
+- **Org KPIs** = `org_kpi_values` rows for this period that are at the manager stage (`pending` + `entered`/`propagated` ratio). Reuses `useOrgKpiPeriodCounts`.
+
+### C. Skip Mgr Review view (`pending_skip_review`) — 3 → 6 tiles
+
+Same structure as B, but for the skip-level stage:
+- **Pending** = `status = 'manager_check'` (queue waiting for skip).
+- **In Skip Review** = `status = 'skip_level_check'`.
+- **Reviewed** = past `skip_level_check`.
+- **Org KPIs** tile reused.
+
+## What changes (logic — minimal)
+
+In `src/components/review/EmployeeSelectorGrid.tsx → stats useMemo`:
+
+1. **`hr_pms` branch** — already returns `pending / inReview / reviewed / totalKpis`; no change needed beyond what's already there. Just consume new tile config.
+2. **`pending_manager_review` branch** — extend to also compute:
+   - `inReview` = `relevantKpis.filter(k => k.status === 'manager_check').length`
+   - `reviewed` = `relevantKpis.filter(k => !['kra_set','self_review','manager_check'].includes(k.status||'')).length`
+   - Map to `stat1=pending`, `stat2=inReview`, `stat3=reviewed`, `stat4=totalKpis`.
+3. **`pending_skip_review` branch** — symmetric:
+   - `pending` = `status='manager_check'`
+   - `inReview` = `status='skip_level_check'`
+   - `reviewed` = past `skip_level_check`
+4. Keep existing `orgKpiCount` / `nonMonthlyCount` as additional sub-line metadata (already used in subtitle), but the Org KPI tile reads from the period-wide hook for parity with Team view.
+
+All three branches already iterate `relevantKpis` once — added counters are O(n), no new DB reads.
+
+### Org KPI hook — gate change
+
+`useOrgKpiPeriodCounts` is currently `enabled: viewLevel === 'team' && isFullAccess`. Extend gating to also include `hr_pms`, `pending_manager_review`, `pending_skip_review`. Same 60s React Query cache → no perf hit on view switching within the same period.
 
 ## Risk & Impact Report
 
 | Area | Impact | Mitigation |
 |---|---|---|
-| Data | None — no schema, no RLS change. | N/A |
-| Workflow | None — display-only. Card-badge logic untouched. | N/A |
-| Performance | One extra `org_kpi_values` count per period switch. | React Query 60 s cache, head fetch, single column, gated to full-access viewers only. |
-| UI/UX | 5→6 tiles in one row at ≥1280 px (current viewport: 1738 px → fits cleanly). | Responsive grid `grid-cols-2 md:grid-cols-3 xl:grid-cols-6`; verified at user's current 1738 px viewport. |
-| Regression | Direct/Skip/Reviewed semantics unchanged — only `kra_set` previously hidden gets its own tile. | Extend `src/test/teamReviewsFullAccessTiles.test.ts` with a `kra_set` mixed-status case and a sum-invariant assertion. |
+| Data | None — display-only. No schema, no RLS, no workflow change. | N/A |
+| Workflow | None — card-badge & action-gate logic untouched. | N/A |
+| Performance | One extra `org_kpi_values` count call when first opening any of the three views per period. | Already cached 60 s; head-only single-column count; ~896 rows. |
+| UI/UX | Pending-stage views grow from 3→6 tiles; HR PMS 5→6. At 1280 px+ they fit on one row; wraps to 3×2 / 2×3 below. | `grid-cols-2 md:grid-cols-3 xl:grid-cols-6`, identical to Team. |
+| Regression | `pending_manager_review` / `pending_skip_review` previously surfaced only `stat1` — adding `stat2/stat3` is additive, doesn't shift existing filters. | Extend `src/test/teamReviewsFullAccessTiles.test.ts` (or new sibling test) with sum-invariant cases for all four views. |
 
 ## Files to touch
 
-- `src/components/review/EmployeeSelectorGrid.tsx` — add `kraSetPending`/`reviewed` ratio in `stats`, render 6-tile strip.
-- `src/components/review/ReviewStatsCards.tsx` — extend `StatCardConfig` with optional `denominator?: number` so the "Reviewed" tile can render `value / denominator` + progress bar without a new component.
-- `src/hooks/useOrgKpiPeriodCounts.ts` — new, ~25 LOC.
-- `src/test/teamReviewsFullAccessTiles.test.ts` — extend with `kra_set` + invariant cases.
-- `DOCUMENTATION.md` — v2.66.11.7 entry.
-- `POLICY.md` — §127 "Team Reviews tile composition: KRA-Set, Direct, Skip, Reviewed (ratio), Org KPIs".
+- `src/components/review/EmployeeSelectorGrid.tsx`
+  - Extend `stats` for `pending_manager_review` and `pending_skip_review` branches (+ counters).
+  - Replace the 3-tile blocks for those two views and the 5-tile block for `hr_pms` inside `renderStatsCards()` with the new 6-tile layout (mirrors Team's grid classes).
+- `src/hooks/useOrgKpiPeriodCounts.ts` — broaden the `enabled` predicate to cover the three additional views.
+- `src/test/teamReviewsFullAccessTiles.test.ts` — add three describe-blocks: HR PMS, Manager Review, Skip Mgr Review — each asserting `pending + inReview + reviewed === totalKpis` plus Org KPI presence.
+- `DOCUMENTATION.md` — v2.66.11.8 entry: "Tile parity for HR PMS / Manager / Skip Mgr Review".
+- `POLICY.md` §127 — append: same 6-tile composition rule applies to all reviewer-stage dashboards (HR PMS, Manager, Skip, Audit-future).
 
-## One open question
+## Out of scope (call out)
 
-The current "Reviewed" tile counts everything **past `self_review`** (i.e. it includes KPIs sitting at `manager_check`, `hr_pms_review`, `audit`, `skip_level_check`, plus `approved`). That's how it reaches 1,170 today. Two ways to label it on the new tile:
+- **Audit view** already has a meaningful 5-tile layout (`Pending Audit | In Audit | Forwarded | My KPIs`). Adding Org KPIs there is a natural follow-up but you didn't ask for it — flag for a v2.66.11.9 follow-up if desired.
+- **Management view** (default branch) — same situation; can be added in the same follow-up.
 
-- **(A)** Keep current meaning, label it **"Moved past Self"** with sub-line `1170 / 2258 reviewed or in-review` — matches today's number, no behaviour change.
-- **(B)** Tighten "Reviewed" to mean **only `approved`** (= 23 for April), and add a separate "In Review" tile for the in-flight 1,147. More honest, but introduces a 7th tile.
+## One small open question
 
-Recommend **(A)** to keep the row at 6 tiles and preserve the number the user already recognises. If you want (B), say so before I implement.
+For **Manager Review** and **Skip Mgr Review**, the "Org KPIs" tile can mean either:
+- **(A)** Org KPIs **at this stage** (`status` matches the view's queue) — a focused, view-specific number.
+- **(B)** Org KPIs for the **whole period** (entered+propagated/total) — same number as Team view's tile, gives period-wide context.
+
+Recommend **(B)** for consistency with Team view (one universally meaningful Org KPI denominator across all reviewer dashboards). Say so if you'd prefer (A).
