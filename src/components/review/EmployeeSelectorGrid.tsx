@@ -160,6 +160,7 @@ export function EmployeeSelectorGrid({
 }: EmployeeSelectorGridProps) {
   const { user, effectiveRole: role } = useAuth();
   const queryClient = useQueryClient();
+  const clearAllFilters = useClearAllFilters();
   // Track in-flight fetches for the data this grid depends on so the refresh
   // button can show a spinner and stay disabled until refetches settle.
   const fetchingProfiles = useIsFetching({ queryKey: ['profiles-by-workflow-stage'] });
@@ -194,10 +195,10 @@ export function EmployeeSelectorGrid({
     ].forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
   }, [queryClient]);
 
-  const { data: teamMembers, isLoading: teamLoading } = useTeamMembers(user?.id);
-  const { data: allProfiles, isLoading: profilesLoading } = useProfiles();
+  const { data: teamMembers, isLoading: teamLoading, isError: teamError, refetch: refetchTeam } = useTeamMembers(user?.id);
+  const { data: allProfiles, isLoading: profilesLoading, isError: profilesError, refetch: refetchProfiles } = useProfiles();
   // Fetch skip-level members for team view (merged) or standalone skip_level view
-  const { data: skipLevelMembers, isLoading: skipLevelLoading } = useSkipLevelTeamMembers(
+  const { data: skipLevelMembers, isLoading: skipLevelLoading, isError: skipError, refetch: refetchSkip } = useSkipLevelTeamMembers(
     (viewLevel === 'team' || viewLevel === 'skip_level') ? user?.id : undefined
   );
 
@@ -216,7 +217,7 @@ export function EmployeeSelectorGrid({
   // Fetch only employees whose resolved workflow template includes the required stage
   const selectedPeriodForFilter = periodSelection.selectedMonth;
   const selectedYearForFilter = periodSelection.selectedYear;
-  const { data: stageFilteredProfiles, isLoading: stageFilteredLoading } = useProfilesByWorkflowStage(requiredStage, selectedPeriodForFilter, selectedYearForFilter);
+  const { data: stageFilteredProfiles, isLoading: stageFilteredLoading, isError: stageFilteredError, refetch: refetchStageFiltered } = useProfilesByWorkflowStage(requiredStage, selectedPeriodForFilter, selectedYearForFilter);
 
   // Lazy-load PMS Grades only after the user opens the "More filters" popover
   // (or if a grade is already preset via URL ?grade=...)
@@ -278,7 +279,7 @@ export function EmployeeSelectorGrid({
   const { data: auditorWorkloadMap } = useAuditorWorkloadSummary(viewLevel === 'audit');
 
   // Fix 1 & 3: Use multi-period hook so YTD/QTD/custom modes fetch ALL relevant months
-  const { data: periodKpis } = useKpisByPeriodRanges(periodSelection.periodRanges);
+  const { data: periodKpis, isError: periodKpisError, refetch: refetchPeriodKpis } = useKpisByPeriodRanges(periodSelection.periodRanges);
 
   // BUG-020 (v2.66.7.21): reviewer-stage scores live on review_submissions,
   // not on kpis. Fetch a slim score-signature map keyed by kpi_id so HR PMS /
@@ -2035,19 +2036,71 @@ export function EmployeeSelectorGrid({
                 </div>
               )}
             </>
-          ) : (
-            <div className="text-center py-12 text-muted-foreground">
-              <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p className="font-medium">{isFullAccess ? 'No employees found' : 'No team members found'}</p>
-              <p className="text-sm mt-1">
-                {searchQuery || selectedDepartment || selectedDesignation || selectedGrade || selectedManager
-                  ? 'Try adjusting your filters' 
-                  : isFullAccess 
-                    ? 'No employees in the system yet' 
-                    : "You don't have any direct reports assigned"}
-              </p>
-            </div>
-          )}
+          ) : (() => {
+            // BUG-101784 — Distinguish "data failed to load" from "no results".
+            // When org-wide PostgREST queries time out (statement timeout) the
+            // grid previously rendered "No employees found" with no recourse.
+            // Now we surface an explicit error block with retry so admins
+            // (incl. Vivek 101784 case) can recover without a full page reload.
+            const dataError =
+              profilesError || teamError || skipError || stageFilteredError || periodKpisError;
+            if (dataError) {
+              return (
+                <div className="text-center py-12 text-muted-foreground">
+                  <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-destructive/70" />
+                  <p className="font-medium text-foreground">Couldn't load this dashboard</p>
+                  <p className="text-sm mt-1 max-w-md mx-auto">
+                    The roster query did not respond in time. This usually clears
+                    after a refresh. If it keeps failing, narrow the period or
+                    contact your administrator.
+                  </p>
+                  <div className="mt-4 flex justify-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        refetchProfiles();
+                        refetchTeam();
+                        refetchSkip();
+                        refetchStageFiltered();
+                        refetchPeriodKpis();
+                        handleRefresh();
+                      }}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-1.5" /> Retry
+                    </Button>
+                  </div>
+                </div>
+              );
+            }
+            const hasActiveFilters =
+              !!searchQuery || !!selectedDepartment || !!selectedDesignation ||
+              !!selectedGrade || !!selectedManager || statusFilter !== 'all';
+            return (
+              <div className="text-center py-12 text-muted-foreground">
+                <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p className="font-medium">
+                  {hasActiveFilters
+                    ? 'No employees match the current filters'
+                    : isFullAccess ? 'No employees found' : 'No team members found'}
+                </p>
+                <p className="text-sm mt-1">
+                  {hasActiveFilters
+                    ? 'Try clearing filters or changing the period.'
+                    : isFullAccess
+                      ? 'No employees in the system yet'
+                      : "You don't have any direct reports assigned"}
+                </p>
+                {hasActiveFilters && (
+                  <div className="mt-4">
+                    <Button variant="outline" size="sm" onClick={clearAllFilters}>
+                      Clear filters
+                    </Button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </CardContent>
       </Card>
 

@@ -2743,3 +2743,6 @@ Any UI surface that displays "who reviews employee X at stage Y for period (P, Y
 The Workflow Resolution Report (`/reports/workflow-resolution`) is the period-aware surface; the existing Workflow Configuration export ("All Employees (Resolved)" sheet) is the global-only surface. Both call the same resolver.
 
 N/A reasons are an enum (`stage_not_in_template`, `no_manager_on_profile`, `skip_level_loop`, `resolved_user_inactive`, `role_unassigned`). New reasons MUST be added to the enum + label map + unit tests in the same patch.
+
+## §123 — Reviewer Dashboard Failure Modes
+Reviewer roster queries (`useProfiles`, `useTeamMembers`, `useSkipLevelTeamMembers`, `useProfilesByWorkflowStage`, `useKpisByPeriodRanges`) MUST surface `isError` to the consuming dashboard. Reviewer dashboards (`EmployeeSelectorGrid` and any successor) MUST render a distinct error state with a Retry CTA when any of these queries fails — they MUST NOT render the generic "No employees found" empty state on query failure, because admin viewers (e.g. employee 101784) are most exposed to org-wide statement timeouts and cannot otherwise distinguish a load failure from an empty roster.
