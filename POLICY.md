@@ -2734,3 +2734,12 @@ Additionally:
 3. When the unaccounted shortfall equals the count of mapped employees who are all past `kra_set`, the page MUST emit the neutral "Already propagated — N rows past data-owner stage (POLICY §88)" toast instead of the destructive name-mismatch one.
 
 Regression: `src/test/orgKpiPropagationBenignReasons.test.ts`, `src/test/orgKpiPropagationToast.test.ts`.
+
+
+## §122 — Workflow Resolution Report (single-resolver rule)
+
+Any UI surface that displays "who reviews employee X at stage Y for period (P, Y)" MUST resolve it through `src/lib/workflowResolver.ts` (`resolveChain` + `buildResolverContext`), and template selection MUST come from the DB function `get_employee_workflow_info`. No surface may re-implement the manager / skip-level / HR-PMS / Auditor / Management chain inline. This prevents the "two standards" drift the user has flagged on prior issues.
+
+The Workflow Resolution Report (`/reports/workflow-resolution`) is the period-aware surface; the existing Workflow Configuration export ("All Employees (Resolved)" sheet) is the global-only surface. Both call the same resolver.
+
+N/A reasons are an enum (`stage_not_in_template`, `no_manager_on_profile`, `skip_level_loop`, `resolved_user_inactive`, `role_unassigned`). New reasons MUST be added to the enum + label map + unit tests in the same patch.

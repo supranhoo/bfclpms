@@ -46,6 +46,7 @@ const DEFAULT_CONFIGS: Record<string, { view_roles: AppRole[]; download_roles: A
   // which would silently return 0 rows. Grant via per-user override if a manager needs access.
   'kpi-scorecard-detail': { view_roles: ['admin', 'management', 'hr_pms', 'auditor'], download_roles: ['admin'] },
   'kpi-employee-matrix': { view_roles: ['admin', 'manager', 'management', 'hr_pms', 'auditor'], download_roles: ['admin'] },
+  'workflow-resolution': { view_roles: ['admin', 'hr_pms', 'management', 'auditor'], download_roles: ['admin', 'hr_pms'] },
 };
 
 export function useReportAccess() {

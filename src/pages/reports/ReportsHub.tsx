@@ -157,6 +157,14 @@ const reports: ReportCard[] = [
     reportKey: 'kpi-journey',
   },
   {
+    title: 'Workflow Resolution Report',
+    description: 'Period-aware view of every active employee\u2019s resolved workflow template and reviewer chain (Self / L1 / Skip-Level / HR PMS / Auditor / Mgmt) with N/A reasons.',
+    icon: Workflow,
+    path: '/reports/workflow-resolution',
+    color: 'text-blue-600',
+    reportKey: 'workflow-resolution',
+  },
+  {
     title: 'Variance Report',
     description: 'KPIs where Audit and Management scores differ — highlights review-level discrepancies',
     icon: TrendingUp,
