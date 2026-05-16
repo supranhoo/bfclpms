@@ -426,7 +426,7 @@ Deno.serve(async (req) => {
         .from("kpis")
         .select("id, employee_id, kpi_name, kra_name, category_id, review_period, review_year, status")
         .in("id", kpiIds)
-        .in("status", ["kra_set", "self_review"]);
+        .in("status", stuckAtStages);
 
       if (!targetKpis || targetKpis.length === 0) {
         return new Response(
@@ -435,7 +435,7 @@ Deno.serve(async (req) => {
             zero_scored: 0,
             skipped: kpiIds.length,
             org_zero_scored: 0,
-            errors: ["No eligible KPIs found in kra_set or self_review status"],
+            errors: [`No eligible KPIs found in stages: ${stuckAtStages.join(", ")}`],
             details: [],
             batch_id: batchId,
             ran_at: timestamp,
