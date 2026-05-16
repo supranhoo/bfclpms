@@ -17,3 +17,5 @@ Reference impl: `src/components/admin/AdminKpiCreateDialog.tsx` (banner near rev
 **Forbidden**: A bare "will be assigned to <month>" string without explaining cycle scope and percolation. Past confusion (2026-04-29) caused users to perceive the cycle-end behavior as a bug.
 
 Tests: `src/test/multiMonthBannerCopy.test.ts`.
+
+**Pending-banner derivations (added 2026-05-16):** Self-mode "pending KPI" alerts and any equivalent reviewer-side actionable counters MUST resolve cycle anchors via `buildCycleScopeLabel()` and skip rows whose `(review_period, review_year)` is not the anchor. Counting raw `kra_set`/`self_review` rows by month alone falsely prompts users to act on multi-month placeholders they cannot edit. Reference impl: `src/components/review/UnifiedScorecard.tsx` `pendingPeriods` memo. Tests: `src/test/pendingPeriodsMultimonth.test.ts`. Codified in POLICY §54 UX Corollary.
