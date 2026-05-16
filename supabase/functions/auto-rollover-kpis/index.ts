@@ -33,6 +33,14 @@ interface RolloverRequest {
   dry_run?: boolean;
   rollover_balance_only?: boolean;
   skip_employee_ids?: string[];
+  /**
+   * When true, after rolling over KPIs the function also clones the
+   * `audit_kpi_level_assignments` rows from each source KPI onto its newly
+   * created target KPI counterpart (matched by employee + kra_name + kpi_name +
+   * resolved review_period). Existing assignments on target KPIs are preserved
+   * (UNIQUE kpi_id → ON CONFLICT DO NOTHING). Opt-in, audit-logged.
+   */
+  carry_audit_assignments?: boolean;
 }
 
 // --- Frequency resolution helpers ---
@@ -213,6 +221,7 @@ Deno.serve(async (req) => {
       rollover_balance_only = false,
       employee_ids,
       skip_employee_ids = [],
+      carry_audit_assignments = false,
     } = params;
 
     // Calculate source/target periods
