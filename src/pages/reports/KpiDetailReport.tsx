@@ -144,6 +144,7 @@ export default function KpiDetailReport() {
             kpi_name,
             weightage,
             frequency,
+            frequency_cycle_start,
             review_period,
             review_year,
             status,
@@ -192,7 +193,10 @@ export default function KpiDetailReport() {
           ? kpi.review_submissions[0]
           : kpi.review_submissions;
         const isNa = sub?.is_na ?? false;
-        const isFrequencyLocked = selectedPeriod !== 'all' && isKpiLockedForPeriod(kpi.frequency, selectedPeriod, year);
+        // POLICY §128 — pass per-KPI frequency_cycle_start.
+        const isFrequencyLocked =
+          selectedPeriod !== 'all' &&
+          isKpiLockedForPeriod(kpi.frequency, selectedPeriod, year, kpi.frequency_cycle_start);
         const weightage = kpi.weightage ?? 0;
         const finalScore = isNa || isFrequencyLocked ? null : resolveFinalScore(sub, kpi.status);
         const totalScore = isNa || isFrequencyLocked || finalScore === null ? null : finalScore * weightage;
