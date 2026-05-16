@@ -728,6 +728,17 @@ export function BulkZeroScoreSection() {
                 Status will advance to "Approved". This action is IRREVERSIBLE.
               </AlertDialogDescription>
             </AlertDialogHeader>
+            {reviewerBypassStages.length > 0 && (
+              <div className="flex items-start gap-2 rounded border border-destructive/40 bg-destructive/5 p-2 text-xs">
+                <AlertTriangle className="h-4 w-4 mt-0.5 text-destructive shrink-0" />
+                <span className="text-destructive">
+                  You are draining KPIs already in a reviewer stage
+                  (<span className="font-mono">{reviewerBypassStages.join(', ')}</span>).
+                  This bypasses a human reviewer and is recorded in the audit log with the
+                  originating stage.
+                </span>
+              </div>
+            )}
             <div className="space-y-2 py-2">
               <label className="text-sm font-medium">
                 Type <span className="font-mono font-bold text-destructive">ZERO</span> to confirm:
