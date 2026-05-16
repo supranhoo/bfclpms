@@ -71,12 +71,31 @@ interface ExecuteResult {
 const REASON_LABELS: Record<string, string> = {
   stuck_at_kra_set: 'Stuck at KRA Set — no self-review submitted',
   stuck_at_self_review: 'Stuck at Self Review — not forwarded',
+  stuck_at_manager_check: 'Stuck at Manager Review — not actioned',
+  stuck_at_skip_level_check: 'Stuck at Skip-Level — not actioned',
+  stuck_at_hr_pms_review: 'Stuck at HR PMS — not actioned',
+  stuck_at_audit: 'Stuck at Audit — not actioned',
+  stuck_at_management_review: 'Stuck at Management Review — not actioned',
   sent_back_open_query: 'Sent back (open query) — excluded',
   non_terminal_multi_month: 'Non-terminal month — not yet due',
   no_data_entered: 'Org KPI — no data entered',
   not_propagated: 'Org KPI — not yet propagated',
   all_levels_zeroed: 'All levels scored 0 successfully',
 };
+
+// v2.66.11.17 — stages a Data Owner / Admin may drain. Default = pre-reviewer
+// (kra_set / self_review). Later stages are gated: enabling them bypasses a
+// human reviewer, so the confirmation dialog calls that out explicitly.
+const DRAINABLE_STAGES: { value: string; label: string; reviewerBypass: boolean }[] = [
+  { value: 'kra_set', label: 'KRA Set (no self-review)', reviewerBypass: false },
+  { value: 'self_review', label: 'Self Review (not forwarded)', reviewerBypass: false },
+  { value: 'manager_check', label: 'Manager Review', reviewerBypass: true },
+  { value: 'skip_level_check', label: 'Skip-Level', reviewerBypass: true },
+  { value: 'hr_pms_review', label: 'HR PMS', reviewerBypass: true },
+  { value: 'audit', label: 'Audit', reviewerBypass: true },
+  { value: 'management_review', label: 'Management Review', reviewerBypass: true },
+];
+const DEFAULT_STUCK_STAGES = ['kra_set', 'self_review'];
 
 export function BulkZeroScoreSection() {
   const currentDate = new Date();
@@ -153,6 +172,18 @@ export function BulkZeroScoreSection() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [adminRemarks, setAdminRemarks] = useState('Data not submitted by deadline');
+  const [stuckAtStages, setStuckAtStages] = useState<string[]>(DEFAULT_STUCK_STAGES);
+
+  const reviewerBypassStages = useMemo(
+    () => stuckAtStages.filter((s) => DRAINABLE_STAGES.find((d) => d.value === s)?.reviewerBypass),
+    [stuckAtStages],
+  );
+
+  const toggleStuckStage = (value: string) => {
+    setStuckAtStages((prev) =>
+      prev.includes(value) ? prev.filter((s) => s !== value) : [...prev, value],
+    );
+  };
 
   const zeroScorableRows = useMemo(
     () => scanDetails?.filter(r => r.action === 'zero_scorable') ?? [],
