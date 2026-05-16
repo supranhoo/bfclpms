@@ -2137,6 +2137,18 @@ Reviewer panels (HR PMS, Audit, Management) MUST treat the **current resolved wo
 
 **Regression coverage**: `BUG-046` in `src/test/bugBountyFixes.test.ts` pins (a) `useReviewSubmissionScoresByKpiIds` selecting `is_na`, (b) the HR PMS reviewed predicate crediting `is_na`, and (c) the workflow-first ordering inside `useProfilesByWorkflowStage`.
 
+### §115 Extension — Structural Advancement Counts as Reviewed (v2.66.11.15)
+
+The HR PMS Reviewed tile in `EmployeeSelectorGrid.tsx` (HR PMS branch, ~L1059-1095) MUST credit a KPI as reviewed when ANY of the following holds:
+
+1. `review_submissions.hr_pms_score IS NOT NULL` (signature path), OR
+2. `is_na = true` AND `status` is at-or-past `hr_pms_review` (or `status = 'approved'` on a workflow without HR PMS), OR
+3. **The KPI's resolved workflow contains `hr_pms_review` AND `status` appears in the stages strictly after `hr_pms_review`.**
+
+Rationale: any KPI whose status has structurally advanced past `hr_pms_review` has, by definition, completed the HR PMS stage. Counting purely off `hr_pms_score` signatures undercounts KPIs that advanced via auto-advance, bulk approval, or legacy import paths where the submission row was not stamped. Implementations MUST guard against double-counting (a `countedReviewed` flag, as in the reference impl).
+
+**Regression coverage**: `src/test/hrPmsReviewedTile.test.ts` pins the three rules and the no-double-count invariant.
+
 ## §116 — Admin On-Behalf Submissions Must Carry a Score or N/A (v2.66.7.49, BUG-047)
 
 Any "score on behalf of" submission written by an admin (via `useAdminSubmitReviewData` or any future equivalent path) MUST, for reviewer stages (`manager`, `skip_level`, `hr_pms`, `auditor`, `management`), include either:
