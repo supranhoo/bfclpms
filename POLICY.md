@@ -2917,3 +2917,16 @@ After period lock, Admin / Data Owner MAY drain stuck KPIs from ANY pre-terminal
 ### §115 Tile↔List Parity Invariant (v2.66.11.17)
 
 For every reviewer-stage "Reviewed" tile on the HR PMS / Audit / Management dashboards, `tile.stat3` MUST equal Σ visible `badge3` over the employees surfaced when `statusFilter='reviewed'`. Regression: `src/test/hrPmsReviewedTileVsList.test.ts`.
+
+### §132.1 Auditor Mapping Backfill (v2.66.11.20)
+
+For periods that were rolled over BEFORE §132 carry-forward existed, Admin MAY backfill `audit_kpi_level_assignments` via the `backfill-audit-assignments` edge function. Rules:
+
+1. **Signature match** = `employee_id | kra_name | kpi_name`. The auditor is inherited from the source KPI in the MOST RECENT PRIOR period (across any year/month) whose source-KPI has an existing mapping.
+2. **Never overwrite.** Upsert uses `onConflict: 'kpi_id', ignoreDuplicates: true`. Any manual mapping already present on the target KPI wins.
+3. **Dry-run is mandatory** before Apply (UI-enforced). Dry-run returns per-period counts (`would_create / already_mapped / no_source_match / source_has_no_auditor`) without writing.
+4. **Audit trail.** Every Apply writes a `system_audit_logs` row with `action='AUDIT_ASSIGNMENTS_BACKFILLED'`, `performed_by=NULL` (system performer attribution), and the full per-period summary.
+5. **Admin-only** via `_shared/admin-auth.ts`.
+6. **Idempotent.** Re-running the same backfill is a no-op.
+
+Regression: `src/test/backfillAuditAssignments.test.ts` (6 tests — happy path, already-assigned preservation, walk-further-back recency, source-without-auditor, no-signature-match, signature-boundary integrity).
