@@ -42,6 +42,7 @@ import { KpiDetailsTable } from '@/components/review/KpiDetailsTable';
 import { SendBackOrgKpiDialog } from '@/components/review/SendBackOrgKpiDialog';
 import { scoreToRating } from '@/components/review/ScoreSelector';
 import { calculateRating } from '@/lib/ratingCalculation';
+import { buildCycleScopeLabel } from '@/lib/frequencyUtils';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -482,6 +483,19 @@ export function UnifiedScorecard({
     allKpis.forEach(k => {
       if (!actionableStatuses.includes(k.status || '')) return;
       if (!k.review_period || k.review_year == null) return;
+      // POLICY §54 v3 UX Corollary — multi-month KPIs (Quarterly, Bi-Monthly,
+      // Half-Yearly, Yearly) are only actionable at the cycle anchor (terminal
+      // month). April/May placeholders of an Apr–Jun quarterly cycle MUST NOT
+      // surface as "pending" — the user cannot enter data on them by design.
+      const scope = buildCycleScopeLabel(
+        k.frequency ?? null,
+        k.review_period,
+        k.review_year,
+        (k as any).frequency_cycle_start ?? null,
+      );
+      if (scope.isMultiMonth) {
+        if (scope.anchorMonth !== k.review_period || scope.anchorYear !== k.review_year) return;
+      }
       const monthIdx = MONTH_ORDER_SELF.indexOf(k.review_period);
       const isEarlier = k.review_year < selectedYear ||
         (k.review_year === selectedYear && monthIdx < currentMonthIdx && monthIdx >= 0);

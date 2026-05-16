@@ -1168,6 +1168,8 @@ All architectural decisions documented as invariants in this policy are also mai
 
 **UX Clause (added 2026-04-29):** All admin-facing KPI creation and edit dialogs MUST display, for any KPI with `frequency ∈ {Bi-Monthly, Quarterly, Half-Yearly, Yearly}`, an information banner that surfaces (a) the **full cycle month range** the KPI covers and (b) the **review anchor month** (cycle terminal). The banner MUST also expose a tooltip that explains the percolation contract so users do not perceive the cycle-end anchor behavior as a defect. Use the canonical helper `buildCycleScopeLabel()` in `src/lib/frequencyUtils.ts` — never recompute cycle months ad-hoc. Reference: `mem://features/admin/multi-month-kpi-cycle-ux`, tests in `src/test/multiMonthBannerCopy.test.ts`.
 
+**UX Corollary — Pending-Period Alerts (added 2026-05-16):** Self-mode "You have N pending KPI(s) for {Month} {Year}" banners, and any equivalent reviewer-side actionable counter, MUST exclude non-anchor placeholder rows of multi-month cycles. Only the cycle's anchor (terminal) month is user-actionable; April/May rows of an Apr–Jun Quarterly cycle exist solely to receive percolated scores from the June approval and MUST NOT prompt the user to "act". All such derivations MUST resolve the anchor through `buildCycleScopeLabel()` — never by raw month comparison. Reference impl: `src/components/review/UnifiedScorecard.tsx` `pendingPeriods` memo. Tests: `src/test/pendingPeriodsMultimonth.test.ts`.
+
 ---
 
 ### §55 — System Audit Log Performer Attribution Invariant
