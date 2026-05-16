@@ -117,7 +117,7 @@ export default function EmployeePerformanceSummary() {
       while (hasMore) {
         let query = supabase
           .from('kpis')
-          .select('id, employee_id, kra_name, kpi_name, weightage, status, review_period, review_year, frequency')
+          .select('id, employee_id, kra_name, kpi_name, weightage, status, review_period, review_year, frequency, frequency_cycle_start')
           .eq('review_year', year)
           .range(offset, offset + batchSize - 1);
 
@@ -185,8 +185,12 @@ export default function EmployeePerformanceSummary() {
         // Skip N/A KPIs entirely
         if (submission?.is_na) return;
 
-        // Check if frequency-locked for the selected period
-        const isLocked = selectedPeriod !== 'all' && isKpiLockedForPeriod(kpi.frequency, selectedPeriod, year);
+        // Check if frequency-locked for the selected period.
+        // POLICY §128 — must pass per-KPI frequency_cycle_start so non-default
+        // cycles (e.g. Bi-Monthly Feb-Mar) are not mis-classified as locked.
+        const isLocked =
+          selectedPeriod !== 'all' &&
+          isKpiLockedForPeriod(kpi.frequency, selectedPeriod, year, kpi.frequency_cycle_start);
 
         const manager = profile.reporting_manager_id 
           ? profileMap.get(profile.reporting_manager_id) 
@@ -295,11 +299,11 @@ export default function EmployeePerformanceSummary() {
       let hasMore = true;
 
       while (hasMore) {
-        const { data: kpis, error } = await supabase
-          .from('kpis')
-          .select('id, employee_id, weightage, status, review_period, review_year')
-          .eq('review_year', year)
-          .range(offset, offset + batchSize - 1);
+          const { data: kpis, error } = await supabase
+            .from('kpis')
+            .select('id, employee_id, weightage, status, review_period, review_year, frequency, frequency_cycle_start')
+            .eq('review_year', year)
+            .range(offset, offset + batchSize - 1);
 
         if (error) throw error;
 
