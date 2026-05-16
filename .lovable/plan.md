@@ -1,75 +1,72 @@
-## Why "116" looks wrong
+## Why your gut is right
 
-The **HR PMS Reviewed** tile on `Dashboard?view=hr_pms` only counts KPIs whose `review_submissions.hr_pms_score IS NOT NULL` (plus N/A approvals past the HR PMS stage). It ignores KPIs whose `kpis.status` has already advanced past `hr_pms_review` but whose submission row is missing an `hr_pms_score` signature.
+Tile says **116 reviewed** but only **4 employees** appear under the *Reviewed* filter, with per-card "reviewed" badges summing to **46**. Both numbers are produced by the same component (`EmployeeSelectorGrid.tsx`) reading the same `periodKpis`, so they MUST agree. They don't — that's a real defect, not a copy issue.
 
-### DB evidence (April 2026, no roster filter)
+### What I verified in the DB (April 2026, no roster filter)
 
-| Bucket | Count |
+| Bucket | KPIs |
 |---|---|
-| `status = hr_pms_review` (in stage) | 448 |
-| `status` past HR PMS (`audit`/`management_review`/`approved`) | 239 |
-| `hr_pms_score IS NOT NULL` | 125 |
-| N/A approvals | 82 |
-| **Past HR PMS but no score and not N/A** | **109** (audit 28 / management_review 41 / approved 40) |
+| Total | 2,267 |
+| `hr_pms_score` set (signature) | 125 — **all on `status=approved`** |
+| Status structurally past HR PMS (`audit`/`mgmt_review`/`approved`) | 239 |
+| N/A approvals at-or-past HR PMS | 37 |
+| Unique employees with any past-HR-PMS KPI | 27 |
 
-Once the dashboard's roster + workflow filter is applied this collapses to ~1090 KPIs and the same shortfall surfaces as **HR PMS Reviewed = 116** even though several hundred KPIs have demonstrably moved past that stage. The discrepancy is real and reproducible.
+Roster shown on screen is **84 employees / 1090 KPIs** (workflow filter to templates that include `hr_pms_review`). After roster scoping, tile claims 116 reviewed but only 4 employees surface under the filter.
 
-### Code root cause
+### Two specific suspects (need confirmation, see step 1)
 
-`src/components/review/EmployeeSelectorGrid.tsx` (HR PMS branch, ~lines 1059–1095):
-- `forwarded` (KPIs whose status is past `hr_pms_review`) is computed but **never folded into `reviewed`**.
-- `reviewed` is derived purely from `hr_pms_score` / N/A signatures via `submissionScoreMap`.
-- Result: any KPI that advanced via auto-advance, bulk approval, legacy import, or any path that did not stamp `hr_pms_score` is invisible to the tile, even though by workflow it has clearly cleared HR PMS.
+1. **Tile / filter source-of-truth divergence.** Tile (`stat3`, L1063-1106) iterates `relevantKpis = periodKpis.filter(k => memberIds.has(k.employee_id))`. Filter (L799-804) also iterates `periodKpis`, then intersects with `demographicFilteredMembers` at L827. If the `useProfilesByWorkflowStage('hr_pms_review')` roster includes an employee whose **period-resolved** `workflowMap` chain *omits* `hr_pms_review` (templates rotated mid-cycle, or template change after KPI creation), then in the tile counter at L1063-1083 the early signature branch (L1069-1080) increments `reviewed` BEFORE the L1083 `if (hrIdx === -1) return;` guard. Filter at L799-804 does NOT have a parallel signature branch, so it skips that employee silently. Net: tile up, filter down, exact gap = signature-only KPIs on roster employees with no `hr_pms_review` in their resolved chain.
 
-This contradicts the tile's stated semantics ("KPIs that have completed HR PMS for this period") and the per-row "Reviewed" math used elsewhere in the same dashboard (the row badges and the `getProgressSegments` "done" segment for `hr_pms` already use `scoreReviewed ?? badge3`, but `badge3` itself is `forwarded`-aware in row aggregation, while the **tile** is not).
+2. **`periodKpis` row-cap (1000 default).** If `useKpisByPeriodRanges` hits the Supabase 1000-row default for April (the period has 2,267 rows DB-wide), the client may receive a different slice for the tile-time render vs the filter-time render due to ordering, OR may consistently miss the same ~1,200 rows but the slice it does receive happens to be skewed toward unreviewed. We need to confirm the hook paginates explicitly.
 
 ## Plan
 
-### 1. Fix the tile aggregation (single file)
+### Step 1 — Diagnostic (no behaviour change, ship + read once, then strip)
 
-`src/components/review/EmployeeSelectorGrid.tsx` — HR PMS branch (~L1059-1095):
+Add a single guarded `console.log` block in `EmployeeSelectorGrid.tsx` that runs only when `viewLevel === 'hr_pms'` and `statusFilter === 'reviewed'`. It must print, for the *current* render:
 
-- Track a per-KPI `countedAsReviewed` flag while iterating `relevantKpis`.
-- Mark reviewed when ANY of the following is true:
-  1. `submissionScoreMap.get(k.id)?.hr_pms_score != null` (existing rule)
-  2. `is_na === true` AND status is past `hr_pms_review` OR `status === 'approved'` on a workflow without HR PMS (existing rule)
-  3. **NEW**: workflow contains `hr_pms_review` AND `k.status` appears in `stages.slice(hrIdx + 1)` (i.e. the existing `forwarded` condition). This restores the structural truth that any KPI past HR PMS has, by definition, completed HR PMS.
-- Keep `pending` and `inReview` exactly as they are (no double counting because reviewed/forwarded statuses do not overlap with `hr_pms_review` or pre-HR-PMS reviewable statuses).
-- Return `stat3 = reviewed` as today.
+- `tile.reviewed` (=`stat3`) and `tile.totalKpis`.
+- `displayedEmployees.length`, plus an array of `{ id, badge3, total }` so we can sum on screen.
+- `roster.size` (= `demographicFilteredMembers.length`) and `periodKpis.length`.
+- Three reconciliation buckets across `relevantKpis`:
+  - `sigOnly` = `hr_pms_score IS NOT NULL` AND status NOT past `hr_pms_review` in resolved chain.
+  - `structPast` = status past `hr_pms_review` in resolved chain.
+  - `naPast` = `is_na=true` AND past.
+- Count of employees in roster whose resolved `workflowMap` chain does not contain `hr_pms_review` (`missingHrInResolved`).
 
-No behavioural change to `pending_self_review`, `pending_manager_review`, `pending_skip_review`, `audit`, `management`, `team`, `skip_level`, or `self` branches.
+User refreshes once on `/dashboard?view=hr_pms&status=reviewed&period=Apr&year=2026` and pastes the log. That single payload pinpoints which suspect is true.
 
-### 2. Tooltip + subtitle copy
+### Step 2 — Fix exactly one of:
 
-Update the tile's `tooltip` on line ~1395 to read: *"KPIs that have completed the HR PMS stage for this period — either an HR PMS score is recorded or the KPI has advanced past the HR PMS stage."* Subtitle ("of total KPIs") stays.
+**Fix A (if signature-no-chain is the cause):** Tighten the signature branch in tile counter at L1069-1080 to require resolved chain contains `hr_pms_review` (move the `hrIdx` lookup ABOVE the signature increment). Tile drops to true count; filter and tile reconcile. No data backfill.
 
-### 3. Regression test (new)
+**Fix B (if `periodKpis` is row-capped):** Switch `useKpisByPeriodRanges` to ranged paging (1000-row chunks ordered by `id`, looped until short page) per `mem://architecture/database/large-export-pagination-policy`. Both tile and filter now see the full set; numbers reconcile upward (tile may grow; filter will list more employees).
 
-`src/test/hrPmsReviewedTile.test.ts` — unit-tests the same classification helper inline (mirrors `teamReviewsFullAccessTiles.test.ts` pattern) covering:
-- KPI in `hr_pms_review` → `inReview` only.
-- KPI in `audit` with no submission row → `reviewed` (regression for current bug).
-- KPI in `approved` with submission row missing `hr_pms_score` and `is_na=false` → `reviewed`.
-- KPI in `self_review` → `pending`.
-- KPI with `hr_pms_score` set but status still `hr_pms_review` → counted as `reviewed` (signature wins, and not double counted as inReview because reviewed and inReview branches are mutually exclusive on status).
-- Sum invariant: `pending + inReview + reviewed ≤ totalKpis` (remaining are pre-self-review `kra_set`).
+**Fix C (if roster is the divergence — `useProfilesByWorkflowStage` resolves chain differently than `useBulkEmployeeWorkflows`):** Align both to the same canonical resolver `get_bulk_employee_workflows` (`mem://architecture/database/per-employee-workflow-resolution`).
 
-### 4. Documentation & policy sync
+### Step 3 — Regression invariant
 
-- `POLICY.md` §115 — extend BUG-046 rule: "HR PMS Reviewed counts a KPI when an `hr_pms_score` signature exists, an N/A approval clears the HR PMS stage, **or the KPI's current status is structurally past `hr_pms_review` in its resolved workflow**."
-- `DOCUMENTATION.md` v2.66.11.15 — RCA entry for the April 2026 HR PMS Reviewed undercount, with the 116 → expected count diff.
-- `mem/features/review/hr-pms-reviewed-tile-semantics` — new memory: tile classification rule + reference to `EmployeeSelectorGrid.tsx` HR PMS branch + test file.
-- Update `mem/index.md` to reference the new memory.
+Add `src/test/hrPmsReviewedTileVsList.test.ts` that asserts the sum invariant: for the HR PMS branch, **`stat3 = Σ kpiStats(emp).badge3` over the displayed-when-statusFilter='reviewed' members**, given a shared `periodKpis` + `workflowMap` fixture. This is the test we have been missing — the existing `hrPmsReviewedTile.test.ts` only validates classification, not tile↔list parity.
 
-### 5. Out of scope
+### Step 4 — Doc + policy
 
-- Backfilling missing `hr_pms_score` rows for the 109 past-stage KPIs without a recorded score (data-integrity question, separate ticket once we confirm whether they should be auto-advance N/A or carry a real score).
-- Changes to per-row badges, progress bars, or "Show only Reviewed" filter — these already use the broader signature and are consistent.
-- Other reviewer-stage tiles (Audit Reviewed, Management Reviewed) — Audit branch (~L1010-1044) has the same shape and may also undercount; flagged as a separate follow-up after we confirm this fix.
+- `POLICY.md` §115 — add **"Tile↔List Parity Invariant: any reviewer-stage Reviewed tile MUST equal Σ visible badge3 when the matching status filter is applied."**
+- `DOCUMENTATION.md` v2.66.11.16 — RCA (April 2026 116 vs 46) + chosen fix.
+- `mem/features/review/hr-pms-reviewed-tile-semantics` — append parity invariant + reference to new test.
 
-## Risk & Impact
+### Out of scope
 
-- **Data**: read-only UI math change; no schema, no RLS, no migrations.
-- **Workflow**: none — only the tile number changes.
-- **UI/UX**: HR PMS Reviewed value increases (e.g. Apr 2026 ~116 → ~225+) and matches the per-employee "done" segments. Pending and In HR PMS are untouched.
-- **Regression**: low. Branch is HR-PMS-only; behaviour for other roles untouched. New unit test locks the rule.
-- **Mitigation**: regression test + tooltip copy update + documented policy.
+- Backfilling `hr_pms_score` rows for legacy auto-advanced KPIs.
+- Other reviewer tiles (Audit Reviewed, Management Reviewed) — same parity test will be cloned in a follow-up once the HR PMS path is proven.
+
+## Risk & impact
+
+- **Data:** read-only; no schema/RLS/migrations.
+- **Workflow:** none.
+- **UI:** tile and list will agree. Number may go down (Fix A) or up (Fix B/C); whichever happens, it will match the visible cards.
+- **Regression:** low. Locked by the new parity test.
+
+## Why I want a diagnostic before patching
+
+The fix path in step 2 is *mutually exclusive* — patching A, B, and C blindly risks double-correcting and overshooting in the opposite direction. One refresh-and-paste from you closes it definitively.
