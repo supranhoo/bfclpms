@@ -331,21 +331,17 @@ export function EmployeeSelectorGrid({
     return source.map((p: { id: string }) => p.id);
   }, [viewLevel, requiredStage, stageFilteredProfiles, isFullAccess, allProfiles, teamMembers, skipLevelMembers]);
 
-  const { data: workflowMap } = useBulkEmployeeWorkflows(allEmployeeIds, selectedPeriod, selectedYear);
-  // BUG-051: Org KPI tile on Team Reviews — only fetched for full-access roles
-  // who actually see the tile. Cached 60s; ~896 rows max per period.
-  // v2.66.11.8: Org KPI tile is now shown on Team, HR PMS, Manager Review,
-  // and Skip Mgr Review dashboards for full-access roles. Same 60s cache.
   const { data: orgKpiCounts } = useOrgKpiPeriodCounts(
     selectedPeriod,
     selectedYear,
-    isFullAccess && (
-      viewLevel === 'team' ||
+    // v2.66.11.11: Tile parity — Org KPI counts are organisation-wide,
+    // shown on all reviewer dashboards regardless of role. 60s cache, ~896 rows max.
+    viewLevel === 'team' ||
       viewLevel === 'hr_pms' ||
       viewLevel === 'pending_manager_review' ||
-      viewLevel === 'pending_skip_review'
-    ),
+      viewLevel === 'pending_skip_review',
   );
+  const { data: workflowMap } = useBulkEmployeeWorkflows(allEmployeeIds, selectedPeriod, selectedYear);
 
   // Helper: get workflow stages for an employee (with fallback)
   const getStages = (employeeId: string): string[] => {
@@ -1337,7 +1333,7 @@ export function EmployeeSelectorGrid({
       const orgPending = orgKpiCounts?.pending ?? 0;
       return (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
-          <StatCard icon={Users} label={isFullAccess ? 'Total Employees' : 'Team Size'} value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
+          <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
           <StatCard
             icon={Hourglass}
             label="KRA Set"
@@ -1361,17 +1357,15 @@ export function EmployeeSelectorGrid({
             active={statusFilter === 'reviewed'}
             tooltip="KPIs that have moved past Self-Review (Manager, Skip, HR PMS, Audit, Management or Approved)."
           />
-          {isFullAccess && (
-            <StatCard
-              icon={Building2}
-              label="Org KPIs"
-              value={orgEntered}
-              denominator={orgTotal}
-              color="purple"
-              subtitle={orgPending > 0 ? `${orgPending} pending entry` : 'All entered'}
-              tooltip="Organisation-level KPIs for this period: Entered + Propagated / Total. Pending = data-owner entry outstanding."
-            />
-          )}
+          <StatCard
+            icon={Building2}
+            label="Org KPIs"
+            value={orgEntered}
+            denominator={orgTotal}
+            color="purple"
+            subtitle={orgPending > 0 ? `${orgPending} pending entry` : 'All entered'}
+            tooltip="Organisation-level KPIs for this period: Entered + Propagated / Total. Pending = data-owner entry outstanding."
+          />
         </div>
       );
     } else if (viewLevel === 'skip_level') {
