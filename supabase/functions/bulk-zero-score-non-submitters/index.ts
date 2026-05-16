@@ -182,7 +182,7 @@ Deno.serve(async (req) => {
           )
           .eq("review_period", reviewPeriod)
           .eq("review_year", reviewYear)
-          .in("status", ["kra_set", "self_review"]);
+          .in("status", stuckAtStages);
         if (employeeId) query = query.eq("employee_id", employeeId);
         const { data: batch, error: bErr } = await query.range(offset, offset + BATCH_SIZE - 1);
         if (bErr) throw bErr;
