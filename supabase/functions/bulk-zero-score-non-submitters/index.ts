@@ -643,6 +643,7 @@ Deno.serve(async (req) => {
               period: reviewPeriod,
               year: reviewYear,
               batch_id: batchId,
+              stuck_at_stage: oldStatus,
             },
           });
 
