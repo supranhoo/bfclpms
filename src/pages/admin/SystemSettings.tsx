@@ -18,6 +18,7 @@ import { WorkflowSettingsTab } from '@/components/admin/WorkflowSettingsTab';
 import { BackupRestoreTab } from '@/components/admin/BackupRestoreTab';
 import { FrequencyCycleSettings } from '@/components/admin/FrequencyCycleSettings';
 import { RolloverDialog } from '@/components/admin/RolloverDialog';
+import { BackfillAuditAssignmentsPanel } from '@/components/admin/BackfillAuditAssignmentsPanel';
 import { PasswordPolicyTab } from '@/components/admin/PasswordPolicyTab';
 import { ReportAccessTab } from '@/components/admin/ReportAccessTab';
 import { MenuAccessTab } from '@/components/admin/MenuAccessTab';
@@ -326,6 +327,8 @@ export default function SystemSettings() {
             </Card>
 
             <RolloverDialog open={rolloverDialogOpen} onOpenChange={setRolloverDialogOpen} />
+
+            <BackfillAuditAssignmentsPanel />
 
             <Card className="mt-6">
               <CardHeader>
