@@ -422,6 +422,49 @@ export function BulkZeroScoreSection() {
           </Button>
         </div>
 
+        {/* v2.66.11.17 — Stage picker. Drain KPIs stuck at any pre-terminal stage. */}
+        <div className="rounded-lg border p-3 space-y-2">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <p className="text-sm font-medium">Drain KPIs stuck at</p>
+              <p className="text-xs text-muted-foreground">
+                By default, only employees who never submitted are zero-scored. Enable later
+                stages to also drain KPIs stuck on a reviewer who failed to act.
+              </p>
+            </div>
+            {reviewerBypassStages.length > 0 && (
+              <Badge variant="destructive" className="text-xs flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" />
+                Bypasses {reviewerBypassStages.length} reviewer stage(s)
+              </Badge>
+            )}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+            {DRAINABLE_STAGES.map((stage) => {
+              const checked = stuckAtStages.includes(stage.value);
+              return (
+                <label
+                  key={stage.value}
+                  className={cn(
+                    'flex items-center gap-2 px-2 py-1.5 rounded border text-sm cursor-pointer transition-colors',
+                    checked ? 'bg-muted border-primary/40' : 'hover:bg-muted/40',
+                    stage.reviewerBypass && checked && 'border-destructive/40 bg-destructive/5',
+                  )}
+                >
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={() => toggleStuckStage(stage.value)}
+                  />
+                  <span className="flex-1">{stage.label}</span>
+                  {stage.reviewerBypass && (
+                    <AlertTriangle className="h-3 w-3 text-destructive shrink-0" />
+                  )}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Prior batch warning */}
         {priorBatchWarning && (
           <div className="flex items-start gap-2 p-3 rounded-lg border border-destructive/30 bg-destructive/5 text-sm">
