@@ -1175,62 +1175,10 @@ export function EmployeeSelectorGrid({
       };
     }
   }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipLevelMembers, teamMembers, submissionScoreMap, isFullAccess]);
-
-
-
-  // v2.66.11.16 — HR PMS Reviewed tile vs visible-list parity diagnostic.
-  // Logs once per render when the user is on the HR PMS dashboard with the
-  // Reviewed filter active so we can pinpoint the 116 vs 46 gap reported on
-  // 16-May-2026. Strip after RCA is closed.
-  useEffect(() => {
-    if (viewLevel !== 'hr_pms' || statusFilter !== 'reviewed') return;
-    if (!periodKpis || !demographicFilteredMembers || !workflowMap) return;
-    const memberIds = new Set(demographicFilteredMembers.map(m => m.id));
-    const relevantKpis = periodKpis.filter(k => memberIds.has(k.employee_id));
-    let sigOnly = 0, sigPast = 0, structPast = 0, naPast = 0, sigNoChain = 0;
-    let missingHrInResolved = 0;
-    const rosterMissingHr = new Set<string>();
-    for (const k of relevantKpis) {
-      const stages = workflowMap.get(k.employee_id) || DEFAULT_WORKFLOW_STAGES;
-      const hrIdx = stages.indexOf('hr_pms_review');
-      const past = hrIdx >= 0 && stages.slice(hrIdx + 1).includes(k.status || '');
-      const sub = submissionScoreMap?.get(k.id);
-      const hasSig = !!(sub && sub.hr_pms_score != null);
-      const isNa = !!(sub && sub.is_na === true);
-      if (hasSig && hrIdx === -1) { sigNoChain++; rosterMissingHr.add(k.employee_id); }
-      if (hasSig && past) sigPast++;
-      if (hasSig && !past && hrIdx !== -1) sigOnly++;
-      if (!hasSig && past) structPast++;
-      if (isNa && past) naPast++;
-      if (hrIdx === -1) missingHrInResolved++;
-    }
-    const displayed = displayMembers || [];
-    const perEmp = displayed.map(m => {
-      const st = getEmployeeKpiStats(m.id, (m as any).relationship);
-      return { id: m.id, name: m.full_name, badge3: st.badge3, total: st.total };
-    });
-    const badge3Sum = perEmp.reduce((a, b) => a + b.badge3, 0);
-    // eslint-disable-next-line no-console
-    console.log('[HR_PMS_REVIEWED_RCA v2.66.11.16]', {
-      tile_stat3: stats?.stat3,
-      tile_totalKpis: stats?.totalKpis,
-      roster_size: demographicFilteredMembers.length,
-      periodKpis_len: periodKpis.length,
-      relevantKpis_len: relevantKpis.length,
-      displayed_len: displayed.length,
-      badge3_sum: badge3Sum,
-      sigOnly_status_not_past: sigOnly,
-      sigPast_overlap_struct: sigPast,
-      structPast_no_sig: structPast,
-      naPast,
-      sigNoChain_signature_but_no_hr_in_resolved_chain: sigNoChain,
-      kpis_with_hrIdx_missing_in_resolved: missingHrInResolved,
-      employees_with_sig_but_no_hr_in_chain: rosterMissingHr.size,
-      perEmp,
-    });
-    // intentional: stats getter is read inside the body.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewLevel, statusFilter, periodKpis, demographicFilteredMembers, workflowMap, submissionScoreMap, displayMembers]);
+  // v2.66.11.17 — RCA closed. The HR PMS Reviewed tile is mathematically
+  // correct (see DOCUMENTATION v2.66.11.17). The visible-list gap was a
+  // symptom of zero-scored KPIs stuck at pre-HR-PMS stages, addressed by
+  // extending the bulk-zero engine to drain later stages.
 
   const handleEmployeeClick = async (member: EmployeeProfile) => {
     // POLICY §107 — defense in depth. baseMembers already strips the viewer,
