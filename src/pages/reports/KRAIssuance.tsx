@@ -211,6 +211,69 @@ export default function KRAIssuance() {
           </div>
         </CardContent>
       </Card>
+
+      {/* v2.66.11.12 — Managers without KRAs for the selected period.
+          Surfaces the population that the Team Reviews diagnostic flags
+          but admins haven't actioned (Sajid Raza RCA, May 2026). */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-600" />
+              <CardTitle>Managers Without KRAs</CardTitle>
+            </div>
+            <div className="flex items-center gap-2">
+              <Select value={gapMonth} onValueChange={setGapMonth}>
+                <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {MONTHS.map(m => <SelectItem key={m} value={m} className="text-xs">{m}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={String(gapYear)} onValueChange={(v) => setGapYear(parseInt(v))}>
+                <SelectTrigger className="w-[90px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {[gapYear - 1, gapYear, gapYear + 1].map(y => <SelectItem key={y} value={String(y)} className="text-xs">{y}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Active managers with 5+ reports whose entire reporting line has no KPIs in {gapMonth} {gapYear}. Chase KRA issuance for these teams.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {gapLoading ? (
+            <Skeleton className="h-32" />
+          ) : !gapManagers || gapManagers.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No gaps — every active manager has at least one report with KPIs in {gapMonth} {gapYear}.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Manager</TableHead>
+                    <TableHead>Code</TableHead>
+                    <TableHead className="text-right">Direct</TableHead>
+                    <TableHead className="text-right">Indirect</TableHead>
+                    <TableHead className="text-right">Total Reports</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {gapManagers.map(m => (
+                    <TableRow key={m.id}>
+                      <TableCell className="font-medium">{m.full_name ?? '—'}</TableCell>
+                      <TableCell className="text-muted-foreground">{m.employee_code ?? '—'}</TableCell>
+                      <TableCell className="text-right">{m.direct_count}</TableCell>
+                      <TableCell className="text-right">{m.indirect_count}</TableCell>
+                      <TableCell className="text-right font-semibold">{m.total_reports}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
