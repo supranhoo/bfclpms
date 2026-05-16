@@ -114,6 +114,7 @@ Deno.serve(async (req) => {
     const businessUnitId: string | null = body?.business_unit_id ?? null;
     const departmentId: string | null = body?.department_id ?? null;
     const employeeId: string | null = body?.employee_id ?? null;
+    const stuckAtStages: string[] = sanitizeStuckStages(body?.stuck_at_stages);
 
     if (!reviewPeriod || !reviewYear) {
       return new Response(
