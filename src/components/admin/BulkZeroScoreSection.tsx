@@ -208,6 +208,7 @@ export function BulkZeroScoreSection() {
         division_id: divisionId,
         business_unit_id: businessUnitId,
         department_id: departmentId,
+        stuck_at_stages: stuckAtStages,
       });
 
       setScanDetails(data.details || []);
@@ -246,6 +247,7 @@ export function BulkZeroScoreSection() {
         division_id: divisionId,
         business_unit_id: businessUnitId,
         department_id: departmentId,
+        stuck_at_stages: stuckAtStages,
       });
       setExecuteResult(data);
       setScanDetails(null);
