@@ -1,62 +1,100 @@
-# Audit — `isKpiLockedForPeriod` callers and per-KPI `frequency_cycle_start`
+## Goal
 
-Scope: every call to `isKpiLockedForPeriod(...)` and every related sibling helper (`isFrequencyNotDue`, `getActiveMonthForCycle`) across the app, plus the SELECT that feeds each call.
+Make the Team Reviews dashboard look and behave the same for **all roles** (Admin, HR PMS, Management, Auditor, Manager, Skip-Level Manager) — same 6 tiles, same labels — and add a **diagnostic panel** that explains *why* a manager sees zeros when they do.
 
-## Findings — all call sites already compliant
+No business logic changes to scoring, rosters, or RLS. Visual + diagnostic only.
 
-| # | File | Line | Passes `frequency_cycle_start`? | SELECT includes it? | Notes |
-|---|------|------|---|---|---|
-| 1 | `src/pages/reports/EmployeePerformanceSummary.tsx` | 193 | yes | yes (lines 120 + 304) | Fixed in v2.66.11.9 |
-| 2 | `src/pages/reports/KpiDetailReport.tsx` | 199 | yes | yes (line 147) | Fixed in v2.66.11.9 |
-| 3 | `src/pages/reports/KpiStatusTracker.tsx` | 166 | yes | yes (line 131) | Fixed in v2.66.11.9 |
-| 4 | `src/pages/admin/OrgKpiDataEntry.tsx` | 214 | yes | yes (uses RPC snapshot) | Long-standing |
-| 5 | `src/hooks/useSystemIssues.ts` | 111 | yes | yes (line 99 type + `select('*')`) | Long-standing |
-| 6 | `src/components/admin/AdminDataEntryDialog.tsx` | 137-143 | yes | yes (`select('*')` line 258) | Long-standing |
-| 7 | `src/components/review/SelfReviewSheet.tsx` | 155 | yes | yes (KPI hydrated via `useKpis` SLIM_KPI_SELECT) | Long-standing |
-| 8 | `src/components/review/KpiJourneySection.tsx` | 184/188 | yes | yes (KPI prop) | Long-standing |
-| 9 | `src/components/review/FrequencyLockedOverlay.tsx` | 29/83 | yes (prop) | n/a — caller's responsibility | Long-standing |
-| 10 | `src/lib/frequencyUtils.ts` | 654 (`getActiveMonthForCycle`) | yes (re-passes arg) | n/a — internal | Helper-internal |
+---
 
-Sibling helper:
-- `src/hooks/useCompliancePenalty.ts` line 190 → `isFrequencyNotDue(kpi.frequency, ..., kpi.frequency_cycle_start, exclusions)` ✅ (SELECT line 137 includes column).
-- `src/hooks/useAdminReports.ts` lines 154/160/208 → uses `getCalendarMonthsForPeriod(..., frequency_cycle_start)` ✅.
+## Risk & Impact Report
 
-Test files exempt by design (they intentionally exercise the default-fallback path):
-- `src/lib/frequencyUtils.test.ts` (3-arg form is the test's purpose)
-- `src/test/reportFrequencyCycleOverride.test.ts` (mixed 3-arg / 4-arg cases)
+- **Data Impact:** None. No schema, RLS, or query change to KPI/score data.
+- **Workflow Impact:** None. Tile counts continue to reflect each role's roster scope (a manager still only counts their direct/indirect reports — they just see the same *layout* as admins).
+- **UI/UX Consistency:** Improves parity. Removes the current divergence where managers see 5 tiles and admins see 6.
+- **Regression Risk:** Low. Changes confined to `EmployeeSelectorGrid.tsx` `viewLevel === 'team'` branch and the `useOrgKpiPeriodCounts` `enabled` gate. Existing tests in `teamReviewsFullAccessTiles.test.ts` remain valid (they test classification, not tile visibility).
+- **Mitigation:** Add unit tests for the diagnostic helper; keep the `isFullAccess` classification branch unchanged so tile *numbers* don't shift for any role.
 
-Both are flagged in POLICY §128 as exempt; no change.
+---
 
-## Result
+## Part 1 — Unified 6-tile layout (Policy-aligned)
 
-No production call site is missing the per-KPI `frequency_cycle_start` argument. No SELECT feeding such a call site is missing the column. The Sajid-Raza class of bug (default-cycle fallback wrongly locking offset-cycle KPIs) is now closed app-wide.
+### Changes in `src/components/review/EmployeeSelectorGrid.tsx`
 
-## What I propose to ship (lightweight hardening only)
+1. **Tile #1 label**: change from conditional `'Total Employees' : 'Team Size'` to **always `'Total Employees'**` (matches the attached reference).
+2. **Org KPIs tile**: remove the `isFullAccess &&` gate so the 6th tile renders for managers and skip-level managers too. Org KPI counts are organisation-wide for the period — managers seeing them is informational, not a permission leak (the data is already visible via Org KPI Data Entry / reports per existing RLS).
+3. **Grid stays `xl:grid-cols-6**` — already correct.
 
-Strictly to prevent future regressions — nothing functional changes:
+### Changes in `src/hooks/useOrgKpiPeriodCounts.ts`
 
-1. **CI guard test** — `src/test/frequencyLockCallSitesAudit.test.ts`. A repo-grep test that:
-   - greps `src/**/*.{ts,tsx}` for `isKpiLockedForPeriod(`,
-   - excludes the two whitelisted test files,
-   - asserts every remaining call has 4+ comma-separated arguments.
-   This makes any future 3-arg slip fail CI immediately, without depending on memory of POLICY §128.
+- Drop the `enabled` parameter requirement at the call site so the query fires for all roles on the Team Reviews tab. Keep the 60s `staleTime` cache so cost is negligible (one lightweight `SELECT status` per period per user-session).
 
-2. **Helper hardening** — add a dev-only `console.warn` inside `isKpiLockedForPeriod` when `frequencyCycleStart` is `undefined` AND the frequency belongs to `MULTI_MONTH_FREQUENCIES` (Bi-Monthly / Quarterly / Half-Yearly / Yearly). Suppressed in production. Catches new entry points the static grep can't see (e.g. dynamic dispatch).
+### Policy update (`POLICY.md`)
 
-3. **Policy refresh** — update POLICY §128 to reference the new CI guard and the dev-only warning, and append an audit attestation row ("Audited 2026-05-12: 10 call sites, 0 violations").
+- New section: **Team Reviews Tile Parity (v2.66.11.11)** — "All reviewer roles see the same 6 tiles on Team Reviews. Tile counts are scoped by each role's roster (direct/indirect for managers, org-wide for full-access). Org KPI tile shows period-wide counts and is informational for all roles."
 
-4. **DOCUMENTATION.md** — append v2.66.11.10 entry summarizing the audit + the two hardening additions.
+---
 
-## Risk & impact
+## Part 2 — Zero-state diagnostic for managers
 
-- Data: none.
-- Workflow: none.
-- UI/UX: none (dev-only warning is suppressed in prod build).
-- Regression risk: very low — only test + warn additions, no behavior change to scoring or locking.
-- Mitigation: the new test itself is the primary guard.
+When a non-full-access user (Manager / Skip-Level) loads Team Reviews and **all five status tiles are zero AND `Total Employees === 0**`, render a diagnostic banner *above* the team list explaining the cause.
 
-## Out of scope
+### New component: `src/components/review/TeamReviewsZeroDiagnostic.tsx`
 
-Reports that intentionally do NOT apply frequency locking to score aggregation (e.g. `useMonthlyTrend`, `MonthlyScorecardReport`, `KpiEmployeeMatrix`, `PerformanceReport` trend mode) are unchanged. Their behavior is by design (trend dashboards include all periods regardless of lock state).
+Inputs (all already available in `EmployeeSelectorGrid`):
 
-If you'd like the trend dashboards re-examined for lock awareness, that's a separate decision and I'll flag it separately.
+- `directCount` — `teamMembers.length`
+- `skipCount` — `skipLevelMembers.length`
+- `periodKpiCount` — `periodKpis.length`
+- `selectedPeriod`, `selectedYear`
+- `userId`
+
+Diagnostic decision tree:
+
+
+| Condition                                             | Message shown                                                                                                                             |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `directCount === 0 && skipCount === 0`                | "No direct or indirect reports are mapped to you for this period. Ask Admin to verify your reporting structure in **User Management**."   |
+| `directCount + skipCount > 0 && periodKpiCount === 0` | "You have N reports mapped, but none have KPIs assigned for {Period} {Year}. KRAs may not yet be issued — check **KRA Issuance** report." |
+| `periodKpiCount > 0 && stats.totalEmployees === 0`    | "KPIs exist for your reports but none match the active workflow stage filter. Try clearing filters or switching periods."                 |
+
+
+UI: amber-tinted `Alert` (shadcn) with `Info` icon, tight `text-sm` body, optional **"Refresh roster"** button that re-runs the team query.
+
+### Wiring in `EmployeeSelectorGrid.tsx`
+
+Render `<TeamReviewsZeroDiagnostic />` immediately after `renderStatsCards()` when `viewLevel === 'team' && !isFullAccess && stats.totalEmployees === 0`.
+
+### Tests
+
+New file `src/test/teamReviewsZeroDiagnostic.test.ts`:
+
+- 3 tests covering the three branches of the decision tree
+- 1 test confirming the diagnostic does NOT render when `stats.totalEmployees > 0`
+- 1 test confirming admins (`isFullAccess === true`) never see it
+
+---
+
+## Files Touched
+
+
+| File                                                  | Change                                                 |
+| ----------------------------------------------------- | ------------------------------------------------------ |
+| `src/components/review/EmployeeSelectorGrid.tsx`      | Tile #1 label, ungate Org KPIs tile, render diagnostic |
+| `src/hooks/useOrgKpiPeriodCounts.ts`                  | Allow query for all roles on Team Reviews              |
+| `src/components/review/TeamReviewsZeroDiagnostic.tsx` | **New** — diagnostic banner                            |
+| `src/test/teamReviewsZeroDiagnostic.test.ts`          | **New** — 5 unit tests                                 |
+| `POLICY.md`                                           | New section — tile parity v2.66.11.11                  |
+| `DOCUMENTATION.md`                                    | Version History entry — v2.66.11.11                    |
+
+
+---
+
+## Out of Scope (will not change in this plan)
+
+- The `isFullAccess` classification logic in `classify()` — managers still count by roster relationship, admins still count by workflow status. Changing this would alter business meaning, not visual parity.
+- HR PMS / Manager Review / Skip Mgr Review dashboards — already on 6-tile parity since v2.66.11.8.
+- Org KPI RLS — unchanged.
+
+---
+
+Approve to proceed?
