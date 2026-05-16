@@ -373,6 +373,10 @@ Deno.serve(async (req) => {
     const skippedEmployees: EmployeeResult[] = [];
     const conflicts: EmployeeResult[] = [];
     const kpisToInsert: any[] = [];
+    // Track which source KPI each target row was cloned from, keyed by the
+    // signature we use to look the inserted row back up afterwards.
+    // Signature: `${employee_id}|${review_year}|${review_period}|${kra_name}|${kpi_name}`
+    const sigToSourceKpiId = new Map<string, string>();
 
     for (const [empId, kpis] of Object.entries(employeeKpis)) {
       if (skip_employee_ids.includes(empId)) continue;
@@ -427,6 +431,11 @@ Deno.serve(async (req) => {
           }
 
           kpisForThisEmployee.push(buildNewKpi(kpi, month, targetYear));
+          // Remember the source→target linkage for audit-assignment cloning.
+          sigToSourceKpiId.set(
+            `${kpi.employee_id}|${targetYear}|${month}|${kpi.kra_name}|${kpi.kpi_name}`,
+            kpi.id,
+          );
           kpisCopied++;
           anyCreated = true;
           // Add to dedup set so subsequent KPIs don't duplicate
