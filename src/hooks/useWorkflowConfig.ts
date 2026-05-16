@@ -528,20 +528,36 @@ export function useBulkEmployeeWorkflows(employeeIds: string[], reviewPeriod?: s
     queryFn: async () => {
       if (employeeIds.length === 0) return new Map<string, string[]>();
 
-      const params: Record<string, unknown> = { employee_ids: employeeIds };
-      if (reviewPeriod && reviewYear) {
-        params.p_review_period = reviewPeriod;
-        params.p_review_year = reviewYear;
+      // v2.66.11.18 (POLICY §125) — chunk inputs to dodge PostgREST's
+      // server-side 1000-row cap. With >1000 ids the RPC silently truncated
+      // the response, leaving employees alphabetically past the cut-off with
+      // NO workflow entry → reviewer panels (HR PMS / Audit / Skip-Level /
+      // Management) excluded their cards even though tile counts via score
+      // signatures still included them. Mirrors the resilient chunked
+      // pattern in `useProfilesByWorkflowStage`.
+      const CHUNK = 500;
+      const chunks: string[][] = [];
+      for (let i = 0; i < employeeIds.length; i += CHUNK) {
+        chunks.push(employeeIds.slice(i, i + CHUNK));
       }
 
-      const { data, error } = await supabase
-        .rpc('get_bulk_employee_workflows' as any, params) as { data: { employee_id: string; stages: string[] }[] | null; error: any };
+      const callChunk = async (ids: string[]) => {
+        const params: Record<string, unknown> = { employee_ids: ids };
+        if (reviewPeriod && reviewYear) {
+          params.p_review_period = reviewPeriod;
+          params.p_review_year = reviewYear;
+        }
+        const first = await (supabase as any).rpc('get_bulk_employee_workflows', params);
+        if (!first.error) return first;
+        await new Promise(r => setTimeout(r, 200));
+        return await (supabase as any).rpc('get_bulk_employee_workflows', params);
+      };
 
-      if (error) throw error;
-
+      const results = await Promise.all(chunks.map(callChunk));
       const map = new Map<string, string[]>();
-      if (data) {
-        for (const row of data) {
+      for (const r of results) {
+        if (r.error) throw r.error;
+        for (const row of ((r.data || []) as { employee_id: string; stages: string[] }[])) {
           map.set(row.employee_id, row.stages);
         }
       }
