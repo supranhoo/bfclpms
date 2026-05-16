@@ -1,62 +1,64 @@
-## Why-Why analysis result
+## Problem
 
-**Confirmed facts for Sajid Raza (100264):**
-- Sajid is active, role = `manager`, department = `DRI`.
-- His visibility is based on `profiles.reporting_manager_id`, **not department**.
-- He has **13 direct** + **172 indirect** active mapped employees = **185 mapped employees**.
-- For May 2026, mapped reports already have **247 KPI rows across 12 employees**; including Sajid’s own KPIs, there are **278 rows across 13 employees**.
-- Those May rows are currently **not issued** (`is_issued = false`), but the dashboard should still not collapse to zero if the policy is to show mapped roster + KPI state.
+The Self-mode "You have N pending KPI(s) for {Month} {Year}" banner on `My Dashboard` counts non-anchor placeholder rows of multi-month KPIs (Quarterly / Bi-Monthly / Half-Yearly / Yearly). These rows are intentionally not user-editable per POLICY §54 v3 (multi-month percolation: review happens only at the terminal/anchor month and is back-filled to siblings). Telling the user to "act" on them is a contradiction.
 
-**Root cause, verified instead of assumed:**
-1. The dashboard calls `get_reviewer_kpis_for_period('May', 2026)` for non-full-access managers.
-2. That backend function fails only in the non-full-access branch with:
-   `column reference "id" is ambiguous`.
-3. Because the KPI RPC fails, `periodKpis` is unavailable; stats fall back to zero and the diagnostic incorrectly says “No KPIs assigned”.
-4. Admin/HR/Management users do not hit this failing branch, which explains why the Admin-style view can show data while Sajid’s manager view shows 0.
-5. A secondary issue exists on the current URL: `?mgr=b68f5bce...` is a hidden manager filter for non-full-access manager views. Even after the RPC fix, this can wrongly narrow Sajid’s team view to only direct reports instead of all direct + indirect mapped employees.
-
-**Who else is affected:**
-- This is not isolated to Sajid.
-- Any non-full-access reviewer/manager using the manager branch of these functions can be affected.
-- Current database audit shows **105 non-full reviewer users** with mapped teams, covering **2,473 direct** and **2,226 indirect** report relationships.
-- Largest affected examples include Sindhu Raj Singh, Saibal Kunar, V.A.V.S.S. Ganapathi Varma, Sujeet Kumar Singh, Abhishek Prasad, Sajid Raza, Jitendra Kumar Dwivedi, Chandra Bhan Singh, Y R V S Murthy, and Pratap Chatterjee.
+**Confirmed example**: Ankit Choudhary (101785). The April 2026 alert is the Quarterly "Timely Completion of KRA Setting…" KPI whose anchor is June 2026. April + May are sibling placeholders that must not surface as actionable.
 
 ## Risk & Impact Report
 
-**Data impact:** No historical KPI/profile data will be changed. The fix is to correct read-only backend helper functions and frontend filter handling.
+- **Data Impact**: None. Read-only filter change in the banner derivation. No schema, RLS, or row writes.
+- **Workflow Impact**: None — anchor-month review behaviour is unchanged. Only the misleading prompt disappears.
+- **UI/UX**: Banner stops crying wolf. Anchor-month pending alerts (e.g. June for a Quarterly cycle) keep working unchanged.
+- **Regression Risk**: Low. Risk is "over-filtering" and hiding a genuinely-pending Monthly KPI. Mitigated by filtering only when `frequency` is multi-month AND the row is not the cycle anchor.
+- **Mitigation**: New unit tests covering Monthly (must alert), Quarterly non-anchor (must NOT alert), Quarterly anchor (must alert), and mixed periods.
 
-**Workflow impact:** Restores intended manager visibility: direct + one-level indirect mapped employees, with self-review remaining separate.
+## Fix
 
-**UI/UX impact:** The dashboard will stop showing a misleading “No KPIs assigned” banner when the real issue is a data-load/RPC failure. Hidden manager URL filters will no longer affect normal manager views.
+### 1. `src/components/review/UnifiedScorecard.tsx` — `pendingPeriods` memo (lines 477–499)
 
-**Regression risk:** Medium, because the same helper functions are shared by Team Reviews, stage-filtered reviewer rosters, and reporting dashboards.
+Add a guard: for KPIs whose `frequency` is anything other than `Monthly` / `Daily` / `Weekly`, only count the row if its `(review_period, review_year)` equals the cycle anchor resolved by the existing helper `resolveCycleAnchor(frequency, review_period, review_year, frequency_cycle_start)` (already exists in `src/lib/frequencyUtils.ts` / `multimonthCycle.ts` — reuse, do not recompute).
 
-**Mitigation:** Add regression tests for the diagnostic branch and hidden-manager-filter behavior, and update POLICY/DOCUMENTATION in the same change.
+Pseudocode:
+```ts
+allKpis.forEach(k => {
+  if (!actionableStatuses.includes(k.status || '')) return;
+  if (!k.review_period || k.review_year == null) return;
 
-## Implementation plan
+  // NEW: skip non-anchor placeholders of multi-month cycles
+  if (isMultiMonthFrequency(k.frequency)) {
+    const anchor = resolveCycleAnchor(k.frequency, k.review_period, k.review_year, k.frequency_cycle_start);
+    if (anchor.month !== k.review_period || anchor.year !== k.review_year) return;
+  }
 
-1. **Fix backend helper functions**
-   - Create a migration replacing `get_reviewer_kpis_for_period` and `get_reviewer_roster_slim`.
-   - Rename/qualify CTE columns in the non-full branch, e.g. `profile_id`, so output column `id` no longer conflicts with CTE `id`.
-   - Preserve the existing security model: full-access users see all active data; non-full users see self/direct/indirect scope as currently intended.
+  // …existing earlier-than-current check + counter
+});
+```
 
-2. **Fix hidden manager filter leakage**
-   - In `EmployeeSelectorGrid`, apply `selectedManager` only for full-access users.
-   - Auto-clear or ignore `mgr` URL params for non-full-access Team Reviews so Sajid sees all mapped direct + indirect employees, not a hidden filtered subset.
+### 2. Tests
 
-3. **Harden the zero-state diagnostic**
-   - Add an explicit `rpc_error` / `data_load_error` branch to `TeamReviewsZeroDiagnostic`.
-   - If KPI/profile loading fails, show “Dashboard data could not be loaded” with refresh guidance instead of “No KPIs assigned”.
+New file `src/test/pendingPeriodsMultimonth.test.ts` covering:
+- Monthly `kra_set` in prior month → counted.
+- Quarterly Apr/May placeholders (anchor Jun) viewed from July → only Jun counted.
+- Quarterly Jun anchor in prior month → counted.
+- Mixed batch (1 Monthly + 2 Quarterly placeholders + 1 Quarterly anchor) → expected count = 2.
+- Year-wrapping cycle (Quarterly Nov 2026 → anchor Jan 2027) viewed from Feb 2027.
 
-4. **Close auth/cache race gap**
-   - Extend the auth-ready query invalidation to include `kpis-by-period-ranges`, `profiles`, `profiles-by-workflow-stage`, `team-members`, and `skip-level-team-members` so manager dashboards refetch after the session is ready.
+### 3. Documentation & Policy sync
 
-5. **Regression protection**
-   - Add/update tests for:
-     - diagnostic returns `rpc_error` when KPI loading fails;
-     - non-full manager views ignore hidden `mgr` filters;
-     - Sajid-style direct + indirect roster logic remains counted as one manager scope.
+- `POLICY.md` §54 v3 — append a "UX Corollary": *"Pending-period alerts MUST exclude non-anchor placeholders of multi-month cycles. Only the anchor month is actionable."*
+- `DOCUMENTATION.md` — new entry **v2.66.11.14** with RCA, fix, test list.
+- `mem://features/admin/multi-month-kpi-cycle-ux` — add a sentence noting that pending-banner derivations must use `resolveCycleAnchor` and never count siblings.
 
-6. **Documentation and policy sync**
-   - Update `POLICY.md` with the verified rule: Team Reviews visibility is reporting-chain based, not department based.
-   - Update `DOCUMENTATION.md` version history with the Sajid RCA, affected-user class, and fixed helper-function contract.
+## Out of scope (do not touch in this change)
+
+- The underlying `kpis` rows for Apr/May placeholders. They are intentional per percolation policy and are needed for downstream score back-fill.
+- Reviewer-mode pending counts (Team Reviews) — separate audit if required.
+- Locking/unlocking data entry for the anchor month (already correct).
+
+## Files touched
+
+- `src/components/review/UnifiedScorecard.tsx` (banner memo only)
+- `src/test/pendingPeriodsMultimonth.test.ts` (new)
+- `POLICY.md`, `DOCUMENTATION.md`, `mem://features/admin/multi-month-kpi-cycle-ux`
+
+Approve to implement.
