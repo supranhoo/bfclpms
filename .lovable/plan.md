@@ -1,72 +1,70 @@
-## Why your gut is right
+## What the data says (April 2026, your 84-person HR PMS roster, 1090 KPIs)
 
-Tile says **116 reviewed** but only **4 employees** appear under the *Reviewed* filter, with per-card "reviewed" badges summing to **46**. Both numbers are produced by the same component (`EmployeeSelectorGrid.tsx`) reading the same `periodKpis`, so they MUST agree. They don't — that's a real defect, not a copy issue.
-
-### What I verified in the DB (April 2026, no roster filter)
-
-| Bucket | KPIs |
+| Bucket | Count |
 |---|---|
-| Total | 2,267 |
-| `hr_pms_score` set (signature) | 125 — **all on `status=approved`** |
-| Status structurally past HR PMS (`audit`/`mgmt_review`/`approved`) | 239 |
-| N/A approvals at-or-past HR PMS | 37 |
-| Unique employees with any past-HR-PMS KPI | 27 |
+| Status structurally past `hr_pms_review` (`audit` / `management_review` / `approved`) | **116** |
+| Has `hr_pms_score` signature | 113 (all within the 116) |
+| `is_na` + past HR PMS | 3 |
+| **Union — "passed HR PMS by any process"** | **116** |
+| Currently AT `hr_pms_review` (in stage) | 448 |
+| Currently pre-HR-PMS (`kra_set` / `self_review` / `manager_check` / `skip_level_check`) | 526 |
 
-Roster shown on screen is **84 employees / 1090 KPIs** (workflow filter to templates that include `hr_pms_review`). After roster scoping, tile claims 116 reviewed but only 4 employees surface under the filter.
+The tile is doing exactly what you asked it to do: it shows every roster KPI that has moved past the HR PMS stage by ANY path (HR PMS signature, N/A approval past HR PMS, or structural advancement). The number 116 is mathematically correct — there are no hidden KPIs that "passed HR PMS" but aren't counted.
 
-### Two specific suspects (need confirmation, see step 1)
+## So why does it feel wrong
 
-1. **Tile / filter source-of-truth divergence.** Tile (`stat3`, L1063-1106) iterates `relevantKpis = periodKpis.filter(k => memberIds.has(k.employee_id))`. Filter (L799-804) also iterates `periodKpis`, then intersects with `demographicFilteredMembers` at L827. If the `useProfilesByWorkflowStage('hr_pms_review')` roster includes an employee whose **period-resolved** `workflowMap` chain *omits* `hr_pms_review` (templates rotated mid-cycle, or template change after KPI creation), then in the tile counter at L1063-1083 the early signature branch (L1069-1080) increments `reviewed` BEFORE the L1083 `if (hrIdx === -1) return;` guard. Filter at L799-804 does NOT have a parallel signature branch, so it skips that employee silently. Net: tile up, filter down, exact gap = signature-only KPIs on roster employees with no `hr_pms_review` in their resolved chain.
+Because of the zero-score policy. The system has 141 zero-scored KPIs scattered across `self_review` (30), `manager_check` (60), `skip_level_check` (1), `hr_pms_review` (31), `audit` (9), and `management_review` (11) — **the ones that "should" have been auto-zeroed and pushed all the way to approved are stuck at intermediate stages**. The current bulk-zero edge function (`bulk-zero-score-non-submitters`) only drains KPIs at `kra_set` and `self_review` — it ignores stuck KPIs at later stages. So once a manager / skip-level / HR PMS reviewer fails to act, the KPI sits there forever, never reaching "Reviewed by HR PMS".
 
-2. **`periodKpis` row-cap (1000 default).** If `useKpisByPeriodRanges` hits the Supabase 1000-row default for April (the period has 2,267 rows DB-wide), the client may receive a different slice for the tile-time render vs the filter-time render due to ordering, OR may consistently miss the same ~1,200 rows but the slice it does receive happens to be skewed toward unreviewed. We need to confirm the hook paginates explicitly.
+That's the real gap. Fixing the tile won't help — we need to actually move those stuck KPIs through.
 
 ## Plan
 
-### Step 1 — Diagnostic (no behaviour change, ship + read once, then strip)
+### Step 1 — Confirm the tile is correct (no code change)
 
-Add a single guarded `console.log` block in `EmployeeSelectorGrid.tsx` that runs only when `viewLevel === 'hr_pms'` and `statusFilter === 'reviewed'`. It must print, for the *current* render:
+- Strip the diagnostic `useEffect` in `EmployeeSelectorGrid.tsx` (added in v2.66.11.16).
+- Document in `DOCUMENTATION.md` v2.66.11.17 that 116 is the verified mathematical truth for April 2026 (table above).
+- Add `src/test/hrPmsReviewedTileVsList.test.ts` asserting the parity invariant: `tile.stat3 = Σ visible badge3` when `statusFilter='reviewed'`. This locks the tile correctness regardless of any future workflow churn.
 
-- `tile.reviewed` (=`stat3`) and `tile.totalKpis`.
-- `displayedEmployees.length`, plus an array of `{ id, badge3, total }` so we can sum on screen.
-- `roster.size` (= `demographicFilteredMembers.length`) and `periodKpis.length`.
-- Three reconciliation buckets across `relevantKpis`:
-  - `sigOnly` = `hr_pms_score IS NOT NULL` AND status NOT past `hr_pms_review` in resolved chain.
-  - `structPast` = status past `hr_pms_review` in resolved chain.
-  - `naPast` = `is_na=true` AND past.
-- Count of employees in roster whose resolved `workflowMap` chain does not contain `hr_pms_review` (`missingHrInResolved`).
+### Step 2 — Extend bulk-zero engine to drain stuck KPIs at later stages
 
-User refreshes once on `/dashboard?view=hr_pms&status=reviewed&period=Apr&year=2026` and pastes the log. That single payload pinpoints which suspect is true.
+Today `supabase/functions/bulk-zero-score-non-submitters/index.ts` filters at L157 / L401:
+```ts
+.in("status", ["kra_set", "self_review"])
+```
 
-### Step 2 — Fix exactly one of:
+Extend it to a configurable set of "stuck-at" stages, defaulting to ALL pre-terminal stages a Data Owner / Admin chooses for that run. Specifically:
 
-**Fix A (if signature-no-chain is the cause):** Tighten the signature branch in tile counter at L1069-1080 to require resolved chain contains `hr_pms_review` (move the `hrIdx` lookup ABOVE the signature increment). Tile drops to true count; filter and tile reconcile. No data backfill.
+- New optional param `stuck_at_stages: string[]` (default `["kra_set", "self_review"]`, allowed values include `manager_check`, `skip_level_check`, `hr_pms_review`, `audit`, `management_review`).
+- Same "set 0 across all stages → status='approved' → audit log" cascade applies, regardless of starting stage.
+- Scoring honours the existing `submissionData.hr_pms_score = 0` block when stages contain `hr_pms_review` — so a KPI zero-advanced from `manager_check` will pick up an HR PMS signature on the way out.
+- Audit reason field gets the new starting stage (`stuck_at_manager_check`, etc.) so HR can see WHY each KPI was auto-closed.
 
-**Fix B (if `periodKpis` is row-capped):** Switch `useKpisByPeriodRanges` to ranged paging (1000-row chunks ordered by `id`, looped until short page) per `mem://architecture/database/large-export-pagination-policy`. Both tile and filter now see the full set; numbers reconcile upward (tile may grow; filter will list more employees).
+Admin UI (`src/components/admin/BulkZeroScoreSection.tsx`) gets a multi-select for "Drain KPIs stuck at:" with the existing two stages pre-checked, and the four new stages opt-in with a warning that this closes the KPI on behalf of the reviewer.
 
-**Fix C (if roster is the divergence — `useProfilesByWorkflowStage` resolves chain differently than `useBulkEmployeeWorkflows`):** Align both to the same canonical resolver `get_bulk_employee_workflows` (`mem://architecture/database/per-employee-workflow-resolution`).
+### Step 3 — Policy update
 
-### Step 3 — Regression invariant
+- `POLICY.md` — extend the zero-score governance section to declare: "After period lock, Admin / Data Owner MAY drain stuck KPIs from ANY pre-terminal stage (not just self_review). All affected KPIs receive a 0 across the cascade, status=`approved`, and an audit log row tagging the originating stuck stage."
+- `mem/features/admin/bulk-zero-scoring-system` — add the new stage set + safeguards (cannot run on an unlocked period; requires explicit confirmation when draining `hr_pms_review` / `audit` / `management_review` since those bypass a human reviewer).
 
-Add `src/test/hrPmsReviewedTileVsList.test.ts` that asserts the sum invariant: for the HR PMS branch, **`stat3 = Σ kpiStats(emp).badge3` over the displayed-when-statusFilter='reviewed' members**, given a shared `periodKpis` + `workflowMap` fixture. This is the test we have been missing — the existing `hrPmsReviewedTile.test.ts` only validates classification, not tile↔list parity.
+### Step 4 — Tests & mock data
 
-### Step 4 — Doc + policy
+- Unit test for the edge function dispatch path covering one stuck KPI per stage (5 cases).
+- Regression test: after a simulated drain of the 141 April KPIs, HR PMS Reviewed tile would rise from 116 → 257 (116 + 141), matching expectation.
+- Mock data fixture seeds one KPI in each stuck stage to drive the test deterministically.
 
-- `POLICY.md` §115 — add **"Tile↔List Parity Invariant: any reviewer-stage Reviewed tile MUST equal Σ visible badge3 when the matching status filter is applied."**
-- `DOCUMENTATION.md` v2.66.11.16 — RCA (April 2026 116 vs 46) + chosen fix.
-- `mem/features/review/hr-pms-reviewed-tile-semantics` — append parity invariant + reference to new test.
+### Step 5 — Documentation
 
-### Out of scope
+- `DOCUMENTATION.md` v2.66.11.17 — entry covering Steps 1–4, including the 116-is-correct RCA and the extended drain capability.
+- Changelog: link the new audit-log reasons so HR / Auditor can trace any zero-closure back to the operator who ran the drain.
 
-- Backfilling `hr_pms_score` rows for legacy auto-advanced KPIs.
-- Other reviewer tiles (Audit Reviewed, Management Reviewed) — same parity test will be cloned in a follow-up once the HR PMS path is proven.
+## Risk & Impact
 
-## Risk & impact
+- **Data:** Step 1 = read-only. Step 2 = writes that already exist (0-score + status=approved + audit log); the only new dimension is the source stage. Reversible via Rollback Request Management.
+- **Workflow:** Draining from `hr_pms_review` / `audit` / `management_review` skips a human reviewer — gated behind an explicit, audited Admin confirmation dialog (per Destructive Action Governance).
+- **UI/UX:** No tile shape change. The Reviewed number will go up only when Admin actually runs the extended drain — fully under operator control.
+- **Regression:** Low. Locked by parity test (Step 1) + per-stage drain tests (Step 4). Existing two-stage default behaviour is preserved.
 
-- **Data:** read-only; no schema/RLS/migrations.
-- **Workflow:** none.
-- **UI:** tile and list will agree. Number may go down (Fix A) or up (Fix B/C); whichever happens, it will match the visible cards.
-- **Regression:** low. Locked by the new parity test.
+## Out of scope
 
-## Why I want a diagnostic before patching
-
-The fix path in step 2 is *mutually exclusive* — patching A, B, and C blindly risks double-correcting and overshooting in the opposite direction. One refresh-and-paste from you closes it definitively.
+- Automatically running the drain on a cron. Today it's operator-initiated; keeping that explicit until you tell me otherwise.
+- Audit Reviewed / Management Reviewed tile parity tests — will be cloned once HR PMS path is proven.
