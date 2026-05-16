@@ -2846,3 +2846,17 @@ All reviewer roles (Admin, HR PMS, Management, Auditor, Manager, Skip-Level Mana
   - `reports_without_kpis` — roster exists but no KPIs assigned for the period → check KRA Issuance
   - `kpis_filtered_out` — KPIs exist but filters or stage hide them
 - Pure helper `diagnoseEmptyTeam` is unit-tested in `src/test/teamReviewsZeroDiagnostic.test.ts` (5 tests).
+
+---
+
+## §130 — KRA Issuance Cache Invalidation & Manager Gap Surfacing (v2.66.11.12)
+
+**Cache invalidation contract.** Any code path that creates `kpis` rows for one or more employees MUST invalidate the React Query key `['kpis-by-period-ranges']` so reviewer dashboards (Team Reviews, HR PMS, Manager / Skip-Level Pending) reflect the new KPIs immediately rather than after the 5-minute staleTime elapses.
+
+Patched call sites (v2.66.11.12): `CopyKrasDialog`, `BulkTemplateAssignDialog`. Future KRA-issuing flows (Smart KRA Assign, Template Bundles, Admin KPI Editor bulk-create, edge functions that write to `kpis` followed by a client refresh) MUST follow the same pattern.
+
+**Manager gap visibility.** `KRAIssuance` report renders a **"Managers Without KRAs"** panel listing every active manager (≥ 5 direct + indirect reports) whose entire reporting line has zero KPI rows for the selected period. The panel surfaces the same population that `TeamReviewsZeroDiagnostic` flags individually, but consolidated for HR PMS / Admin so issuance gaps don't depend on individual managers raising tickets.
+
+**Scope rule.** Department, designation, or grade changes never affect manager visibility — reviewer scope is computed strictly from `reporting_manager_id` chains in `get_reviewer_roster_slim` / `get_reviewer_kpis_for_period`. RCA closed: Sajid Raza (100264) zero-KPI banner was a false negative caused by a transient RPC failure, not by his department change.
+
+**Regression:** `src/test/managersWithoutKras.test.ts` (4 tests covering the gap predicate, indirect-hop counting, and `minReports` threshold).
