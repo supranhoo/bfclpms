@@ -1,12 +1,20 @@
 ---
 name: team-reviews-zero-kpi-rca
-description: KRA-issuance flows must invalidate ['kpis-by-period-ranges']; KRA Issuance report has a Managers Without KRAs gap panel; reviewer scope ignores department
+description: Reviewer SECURITY DEFINER RPCs must qualify CTE id columns; ?mgr filter is admin-only; KRA-issuance flows invalidate ['kpis-by-period-ranges']; KRA Issuance report has a Managers Without KRAs panel; reviewer scope ignores department
 type: feature
 ---
+**RPC hygiene (POLICY §131, v2.66.11.13).** SECURITY DEFINER reviewer helpers with `RETURNS TABLE (id uuid, …)` MUST qualify CTE columns as `SELECT p.id AS profile_id` and reference `cte.profile_id`. Bare `id` inside CTEs raises `42702 ambiguous column` only in the non-full-access branch, silently zeroing manager dashboards (Sajid Raza true RCA, 105 affected reviewers covering ~4,700 reports).
+
+**Hidden URL filter gating.** `EmployeeSelectorGrid` applies `?mgr=<uuid>` only when `isFullAccess === true`. Stale admin-session URL params must never narrow a manager's roster.
+
+**Diagnostic precedence.** `diagnoseEmptyTeam` evaluates `dataLoadError` BEFORE `no_reports_mapped / reports_without_kpis / kpis_filtered_out` so RPC failures never display "No KPIs assigned".
+
+**Auth-ready cache eviction.** `AuthContext` invalidates `['kpis-by-period-ranges']`, `['profiles']`, `['profiles-by-workflow-stage']`, `['team-members']`, `['skip-level-team-members']` on first auth-ready transition.
+
 **Cache invalidation contract (POLICY §130).** Every code path that creates `kpis` rows MUST invalidate `['kpis-by-period-ranges']` so reviewer dashboards reflect new KPIs immediately instead of waiting out the staleTime. Patched: `CopyKrasDialog`, `BulkTemplateAssignDialog`. Future KRA-creating flows (Smart KRA Assign, Template Bundles, edge functions followed by client refresh) must follow.
 
 **Manager gap panel.** `KRAIssuance` report (`/reports/kra-issuance`) renders a "Managers Without KRAs" card driven by `useManagersWithoutKras(period, year, { minReports: 5 })`. Lists active managers whose entire (direct ∪ indirect) reporting line has zero `kpis` rows for the selected period. Surfaces the same population that `TeamReviewsZeroDiagnostic` flags individually.
 
-**Scope rule.** Reviewer scope is computed strictly from `reporting_manager_id` chains in `get_reviewer_roster_slim` and `get_reviewer_kpis_for_period`. Department / designation / grade changes never affect a manager's Team Reviews counts. RCA closed: Sajid Raza (100264) zero-KPI banner was a false negative from a transient RPC failure, NOT his department change.
+**Scope rule.** Reviewer scope is computed strictly from `reporting_manager_id` chains in `get_reviewer_roster_slim` and `get_reviewer_kpis_for_period`. Department / designation / grade changes never affect a manager's Team Reviews counts. **RCA closed (v2.66.11.13):** Sajid Raza (100264) zero-KPI banner was a deterministic SQL error in the manager branch of both helper RPCs, NOT his department change and NOT a transient failure.
 
-Regression: `src/test/managersWithoutKras.test.ts` (4 tests covering predicate, indirect-hop counting, minReports threshold).
+Regression: `src/test/managersWithoutKras.test.ts` (predicate / indirect hops / minReports), `src/test/teamReviewsZeroDiagnostic.test.ts` (incl. data_load_error branch), `src/test/managerScopeFilterGate.test.ts` (admin-only `mgr` filter gate).
