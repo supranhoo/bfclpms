@@ -1,70 +1,62 @@
-## What the data says (April 2026, your 84-person HR PMS roster, 1090 KPIs)
 
-| Bucket | Count |
-|---|---|
-| Status structurally past `hr_pms_review` (`audit` / `management_review` / `approved`) | **116** |
-| Has `hr_pms_score` signature | 113 (all within the 116) |
-| `is_na` + past HR PMS | 3 |
-| **Union — "passed HR PMS by any process"** | **116** |
-| Currently AT `hr_pms_review` (in stage) | 448 |
-| Currently pre-HR-PMS (`kra_set` / `self_review` / `manager_check` / `skip_level_check`) | 526 |
+## Root Cause — why employee 200079 is invisible
 
-The tile is doing exactly what you asked it to do: it shows every roster KPI that has moved past the HR PMS stage by ANY path (HR PMS signature, N/A approval past HR PMS, or structural advancement). The number 116 is mathematically correct — there are no hidden KPIs that "passed HR PMS" but aren't counted.
+Siddharth Kumar Sharma (200079) is correctly:
+- `is_active = true`
+- has 17 April-2026 KPIs, all at status `approved`
+- has a resolved workflow that includes `hr_pms_review`
+- has `hr_pms_score` signatures on all 17 review_submissions
 
-## So why does it feel wrong
+So his 17 KPIs **are** counted inside the “HR PMS Reviewed = 116/1090” tile (via the score-signature branch at `EmployeeSelectorGrid.tsx:1071`). But his **card never appears** in the “Reviewed” list.
 
-Because of the zero-score policy. The system has 141 zero-scored KPIs scattered across `self_review` (30), `manager_check` (60), `skip_level_check` (1), `hr_pms_review` (31), `audit` (9), and `management_review` (11) — **the ones that "should" have been auto-zeroed and pushed all the way to approved are stuck at intermediate stages**. The current bulk-zero edge function (`bulk-zero-score-non-submitters`) only drains KPIs at `kra_set` and `self_review` — it ignores stuck KPIs at later stages. So once a manager / skip-level / HR PMS reviewer fails to act, the KPI sits there forever, never reaching "Reviewed by HR PMS".
+The bug is in `src/hooks/useWorkflowConfig.ts` → `useBulkEmployeeWorkflows`:
 
-That's the real gap. Fixing the tile won't help — we need to actually move those stuck KPIs through.
-
-## Plan
-
-### Step 1 — Confirm the tile is correct (no code change)
-
-- Strip the diagnostic `useEffect` in `EmployeeSelectorGrid.tsx` (added in v2.66.11.16).
-- Document in `DOCUMENTATION.md` v2.66.11.17 that 116 is the verified mathematical truth for April 2026 (table above).
-- Add `src/test/hrPmsReviewedTileVsList.test.ts` asserting the parity invariant: `tile.stat3 = Σ visible badge3` when `statusFilter='reviewed'`. This locks the tile correctness regardless of any future workflow churn.
-
-### Step 2 — Extend bulk-zero engine to drain stuck KPIs at later stages
-
-Today `supabase/functions/bulk-zero-score-non-submitters/index.ts` filters at L157 / L401:
 ```ts
-.in("status", ["kra_set", "self_review"])
+const { data, error } = await supabase
+  .rpc('get_bulk_employee_workflows', params);   // ← NOT paginated
 ```
 
-Extend it to a configurable set of "stuck-at" stages, defaulting to ALL pre-terminal stages a Data Owner / Admin chooses for that run. Specifically:
+For the HR PMS panel, `allEmployeeIds` = `stageFilteredProfiles` = **2,466 ids** (every active employee whose workflow contains `hr_pms_review`). PostgREST silently caps RPC responses at **1000 rows** (POLICY §125 — same class of bug we already fixed for `get_reviewer_roster_slim` and `get_reviewer_kpis_for_period`). The hook therefore returns workflow stages only for the first ~1000 employee_ids and drops the rest.
 
-- New optional param `stuck_at_stages: string[]` (default `["kra_set", "self_review"]`, allowed values include `manager_check`, `skip_level_check`, `hr_pms_review`, `audit`, `management_review`).
-- Same "set 0 across all stages → status='approved' → audit log" cascade applies, regardless of starting stage.
-- Scoring honours the existing `submissionData.hr_pms_score = 0` block when stages contain `hr_pms_review` — so a KPI zero-advanced from `manager_check` will pick up an HR PMS signature on the way out.
-- Audit reason field gets the new starting stage (`stuck_at_manager_check`, etc.) so HR can see WHY each KPI was auto-closed.
+For every employee past that cut-off (Siddharth sits alphabetically around position ~1900):
+- `workflowMap.has(empId)` → `false`
+- `getStages(empId)` falls back to `DEFAULT_WORKFLOW_STAGES = [kra_set, self_review, manager_check, audit, management_review, approved]` — **no `hr_pms_review`**
+- displayMembers filter (`EmployeeSelectorGrid.tsx:800`) computes `stages.indexOf('hr_pms_review') = -1` → employee is **not added** to the Reviewed list
+- The same exclusion silently hits Audit (line 1029), Skip-Level, and Management panels for any org with >1000 stage-eligible profiles
 
-Admin UI (`src/components/admin/BulkZeroScoreSection.tsx`) gets a multi-select for "Drain KPIs stuck at:" with the existing two stages pre-checked, and the four new stages opt-in with a warning that this closes the KPI on behalf of the reviewer.
+This also explains the earlier 4 vs 27 discrepancy: only employees who happen to fall in the first 1000 ids (alphabetical) get cards. The tile counts are higher because the signature branch doesn’t depend on `workflowMap`.
 
-### Step 3 — Policy update
+## Fix
 
-- `POLICY.md` — extend the zero-score governance section to declare: "After period lock, Admin / Data Owner MAY drain stuck KPIs from ANY pre-terminal stage (not just self_review). All affected KPIs receive a 0 across the cascade, status=`approved`, and an audit log row tagging the originating stuck stage."
-- `mem/features/admin/bulk-zero-scoring-system` — add the new stage set + safeguards (cannot run on an unlocked period; requires explicit confirmation when draining `hr_pms_review` / `audit` / `management_review` since those bypass a human reviewer).
+1. **`src/hooks/useWorkflowConfig.ts` — paginate `useBulkEmployeeWorkflows`**
+   - Chunk `employeeIds` into 500-id batches (same size used in `useOrganization.ts`).
+   - Call the RPC once per chunk in parallel via `Promise.all`, with one retry on failure (mirror the resilient pattern already in `useProfilesByWorkflowStage`).
+   - Merge all rows into a single `Map<string, string[]>`.
+   - Keep the query key + 5-min `staleTime` unchanged so cached pages still hit.
 
-### Step 4 — Tests & mock data
+2. **Regression test — `src/test/bulkEmployeeWorkflowsPagination.test.ts` (new)**
+   - Mock `supabase.rpc` to return 1000 rows on the first call and 500 on the second; assert the merged map has 1500 entries.
+   - Assert chunking kicks in above 500 ids (verify `rpc` is called ≥2 times for a 1500-id input).
+   - Static-source assertion: `useBulkEmployeeWorkflows` source contains `fetchAllRpcPaged` or an explicit chunk loop (mirrors `BUG-049` test style in `bugBountyFixes.test.ts`).
 
-- Unit test for the edge function dispatch path covering one stuck KPI per stage (5 cases).
-- Regression test: after a simulated drain of the 141 April KPIs, HR PMS Reviewed tile would rise from 116 → 257 (116 + 141), matching expectation.
-- Mock data fixture seeds one KPI in each stuck stage to drive the test deterministically.
+3. **Card-visibility parity test — `src/test/hrPmsRosterCompleteness.test.ts` (new)**
+   - Given a synthetic roster of 1200 employees all with `hr_pms_review` in their workflow and one KPI structurally past HR PMS, the reviewer-stage filter (`statusFilter='reviewed'`) must return all 1200, not ~1000.
+   - Locks the invariant: card count under Reviewed ≥ employees-with-signature in the tile.
 
-### Step 5 — Documentation
-
-- `DOCUMENTATION.md` v2.66.11.17 — entry covering Steps 1–4, including the 116-is-correct RCA and the extended drain capability.
-- Changelog: link the new audit-log reasons so HR / Auditor can trace any zero-closure back to the operator who ran the drain.
+4. **Documentation & policy sync**
+   - `DOCUMENTATION.md` v2.66.11.18 — RCA: PostgREST 1000-row cap silently truncates `get_bulk_employee_workflows` for orgs >1000 stage-eligible profiles; fixed by chunked fetch.
+   - `POLICY.md` §125 — extend the “any RPC that may return >1000 rows must paginate” rule to include hooks (not just reporting screens). Add `useBulkEmployeeWorkflows` to the enumerated list.
+   - `mem/architecture/data-import-engine` or a new `mem/infrastructure/postgrest-1000-row-cap` note — record that any new bulk-resolution hook must chunk inputs at ≤500 ids.
 
 ## Risk & Impact
 
-- **Data:** Step 1 = read-only. Step 2 = writes that already exist (0-score + status=approved + audit log); the only new dimension is the source stage. Reversible via Rollback Request Management.
-- **Workflow:** Draining from `hr_pms_review` / `audit` / `management_review` skips a human reviewer — gated behind an explicit, audited Admin confirmation dialog (per Destructive Action Governance).
-- **UI/UX:** No tile shape change. The Reviewed number will go up only when Admin actually runs the extended drain — fully under operator control.
-- **Regression:** Low. Locked by parity test (Step 1) + per-stage drain tests (Step 4). Existing two-stage default behaviour is preserved.
+- **Data Impact:** none — read-only fix. No schema, RLS, or migration changes.
+- **Workflow Impact:** none on stored data. Visible-roster size will grow for HR PMS / Audit / Skip-Level / Management panels in orgs >1000 stage-eligible profiles. Tile values (which already used signatures) stay identical; per-card badges become consistent with the tile.
+- **UI/UX Consistency:** existing layout, pagination (24/page), and sort order unchanged. More cards may now appear on later pages.
+- **Regression Risk:** Low. The hook is called from `EmployeeSelectorGrid` and `useBottleneckReport`; both already treat `workflowMap` as “lookup with fallback”, so a fuller map can only improve correctness. Parallel chunked RPC calls are the same pattern already proven in `useProfilesByWorkflowStage`.
+- **Mitigation:** New pagination unit test + roster-completeness test guard against the 1000-row cap returning. Keep `staleTime` so we don’t inflate request volume.
 
 ## Out of scope
 
-- Automatically running the drain on a cron. Today it's operator-initiated; keeping that explicit until you tell me otherwise.
-- Audit Reviewed / Management Reviewed tile parity tests — will be cloned once HR PMS path is proven.
+- Bulk-zero engine changes (already shipped in v2.66.11.17).
+- Tile/list semantics — both branches already agree once the workflow map is complete.
