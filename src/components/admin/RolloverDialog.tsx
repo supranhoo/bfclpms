@@ -50,6 +50,9 @@ interface RolloverResponse {
   skipped?: boolean;
   reason?: string;
   error?: string;
+  audit_assignments_cloned?: number;
+  audit_assignments_skipped_already_assigned?: number;
+  audit_clone_errors?: string[];
 }
 
 interface RolloverDialogProps {
@@ -92,6 +95,10 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
   const [previewData, setPreviewData] = useState<RolloverResponse | null>(null);
   const [balanceIds, setBalanceIds] = useState<Set<string>>(new Set());
   const [results, setResults] = useState<RolloverResponse | null>(null);
+  // Opt-in: carry forward `audit_kpi_level_assignments` (per-KPI auditor
+  // mappings) from the source period onto the newly created target KPIs.
+  // Off by default — existing assignments on target KPIs are never overwritten.
+  const [carryAuditAssignments, setCarryAuditAssignments] = useState(true);
 
   // When opened in scoped mode, ensure state stays locked to the scoped employee
   // and the supplied target period each time the dialog is reopened.
@@ -186,6 +193,7 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
           dry_run: false,
           rollover_balance_only: true,
           skip_employee_ids: skipIds,
+          carry_audit_assignments: carryAuditAssignments,
         },
       });
       if (error) throw error;
