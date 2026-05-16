@@ -762,6 +762,9 @@ Deno.serve(async (req) => {
         source_year: sourceYear,
         target_period: targetMonth,
         target_year: targetYear,
+        audit_assignments_cloned: auditAssignmentsCloned,
+        audit_assignments_skipped_already_assigned: auditAssignmentsSkipped,
+        audit_clone_errors: auditCloneErrors,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
