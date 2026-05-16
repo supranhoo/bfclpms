@@ -636,7 +636,11 @@ export function EmployeeSelectorGrid({
     if (selectedGrade) {
       filtered = filtered?.filter(p => p.pms_grade === selectedGrade);
     }
-    if (selectedManager) {
+    // v2.66.11.13 — The hidden `?mgr=` filter is an admin/full-access affordance
+    // (only the Manager combobox in EmployeeFilters is rendered for full-access).
+    // Non-full reviewers must always see their full direct + indirect roster, so
+    // any stale `mgr` URL param from a prior admin session is ignored here.
+    if (selectedManager && isFullAccess) {
       filtered = filtered?.filter(p => p.reporting_manager_id === selectedManager);
     }
 
@@ -1918,7 +1922,9 @@ export function EmployeeSelectorGrid({
       {/* Stats Cards */}
       {!isExploreMode && renderStatsCards()}
 
-      {/* v2.66.11.11 — Zero-state diagnostic for Manager / Skip-Level on Team Reviews */}
+      {/* v2.66.11.11 — Zero-state diagnostic for Manager / Skip-Level on Team Reviews
+          v2.66.11.13 — adds a data_load_error branch so RPC/network failures stop
+          showing the misleading "No KPIs assigned" banner. */}
       {!isExploreMode && viewLevel === 'team' && !isFullAccess && stats.totalEmployees === 0 && (
         <TeamReviewsZeroDiagnostic
           directCount={teamMembers?.length ?? 0}
@@ -1927,10 +1933,15 @@ export function EmployeeSelectorGrid({
           totalEmployees={stats.totalEmployees}
           selectedPeriod={selectedPeriod}
           selectedYear={selectedYear}
+          dataLoadError={
+            !!periodKpisError || !!teamError || !!skipError ||
+            !!profilesError || !!stageFilteredError
+          }
           onRefresh={() => {
             refetchTeam();
             refetchSkip();
             refetchPeriodKpis();
+            refetchProfiles();
           }}
         />
       )}

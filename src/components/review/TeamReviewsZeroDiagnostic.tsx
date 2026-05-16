@@ -14,7 +14,8 @@ import { Button } from '@/components/ui/button';
 export type ZeroDiagnosisCode =
   | 'no_reports_mapped'
   | 'reports_without_kpis'
-  | 'kpis_filtered_out';
+  | 'kpis_filtered_out'
+  | 'data_load_error';
 
 export interface ZeroDiagnosis {
   code: ZeroDiagnosisCode;
@@ -29,9 +30,19 @@ export function diagnoseEmptyTeam(input: {
   totalEmployees: number;
   selectedPeriod: string;
   selectedYear: number | string;
+  dataLoadError?: boolean;
 }): ZeroDiagnosis {
-  const { directCount, skipCount, periodKpiCount, totalEmployees, selectedPeriod, selectedYear } = input;
+  const { directCount, skipCount, periodKpiCount, totalEmployees, selectedPeriod, selectedYear, dataLoadError } = input;
   const reportsTotal = directCount + skipCount;
+
+  if (dataLoadError) {
+    return {
+      code: 'data_load_error',
+      title: 'Dashboard data could not be loaded',
+      message:
+        'The roster or KPI query failed to return. This is usually a transient network or backend issue — try Refresh roster, or reload the page in a moment.',
+    };
+  }
 
   if (reportsTotal === 0) {
     return {
@@ -66,6 +77,7 @@ interface Props {
   totalEmployees: number;
   selectedPeriod: string;
   selectedYear: number | string;
+  dataLoadError?: boolean;
   onRefresh?: () => void;
 }
 
