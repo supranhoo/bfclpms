@@ -2860,3 +2860,19 @@ Patched call sites (v2.66.11.12): `CopyKrasDialog`, `BulkTemplateAssignDialog`. 
 **Scope rule.** Department, designation, or grade changes never affect manager visibility — reviewer scope is computed strictly from `reporting_manager_id` chains in `get_reviewer_roster_slim` / `get_reviewer_kpis_for_period`. RCA closed: Sajid Raza (100264) zero-KPI banner was a false negative caused by a transient RPC failure, not by his department change.
 
 **Regression:** `src/test/managersWithoutKras.test.ts` (4 tests covering the gap predicate, indirect-hop counting, and `minReports` threshold).
+
+---
+
+## §131 — Reviewer SECURITY DEFINER RPC Hygiene & Hidden URL Filter Gating (v2.66.11.13)
+
+**RCA — Sajid Raza, true root cause.** The Apr/May 2026 zero-KPI Team Reviews banner was **not** a transient failure as previously logged in §130. Both `get_reviewer_kpis_for_period(text,integer)` and `get_reviewer_roster_slim()` raised `42702 column reference "id" is ambiguous` **only inside the non-full-access (manager / skip-level) branch**, because the CTEs `directs / indirects / mine / visible` exposed an unqualified `id` column that collided with the function's `RETURNS TABLE (id uuid, …)` output column. Admin / HR PMS / Auditor / Management took the `v_is_full = true` branch and were unaffected, which is why Admin View showed 13 employees with KPIs while Sajid's Manager View showed 0. **Affected population:** every non-full reviewer with a mapped roster — current snapshot = **105 reviewers covering 2,473 direct + 2,226 indirect reports**.
+
+**RPC contract.** Every SECURITY DEFINER reviewer helper that returns a `RETURNS TABLE (id uuid, …)` MUST qualify CTE output columns (e.g. `SELECT p.id AS profile_id`) and reference them as `cte.profile_id`. Bare `id` inside CTEs is forbidden because PL/pgSQL can ambiguate against the result column.
+
+**Hidden URL filter gating.** The Team Reviews `?mgr=<uuid>` URL parameter is an **admin / full-access affordance only** (only the Manager combobox in `EmployeeFilters` is rendered when `showManagerFilter` is true, which itself is gated by `isFullAccess`). `EmployeeSelectorGrid.demographicFilteredMembers` MUST therefore apply `selectedManager` only when `isFullAccess === true`, otherwise a stale `mgr` param from a prior admin session silently narrows a manager's roster to a single direct line.
+
+**Auth-ready cache eviction.** `AuthContext` MUST invalidate the manager dashboard caches once the auth bootstrap completes for the first time, including `['kpis-by-period-ranges']`, `['profiles']`, `['profiles-by-workflow-stage']`, `['team-members']`, and `['skip-level-team-members']`. Without this, RPCs that race the bootstrap return zero rows under `auth.uid() IS NULL` and stay cached.
+
+**Diagnostic precedence.** `TeamReviewsZeroDiagnostic.diagnoseEmptyTeam` evaluates `dataLoadError` BEFORE the `no_reports_mapped / reports_without_kpis / kpis_filtered_out` branches, so an upstream RPC or network error never masquerades as "No KPIs assigned".
+
+**Regression:** `src/test/teamReviewsZeroDiagnostic.test.ts` adds a `data_load_error` case; `src/test/managerScopeFilterGate.test.ts` (3 tests) protects the `isFullAccess` gate on the `mgr` filter.
