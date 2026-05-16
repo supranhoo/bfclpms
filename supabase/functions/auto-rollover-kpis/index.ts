@@ -547,6 +547,117 @@ Deno.serve(async (req) => {
       totalInserted += insertedCount || 0;
     }
 
+    // ── Optional: carry forward auditor mappings (audit_kpi_level_assignments) ──
+    // Triggered when carry_audit_assignments=true. Idempotent: target KPIs that
+    // already have an assignment row are preserved (UNIQUE kpi_id constraint).
+    let auditAssignmentsCloned = 0;
+    let auditAssignmentsSkipped = 0;
+    const auditCloneErrors: string[] = [];
+    if (carry_audit_assignments && sigToSourceKpiId.size > 0) {
+      try {
+        const sourceKpiIds = Array.from(new Set(sigToSourceKpiId.values()));
+
+        // 1. Pull every audit assignment that exists on the source KPIs.
+        const sourceAssignmentByKpi = new Map<string, string>(); // src_kpi_id → auditor_id
+        for (let i = 0; i < sourceKpiIds.length; i += 200) {
+          const chunk = sourceKpiIds.slice(i, i + 200);
+          const { data, error } = await supabase
+            .from('audit_kpi_level_assignments')
+            .select('kpi_id, auditor_id')
+            .in('kpi_id', chunk);
+          if (error) throw new Error(`Fetch source audit assignments: ${error.message}`);
+          for (const row of data || []) {
+            sourceAssignmentByKpi.set(row.kpi_id, row.auditor_id);
+          }
+        }
+
+        if (sourceAssignmentByKpi.size > 0) {
+          // 2. Re-fetch the newly created target KPIs so we know their ids.
+          //    Filter by employee_ids + target year + the resolved months we used.
+          const targetEmployeeIds = Array.from(new Set(kpisToInsert.map((k: any) => k.employee_id)));
+          const targetMonths = Array.from(new Set(kpisToInsert.map((k: any) => k.review_period)));
+          const targetSigToId = new Map<string, string>(); // sig → target_kpi_id
+          for (let i = 0; i < targetEmployeeIds.length; i += 50) {
+            const empChunk = targetEmployeeIds.slice(i, i + 50);
+            let tp = 0;
+            while (true) {
+              const { data, error } = await supabase
+                .from('kpis')
+                .select('id, employee_id, review_period, review_year, kra_name, kpi_name')
+                .eq('review_year', targetYear)
+                .in('review_period', targetMonths)
+                .in('employee_id', empChunk)
+                .range(tp * PAGE_SIZE, (tp + 1) * PAGE_SIZE - 1);
+              if (error) throw new Error(`Fetch target KPIs: ${error.message}`);
+              if (!data || data.length === 0) break;
+              for (const r of data) {
+                const sig = `${r.employee_id}|${r.review_year}|${r.review_period}|${r.kra_name}|${r.kpi_name}`;
+                targetSigToId.set(sig, r.id);
+              }
+              if (data.length < PAGE_SIZE) break;
+              tp++;
+            }
+          }
+
+          // 3. Build assignment rows for newly created target KPIs whose source
+          //    KPI had an auditor mapping.
+          const rowsToUpsert: { kpi_id: string; auditor_id: string; assigned_by: string | null }[] = [];
+          for (const [sig, srcKpiId] of sigToSourceKpiId.entries()) {
+            const targetKpiId = targetSigToId.get(sig);
+            if (!targetKpiId) continue;
+            const auditorId = sourceAssignmentByKpi.get(srcKpiId);
+            if (!auditorId) continue;
+            rowsToUpsert.push({
+              kpi_id: targetKpiId,
+              auditor_id: auditorId,
+              assigned_by: null, // automated rollover — system performer attribution
+            });
+          }
+
+          // 4. Upsert in batches; UNIQUE (kpi_id) → ignoreDuplicates preserves
+          //    any pre-existing manual assignment on the target KPI.
+          for (let i = 0; i < rowsToUpsert.length; i += 500) {
+            const batch = rowsToUpsert.slice(i, i + 500);
+            const { error, count } = await supabase
+              .from('audit_kpi_level_assignments')
+              .upsert(batch, { onConflict: 'kpi_id', ignoreDuplicates: true, count: 'exact' });
+            if (error) {
+              auditCloneErrors.push(error.message);
+              continue;
+            }
+            auditAssignmentsCloned += count ?? 0;
+            auditAssignmentsSkipped += batch.length - (count ?? 0);
+          }
+
+          // 5. Audit-log the bulk action (best-effort).
+          try {
+            await supabase.from('system_audit_logs').insert({
+              action: 'AUDIT_ASSIGNMENTS_CARRIED_FORWARD',
+              performed_by: null,
+              metadata: {
+                source_period: sourceMonth,
+                source_year: sourceYear,
+                target_period: targetMonth,
+                target_year: targetYear,
+                triggered_by,
+                source_assignments_found: sourceAssignmentByKpi.size,
+                target_kpis_matched: rowsToUpsert.length,
+                cloned: auditAssignmentsCloned,
+                skipped_already_assigned: auditAssignmentsSkipped,
+                errors: auditCloneErrors,
+              },
+            });
+          } catch (logErr) {
+            console.error('Audit-clone log insert failed:', logErr);
+          }
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('Carry-forward audit assignments failed:', msg);
+        auditCloneErrors.push(msg);
+      }
+    }
+
     // ── Send ONE consolidated notification + email per affected employee ──
     // (supabaseUrl is already declared at the top of the handler)
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
