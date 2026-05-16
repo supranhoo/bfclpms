@@ -11,7 +11,8 @@ const corsHeaders = {
  * Bulk Zero-Score Non-Submitters
  *
  * Modes:
- *   scan    – Returns KPIs stuck at kra_set / self_review for a given period/year
+ *   scan    – Returns KPIs stuck at the configured stages for a given period/year
+ *              (default: kra_set, self_review)
  *   execute – Sets score 0 across all workflow levels, advances to approved, logs audit
  *
  * Body:
@@ -22,9 +23,35 @@ const corsHeaders = {
  *   kpi_ids: string[]          (execute only – selected KPIs)
  *   org_kpi_ids: string[]      (execute only – selected org KPI value IDs)
  *   admin_remarks: string      (execute only)
+ *   stuck_at_stages: string[]  (optional, default ["kra_set","self_review"])
+ *                              v2.66.11.17 — admin may also drain manager_check,
+ *                              skip_level_check, hr_pms_review, audit,
+ *                              management_review when reviewers fail to act.
  */
 
 // Deploy sync marker: 2026-04-10T2 org-filter support.
+
+// v2.66.11.17 — whitelist of stages that may be drained. Anything else is
+// rejected to prevent accidental zero-scoring of terminal/unknown statuses.
+const ALLOWED_STUCK_STAGES = new Set([
+  "kra_set",
+  "self_review",
+  "manager_check",
+  "skip_level_check",
+  "hr_pms_review",
+  "audit",
+  "management_review",
+]);
+
+function sanitizeStuckStages(input: unknown): string[] {
+  if (!Array.isArray(input) || input.length === 0) {
+    return ["kra_set", "self_review"];
+  }
+  const cleaned = input
+    .filter((s): s is string => typeof s === "string")
+    .filter((s) => ALLOWED_STUCK_STAGES.has(s));
+  return cleaned.length > 0 ? Array.from(new Set(cleaned)) : ["kra_set", "self_review"];
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -87,6 +114,7 @@ Deno.serve(async (req) => {
     const businessUnitId: string | null = body?.business_unit_id ?? null;
     const departmentId: string | null = body?.department_id ?? null;
     const employeeId: string | null = body?.employee_id ?? null;
+    const stuckAtStages: string[] = sanitizeStuckStages(body?.stuck_at_stages);
 
     if (!reviewPeriod || !reviewYear) {
       return new Response(
@@ -154,7 +182,7 @@ Deno.serve(async (req) => {
           )
           .eq("review_period", reviewPeriod)
           .eq("review_year", reviewYear)
-          .in("status", ["kra_set", "self_review"]);
+          .in("status", stuckAtStages);
         if (employeeId) query = query.eq("employee_id", employeeId);
         const { data: batch, error: bErr } = await query.range(offset, offset + BATCH_SIZE - 1);
         if (bErr) throw bErr;
@@ -327,7 +355,7 @@ Deno.serve(async (req) => {
           review_year: kpi.review_year,
           current_status: kpi.status,
           action: "zero_scorable",
-          reason: kpi.status === "kra_set" ? "stuck_at_kra_set" : "stuck_at_self_review",
+          reason: `stuck_at_${kpi.status}`,
         });
       }
 
@@ -398,7 +426,7 @@ Deno.serve(async (req) => {
         .from("kpis")
         .select("id, employee_id, kpi_name, kra_name, category_id, review_period, review_year, status")
         .in("id", kpiIds)
-        .in("status", ["kra_set", "self_review"]);
+        .in("status", stuckAtStages);
 
       if (!targetKpis || targetKpis.length === 0) {
         return new Response(
@@ -407,7 +435,7 @@ Deno.serve(async (req) => {
             zero_scored: 0,
             skipped: kpiIds.length,
             org_zero_scored: 0,
-            errors: ["No eligible KPIs found in kra_set or self_review status"],
+            errors: [`No eligible KPIs found in stages: ${stuckAtStages.join(", ")}`],
             details: [],
             batch_id: batchId,
             ran_at: timestamp,
@@ -615,6 +643,7 @@ Deno.serve(async (req) => {
               period: reviewPeriod,
               year: reviewYear,
               batch_id: batchId,
+              stuck_at_stage: oldStatus,
             },
           });
 

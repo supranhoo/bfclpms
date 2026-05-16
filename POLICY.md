@@ -2890,3 +2890,11 @@ Patched call sites (v2.66.11.12): `CopyKrasDialog`, `BulkTemplateAssignDialog`. 
 **Diagnostic precedence.** `TeamReviewsZeroDiagnostic.diagnoseEmptyTeam` evaluates `dataLoadError` BEFORE the `no_reports_mapped / reports_without_kpis / kpis_filtered_out` branches, so an upstream RPC or network error never masquerades as "No KPIs assigned".
 
 **Regression:** `src/test/teamReviewsZeroDiagnostic.test.ts` adds a `data_load_error` case; `src/test/managerScopeFilterGate.test.ts` (3 tests) protects the `isFullAccess` gate on the `mgr` filter.
+
+### §115 Extension — Stuck-Stage Drain Authority (v2.66.11.17)
+
+After period lock, Admin / Data Owner MAY drain stuck KPIs from ANY pre-terminal stage (whitelist: `kra_set`, `self_review`, `manager_check`, `skip_level_check`, `hr_pms_review`, `audit`, `management_review`). All affected KPIs receive 0 across the cascade, status advances to `approved`, and a `kpi_audit_logs` row is written with `metadata.stuck_at_stage = <originating_status>` so HR / Auditor can trace why the human reviewer was bypassed. The UI MUST display an explicit reviewer-bypass warning when the operator opts into any of the 5 reviewer stages. Default behaviour (kra_set + self_review only) is preserved. Regression: `src/test/bulkZeroStageDrain.test.ts`.
+
+### §115 Tile↔List Parity Invariant (v2.66.11.17)
+
+For every reviewer-stage "Reviewed" tile on the HR PMS / Audit / Management dashboards, `tile.stat3` MUST equal Σ visible `badge3` over the employees surfaced when `statusFilter='reviewed'`. Regression: `src/test/hrPmsReviewedTileVsList.test.ts`.

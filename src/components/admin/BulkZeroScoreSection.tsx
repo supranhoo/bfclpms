@@ -71,12 +71,31 @@ interface ExecuteResult {
 const REASON_LABELS: Record<string, string> = {
   stuck_at_kra_set: 'Stuck at KRA Set — no self-review submitted',
   stuck_at_self_review: 'Stuck at Self Review — not forwarded',
+  stuck_at_manager_check: 'Stuck at Manager Review — not actioned',
+  stuck_at_skip_level_check: 'Stuck at Skip-Level — not actioned',
+  stuck_at_hr_pms_review: 'Stuck at HR PMS — not actioned',
+  stuck_at_audit: 'Stuck at Audit — not actioned',
+  stuck_at_management_review: 'Stuck at Management Review — not actioned',
   sent_back_open_query: 'Sent back (open query) — excluded',
   non_terminal_multi_month: 'Non-terminal month — not yet due',
   no_data_entered: 'Org KPI — no data entered',
   not_propagated: 'Org KPI — not yet propagated',
   all_levels_zeroed: 'All levels scored 0 successfully',
 };
+
+// v2.66.11.17 — stages a Data Owner / Admin may drain. Default = pre-reviewer
+// (kra_set / self_review). Later stages are gated: enabling them bypasses a
+// human reviewer, so the confirmation dialog calls that out explicitly.
+const DRAINABLE_STAGES: { value: string; label: string; reviewerBypass: boolean }[] = [
+  { value: 'kra_set', label: 'KRA Set (no self-review)', reviewerBypass: false },
+  { value: 'self_review', label: 'Self Review (not forwarded)', reviewerBypass: false },
+  { value: 'manager_check', label: 'Manager Review', reviewerBypass: true },
+  { value: 'skip_level_check', label: 'Skip-Level', reviewerBypass: true },
+  { value: 'hr_pms_review', label: 'HR PMS', reviewerBypass: true },
+  { value: 'audit', label: 'Audit', reviewerBypass: true },
+  { value: 'management_review', label: 'Management Review', reviewerBypass: true },
+];
+const DEFAULT_STUCK_STAGES = ['kra_set', 'self_review'];
 
 export function BulkZeroScoreSection() {
   const currentDate = new Date();
@@ -153,6 +172,18 @@ export function BulkZeroScoreSection() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [adminRemarks, setAdminRemarks] = useState('Data not submitted by deadline');
+  const [stuckAtStages, setStuckAtStages] = useState<string[]>(DEFAULT_STUCK_STAGES);
+
+  const reviewerBypassStages = useMemo(
+    () => stuckAtStages.filter((s) => DRAINABLE_STAGES.find((d) => d.value === s)?.reviewerBypass),
+    [stuckAtStages],
+  );
+
+  const toggleStuckStage = (value: string) => {
+    setStuckAtStages((prev) =>
+      prev.includes(value) ? prev.filter((s) => s !== value) : [...prev, value],
+    );
+  };
 
   const zeroScorableRows = useMemo(
     () => scanDetails?.filter(r => r.action === 'zero_scorable') ?? [],
@@ -177,6 +208,7 @@ export function BulkZeroScoreSection() {
         division_id: divisionId,
         business_unit_id: businessUnitId,
         department_id: departmentId,
+        stuck_at_stages: stuckAtStages,
       });
 
       setScanDetails(data.details || []);
@@ -215,6 +247,7 @@ export function BulkZeroScoreSection() {
         division_id: divisionId,
         business_unit_id: businessUnitId,
         department_id: departmentId,
+        stuck_at_stages: stuckAtStages,
       });
       setExecuteResult(data);
       setScanDetails(null);
@@ -387,6 +420,49 @@ export function BulkZeroScoreSection() {
               <><Search className="h-4 w-4" /> Scan Non-Submitters</>
             )}
           </Button>
+        </div>
+
+        {/* v2.66.11.17 — Stage picker. Drain KPIs stuck at any pre-terminal stage. */}
+        <div className="rounded-lg border p-3 space-y-2">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <p className="text-sm font-medium">Drain KPIs stuck at</p>
+              <p className="text-xs text-muted-foreground">
+                By default, only employees who never submitted are zero-scored. Enable later
+                stages to also drain KPIs stuck on a reviewer who failed to act.
+              </p>
+            </div>
+            {reviewerBypassStages.length > 0 && (
+              <Badge variant="destructive" className="text-xs flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" />
+                Bypasses {reviewerBypassStages.length} reviewer stage(s)
+              </Badge>
+            )}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+            {DRAINABLE_STAGES.map((stage) => {
+              const checked = stuckAtStages.includes(stage.value);
+              return (
+                <label
+                  key={stage.value}
+                  className={cn(
+                    'flex items-center gap-2 px-2 py-1.5 rounded border text-sm cursor-pointer transition-colors',
+                    checked ? 'bg-muted border-primary/40' : 'hover:bg-muted/40',
+                    stage.reviewerBypass && checked && 'border-destructive/40 bg-destructive/5',
+                  )}
+                >
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={() => toggleStuckStage(stage.value)}
+                  />
+                  <span className="flex-1">{stage.label}</span>
+                  {stage.reviewerBypass && (
+                    <AlertTriangle className="h-3 w-3 text-destructive shrink-0" />
+                  )}
+                </label>
+              );
+            })}
+          </div>
         </div>
 
         {/* Prior batch warning */}
@@ -652,6 +728,17 @@ export function BulkZeroScoreSection() {
                 Status will advance to "Approved". This action is IRREVERSIBLE.
               </AlertDialogDescription>
             </AlertDialogHeader>
+            {reviewerBypassStages.length > 0 && (
+              <div className="flex items-start gap-2 rounded border border-destructive/40 bg-destructive/5 p-2 text-xs">
+                <AlertTriangle className="h-4 w-4 mt-0.5 text-destructive shrink-0" />
+                <span className="text-destructive">
+                  You are draining KPIs already in a reviewer stage
+                  (<span className="font-mono">{reviewerBypassStages.join(', ')}</span>).
+                  This bypasses a human reviewer and is recorded in the audit log with the
+                  originating stage.
+                </span>
+              </div>
+            )}
             <div className="space-y-2 py-2">
               <label className="text-sm font-medium">
                 Type <span className="font-mono font-bold text-destructive">ZERO</span> to confirm:
