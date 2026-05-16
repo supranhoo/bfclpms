@@ -2831,3 +2831,18 @@ Any code path that calls `isKpiLockedForPeriod(frequency, month, year, ...)` for
 | Date | Production call sites | Violations |
 |------|----------------------|-----------|
 | 2026-05-12 | 10 | 0 |
+
+---
+
+## §129 — Team Reviews Tile Parity (v2.66.11.11)
+
+All reviewer roles (Admin, HR PMS, Management, Auditor, Manager, Skip-Level Manager) see the **same 6 tiles** on the Team Reviews dashboard: Total Employees · KRA Set · Direct Pending · Skip-Level Pending · Reviewed · Org KPIs.
+
+- Tile **layout** is role-independent. Tile **counts** remain role-scoped: managers count their direct/indirect roster only; full-access roles count org-wide. This is by design and unchanged from v2.66.11.8.
+- The **Org KPIs** tile is informational and shows period-wide entered/propagated/total counts to every role. No additional RLS exposure — counts come from `org_kpi_values.status` only.
+- Tile #1 label is always **"Total Employees"** (previously read "Team Size" for non-full-access roles).
+- When a Manager / Skip-Level user lands on Team Reviews and `Total Employees === 0`, a **diagnostic banner** (`TeamReviewsZeroDiagnostic`) explains the cause:
+  - `no_reports_mapped` — empty roster → fix in User Management
+  - `reports_without_kpis` — roster exists but no KPIs assigned for the period → check KRA Issuance
+  - `kpis_filtered_out` — KPIs exist but filters or stage hide them
+- Pure helper `diagnoseEmptyTeam` is unit-tested in `src/test/teamReviewsZeroDiagnostic.test.ts` (5 tests).
