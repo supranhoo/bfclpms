@@ -1917,6 +1917,23 @@ export function EmployeeSelectorGrid({
       {/* Stats Cards */}
       {!isExploreMode && renderStatsCards()}
 
+      {/* v2.66.11.11 — Zero-state diagnostic for Manager / Skip-Level on Team Reviews */}
+      {!isExploreMode && viewLevel === 'team' && !isFullAccess && stats.totalEmployees === 0 && (
+        <TeamReviewsZeroDiagnostic
+          directCount={teamMembers?.length ?? 0}
+          skipCount={skipLevelMembers?.length ?? 0}
+          periodKpiCount={periodKpis?.length ?? 0}
+          totalEmployees={stats.totalEmployees}
+          selectedPeriod={selectedPeriod}
+          selectedYear={selectedYear}
+          onRefresh={() => {
+            refetchTeam();
+            refetchSkip();
+            refetchPeriodKpis();
+          }}
+        />
+      )}
+
       {/* v2.64.9 — Roster resolution diagnostic (admin / full-access only) */}
       {isFullAccess && requiredStage && rosterMeta && (
         <div className="text-xs text-muted-foreground flex items-center gap-2 -mt-2">
