@@ -1,0 +1,12 @@
+---
+name: team-reviews-zero-kpi-rca
+description: KRA-issuance flows must invalidate ['kpis-by-period-ranges']; KRA Issuance report has a Managers Without KRAs gap panel; reviewer scope ignores department
+type: feature
+---
+**Cache invalidation contract (POLICY §130).** Every code path that creates `kpis` rows MUST invalidate `['kpis-by-period-ranges']` so reviewer dashboards reflect new KPIs immediately instead of waiting out the staleTime. Patched: `CopyKrasDialog`, `BulkTemplateAssignDialog`. Future KRA-creating flows (Smart KRA Assign, Template Bundles, edge functions followed by client refresh) must follow.
+
+**Manager gap panel.** `KRAIssuance` report (`/reports/kra-issuance`) renders a "Managers Without KRAs" card driven by `useManagersWithoutKras(period, year, { minReports: 5 })`. Lists active managers whose entire (direct ∪ indirect) reporting line has zero `kpis` rows for the selected period. Surfaces the same population that `TeamReviewsZeroDiagnostic` flags individually.
+
+**Scope rule.** Reviewer scope is computed strictly from `reporting_manager_id` chains in `get_reviewer_roster_slim` and `get_reviewer_kpis_for_period`. Department / designation / grade changes never affect a manager's Team Reviews counts. RCA closed: Sajid Raza (100264) zero-KPI banner was a false negative from a transient RPC failure, NOT his department change.
+
+Regression: `src/test/managersWithoutKras.test.ts` (4 tests covering predicate, indirect-hop counting, minReports threshold).
