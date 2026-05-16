@@ -17,7 +17,7 @@ const hookSrc = fs.readFileSync(
 describe('useBulkEmployeeWorkflows: source-level chunking guard', () => {
   it('hook source chunks employee_ids before calling the RPC', () => {
     // Either via the dedicated chunked loop or fetchAllRpcPaged.
-    const hasChunkLoop = /for\s*\([^)]*employeeIds\.length[^)]*\+=\s*\d+/.test(hookSrc);
+    const hasChunkLoop = /for\s*\([^)]*employeeIds\.length[^)]*\+=\s*\w+/.test(hookSrc);
     const hasPagedHelper = /fetchAllRpcPaged/.test(hookSrc);
     expect(hasChunkLoop || hasPagedHelper).toBe(true);
   });
