@@ -19,20 +19,25 @@ function sig(k: { employee_id: string; review_year: number; review_period: strin
   return `${k.employee_id}|${k.review_year}|${k.review_period}|${k.kra_name}|${k.kpi_name}`;
 }
 
+/**
+ * Mirrors the edge-function logic exactly: at clone-time we store a map
+ * keyed by the TARGET signature (target year + target period + employee +
+ * KRA + KPI name) whose value is the SOURCE kpi id we cloned from. Then
+ * after KPIs are inserted we re-fetch the target rows, rebuild the same
+ * signature, and look up which source KPI to inherit the auditor from.
+ */
 function planAuditCarryForward(
-  sourceKpis: SourceKpi[],
+  // sigToSourceKpiId: mapping captured during the rollover insert phase
+  sigToSourceKpiId: Map<string, string>,
   targetKpis: TargetKpi[],
   sourceAssignments: Record<string, string>, // src_kpi_id → auditor_id
   existingTargetAssignedKpiIds: Set<string>,
 ) {
-  const srcSigToId = new Map<string, string>();
-  for (const s of sourceKpis) srcSigToId.set(sig(s), s.id);
-
   const toCreate: { kpi_id: string; auditor_id: string }[] = [];
   let preservedCount = 0;
 
   for (const t of targetKpis) {
-    const srcId = srcSigToId.get(sig(t));
+    const srcId = sigToSourceKpiId.get(sig(t));
     if (!srcId) continue;
     const auditor = sourceAssignments[srcId];
     if (!auditor) continue;
@@ -46,6 +51,17 @@ function planAuditCarryForward(
   return { toCreate, preservedCount };
 }
 
+function buildSigMap(pairs: Array<{ src: SourceKpi; targetMonth: string; targetYear: number }>) {
+  const m = new Map<string, string>();
+  for (const { src, targetMonth, targetYear } of pairs) {
+    m.set(
+      `${src.employee_id}|${targetYear}|${targetMonth}|${src.kra_name}|${src.kpi_name}`,
+      src.id,
+    );
+  }
+  return m;
+}
+
 describe('carry_audit_assignments — source → target matching', () => {
   const baseSrc: SourceKpi = {
     id: 'src-1', employee_id: 'emp-1', review_year: 2026,
@@ -55,7 +71,7 @@ describe('carry_audit_assignments — source → target matching', () => {
 
   it('clones auditor mapping onto the new target KPI', () => {
     const plan = planAuditCarryForward(
-      [baseSrc],
+      buildSigMap([{ src: baseSrc, targetMonth: 'April', targetYear: 2026 }]),
       [baseTgt],
       { 'src-1': 'auditor-99' },
       new Set(),
@@ -66,7 +82,7 @@ describe('carry_audit_assignments — source → target matching', () => {
 
   it('preserves existing target assignments (UNIQUE kpi_id semantics)', () => {
     const plan = planAuditCarryForward(
-      [baseSrc],
+      buildSigMap([{ src: baseSrc, targetMonth: 'April', targetYear: 2026 }]),
       [baseTgt],
       { 'src-1': 'auditor-99' },
       new Set(['tgt-1']),
@@ -76,7 +92,12 @@ describe('carry_audit_assignments — source → target matching', () => {
   });
 
   it('ignores source KPIs that have no audit assignment', () => {
-    const plan = planAuditCarryForward([baseSrc], [baseTgt], {}, new Set());
+    const plan = planAuditCarryForward(
+      buildSigMap([{ src: baseSrc, targetMonth: 'April', targetYear: 2026 }]),
+      [baseTgt],
+      {},
+      new Set(),
+    );
     expect(plan.toCreate).toHaveLength(0);
   });
 
@@ -84,7 +105,10 @@ describe('carry_audit_assignments — source → target matching', () => {
     const src2: SourceKpi = { ...baseSrc, id: 'src-2', employee_id: 'emp-2', kpi_name: 'Throughput' };
     const tgt2: TargetKpi = { ...src2, id: 'tgt-2', review_period: 'April' };
     const plan = planAuditCarryForward(
-      [baseSrc, src2],
+      buildSigMap([
+        { src: baseSrc, targetMonth: 'April', targetYear: 2026 },
+        { src: src2, targetMonth: 'April', targetYear: 2026 },
+      ]),
       [baseTgt, tgt2],
       { 'src-1': 'aud-A', 'src-2': 'aud-B' },
       new Set(),
@@ -101,7 +125,7 @@ describe('carry_audit_assignments — source → target matching', () => {
       review_period: 'April', kra_name: 'Quality', kpi_name: 'NEW kpi this period',
     };
     const plan = planAuditCarryForward(
-      [baseSrc],
+      buildSigMap([{ src: baseSrc, targetMonth: 'April', targetYear: 2026 }]),
       [baseTgt, orphanTgt],
       { 'src-1': 'auditor-99' },
       new Set(),
