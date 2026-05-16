@@ -39,4 +39,16 @@ describe('diagnoseEmptyTeam (v2.66.11.11)', () => {
     expect(d).toHaveProperty('title');
     expect(d).toHaveProperty('message');
   });
+
+  it('flags data_load_error when an upstream query failed (v2.66.11.13)', () => {
+    const d = diagnoseEmptyTeam({
+      ...base,
+      directCount: 13,
+      skipCount: 172,
+      periodKpiCount: 0,
+      dataLoadError: true,
+    });
+    expect(d.code).toBe('data_load_error');
+    expect(d.title).toMatch(/could not be loaded/i);
+  });
 });
