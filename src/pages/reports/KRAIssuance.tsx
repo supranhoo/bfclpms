@@ -1,8 +1,9 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useState } from 'react';
 import { useReportAccess } from '@/hooks/useReportAccess';
 import { useAllKpis } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { useManagersWithoutKras } from '@/hooks/useManagersWithoutKras';
 import { CompanyFilter } from '@/components/reports/CompanyFilter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,8 +11,9 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { FileText, CheckCircle2, Clock, AlertCircle, Download } from 'lucide-react';
+import { FileText, CheckCircle2, Clock, AlertCircle, Download, AlertTriangle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
 
@@ -37,12 +39,23 @@ const statusLabels: Record<string, string> = {
   approved: 'Approved',
 };
 
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
 export default function KRAIssuance() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('kra-issuance');
   const { data: allKpis, isLoading } = useAllKpis();
   const { data: categories } = useKraCategories();
   const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany } = useCompanyFilter();
+
+  // v2.66.11.12 — Managers without KRAs panel (period-scoped).
+  const now = new Date();
+  const [gapMonth, setGapMonth] = useState<string>(MONTHS[now.getMonth()]);
+  const [gapYear, setGapYear] = useState<number>(now.getFullYear());
+  const { data: gapManagers, isLoading: gapLoading } = useManagersWithoutKras(gapMonth, gapYear, { minReports: 5 });
 
   const filteredKpis = useMemo(() => allKpis?.filter(k => filterByCompany(k.employee_id)) ?? [], [allKpis, filterByCompany]);
 
