@@ -11,7 +11,8 @@ const corsHeaders = {
  * Bulk Zero-Score Non-Submitters
  *
  * Modes:
- *   scan    – Returns KPIs stuck at kra_set / self_review for a given period/year
+ *   scan    – Returns KPIs stuck at the configured stages for a given period/year
+ *              (default: kra_set, self_review)
  *   execute – Sets score 0 across all workflow levels, advances to approved, logs audit
  *
  * Body:
@@ -22,9 +23,35 @@ const corsHeaders = {
  *   kpi_ids: string[]          (execute only – selected KPIs)
  *   org_kpi_ids: string[]      (execute only – selected org KPI value IDs)
  *   admin_remarks: string      (execute only)
+ *   stuck_at_stages: string[]  (optional, default ["kra_set","self_review"])
+ *                              v2.66.11.17 — admin may also drain manager_check,
+ *                              skip_level_check, hr_pms_review, audit,
+ *                              management_review when reviewers fail to act.
  */
 
 // Deploy sync marker: 2026-04-10T2 org-filter support.
+
+// v2.66.11.17 — whitelist of stages that may be drained. Anything else is
+// rejected to prevent accidental zero-scoring of terminal/unknown statuses.
+const ALLOWED_STUCK_STAGES = new Set([
+  "kra_set",
+  "self_review",
+  "manager_check",
+  "skip_level_check",
+  "hr_pms_review",
+  "audit",
+  "management_review",
+]);
+
+function sanitizeStuckStages(input: unknown): string[] {
+  if (!Array.isArray(input) || input.length === 0) {
+    return ["kra_set", "self_review"];
+  }
+  const cleaned = input
+    .filter((s): s is string => typeof s === "string")
+    .filter((s) => ALLOWED_STUCK_STAGES.has(s));
+  return cleaned.length > 0 ? Array.from(new Set(cleaned)) : ["kra_set", "self_review"];
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
