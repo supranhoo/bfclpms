@@ -162,7 +162,13 @@ export default function KpiStatusTracker() {
         const deptData = profile?.departments as any;
         const division = deptData?.business_units?.divisions?.name ?? '—';
 
-        const isFrequencyLocked = isKpiLockedForPeriod(kpi.frequency, selectedPeriod, year);
+        // POLICY §128 — pass per-KPI frequency_cycle_start.
+        const isFrequencyLocked = isKpiLockedForPeriod(
+          kpi.frequency,
+          selectedPeriod,
+          year,
+          kpi.frequency_cycle_start,
+        );
 
         return {
           kpiId: kpi.id,
