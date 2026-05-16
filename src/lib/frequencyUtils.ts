@@ -243,7 +243,25 @@ export function isKpiLockedForPeriod(
 ): boolean {
   const frequency = normalizeFrequency(rawFrequency);
   if (!frequency) return false;
-  
+
+  // POLICY §128 dev-only guard: multi-month frequencies require a per-KPI
+  // frequency_cycle_start to avoid silent default-cycle fallback (see Sajid
+  // Raza RCA, v2.66.11.9). Suppressed in production builds.
+  if (
+    import.meta.env?.DEV &&
+    frequencyCycleStart === undefined &&
+    (frequency === 'Bi-Monthly' ||
+      frequency === 'Quarterly' ||
+      frequency === 'Half-Yearly' ||
+      frequency === 'Yearly')
+  ) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[isKpiLockedForPeriod] ${frequency} called without frequencyCycleStart — ` +
+        `risk of incorrect lock under default cycle. See POLICY §128.`
+    );
+  }
+
   const monthNum = getMonthNumber(reviewMonth);
 
   // Resolve effective cycle option: per-KPI override → global config → hardcoded default
