@@ -191,6 +191,9 @@ export function BulkTemplateAssignDialog({ isOpen, onClose }: BulkTemplateAssign
     onSuccess: (count) => {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+      // v2.66.11.12 — Bust manager-dashboard period cache so freshly
+      // issued KRAs surface immediately instead of after staleTime.
+      queryClient.invalidateQueries({ queryKey: ['kpis-by-period-ranges'] });
       toast({
         title: 'Bulk Assignment Complete',
         description: `Assigned "${selectedTemplate?.kra_name}" to ${count} employees`,

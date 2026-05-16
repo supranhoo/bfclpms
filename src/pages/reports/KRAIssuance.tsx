@@ -1,8 +1,9 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useState } from 'react';
 import { useReportAccess } from '@/hooks/useReportAccess';
 import { useAllKpis } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { useManagersWithoutKras } from '@/hooks/useManagersWithoutKras';
 import { CompanyFilter } from '@/components/reports/CompanyFilter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,8 +11,9 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { FileText, CheckCircle2, Clock, AlertCircle, Download } from 'lucide-react';
+import { FileText, CheckCircle2, Clock, AlertCircle, Download, AlertTriangle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
 
@@ -37,12 +39,23 @@ const statusLabels: Record<string, string> = {
   approved: 'Approved',
 };
 
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
 export default function KRAIssuance() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('kra-issuance');
   const { data: allKpis, isLoading } = useAllKpis();
   const { data: categories } = useKraCategories();
   const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany } = useCompanyFilter();
+
+  // v2.66.11.12 — Managers without KRAs panel (period-scoped).
+  const now = new Date();
+  const [gapMonth, setGapMonth] = useState<string>(MONTHS[now.getMonth()]);
+  const [gapYear, setGapYear] = useState<number>(now.getFullYear());
+  const { data: gapManagers, isLoading: gapLoading } = useManagersWithoutKras(gapMonth, gapYear, { minReports: 5 });
 
   const filteredKpis = useMemo(() => allKpis?.filter(k => filterByCompany(k.employee_id)) ?? [], [allKpis, filterByCompany]);
 
@@ -196,6 +209,69 @@ export default function KRAIssuance() {
             </TableBody>
           </Table>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* v2.66.11.12 — Managers without KRAs for the selected period.
+          Surfaces the population that the Team Reviews diagnostic flags
+          but admins haven't actioned (Sajid Raza RCA, May 2026). */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-600" />
+              <CardTitle>Managers Without KRAs</CardTitle>
+            </div>
+            <div className="flex items-center gap-2">
+              <Select value={gapMonth} onValueChange={setGapMonth}>
+                <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {MONTHS.map(m => <SelectItem key={m} value={m} className="text-xs">{m}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={String(gapYear)} onValueChange={(v) => setGapYear(parseInt(v))}>
+                <SelectTrigger className="w-[90px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {[gapYear - 1, gapYear, gapYear + 1].map(y => <SelectItem key={y} value={String(y)} className="text-xs">{y}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Active managers with 5+ reports whose entire reporting line has no KPIs in {gapMonth} {gapYear}. Chase KRA issuance for these teams.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {gapLoading ? (
+            <Skeleton className="h-32" />
+          ) : !gapManagers || gapManagers.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No gaps — every active manager has at least one report with KPIs in {gapMonth} {gapYear}.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Manager</TableHead>
+                    <TableHead>Code</TableHead>
+                    <TableHead className="text-right">Direct</TableHead>
+                    <TableHead className="text-right">Indirect</TableHead>
+                    <TableHead className="text-right">Total Reports</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {gapManagers.map(m => (
+                    <TableRow key={m.id}>
+                      <TableCell className="font-medium">{m.full_name ?? '—'}</TableCell>
+                      <TableCell className="text-muted-foreground">{m.employee_code ?? '—'}</TableCell>
+                      <TableCell className="text-right">{m.direct_count}</TableCell>
+                      <TableCell className="text-right">{m.indirect_count}</TableCell>
+                      <TableCell className="text-right font-semibold">{m.total_reports}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

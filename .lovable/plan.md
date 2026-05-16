@@ -1,100 +1,99 @@
-## Goal
+## TL;DR
 
-Make the Team Reviews dashboard look and behave the same for **all roles** (Admin, HR PMS, Management, Auditor, Manager, Skip-Level Manager) — same 6 tiles, same labels — and add a **diagnostic panel** that explains *why* a manager sees zeros when they do.
-
-No business logic changes to scoring, rosters, or RLS. Visual + diagnostic only.
+**Sajid's department change is NOT the cause.** The reviewer-scope RPCs are 100% based on `reporting_manager_id`; department isn't read anywhere in the chain. Sajid actually has 247 KPIs available for April 2026 across his 185 reports — the banner is showing a **false negative** because the diagnostic ignores RPC errors. Separately, **12 other managers have a real zero-KPI problem** that the same banner correctly flags but nobody acted on.
 
 ---
 
-## Risk & Impact Report
+## Why-Why Analysis (Sajid Raza, 100264)
 
-- **Data Impact:** None. No schema, RLS, or query change to KPI/score data.
-- **Workflow Impact:** None. Tile counts continue to reflect each role's roster scope (a manager still only counts their direct/indirect reports — they just see the same *layout* as admins).
-- **UI/UX Consistency:** Improves parity. Removes the current divergence where managers see 5 tiles and admins see 6.
-- **Regression Risk:** Low. Changes confined to `EmployeeSelectorGrid.tsx` `viewLevel === 'team'` branch and the `useOrgKpiPeriodCounts` `enabled` gate. Existing tests in `teamReviewsFullAccessTiles.test.ts` remain valid (they test classification, not tile visibility).
-- **Mitigation:** Add unit tests for the diagnostic helper; keep the `isFullAccess` classification branch unchanged so tile *numbers* don't shift for any role.
 
----
+| #   | Question                                      | Evidence                                                                                                                                                                                                                                                                        |
+| --- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Why does the banner say "185 mapped, 0 KPIs"? | Component renders branch `reports_without_kpis` whenever `periodKpis?.length === 0`.                                                                                                                                                                                            |
+| 2   | Why is `periodKpis` empty in his React state? | `useKpisByPeriodRanges` calls RPC `get_reviewer_kpis_for_period('April', 2026)`. If the RPC throws (timeout, network, auth glitch) `data` stays `undefined` → `?? 0`.                                                                                                           |
+| 3   | Should the RPC return rows?                   | **Yes — 247 rows.** Simulating the RPC's ELSE branch with Sajid's uid (`b68f5bce…`) returns 247 KPIs across 12 of his 185 reports.                                                                                                                                              |
+| 4   | Could department change have broken it?       | **No.** `get_reviewer_kpis_for_period`, `get_reviewer_roster_slim`, `useTeamMembers`, `useSkipLevelTeamMembers` only read `reporting_manager_id` + `is_active`. Department isn't referenced.                                                                                    |
+| 5   | Then why is his UI empty?                     | Two plausible causes (need network/console capture to confirm): **(a)** RPC silently fails for his session — the diagnostic ignores `periodKpisError`; **(b)** stale React Query cache from when he had 0 KPIs (cached empty result, never invalidated after KRAs were issued). |
+| 6   | Why doesn't the user see the real cause?      | `TeamReviewsZeroDiagnostic` has 3 branches but **no error branch**. An RPC error is mis-classified as "no KPIs assigned".                                                                                                                                                       |
 
-## Part 1 — Unified 6-tile layout (Policy-aligned)
 
-### Changes in `src/components/review/EmployeeSelectorGrid.tsx`
+### Verdict for Sajid
 
-1. **Tile #1 label**: change from conditional `'Total Employees' : 'Team Size'` to **always `'Total Employees'**` (matches the attached reference).
-2. **Org KPIs tile**: remove the `isFullAccess &&` gate so the 6th tile renders for managers and skip-level managers too. Org KPI counts are organisation-wide for the period — managers seeing them is informational, not a permission leak (the data is already visible via Org KPI Data Entry / reports per existing RLS).
-3. **Grid stays `xl:grid-cols-6**` — already correct.
-
-### Changes in `src/hooks/useOrgKpiPeriodCounts.ts`
-
-- Drop the `enabled` parameter requirement at the call site so the query fires for all roles on the Team Reviews tab. Keep the 60s `staleTime` cache so cost is negligible (one lightweight `SELECT status` per period per user-session).
-
-### Policy update (`POLICY.md`)
-
-- New section: **Team Reviews Tile Parity (v2.66.11.11)** — "All reviewer roles see the same 6 tiles on Team Reviews. Tile counts are scoped by each role's roster (direct/indirect for managers, org-wide for full-access). Org KPI tile shows period-wide counts and is informational for all roles."
+- Mapping is correct: 13 direct + 172 indirect = 185.
+- Auth identity is correct: `auth.users.id == profiles.id == b68f5bce…`.
+- Role is `manager`, ELSE branch of RPC applies.
+- DB has the data. The banner text is wrong for his case — it's a **diagnostic blind spot**, not a data/permissions bug.
 
 ---
 
-## Part 2 — Zero-state diagnostic for managers
+## Who else is affected
 
-When a non-full-access user (Manager / Skip-Level) loads Team Reviews and **all five status tiles are zero AND `Total Employees === 0**`, render a diagnostic banner *above* the team list explaining the cause.
+Two distinct populations surface from the same banner. Run against `kpis WHERE review_period='April' AND review_year=2026` scoped to each manager's (direct ∪ indirect) roster:
 
-### New component: `src/components/review/TeamReviewsZeroDiagnostic.tsx`
+### A. False-negative candidates (banner wrong — KPIs exist but UI may show empty)
 
-Inputs (all already available in `EmployeeSelectorGrid`):
+Only Sajid is currently reported. Anyone seeing "0 KPIs" while their roster's `kpi_rows > 0` is in this bucket. Worth proactively asking: Sindhu Raj Singh (109), Ganapathi Varma (199), Jitendra Dwivedi (212), Y R V S Murthy (108), Anant Shankar Shet (265), Abhas Luharuwalla (319) — all have abundant KPIs and could hit the same silent-error path.
 
-- `directCount` — `teamMembers.length`
-- `skipCount` — `skipLevelMembers.length`
-- `periodKpiCount` — `periodKpis.length`
-- `selectedPeriod`, `selectedYear`
-- `userId`
-
-Diagnostic decision tree:
+### B. Real zero-KPI managers (banner is accurate — KRAs not issued for their reports)
 
 
-| Condition                                             | Message shown                                                                                                                             |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `directCount === 0 && skipCount === 0`                | "No direct or indirect reports are mapped to you for this period. Ask Admin to verify your reporting structure in **User Management**."   |
-| `directCount + skipCount > 0 && periodKpiCount === 0` | "You have N reports mapped, but none have KPIs assigned for {Period} {Year}. KRAs may not yet be issued — check **KRA Issuance** report." |
-| `periodKpiCount > 0 && stats.totalEmployees === 0`    | "KPIs exist for your reports but none match the active workflow stage filter. Try clearing filters or switching periods."                 |
+| Manager                | Code   | Direct | Skip | KPI rows (Apr 2026) |
+| ---------------------- | ------ | ------ | ---- | ------------------- |
+| Saibal Kunar           | 200834 | 458    | 11   | **0**               |
+| Sujeet Kumar Singh     | 200405 | 241    | 0    | **0**               |
+| Chandra Bhan Singh     | 101964 | 131    | 0    | **0**               |
+| Pratap Chatterjee      | 100832 | 120    | 0    | **0**               |
+| Bhoopendra Kumar Sinha | 101131 | 82     | 0    | **0**               |
+| Awadhesh Kumar Singh   | 100070 | 74     | 0    | **0**               |
+| Pradip Duary           | 200428 | 73     | 0    | **0**               |
+| Abhishek Prasad        | 101893 | 65     | 120  | **0**               |
+| Sudhir Kumar           | 101894 | 52     | 0    | **0**               |
+| Radha Krishan Pandey   | 200568 | 50     | 0    | **0**               |
+| Gaurav Tiwari          | 100750 | 49     | 0    | **0**               |
+| Ramendra Lal Roy       | 101824 | 45     | 0    | **0**               |
 
 
-UI: amber-tinted `Alert` (shadcn) with `Info` icon, tight `text-sm` body, optional **"Refresh roster"** button that re-runs the team query.
-
-### Wiring in `EmployeeSelectorGrid.tsx`
-
-Render `<TeamReviewsZeroDiagnostic />` immediately after `renderStatsCards()` when `viewLevel === 'team' && !isFullAccess && stats.totalEmployees === 0`.
-
-### Tests
-
-New file `src/test/teamReviewsZeroDiagnostic.test.ts`:
-
-- 3 tests covering the three branches of the decision tree
-- 1 test confirming the diagnostic does NOT render when `stats.totalEmployees > 0`
-- 1 test confirming admins (`isFullAccess === true`) never see it
+≈ 1,500+ employees combined have no Apr-2026 KPIs in their reporting line. This is a KRA-issuance gap, not a UI bug.
 
 ---
 
-## Files Touched
+## Proposed Fixes (require approval)
 
+### Fix 1 — Close the diagnostic blind spot (UI only, ~30 lines)
 
-| File                                                  | Change                                                 |
-| ----------------------------------------------------- | ------------------------------------------------------ |
-| `src/components/review/EmployeeSelectorGrid.tsx`      | Tile #1 label, ungate Org KPIs tile, render diagnostic |
-| `src/hooks/useOrgKpiPeriodCounts.ts`                  | Allow query for all roles on Team Reviews              |
-| `src/components/review/TeamReviewsZeroDiagnostic.tsx` | **New** — diagnostic banner                            |
-| `src/test/teamReviewsZeroDiagnostic.test.ts`          | **New** — 5 unit tests                                 |
-| `POLICY.md`                                           | New section — tile parity v2.66.11.11                  |
-| `DOCUMENTATION.md`                                    | Version History entry — v2.66.11.11                    |
+Extend `TeamReviewsZeroDiagnostic` to surface a 4th branch `rpc_error` and pass `periodKpisError` from `EmployeeSelectorGrid.tsx`. When the RPC errors, show:
 
+> "We couldn't load KPIs for this period. The data exists, but the request failed — try Refresh roster or reload the page."
+
+This prevents Sajid-style false negatives from masquerading as "no KPIs assigned".  
+  
+(this is just 1 more notification which is not being usefull)
+
+### Fix 2 — Cache-bust on KPI issuance
+
+When KRAs are issued/copied (`copy-kras`, `bulk-template-assign`), invalidate `['kpis-by-period-ranges']` so a manager whose roster transitions from 0 → N KPIs sees them immediately instead of after a stale-time elapses.
+
+### Fix 3 — Admin alert for Population B
+
+Surface the 12 managers above on the **KRA Issuance** report with a "no-KRAs-for-Apr-2026" filter so HR PMS can chase issuance. No code changes required if the report already supports the filter; if not, add it.
+
+### Out of scope
+
+- Department change rollback (irrelevant — confirmed not causal).
+- Touching reviewer-scope RPCs (verified correct).
+- Workflow stage logic.
+
+### Risk & Impact
+
+- Fix 1: presentation-only, no schema, no RLS change. Adds one branch + one prop.
+- Fix 2: cache invalidation, no data mutation.
+- Fix 3: read-only report filter.
 
 ---
 
-## Out of Scope (will not change in this plan)
+## Documentation to update if approved
 
-- The `isFullAccess` classification logic in `classify()` — managers still count by roster relationship, admins still count by workflow status. Changing this would alter business meaning, not visual parity.
-- HR PMS / Manager Review / Skip Mgr Review dashboards — already on 6-tile parity since v2.66.11.8.
-- Org KPI RLS — unchanged.
-
----
-
-Approve to proceed?
+- `POLICY.md` §129 — add 4th diagnostic branch and KPI cache invalidation contract.
+- `DOCUMENTATION.md` v2.66.11.12 — RCA + fixes.
+- New `mem://features/review/team-reviews-rpc-error-branch`.
+- New unit test `teamReviewsZeroDiagnostic.test.ts` — covers `rpc_error` branch.

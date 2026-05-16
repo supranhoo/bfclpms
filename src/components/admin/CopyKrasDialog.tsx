@@ -265,6 +265,11 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
       queryClient.invalidateQueries({ queryKey: ['org-kpi-data-owners'] });
       queryClient.invalidateQueries({ queryKey: ['org-kpi-data-owner-names'] });
       queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
+      // v2.66.11.12 — Manager dashboards key off `kpis-by-period-ranges`.
+      // Without this invalidation, a manager whose roster transitions from
+      // 0 → N KPIs keeps seeing the empty "no KPIs assigned" diagnostic
+      // until React Query's staleTime elapses.
+      queryClient.invalidateQueries({ queryKey: ['kpis-by-period-ranges'] });
       toast({ title: `Copied ${count} KRAs to ${targetEmployeeIds.length} employee(s)` });
 
       // Email deferred to "Issue KRAs" confirmation step

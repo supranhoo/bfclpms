@@ -61,3 +61,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Org KPI Data Entry Snapshot RPC](mem://features/admin/org-kpi-data-entry-snapshot) — Org KPI page reads via get_org_kpi_data_entry_snapshot RPC (SECURITY DEFINER, in-function access); never paged raw kpis fetch
 - [Dashboard KRA Add/Delete](mem://features/admin/dashboard-kra-management) — Allowlist-gated Add/Delete KRA on Dashboard reusing AdminKpiCreateDialog + useAdminDeleteKpi
 - [Org KPI Propagation Truth](mem://features/admin/org-kpi-propagation-truth) — Row "Propagated" badge = review_submissions presence, not OKV.status; RPC mapper handles both result shapes
+- [Team Reviews Zero-KPI RCA](mem://features/review/team-reviews-zero-kpi-rca) — KRA-issuance flows must invalidate ['kpis-by-period-ranges']; KRA Issuance has Managers Without KRAs panel; reviewer scope ignores department
