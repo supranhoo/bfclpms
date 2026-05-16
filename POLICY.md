@@ -2893,6 +2893,23 @@ Patched call sites (v2.66.11.12): `CopyKrasDialog`, `BulkTemplateAssignDialog`. 
 
 **Regression:** `src/test/teamReviewsZeroDiagnostic.test.ts` adds a `data_load_error` case; `src/test/managerScopeFilterGate.test.ts` (3 tests) protects the `isFullAccess` gate on the `mgr` filter.
 
+---
+
+## §132 — Audit Assignment Carry-Forward on KRA Rollover (v2.66.11.19)
+
+**Context.** `audit_kpi_level_assignments` is the per-KPI auditor mapping table (`UNIQUE(kpi_id)`, `FK → kpis ON DELETE CASCADE`). Historically the `auto-rollover-kpis` edge function cloned KPIs across periods but did NOT clone these mappings, leaving every new period with zero auditor assignments until Admin re-mapped them manually. Confirmed for April 2026: 2,267 KPIs / 0 assignments.
+
+**Policy.**
+
+1. `auto-rollover-kpis` MUST accept an opt-in boolean `carry_audit_assignments`. When true, after KPI insertion the function clones every `audit_kpi_level_assignments` row from each rolled-over source KPI onto the matching target KPI.
+2. Matching key is the **full signature** `(employee_id | review_year | review_period | kra_name | kpi_name)` resolved at insert time and stored in an in-memory map keyed by the target signature → source `kpi_id`. Partial matches are forbidden — a brand-new KPI in the target period inherits nothing.
+3. The insert MUST use `onConflict: 'kpi_id', ignoreDuplicates: true` so any pre-existing manual auditor assignment on the target KPI is preserved. The function MUST NEVER overwrite or delete an existing assignment row.
+4. The action MUST emit a single `system_audit_logs` row with `action='AUDIT_ASSIGNMENTS_CARRIED_FORWARD'`, `performed_by=NULL` (per Core "automated actions set performed_by=NULL"), and metadata `{ source_period, source_year, target_period, target_year, triggered_by, source_assignments_found, target_kpis_matched, cloned, skipped_already_assigned, errors }`.
+5. The response payload MUST expose `audit_assignments_cloned`, `audit_assignments_skipped_already_assigned`, and `audit_clone_errors: string[]` so the admin UI can surface results.
+6. The admin UI (`RolloverDialog`) MUST present this as a clearly labelled toggle (default ON) at the Configuration step, with an Alert on the Results step reporting the cloned and preserved counts. The toggle is sent on the **execute** call only, never on the dry-run preview.
+
+**Regression:** `src/test/carryAuditAssignmentsRollover.test.ts` (5 tests — happy-path clone, UNIQUE-kpi_id preservation, source-without-assignment, full-signature collision safety, orphan-target skip).
+
 ### §115 Extension — Stuck-Stage Drain Authority (v2.66.11.17)
 
 After period lock, Admin / Data Owner MAY drain stuck KPIs from ANY pre-terminal stage (whitelist: `kra_set`, `self_review`, `manager_check`, `skip_level_check`, `hr_pms_review`, `audit`, `management_review`). All affected KPIs receive 0 across the cascade, status advances to `approved`, and a `kpi_audit_logs` row is written with `metadata.stuck_at_stage = <originating_status>` so HR / Auditor can trace why the human reviewer was bypassed. The UI MUST display an explicit reviewer-bypass warning when the operator opts into any of the 5 reviewer stages. Default behaviour (kra_set + self_review only) is preserved. Regression: `src/test/bulkZeroStageDrain.test.ts`.
