@@ -1063,18 +1063,19 @@ export function EmployeeSelectorGrid({
       relevantKpis.forEach(k => {
         // v2.64.11: Count any employee with at least one KPI in period.
         periodEmployeeIds.add(k.employee_id);
+        let countedReviewed = false;
         // BUG-046: count HR PMS reviewed signatures (incl. N/A approvals)
         // BEFORE workflow guards so historically-scored KPIs still contribute.
         const hrSubEarly = submissionScoreMap?.get(k.id);
         if (hrSubEarly) {
-          if (hrSubEarly.hr_pms_score != null) reviewed++;
+          if (hrSubEarly.hr_pms_score != null) { reviewed++; countedReviewed = true; }
           else if (hrSubEarly.is_na === true) {
             const stagesForK = getStages(k.employee_id);
             const hrIdxK = stagesForK.indexOf('hr_pms_review');
             // Treat N/A as reviewed once the KPI has moved past the HR PMS stage,
             // OR if the KPI is already terminal (approved) on a workflow without HR PMS.
             const past = hrIdxK >= 0 && stagesForK.slice(hrIdxK + 1).includes(k.status || '');
-            if (past || k.status === 'approved') reviewed++;
+            if (past || k.status === 'approved') { reviewed++; countedReviewed = true; }
           }
         }
         const stages = getStages(k.employee_id);
@@ -1087,11 +1088,21 @@ export function EmployeeSelectorGrid({
             pending++;
           }
           const afterHr = stages.slice(hrIdx + 1);
-          if (afterHr.includes(k.status || '')) { forwarded++; }
+          if (afterHr.includes(k.status || '')) {
+            forwarded++;
+            // v2.66.11.15 (POLICY §115): a KPI whose status has structurally
+            // advanced past `hr_pms_review` has — by definition — completed
+            // the HR PMS stage. Count it as reviewed even when the submission
+            // row lacks an `hr_pms_score` signature (auto-advance, bulk
+            // approval, or legacy import paths). Guarded by `countedReviewed`
+            // to prevent double-counting against the score-signature branch.
+            if (!countedReviewed) { reviewed++; countedReviewed = true; }
+          }
         }
       });
       // v2.64.11: Total Employees = unique employees with any KPI in period
-      // (workflow-filtered roster). Stat3 = reviewed via hr_pms_score signature.
+      // (workflow-filtered roster). Stat3 = reviewed via hr_pms_score signature
+      // OR structural advancement past `hr_pms_review` (v2.66.11.15).
       return { totalEmployees: periodEmployeeIds.size, stat0: 0, stat1: pending, stat2: inReview, stat3: reviewed, stat4: relevantKpis.length, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'pending_self_review') {
       const pendingKpis = relevantKpis.filter(k => k.status === 'kra_set');
@@ -1392,7 +1403,7 @@ export function EmployeeSelectorGrid({
           <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} tooltip="Employees with at least one KPI in this period whose workflow includes the HR PMS stage." />
           <StatCard icon={Clock} label="Pending Review" value={stats.stat1} color="amber" subtitle="Before HR PMS stage" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} tooltip="KPIs at the stage immediately before HR PMS, awaiting your queue." />
           <StatCard icon={FileCheck} label="In HR PMS Review" value={stats.stat2} color="purple" subtitle="Currently in HR PMS" onClick={() => toggleStatusFilter('in_review')} active={statusFilter === 'in_review'} tooltip="KPIs currently sitting in the HR PMS review stage." />
-          <StatCard icon={CheckCircle2} label="HR PMS Reviewed" value={stats.stat3} denominator={stats.totalKpis} color="green" subtitle="of total KPIs" onClick={() => toggleStatusFilter('reviewed')} active={statusFilter === 'reviewed'} tooltip="KPIs with an HR PMS score recorded for this period (regardless of current stage)." />
+          <StatCard icon={CheckCircle2} label="HR PMS Reviewed" value={stats.stat3} denominator={stats.totalKpis} color="green" subtitle="of total KPIs" onClick={() => toggleStatusFilter('reviewed')} active={statusFilter === 'reviewed'} tooltip="KPIs that have completed the HR PMS stage for this period — either an HR PMS score is recorded or the KPI has advanced past the HR PMS stage." />
           <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" tooltip="All KPIs in this period for employees visible in this view (after filters)." />
           {isFullAccess && (
             <StatCard

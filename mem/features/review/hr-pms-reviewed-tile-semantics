@@ -1,0 +1,19 @@
+---
+name: HR PMS Reviewed Tile Semantics
+description: Classification rule for the HR PMS Reviewed tile — signature OR structural advancement past hr_pms_review
+type: feature
+---
+
+The **HR PMS Reviewed** tile on the HR PMS dashboard (`EmployeeSelectorGrid.tsx`, HR PMS branch ~L1059-1095) credits a KPI as reviewed when ANY of:
+
+1. `review_submissions.hr_pms_score IS NOT NULL` (signature path)
+2. `is_na = true` AND status is at-or-past `hr_pms_review` (or `status = 'approved'` on a workflow without HR PMS)
+3. The KPI's resolved workflow contains `hr_pms_review` AND `status` appears strictly after `hr_pms_review` in the resolved stages (structural advancement — codified v2.66.11.15)
+
+A `countedReviewed` per-KPI flag prevents double-counting across paths.
+
+**Why:** Auto-advance, bulk approval, and legacy import paths leave `hr_pms_score` NULL even though the KPI has demonstrably completed the HR PMS stage. Without rule 3, those KPIs were silently dropped from the tile (April 2026: 109 missing).
+
+**How to apply:** Any future reviewer-stage Reviewed tile (Audit Reviewed, Management Reviewed) must follow the same three-rule pattern with the appropriate stage anchor. See POLICY §115 + §115 Extension.
+
+**Regression:** `src/test/hrPmsReviewedTile.test.ts`.
