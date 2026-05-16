@@ -1,99 +1,62 @@
-## TL;DR
+## Why-Why analysis result
 
-**Sajid's department change is NOT the cause.** The reviewer-scope RPCs are 100% based on `reporting_manager_id`; department isn't read anywhere in the chain. Sajid actually has 247 KPIs available for April 2026 across his 185 reports — the banner is showing a **false negative** because the diagnostic ignores RPC errors. Separately, **12 other managers have a real zero-KPI problem** that the same banner correctly flags but nobody acted on.
+**Confirmed facts for Sajid Raza (100264):**
+- Sajid is active, role = `manager`, department = `DRI`.
+- His visibility is based on `profiles.reporting_manager_id`, **not department**.
+- He has **13 direct** + **172 indirect** active mapped employees = **185 mapped employees**.
+- For May 2026, mapped reports already have **247 KPI rows across 12 employees**; including Sajid’s own KPIs, there are **278 rows across 13 employees**.
+- Those May rows are currently **not issued** (`is_issued = false`), but the dashboard should still not collapse to zero if the policy is to show mapped roster + KPI state.
 
----
+**Root cause, verified instead of assumed:**
+1. The dashboard calls `get_reviewer_kpis_for_period('May', 2026)` for non-full-access managers.
+2. That backend function fails only in the non-full-access branch with:
+   `column reference "id" is ambiguous`.
+3. Because the KPI RPC fails, `periodKpis` is unavailable; stats fall back to zero and the diagnostic incorrectly says “No KPIs assigned”.
+4. Admin/HR/Management users do not hit this failing branch, which explains why the Admin-style view can show data while Sajid’s manager view shows 0.
+5. A secondary issue exists on the current URL: `?mgr=b68f5bce...` is a hidden manager filter for non-full-access manager views. Even after the RPC fix, this can wrongly narrow Sajid’s team view to only direct reports instead of all direct + indirect mapped employees.
 
-## Why-Why Analysis (Sajid Raza, 100264)
+**Who else is affected:**
+- This is not isolated to Sajid.
+- Any non-full-access reviewer/manager using the manager branch of these functions can be affected.
+- Current database audit shows **105 non-full reviewer users** with mapped teams, covering **2,473 direct** and **2,226 indirect** report relationships.
+- Largest affected examples include Sindhu Raj Singh, Saibal Kunar, V.A.V.S.S. Ganapathi Varma, Sujeet Kumar Singh, Abhishek Prasad, Sajid Raza, Jitendra Kumar Dwivedi, Chandra Bhan Singh, Y R V S Murthy, and Pratap Chatterjee.
 
+## Risk & Impact Report
 
-| #   | Question                                      | Evidence                                                                                                                                                                                                                                                                        |
-| --- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Why does the banner say "185 mapped, 0 KPIs"? | Component renders branch `reports_without_kpis` whenever `periodKpis?.length === 0`.                                                                                                                                                                                            |
-| 2   | Why is `periodKpis` empty in his React state? | `useKpisByPeriodRanges` calls RPC `get_reviewer_kpis_for_period('April', 2026)`. If the RPC throws (timeout, network, auth glitch) `data` stays `undefined` → `?? 0`.                                                                                                           |
-| 3   | Should the RPC return rows?                   | **Yes — 247 rows.** Simulating the RPC's ELSE branch with Sajid's uid (`b68f5bce…`) returns 247 KPIs across 12 of his 185 reports.                                                                                                                                              |
-| 4   | Could department change have broken it?       | **No.** `get_reviewer_kpis_for_period`, `get_reviewer_roster_slim`, `useTeamMembers`, `useSkipLevelTeamMembers` only read `reporting_manager_id` + `is_active`. Department isn't referenced.                                                                                    |
-| 5   | Then why is his UI empty?                     | Two plausible causes (need network/console capture to confirm): **(a)** RPC silently fails for his session — the diagnostic ignores `periodKpisError`; **(b)** stale React Query cache from when he had 0 KPIs (cached empty result, never invalidated after KRAs were issued). |
-| 6   | Why doesn't the user see the real cause?      | `TeamReviewsZeroDiagnostic` has 3 branches but **no error branch**. An RPC error is mis-classified as "no KPIs assigned".                                                                                                                                                       |
+**Data impact:** No historical KPI/profile data will be changed. The fix is to correct read-only backend helper functions and frontend filter handling.
 
+**Workflow impact:** Restores intended manager visibility: direct + one-level indirect mapped employees, with self-review remaining separate.
 
-### Verdict for Sajid
+**UI/UX impact:** The dashboard will stop showing a misleading “No KPIs assigned” banner when the real issue is a data-load/RPC failure. Hidden manager URL filters will no longer affect normal manager views.
 
-- Mapping is correct: 13 direct + 172 indirect = 185.
-- Auth identity is correct: `auth.users.id == profiles.id == b68f5bce…`.
-- Role is `manager`, ELSE branch of RPC applies.
-- DB has the data. The banner text is wrong for his case — it's a **diagnostic blind spot**, not a data/permissions bug.
+**Regression risk:** Medium, because the same helper functions are shared by Team Reviews, stage-filtered reviewer rosters, and reporting dashboards.
 
----
+**Mitigation:** Add regression tests for the diagnostic branch and hidden-manager-filter behavior, and update POLICY/DOCUMENTATION in the same change.
 
-## Who else is affected
+## Implementation plan
 
-Two distinct populations surface from the same banner. Run against `kpis WHERE review_period='April' AND review_year=2026` scoped to each manager's (direct ∪ indirect) roster:
+1. **Fix backend helper functions**
+   - Create a migration replacing `get_reviewer_kpis_for_period` and `get_reviewer_roster_slim`.
+   - Rename/qualify CTE columns in the non-full branch, e.g. `profile_id`, so output column `id` no longer conflicts with CTE `id`.
+   - Preserve the existing security model: full-access users see all active data; non-full users see self/direct/indirect scope as currently intended.
 
-### A. False-negative candidates (banner wrong — KPIs exist but UI may show empty)
+2. **Fix hidden manager filter leakage**
+   - In `EmployeeSelectorGrid`, apply `selectedManager` only for full-access users.
+   - Auto-clear or ignore `mgr` URL params for non-full-access Team Reviews so Sajid sees all mapped direct + indirect employees, not a hidden filtered subset.
 
-Only Sajid is currently reported. Anyone seeing "0 KPIs" while their roster's `kpi_rows > 0` is in this bucket. Worth proactively asking: Sindhu Raj Singh (109), Ganapathi Varma (199), Jitendra Dwivedi (212), Y R V S Murthy (108), Anant Shankar Shet (265), Abhas Luharuwalla (319) — all have abundant KPIs and could hit the same silent-error path.
+3. **Harden the zero-state diagnostic**
+   - Add an explicit `rpc_error` / `data_load_error` branch to `TeamReviewsZeroDiagnostic`.
+   - If KPI/profile loading fails, show “Dashboard data could not be loaded” with refresh guidance instead of “No KPIs assigned”.
 
-### B. Real zero-KPI managers (banner is accurate — KRAs not issued for their reports)
+4. **Close auth/cache race gap**
+   - Extend the auth-ready query invalidation to include `kpis-by-period-ranges`, `profiles`, `profiles-by-workflow-stage`, `team-members`, and `skip-level-team-members` so manager dashboards refetch after the session is ready.
 
+5. **Regression protection**
+   - Add/update tests for:
+     - diagnostic returns `rpc_error` when KPI loading fails;
+     - non-full manager views ignore hidden `mgr` filters;
+     - Sajid-style direct + indirect roster logic remains counted as one manager scope.
 
-| Manager                | Code   | Direct | Skip | KPI rows (Apr 2026) |
-| ---------------------- | ------ | ------ | ---- | ------------------- |
-| Saibal Kunar           | 200834 | 458    | 11   | **0**               |
-| Sujeet Kumar Singh     | 200405 | 241    | 0    | **0**               |
-| Chandra Bhan Singh     | 101964 | 131    | 0    | **0**               |
-| Pratap Chatterjee      | 100832 | 120    | 0    | **0**               |
-| Bhoopendra Kumar Sinha | 101131 | 82     | 0    | **0**               |
-| Awadhesh Kumar Singh   | 100070 | 74     | 0    | **0**               |
-| Pradip Duary           | 200428 | 73     | 0    | **0**               |
-| Abhishek Prasad        | 101893 | 65     | 120  | **0**               |
-| Sudhir Kumar           | 101894 | 52     | 0    | **0**               |
-| Radha Krishan Pandey   | 200568 | 50     | 0    | **0**               |
-| Gaurav Tiwari          | 100750 | 49     | 0    | **0**               |
-| Ramendra Lal Roy       | 101824 | 45     | 0    | **0**               |
-
-
-≈ 1,500+ employees combined have no Apr-2026 KPIs in their reporting line. This is a KRA-issuance gap, not a UI bug.
-
----
-
-## Proposed Fixes (require approval)
-
-### Fix 1 — Close the diagnostic blind spot (UI only, ~30 lines)
-
-Extend `TeamReviewsZeroDiagnostic` to surface a 4th branch `rpc_error` and pass `periodKpisError` from `EmployeeSelectorGrid.tsx`. When the RPC errors, show:
-
-> "We couldn't load KPIs for this period. The data exists, but the request failed — try Refresh roster or reload the page."
-
-This prevents Sajid-style false negatives from masquerading as "no KPIs assigned".  
-  
-(this is just 1 more notification which is not being usefull)
-
-### Fix 2 — Cache-bust on KPI issuance
-
-When KRAs are issued/copied (`copy-kras`, `bulk-template-assign`), invalidate `['kpis-by-period-ranges']` so a manager whose roster transitions from 0 → N KPIs sees them immediately instead of after a stale-time elapses.
-
-### Fix 3 — Admin alert for Population B
-
-Surface the 12 managers above on the **KRA Issuance** report with a "no-KRAs-for-Apr-2026" filter so HR PMS can chase issuance. No code changes required if the report already supports the filter; if not, add it.
-
-### Out of scope
-
-- Department change rollback (irrelevant — confirmed not causal).
-- Touching reviewer-scope RPCs (verified correct).
-- Workflow stage logic.
-
-### Risk & Impact
-
-- Fix 1: presentation-only, no schema, no RLS change. Adds one branch + one prop.
-- Fix 2: cache invalidation, no data mutation.
-- Fix 3: read-only report filter.
-
----
-
-## Documentation to update if approved
-
-- `POLICY.md` §129 — add 4th diagnostic branch and KPI cache invalidation contract.
-- `DOCUMENTATION.md` v2.66.11.12 — RCA + fixes.
-- New `mem://features/review/team-reviews-rpc-error-branch`.
-- New unit test `teamReviewsZeroDiagnostic.test.ts` — covers `rpc_error` branch.
+6. **Documentation and policy sync**
+   - Update `POLICY.md` with the verified rule: Team Reviews visibility is reporting-chain based, not department based.
+   - Update `DOCUMENTATION.md` version history with the Sajid RCA, affected-user class, and fixed helper-function contract.
