@@ -1,108 +1,71 @@
-## Goal
+# RCA — Sajid Raza score 44.27% (114/257.5) is wrong
 
-Apply the same 6-tile clarity pattern we shipped for **Team Reviews** (v2.66.11.7) to the three reviewer-stage dashboards — **HR PMS Review**, **Manager Review** (`pending_manager_review`), and **Skip Mgr Review** (`pending_skip_review`) — so the headline numbers reconcile to a single sum invariant and Org KPIs surface as a first-class tile.
+## What the screen shows
+Employee Performance Summary, March 2026, Sajid Raza (100264): **Total 114 / Out 257.5 = 44.27%**.
 
-## What's wrong today
+## What the database actually contains
+30 active (non-N/A) approved KPIs for him in Mar-2026:
 
-```text
-HR PMS view  : 5 tiles → Total Emp │ Pending │ In HR PMS │ Reviewed │ Total KPIs
-Manager view : 3 tiles → Total Emp │ Pending Manager Review │ Total KPIs
-Skip Mgr view: 3 tiles → Total Emp │ Pending Skip Mgr Review │ Total KPIs
-```
+| Frequency  | KPIs | Σ weight | Σ weight×5 | Σ weight×score |
+|------------|------|---------:|-----------:|---------------:|
+| Daily      | 2    | 1.5      | 7.5        | 7.5            |
+| Monthly    | 22   | 50.0     | 250.0      | 106.5          |
+| Bi-Monthly | 6    | 47.0     | 235.0      | 200.0          |
+| **Total**  | 30   | 98.5     | 492.5      | **314.0**      |
 
-Issues:
-1. **No Org KPI tile** on any of these — Org KPIs flowing through the same stage are invisible at a glance, even though `pending_manager_review` already counts `orgKpiCount` internally (`stat2`) but shows it only as a subtitle fragment.
-2. **No ratio / progress bar** on the "Reviewed" tile (HR PMS) and **no "Reviewed" tile at all** on the two pending-stage views — so you cannot see "X of Y done" without doing the math.
-3. **No explicit sum invariant** displayed; numbers don't visibly add up to Total KPIs.
+Correct percentage = **314 / 492.5 = 63.76%**.
+Screen value = 114 / 257.5 ≡ Daily + Monthly only — **the 6 Bi-Monthly KPIs (weight 47, 200 score points) are silently dropped.**
 
-## What changes (UI only — same pattern as Team)
+## Why why analysis
+1. *Why is the percentage 44.27 and not 63.76?* Because Bi-Monthly KPIs are excluded from `totalScore` and `outOfScore`.
+2. *Why are they excluded?* `isKpiLockedForPeriod(kpi.frequency, 'March', 2026)` returns `true`, and the report skips locked KPIs while the "Show frequency-locked KPIs" toggle is off.
+3. *Why does the helper return `true` for March?* It falls through to the **first** Bi-Monthly cycle option (`Jan-Feb` → `Mar-Apr` → locked month = 3). March IS locked under the standard cycle.
+4. *Why does it use the wrong cycle?* All 6 of his Bi-Monthly KPIs carry `frequency_cycle_start = 'Feb-Mar'` (offset cycle, active month = March, locked month = February). But the report **never reads or passes `frequency_cycle_start`**:
+   - `EmployeePerformanceSummary.tsx` line 120 SELECT: `id, employee_id, kra_name, kpi_name, weightage, status, review_period, review_year, frequency` — column missing.
+   - Line 189 call: `isKpiLockedForPeriod(kpi.frequency, selectedPeriod, year)` — 4th arg `frequencyCycleStart` missing.
+   - With both missing, `resolveEffectiveCycleOption` returns `BI_MONTHLY_OPTIONS[0]` (Jan-Feb), wrongly classifying March as locked.
+5. *Why wasn't this caught earlier?* The same omission exists in two more reports (`KpiDetailReport`, `KpiStatusTracker`) — there is no regression test that drives `isKpiLockedForPeriod` through the per-KPI override path inside the report layer. `useSystemIssues`, `OrgKpiDataEntry`, `SelfReviewSheet`, `KpiJourneySection`, `FrequencyLockedOverlay` already pass it correctly, so the helper itself is fine.
 
-### A. HR PMS view — extend from 5 → 6 tiles
+## Root cause
+**Reports drop the per-KPI `frequency_cycle_start` override**, so any KPI whose cycle differs from the first hard-coded option (`Jan-Feb` for Bi-Monthly, `Jan-Mar` for Quarterly, `Jan-Jun` for Half-Yearly, `Jan-Dec` for Yearly) is mis-classified. Sajid Raza is the visible victim because almost half his weight (47/98.5) sits on `Feb-Mar` Bi-Monthly KPIs.
 
-```text
-┌────────────┬────────────┬────────────┬────────────┬────────────┬────────────┐
-│ Total Emp  │ Pending    │ In HR PMS  │ Reviewed   │ Total KPIs │ Org KPIs   │
-│            │ Review     │ Review     │ X / Total  │            │ E+P / Tot  │
-│            │ (amber)    │ (purple)   │ ▓▓▓▓░░ %   │ (blue)     │ (purple)   │
-└────────────┴────────────┴────────────┴────────────┴────────────┴────────────┘
-```
-- Add `denominator={stats.totalKpis}` + progress bar to **Reviewed** tile (already supported by `StatCard.denominator`).
-- Add new **Org KPIs** tile (`orgEntered / orgTotal`, sub-line = `N pending entry`), shown only for full-access roles, reusing the existing `useOrgKpiPeriodCounts(period, year)` hook.
-- Footer micro-text (muted): `Pending + In HR PMS + Reviewed = Total KPIs` invariant check.
+# Fix plan
 
-### B. Manager Review view (`pending_manager_review`) — 3 → 6 tiles
+## 1. Patch the three reports (data-only change, no UI shift)
+For each:
+- Add `frequency_cycle_start` to the `kpis` SELECT.
+- Pass it as the 4th argument to `isKpiLockedForPeriod`.
 
-```text
-┌────────────┬────────────┬────────────┬────────────┬────────────┬────────────┐
-│ Total Emp  │ Pending    │ In Manager │ Reviewed   │ Total KPIs │ Org KPIs   │
-│            │ Mgr Review │ Review     │ X / Total  │ (this stg) │ at mgr     │
-│            │ (amber)    │ (yellow)   │ ▓▓▓▓░░ %   │ (blue)     │ (purple)   │
-└────────────┴────────────┴────────────┴────────────┴────────────┴────────────┘
-```
-Where for this view:
-- **Pending** = KPIs with `status = 'self_review'` (current `stat1` regular) — the queue.
-- **In Manager Review** = KPIs with `status = 'manager_check'` — actively being reviewed.
-- **Reviewed** = KPIs past `manager_check` for this view's roster (`approved` chain).
-- **Org KPIs** = `org_kpi_values` rows for this period that are at the manager stage (`pending` + `entered`/`propagated` ratio). Reuses `useOrgKpiPeriodCounts`.
+Files:
+- `src/pages/reports/EmployeePerformanceSummary.tsx`
+  - SELECT (line 120) and `trendData` SELECT (line 300).
+  - Call site line 189 → `isKpiLockedForPeriod(kpi.frequency, selectedPeriod, year, kpi.frequency_cycle_start)`.
+- `src/pages/reports/KpiDetailReport.tsx` line 195 (+ matching SELECT).
+- `src/pages/reports/KpiStatusTracker.tsx` line 165 (+ matching SELECT).
 
-### C. Skip Mgr Review view (`pending_skip_review`) — 3 → 6 tiles
+No schema, RLS, or workflow change. No score recomputation in DB.
 
-Same structure as B, but for the skip-level stage:
-- **Pending** = `status = 'manager_check'` (queue waiting for skip).
-- **In Skip Review** = `status = 'skip_level_check'`.
-- **Reviewed** = past `skip_level_check`.
-- **Org KPIs** tile reused.
+## 2. Regression test
+Add `src/test/reportFrequencyCycleOverride.test.ts`:
+- Bi-Monthly KPI with `frequency_cycle_start='Feb-Mar'` in March → not locked.
+- Same KPI without override → locked under default `Jan-Feb`.
+- Quarterly `Apr-Jun` cycle in June → not locked.
+This locks behaviour at the report layer, not just inside `frequencyUtils`.
 
-## What changes (logic — minimal)
+## 3. Mock-data refresh
+Extend the existing mock fixtures used by the report tests to include at least one Bi-Monthly KPI with `frequency_cycle_start='Feb-Mar'` and one Quarterly with `Apr-Jun`, so any future refactor that drops the column fails CI immediately.
 
-In `src/components/review/EmployeeSelectorGrid.tsx → stats useMemo`:
+## 4. POLICY.md / DOCUMENTATION.md sync
+- DOCUMENTATION.md → new entry **v2.66.11.9** describing the bug, RCA, the three-file fix and the new test.
+- POLICY.md → add **§128 (Frequency-Lock Determination)**: "Any code path that calls `isKpiLockedForPeriod` for a KPI MUST pass that KPI's `frequency_cycle_start`. SELECTs that feed such code paths MUST include the `frequency_cycle_start` column. Helper-only call sites that intentionally check a *frequency family* (no specific KPI) are exempt and must add an inline comment."
 
-1. **`hr_pms` branch** — already returns `pending / inReview / reviewed / totalKpis`; no change needed beyond what's already there. Just consume new tile config.
-2. **`pending_manager_review` branch** — extend to also compute:
-   - `inReview` = `relevantKpis.filter(k => k.status === 'manager_check').length`
-   - `reviewed` = `relevantKpis.filter(k => !['kra_set','self_review','manager_check'].includes(k.status||'')).length`
-   - Map to `stat1=pending`, `stat2=inReview`, `stat3=reviewed`, `stat4=totalKpis`.
-3. **`pending_skip_review` branch** — symmetric:
-   - `pending` = `status='manager_check'`
-   - `inReview` = `status='skip_level_check'`
-   - `reviewed` = past `skip_level_check`
-4. Keep existing `orgKpiCount` / `nonMonthlyCount` as additional sub-line metadata (already used in subtitle), but the Org KPI tile reads from the period-wide hook for parity with Team view.
+## Risk & impact report
+- **Data impact:** none — read-only, no migration, no recomputation of stored scores.
+- **Workflow impact:** none — does not change reviewer stages, status, or RLS.
+- **UI/UX impact:** Mar-2026 Performance Summary will show Sajid Raza at 314/492.5 = 63.76% (and similar corrections for any employee with non-default cycles). The 6 missing Bi-Monthly KPIs become visible in `KpiDetailReport` / `KpiStatusTracker` for their active months, and stay correctly hidden in their locked months.
+- **Regression risk:** low. Helper signature is unchanged; we only start passing an argument that other call sites already pass. Frequency-lock toggle behaviour is preserved.
+- **Mitigation:** unit test (item 2), updated mocks (item 3), policy guard (item 4) plus a one-time grep audit of `isKpiLockedForPeriod(` to confirm no remaining 3-arg calls except the explicitly exempt test cases.
 
-All three branches already iterate `relevantKpis` once — added counters are O(n), no new DB reads.
-
-### Org KPI hook — gate change
-
-`useOrgKpiPeriodCounts` is currently `enabled: viewLevel === 'team' && isFullAccess`. Extend gating to also include `hr_pms`, `pending_manager_review`, `pending_skip_review`. Same 60s React Query cache → no perf hit on view switching within the same period.
-
-## Risk & Impact Report
-
-| Area | Impact | Mitigation |
-|---|---|---|
-| Data | None — display-only. No schema, no RLS, no workflow change. | N/A |
-| Workflow | None — card-badge & action-gate logic untouched. | N/A |
-| Performance | One extra `org_kpi_values` count call when first opening any of the three views per period. | Already cached 60 s; head-only single-column count; ~896 rows. |
-| UI/UX | Pending-stage views grow from 3→6 tiles; HR PMS 5→6. At 1280 px+ they fit on one row; wraps to 3×2 / 2×3 below. | `grid-cols-2 md:grid-cols-3 xl:grid-cols-6`, identical to Team. |
-| Regression | `pending_manager_review` / `pending_skip_review` previously surfaced only `stat1` — adding `stat2/stat3` is additive, doesn't shift existing filters. | Extend `src/test/teamReviewsFullAccessTiles.test.ts` (or new sibling test) with sum-invariant cases for all four views. |
-
-## Files to touch
-
-- `src/components/review/EmployeeSelectorGrid.tsx`
-  - Extend `stats` for `pending_manager_review` and `pending_skip_review` branches (+ counters).
-  - Replace the 3-tile blocks for those two views and the 5-tile block for `hr_pms` inside `renderStatsCards()` with the new 6-tile layout (mirrors Team's grid classes).
-- `src/hooks/useOrgKpiPeriodCounts.ts` — broaden the `enabled` predicate to cover the three additional views.
-- `src/test/teamReviewsFullAccessTiles.test.ts` — add three describe-blocks: HR PMS, Manager Review, Skip Mgr Review — each asserting `pending + inReview + reviewed === totalKpis` plus Org KPI presence.
-- `DOCUMENTATION.md` — v2.66.11.8 entry: "Tile parity for HR PMS / Manager / Skip Mgr Review".
-- `POLICY.md` §127 — append: same 6-tile composition rule applies to all reviewer-stage dashboards (HR PMS, Manager, Skip, Audit-future).
-
-## Out of scope (call out)
-
-- **Audit view** already has a meaningful 5-tile layout (`Pending Audit | In Audit | Forwarded | My KPIs`). Adding Org KPIs there is a natural follow-up but you didn't ask for it — flag for a v2.66.11.9 follow-up if desired.
-- **Management view** (default branch) — same situation; can be added in the same follow-up.
-
-## One small open question
-
-For **Manager Review** and **Skip Mgr Review**, the "Org KPIs" tile can mean either:
-- **(A)** Org KPIs **at this stage** (`status` matches the view's queue) — a focused, view-specific number.
-- **(B)** Org KPIs for the **whole period** (entered+propagated/total) — same number as Team view's tile, gives period-wide context.
-
-Recommend **(B)** for consistency with Team view (one universally meaningful Org KPI denominator across all reviewer dashboards). Say so if you'd prefer (A).
+## Out of scope (flagged, not changed now)
+- `useMonthlyTrend` / Monthly Scorecard already aggregate without lock filtering, so they are unaffected. No change proposed.
+- A potential follow-up: if business wants locked-but-already-scored KPIs (rare data-entry overrides) to count, that is a separate policy decision and not part of this fix.

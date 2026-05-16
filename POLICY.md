@@ -2808,3 +2808,17 @@ Per-view stage mapping:
 Sum invariant: `Pending + In Review + Reviewed = Total KPIs` (excluding pre-stage rows: `kra_set`, and for skip view also `self_review`). Audit and Management views are intentionally out of scope until a follow-up; their existing 5-tile layouts remain unchanged.
 
 Regression: `src/test/teamReviewsFullAccessTiles.test.ts` includes sum-invariant assertions for Manager and Skip Mgr stages.
+
+---
+
+## §128 — Frequency-Lock Determination Must Honor Per-KPI Cycle Override (v2.66.11.9)
+
+Any code path that calls `isKpiLockedForPeriod(frequency, month, year, ...)` for a specific KPI MUST pass that KPI's `frequency_cycle_start` as the 4th argument. The corresponding Supabase SELECT MUST include the `frequency_cycle_start` column.
+
+**Rationale.** Sajid Raza (100264) showed 114/257.5 = 44.27% in the Mar-2026 Employee Performance Summary instead of the correct 314/492.5 = 63.76%. All 6 of his Bi-Monthly KPIs use the offset cycle `Feb-Mar` (active month = March). The report omitted the override; `resolveEffectiveCycleOption` fell back to the default `Jan-Feb` cycle (which locks March), so 47 of 98.5 weight points were silently dropped from both the numerator and the denominator.
+
+**Affected reports patched (v2.66.11.9):** `EmployeePerformanceSummary.tsx`, `KpiDetailReport.tsx`, `KpiStatusTracker.tsx`.
+
+**Exempt call sites** (frequency-family checks, no specific KPI in hand) MUST add an inline comment justifying the omission. Audit with `rg "isKpiLockedForPeriod\("`; every match against a KPI row must pass argument 4.
+
+**Regression guard:** `src/test/reportFrequencyCycleOverride.test.ts` (5 tests covering Bi-Monthly Feb-Mar, Quarterly Apr-Jun, Half-Yearly Apr-Sep, Yearly Apr-Mar, plus default-fallback baseline).
