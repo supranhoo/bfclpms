@@ -355,7 +355,7 @@ Deno.serve(async (req) => {
           review_year: kpi.review_year,
           current_status: kpi.status,
           action: "zero_scorable",
-          reason: kpi.status === "kra_set" ? "stuck_at_kra_set" : "stuck_at_self_review",
+          reason: `stuck_at_${kpi.status}`,
         });
       }
 
