@@ -2778,6 +2778,8 @@ const rows = await fetchAllRpcPaged<MyType>((from, to) =>
 
 Direct `.rpc(...).range(0, N)` for these large-result RPCs is a regression and is blocked by the BUG-049 test suite.
 
+**§125.1 — Bulk-resolution React hooks (v2.66.11.18).** The same 1,000-row cap applies to React Query hooks that call `supabase.rpc(...)` with a large input array. Any hook that resolves per-employee or per-id data for a roster whose size can exceed ~500 MUST chunk the input ids client-side (default chunk size = 500) and merge results, OR use `fetchAllRpcPaged` when the RPC is range-pageable. Concrete hooks under this rule: `useBulkEmployeeWorkflows` (`src/hooks/useWorkflowConfig.ts`) — chunks `employee_ids` into 500-id batches and calls the RPC in parallel via `Promise.all` with one retry per chunk on failure. Violations silently exclude every employee past the cut-off from reviewer-stage filters and bottleneck aggregations, even though tile counters (which use score-signature paths) appear correct. Regression: `src/test/bulkEmployeeWorkflowsPagination.test.ts` + `src/test/hrPmsRosterCompleteness.test.ts`.
+
 ## §126 — Team Reviews Tile Aggregation for Full-Access Roles (v2.66.11.6)
 On the merged Team Reviews dashboard (`/dashboard?view=team`), the Direct Pending / Skip-Level Pending / Reviewed tiles MUST be computed from each KPI's resolved per-employee workflow position when the viewer is a full-access role (`admin`, `auditor`, `management`, `hr_pms`).
 
