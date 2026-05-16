@@ -2822,3 +2822,12 @@ Any code path that calls `isKpiLockedForPeriod(frequency, month, year, ...)` for
 **Exempt call sites** (frequency-family checks, no specific KPI in hand) MUST add an inline comment justifying the omission. Audit with `rg "isKpiLockedForPeriod\("`; every match against a KPI row must pass argument 4.
 
 **Regression guard:** `src/test/reportFrequencyCycleOverride.test.ts` (5 tests covering Bi-Monthly Feb-Mar, Quarterly Apr-Jun, Half-Yearly Apr-Sep, Yearly Apr-Mar, plus default-fallback baseline).
+
+**CI guard (v2.66.11.10):** `src/test/frequencyLockCallSitesAudit.test.ts` greps the entire `src/` tree for `isKpiLockedForPeriod(` and asserts every non-whitelisted call passes ≥ 4 top-level arguments. Whitelist is limited to the helper's own unit tests where the 3-arg form is the test's purpose.
+
+**Runtime guard (v2.66.11.10):** `isKpiLockedForPeriod` emits a dev-only `console.warn` when `frequencyCycleStart === undefined` and the frequency is multi-month (Bi-Monthly / Quarterly / Half-Yearly / Yearly). Suppressed in production builds via `import.meta.env.DEV`.
+
+**Audit attestation:**
+| Date | Production call sites | Violations |
+|------|----------------------|-----------|
+| 2026-05-12 | 10 | 0 |

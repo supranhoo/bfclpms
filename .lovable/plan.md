@@ -1,71 +1,62 @@
-# RCA — Sajid Raza score 44.27% (114/257.5) is wrong
+# Audit — `isKpiLockedForPeriod` callers and per-KPI `frequency_cycle_start`
 
-## What the screen shows
-Employee Performance Summary, March 2026, Sajid Raza (100264): **Total 114 / Out 257.5 = 44.27%**.
+Scope: every call to `isKpiLockedForPeriod(...)` and every related sibling helper (`isFrequencyNotDue`, `getActiveMonthForCycle`) across the app, plus the SELECT that feeds each call.
 
-## What the database actually contains
-30 active (non-N/A) approved KPIs for him in Mar-2026:
+## Findings — all call sites already compliant
 
-| Frequency  | KPIs | Σ weight | Σ weight×5 | Σ weight×score |
-|------------|------|---------:|-----------:|---------------:|
-| Daily      | 2    | 1.5      | 7.5        | 7.5            |
-| Monthly    | 22   | 50.0     | 250.0      | 106.5          |
-| Bi-Monthly | 6    | 47.0     | 235.0      | 200.0          |
-| **Total**  | 30   | 98.5     | 492.5      | **314.0**      |
+| # | File | Line | Passes `frequency_cycle_start`? | SELECT includes it? | Notes |
+|---|------|------|---|---|---|
+| 1 | `src/pages/reports/EmployeePerformanceSummary.tsx` | 193 | yes | yes (lines 120 + 304) | Fixed in v2.66.11.9 |
+| 2 | `src/pages/reports/KpiDetailReport.tsx` | 199 | yes | yes (line 147) | Fixed in v2.66.11.9 |
+| 3 | `src/pages/reports/KpiStatusTracker.tsx` | 166 | yes | yes (line 131) | Fixed in v2.66.11.9 |
+| 4 | `src/pages/admin/OrgKpiDataEntry.tsx` | 214 | yes | yes (uses RPC snapshot) | Long-standing |
+| 5 | `src/hooks/useSystemIssues.ts` | 111 | yes | yes (line 99 type + `select('*')`) | Long-standing |
+| 6 | `src/components/admin/AdminDataEntryDialog.tsx` | 137-143 | yes | yes (`select('*')` line 258) | Long-standing |
+| 7 | `src/components/review/SelfReviewSheet.tsx` | 155 | yes | yes (KPI hydrated via `useKpis` SLIM_KPI_SELECT) | Long-standing |
+| 8 | `src/components/review/KpiJourneySection.tsx` | 184/188 | yes | yes (KPI prop) | Long-standing |
+| 9 | `src/components/review/FrequencyLockedOverlay.tsx` | 29/83 | yes (prop) | n/a — caller's responsibility | Long-standing |
+| 10 | `src/lib/frequencyUtils.ts` | 654 (`getActiveMonthForCycle`) | yes (re-passes arg) | n/a — internal | Helper-internal |
 
-Correct percentage = **314 / 492.5 = 63.76%**.
-Screen value = 114 / 257.5 ≡ Daily + Monthly only — **the 6 Bi-Monthly KPIs (weight 47, 200 score points) are silently dropped.**
+Sibling helper:
+- `src/hooks/useCompliancePenalty.ts` line 190 → `isFrequencyNotDue(kpi.frequency, ..., kpi.frequency_cycle_start, exclusions)` ✅ (SELECT line 137 includes column).
+- `src/hooks/useAdminReports.ts` lines 154/160/208 → uses `getCalendarMonthsForPeriod(..., frequency_cycle_start)` ✅.
 
-## Why why analysis
-1. *Why is the percentage 44.27 and not 63.76?* Because Bi-Monthly KPIs are excluded from `totalScore` and `outOfScore`.
-2. *Why are they excluded?* `isKpiLockedForPeriod(kpi.frequency, 'March', 2026)` returns `true`, and the report skips locked KPIs while the "Show frequency-locked KPIs" toggle is off.
-3. *Why does the helper return `true` for March?* It falls through to the **first** Bi-Monthly cycle option (`Jan-Feb` → `Mar-Apr` → locked month = 3). March IS locked under the standard cycle.
-4. *Why does it use the wrong cycle?* All 6 of his Bi-Monthly KPIs carry `frequency_cycle_start = 'Feb-Mar'` (offset cycle, active month = March, locked month = February). But the report **never reads or passes `frequency_cycle_start`**:
-   - `EmployeePerformanceSummary.tsx` line 120 SELECT: `id, employee_id, kra_name, kpi_name, weightage, status, review_period, review_year, frequency` — column missing.
-   - Line 189 call: `isKpiLockedForPeriod(kpi.frequency, selectedPeriod, year)` — 4th arg `frequencyCycleStart` missing.
-   - With both missing, `resolveEffectiveCycleOption` returns `BI_MONTHLY_OPTIONS[0]` (Jan-Feb), wrongly classifying March as locked.
-5. *Why wasn't this caught earlier?* The same omission exists in two more reports (`KpiDetailReport`, `KpiStatusTracker`) — there is no regression test that drives `isKpiLockedForPeriod` through the per-KPI override path inside the report layer. `useSystemIssues`, `OrgKpiDataEntry`, `SelfReviewSheet`, `KpiJourneySection`, `FrequencyLockedOverlay` already pass it correctly, so the helper itself is fine.
+Test files exempt by design (they intentionally exercise the default-fallback path):
+- `src/lib/frequencyUtils.test.ts` (3-arg form is the test's purpose)
+- `src/test/reportFrequencyCycleOverride.test.ts` (mixed 3-arg / 4-arg cases)
 
-## Root cause
-**Reports drop the per-KPI `frequency_cycle_start` override**, so any KPI whose cycle differs from the first hard-coded option (`Jan-Feb` for Bi-Monthly, `Jan-Mar` for Quarterly, `Jan-Jun` for Half-Yearly, `Jan-Dec` for Yearly) is mis-classified. Sajid Raza is the visible victim because almost half his weight (47/98.5) sits on `Feb-Mar` Bi-Monthly KPIs.
+Both are flagged in POLICY §128 as exempt; no change.
 
-# Fix plan
+## Result
 
-## 1. Patch the three reports (data-only change, no UI shift)
-For each:
-- Add `frequency_cycle_start` to the `kpis` SELECT.
-- Pass it as the 4th argument to `isKpiLockedForPeriod`.
+No production call site is missing the per-KPI `frequency_cycle_start` argument. No SELECT feeding such a call site is missing the column. The Sajid-Raza class of bug (default-cycle fallback wrongly locking offset-cycle KPIs) is now closed app-wide.
 
-Files:
-- `src/pages/reports/EmployeePerformanceSummary.tsx`
-  - SELECT (line 120) and `trendData` SELECT (line 300).
-  - Call site line 189 → `isKpiLockedForPeriod(kpi.frequency, selectedPeriod, year, kpi.frequency_cycle_start)`.
-- `src/pages/reports/KpiDetailReport.tsx` line 195 (+ matching SELECT).
-- `src/pages/reports/KpiStatusTracker.tsx` line 165 (+ matching SELECT).
+## What I propose to ship (lightweight hardening only)
 
-No schema, RLS, or workflow change. No score recomputation in DB.
+Strictly to prevent future regressions — nothing functional changes:
 
-## 2. Regression test
-Add `src/test/reportFrequencyCycleOverride.test.ts`:
-- Bi-Monthly KPI with `frequency_cycle_start='Feb-Mar'` in March → not locked.
-- Same KPI without override → locked under default `Jan-Feb`.
-- Quarterly `Apr-Jun` cycle in June → not locked.
-This locks behaviour at the report layer, not just inside `frequencyUtils`.
+1. **CI guard test** — `src/test/frequencyLockCallSitesAudit.test.ts`. A repo-grep test that:
+   - greps `src/**/*.{ts,tsx}` for `isKpiLockedForPeriod(`,
+   - excludes the two whitelisted test files,
+   - asserts every remaining call has 4+ comma-separated arguments.
+   This makes any future 3-arg slip fail CI immediately, without depending on memory of POLICY §128.
 
-## 3. Mock-data refresh
-Extend the existing mock fixtures used by the report tests to include at least one Bi-Monthly KPI with `frequency_cycle_start='Feb-Mar'` and one Quarterly with `Apr-Jun`, so any future refactor that drops the column fails CI immediately.
+2. **Helper hardening** — add a dev-only `console.warn` inside `isKpiLockedForPeriod` when `frequencyCycleStart` is `undefined` AND the frequency belongs to `MULTI_MONTH_FREQUENCIES` (Bi-Monthly / Quarterly / Half-Yearly / Yearly). Suppressed in production. Catches new entry points the static grep can't see (e.g. dynamic dispatch).
 
-## 4. POLICY.md / DOCUMENTATION.md sync
-- DOCUMENTATION.md → new entry **v2.66.11.9** describing the bug, RCA, the three-file fix and the new test.
-- POLICY.md → add **§128 (Frequency-Lock Determination)**: "Any code path that calls `isKpiLockedForPeriod` for a KPI MUST pass that KPI's `frequency_cycle_start`. SELECTs that feed such code paths MUST include the `frequency_cycle_start` column. Helper-only call sites that intentionally check a *frequency family* (no specific KPI) are exempt and must add an inline comment."
+3. **Policy refresh** — update POLICY §128 to reference the new CI guard and the dev-only warning, and append an audit attestation row ("Audited 2026-05-12: 10 call sites, 0 violations").
 
-## Risk & impact report
-- **Data impact:** none — read-only, no migration, no recomputation of stored scores.
-- **Workflow impact:** none — does not change reviewer stages, status, or RLS.
-- **UI/UX impact:** Mar-2026 Performance Summary will show Sajid Raza at 314/492.5 = 63.76% (and similar corrections for any employee with non-default cycles). The 6 missing Bi-Monthly KPIs become visible in `KpiDetailReport` / `KpiStatusTracker` for their active months, and stay correctly hidden in their locked months.
-- **Regression risk:** low. Helper signature is unchanged; we only start passing an argument that other call sites already pass. Frequency-lock toggle behaviour is preserved.
-- **Mitigation:** unit test (item 2), updated mocks (item 3), policy guard (item 4) plus a one-time grep audit of `isKpiLockedForPeriod(` to confirm no remaining 3-arg calls except the explicitly exempt test cases.
+4. **DOCUMENTATION.md** — append v2.66.11.10 entry summarizing the audit + the two hardening additions.
 
-## Out of scope (flagged, not changed now)
-- `useMonthlyTrend` / Monthly Scorecard already aggregate without lock filtering, so they are unaffected. No change proposed.
-- A potential follow-up: if business wants locked-but-already-scored KPIs (rare data-entry overrides) to count, that is a separate policy decision and not part of this fix.
+## Risk & impact
+
+- Data: none.
+- Workflow: none.
+- UI/UX: none (dev-only warning is suppressed in prod build).
+- Regression risk: very low — only test + warn additions, no behavior change to scoring or locking.
+- Mitigation: the new test itself is the primary guard.
+
+## Out of scope
+
+Reports that intentionally do NOT apply frequency locking to score aggregation (e.g. `useMonthlyTrend`, `MonthlyScorecardReport`, `KpiEmployeeMatrix`, `PerformanceReport` trend mode) are unchanged. Their behavior is by design (trend dashboards include all periods regardless of lock state).
+
+If you'd like the trend dashboards re-examined for lock awareness, that's a separate decision and I'll flag it separately.
