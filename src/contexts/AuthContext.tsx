@@ -270,6 +270,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     queryClient.invalidateQueries({ queryKey: ['kpis'] });
     queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
     queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
+    // v2.66.11.13 — Manager Team Reviews dashboard caches must also re-fetch
+    // once auth is ready, otherwise SECURITY DEFINER RPCs that race the
+    // bootstrap silently return zero rows and managers see an empty grid.
+    queryClient.invalidateQueries({ queryKey: ['kpis-by-period-ranges'] });
+    queryClient.invalidateQueries({ queryKey: ['profiles'] });
+    queryClient.invalidateQueries({ queryKey: ['profiles-by-workflow-stage'] });
+    queryClient.invalidateQueries({ queryKey: ['team-members'] });
+    queryClient.invalidateQueries({ queryKey: ['skip-level-team-members'] });
   }, [isReady, user?.id, queryClient]);
 
   const signIn = async (email: string, password: string, rememberMe: boolean = true) => {
