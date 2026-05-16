@@ -50,6 +50,9 @@ interface RolloverResponse {
   skipped?: boolean;
   reason?: string;
   error?: string;
+  audit_assignments_cloned?: number;
+  audit_assignments_skipped_already_assigned?: number;
+  audit_clone_errors?: string[];
 }
 
 interface RolloverDialogProps {
@@ -92,6 +95,10 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
   const [previewData, setPreviewData] = useState<RolloverResponse | null>(null);
   const [balanceIds, setBalanceIds] = useState<Set<string>>(new Set());
   const [results, setResults] = useState<RolloverResponse | null>(null);
+  // Opt-in: carry forward `audit_kpi_level_assignments` (per-KPI auditor
+  // mappings) from the source period onto the newly created target KPIs.
+  // Off by default — existing assignments on target KPIs are never overwritten.
+  const [carryAuditAssignments, setCarryAuditAssignments] = useState(true);
 
   // When opened in scoped mode, ensure state stays locked to the scoped employee
   // and the supplied target period each time the dialog is reopened.
@@ -186,6 +193,7 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
           dry_run: false,
           rollover_balance_only: true,
           skip_employee_ids: skipIds,
+          carry_audit_assignments: carryAuditAssignments,
         },
       });
       if (error) throw error;
@@ -370,6 +378,24 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
                   <><Search className="h-4 w-4 mr-2" />Check & Preview</>
                 )}
               </Button>
+
+              <div className="flex items-start justify-between gap-3 p-4 rounded-lg border bg-muted/30">
+                <div className="flex-1">
+                  <Label htmlFor="carry-audit" className="text-sm font-medium">
+                    Carry forward auditor mappings
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Clone each source KPI's assigned auditor onto the newly created
+                    target KPI. Target KPIs that already have an auditor are
+                    preserved. Action is audit-logged.
+                  </p>
+                </div>
+                <Switch
+                  id="carry-audit"
+                  checked={carryAuditAssignments}
+                  onCheckedChange={setCarryAuditAssignments}
+                />
+              </div>
             </div>
           )}
 
@@ -500,6 +526,32 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
               <div className="text-sm text-muted-foreground text-center">
                 Total: {results.total_kpis_copied} KPIs copied for {results.total_employees_affected} employees
               </div>
+
+              {(results.audit_assignments_cloned ?? 0) +
+                (results.audit_assignments_skipped_already_assigned ?? 0) >
+                0 && (
+                <Alert className="border-primary/30 bg-primary/5">
+                  <Users className="h-4 w-4" />
+                  <AlertDescription className="text-sm">
+                    Auditor mappings:{' '}
+                    <span className="font-semibold">{results.audit_assignments_cloned ?? 0}</span> cloned
+                    {(results.audit_assignments_skipped_already_assigned ?? 0) > 0 && (
+                      <>
+                        {', '}
+                        <span className="font-semibold">
+                          {results.audit_assignments_skipped_already_assigned}
+                        </span>{' '}
+                        preserved (target already assigned)
+                      </>
+                    )}
+                    {(results.audit_clone_errors?.length ?? 0) > 0 && (
+                      <span className="text-destructive">
+                        {' '}— {results.audit_clone_errors!.length} error(s); see edge-function logs.
+                      </span>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
 
               <Table>
                 <TableHeader>
