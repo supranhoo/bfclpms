@@ -289,8 +289,8 @@ function PasswordPanel({ user }: { user: UserAccessSheetUser }) {
 // ============================================================
 // Audit
 // ============================================================
-interface IacAuditRow { id: string; action: string; target_type: string; target_id: string | null; created_at: string; }
-interface EmailAuditRow { id: string; old_email: string | null; new_email: string | null; source: string | null; created_at: string; }
+interface IacAuditRow { id: number; action: string; target_type: string; target_id: string | null; created_at: string; }
+interface EmailAuditRow { id: string; old_email: string | null; new_email: string | null; source: string | null; performed_at: string; }
 
 function AuditPanel({ user }: { user: UserAccessSheetUser }) {
   const { data: iacRows, isLoading: iacLoading } = useQuery({
@@ -303,7 +303,7 @@ function AuditPanel({ user }: { user: UserAccessSheetUser }) {
         .order('created_at', { ascending: false })
         .limit(20);
       if (error) throw error;
-      return (data as IacAuditRow[]) ?? [];
+      return ((data ?? []) as unknown) as IacAuditRow[];
     },
   });
 
@@ -312,12 +312,12 @@ function AuditPanel({ user }: { user: UserAccessSheetUser }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('email_change_audit')
-        .select('id, old_email, new_email, source, created_at')
+        .select('id, old_email, new_email, source, performed_at')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
+        .order('performed_at', { ascending: false })
         .limit(5);
       if (error) return [] as EmailAuditRow[]; // table may not be visible under RLS for non-admin contexts
-      return (data as EmailAuditRow[]) ?? [];
+      return ((data ?? []) as unknown) as EmailAuditRow[];
     },
   });
 
@@ -351,7 +351,7 @@ function AuditPanel({ user }: { user: UserAccessSheetUser }) {
               <div key={r.id} className="text-xs border rounded p-2">
                 <div className="flex justify-between gap-2">
                   <span className="truncate">{r.old_email || '—'} → {r.new_email || '—'}</span>
-                  <span className="text-muted-foreground">{new Date(r.created_at).toLocaleString()}</span>
+                  <span className="text-muted-foreground">{new Date(r.performed_at).toLocaleString()}</span>
                 </div>
                 {r.source && <p className="text-muted-foreground mt-0.5">via {r.source}</p>}
               </div>
