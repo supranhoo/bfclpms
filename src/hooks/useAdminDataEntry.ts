@@ -855,23 +855,50 @@ export function useAdminStatusStepBack() {
           // Fetch KPI details for sibling lookup
           const { data: kpiData } = await supabase
             .from('kpis')
-            .select('kra_name, kpi_name, review_year, frequency, review_period')
+            .select('kra_name, kpi_name, review_year, frequency, review_period, frequency_cycle_start')
             .eq('id', kpi_id)
             .single();
 
-          if (kpiData && kpiData.frequency && kpiData.frequency !== 'Monthly') {
-            // Find sibling KPIs in the same cycle
-            const { data: siblings } = await supabase
-              .from('kpis')
-              .select('id, review_period, status')
-              .eq('employee_id', employee_id)
-              .eq('kra_name', kpiData.kra_name)
-              .eq('kpi_name', kpiData.kpi_name)
-              .eq('review_year', kpiData.review_year)
-              .eq('frequency', kpiData.frequency)
-              .neq('id', kpi_id);
+          if (kpiData && kpiData.frequency) {
+            // POLICY: cascade is bounded by the source KPI's own multi-month
+            // cycle (e.g. Bi-Monthly Mar → only Apr; Quarterly Mar → only the
+            // matching Jan-Mar OR Mar-May cycle members). Never year-wide.
+            // See: src/lib/multimonthAssignment.ts#getCycleMembers
+            const { getCycleMembers } = await import('@/lib/multimonthAssignment');
+            const cycleMembers = getCycleMembers({
+              frequency: kpiData.frequency,
+              reviewPeriod: kpiData.review_period,
+              reviewYear: kpiData.review_year,
+              frequencyCycleStart: (kpiData as any).frequency_cycle_start ?? null,
+            });
+            const otherMembers = cycleMembers.filter(
+              (m) => !(m.period === kpiData.review_period && m.year === kpiData.review_year),
+            );
 
-            if (siblings && siblings.length > 0) {
+            if (otherMembers.length > 0) {
+              const periodList = Array.from(new Set(otherMembers.map((m) => m.period)));
+              const yearList = Array.from(new Set(otherMembers.map((m) => m.year)));
+
+              const { data: candidates } = await supabase
+                .from('kpis')
+                .select('id, review_period, review_year, status')
+                .eq('employee_id', employee_id)
+                .eq('kra_name', kpiData.kra_name)
+                .eq('kpi_name', kpiData.kpi_name)
+                .eq('frequency', kpiData.frequency)
+                .in('review_period', periodList)
+                .in('review_year', yearList)
+                .neq('id', kpi_id);
+
+              // Final guard: only keep candidates whose (period, year) tuple
+              // is in the cycle — protects against the .in() cross-product
+              // when a cycle wraps the year.
+              const siblings = (candidates ?? []).filter((c) =>
+                otherMembers.some(
+                  (m) => m.period === c.review_period && m.year === c.review_year,
+                ),
+              );
+
               for (const sibling of siblings) {
                 // Update sibling KPI status
                 await supabase
@@ -898,6 +925,8 @@ export function useAdminStatusStepBack() {
                     reason,
                     source_kpi_id: kpi_id,
                     source_period: kpiData.review_period,
+                    source_year: kpiData.review_year,
+                    cycle_members: cycleMembers,
                     full_reset,
                   },
                 });
