@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useSubPeriodSubmissionsByKpis, useSubmitSubPeriod, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { useDailyAggregationMethod } from '@/hooks/useSystemSettings';
 import { useCanRecallSubmission, useRecallSubmission } from '@/hooks/useRecallSubmission';
-import { calculateDailyAggregatedScoreWithExpectedDays, getAggregationMethodLabel } from '@/lib/dailyAggregation';
+import { calculateDailyAggregatedScoreWithExpectedDays } from '@/lib/dailyAggregation';
 import { useExpectedDays } from '@/hooks/useDailyAggregation';
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
