@@ -1,77 +1,55 @@
-# Multi-Role Assignment — Discussion & Plan
+# Edit User Dialog — Fit-Everything Redesign
 
-## Short answer to your questions
+## Problem (from your screenshot)
 
-**1. "Seems only 1 role can be granted"** — that's only how the UI currently *looks*. The database already supports many-to-many.
+The dialog opens at ~895×820 px with **5 sections stacked vertically** inside an internal `ScrollArea`. Result:
+- "Access & Status" header is visible but its fields are clipped.
+- "Module Access & Login" section is **entirely hidden** below the fold.
+- The inner scrollbar is on the right edge of the scroll area, not on the page — users don't realise they can scroll inside the dialog and reach for browser zoom-out instead.
 
-- Table `iac_user_role_assignments` has a composite unique key on `(user_id, role_id, scope_type, scope_id)`. So a single user can hold **as many rows as needed** — one per role (and per scope).
-- The "Grant" form in `UserAccessSheet` is a single dropdown + button. After you grant, the row appears under "Current assignments" and the dropdown clears so you can pick the **next** role. You can repeat this N times.
-- So an employee who is *Employee + Manager (PMS) + Safety Officer (Safety module)* would end up with 3 rows in `iac_user_role_assignments`, each pointing to a different role in `iac_roles`.
+Same issue applies to the **Add New User** dialog (identical layout, ~6 sections).
 
-**2. How multi-role actually resolves at runtime**
+## Goal
 
-- `has_role(user, role)` / capability checks union across **all** active (non-expired) assignments.
-- Module shells (PMS, Safety, HR, Incentive, Reports) each look up their own role family. A user with PMS-Manager + Safety-Officer sees both module tiles on the hub and gets the union of menu items via the Profile-Based Menu Access layer.
-- Scope (`global` vs `department`/`location`/etc.) lets you say e.g. *"Manager for Dept A only, Auditor globally"*.
+Every field must be reachable **without browser zoom and without hunting for an inner scrollbar**, on a typical laptop (1366×768 and up).
 
-So functionally nothing is missing — but the **UX makes it look single-role**, which is exactly the friction you hit.
+## Solution — Tabbed layout, wider dialog, no inner scroll on common screens
 
----
+### A. Structural changes (`src/pages/admin/UserManagement.tsx`, both Edit & Create dialogs)
 
-## What I propose to change (UI only, no schema)
+1. **Widen dialog**: `max-w-3xl` → `max-w-5xl` (1024 px). Use full available width up to that cap; on mobile it stays full-width via shadcn's default.
+2. **Replace stacked sections with `Tabs`** (shadcn `Tabs` already in the project):
+   - **Tab 1 — Profile**: Personal Information + Organization (the 2 most-used groups, fits in one screen as 2-column grid).
+   - **Tab 2 — Access**: Access & Status (legacy single-role) + Module Access & Login shortcuts (Roles / Password / Activity).
+   - **Tab 3 — Activity** (Edit only): inline mini-recap (last login, last password rollout date, role count) — read-only summary so admin sees state without opening the side sheet.
+   - Add Dialog has the same Profile + Access tabs (no Activity tab — user doesn't exist yet).
+3. **Tabs header sticks** to the top of the dialog body; **footer (Cancel / Save) sticks** to the bottom. Body uses `min-h-[420px]` so tab switches don't reflow the dialog height. Remove the inner `ScrollArea` — each tab's content is short enough to fit. A safety `overflow-y-auto` stays on the body for sub-1366px laptops, but with tabs each tab is ~3-4 rows, so it almost never triggers.
+4. **Required-field markers** kept; add a small "Required *" legend in the dialog header so the asterisks aren't ambiguous.
+5. **Section icons** (Users, Package, Shield, KeyRound) reused as **tab triggers**, so the visual language stays consistent with today's section headers.
 
-### A. Make "multi-role" obvious in the Roles tab
+### B. UX polish carried in the same pass
 
-Rework `RolesPanel` inside `src/components/admin/UserAccessSheet.tsx`:
+- The "Module Access & Login" three-button row becomes the **whole Access tab body** (large, obvious buttons with descriptions: "Grant module roles", "Send/reset password", "View access history") — no more hiding in a sub-card.
+- Account Status switch and legacy single-role dropdown move into a tidy left column on the Access tab; right column shows current IAC role count + a "Manage in detail →" hint pointing to the Roles button.
+- Save / Cancel footer gets a subtle border-top to anchor visually.
 
-1. **Multi-select grant** instead of a single dropdown.
-  - Replace the single `Select` with a searchable multi-select (checkbox list grouped by `module`: PMS / Safety / HR / Incentive / Admin).
-  - One "Grant N roles" button issues N `grantRole` calls in sequence (sequential, not parallel, so the existing edge-function audit log stays clean).
-  - Show per-row success/fail toast summary at the end.
-2. **Current assignments grouped by module** with a count badge:
-  ```
-   PMS (2)        [Manager — Dept A]  [Employee — Global]
-   Safety (1)    [Safety Officer — Plant 1]
-   HR (0)
-  ```
-   Each chip has a small ✕ to revoke. Expired assignments shown dimmed.
-3. **Scope picker** next to each role at grant time (default `global`, dropdown for `department` / `location` / `company` when the role supports scoping). Today the UI hard-codes `global`.
-4. **Quick presets** for the common combos you described, e.g.:
-  - *"Employee + Line Manager"* (PMS-Employee + PMS-Manager)
-  - *"Manager + Safety Officer"* (PMS-Manager + Safety-Officer)
-  - *"Full-stack reviewer"* (Manager + Auditor + Skip-Level)
-   Presets are just client-side bundles of role IDs — no new tables.
-5. **Conflict / redundancy hints** (non-blocking):
-  - Warn if granting a role that's a strict subset of one already held (e.g. Employee when Manager already grants the same caps).
-  - Warn on opposite-side conflicts (e.g. Auditor + Reviewee on the same scope) — purely advisory.
+### C. Reuse, don't duplicate
 
-### B. Mirror the same multi-select in two more places
-
-- **User-create dialog → "Next steps" panel** (already planned step 4 from the earlier work): replace the single-role grant with the same multi-select component so a new hire can be stamped with all needed roles in one go.
-- **Identity & Access Console → PersonDrawer**: already reuses `UserAccessSheet`, so it gets the upgrade for free.
-
-### C. Bulk path (optional, only if you want it now)
-
-The IAC Bulk Importer already supports many rows per user via CSV (`user_id, role_id, scope_type, scope_id`). I'll add a one-line note in the Roles tab: *"Need to assign roles to many users at once? Use Bulk Importer →"* deep-linking to `/admin/iac?tab=bulk`.
-
----
+- The Create dialog reuses the **same `<UserDialogTabs />` extraction** so future fields only need editing in one place. New file: `src/components/admin/UserDialogShell.tsx` (a thin wrapper exposing `mode: 'create' | 'edit'` + slot per tab).
+- All existing state hooks (`editFullName`, `newFullName`, etc.) stay untouched — only JSX moves.
 
 ## Risk & Impact
 
-- **Data impact:** none. Schema already supports it; we're only changing how the UI calls the existing `grantRole` mutation.
-- **Workflow impact:** users may legitimately end up with more roles than before. Capability resolution is already a UNION, so this is additive — no breaking change to authorization.
-- **RLS:** untouched. Admin-only writes to `iac_user_role_assignments` remain.
-- **Regression risk:** low. The single change inside `UserAccessSheet` is isolated; IAC Console picks it up via the shared component.
-- **Mitigation:** add a unit test for the "grant N roles in one click" handler (success + partial failure paths) and snapshot the grouped-by-module render.
+- **Data impact:** none. Pure UI restructuring; no field renames, no validation changes.
+- **Workflow impact:** none — same fields, same submit handler. Tab switching is local state.
+- **UI/UX consistency:** matches the tabbed pattern already used in `UserAccessSheet` (Roles / Password / Audit), so admins get one mental model across both surfaces.
+- **Regression risk:** low. The two areas touched are inside the dialogs only; row actions, filters, and lists are untouched. If a tab is empty (e.g. you remove a tab later) the body just collapses to its min-height.
+- **Mitigation:** retain `overflow-y-auto` on the tab body as a safety net for very small viewports; smoke-test Create + Edit + the new Access tab buttons (each opens `UserAccessSheet` on the right tab as today).
 
----
+## What I won't change
 
-## Open questions before I build
+- The data model, save logic, or `handleSaveUser` / `handleCreate` flows.
+- The IAC service layer or `UserAccessSheet`.
+- Mobile breakpoints — the dialog is already responsive; tabs make it *more* compact on mobile, not less.
 
-1. **Scope picker** — do you actually need per-role scoping in the UI right now (department / location / company), or is `global` sufficient for v1 and we ship scope-picker in a follow-up?
-2. **Presets** — do you want me to define the preset bundles, or will you supply the list of "common role combinations" used at BFCL?
-3. **Conflict warnings** — do you want hard blocks (e.g. cannot be Auditor and Reviewee of the same dept) or only soft warnings?
-
-Once you answer those (or say "use sensible defaults"), I'll implement A + B in a single pass.  
-   
-use sensible defaults
+If this looks good I'll implement it in one pass and verify the build.
