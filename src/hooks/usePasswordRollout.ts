@@ -10,7 +10,7 @@ export interface EligibleUser {
   employee_code: string | null;
   designation: string | null;
   department_id: string | null;
-  eligibility_type: 'has_kras' | 'reporting_manager' | 'auditor' | 'both';
+  eligibility_type: 'has_kras' | 'reporting_manager' | 'auditor' | 'both' | 'role_holder';
 }
 
 export interface PasswordRolloutLog {

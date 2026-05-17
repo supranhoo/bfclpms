@@ -94,6 +94,8 @@ export function PasswordPolicyTab() {
         return <Badge variant="outline" className="border-primary text-primary">Auditor</Badge>;
       case 'both':
         return <Badge>Both</Badge>;
+      case 'role_holder':
+        return <Badge variant="outline">Role Assigned</Badge>;
       default:
         return <Badge variant="outline">{type}</Badge>;
     }
@@ -143,6 +145,7 @@ export function PasswordPolicyTab() {
                 <SelectItem value="reporting_manager">Reporting Manager</SelectItem>
                 <SelectItem value="both">Both</SelectItem>
                 <SelectItem value="auditor">Auditor</SelectItem>
+                <SelectItem value="role_holder">Role Assigned</SelectItem>
               </SelectContent>
             </Select>
           </div>
