@@ -1196,6 +1196,33 @@ export default function UserManagement() {
                   </div>
                 </div>
               </div>
+
+              {/* Section: Module Access & Login (shortcuts to UserAccessSheet) */}
+              {selectedUser && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <KeyRound className="h-4 w-4 text-muted-foreground" />
+                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Module Access & Login</h3>
+                  </div>
+                  <Separator />
+                  <div className="rounded-lg border p-3 space-y-3">
+                    <p className="text-xs text-muted-foreground">
+                      Manage IAC module roles, password rollout, and view this user's access history.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <Button variant="outline" size="sm" onClick={() => { const u = selectedUser; setEditDialogOpen(false); openAccessSheet(u, 'roles'); }}>
+                        <Shield className="h-3.5 w-3.5 mr-1.5" /> Module Roles
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => { const u = selectedUser; setEditDialogOpen(false); openAccessSheet(u, 'password'); }}>
+                        <KeyRound className="h-3.5 w-3.5 mr-1.5" /> Password
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => { const u = selectedUser; setEditDialogOpen(false); openAccessSheet(u, 'audit'); }}>
+                        <Search className="h-3.5 w-3.5 mr-1.5" /> Activity
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </ScrollArea>
 
