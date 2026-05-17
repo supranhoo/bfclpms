@@ -30,6 +30,7 @@ import { EmployeeWorkingDaysDialog } from '@/components/admin/EmployeeWorkingDay
 import { ManagerCombobox, formatManagerLabel } from '@/components/admin/ManagerCombobox';
 import { OrgFilterCombobox } from '@/components/admin/OrgFilterCombobox';
 import { UserAccessSheet, type UserAccessSheetTab, type UserAccessSheetUser } from '@/components/admin/UserAccessSheet';
+import { BulkGrantAccessDialog, type BulkGrantTarget } from '@/components/admin/BulkGrantAccessDialog';
 import { useSearchParams } from 'react-router-dom';
 
 import { ALL_APP_ROLES, type AppRole } from '@/lib/roles';
@@ -111,6 +112,9 @@ export default function UserManagement() {
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [bulkRole, setBulkRole] = useState<string>('');
   const [bulkManagerId, setBulkManagerId] = useState<string>('');
+
+  // Bulk Grant Access Dialog (multi-user × multi-role IAC grants)
+  const [bulkGrantOpen, setBulkGrantOpen] = useState(false);
 
   // Password Reset Dialog
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
@@ -785,6 +789,14 @@ export default function UserManagement() {
             Bulk Update ({selectedUserIds.size})
           </Button>
         )}
+        <Button
+          variant={selectedUserIds.size > 0 ? 'default' : 'outline'}
+          onClick={() => setBulkGrantOpen(true)}
+        >
+          <Shield className="h-4 w-4 mr-2" />
+          Bulk Grant Access
+          {selectedUserIds.size > 0 ? ` (${selectedUserIds.size})` : ''}
+        </Button>
       </div>
 
       {/* Users Table */}
