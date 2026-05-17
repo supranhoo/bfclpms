@@ -80,16 +80,47 @@ export default function SafetyUsers() {
     return m;
   }, [profilesQuery.data]);
 
+  // Names lookup for the "Current assignments" list — independent of search box.
+  // The search-scoped profilesQuery above is capped at 50 and filtered, so we
+  // resolve assigned user_ids separately to avoid showing raw UUIDs.
+  const assignedUserIds = useMemo(() => {
+    const ids = new Set<string>();
+    (rolesQuery.data ?? []).forEach((r) => ids.add(r.user_id));
+    return Array.from(ids).sort();
+  }, [rolesQuery.data]);
+
+  const assignedProfilesQuery = useQuery({
+    queryKey: ['safety', 'assigned-profiles', assignedUserIds.join(',')],
+    enabled: assignedUserIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, employee_code')
+        .in('id', assignedUserIds);
+      if (error) throw error;
+      return (data ?? []) as ProfileRow[];
+    },
+  });
+
+  const assignedProfilesById = useMemo(() => {
+    const m = new Map<string, ProfileRow>();
+    (assignedProfilesQuery.data ?? []).forEach((p) => m.set(p.id, p));
+    return m;
+  }, [assignedProfilesQuery.data]);
+
   const handleGrant = async () => {
     if (!selectedUserId) {
       toast({ title: 'Select a user', variant: 'destructive' });
       return;
     }
     try {
-      await grant.mutateAsync({ user_id: selectedUserId, role: selectedRole });
+      const res = await grant.mutateAsync({ user_id: selectedUserId, role: selectedRole });
       toast({
         title: 'Role granted',
-        description: `${SAFETY_ROLE_LABEL[selectedRole]} assigned.`,
+        description:
+          res.auth_action === 'created'
+            ? `${SAFETY_ROLE_LABEL[selectedRole]} assigned. Login was provisioned — user must reset their password on first sign-in.`
+            : `${SAFETY_ROLE_LABEL[selectedRole]} assigned.`,
       });
       setSelectedUserId('');
     } catch (err) {
@@ -251,7 +282,8 @@ export default function SafetyUsers() {
           ) : (
             <div className="border rounded-md divide-y">
               {(rolesQuery.data ?? []).map((row) => {
-                const profile = profilesById.get(row.user_id);
+                const profile =
+                  assignedProfilesById.get(row.user_id) ?? profilesById.get(row.user_id);
                 return (
                   <div
                     key={row.id}
@@ -262,6 +294,9 @@ export default function SafetyUsers() {
                         {profile?.full_name || profile?.email || row.user_id}
                       </p>
                       <p className="text-xs text-muted-foreground truncate">
+                        {profile?.email ?? ''}
+                        {profile?.employee_code ? ` · ${profile.employee_code}` : ''}
+                        {profile ? ' · ' : ''}
                         Granted {new Date(row.assigned_at).toLocaleDateString()}
                       </p>
                     </div>

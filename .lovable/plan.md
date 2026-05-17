@@ -1,72 +1,55 @@
-# Backfill Auditor KPI Assignments — April & May 2026
+## Root cause
 
-## Goal
-Populate `audit_kpi_level_assignments` for **April 2026** (2,267 KPIs, 0 mappings) and **May 2026** (2,186 KPIs, 1 mapping) by inheriting auditor assignments from the most recent prior period that has them — same signature-matching logic used by the rollover engine.
+**Issue 1 — "Grant failed: violates foreign key safety_user_roles_user_id_fkey"**
+`public.safety_user_roles.user_id` has a single FK to `auth.users(id)`. The selected user **Vedant Pawar (emp 101966)** exists in `public.profiles` but has **no `auth.users` row** (`has_auth = false`, `portal_access = false`) — he was created via Employee Master Backfill and has never been provisioned for login. The FK therefore rejects the insert. This is the same "profile-without-auth" state covered by mem `non-login-user-provisioning`; PMS handles it via Password Rollout, but Safety's grant flow doesn't.
 
-## Matching Rule
-For each target KPI in the period being backfilled, find a source KPI where:
+**Issue 2 — Assignments list shows raw UUIDs instead of names**
+`SafetyUsers.tsx` builds `profilesById` only from the search result (limited to 50 rows and filtered by the active search term). Any assigned user not in that small slice falls back to `row.user_id`. The list never fetches profiles for the user_ids that are actually assigned.
 
-```
-source.employee_id  = target.employee_id
-source.kra_name     = target.kra_name
-source.kpi_name     = target.kpi_name
-source.review_year/period = the most recent prior period (≤ target) that has an auditor assignment for that signature
-```
+## Plan
 
-If the source KPI has a row in `audit_kpi_level_assignments`, insert the same `auditor_id` for the target KPI. Skip if target already has an assignment.
+### 1. Auto-provision login when a Safety role is granted
 
-## Approach: Admin-Only Edge Function (`backfill-audit-assignments`)
+Create a new admin edge function `grant-safety-role` that does the full operation server-side under service-role, mirroring the canonical Password Rollout provisioning contract (mem `non-login-user-provisioning`):
 
-New edge function, admin-gated, two modes:
-- `dry_run: true` → returns a summary (per-period counts of would-create / already-assigned / no-source-match / source-has-no-auditor) **without writing**.
-- `dry_run: false` → performs the upsert with `onConflict: 'kpi_id', ignoreDuplicates: true` so any existing target mapping is preserved.
+1. Validate caller's JWT → must be either PMS admin (`public.user_roles.role = 'admin'`) or already-existing Safety admin.
+2. Read target `profiles` row (id, email, full_name, employee_code, portal_access).
+3. Probe `auth.admin.getUserById(profile.id)`.
+   - **Present** → no-op on auth.
+   - **Missing** → if profile has a real email (`has_real_email = true`), call `auth.admin.createUser({ id: profile.id, email, password: <random 16-char>, email_confirm: true, user_metadata: { full_name, employee_code } })`. Profile id is reused verbatim so every existing FK stays intact. If the profile has no real email, return a 409 with a clear message asking admin to add an email first; do not invent one.
+   - On create, also set `profiles.portal_access = true` and `profiles.has_real_email = true` (already true here).
+4. Insert into `safety_user_roles` with `(user_id, role, business_unit_id, department_id, assigned_by)`.
+5. Return `{ ok: true, auth_action: 'created' | 'existing', user_id, granted_role }` so the UI can surface a toast like *"Vedant Pawar now has login + Safety Admin role. A password reset will be required on first sign-in."*
+6. CORS headers on every response (including errors).
 
-Inputs:
-```
-{ targets: [{year:2026,period:'April'},{year:2026,period:'May'}], dry_run: boolean }
-```
+Front-end:
+- Replace the direct `supabase.from('safety_user_roles').insert(...)` call in `useGrantSafetyRole` with `supabase.functions.invoke('grant-safety-role', ...)`.
+- Toast wording reflects whether login was newly provisioned vs already existed.
+- No schema change; the FK to `auth.users` stays — we just ensure the row exists before inserting.
 
-Writes one row to `system_audit_logs` per execution: `action='AUDIT_ASSIGNMENTS_BACKFILLED'`, `performed_by=NULL` (system action), details payload with counts.
+### 2. Show real names in "Current Safety role assignments"
 
-## Admin UI
-Add a small panel **"Backfill Auditor Mappings"** inside the existing Rollover/Admin Settings area:
-1. Period multi-select (defaults to April + May 2026).
-2. **"Run Dry-Run"** button → shows the result table.
-3. **"Apply"** button → enabled only after a successful dry-run for the selected periods. Confirms via `ConfirmDestructiveDialog`.
-4. Result table columns: Period | Target KPIs | Would Create | Already Mapped | No Source Match | Source Has No Auditor.
+In `SafetyUsers.tsx`:
+- Add a second `useQuery` keyed on the sorted list of assigned `user_id`s from `rolesQuery.data`, fetching `id, full_name, email, employee_code` from `profiles` with `.in('id', userIds)` — independent of the search box and not capped to 50.
+- Use that map for the assignments list (`profile?.full_name || profile?.email || row.user_id`).
+- Also show `employee_code` next to the name to match the search-result styling and avoid bare UUIDs even when a profile is missing.
+- Keep the search-scoped `profilesQuery` for the picker (unchanged).
 
-## Safety Rails
-- Idempotent: `onConflict: 'kpi_id', ignoreDuplicates: true` — re-running is harmless.
-- Per-period chunked fetch (500 KPI ids per query) to avoid the 1000-row PostgREST cap.
-- Admin-only via `_shared/admin-auth.ts`.
-- Full audit trail entry.
-- Dry-run is mandatory before Apply (UI-enforced).
+### 3. Docs / memory sync
+- `DOCUMENTATION.md` → new section under Safety RBAC describing `grant-safety-role` and the auto-provisioning behaviour.
+- `POLICY.md` → extend §113 (non-login user provisioning) to list `grant-safety-role` as a canonical first-login provisioning entry-point alongside `password-rollout`.
+- `mem/architecture/safety/rbac.md` → note the FK-to-auth.users contract and the provisioning hand-off.
 
-## Tests
-`src/test/backfillAuditAssignments.test.ts` — unit tests for the pure planner:
-1. Inherits auditor when source signature has mapping.
-2. Skips when target already mapped (preserved count).
-3. Skips when source KPI exists but has no auditor mapping.
-4. Skips when no source KPI exists for that signature.
-5. Falls back to **most recent prior period** (e.g. May target → uses April if April has the mapping, else March).
-6. Never crosses employee/KRA/KPI boundaries.
+## Risk & impact
+- **Data**: zero schema change. No existing rows touched. New `auth.users` rows reuse `profiles.id` so all FKs stay aligned.
+- **Workflow**: existing Safety admins can now grant roles to backfilled employees in one click instead of bouncing through Password Rollout.
+- **Security**: edge function is admin-gated (PMS admin OR Safety admin) and runs on service-role. Random password + `email_confirm: true` means the new account is unusable until the admin runs the standard password reset flow.
+- **Regression**: revoke path, RLS, and existing role rows are untouched. The "Names look bad" fix is purely a frontend render fix.
 
-## Files
-- **new** `supabase/functions/backfill-audit-assignments/index.ts`
-- **new** `src/components/admin/BackfillAuditAssignmentsPanel.tsx`
-- **edit** existing admin settings/rollover page to mount the panel
-- **new** `src/test/backfillAuditAssignments.test.ts`
-- **edit** `POLICY.md` — new §132.1 "Auditor Mapping Backfill"
-- **edit** `DOCUMENTATION.md` — v2.66.11.20 RCA + how-to
-
-## Risk & Impact
-- **Data**: Insert-only into one table with UNIQUE(kpi_id). No updates, no deletes. Existing mappings preserved.
-- **Workflow**: None — auditor queue UI already filters by KPI stage; new rows simply make April KPIs visible to the right auditor.
-- **RLS**: No policy changes; edge function uses service role.
-- **Regression**: Zero risk to rollover engine (separate code path). Dry-run protects against bad runs.
-- **Mitigation**: Dry-run first, idempotent upsert, audit log, admin-only.
-
-## Out of Scope
-- No change to the rollover engine (already carries forward going forward).
-- No re-assignment UI changes.
-- June 2026 (only 47 KPIs) — included as optional checkbox if the user wants it covered.
+## Verification
+- Re-grant Safety Admin to Vedant Pawar → succeeds, toast says login was provisioned.
+- `auth.users` now has a row with id = `b1110516-1a80-493c-9297-39e0355b0cb6`.
+- `safety_user_roles` shows the new row; the assignments list renders **"Vedant Pawar · 101966"** instead of the UUID.
+- Existing three Safety Admin rows in the screenshot also render their real names.
+- Granting a role to a user who already has login still works (no-op on auth path).
+- Granting to a profile with no real email returns a clear 409 toast instead of the cryptic FK error.
