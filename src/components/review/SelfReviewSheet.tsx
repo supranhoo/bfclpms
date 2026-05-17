@@ -1314,15 +1314,14 @@ export function SelfReviewSheet({
                     </div>
                   )}
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">{getAggregationMethodLabel(dailyAggregationMethod)} Score:</span>
-                    <strong className="text-foreground">{(aggregatedSubPeriodScore ?? 0).toFixed(2)}</strong>
+                    <span className="text-muted-foreground">Aggregated Value (Sum):</span>
+                    <strong className="text-foreground">{(aggregatedSubPeriodResult?.sumValue ?? 0).toFixed(2)}</strong>
                   </div>
                   {selectedKpi && (() => {
-                    const isDW = selectedKpi.frequency === 'Daily' || selectedKpi.frequency === 'Weekly';
-                    const isMDP = dailyAggregationMethod === 'missed_days_penalty';
-                    const ratingValue = (isDW && isMDP)
-                      ? Math.min(5, Math.max(0, Math.round(aggregatedSubPeriodScore ?? 0)))
-                      : Math.round(calculateScoreFromAchieved(aggregatedSubPeriodScore ?? 0, selectedKpi).rating);
+                    const sumForRating = aggregatedSubPeriodResult?.sumValue ?? 0;
+                    const ratingValue = Math.round(
+                      calculateScoreFromAchieved(sumForRating, selectedKpi).rating
+                    );
                     return (
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Rating:</span>
