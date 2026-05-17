@@ -1,45 +1,26 @@
-## Finding
+## Issue
+On tablet viewport, the **Metrics & Scale** card (`src/components/review/KpiMetricsSection.tsx`) breaks visually:
+- Target value `100` and `%` stack awkwardly under the label
+- "Higher / Better" criteria wraps over the icon
+- Frequency/Source values (`MgrBdyrceMa...`) overlap and truncate badly
 
-User **101966 / Vedant Pawar** already has an active IAC role:
+Root cause: the grid uses `sm:grid-cols-2` which kicks in at 640px, so on tablet (≥768px but narrow card width) two columns squeeze each cell's label+value into the same row with no wrap protection. Long values like "Higher is Better" and "Manual Entry" collide with their labels.
 
-- `safety_admin` in `iac_user_role_assignments`
-- Global Safety module is enabled
-- `has_any_safety_role(...)` returns `true`
-- But the Hub and `/safety` route still call `has_safety_module_access(...)`, and that function currently checks only:
-  - `safety_module_access`, or
-  - legacy `safety_user_roles`
+## Fix (UI-only, presentation layer)
 
-So this is not a user assignment issue. It is an access-gate mismatch: the new bulk grant writes to IAC, but the Safety tile gate still ignores IAC roles.
+Edit `src/components/review/KpiMetricsSection.tsx`:
 
-## Risk & Impact Report
+1. **Switch grid to single-column until enough width is available**: use `grid-cols-1 md:grid-cols-2` (drop the `sm:`). On tablet the card sits in a sidebar/column where 2-col is too tight.
+2. **Stack label above value inside each cell** instead of `justify-between` row: use a vertical flex (`flex flex-col gap-0.5`). This guarantees the value never collides with the label regardless of width.
+3. **Allow value wrapping**: remove `truncate` + fixed `max-w-[80px]` on Source; use `break-words` and `whitespace-normal` so "Manual Entry" / "Higher is Better" wrap cleanly.
+4. **Keep Target unit inline**: render `{target} {uom}` on one line with `whitespace-nowrap` so `100 %` doesn't split.
+5. **Tighten the Rating Scale rows** so R-values + threshold text wrap rather than overflow on narrow widths (`flex-wrap`, remove `truncate`).
 
-- **Data Impact:** No historical user data needs to be changed. Existing IAC Safety assignments will immediately become effective after the function is corrected.
-- **Workflow Impact:** Users granted Safety roles through Bulk Grant Access will correctly see the Safety module. Legacy Safety grants remain supported.
-- **UI/UX Consistency:** The Hub tile and `/safety` route will behave consistently with the IAC access model.
-- **Regression Risk:** Low, but Safety visibility is security-sensitive. The fix must stay fail-closed and only allow active, non-expired Safety IAC roles.
-- **Mitigation Plan:** Update the DB function centrally, add/adjust tests around Safety role visibility, and update documentation/policy notes so future grants use the same access source.
+No business logic, no schema, no policy change. Pure presentation.
 
-## Plan
-
-1. **Fix the backend access gate**
-   - Update `public.has_safety_module_access(_user_id uuid)` so it grants access when any of these are true:
-     - active row in `safety_module_access` with `can_view = true`
-     - legacy row in `safety_user_roles`
-     - active, non-expired IAC role where `iac_roles.module = 'safety'`
-   - Keep the function `SECURITY DEFINER` and fail-closed semantics.
-
-2. **Refresh Hub visibility immediately after IAC changes**
-   - Update `useModules` to also listen for realtime changes on `iac_user_role_assignments` for the current user.
-   - This prevents users from needing to reload or wait for cache expiry after a bulk grant.
-
-3. **Add regression coverage**
-   - Add a test that documents the expected behavior: an active IAC Safety role is enough to unlock Safety visibility.
-   - Keep legacy Safety grants covered so older role assignments continue working.
-
-4. **Update SSOT documentation**
-   - Update `DOCUMENTATION.md` / policy notes to state that Safety module visibility is now controlled by the unified IAC role model plus legacy Safety grants.
-   - Add a version history entry for the access-gate alignment.
-
-## Expected Result
-
-After implementation, **101966 will see Safety** because his existing `safety_admin` IAC assignment will be recognized by the same function used by the Hub and route guard.
+## Risk & Impact
+- Data Impact: none
+- Workflow Impact: none
+- UI/UX: improves tablet + narrow desktop card readability; desktop ≥1024px unchanged visually since md:grid-cols-2 still applies
+- Regression Risk: low — single component, no shared tokens changed
+- Mitigation: verify at 768px, 1024px, 1493px viewports after change
