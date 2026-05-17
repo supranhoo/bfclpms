@@ -1657,6 +1657,29 @@ export default function UserManagement() {
           }
         }}
       />
+
+      {/* Bulk Grant Access dialog — multi-user × multi-role IAC grants */}
+      <BulkGrantAccessDialog
+        open={bulkGrantOpen}
+        onOpenChange={setBulkGrantOpen}
+        initialUsers={(profiles ?? [])
+          .filter((p) => selectedUserIds.has(p.id))
+          .map<BulkGrantTarget>((p) => ({
+            id: p.id,
+            full_name: p.full_name,
+            email: p.email,
+            employee_code: p.employee_code,
+            is_active: (p as any).is_active !== false,
+          }))}
+        pool={(profiles ?? []).map<BulkGrantTarget>((p) => ({
+          id: p.id,
+          full_name: p.full_name,
+          email: p.email,
+          employee_code: p.employee_code,
+          is_active: (p as any).is_active !== false,
+        }))}
+        onCompleted={() => setSelectedUserIds(new Set())}
+      />
     </div>
   );
 }
