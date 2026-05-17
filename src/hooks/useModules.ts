@@ -39,6 +39,30 @@ export function useModules() {
           queryClient.invalidateQueries({ queryKey: ['modules'] });
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'iac_user_role_assignments',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['modules'] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'safety_user_roles',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['modules'] });
+        }
+      )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
