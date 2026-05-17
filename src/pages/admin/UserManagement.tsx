@@ -1258,15 +1258,20 @@ export default function UserManagement() {
 
       {/* Create Dialog */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogContent className="max-w-5xl w-[96vw] max-h-[92vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>Add New User</DialogTitle>
             <DialogDescription>Create a new user account and assign their role</DialogDescription>
           </DialogHeader>
 
-          <ScrollArea className="flex-1 pr-4 -mr-4">
-            <div className="space-y-6 py-4">
-              {/* Section: Personal Information */}
+          <Tabs defaultValue="profile" className="flex-1 flex flex-col min-h-0">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="profile" className="gap-1.5"><Users className="h-3.5 w-3.5" /> Profile</TabsTrigger>
+              <TabsTrigger value="access" className="gap-1.5"><Shield className="h-3.5 w-3.5" /> Access</TabsTrigger>
+            </TabsList>
+
+            <ScrollArea className="flex-1 pr-4 -mr-4 mt-4">
+            <TabsContent value="profile" className="mt-0 space-y-6 py-1">
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <Users className="h-4 w-4 text-muted-foreground" />
@@ -1378,8 +1383,9 @@ export default function UserManagement() {
                   </div>
                 </div>
               </div>
+            </TabsContent>
 
-              {/* Section: Access */}
+            <TabsContent value="access" className="mt-0 space-y-6 py-1">
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <Shield className="h-4 w-4 text-muted-foreground" />
@@ -1409,9 +1415,13 @@ export default function UserManagement() {
                     />
                   </div>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Tip: after creating the user, open <span className="font-medium">Manage Access</span> from the user row to grant additional module roles (PMS, Safety, HR) and send the welcome password.
+                </p>
               </div>
-            </div>
-          </ScrollArea>
+            </TabsContent>
+            </ScrollArea>
+          </Tabs>
 
           <DialogFooter className="pt-4 border-t">
             <Button variant="outline" onClick={() => { setCreateDialogOpen(false); resetCreateForm(); }}>Cancel</Button>
