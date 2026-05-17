@@ -126,21 +126,26 @@ export async function grantRole(input: {
   scope_id?: string | null;
   expires_at?: string | null;
 }) {
-  const { error } = await supabase.from('iac_user_role_assignments').insert({
-    user_id: input.user_id,
-    role_id: input.role_id,
-    scope_type: input.scope_type ?? 'global',
-    scope_id: input.scope_id ?? null,
-    expires_at: input.expires_at ?? null,
+  // Route through edge function so auth.users is auto-provisioned for
+  // backfilled profiles (otherwise the FK on iac_user_role_assignments.user_id
+  // -> auth.users(id) fails for employees who never logged in). The edge
+  // function also writes the audit row.
+  const { data, error } = await supabase.functions.invoke('grant-iac-role', {
+    body: {
+      user_id: input.user_id,
+      role_id: input.role_id,
+      scope_type: input.scope_type ?? 'global',
+      scope_id: input.scope_id ?? null,
+      expires_at: input.expires_at ?? null,
+    },
   });
-  if (error) throw error;
-  await audit('assignment.grant', 'assignment', `${input.user_id}:${input.role_id}`, {
-    user_id: input.user_id,
-    role_id: input.role_id,
-    scope_type: input.scope_type ?? 'global',
-    scope_id: input.scope_id ?? null,
-    expires_at: input.expires_at ?? null,
-  });
+  if (error) {
+    const msg = (data as { error?: string } | null)?.error || error.message;
+    throw new Error(msg);
+  }
+  if (data && typeof data === 'object' && 'error' in data && data.error) {
+    throw new Error(String((data as { error: string }).error));
+  }
 }
 
 export async function revokeAssignment(id: string) {
