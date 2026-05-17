@@ -7,6 +7,7 @@
  * No schema changes; relies on existing edge functions and hooks.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -14,8 +15,10 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, UserPlus, Trash2, Mail, KeyRound, ShieldCheck, History, Inbox } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Loader2, UserPlus, Trash2, Mail, KeyRound, ShieldCheck, History, Inbox, Search, ExternalLink, AlertTriangle } from 'lucide-react';
 import { useIacAssignments, useIacRoles, useGrantRole, useRevokeAssignment } from '@/hooks/useIac';
 
 export interface UserAccessSheetUser {
@@ -79,7 +82,9 @@ function RolesPanel({ user }: { user: UserAccessSheetUser }) {
   const assignments = useIacAssignments();
   const grant = useGrantRole();
   const revoke = useRevokeAssignment();
-  const [roleId, setRoleId] = useState<string>('');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState('');
+  const [granting, setGranting] = useState(false);
 
   const userAssignments = useMemo(
     () => (assignments.data ?? []).filter((a) => a.user_id === user.id),
@@ -91,16 +96,79 @@ function RolesPanel({ user }: { user: UserAccessSheetUser }) {
     return m;
   }, [roles.data]);
 
-  const handleGrant = async () => {
-    if (!roleId) return;
-    try {
-      await grant.mutateAsync({ user_id: user.id, role_id: roleId });
-      toast({ title: 'Role granted' });
-      setRoleId('');
-    } catch (e) {
-      toast({ title: 'Grant failed', description: (e as Error).message, variant: 'destructive' });
+  // Roles the user already holds (any scope) — to hide / mark in the picker.
+  const heldRoleIds = useMemo(
+    () => new Set(userAssignments.map((a) => a.role_id)),
+    [userAssignments],
+  );
+
+  // Group available roles by module, filtered by search + excluding already-held.
+  const groupedAvailable = useMemo(() => {
+    const all = roles.data ?? [];
+    const term = search.trim().toLowerCase();
+    const filtered = all.filter((r) => {
+      if (heldRoleIds.has(r.id)) return false;
+      if (!term) return true;
+      return r.name.toLowerCase().includes(term) || r.module.toLowerCase().includes(term);
+    });
+    const map = new Map<string, typeof filtered>();
+    for (const r of filtered) {
+      const key = r.module || 'Other';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(r);
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [roles.data, search, heldRoleIds]);
+
+  // Group current assignments by module for display.
+  const groupedHeld = useMemo(() => {
+    const map = new Map<string, typeof userAssignments>();
+    for (const a of userAssignments) {
+      const mod = roleById.get(a.role_id)?.module || 'Other';
+      if (!map.has(mod)) map.set(mod, []);
+      map.get(mod)!.push(a);
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [userAssignments, roleById]);
+
+  const toggle = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleGrantAll = async () => {
+    if (selected.size === 0) return;
+    setGranting(true);
+    const ids = Array.from(selected);
+    let ok = 0;
+    const failures: string[] = [];
+    // Sequential to keep audit log clean.
+    for (const role_id of ids) {
+      try {
+        await grant.mutateAsync({ user_id: user.id, role_id });
+        ok++;
+      } catch (e) {
+        const name = roleById.get(role_id)?.name ?? role_id;
+        failures.push(`${name}: ${(e as Error).message}`);
+      }
+    }
+    setGranting(false);
+    setSelected(new Set());
+    if (failures.length === 0) {
+      toast({ title: `Granted ${ok} role${ok === 1 ? '' : 's'}` });
+    } else {
+      toast({
+        title: `Granted ${ok}, failed ${failures.length}`,
+        description: failures.slice(0, 3).join(' · '),
+        variant: failures.length === ids.length ? 'destructive' : 'default',
+      });
     }
   };
+
   const handleRevoke = async (id: string) => {
     try {
       await revoke.mutateAsync(id);
@@ -113,54 +181,120 @@ function RolesPanel({ user }: { user: UserAccessSheetUser }) {
   return (
     <div className="space-y-5">
       <section>
-        <h3 className="text-sm font-semibold mb-2">Grant a role</h3>
-        <div className="flex gap-2">
-          <Select value={roleId} onValueChange={setRoleId}>
-            <SelectTrigger className="flex-1"><SelectValue placeholder="Pick a role" /></SelectTrigger>
-            <SelectContent>
-              {(roles.data ?? []).map((r) => (
-                <SelectItem key={r.id} value={r.id}>
-                  <span className="text-xs uppercase mr-2 text-muted-foreground">{r.module}</span>
-                  {r.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button onClick={handleGrant} disabled={!roleId || grant.isPending}>
-            {grant.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-semibold">Grant roles</h3>
+          <span className="text-xs text-muted-foreground">
+            A user can hold multiple roles across modules.
+          </span>
+        </div>
+        <div className="relative mb-2">
+          <Search className="absolute left-2 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search roles or modules…"
+            className="pl-7 h-9 text-sm"
+          />
+        </div>
+        <ScrollArea className="h-56 border rounded-md">
+          <div className="p-2 space-y-3">
+            {groupedAvailable.length === 0 ? (
+              <p className="text-xs text-muted-foreground p-2">
+                {roles.isLoading ? 'Loading…' : 'No more roles to grant.'}
+              </p>
+            ) : (
+              groupedAvailable.map(([mod, list]) => (
+                <div key={mod}>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 px-1">
+                    {mod}
+                  </div>
+                  <div className="space-y-0.5">
+                    {list.map((r) => (
+                      <label
+                        key={r.id}
+                        className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-accent cursor-pointer text-sm"
+                      >
+                        <Checkbox
+                          checked={selected.has(r.id)}
+                          onCheckedChange={() => toggle(r.id)}
+                        />
+                        <span className="flex-1 truncate">{r.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </ScrollArea>
+        <div className="flex items-center justify-between mt-2">
+          <span className="text-xs text-muted-foreground">
+            {selected.size} selected
+          </span>
+          <Button onClick={handleGrantAll} disabled={selected.size === 0 || granting} size="sm">
+            {granting ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Granting…</>
+            ) : (
+              <><UserPlus className="h-4 w-4 mr-2" />Grant {selected.size || ''}</>
+            )}
           </Button>
         </div>
+        <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1">
+          Need to assign roles to many users at once?{' '}
+          <Link to="/admin/iac?tab=bulk" className="text-primary inline-flex items-center gap-0.5 hover:underline">
+            Use Bulk Importer <ExternalLink className="h-3 w-3" />
+          </Link>
+        </p>
       </section>
 
       <section>
-        <h3 className="text-sm font-semibold mb-2">Current assignments</h3>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-semibold">Current assignments</h3>
+          <Badge variant="secondary">{userAssignments.length}</Badge>
+        </div>
         {userAssignments.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No roles yet.</p>
+          <p className="text-sm text-muted-foreground flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            No roles yet — user cannot access any module.
+          </p>
         ) : (
-          <div className="space-y-2">
-            {userAssignments.map((a) => {
-              const r = roleById.get(a.role_id);
-              return (
-                <div key={a.id} className="flex items-center justify-between border rounded-md p-2">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{r?.name ?? a.role_id}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {r?.module} · {a.scope_type}
-                      {a.expires_at ? ` · expires ${new Date(a.expires_at).toLocaleDateString()}` : ''}
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleRevoke(a.id)}
-                    disabled={revoke.isPending}
-                    aria-label="Revoke"
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
+          <div className="space-y-3">
+            {groupedHeld.map(([mod, list]) => (
+              <div key={mod}>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+                  {mod} <span className="text-muted-foreground/60">· {list.length}</span>
                 </div>
-              );
-            })}
+                <div className="space-y-1.5">
+                  {list.map((a) => {
+                    const r = roleById.get(a.role_id);
+                    const expired = a.expires_at && new Date(a.expires_at) < new Date();
+                    return (
+                      <div
+                        key={a.id}
+                        className={`flex items-center justify-between border rounded-md p-2 ${expired ? 'opacity-50' : ''}`}
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{r?.name ?? a.role_id}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {a.scope_type}
+                            {a.expires_at ? ` · ${expired ? 'expired' : 'expires'} ${new Date(a.expires_at).toLocaleDateString()}` : ''}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleRevoke(a.id)}
+                          disabled={revoke.isPending}
+                          aria-label="Revoke"
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </section>
