@@ -1,76 +1,77 @@
-## Step 1 — DONE
-`grant-iac-role` edge function deployed + `iacService.grantRole` routes through it. Vedant (101966) is unblocked.
+# Multi-Role Assignment — Discussion & Plan
 
-## Step 2 — "Manage Access" sheet on User Management (per-user cockpit)
+## Short answer to your questions
 
-**Extract** the existing `PersonDrawer` block (`IdentityAccessConsole.tsx` lines 146–240) into a reusable component:
+**1. "Seems only 1 role can be granted"** — that's only how the UI currently *looks*. The database already supports many-to-many.
 
-```text
-src/components/admin/UserAccessSheet.tsx
-  ├─ Tabs: Roles | Password | Audit
-  ├─ Roles tab     → reuse the PersonDrawer body (useIacRoles + useGrantRole + useRevokeAssignment)
-  ├─ Password tab  → single-user wrapper around password-rollout edge fn
-  │                  • "Generate & email password"   (send_email: true)
-  │                  • "Generate without email"      (send_email: false)
-  │                  • Last rollout from password_rollout_logs (latest row by user_id)
-  │                  • has_real_email / portal_access badges
-  └─ Audit tab     → last 20 rows from iac_audit_log filtered by target_id LIKE '<uid>:%'
-                     + last 5 from email_change_audit for the same user_id
-```
+- Table `iac_user_role_assignments` has a composite unique key on `(user_id, role_id, scope_type, scope_id)`. So a single user can hold **as many rows as needed** — one per role (and per scope).
+- The "Grant" form in `UserAccessSheet` is a single dropdown + button. After you grant, the row appears under "Current assignments" and the dropdown clears so you can pick the **next** role. You can repeat this N times.
+- So an employee who is *Employee + Manager (PMS) + Safety Officer (Safety module)* would end up with 3 rows in `iac_user_role_assignments`, each pointing to a different role in `iac_roles`.
 
-Refactor IdentityAccessConsole's `PersonDrawer` to wrap `UserAccessSheet` so both screens share the exact same UI and behavior — single source of truth.
+**2. How multi-role actually resolves at runtime**
 
-**Wire into User Management**: in the row action group (line ~910 in `UserManagement.tsx`), add a new icon button "Manage Access" (Shield icon) between the existing Edit and Assign-KRAs buttons. Clicking opens `UserAccessSheet` for that profile. Mobile card view gets the same action.
+- `has_role(user, role)` / capability checks union across **all** active (non-expired) assignments.
+- Module shells (PMS, Safety, HR, Incentive, Reports) each look up their own role family. A user with PMS-Manager + Safety-Officer sees both module tiles on the hub and gets the union of menu items via the Profile-Based Menu Access layer.
+- Scope (`global` vs `department`/`location`/etc.) lets you say e.g. *"Manager for Dept A only, Auditor globally"*.
 
-## Step 3 — Enrich Edit User dialog
-
-Open `UserManagement.tsx` lines ~1040–1200 (edit dialog). Append three collapsible sections AFTER the existing Access & Status block:
-
-1. **Module Access** — read-only chip list of all IAC roles for this user (queried via `useIacAssignments` filtered by user id) + `<Button>Manage in Access sheet</Button>` that opens the same `UserAccessSheet` directly on the Roles tab.
-2. **Login & Password** — `has_real_email`, `portal_access`, last login (`auth.users.last_sign_in_at` via existing admin function or `password_rollout_logs` latest). Buttons: "Send password rollout (email)" + "Generate password only" — same handlers as the sheet's Password tab.
-3. **Activity** — collapsible, last 5 IAC + email-change audit rows.
-
-Keep all existing fields intact; this is additive. Replace the standalone Reset Password mini-dialog (lines ~935–940 icon + its dialog) with a deprecation note that routes to the new sheet — keep the icon, change its handler to open `UserAccessSheet` on the Password tab.
-
-## Step 4 — Post-create follow-up step
-
-After the "Add User" mutation succeeds (line ~540 area, `handleCreate` success path):
-- Don't auto-close the create dialog.
-- Swap its contents to a "Next steps" panel showing the new user's name + two cards:
-  - "Assign module roles now" → opens `UserAccessSheet` on Roles tab for the new user_id
-  - "Send password & credentials now" → opens `UserAccessSheet` on Password tab
-- "Done" button closes everything. Skipping is allowed.
-
-## Step 5 — Cross-links
-
-- **IAC Console** Directory rows: add a small "Open in User Management →" link in `PersonDrawer` header.
-- **Password Policy** Eligible Users table: per-row "Manage in User Management →" link that deep-links to `/admin/users?manage=<user_id>` and auto-opens the sheet.
-
-`UserManagement.tsx` listens to the `manage` query param on mount and opens the sheet for that user.
+So functionally nothing is missing — but the **UX makes it look single-role**, which is exactly the friction you hit.
 
 ---
 
-## Technical notes
+## What I propose to change (UI only, no schema)
 
-- **No schema changes.** Pure UI + reuse of existing hooks/edge functions.
-- **password-rollout invocation** from the new sheet uses `supabase.functions.invoke('password-rollout', { body: { user_ids: [id], send_email } })` — exact same shape Password Policy bulk uses.
-- **Audit queries**: `iac_audit_log` rows store `target_id` as `<user_id>:<role_id>` for grants and `<assignment_id>` for revokes; filter by `target_id.ilike.<uid>%` to catch both grants and per-user activity.
-- **Permissions**: every action is admin-only — UserManagement page is already behind admin route guard, and the edge functions enforce admin themselves.
-- **No new memory file needed**; this is reuse, not a new concept. After ship, update `mem://architecture/security/identity-access-console` with one line noting "Per-user cockpit also available from /admin/users via UserAccessSheet."
+### A. Make "multi-role" obvious in the Roles tab
 
-## Risk & impact
+Rework `RolesPanel` inside `src/components/admin/UserAccessSheet.tsx`:
 
-- **Data**: none.
-- **Workflow**: net-additive. IAC console and Password Policy remain unchanged.
-- **UI regression risk**: low — `PersonDrawer` extraction is mechanical; the IAC console keeps the same import surface.
-- **Mitigation**: smoke-test (a) grant role from User Management → confirm same row appears in IAC; (b) password rollout from User Management → confirm `password_rollout_logs` row written; (c) deep-link `/admin/users?manage=<id>` opens the sheet.
+1. **Multi-select grant** instead of a single dropdown.
+  - Replace the single `Select` with a searchable multi-select (checkbox list grouped by `module`: PMS / Safety / HR / Incentive / Admin).
+  - One "Grant N roles" button issues N `grantRole` calls in sequence (sequential, not parallel, so the existing edge-function audit log stays clean).
+  - Show per-row success/fail toast summary at the end.
+2. **Current assignments grouped by module** with a count badge:
+  ```
+   PMS (2)        [Manager — Dept A]  [Employee — Global]
+   Safety (1)    [Safety Officer — Plant 1]
+   HR (0)
+  ```
+   Each chip has a small ✕ to revoke. Expired assignments shown dimmed.
+3. **Scope picker** next to each role at grant time (default `global`, dropdown for `department` / `location` / `company` when the role supports scoping). Today the UI hard-codes `global`.
+4. **Quick presets** for the common combos you described, e.g.:
+  - *"Employee + Line Manager"* (PMS-Employee + PMS-Manager)
+  - *"Manager + Safety Officer"* (PMS-Manager + Safety-Officer)
+  - *"Full-stack reviewer"* (Manager + Auditor + Skip-Level)
+   Presets are just client-side bundles of role IDs — no new tables.
+5. **Conflict / redundancy hints** (non-blocking):
+  - Warn if granting a role that's a strict subset of one already held (e.g. Employee when Manager already grants the same caps).
+  - Warn on opposite-side conflicts (e.g. Auditor + Reviewee on the same scope) — purely advisory.
 
-## Sequencing
+### B. Mirror the same multi-select in two more places
 
-1. Extract `UserAccessSheet` + refactor `PersonDrawer` to wrap it (no behavior change).
-2. Add "Manage Access" button + sheet in User Management table & mobile cards.
-3. Enrich Edit User dialog with the three new sections.
-4. Post-create follow-up panel.
-5. Cross-links + `?manage=<id>` deep-link.
+- **User-create dialog → "Next steps" panel** (already planned step 4 from the earlier work): replace the single-role grant with the same multi-select component so a new hire can be stamped with all needed roles in one go.
+- **Identity & Access Console → PersonDrawer**: already reuses `UserAccessSheet`, so it gets the upgrade for free.
 
-Approve and I'll ship 1–5 in order. Each step is independently shippable so you can stop early if needed.
+### C. Bulk path (optional, only if you want it now)
+
+The IAC Bulk Importer already supports many rows per user via CSV (`user_id, role_id, scope_type, scope_id`). I'll add a one-line note in the Roles tab: *"Need to assign roles to many users at once? Use Bulk Importer →"* deep-linking to `/admin/iac?tab=bulk`.
+
+---
+
+## Risk & Impact
+
+- **Data impact:** none. Schema already supports it; we're only changing how the UI calls the existing `grantRole` mutation.
+- **Workflow impact:** users may legitimately end up with more roles than before. Capability resolution is already a UNION, so this is additive — no breaking change to authorization.
+- **RLS:** untouched. Admin-only writes to `iac_user_role_assignments` remain.
+- **Regression risk:** low. The single change inside `UserAccessSheet` is isolated; IAC Console picks it up via the shared component.
+- **Mitigation:** add a unit test for the "grant N roles in one click" handler (success + partial failure paths) and snapshot the grouped-by-module render.
+
+---
+
+## Open questions before I build
+
+1. **Scope picker** — do you actually need per-role scoping in the UI right now (department / location / company), or is `global` sufficient for v1 and we ship scope-picker in a follow-up?
+2. **Presets** — do you want me to define the preset bundles, or will you supply the list of "common role combinations" used at BFCL?
+3. **Conflict warnings** — do you want hard blocks (e.g. cannot be Auditor and Reviewee of the same dept) or only soft warnings?
+
+Once you answer those (or say "use sensible defaults"), I'll implement A + B in a single pass.  
+   
+use sensible defaults
