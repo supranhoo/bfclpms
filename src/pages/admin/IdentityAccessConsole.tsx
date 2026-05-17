@@ -44,6 +44,7 @@ import { parseCsv, validateBulkRow, serializeCsv, downloadCsv, templateCsv, BULK
 import { useRef } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import type { IacPerson } from '@/services/iac/iacService';
+import { UserAccessSheet } from '@/components/admin/UserAccessSheet';
 
 /**
  * Identity & Access Console
@@ -144,98 +145,16 @@ function PeopleTab() {
 }
 
 function PersonDrawer({ person, onClose }: { person: IacPerson | null; onClose: () => void }) {
-  const { toast } = useToast();
-  const roles = useIacRoles();
-  const assignments = useIacAssignments();
-  const grant = useGrantRole();
-  const revoke = useRevokeAssignment();
-  const [roleId, setRoleId] = useState<string>('');
-
-  const userAssignments = useMemo(
-    () => (assignments.data ?? []).filter((a) => a.user_id === person?.id),
-    [assignments.data, person?.id],
-  );
-  const roleById = useMemo(() => {
-    const m = new Map<string, { name: string; module: string }>();
-    (roles.data ?? []).forEach((r) => m.set(r.id, { name: r.name, module: r.module }));
-    return m;
-  }, [roles.data]);
-
-  const handleGrant = async () => {
-    if (!person || !roleId) return;
-    try {
-      await grant.mutateAsync({ user_id: person.id, role_id: roleId });
-      toast({ title: 'Role granted' });
-      setRoleId('');
-    } catch (e) {
-      toast({ title: 'Grant failed', description: (e as Error).message, variant: 'destructive' });
-    }
-  };
-  const handleRevoke = async (id: string) => {
-    try {
-      await revoke.mutateAsync(id);
-      toast({ title: 'Role revoked' });
-    } catch (e) {
-      toast({ title: 'Revoke failed', description: (e as Error).message, variant: 'destructive' });
-    }
-  };
-
   return (
-    <Sheet open={!!person} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle>{person?.full_name || person?.email}</SheetTitle>
-          <SheetDescription>{person?.email}</SheetDescription>
-        </SheetHeader>
-        <div className="space-y-5 mt-5">
-          <section>
-            <h3 className="text-sm font-semibold mb-2">Grant a role</h3>
-            <div className="flex gap-2">
-              <Select value={roleId} onValueChange={setRoleId}>
-                <SelectTrigger className="flex-1"><SelectValue placeholder="Pick a role" /></SelectTrigger>
-                <SelectContent>
-                  {(roles.data ?? []).map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      <span className="text-xs uppercase mr-2 text-muted-foreground">{r.module}</span>
-                      {r.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button onClick={handleGrant} disabled={!roleId || grant.isPending}>
-                {grant.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-              </Button>
-            </div>
-          </section>
-
-          <section>
-            <h3 className="text-sm font-semibold mb-2">Current assignments</h3>
-            {userAssignments.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No roles yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {userAssignments.map((a) => {
-                  const r = roleById.get(a.role_id);
-                  return (
-                    <div key={a.id} className="flex items-center justify-between border rounded-md p-2">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{r?.name ?? a.role_id}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {r?.module} · {a.scope_type}{a.expires_at ? ` · expires ${new Date(a.expires_at).toLocaleDateString()}` : ''}
-                        </p>
-                      </div>
-                      <Button size="sm" variant="ghost" onClick={() => handleRevoke(a.id)} disabled={revoke.isPending} aria-label="Revoke">
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        </div>
-      </SheetContent>
-    </Sheet>
+    <UserAccessSheet
+      user={person ? {
+        id: person.id,
+        full_name: person.full_name,
+        email: person.email,
+        employee_code: person.employee_code,
+      } : null}
+      onClose={onClose}
+    />
   );
 }
 
