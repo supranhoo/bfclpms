@@ -403,38 +403,29 @@ export function SelfReviewSheet({
       .map(s => s.achieved_value as number);
     const isBinaryKpi = selectedKpi?.uom_type === 'binary';
     const aggregationResult = calculateDailyAggregatedScoreWithExpectedDays(values, dailyAggregationMethod, expectedDays, isBinaryKpi);
-    const aggregatedScore = aggregationResult.score;
 
-    // Allow submission with 0 score when no daily data was captured
-    const effectiveScore = aggregatedScore ?? 0;
-    const hasNoEntries = aggregatedScore === null;
+    // v2.66.7.x — Daily/Weekly aggregation now uses SUM of submitted values
+    // mapped through the KPI's R5..R0 scale (supersedes ADR-046). The legacy
+    // "missed days penalty" score is kept only as a compliance metric.
+    const sumValue = aggregationResult.sumValue;
+    const hasNoEntries = sumValue === null;
+    const effectiveScore = sumValue ?? 0;
 
     setIsSubmittingMonthly(true);
     try {
-      // For missed_days_penalty, the aggregated score IS the rating (0-5) — do NOT re-map through thresholds
-      const isDailyWeekly = selectedKpi.frequency === 'Daily' || selectedKpi.frequency === 'Weekly';
-      const isMissedDaysPenalty = dailyAggregationMethod === 'missed_days_penalty';
-      
-      let finalRating: number;
-      let selfRating: RatingLevel;
-      if (isDailyWeekly && isMissedDaysPenalty) {
-        finalRating = Math.min(5, Math.max(0, Math.round(effectiveScore)));
-        selfRating = scoreToRatingLevel(finalRating);
-      } else {
-        const result = calculateScoreFromAchieved(effectiveScore, selectedKpi);
-        finalRating = result.rating;
-        selfRating = scoreToRatingLevel(result.rating);
-      }
+      // Always map the aggregated SUM through the KPI's defined R5..R0 scale.
+      // Binary Daily KPIs still flow through the qualitative branch inside
+      // calculateScoreFromAchieved.
+      const result = calculateScoreFromAchieved(effectiveScore, selectedKpi);
+      const finalRating = result.rating;
+      const selfRating: RatingLevel = scoreToRatingLevel(result.rating);
       
       let defaultRemarks: string;
       if (hasNoEntries) {
         const totalDays = aggregationResult.totalDays;
-        defaultRemarks = `Missed Days Penalty: 0 of ${totalDays} days submitted — Score 0`;
+        defaultRemarks = `No daily entries submitted (0 of ${totalDays} days) — Score 0`;
       } else {
-        const methodLabel = dailyAggregationMethod === 'missed_days_penalty'
-          ? `Missed Days Penalty (${aggregationResult.missedDays} missed)`
-          : 'Average';
-        defaultRemarks = `${methodLabel}: Aggregated from ${selectedKpiSubPeriods.length} ${selectedKpi.frequency?.toLowerCase()} entries`;
+        defaultRemarks = `Sum: ${effectiveScore} (from ${selectedKpiSubPeriods.length} ${selectedKpi.frequency?.toLowerCase()} entries, ${aggregationResult.missedDays} missed days) → Rating ${finalRating}`;
       }
 
       await submitReview.mutateAsync({
