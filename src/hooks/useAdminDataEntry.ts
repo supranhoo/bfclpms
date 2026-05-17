@@ -928,7 +928,7 @@ export function useAdminStatusStepBack() {
                     source_year: kpiData.review_year,
                     cycle_members: cycleMembers,
                     full_reset,
-                  },
+                  } as any,
                 });
               }
             }
