@@ -174,5 +174,64 @@ export function periodKey(p: SiblingPeriod): string {
   return `${p.period}|${p.year}`;
 }
 
+/**
+ * Given a KPI's (frequency, reviewPeriod, reviewYear), return the explicit
+ * list of (period, year) tuples that belong to the SAME multi-month cycle as
+ * the source — including the source itself. For non-multi-month frequencies
+ * (Daily/Weekly/Monthly) returns just the source tuple.
+ *
+ * Correctly handles year-wrapping cycles (e.g. Quarterly Nov-2026 →
+ * [Nov-2026, Dec-2026, Jan-2027]).
+ *
+ * Use this to bound multi-month cascade operations (status step-back sibling
+ * reversion, evidence propagation, etc.) so they never leak across cycle
+ * boundaries inside the same fiscal year.
+ */
+export function getCycleMembers(input: {
+  frequency: string | null | undefined;
+  reviewPeriod: string;
+  reviewYear: number;
+  frequencyCycleStart?: string | null;
+}): SiblingPeriod[] {
+  const { frequency, reviewPeriod, reviewYear, frequencyCycleStart } = input;
+
+  const scope = buildCycleScopeLabel(
+    frequency ?? null,
+    reviewPeriod,
+    reviewYear,
+    frequencyCycleStart ?? null,
+  );
+
+  if (!scope.isMultiMonth) {
+    return [{ period: reviewPeriod, year: reviewYear }];
+  }
+
+  const cycleMonths = scope.cycleMonths;
+  const nums = cycleMonths.map(getMonthNumber);
+  const min = Math.min(...nums);
+  const max = Math.max(...nums);
+  const wraps = max - min + 1 !== cycleMonths.length;
+
+  let pivot = cycleMonths.length;
+  if (wraps) {
+    for (let i = 1; i < nums.length; i++) {
+      if (nums[i] < nums[i - 1]) {
+        pivot = i;
+        break;
+      }
+    }
+  }
+
+  // buildCycleScopeLabel returns anchorYear = year of the terminal (last) month.
+  // For non-wrap cycles, every month lives in anchorYear.
+  // For wrap cycles, early months (idx<pivot) live in anchorYear-1 and late
+  // months (idx>=pivot) live in anchorYear.
+  const earlyYear = wraps ? scope.anchorYear - 1 : scope.anchorYear;
+  return cycleMonths.map((period, idx) => ({
+    period,
+    year: wraps && idx >= pivot ? scope.anchorYear : earlyYear,
+  }));
+}
+
 // Re-export MONTHS for convenience in tests.
 export { MONTHS };
