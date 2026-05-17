@@ -1572,6 +1572,21 @@ export default function UserManagement() {
         }}
         employee={workingDaysEmployee}
       />
+
+      {/* Per-user Access cockpit: Roles · Password · Audit */}
+      <UserAccessSheet
+        user={accessUser}
+        defaultTab={accessTab}
+        onClose={() => {
+          setAccessUser(null);
+          if (searchParams.get('manage')) {
+            const next = new URLSearchParams(searchParams);
+            next.delete('manage');
+            next.delete('tab');
+            setSearchParams(next, { replace: true });
+          }
+        }}
+      />
     </div>
   );
 }
