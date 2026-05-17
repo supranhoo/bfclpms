@@ -1,44 +1,92 @@
-# Plan: Extend Password Rollout Eligibility to All Role Holders
+## Root cause of "Grant failed" (Vedant 101966)
 
-## Goal
-A Safety-only employee (or any employee with *any* `user_roles` row but no KRAs / direct reports) must appear in the Password Rollout "Eligible Users" list so admins can provision their first login.
+`iac_user_role_assignments.user_id` has FK → `auth.users(id)`. Vedant exists in `profiles` but has **no `auth.users` row yet** (backfilled employee, never went through password rollout). So any direct insert via `iacService.grantRole` fails with the FK violation you screenshot.
 
-## Change (single migration, no UI changes)
+We already solved this exact pattern for Safety with the `grant-safety-role` edge function: it auto-provisions `auth.users` (using the profile's real email, or blocks if missing) before inserting the role row. IAC needs the same treatment.
 
-Replace the `public.eligible_login_users` view with a 4-branch version:
+---
 
-1. `has_kras` — at least one row in `kpis`
-2. `reporting_manager` — manager of someone who has KRAs
-3. `auditor` — has `auditor` role (kept for backward compatibility of the badge label)
-4. **NEW** `role_holder` — has **any** row in `user_roles` not already covered above (safety_admin, safety_user, hr_pms, management, manager, employee, skip_level, admin, …)
+## Brainstorm: unify User Management as the single cockpit
 
-Priority order for the `eligibility_type` badge when multiple apply:
-`both` (has_kras + reporting_manager) → `has_kras` → `reporting_manager` → `auditor` → `role_holder`
+Today the admin must jump across 3 screens:
 
-Only active profiles (`is_active = true`) are returned — adds an `is_active` filter that the current view is missing (small cleanup).
+```text
+User Management        → create / edit identity + PMS role
+Identity & Access      → grant Safety/HR/other module roles
+Password Policy        → trigger password rollout
+```
 
-## Frontend impact
+Goal: **User Management becomes the one place** for identity, roles (all modules), password rollout, and full edit. The other two screens stay as bulk/admin power tools but the per-user actions are reachable from User Management.
 
-- `src/hooks/usePasswordRollout.ts` — extend `EligibleUser.eligibility_type` union to include `'role_holder'`.
-- `src/pages/admin/PasswordRollout.tsx` (or whichever component renders the eligibility chip) — add a label + color for `role_holder` ("Role Assigned"). Tiny one-liner; no logic change.
-- No change to the `password-rollout` edge function — it already auto-provisions any selected profile id (per `mem://features/admin/non-login-user-provisioning`).
+### Reuse, don't rebuild
 
-## Risk & Impact
-
-| Area | Impact |
+| Need | Reuse what already exists |
 |---|---|
-| Data | None — view-only change, no schema or row mutations |
-| RLS | View runs as definer-equivalent (it's already used by admins only via this screen) — no new exposure |
-| Workflow | Admins now see a larger eligible list (anyone with any role). Selection + provisioning flow unchanged |
-| Regression | Low — the existing 3 branches are preserved verbatim; new branch is purely additive |
-| UI | One new badge value to render |
+| Grant/revoke any module role | `iacService` + `useGrantRole` / `useRevokeAssignment` + `useIacRoles` |
+| Auto-provision auth before grant | Pattern from `grant-safety-role` edge function — generalize into `grant-iac-role` |
+| Password rollout for 1 user | `password-rollout` edge function (already supports `user_ids` array — pass `[id]`) |
+| Eligibility surfacing | `eligible_login_users` view (already includes `role_holder`) |
+| Email/no-real-email guardrails | `has_real_email` + synthetic email logic in `password-rollout` |
 
-## Verification
+---
 
-- Vedant Pawar (101966): grant him a Safety role → he appears with `role_holder` badge → "Generate Only / Generate & Send" works → auth user is created on first run (existing logic).
-- Existing users with KRAs / direct reports / auditor role still appear with their current badge values (no regression).
-- Inactive profiles no longer appear (cleanup).
+## Proposed plan
 
-## Memory / Docs sync
-- Update `mem://features/admin/non-login-user-provisioning` with the new "any role holder is eligible" rule.
-- Append entry to `POLICY.md` and `DOCUMENTATION.md` Version History (ADR-064: "Password Rollout eligibility extended to all role holders").
+### Fix 1 — IAC grant must auto-provision auth (unblocks 101966 today)
+
+Create `supabase/functions/grant-iac-role/index.ts` modeled on `grant-safety-role`:
+- Admin-gated via `requireAdminUser`.
+- Loads target profile. If `auth.users` missing:
+  - If `has_real_email` → create auth user (random password, `email_confirm: true`), set `portal_access = true`.
+  - If no real email → mint synthetic `@noemail.bfclpms.local` (same convention as password-rollout), set `has_real_email = false`. **Do not block** — admin can still grant the role; they share the password manually after rollout.
+- Insert into `iac_user_role_assignments` (scope_type/scope_id from body).
+- Audit row in `iac_role_audit`.
+
+Switch `iacService.grantRole` to call this edge function instead of inserting directly. `useGrantRole` signature stays the same → no UI changes needed for IAC console.
+
+### Fix 2 — Make User Management the cockpit
+
+**A. Per-row "Manage Access" action** in the User Management table (new dropdown item next to Edit/Delete) opens a sheet with three tabs:
+
+1. **Roles** — embed a trimmed version of IAC's per-user role manager (role select + scope + grant button + current assignments list). Uses `useIacRoles`, `useGrantRole`, `useRevokeAssignment`. Shows badges for current PMS role + all module roles.
+2. **Password** — single-user rollout card: "Generate & email password" + "Generate without email" + last rollout timestamp from `password_rollout_logs`. Calls `password-rollout` with `user_ids: [id]`.
+3. **Audit** — recent IAC/auth events for this user (read-only).
+
+**B. Enrich `EditUserDialog`** (screenshot shows it's already organized — extend, don't replace):
+
+Add collapsed sections under existing Personal / Organization / Access:
+- **Module Access** — read-only summary chips of all IAC roles + "Manage…" button that opens the Roles tab from (A).
+- **Login & Password** — `has_real_email` badge, `portal_access` toggle, "Send password rollout" button, last login + last password-rollout timestamps.
+- **Audit Snapshot** — last 5 changes from `email_change_audit` + `iac_role_audit`.
+
+**C. New-user creation flow** — after the existing "create profile" succeeds, show an optional follow-up step:
+- "Assign module roles now?" (reuses Roles panel)
+- "Send password & email credentials now?" (reuses Password panel)
+
+This keeps the create form fast (one screen, validated) and makes the heavy actions opt-in immediately after.
+
+### Fix 3 — Keep IAC + Password Policy pages
+
+They stay for bulk/matrix work (CSV import, bulk eligibility filter, etc.). Add a "Manage in User Management →" link on each per-user row so admins discover the cockpit.
+
+---
+
+## Risk & impact
+
+- **Data**: New edge function only. No schema changes. (FK stays as-is — we fix the symptom by provisioning auth first.)
+- **Workflow**: Net-additive. Existing IAC and Password Policy screens keep working byte-for-byte.
+- **RLS**: Edge function uses service role + `requireAdminUser`, same pattern already audited for Safety.
+- **Regression risk**: Low. `iacService.grantRole` switches from direct insert → edge call; the rest of IAC console is unchanged. Sheet/tabs in User Management are new components.
+- **Mitigation**: Unit-test the new edge function (synthetic-email branch, real-email branch, already-has-auth branch, deactivated user branch). Manual smoke: grant Safety to 101966 from both IAC console and the new User Management sheet — both must succeed and produce identical rows.
+
+---
+
+## Sequencing
+
+1. Ship `grant-iac-role` edge function + switch `iacService.grantRole` to use it → **unblocks Vedant today**.
+2. Add "Manage Access" sheet (Roles + Password + Audit tabs) to User Management.
+3. Extend `EditUserDialog` with Module Access + Login & Password + Audit sections.
+4. Add post-create follow-up step in new-user flow.
+5. Add cross-links from IAC console and Password Policy back to User Management.
+
+Confirm and I'll start with step 1.
