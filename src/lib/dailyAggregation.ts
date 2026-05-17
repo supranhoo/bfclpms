@@ -23,6 +23,14 @@ export interface AggregationResult {
   submittedDays: number;
   totalDays: number;
   missedDays: number;
+  /**
+   * v2.66.7.x — Raw SUM of submitted daily/weekly achieved values.
+   * This is the authoritative aggregated value that should be mapped through
+   * the KPI's R5..R0 thresholds to derive the final 0–5 rating.
+   * (Supersedes ADR-046 — the legacy `score` field below is now treated as a
+   * compliance/penalty metric only, not the rating.)
+   */
+  sumValue: number | null;
 }
 
 export interface BinaryAggregationResult extends AggregationResult {
