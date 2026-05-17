@@ -82,39 +82,39 @@ export function KpiMetricsSection({ kpi }: KpiMetricsSectionProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 sm:space-y-4 px-3 sm:px-6 pb-3 sm:pb-6">
-        {/* Metrics Grid - single column on very small screens */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm">
-          <div className="flex items-center justify-between">
+        {/* Metrics Grid - stack label above value to avoid overlap on narrow widths */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-2 text-xs sm:text-sm">
+          <div className="flex flex-col gap-0.5 min-w-0">
             <span className="text-muted-foreground flex items-center gap-1">
-              <Target className="h-3 w-3" />
+              <Target className="h-3 w-3 shrink-0" />
               Target
             </span>
-            <span className="font-medium">
+            <span className="font-medium whitespace-nowrap">
               {target !== null && target !== undefined ? `${target} ${uom}` : 'N/A'}
             </span>
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-0.5 min-w-0">
             <span className="text-muted-foreground flex items-center gap-1">
-              <Scale className="h-3 w-3" />
+              <Scale className="h-3 w-3 shrink-0" />
               Criteria
             </span>
-            <span className="font-medium text-xs">{criteria}</span>
+            <span className="font-medium text-xs break-words">{criteria}</span>
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-0.5 min-w-0">
             <span className="text-muted-foreground flex items-center gap-1">
-              <Clock className="h-3 w-3" />
+              <Clock className="h-3 w-3 shrink-0" />
               Frequency
             </span>
-            <Badge variant="outline" className="text-[10px] sm:text-xs h-5">
+            <Badge variant="outline" className="text-[10px] sm:text-xs h-5 w-fit">
               {frequency}
             </Badge>
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-0.5 min-w-0">
             <span className="text-muted-foreground flex items-center gap-1">
-              <Database className="h-3 w-3" />
+              <Database className="h-3 w-3 shrink-0" />
               Source
             </span>
-            <span className="font-medium text-xs truncate max-w-[80px] sm:max-w-[100px]" title={source}>
+            <span className="font-medium text-xs break-words" title={source}>
               {source}
             </span>
           </div>
