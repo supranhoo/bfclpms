@@ -1044,15 +1044,20 @@ export default function UserManagement() {
 
       {/* Edit Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogContent className="max-w-5xl w-[96vw] max-h-[92vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>Edit User</DialogTitle>
             <DialogDescription>Update details for {selectedUser?.full_name}</DialogDescription>
           </DialogHeader>
 
-          <ScrollArea className="flex-1 pr-4 -mr-4">
-            <div className="space-y-6 py-4">
-              {/* Section: Personal Information */}
+          <Tabs defaultValue="profile" className="flex-1 flex flex-col min-h-0">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="profile" className="gap-1.5"><Users className="h-3.5 w-3.5" /> Profile</TabsTrigger>
+              <TabsTrigger value="access" className="gap-1.5"><Shield className="h-3.5 w-3.5" /> Access & Login</TabsTrigger>
+            </TabsList>
+
+            <ScrollArea className="flex-1 pr-4 -mr-4 mt-4">
+            <TabsContent value="profile" className="mt-0 space-y-6 py-1">
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <Users className="h-4 w-4 text-muted-foreground" />
@@ -1165,8 +1170,9 @@ export default function UserManagement() {
                   </div>
                 </div>
               </div>
+            </TabsContent>
 
-              {/* Section: Access & Status */}
+            <TabsContent value="access" className="mt-0 space-y-6 py-1">
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <Shield className="h-4 w-4 text-muted-foreground" />
@@ -1206,26 +1212,40 @@ export default function UserManagement() {
                     <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Module Access & Login</h3>
                   </div>
                   <Separator />
-                  <div className="rounded-lg border p-3 space-y-3">
-                    <p className="text-xs text-muted-foreground">
-                      Manage IAC module roles, password rollout, and view this user's access history.
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <Button variant="outline" size="sm" onClick={() => { const u = selectedUser; setEditDialogOpen(false); openAccessSheet(u, 'roles'); }}>
-                        <Shield className="h-3.5 w-3.5 mr-1.5" /> Module Roles
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => { const u = selectedUser; setEditDialogOpen(false); openAccessSheet(u, 'password'); }}>
-                        <KeyRound className="h-3.5 w-3.5 mr-1.5" /> Password
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => { const u = selectedUser; setEditDialogOpen(false); openAccessSheet(u, 'audit'); }}>
-                        <Search className="h-3.5 w-3.5 mr-1.5" /> Activity
-                      </Button>
-                    </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => { const u = selectedUser; setEditDialogOpen(false); openAccessSheet(u, 'roles'); }}
+                      className="text-left rounded-lg border p-4 hover:border-primary hover:bg-accent/50 transition-colors"
+                    >
+                      <Shield className="h-5 w-5 text-primary mb-2" />
+                      <p className="text-sm font-semibold">Grant module roles</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Assign PMS, Safety, HR roles. Multiple allowed.</p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { const u = selectedUser; setEditDialogOpen(false); openAccessSheet(u, 'password'); }}
+                      className="text-left rounded-lg border p-4 hover:border-primary hover:bg-accent/50 transition-colors"
+                    >
+                      <KeyRound className="h-5 w-5 text-primary mb-2" />
+                      <p className="text-sm font-semibold">Send / reset password</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Email credentials or generate manually.</p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { const u = selectedUser; setEditDialogOpen(false); openAccessSheet(u, 'audit'); }}
+                      className="text-left rounded-lg border p-4 hover:border-primary hover:bg-accent/50 transition-colors"
+                    >
+                      <Search className="h-5 w-5 text-primary mb-2" />
+                      <p className="text-sm font-semibold">View access history</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Recent grants, revokes, and email changes.</p>
+                    </button>
                   </div>
                 </div>
               )}
-            </div>
-          </ScrollArea>
+            </TabsContent>
+            </ScrollArea>
+          </Tabs>
 
           <DialogFooter className="pt-4 border-t">
             <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancel</Button>
