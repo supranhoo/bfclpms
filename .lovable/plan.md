@@ -1,92 +1,76 @@
-## Root cause of "Grant failed" (Vedant 101966)
+## Step 1 — DONE
+`grant-iac-role` edge function deployed + `iacService.grantRole` routes through it. Vedant (101966) is unblocked.
 
-`iac_user_role_assignments.user_id` has FK → `auth.users(id)`. Vedant exists in `profiles` but has **no `auth.users` row yet** (backfilled employee, never went through password rollout). So any direct insert via `iacService.grantRole` fails with the FK violation you screenshot.
+## Step 2 — "Manage Access" sheet on User Management (per-user cockpit)
 
-We already solved this exact pattern for Safety with the `grant-safety-role` edge function: it auto-provisions `auth.users` (using the profile's real email, or blocks if missing) before inserting the role row. IAC needs the same treatment.
-
----
-
-## Brainstorm: unify User Management as the single cockpit
-
-Today the admin must jump across 3 screens:
+**Extract** the existing `PersonDrawer` block (`IdentityAccessConsole.tsx` lines 146–240) into a reusable component:
 
 ```text
-User Management        → create / edit identity + PMS role
-Identity & Access      → grant Safety/HR/other module roles
-Password Policy        → trigger password rollout
+src/components/admin/UserAccessSheet.tsx
+  ├─ Tabs: Roles | Password | Audit
+  ├─ Roles tab     → reuse the PersonDrawer body (useIacRoles + useGrantRole + useRevokeAssignment)
+  ├─ Password tab  → single-user wrapper around password-rollout edge fn
+  │                  • "Generate & email password"   (send_email: true)
+  │                  • "Generate without email"      (send_email: false)
+  │                  • Last rollout from password_rollout_logs (latest row by user_id)
+  │                  • has_real_email / portal_access badges
+  └─ Audit tab     → last 20 rows from iac_audit_log filtered by target_id LIKE '<uid>:%'
+                     + last 5 from email_change_audit for the same user_id
 ```
 
-Goal: **User Management becomes the one place** for identity, roles (all modules), password rollout, and full edit. The other two screens stay as bulk/admin power tools but the per-user actions are reachable from User Management.
+Refactor IdentityAccessConsole's `PersonDrawer` to wrap `UserAccessSheet` so both screens share the exact same UI and behavior — single source of truth.
 
-### Reuse, don't rebuild
+**Wire into User Management**: in the row action group (line ~910 in `UserManagement.tsx`), add a new icon button "Manage Access" (Shield icon) between the existing Edit and Assign-KRAs buttons. Clicking opens `UserAccessSheet` for that profile. Mobile card view gets the same action.
 
-| Need | Reuse what already exists |
-|---|---|
-| Grant/revoke any module role | `iacService` + `useGrantRole` / `useRevokeAssignment` + `useIacRoles` |
-| Auto-provision auth before grant | Pattern from `grant-safety-role` edge function — generalize into `grant-iac-role` |
-| Password rollout for 1 user | `password-rollout` edge function (already supports `user_ids` array — pass `[id]`) |
-| Eligibility surfacing | `eligible_login_users` view (already includes `role_holder`) |
-| Email/no-real-email guardrails | `has_real_email` + synthetic email logic in `password-rollout` |
+## Step 3 — Enrich Edit User dialog
 
----
+Open `UserManagement.tsx` lines ~1040–1200 (edit dialog). Append three collapsible sections AFTER the existing Access & Status block:
 
-## Proposed plan
+1. **Module Access** — read-only chip list of all IAC roles for this user (queried via `useIacAssignments` filtered by user id) + `<Button>Manage in Access sheet</Button>` that opens the same `UserAccessSheet` directly on the Roles tab.
+2. **Login & Password** — `has_real_email`, `portal_access`, last login (`auth.users.last_sign_in_at` via existing admin function or `password_rollout_logs` latest). Buttons: "Send password rollout (email)" + "Generate password only" — same handlers as the sheet's Password tab.
+3. **Activity** — collapsible, last 5 IAC + email-change audit rows.
 
-### Fix 1 — IAC grant must auto-provision auth (unblocks 101966 today)
+Keep all existing fields intact; this is additive. Replace the standalone Reset Password mini-dialog (lines ~935–940 icon + its dialog) with a deprecation note that routes to the new sheet — keep the icon, change its handler to open `UserAccessSheet` on the Password tab.
 
-Create `supabase/functions/grant-iac-role/index.ts` modeled on `grant-safety-role`:
-- Admin-gated via `requireAdminUser`.
-- Loads target profile. If `auth.users` missing:
-  - If `has_real_email` → create auth user (random password, `email_confirm: true`), set `portal_access = true`.
-  - If no real email → mint synthetic `@noemail.bfclpms.local` (same convention as password-rollout), set `has_real_email = false`. **Do not block** — admin can still grant the role; they share the password manually after rollout.
-- Insert into `iac_user_role_assignments` (scope_type/scope_id from body).
-- Audit row in `iac_role_audit`.
+## Step 4 — Post-create follow-up step
 
-Switch `iacService.grantRole` to call this edge function instead of inserting directly. `useGrantRole` signature stays the same → no UI changes needed for IAC console.
+After the "Add User" mutation succeeds (line ~540 area, `handleCreate` success path):
+- Don't auto-close the create dialog.
+- Swap its contents to a "Next steps" panel showing the new user's name + two cards:
+  - "Assign module roles now" → opens `UserAccessSheet` on Roles tab for the new user_id
+  - "Send password & credentials now" → opens `UserAccessSheet` on Password tab
+- "Done" button closes everything. Skipping is allowed.
 
-### Fix 2 — Make User Management the cockpit
+## Step 5 — Cross-links
 
-**A. Per-row "Manage Access" action** in the User Management table (new dropdown item next to Edit/Delete) opens a sheet with three tabs:
+- **IAC Console** Directory rows: add a small "Open in User Management →" link in `PersonDrawer` header.
+- **Password Policy** Eligible Users table: per-row "Manage in User Management →" link that deep-links to `/admin/users?manage=<user_id>` and auto-opens the sheet.
 
-1. **Roles** — embed a trimmed version of IAC's per-user role manager (role select + scope + grant button + current assignments list). Uses `useIacRoles`, `useGrantRole`, `useRevokeAssignment`. Shows badges for current PMS role + all module roles.
-2. **Password** — single-user rollout card: "Generate & email password" + "Generate without email" + last rollout timestamp from `password_rollout_logs`. Calls `password-rollout` with `user_ids: [id]`.
-3. **Audit** — recent IAC/auth events for this user (read-only).
-
-**B. Enrich `EditUserDialog`** (screenshot shows it's already organized — extend, don't replace):
-
-Add collapsed sections under existing Personal / Organization / Access:
-- **Module Access** — read-only summary chips of all IAC roles + "Manage…" button that opens the Roles tab from (A).
-- **Login & Password** — `has_real_email` badge, `portal_access` toggle, "Send password rollout" button, last login + last password-rollout timestamps.
-- **Audit Snapshot** — last 5 changes from `email_change_audit` + `iac_role_audit`.
-
-**C. New-user creation flow** — after the existing "create profile" succeeds, show an optional follow-up step:
-- "Assign module roles now?" (reuses Roles panel)
-- "Send password & email credentials now?" (reuses Password panel)
-
-This keeps the create form fast (one screen, validated) and makes the heavy actions opt-in immediately after.
-
-### Fix 3 — Keep IAC + Password Policy pages
-
-They stay for bulk/matrix work (CSV import, bulk eligibility filter, etc.). Add a "Manage in User Management →" link on each per-user row so admins discover the cockpit.
+`UserManagement.tsx` listens to the `manage` query param on mount and opens the sheet for that user.
 
 ---
+
+## Technical notes
+
+- **No schema changes.** Pure UI + reuse of existing hooks/edge functions.
+- **password-rollout invocation** from the new sheet uses `supabase.functions.invoke('password-rollout', { body: { user_ids: [id], send_email } })` — exact same shape Password Policy bulk uses.
+- **Audit queries**: `iac_audit_log` rows store `target_id` as `<user_id>:<role_id>` for grants and `<assignment_id>` for revokes; filter by `target_id.ilike.<uid>%` to catch both grants and per-user activity.
+- **Permissions**: every action is admin-only — UserManagement page is already behind admin route guard, and the edge functions enforce admin themselves.
+- **No new memory file needed**; this is reuse, not a new concept. After ship, update `mem://architecture/security/identity-access-console` with one line noting "Per-user cockpit also available from /admin/users via UserAccessSheet."
 
 ## Risk & impact
 
-- **Data**: New edge function only. No schema changes. (FK stays as-is — we fix the symptom by provisioning auth first.)
-- **Workflow**: Net-additive. Existing IAC and Password Policy screens keep working byte-for-byte.
-- **RLS**: Edge function uses service role + `requireAdminUser`, same pattern already audited for Safety.
-- **Regression risk**: Low. `iacService.grantRole` switches from direct insert → edge call; the rest of IAC console is unchanged. Sheet/tabs in User Management are new components.
-- **Mitigation**: Unit-test the new edge function (synthetic-email branch, real-email branch, already-has-auth branch, deactivated user branch). Manual smoke: grant Safety to 101966 from both IAC console and the new User Management sheet — both must succeed and produce identical rows.
-
----
+- **Data**: none.
+- **Workflow**: net-additive. IAC console and Password Policy remain unchanged.
+- **UI regression risk**: low — `PersonDrawer` extraction is mechanical; the IAC console keeps the same import surface.
+- **Mitigation**: smoke-test (a) grant role from User Management → confirm same row appears in IAC; (b) password rollout from User Management → confirm `password_rollout_logs` row written; (c) deep-link `/admin/users?manage=<id>` opens the sheet.
 
 ## Sequencing
 
-1. Ship `grant-iac-role` edge function + switch `iacService.grantRole` to use it → **unblocks Vedant today**.
-2. Add "Manage Access" sheet (Roles + Password + Audit tabs) to User Management.
-3. Extend `EditUserDialog` with Module Access + Login & Password + Audit sections.
-4. Add post-create follow-up step in new-user flow.
-5. Add cross-links from IAC console and Password Policy back to User Management.
+1. Extract `UserAccessSheet` + refactor `PersonDrawer` to wrap it (no behavior change).
+2. Add "Manage Access" button + sheet in User Management table & mobile cards.
+3. Enrich Edit User dialog with the three new sections.
+4. Post-create follow-up panel.
+5. Cross-links + `?manage=<id>` deep-link.
 
-Confirm and I'll start with step 1.
+Approve and I'll ship 1–5 in order. Each step is independently shippable so you can stop early if needed.

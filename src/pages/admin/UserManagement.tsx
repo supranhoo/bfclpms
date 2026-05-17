@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { invokeAdminEdgeFunction } from '@/lib/adminEdgeFunction';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -28,6 +28,8 @@ import { SmartAssignmentDialog } from '@/components/admin/SmartAssignmentDialog'
 import { EmployeeWorkingDaysDialog } from '@/components/admin/EmployeeWorkingDaysDialog';
 import { ManagerCombobox, formatManagerLabel } from '@/components/admin/ManagerCombobox';
 import { OrgFilterCombobox } from '@/components/admin/OrgFilterCombobox';
+import { UserAccessSheet, type UserAccessSheetTab, type UserAccessSheetUser } from '@/components/admin/UserAccessSheet';
+import { useSearchParams } from 'react-router-dom';
 
 import { ALL_APP_ROLES, type AppRole } from '@/lib/roles';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
@@ -141,6 +143,35 @@ export default function UserManagement() {
     email: string;
     employee_code: string | null;
   } | null>(null);
+
+  // Manage Access sheet (per-user cockpit: Roles / Password / Audit)
+  const [accessUser, setAccessUser] = useState<UserAccessSheetUser | null>(null);
+  const [accessTab, setAccessTab] = useState<UserAccessSheetTab>('roles');
+  const openAccessSheet = (
+    p: NonNullable<typeof profiles>[number],
+    tab: UserAccessSheetTab = 'roles',
+  ) => {
+    setAccessUser({
+      id: p.id,
+      full_name: p.full_name,
+      email: p.email,
+      employee_code: p.employee_code,
+      has_real_email: (p as any).has_real_email,
+      portal_access: (p as any).portal_access,
+    });
+    setAccessTab(tab);
+  };
+
+  // Deep-link: /admin/users?manage=<user_id>[&tab=password|audit|roles]
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const manageId = searchParams.get('manage');
+    if (!manageId || !profiles?.length || accessUser) return;
+    const target = profiles.find(p => p.id === manageId);
+    if (!target) return;
+    const tab = (searchParams.get('tab') as UserAccessSheetTab) || 'roles';
+    openAccessSheet(target, tab);
+  }, [searchParams, profiles, accessUser]);
 
   // Filtered and paginated profiles
   // POLICY §120: debounce the search term so the 2,533-row in-memory filter
@@ -797,17 +828,20 @@ export default function UserManagement() {
                       <span>Manager: {manager ? formatManagerLabel(manager.full_name, manager.employee_code) : '-'}</span>
                     </div>
                     <div className="flex items-center gap-1 pt-1 border-t">
-                      <Button size="sm" variant="ghost" onClick={() => openEditDialog(profile)} className="min-h-[44px]">
+                      <Button size="sm" variant="ghost" onClick={() => openEditDialog(profile)} className="min-h-[44px]" title="Edit">
                         <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => openAccessSheet(profile, 'roles')} className="min-h-[44px]" title="Manage Access">
+                        <Shield className="h-4 w-4 text-primary" />
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => {
                         const r = (profile.user_roles as any)?.[0]?.role || 'employee';
                         setAssignTargetUser({ id: profile.id, name: profile.full_name || profile.email, departmentId: profile.department_id, role: r });
                         setSmartAssignDialogOpen(true);
-                      }} className="min-h-[44px]">
+                      }} className="min-h-[44px]" title="Assign KRAs">
                         <Package className="h-4 w-4" />
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => openResetDialog(profile)} className="min-h-[44px]">
+                      <Button size="sm" variant="ghost" onClick={() => openAccessSheet(profile, 'password')} className="min-h-[44px]" title="Password Rollout">
                         <KeyRound className="h-4 w-4" />
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => {
@@ -912,6 +946,14 @@ export default function UserManagement() {
                           <Button size="sm" variant="ghost" onClick={() => openEditDialog(profile)} title="Edit">
                             <Edit2 className="h-4 w-4" />
                           </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => openAccessSheet(profile, 'roles')}
+                            title="Manage Access (Roles · Password · Audit)"
+                          >
+                            <Shield className="h-4 w-4 text-primary" />
+                          </Button>
                           <Button 
                             size="sm" 
                             variant="ghost" 
@@ -932,8 +974,8 @@ export default function UserManagement() {
                           <Button 
                             size="sm" 
                             variant="ghost" 
-                            onClick={() => openResetDialog(profile)} 
-                            title="Reset Password"
+                            onClick={() => openAccessSheet(profile, 'password')}
+                            title="Password Rollout"
                           >
                             <KeyRound className="h-4 w-4" />
                           </Button>
@@ -1529,6 +1571,21 @@ export default function UserManagement() {
           setWorkingDaysEmployee(null);
         }}
         employee={workingDaysEmployee}
+      />
+
+      {/* Per-user Access cockpit: Roles · Password · Audit */}
+      <UserAccessSheet
+        user={accessUser}
+        defaultTab={accessTab}
+        onClose={() => {
+          setAccessUser(null);
+          if (searchParams.get('manage')) {
+            const next = new URLSearchParams(searchParams);
+            next.delete('manage');
+            next.delete('tab');
+            setSearchParams(next, { replace: true });
+          }
+        }}
       />
     </div>
   );
