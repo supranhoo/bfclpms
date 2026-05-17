@@ -23,6 +23,14 @@ export interface AggregationResult {
   submittedDays: number;
   totalDays: number;
   missedDays: number;
+  /**
+   * v2.66.7.x — Raw SUM of submitted daily/weekly achieved values.
+   * This is the authoritative aggregated value that should be mapped through
+   * the KPI's R5..R0 thresholds to derive the final 0–5 rating.
+   * (Supersedes ADR-046 — the legacy `score` field below is now treated as a
+   * compliance/penalty metric only, not the rating.)
+   */
+  sumValue: number | null;
 }
 
 export interface BinaryAggregationResult extends AggregationResult {
@@ -112,6 +120,7 @@ export function calculateBinaryDailyScoreWithExpectedDays(
   
   // Score calculation: 0 No = 5, each No reduces by 1, minimum 0
   const score = Math.max(0, 5 - totalNoCount);
+  const sumValue = submittedValues.reduce((a, b) => a + b, 0);
 
   return {
     score,
@@ -119,6 +128,7 @@ export function calculateBinaryDailyScoreWithExpectedDays(
     submittedDays,
     totalDays,
     missedDays,
+    sumValue,
     noSubmissions,
     totalNoCount,
   };
@@ -153,6 +163,9 @@ export function calculateDailyAggregatedScoreWithExpectedDays(
 
   const submittedDays = submittedValues.length;
   const missedDays = Math.max(0, totalDays - submittedDays);
+  const sumValue = submittedValues.length > 0
+    ? submittedValues.reduce((a, b) => a + b, 0)
+    : null;
 
   let score: number | null = null;
 
@@ -170,6 +183,7 @@ export function calculateDailyAggregatedScoreWithExpectedDays(
     submittedDays,
     totalDays,
     missedDays,
+    sumValue,
   };
 }
 
@@ -193,6 +207,9 @@ export function calculateDailyAggregatedScore(
   const totalDays = getExpectedDaysInMonth(month, year);
   const submittedDays = submittedValues.length;
   const missedDays = Math.max(0, totalDays - submittedDays);
+  const sumValue = submittedValues.length > 0
+    ? submittedValues.reduce((a, b) => a + b, 0)
+    : null;
 
   let score: number | null = null;
 
@@ -210,6 +227,7 @@ export function calculateDailyAggregatedScore(
     submittedDays,
     totalDays,
     missedDays,
+    sumValue,
   };
 }
 
