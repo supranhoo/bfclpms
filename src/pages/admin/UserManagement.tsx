@@ -828,17 +828,20 @@ export default function UserManagement() {
                       <span>Manager: {manager ? formatManagerLabel(manager.full_name, manager.employee_code) : '-'}</span>
                     </div>
                     <div className="flex items-center gap-1 pt-1 border-t">
-                      <Button size="sm" variant="ghost" onClick={() => openEditDialog(profile)} className="min-h-[44px]">
+                      <Button size="sm" variant="ghost" onClick={() => openEditDialog(profile)} className="min-h-[44px]" title="Edit">
                         <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => openAccessSheet(profile, 'roles')} className="min-h-[44px]" title="Manage Access">
+                        <Shield className="h-4 w-4 text-primary" />
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => {
                         const r = (profile.user_roles as any)?.[0]?.role || 'employee';
                         setAssignTargetUser({ id: profile.id, name: profile.full_name || profile.email, departmentId: profile.department_id, role: r });
                         setSmartAssignDialogOpen(true);
-                      }} className="min-h-[44px]">
+                      }} className="min-h-[44px]" title="Assign KRAs">
                         <Package className="h-4 w-4" />
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => openResetDialog(profile)} className="min-h-[44px]">
+                      <Button size="sm" variant="ghost" onClick={() => openAccessSheet(profile, 'password')} className="min-h-[44px]" title="Password Rollout">
                         <KeyRound className="h-4 w-4" />
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => {
@@ -943,6 +946,14 @@ export default function UserManagement() {
                           <Button size="sm" variant="ghost" onClick={() => openEditDialog(profile)} title="Edit">
                             <Edit2 className="h-4 w-4" />
                           </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => openAccessSheet(profile, 'roles')}
+                            title="Manage Access (Roles · Password · Audit)"
+                          >
+                            <Shield className="h-4 w-4 text-primary" />
+                          </Button>
                           <Button 
                             size="sm" 
                             variant="ghost" 
@@ -963,8 +974,8 @@ export default function UserManagement() {
                           <Button 
                             size="sm" 
                             variant="ghost" 
-                            onClick={() => openResetDialog(profile)} 
-                            title="Reset Password"
+                            onClick={() => openAccessSheet(profile, 'password')}
+                            title="Password Rollout"
                           >
                             <KeyRound className="h-4 w-4" />
                           </Button>
