@@ -10,8 +10,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertCircle, Key, Mail, Search, Shield, Users, History, CheckCircle, XCircle } from 'lucide-react';
+import { AlertCircle, Key, Mail, Search, Shield, Users, History, CheckCircle, XCircle, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
+import { Link } from 'react-router-dom';
 import { useEligibleUsers, usePasswordRolloutLogs, usePasswordRolloutMutation, type EligibleUser } from '@/hooks/usePasswordRollout';
 
 export function PasswordPolicyTab() {
@@ -165,12 +166,13 @@ export function PasswordPolicyTab() {
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Eligibility</TableHead>
+                  <TableHead className="w-20 text-right">Manage</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredUsers.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                       No eligible users found.
                     </TableCell>
                   </TableRow>
@@ -187,6 +189,13 @@ export function PasswordPolicyTab() {
                       <TableCell>{user.full_name || '—'}</TableCell>
                       <TableCell className="text-sm">{user.email}</TableCell>
                       <TableCell>{eligibilityBadge(user.eligibility_type)}</TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <Button asChild variant="ghost" size="sm" title="Manage in User Management">
+                          <Link to={`/admin/users?manage=${user.id}&tab=password`}>
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </Link>
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))
                 )}
