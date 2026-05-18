@@ -862,6 +862,9 @@ export default function OrgKpiDataEntry() {
     // previous "1 matching past initial stage" message that fired 13× silently).
     let totalSkippedBenign = 0;
     let totalSkippedHard = 0;
+    // ADR-063 — surface (instead of silently dropping) zero values that the
+    // user can see in the UI but never explicitly edited this session.
+    let untouchedZeroSkipCount = 0;
     const kk = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
     const expectedCount = employeeCountMap.get(kk) ?? 0;
     
@@ -904,11 +907,14 @@ export default function OrgKpiDataEntry() {
           consideredScopeIds.push(sv.scopeId);
           continue;
         }
-        // v2.65.4 — Block silent zero-propagation:
-        // Skip rows that hold 0 but were not edited this session (stale Save value).
-        // Owner must explicitly type a value (or 0) before Propagate writes it.
+        // v2.65.4 + ADR-063 — Block silent zero-propagation, but no longer
+        // silently. The user sees `0` in the cell and (rightly) expects it to
+        // flow through; we still refuse to push it without an explicit edit
+        // so a stale render can't poison the scorecard, but we now COUNT the
+        // skips and emit a single explanatory toast after the loop.
         if (!(sv as any)._touched && sv.achievedValue === 0 && !sv.isNa) {
           consideredScopeIds.push(sv.scopeId);
+          untouchedZeroSkipCount += 1;
           continue;
         }
         const result = await propagate.mutateAsync({
