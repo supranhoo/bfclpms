@@ -635,6 +635,9 @@ export default function OrgKpiDataEntry() {
             departmentName,
             designation,
             achievedValue: fallbackAchieved,
+            // ADR-063 — raw OKV value (pre-fallback) so the per-row pill can
+            // detect unsaved local edits ("data shown but not in DB yet").
+            dbAchievedValue: val?.achieved_value ?? null,
             remarks: val?.remarks ?? '',
             evidenceUrl: val?.evidence_url ?? null,
             isNa: fallbackIsNa,
