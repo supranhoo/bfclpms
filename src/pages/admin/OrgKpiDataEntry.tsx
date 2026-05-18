@@ -556,6 +556,8 @@ export default function OrgKpiDataEntry() {
             scopeName: deptName,
             scopeSubText,
             achievedValue: deptAchieved,
+            // ADR-063 — see employee-branch note below.
+            dbAchievedValue: val?.achieved_value ?? null,
             remarks: val?.remarks ?? '',
             evidenceUrl: val?.evidence_url ?? null,
             isNa: deptIsNa,
@@ -635,6 +637,9 @@ export default function OrgKpiDataEntry() {
             departmentName,
             designation,
             achievedValue: fallbackAchieved,
+            // ADR-063 — raw OKV value (pre-fallback) so the per-row pill can
+            // detect unsaved local edits ("data shown but not in DB yet").
+            dbAchievedValue: val?.achieved_value ?? null,
             remarks: val?.remarks ?? '',
             evidenceUrl: val?.evidence_url ?? null,
             isNa: fallbackIsNa,
@@ -857,6 +862,9 @@ export default function OrgKpiDataEntry() {
     // previous "1 matching past initial stage" message that fired 13× silently).
     let totalSkippedBenign = 0;
     let totalSkippedHard = 0;
+    // ADR-063 — surface (instead of silently dropping) zero values that the
+    // user can see in the UI but never explicitly edited this session.
+    let untouchedZeroSkipCount = 0;
     const kk = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
     const expectedCount = employeeCountMap.get(kk) ?? 0;
     
@@ -899,11 +907,14 @@ export default function OrgKpiDataEntry() {
           consideredScopeIds.push(sv.scopeId);
           continue;
         }
-        // v2.65.4 — Block silent zero-propagation:
-        // Skip rows that hold 0 but were not edited this session (stale Save value).
-        // Owner must explicitly type a value (or 0) before Propagate writes it.
+        // v2.65.4 + ADR-063 — Block silent zero-propagation, but no longer
+        // silently. The user sees `0` in the cell and (rightly) expects it to
+        // flow through; we still refuse to push it without an explicit edit
+        // so a stale render can't poison the scorecard, but we now COUNT the
+        // skips and emit a single explanatory toast after the loop.
         if (!(sv as any)._touched && sv.achievedValue === 0 && !sv.isNa) {
           consideredScopeIds.push(sv.scopeId);
+          untouchedZeroSkipCount += 1;
           continue;
         }
         const result = await propagate.mutateAsync({
@@ -963,6 +974,19 @@ export default function OrgKpiDataEntry() {
         toast({
           title: `Propagation incomplete`,
           description: `${totalPropagated} updated, ${totalSkippedHard} could not be advanced (missing rows or race condition). Please refresh and retry.`,
+          variant: 'destructive',
+        });
+      }
+
+      // ADR-063 — explain the silent-zero guard so admins stop wondering why
+      // rows that visibly show "0" never advance. The guard itself is still
+      // intentional (POLICY §111.7 — never push an unedited value), but the
+      // user must be told it fired.
+      if (untouchedZeroSkipCount > 0) {
+        toast({
+          title: `${untouchedZeroSkipCount} row(s) holding 0 were not propagated`,
+          description:
+            'They show "0" in the cell but were never edited this session. Click into each cell, retype 0 (or the correct value), wait for autosave, then click Propagate again.',
           variant: 'destructive',
         });
       }
