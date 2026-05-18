@@ -556,6 +556,8 @@ export default function OrgKpiDataEntry() {
             scopeName: deptName,
             scopeSubText,
             achievedValue: deptAchieved,
+            // ADR-063 — see employee-branch note below.
+            dbAchievedValue: val?.achieved_value ?? null,
             remarks: val?.remarks ?? '',
             evidenceUrl: val?.evidence_url ?? null,
             isNa: deptIsNa,
