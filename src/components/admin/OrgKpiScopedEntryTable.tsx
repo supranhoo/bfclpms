@@ -400,37 +400,57 @@ const obsStatusConfig: Record<string, { label: string; variant: 'outline' | 'sec
 // ---- Per-row propagation status pill ----
 // Mirrors the colour tokens used by OrgKpiEntryCard's header statusConfig so
 // the per-row badge reads consistently with the card-level pill.
-function RowStatusPill({ status }: { status?: ScopedRow['status'] }) {
+function RowStatusPill({ status, reason }: { status?: ScopedRow['status']; reason?: string }) {
   const s = status ?? 'pending';
+  const ReasonChip = reason ? (
+    <span
+      className="text-[10px] leading-none text-amber-700 dark:text-amber-400 ml-1 italic"
+      title={reason}
+    >
+      · {reason}
+    </span>
+  ) : null;
   if (s === 'propagated') {
     return (
-      <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-green-300 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400 gap-0.5">
-        <ArrowUpRight className="w-2.5 h-2.5" />
-        Propagated
-      </Badge>
+      <span className="inline-flex items-center">
+        <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-green-300 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400 gap-0.5">
+          <ArrowUpRight className="w-2.5 h-2.5" />
+          Propagated
+        </Badge>
+        {ReasonChip}
+      </span>
     );
   }
   if (s === 'approved') {
     return (
-      <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400 gap-0.5">
-        <CheckCircle2 className="w-2.5 h-2.5" />
-        Approved
-      </Badge>
+      <span className="inline-flex items-center">
+        <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400 gap-0.5">
+          <CheckCircle2 className="w-2.5 h-2.5" />
+          Approved
+        </Badge>
+        {ReasonChip}
+      </span>
     );
   }
   if (s === 'entered') {
     return (
-      <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/30 dark:text-orange-400 gap-0.5">
-        <CheckCircle2 className="w-2.5 h-2.5" />
-        Not propagated
-      </Badge>
+      <span className="inline-flex items-center">
+        <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/30 dark:text-orange-400 gap-0.5">
+          <CheckCircle2 className="w-2.5 h-2.5" />
+          Not propagated
+        </Badge>
+        {ReasonChip}
+      </span>
     );
   }
   return (
-    <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal text-muted-foreground border-muted-foreground/30 gap-0.5">
-      <Clock className="w-2.5 h-2.5" />
-      Pending
-    </Badge>
+    <span className="inline-flex items-center">
+      <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal text-muted-foreground border-muted-foreground/30 gap-0.5">
+        <Clock className="w-2.5 h-2.5" />
+        Pending
+      </Badge>
+      {ReasonChip}
+    </span>
   );
 }
 
