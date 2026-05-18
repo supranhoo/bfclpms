@@ -42,6 +42,13 @@ export interface ScopedRow {
    * need the Propagate action. Defaults to 'pending' when omitted.
    */
   status?: 'pending' | 'entered' | 'propagated' | 'approved';
+  /**
+   * Raw `org_kpi_values.achieved_value` from the DB at fetch time (ADR-063).
+   * When this differs from `achievedValue`, the local row holds an unsaved
+   * edit. Used by `RowStatusPill` to render a "Unsaved" reason micro-label
+   * so admins stop confusing visible-but-unsaved values with propagated ones.
+   */
+  dbAchievedValue?: number | null;
 }
 
 export interface ObservationCounts {
