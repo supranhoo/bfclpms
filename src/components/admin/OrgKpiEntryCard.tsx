@@ -356,6 +356,9 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
             ...row,
             // Refreshable, non-editable metadata from snapshot truth.
             status: dbRow.status ?? row.status,
+            // ADR-063 — refresh DB-anchored value so the "Unsaved" reason
+            // chip clears as soon as autosave commits.
+            dbAchievedValue: dbRow.dbAchievedValue ?? null,
             // Editable fields — only fill in when local is empty.
             subFactors: row.subFactors ?? dbRow.subFactors,
             achievedValue: row.achievedValue ?? dbRow.achievedValue,
