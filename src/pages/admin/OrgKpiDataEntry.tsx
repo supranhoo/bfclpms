@@ -977,6 +977,19 @@ export default function OrgKpiDataEntry() {
           variant: 'destructive',
         });
       }
+
+      // ADR-063 — explain the silent-zero guard so admins stop wondering why
+      // rows that visibly show "0" never advance. The guard itself is still
+      // intentional (POLICY §111.7 — never push an unedited value), but the
+      // user must be told it fired.
+      if (untouchedZeroSkipCount > 0) {
+        toast({
+          title: `${untouchedZeroSkipCount} row(s) holding 0 were not propagated`,
+          description:
+            'They show "0" in the cell but were never edited this session. Click into each cell, retype 0 (or the correct value), wait for autosave, then click Propagate again.',
+          variant: 'destructive',
+        });
+      }
     }
 
     // Propagation completeness validation (PA3) — v2.66.10 skip-aware
