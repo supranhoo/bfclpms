@@ -582,8 +582,24 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
                   {row.designation}
                 </Badge>
               )}
-              {/* Per-row propagation status — see RowStatusPill */}
-              <RowStatusPill status={row.status} />
+              {/* Per-row propagation status — see RowStatusPill (ADR-063) */}
+              <RowStatusPill
+                status={row.status}
+                reason={(() => {
+                  const s = row.status ?? 'pending';
+                  if (s === 'propagated' || s === 'approved') return undefined;
+                  if (row.isNa) return undefined;
+                  if (row.achievedValue === null) return 'No value entered';
+                  // Local edit differs from what was persisted to OKV
+                  if (row.dbAchievedValue !== undefined && row.dbAchievedValue !== row.achievedValue) {
+                    return 'Unsaved — wait for autosave, then Propagate';
+                  }
+                  if (row.achievedValue === 0 && (row.dbAchievedValue ?? null) === null) {
+                    return '0 not saved — click cell then Save';
+                  }
+                  return undefined;
+                })()}
+              />
               {/* Sent-back indicator */}
               {isSentBack && (
                 <TooltipProvider>
