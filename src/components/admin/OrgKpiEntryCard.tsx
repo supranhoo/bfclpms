@@ -212,6 +212,21 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [showRepairDialog, setShowRepairDialog] = useState(false);
   const [repairRows, setRepairRows] = useState<DiagnoseGapRow[] | null>(null);
+  const [showEvidenceSheet, setShowEvidenceSheet] = useState(false);
+
+  // Evidence manager — for org-scope, resolve the single OKV row id.
+  const { data: orgOkvId } = useOrgScopeOkvId({
+    categoryId: data.categoryId,
+    kraName: data.kraName,
+    kpiName: data.kpiName,
+    reviewPeriod,
+    reviewYear,
+    enabled: data.scope === 'organization',
+  });
+  const { data: evidenceFiles } = useOrgKpiEvidenceFiles(orgOkvId);
+  const { data: parityMap } = useOrgKpiEvidenceParity(reviewPeriod, reviewYear);
+  const parityRow = orgOkvId ? parityMap?.get(orgOkvId) : undefined;
+  const evidenceCount = evidenceFiles?.length ?? 0;
   const diagnoseGap = useDiagnoseOrgKpiGap();
   const repairGap = useRepairOrgKpiGap();
   const openRepairDialog = useCallback(async () => {
