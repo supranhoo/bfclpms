@@ -47,8 +47,12 @@ interface PropagateParams {
    * data owners overwrite employee self-reviewed values that no manager/auditor
    * has yet acted on. Use 'force_pre_terminal' (admin) to overwrite any
    * non-terminal stage. 'safe' keeps the legacy kra_set-only behaviour.
+   * Use 'overwrite_and_stepback' (admin, ADR-064) to make the Org KPI entry
+   * the source of truth — overwrites self_* fields and steps the row back
+   * to self_review (clearing reviewer columns) if past it. Approved rows
+   * are still immutable.
    */
-  overwritePolicy?: 'safe' | 'pre_review_only' | 'force_pre_terminal';
+  overwritePolicy?: 'safe' | 'pre_review_only' | 'force_pre_terminal' | 'overwrite_and_stepback';
 }
 
 /**
@@ -192,7 +196,7 @@ async function callPropagationRpc(
   profileMap: Map<string, any>,
   isNa: boolean,
   remarks?: string | null,
-  overwritePolicy: 'safe' | 'pre_review_only' | 'force_pre_terminal' = 'pre_review_only'
+  overwritePolicy: 'safe' | 'pre_review_only' | 'force_pre_terminal' | 'overwrite_and_stepback' = 'pre_review_only'
 ): Promise<PropagationResultWithDetails> {
   const { data, error } = await supabase.rpc('propagate_org_kpi_value', {
     p_kpi_ratings: kpiRatings,
