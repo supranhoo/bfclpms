@@ -20,6 +20,7 @@ import {
 import { usePromoteSignature } from '@/hooks/useCanonicalAutolink';
 import { format } from 'date-fns';
 import { RegistryPager, pagedSlice } from './RegistryPager';
+import { CompareCell } from './CompareCell';
 
 /**
  * Phase 4b: Auto-merge suggestion review surface.
