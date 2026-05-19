@@ -12,7 +12,22 @@ import {
 } from 'lucide-react';
 import { OrgKpiEvidenceStatusChip } from '@/components/admin/OrgKpiEvidenceStatusChip';
 import { OrgKpiParityBadge } from '@/components/admin/OrgKpiParityBadge';
+import { DistributionPreview } from '@/components/admin/EvidenceTargetPopover';
 import type { OrgKpiEvidenceParityRow } from '@/hooks/useOrgKpiEvidenceFiles';
+import type { OrgKpiEvidenceTargetingRow } from '@/hooks/useOrgKpiEvidenceFiles';
+
+const MOCK_TARGETING: Record<string, OrgKpiEvidenceTargetingRow[]> = {
+  s2: [
+    { employee_id: 'e1', employee_name: 'Asha Patel',  department_id: 'd1', department_name: 'Plant A', kpi_id: 'k1', kpi_status: 'self_review', expected_files: [{ url:'#', label:'May 2026 production log', added_by:null, added_at:null },{ url:'#', label:'Plant-head sign-off PDF', added_by:null, added_at:null },{ url:'#', label:'Daily output trend (XLSX)', added_by:null, added_at:null }], current_urls: ['#','#','#'], drift_kind: 'in_sync' },
+    { employee_id: 'e2', employee_name: 'Ravi Kumar',  department_id: 'd1', department_name: 'Plant A', kpi_id: 'k2', kpi_status: 'self_review', expected_files: [{ url:'#', label:'May 2026 production log', added_by:null, added_at:null },{ url:'#', label:'Plant-head sign-off PDF', added_by:null, added_at:null },{ url:'#', label:'Daily output trend (XLSX)', added_by:null, added_at:null }], current_urls: ['#','#','#'], drift_kind: 'in_sync' },
+    { employee_id: 'e3', employee_name: 'Sara Nair',   department_id: 'd2', department_name: 'Plant B', kpi_id: 'k3', kpi_status: 'kra_set',    expected_files: [{ url:'#', label:'May 2026 production log', added_by:null, added_at:null },{ url:'#', label:'Plant-head sign-off PDF', added_by:null, added_at:null },{ url:'#', label:'Daily output trend (XLSX)', added_by:null, added_at:null }], current_urls: [], drift_kind: 'not_propagated' },
+  ],
+  s3: [
+    { employee_id: 'e4', employee_name: 'Mahesh Iyer', department_id: 'd1', department_name: 'Plant A', kpi_id: 'k4', kpi_status: 'manager_check', expected_files: [{ url:'#', label:'Manning sheet — original', added_by:null, added_at:null },{ url:'#', label:'Manning sheet — revision v2', added_by:null, added_at:null }], current_urls: ['#'], drift_kind: 'missing_files' },
+    { employee_id: 'e5', employee_name: 'Neha Sharma', department_id: 'd2', department_name: 'Plant B', kpi_id: 'k5', kpi_status: 'self_review',   expected_files: [{ url:'#', label:'Manning sheet — original', added_by:null, added_at:null }], current_urls: ['#'], drift_kind: 'in_sync' },
+    { employee_id: 'e6', employee_name: 'Vikas Rao',   department_id: 'd2', department_name: 'Plant B', kpi_id: 'k6', kpi_status: 'self_review',   expected_files: [{ url:'#', label:'Manning sheet — original', added_by:null, added_at:null }], current_urls: ['#','#'], drift_kind: 'extra_files' },
+  ],
+};
 
 /**
  * Static UI preview for the Org-KPI multi-file evidence + parity feature.
@@ -146,6 +161,18 @@ export default function OrgKpiEvidenceDemo() {
                     <Upload className="h-3 w-3 mr-1" /> Add file(s)
                   </Button>
                   <Button size="sm" disabled>Save changes</Button>
+                </div>
+
+                <Separator />
+
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold flex items-center gap-2">
+                    <FileText className="h-3.5 w-3.5" /> Distribution preview
+                  </h4>
+                  <p className="text-[11px] text-muted-foreground">
+                    Which supporting file each mapped employee will receive (after per-file targeting).
+                  </p>
+                  <DistributionPreview rows={MOCK_TARGETING[active.id] ?? []} />
                 </div>
 
                 <Separator />
