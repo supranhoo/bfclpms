@@ -1,93 +1,52 @@
-## Problem
-
-For a Half-Yearly KPI with **Cycle Start = Financial Year (Apr Start)** the cycles are:
-- H1: Apr–Sep → today's `activeMonth = 9` (review in September, the last month of the cycle)
-- H2: Oct–Mar → today's `activeMonth = 3` (review in March)
-
-Business reality (e.g. stock-audit variance KPI): the review can only happen **after** the half closes — i.e. **April** (for H2 Oct–Mar) and **October** (for H1 Apr–Sep). The current rigid terminal-month rule blocks this:
-
-> "Half-Yearly KPI cannot be reviewed for April. Only the terminal month of the cycle is reviewable."
-
-Admins have no way to express "review one month after the cycle ends".
-
 ## Goal
 
-Introduce a new selectable Half-Yearly cycle option **"Financial Year — Review in Apr & Oct"** that:
-- Keeps the same H1 (Apr–Sep) / H2 (Oct–Mar) cycles
-- Moves the review (terminal) month to **October** for H1 and **April** for H2
-- Locks all other months of each cycle the same way
-
-This is opt-in per KPI (existing per-KPI `frequency_cycle_start` override field — already wired through `resolveEffectiveCycleOption`) and also available as a global default in Frequency Cycle Settings.
+Show a coloured frequency pill next to **every** non-Monthly KPI title on the dashboard / review surfaces — currently only **Daily**, **Bi-Monthly**, and **Quarterly** render. **Weekly**, **Half-Yearly**, and **Yearly** are silently dropped. **Monthly** is intentionally suppressed (the implicit default).
 
 ## Risk & Impact Report
 
 | Area | Impact | Mitigation |
 |---|---|---|
-| Data schema | None — reuses existing `frequency_cycle_start` text column and `frequency_config.sub_frequency` / `locked_months` / `active_month` | New value strings only; no migration of historical data |
-| Workflow | Only affects KPIs whose admin explicitly selects the new option | Existing KPIs untouched (default option unchanged) |
-| Multi-month percolation | `percolate_multimonth_score` resolves terminal via `get_cycle_months` + last-element-of-array rule. Need to confirm terminal resolution for a cycle whose "review month" sits **outside** the data-collection months works correctly | See "Open question" below — may require extending `get_cycle_months` or storing terminal explicitly |
-| Frequency lock | `enforce_frequency_lock_on_submission` reads `locked_months` from `frequency_config`. New option provides correct locked-months map | Covered by config row |
-| UI | Cycle Start dropdown gets one extra row in Admin KPI editor and Frequency Cycle Settings | Pure additive |
-| Regression | Existing Apr-Sep option (`activeMonth: 9`) untouched | New option has different `value` key |
+| Data / schema | None — pure presentation | — |
+| Workflow / scoring | None | — |
+| UI consistency | Centralises 4 currently divergent inline JSX blocks into one component | Same visual language everywhere |
+| Regression | Low — replacing existing per-frequency JSX with a shared component that emits the identical markup for Daily/Bi-Monthly/Quarterly and adds new variants for Weekly/Half-Yearly/Yearly | Snapshot/unit test for the component |
 
-## Open question (needs your confirmation before build)
+## Plan
 
-The current model assumes the **terminal/review month is one of the cycle's data months**. The new pattern says "review in the month **after** the cycle ends" (April reviews data from Oct–Mar; October reviews data from Apr–Sep). Two ways to model it:
+### 1. New shared component
+**`src/components/review/FrequencyBadge.tsx`** — single source of truth.
 
-**Option A — Shift the cycle boundary** (simplest, no engine changes)
-- H1 = May–Oct (review month = Oct), H2 = Nov–Apr (review month = Apr)
-- Pros: zero changes to `get_cycle_months` / percolation triggers
-- Cons: the "cycle label" no longer matches the financial half exactly
+| Frequency  | Label        | Color (light / dark text + border)            | Icon |
+|------------|--------------|-----------------------------------------------|------|
+| Daily      | Daily        | blue (existing `DailyBadge` palette)          | Calendar |
+| Weekly     | Weekly       | sky                                           | CalendarDays |
+| Bi-Monthly | Bi-Monthly   | violet (existing)                             | — |
+| Quarterly  | Quarterly    | teal (existing)                               | — |
+| Half-Yearly| Half-Yearly  | amber                                         | — |
+| Yearly     | Yearly       | rose                                          | — |
+| Monthly    | *(no badge — returns null)*                                | — |
 
-**Option B — Keep Apr–Sep / Oct–Mar cycles, add explicit `review_month`** (cleanest semantically)
-- Cycle months stay Apr–Sep and Oct–Mar (matches FY half)
-- New `review_month` field tells the workflow engine "open the review in the month after the last data month"
-- Requires: extending `frequency_config` with `review_month`, updating `get_cycle_months` / `getActiveMonthForCycle` / `enforce_frequency_lock_on_submission` / sibling-creation logic in `useCreateKpi`
-- Higher blast radius — touches POLICY §54
+Same dimensions / typography as the current ad-hoc badges (`text-[10px] px-1.5 py-0 h-4` desktop, `text-[10px] px-1 py-0 h-4` mobile via a `size="sm" | "xs"` prop). All colors via Tailwind semantic palette tokens (border + text classes, no `bg-*` flooding).
 
-I recommend **Option A** unless you specifically need the cycle label to read "Apr–Sep". It satisfies the business need (review happens in Apr & Oct) with zero engine risk.
+### 2. Replace ad-hoc sites
+Swap the inline `Bi-Monthly` / `Quarterly` / `DailyBadge` blocks in:
+- `src/components/review/KpiDetailsTable.tsx` (team-reviews desktop — the surface in your screenshot)
+- `src/components/dashboard/MobileKpiCard.tsx` (own-dashboard mobile)
+- `src/components/review/MobileKpiCard.tsx` (team-reviews mobile)
+- `src/components/review/KpiHeaderSection.tsx` keeps its existing **cycle-label** chip (e.g. "Bi-Monthly: Sep–Oct 2026") since it carries extra cycle metadata, but I'll add Weekly/Half-Yearly/Yearly cycle labels there too via the existing `getCycleLabel` helper.
 
-## Plan (assuming Option A is approved)
+`DailyBadge` stays exported but becomes a thin re-export of `<FrequencyBadge frequency="Daily" />` for backwards compatibility (other call sites in `DailyKpiExpandButton` unchanged).
 
-### 1. `src/lib/frequencyCycleOptions.ts`
-Add to `HALF_YEARLY_OPTIONS`:
-```
-{
-  value: 'May-Oct',
-  label: 'Financial Year — Review in Apr & Oct',
-  description: 'H1: May–Oct (review in Oct), H2: Nov–Apr (review in Apr)',
-  subFrequency: 'May-Oct,Nov-Apr',
-  lockedMonths: { H1: [5,6,7,8,9], H2: [11,12,1,2,3] },
-  activeMonth: 10,   // primary terminal; secondary terminal (Apr) handled by cycle array
-}
-```
+### 3. Test
+`src/test/frequencyBadge.test.tsx`:
+- Daily / Weekly / Bi-Monthly / Quarterly / Half-Yearly / Yearly each render with the expected label + non-empty className
+- Monthly returns `null`
+- Unknown frequency returns `null`
 
-### 2. DB seed — extend `frequency_config` choices
-Migration to UPSERT the new sub_frequency entry into `frequency_config` so the dropdown in Frequency Cycle Settings can persist it globally. (No schema changes — data only.)
-
-### 3. Verify `get_cycle_months` handles the wrap (Nov–Apr crosses year boundary)
-Quick read-only check of the function; existing Dec→Jan wrap rule for Bi-Monthly `Dec-Jan` already covers this pattern, so behavior should be inherited.
-
-### 4. UI surfaces
-- `AdminKpiEditorForm` / KPI create dialog — Cycle Start dropdown auto-picks up new option from `HALF_YEARLY_OPTIONS`
-- `FrequencyCycleSettings.tsx` — Half-Yearly section gets the third radio card automatically
-- No component refactor needed; both already iterate `HALF_YEARLY_OPTIONS`
-
-### 5. Tests
-- `frequencyCycleOptions.test.ts` — assert the new option resolves correctly via `resolveEffectiveCycleOption`
-- `frequencyUtils.test.ts` — terminal-month resolution for `May-Oct` returns October; for `Nov-Apr` returns April (handles year wrap)
-- Mock KPI fixture with `frequency='Half-Yearly'`, `frequency_cycle_start='May-Oct'` — submitting in April for the Nov–Apr cycle passes the lock, submitting in March is blocked
-
-### 6. Docs / policy
-- `POLICY.md` §54 — add v5.1 note: "Half-Yearly supports an additional FY-aligned variant where review opens in the month following the data-collection half."
-- New ADR-064: "Configurable Half-Yearly review-month for post-cycle audits"
-- Update `mem/architecture/pms/multimonth-percolation` with the new option string
+### 4. Memory
+Append a one-liner to `mem/features/review/kpi-frequency-indicators` noting the new shared `FrequencyBadge` component is the canonical render and lists Monthly as the suppressed default.
 
 ## Out of scope
-- No changes to scoring math, score percolation behavior, or workflow stage engine
-- No retroactive migration of existing Apr–Sep KPIs — admins migrate manually if desired
-- No changes to Quarterly / Bi-Monthly / Yearly cycles (can be added later with the same pattern if needed)
-
----
-
-**Please confirm:** Option A (shift cycles to May–Oct / Nov–Apr) or Option B (keep Apr–Sep / Oct–Mar and add a separate review-month engine field)?
+- No backend / logic changes
+- No change to KpiHeaderSection's contextual cycle-label chip (just adds the missing frequencies)
+- No icon for non-Daily frequencies unless you want one
