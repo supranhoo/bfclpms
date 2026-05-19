@@ -196,6 +196,7 @@ export function useResyncOrgKpiEvidence() {
       qc.invalidateQueries({ queryKey: ['org-kpi-evidence-parity'] });
       qc.invalidateQueries({ queryKey: ['org-kpi-values'] });
       qc.invalidateQueries({ queryKey: ['review-submissions'] });
+      qc.invalidateQueries({ queryKey: ['org-kpi-evidence-targeting', vars.okvId] });
       toast({
         title: 'Supporting files re-synced',
         description:
