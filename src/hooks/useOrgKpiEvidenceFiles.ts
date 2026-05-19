@@ -101,6 +101,7 @@ export function useUpsertOrgKpiEvidenceFiles() {
       qc.invalidateQueries({ queryKey: ['org-kpi-evidence-files', okvId] });
       qc.invalidateQueries({ queryKey: ['org-kpi-values'] });
       qc.invalidateQueries({ queryKey: ['org-kpi-evidence-parity'] });
+      qc.invalidateQueries({ queryKey: ['org-kpi-evidence-targeting', okvId] });
     },
     onError: (err: Error) => {
       toast({ title: 'Failed to update supporting files', description: err.message, variant: 'destructive' });
