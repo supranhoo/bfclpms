@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Database, Download, RotateCcw, HardDrive, Clock, AlertTriangle, Upload, CalendarClock, X } from 'lucide-react';
 import { format } from 'date-fns';
+import { SafetyDrillCard } from '@/components/admin/SafetyDrillCard';
 import {
   useBackupLogs,
   useTriggerBackup,
