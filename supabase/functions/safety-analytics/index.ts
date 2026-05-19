@@ -1,9 +1,12 @@
 /**
  * safety-analytics
  * ----------------
- * Phase 7-B. Returns aggregated reads from the materialized views with
- * optional `business_unit_id` and `from_date` filters. Uses the caller's
- * JWT so RLS / GRANTs are honored.
+ * Phase 7-B. Returns aggregated reads from the safety materialized views
+ * with optional `business_unit_id` filter.
+ *
+ * T-001 (Phase 1.5): MVs are no longer readable by anon/authenticated.
+ * We use a service-role client and gate access by verifying the caller
+ * has a Safety role via `has_any_safety_role`.
  *
  * GET / POST { business_unit_id?: string }
  */
@@ -23,12 +26,45 @@ Deno.serve(async (req) => {
   try {
     const url = Deno.env.get('SUPABASE_URL')!;
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const authHeader = req.headers.get('Authorization') ?? '';
 
-    const supabase = createClient(url, anonKey, {
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ ok: false, error: 'unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // Caller-scoped client only to resolve the user identity.
+    const userClient = createClient(url, anonKey, {
       global: { headers: { Authorization: authHeader } },
       auth: { persistSession: false },
     });
+    const { data: userData, error: userErr } = await userClient.auth.getUser();
+    if (userErr || !userData?.user) {
+      return new Response(
+        JSON.stringify({ ok: false, error: 'unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // Service-role client for MV reads (revoked from authenticated by T-001).
+    const supabase = createClient(url, serviceKey, {
+      auth: { persistSession: false },
+    });
+
+    // Gate: caller must hold any Safety role.
+    const { data: roleOk, error: roleErr } = await supabase.rpc(
+      'has_any_safety_role',
+      { _user_id: userData.user.id },
+    );
+    if (roleErr || roleOk !== true) {
+      return new Response(
+        JSON.stringify({ ok: false, error: 'forbidden' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
 
     let bu: string | null = null;
     if (req.method === 'POST') {
