@@ -107,19 +107,16 @@ Deno.serve(async (req) => {
         snapshot[t] = JSON.parse(await file.text()) as unknown[]
       }
     } else {
-      // Flow A — inline snapshot via service-role select from sandbox copies
-      // (sandbox now holds the seed rows). This proves the storage round-trip
-      // without invoking the full create-backup pipeline.
-      const drillClient = createClient(supabaseUrl, serviceKey, {
-        db: { schema: 'safety_drill' },
-      })
+      // Flow A — inline snapshot via SECURITY DEFINER RPC that reads from the
+      // sandbox schema (PostgREST cannot reach safety_drill directly).
       const drillFolder = `drills/${drillId}`
       for (const t of DRILL_TABLES) {
-        const { data: rows, error: selErr } = await drillClient
-          .from(t)
-          .select('*')
-        if (selErr) return jsonRes({ error: `select ${t}: ${selErr.message}` }, 500)
-        snapshot[t] = rows ?? []
+        const { data: rows, error: selErr } = await callerRpc.rpc(
+          'safety_drill_dump',
+          { _table: t }
+        )
+        if (selErr) return jsonRes({ error: `dump ${t}: ${selErr.message}` }, 500)
+        snapshot[t] = (rows as unknown[]) ?? []
         const { error: upErr } = await admin.storage
           .from('database-backups')
           .upload(
@@ -135,15 +132,15 @@ Deno.serve(async (req) => {
     const { error: truncErr } = await callerRpc.rpc('safety_drill_truncate')
     if (truncErr) return jsonRes({ error: `truncate: ${truncErr.message}` }, 500)
 
-    const drillSchema = createClient(supabaseUrl, serviceKey, {
-      db: { schema: 'safety_drill' },
-    })
     const insertErrors: string[] = []
     for (const t of DRILL_TABLES) {
       const rows = snapshot[t]
       if (!rows.length) continue
-      const { error } = await drillSchema.from(t).insert(rows)
-      if (error) insertErrors.push(`insert ${t}: ${error.message}`)
+      const { error } = await callerRpc.rpc('safety_drill_load', {
+        _table: t,
+        _rows: rows,
+      })
+      if (error) insertErrors.push(`load ${t}: ${error.message}`)
     }
 
     // ---------- Phase 4: verify ----------
