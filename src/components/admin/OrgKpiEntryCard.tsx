@@ -678,21 +678,22 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               <>
                 <OrgKpiEvidenceStatusChip
                   count={evidenceCount}
-                  onClick={() => setShowEvidenceSheet(true)}
+                  onClick={openEvidenceSheet}
                 />
                 <OrgKpiParityBadge
                   parity={parityRow}
-                  onClick={() => setShowEvidenceSheet(true)}
+                  onClick={openEvidenceSheet}
                 />
                 {isAdmin && (
                   <Button
                     variant="outline"
                     size="sm"
                     className="h-6 px-2 text-[10px] gap-1"
-                    onClick={() => setShowEvidenceSheet(true)}
+                    onClick={openEvidenceSheet}
+                    disabled={ensureScopeRows.isPending}
                   >
                     <Paperclip className="h-3 w-3" />
-                    Manage files
+                    {ensureScopeRows.isPending ? 'Preparing…' : 'Manage files'}
                   </Button>
                 )}
               </>
