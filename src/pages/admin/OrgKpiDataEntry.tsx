@@ -635,6 +635,7 @@ export default function OrgKpiDataEntry() {
           return {
             scopeId: empId,
             scopeName: fullName || emp?.email || `Employee ${empId.slice(0, 6)}`,
+            okvId: val?.id,
             departmentName,
             designation,
             achievedValue: fallbackAchieved,
