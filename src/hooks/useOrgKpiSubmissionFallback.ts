@@ -6,6 +6,10 @@ import { normalizeKpiKey } from '@/lib/orgKpiKey';
 export interface SubmissionFallbackEntry {
   achievedValue: number | null;
   isNa: boolean;
+  /** Self-review remarks (employee-entered). Only populated on per-employee keys. */
+  selfRemarks?: string | null;
+  /** Self-review evidence URLs (plural preferred, else singular). Empty when none. */
+  selfEvidenceUrls?: string[];
 }
 
 /**
@@ -58,13 +62,20 @@ export function useOrgKpiSubmissionFallback(
       if (kpiIds.length === 0) return map;
 
       // 2) Pull matching review_submissions in chunks (avoid 1k IN-list cap).
-      const submissions: Array<{ kpi_id: string; achieved_value: number | null; is_na: boolean | null }> = [];
+      const submissions: Array<{
+        kpi_id: string;
+        achieved_value: number | null;
+        is_na: boolean | null;
+        self_remarks: string | null;
+        self_evidence_url: string | null;
+        self_evidence_urls: string[] | null;
+      }> = [];
       const chunk = 500;
       for (let i = 0; i < kpiIds.length; i += chunk) {
         const slice = kpiIds.slice(i, i + chunk);
         const { data, error } = await supabase
           .from('review_submissions')
-          .select('kpi_id, achieved_value, is_na')
+          .select('kpi_id, achieved_value, is_na, self_remarks, self_evidence_url, self_evidence_urls')
           .in('kpi_id', slice);
         if (error) throw error;
         if (data) submissions.push(...data as any);
@@ -89,7 +100,14 @@ export function useOrgKpiSubmissionFallback(
       (kpiRows ?? []).forEach(k => {
         const sub = subByKpiId.get(k.id);
         if (!sub) return;
-        const hasValue = sub.achieved_value !== null || !!sub.is_na;
+        const selfUrls: string[] = Array.isArray(sub.self_evidence_urls) && sub.self_evidence_urls.length > 0
+          ? sub.self_evidence_urls.filter((u): u is string => typeof u === 'string' && !!u)
+          : (sub.self_evidence_url ? [sub.self_evidence_url] : []);
+        const selfRemarks = sub.self_remarks ?? null;
+        const hasValue = sub.achieved_value !== null
+          || !!sub.is_na
+          || !!(selfRemarks && selfRemarks.trim())
+          || selfUrls.length > 0;
         if (!hasValue) return;
         const defKey = normalizeKpiKey(k.category_id, k.kra_name, k.kpi_name);
 
@@ -100,6 +118,8 @@ export function useOrgKpiSubmissionFallback(
           map.set(`${defKey}||${k.employee_id}`, {
             achievedValue: sub.achieved_value,
             isNa: !!sub.is_na,
+            selfRemarks,
+            selfEvidenceUrls: selfUrls,
           });
         }
 
