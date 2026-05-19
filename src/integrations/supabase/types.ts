@@ -3650,6 +3650,7 @@ export type Database = {
           department_id: string | null
           employee_id: string | null
           entered_by: string | null
+          evidence_files: Json
           evidence_url: string | null
           evidence_urls: Json | null
           id: string
@@ -3689,6 +3690,7 @@ export type Database = {
           department_id?: string | null
           employee_id?: string | null
           entered_by?: string | null
+          evidence_files?: Json
           evidence_url?: string | null
           evidence_urls?: Json | null
           id?: string
@@ -3728,6 +3730,7 @@ export type Database = {
           department_id?: string | null
           employee_id?: string | null
           entered_by?: string | null
+          evidence_files?: Json
           evidence_url?: string | null
           evidence_urls?: Json | null
           id?: string
@@ -8363,6 +8366,7 @@ export type Database = {
         Args: { _permit_id: string; _uid: string }
         Returns: boolean
       }
+      jsonb_url_set_equal: { Args: { a: Json; b: Json }; Returns: boolean }
       log_standardization_action: {
         Args: {
           p_action_type: string
@@ -8403,6 +8407,20 @@ export type Database = {
       month_name_to_index: { Args: { p_month: string }; Returns: number }
       normalize_kpi_text: { Args: { p: string }; Returns: string }
       normalize_kpi_text_value: { Args: { txt: string }; Returns: string }
+      org_kpi_evidence_parity: {
+        Args: { p_review_period: string; p_review_year: number }
+        Returns: {
+          category_id: string
+          drift_evidence: number
+          drift_value: number
+          in_sync: number
+          kpi_name: string
+          kra_name: string
+          not_propagated: number
+          okv_id: string
+          total_emps: number
+        }[]
+      }
       preview_org_kpi_propagation: {
         Args: {
           p_kpi_ids: string[]
@@ -8556,6 +8574,10 @@ export type Database = {
           terminal_period: string
           terminal_year: number
         }[]
+      }
+      resync_org_kpi_evidence: {
+        Args: { p_mode?: string; p_okv_id: string }
+        Returns: Json
       }
       reverse_standardization_action: {
         Args: { p_action_id: string }
