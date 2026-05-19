@@ -575,6 +575,29 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                 {data.employeeCount} employee{data.employeeCount !== 1 ? 's' : ''}
               </Badge>
             )}
+            {data.scope === 'organization' && orgOkvId && (
+              <>
+                <OrgKpiEvidenceStatusChip
+                  count={evidenceCount}
+                  onClick={() => setShowEvidenceSheet(true)}
+                />
+                <OrgKpiParityBadge
+                  parity={parityRow}
+                  onClick={() => setShowEvidenceSheet(true)}
+                />
+                {isAdmin && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 px-2 text-[10px] gap-1"
+                    onClick={() => setShowEvidenceSheet(true)}
+                  >
+                    <Paperclip className="h-3 w-3" />
+                    Manage files
+                  </Button>
+                )}
+              </>
+            )}
           </div>
         </div>
 
