@@ -8063,6 +8063,16 @@ export type Database = {
         }
         Returns: string
       }
+      ensure_org_kpi_scope_rows: {
+        Args: {
+          p_category_id: string
+          p_kpi_name: string
+          p_kra_name: string
+          p_review_period: string
+          p_review_year: number
+        }
+        Returns: Json
+      }
       expire_overdue_permits: { Args: never; Returns: Json }
       find_ongoing_workflow: {
         Args: {
