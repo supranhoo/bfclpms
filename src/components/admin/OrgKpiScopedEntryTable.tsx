@@ -11,11 +11,63 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { OrgKpiFileUpload } from '@/components/admin/OrgKpiFileUpload';
+import { OrgKpiEvidenceManagerSheet } from '@/components/admin/OrgKpiEvidenceManagerSheet';
+import { Paperclip } from 'lucide-react';
 import { isValueOutOfRange, RatingThresholds, calculateRating } from '@/lib/ratingCalculation';
 import { RatingBadge } from '@/components/ui/RatingBadge';
 import { QualitativeSelect } from '@/components/review/QualitativeSelect';
 import { BINARY_OPTIONS, type QualitativeOption } from '@/lib/qualitativeUom';
 import { ChevronDown, ChevronRight, Building2, AlertTriangle, Ban, TrendingUp, TrendingDown, MessageSquare, ArrowUpRight, Undo2, CheckCircle2, Clock } from 'lucide-react';
+
+/**
+ * Per-row "Manage Files" launcher — opens the same Evidence & Parity sheet
+ * that the card header uses, but scoped to a single OKV row. Hidden until
+ * the row has been saved at least once (no OKV id yet → tooltip-disabled).
+ */
+function PerRowManageFiles({ okvId, kpiName, scopeName }: { okvId?: string; kpiName: string; scopeName: string }) {
+  const [open, setOpen] = useState(false);
+  if (!okvId) {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 opacity-40" disabled>
+              <Paperclip className="h-3 w-3" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="text-xs">Save the row first to manage supporting files</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+  return (
+    <>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0"
+              onClick={() => setOpen(true)}
+            >
+              <Paperclip className="h-3 w-3" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="text-xs">Manage supporting files for {scopeName}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      {open && (
+        <OrgKpiEvidenceManagerSheet
+          open={open}
+          onOpenChange={setOpen}
+          okvId={okvId}
+          kpiName={`${kpiName} — ${scopeName}`}
+        />
+      )}
+    </>
+  );
+}
 import { format } from 'date-fns';
 import type { KpiObservation } from '@/hooks/useKpiObservations';
 import type { ComplianceSubFactors } from '@/hooks/useComplianceSubFactors';
