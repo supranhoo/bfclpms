@@ -29,6 +29,26 @@ export interface DefinitionMergeSuggestion {
   right_alias_count: number;
   left_linked_kpi_count: number;
   right_linked_kpi_count: number;
+  // Phase 4d: enrichment (mode of linked kpis). May be null when a definition
+  // has no linked KPI rows yet — UI renders "—" in that case.
+  left_frequency: string | null;
+  left_frequency_mixed: boolean;
+  left_r0: string | null;
+  left_r1: string | null;
+  left_r2: string | null;
+  left_r3: string | null;
+  left_r4: string | null;
+  left_r5: string | null;
+  left_r_mixed: boolean;
+  right_frequency: string | null;
+  right_frequency_mixed: boolean;
+  right_r0: string | null;
+  right_r1: string | null;
+  right_r2: string | null;
+  right_r3: string | null;
+  right_r4: string | null;
+  right_r5: string | null;
+  right_r_mixed: boolean;
 }
 
 export interface AliasCandidateSuggestion {
