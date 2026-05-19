@@ -29,8 +29,9 @@ import {
   useOrgScopeOkvId,
   useOrgKpiEvidenceFiles,
   useOrgKpiEvidenceParity,
+  useOrgKpiEvidenceCounts,
 } from '@/hooks/useOrgKpiEvidenceFiles';
-import { OrgKpiEvidenceManagerSheet } from '@/components/admin/OrgKpiEvidenceManagerSheet';
+import { OrgKpiEvidenceManagerSheet, type OrgKpiEvidenceScopeOption } from '@/components/admin/OrgKpiEvidenceManagerSheet';
 import { OrgKpiEvidenceStatusChip } from '@/components/admin/OrgKpiEvidenceStatusChip';
 import { OrgKpiParityBadge } from '@/components/admin/OrgKpiParityBadge';
 
