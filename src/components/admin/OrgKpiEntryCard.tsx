@@ -798,6 +798,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               isPropagating={isPropagating}
               isComplianceKpi={isCompliance}
               submissionDates={submissionDates}
+              kpiName={data.kpiName}
             />
             </>
           )}
