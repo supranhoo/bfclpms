@@ -1,33 +1,35 @@
-## Goal
+# Sort Build Registry groups by match strength
 
-In the "View KPIs" drill-in table (`AffectedKpisTable`), enrich the **Employee** column to show the employee code and add a new **Department** column. Both columns get the existing Excel-style filter popover.
+## Change
+In `src/components/admin/kpi-standardization/BuildRegistryTab.tsx`, sort `visibleGroups` so the highest-similarity groups appear first — making it easier for the admin to scan from "most similar" down to "least similar".
 
-## Changes
+## Sort key (per group)
+For each group, compute a `matchScore`:
+- If the group has any `match_type === 'exact'` variant → score = `1` (exact stays at the top).
+- Else → score = `max(variant.similarity ?? 0)` across all variants (the strongest fuzzy match).
 
-### 1. `src/components/admin/kpi-standardization/AffectedKpisTable.tsx`
+Sort descending by `matchScore`. Tiebreakers (preserve stable, predictable order):
+1. Higher `row_count` first (bigger impact).
+2. Higher `variants.length` first.
+3. `normalized_kpi` alphabetical (stable fallback).
 
-**a. Profile fetch — extend select**
-- Change the profiles query from `select('id, full_name')` to `select('id, full_name, employee_code, department_id, departments(name)')`.
-- Store `{ name, code, department }` per employee id in the `employees` map (instead of just `{ name }`).
+Skipped groups (`is_skipped`) remain in their existing flow — they're already dimmed and toggle-controlled; we do **not** force them to the bottom (keeps current "Include skipped" UX intact).
 
-**b. Enriched rows — add fields**
-- `employee` cell display becomes `"Full Name (EMP123)"` when employee_code exists, else just the name (fallback to `id.slice(0,8)` when name missing).
-- Add `department: employees[r.employee_id]?.department ?? ''` to each enriched row.
+## Implementation
+- Add a small `groupMatchScore(group)` helper in the same file (or co-locate next to `groupKey`).
+- Wrap the existing `filteredGroups`/`visibleGroups` derivation: sort `visibleGroups` with the comparator above before slicing into `pagedGroups`. Memoize via `useMemo`.
+- No changes to `useScanDuplicates`, the scanner SQL, dedupe helper, or the variant-level UI badges.
 
-**c. Filter key + distinct**
-- Add `'department'` to the `FilterKey` union.
-- Add `department: distinctValues(enriched, 'department')` to the `distinct` memo.
+## Tests
+Add `src/components/admin/kpi-standardization/buildRegistrySort.test.ts` (pure helper extracted alongside) covering:
+- Exact group ranks above any fuzzy group.
+- Two fuzzy groups sort by max similarity desc.
+- Tie on similarity → higher `row_count` wins.
+- Tie on similarity + row_count → alphabetical `normalized_kpi`.
 
-**d. Header & body**
-- Insert a new **Department** `<th>` (with `ColumnFilterPopover`) right after the sticky **Employee** header.
-- Insert a matching `<td>{r.department || '—'}</td>` after the sticky Employee cell.
-- Bump the empty-state `colSpan` from `4`/`12` to `5`/`13` to account for the new column.
-
-### 2. Out of scope
-- No schema/RLS/backend changes — `profiles.department_id → departments.name` is already readable.
-- No changes to filter logic (`affectedKpisFilters.ts`) — it is column-agnostic.
-- No changes to existing filter popover, pagination, outlier highlighting, or scale toggle.
-- No test changes required (filter utility tests remain valid; the change is purely additive presentation).
-
-## Risk
-Very low — read-only UI enrichment within a single component. Only the profile select widens by a few columns; if `departments` join returns null for an employee, the cell falls back to `—` and that employee simply shows blank in the Department column.
+## Risk & Impact
+- **Data**: none (read-only presentation).
+- **Workflow**: none — same approval flow, only display order changes.
+- **UI/UX**: pagination resets are already keyed on `resetKey`; sort change is deterministic per scan so no extra reset needed.
+- **Regression**: very low; isolated to one memo + one helper.
+- **Mitigation**: unit tests on the comparator lock the contract.

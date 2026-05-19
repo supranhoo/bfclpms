@@ -14,6 +14,7 @@ import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDial
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { RegistryPager, pagedSlice } from './RegistryPager';
+import { sortGroupsByMatch } from './buildRegistrySort';
 import {
   BucketId,
   SKIP_BUCKET,
@@ -85,7 +86,10 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
     );
   }, [groups, debouncedSearch]);
 
-  const visibleGroups = filteredGroups.filter(g => !processedGroups.has(groupKey(g)));
+  const visibleGroups = useMemo(
+    () => sortGroupsByMatch(filteredGroups.filter(g => !processedGroups.has(groupKey(g)))),
+    [filteredGroups, processedGroups],
+  );
   const skippedCount = filteredGroups.filter(g => g.is_skipped).length;
   const pendingCount = visibleGroups.filter(g => !g.is_skipped).length;
   const pagedGroups = useMemo(
