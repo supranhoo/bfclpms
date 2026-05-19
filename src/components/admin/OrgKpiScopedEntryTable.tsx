@@ -589,9 +589,10 @@ interface EmployeeRowProps {
   hasRowPropagation: boolean;
   isComplianceKpi?: boolean;
   submissionDateInfo?: { complete: boolean; date: string | null; pendingCount: number };
+  kpiName?: string;
 }
 
-function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, observations, observationCounts: legacyCounts, sentBackInfo, isSelected, onToggleRow, onPropagateRow, isPropagating, totalColSpan, hasSelectionFeature, hasRowPropagation, isComplianceKpi, submissionDateInfo }: EmployeeRowProps) {
+function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, observations, observationCounts: legacyCounts, sentBackInfo, isSelected, onToggleRow, onPropagateRow, isPropagating, totalColSpan, hasSelectionFeature, hasRowPropagation, isComplianceKpi, submissionDateInfo, kpiName }: EmployeeRowProps) {
   const [expanded, setExpanded] = useState(false);
 
   const effectiveTarget = row.targetValue != null ? row.targetValue : targetValue;
@@ -995,9 +996,10 @@ interface DepartmentRowProps {
   isPropagating?: boolean;
   hasSelectionFeature: boolean;
   hasRowPropagation: boolean;
+  kpiName?: string;
 }
 
-function DepartmentRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, sentBackInfo, isSelected, onToggleRow, onPropagateRow, isPropagating, hasSelectionFeature, hasRowPropagation }: DepartmentRowProps) {
+function DepartmentRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, sentBackInfo, isSelected, onToggleRow, onPropagateRow, isPropagating, hasSelectionFeature, hasRowPropagation, kpiName }: DepartmentRowProps) {
   const rowIsNa = row.isNa ?? false;
   const effectiveTarget = row.targetValue != null ? row.targetValue : targetValue;
   const effectiveUom = row.uom != null ? row.uom : uom;
