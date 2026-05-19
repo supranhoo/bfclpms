@@ -176,6 +176,43 @@ export function useOrgKpiEvidenceParity(reviewPeriod?: string, reviewYear?: numb
 }
 
 /**
+ * Batch-read evidence file counts for many OKV ids in one round-trip.
+ * Returns a Map<okvId, count>.
+ *
+ * Used by the per-card "Evidence & Parity" controls on dept/employee scope
+ * KPIs, where each scoped row owns its own OKV row and the card header
+ * needs the aggregate count across them.
+ */
+export function useOrgKpiEvidenceCounts(okvIds: string[] | null | undefined) {
+  const { isReady, user } = useAuth();
+  const stableKey = (okvIds ?? []).slice().sort().join(',');
+  return useQuery({
+    queryKey: ['org-kpi-evidence-counts', stableKey, user?.id],
+    enabled: isReady && !!user && !!okvIds && okvIds.length > 0,
+    queryFn: async (): Promise<Map<string, number>> => {
+      const ids = okvIds as string[];
+      const { data, error } = await supabase
+        .from('org_kpi_values')
+        .select('id, evidence_files, evidence_url, evidence_urls')
+        .in('id', ids);
+      if (error) throw error;
+      const map = new Map<string, number>();
+      (data || []).forEach((row: any) => {
+        const rich: any[] = Array.isArray(row.evidence_files) ? row.evidence_files : [];
+        let count = rich.length;
+        if (count === 0) {
+          const urls: string[] = Array.isArray(row.evidence_urls) ? row.evidence_urls : [];
+          count = urls.length > 0 ? urls.length : (row.evidence_url ? 1 : 0);
+        }
+        map.set(row.id, count);
+      });
+      ids.forEach(id => { if (!map.has(id)) map.set(id, 0); });
+      return map;
+    },
+  });
+}
+
+/**
  * Resync OKV evidence into every mapped employee's review_submissions.
  *  - 'append_only'           : safe at any stage, only adds new URLs
  *  - 'replace_with_stepback' : full replace; rows past self_review are sent back

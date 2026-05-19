@@ -81,6 +81,14 @@ export default function OrgKpiEvidenceDemo() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
+      <Alert className="border-amber-400/60 bg-amber-50 dark:bg-amber-950/30">
+        <AlertTriangle className="h-4 w-4 text-amber-700" />
+        <AlertDescription className="text-xs text-amber-900 dark:text-amber-200">
+          <strong>Demo only.</strong> The production Evidence &amp; Parity controls now live inline on the
+          <em> Organization KPI Data Entry</em> page — per KPI, adapting automatically to the KPI&apos;s scope
+          (Organization, Department, or Employee). This page is preserved purely as a visual reference.
+        </AlertDescription>
+      </Alert>
       <div>
         <h1 className="text-2xl font-semibold">Org KPI — Evidence & Parity (UI Preview)</h1>
         <p className="text-sm text-muted-foreground">

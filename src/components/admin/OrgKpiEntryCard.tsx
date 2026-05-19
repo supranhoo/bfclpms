@@ -29,8 +29,9 @@ import {
   useOrgScopeOkvId,
   useOrgKpiEvidenceFiles,
   useOrgKpiEvidenceParity,
+  useOrgKpiEvidenceCounts,
 } from '@/hooks/useOrgKpiEvidenceFiles';
-import { OrgKpiEvidenceManagerSheet } from '@/components/admin/OrgKpiEvidenceManagerSheet';
+import { OrgKpiEvidenceManagerSheet, type OrgKpiEvidenceScopeOption } from '@/components/admin/OrgKpiEvidenceManagerSheet';
 import { OrgKpiEvidenceStatusChip } from '@/components/admin/OrgKpiEvidenceStatusChip';
 import { OrgKpiParityBadge } from '@/components/admin/OrgKpiParityBadge';
 
@@ -225,8 +226,62 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
   });
   const { data: evidenceFiles } = useOrgKpiEvidenceFiles(orgOkvId);
   const { data: parityMap } = useOrgKpiEvidenceParity(reviewPeriod, reviewYear);
-  const parityRow = orgOkvId ? parityMap?.get(orgOkvId) : undefined;
-  const evidenceCount = evidenceFiles?.length ?? 0;
+
+  // Scoped (dept/employee) — aggregate OKV ids carried on the scoped rows
+  // by OrgKpiDataEntry. Drives the same Evidence chip / Parity badge /
+  // Manage-files sheet that org-scope KPIs already get, in roll-up mode.
+  const scopedOkvIds = useMemo<string[]>(() => {
+    if (data.scope === 'organization') return [];
+    return (data.scopedRows ?? [])
+      .map(r => (r as any).okvId as string | undefined)
+      .filter((v): v is string => !!v);
+  }, [data.scope, data.scopedRows]);
+  const scopedOkvOptions = useMemo<OrgKpiEvidenceScopeOption[]>(() => {
+    if (data.scope === 'organization') return [];
+    return (data.scopedRows ?? [])
+      .filter(r => !!(r as any).okvId)
+      .map(r => ({
+        okvId: (r as any).okvId as string,
+        label: r.scopeName,
+        subLabel: r.departmentName,
+      }));
+  }, [data.scope, data.scopedRows]);
+  const { data: scopedCountsMap } = useOrgKpiEvidenceCounts(scopedOkvIds);
+
+  // Header-level chip count + parity — adapts to scope.
+  const evidenceCount = data.scope === 'organization'
+    ? (evidenceFiles?.length ?? 0)
+    : Array.from(scopedCountsMap?.values() ?? []).reduce((s, n) => s + n, 0);
+  const parityRow = data.scope === 'organization'
+    ? (orgOkvId ? parityMap?.get(orgOkvId) : undefined)
+    : (() => {
+        // Aggregate parity across all scoped OKV rows — worst case wins.
+        if (!parityMap || scopedOkvIds.length === 0) return undefined;
+        let total = 0, in_sync = 0, drift_value = 0, drift_evidence = 0, not_propagated = 0;
+        let found = false;
+        scopedOkvIds.forEach(id => {
+          const p = parityMap.get(id);
+          if (!p) return;
+          found = true;
+          total += p.total_emps;
+          in_sync += p.in_sync;
+          drift_value += p.drift_value;
+          drift_evidence += p.drift_evidence;
+          not_propagated += p.not_propagated;
+        });
+        if (!found) return undefined;
+        return {
+          okv_id: 'aggregate',
+          category_id: data.categoryId,
+          kra_name: data.kraName,
+          kpi_name: data.kpiName,
+          total_emps: total,
+          in_sync, drift_value, drift_evidence, not_propagated,
+        };
+      })();
+  const hasEvidenceControls = data.scope === 'organization'
+    ? !!orgOkvId
+    : scopedOkvIds.length > 0;
   const diagnoseGap = useDiagnoseOrgKpiGap();
   const repairGap = useRepairOrgKpiGap();
   const openRepairDialog = useCallback(async () => {
@@ -575,7 +630,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                 {data.employeeCount} employee{data.employeeCount !== 1 ? 's' : ''}
               </Badge>
             )}
-            {data.scope === 'organization' && orgOkvId && (
+            {hasEvidenceControls && (
               <>
                 <OrgKpiEvidenceStatusChip
                   count={evidenceCount}
@@ -743,6 +798,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               isPropagating={isPropagating}
               isComplianceKpi={isCompliance}
               submissionDates={submissionDates}
+              kpiName={data.kpiName}
             />
             </>
           )}
@@ -1185,11 +1241,13 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
         newScope={scopeChangeTarget}
       />
     )}
-    {data.scope === 'organization' && (
+    {hasEvidenceControls && (
       <OrgKpiEvidenceManagerSheet
         open={showEvidenceSheet}
         onOpenChange={setShowEvidenceSheet}
-        okvId={orgOkvId ?? null}
+        okvId={data.scope === 'organization' ? (orgOkvId ?? null) : null}
+        okvScopes={data.scope === 'organization' ? undefined : scopedOkvOptions}
+        scopeLabel={data.scope === 'department' ? 'Department' : data.scope === 'employee' ? 'Employee' : undefined}
         kpiName={data.kpiName}
       />
     )}

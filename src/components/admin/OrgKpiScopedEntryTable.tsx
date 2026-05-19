@@ -11,11 +11,63 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { OrgKpiFileUpload } from '@/components/admin/OrgKpiFileUpload';
+import { OrgKpiEvidenceManagerSheet } from '@/components/admin/OrgKpiEvidenceManagerSheet';
+import { Paperclip } from 'lucide-react';
 import { isValueOutOfRange, RatingThresholds, calculateRating } from '@/lib/ratingCalculation';
 import { RatingBadge } from '@/components/ui/RatingBadge';
 import { QualitativeSelect } from '@/components/review/QualitativeSelect';
 import { BINARY_OPTIONS, type QualitativeOption } from '@/lib/qualitativeUom';
 import { ChevronDown, ChevronRight, Building2, AlertTriangle, Ban, TrendingUp, TrendingDown, MessageSquare, ArrowUpRight, Undo2, CheckCircle2, Clock } from 'lucide-react';
+
+/**
+ * Per-row "Manage Files" launcher — opens the same Evidence & Parity sheet
+ * that the card header uses, but scoped to a single OKV row. Hidden until
+ * the row has been saved at least once (no OKV id yet → tooltip-disabled).
+ */
+function PerRowManageFiles({ okvId, kpiName, scopeName }: { okvId?: string; kpiName: string; scopeName: string }) {
+  const [open, setOpen] = useState(false);
+  if (!okvId) {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 opacity-40" disabled>
+              <Paperclip className="h-3 w-3" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="text-xs">Save the row first to manage supporting files</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+  return (
+    <>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0"
+              onClick={() => setOpen(true)}
+            >
+              <Paperclip className="h-3 w-3" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="text-xs">Manage supporting files for {scopeName}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      {open && (
+        <OrgKpiEvidenceManagerSheet
+          open={open}
+          onOpenChange={setOpen}
+          okvId={okvId}
+          kpiName={`${kpiName} — ${scopeName}`}
+        />
+      )}
+    </>
+  );
+}
 import { format } from 'date-fns';
 import type { KpiObservation } from '@/hooks/useKpiObservations';
 import type { ComplianceSubFactors } from '@/hooks/useComplianceSubFactors';
@@ -24,6 +76,13 @@ import type { SentBackInfo } from '@/hooks/useSentBackOrgKpiEmployees';
 export interface ScopedRow {
   scopeId: string;
   scopeName: string;
+  /**
+   * `org_kpi_values.id` for this scoped row, when an OKV row already exists.
+   * Drives the per-row "Manage Files" action and the Evidence chip / Parity
+   * badge that mirror what the card-header sheet does for org-scope KPIs.
+   * Undefined until the admin saves the row at least once.
+   */
+  okvId?: string;
   scopeSubText?: string;
   departmentName?: string;
   designation?: string;
@@ -89,9 +148,11 @@ interface OrgKpiScopedEntryTableProps {
    * subset cannot be confused with the true mapped total.
    */
   totalCount?: number;
+  /** KPI display name — passed through so per-row sheets can show context. */
+  kpiName?: string;
 }
 
-export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds = [], onSelectionChange, onPropagateRow, isPropagating, isComplianceKpi = false, submissionDates, totalCount }: OrgKpiScopedEntryTableProps) {
+export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds = [], onSelectionChange, onPropagateRow, isPropagating, isComplianceKpi = false, submissionDates, totalCount, kpiName }: OrgKpiScopedEntryTableProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [bulkFillValue, setBulkFillValue] = useState('');
 
@@ -289,6 +350,7 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
                     hasRowPropagation={hasRowPropagation}
                     isComplianceKpi={isComplianceKpi}
                     submissionDates={submissionDates}
+                    kpiName={kpiName}
                   />
                 ))
               ) : (
@@ -308,6 +370,7 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
                     isPropagating={isPropagating}
                     hasSelectionFeature={hasSelectionFeature}
                     hasRowPropagation={hasRowPropagation}
+                    kpiName={kpiName}
                   />
                 ))
               )}
@@ -339,9 +402,10 @@ interface EmployeeGroupProps {
   hasRowPropagation: boolean;
   isComplianceKpi?: boolean;
   submissionDates?: Map<string, { complete: boolean; date: string | null; pendingCount: number }>;
+  kpiName?: string;
 }
 
-function EmployeeGroup({ group, onValueChange, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds, onToggleRow, onPropagateRow, isPropagating, totalColSpan, hasSelectionFeature, hasRowPropagation, isComplianceKpi, submissionDates }: EmployeeGroupProps) {
+function EmployeeGroup({ group, onValueChange, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds, onToggleRow, onPropagateRow, isPropagating, totalColSpan, hasSelectionFeature, hasRowPropagation, isComplianceKpi, submissionDates, kpiName }: EmployeeGroupProps) {
   return (
     <>
       <TableRow key={`group-${group.dept ?? 'none'}`} className="bg-muted/50 hover:bg-muted/50">
@@ -378,6 +442,7 @@ function EmployeeGroup({ group, onValueChange, ratingThresholds, targetValue, uo
           hasRowPropagation={hasRowPropagation}
           isComplianceKpi={isComplianceKpi}
           submissionDateInfo={submissionDates?.get(row.scopeId)}
+          kpiName={kpiName}
         />
       ))}
     </>
@@ -524,9 +589,10 @@ interface EmployeeRowProps {
   hasRowPropagation: boolean;
   isComplianceKpi?: boolean;
   submissionDateInfo?: { complete: boolean; date: string | null; pendingCount: number };
+  kpiName?: string;
 }
 
-function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, observations, observationCounts: legacyCounts, sentBackInfo, isSelected, onToggleRow, onPropagateRow, isPropagating, totalColSpan, hasSelectionFeature, hasRowPropagation, isComplianceKpi, submissionDateInfo }: EmployeeRowProps) {
+function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, observations, observationCounts: legacyCounts, sentBackInfo, isSelected, onToggleRow, onPropagateRow, isPropagating, totalColSpan, hasSelectionFeature, hasRowPropagation, isComplianceKpi, submissionDateInfo, kpiName }: EmployeeRowProps) {
   const [expanded, setExpanded] = useState(false);
 
   const effectiveTarget = row.targetValue != null ? row.targetValue : targetValue;
@@ -849,10 +915,13 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
         {/* File */}
         <TableCell className="py-1.5 w-24">
           {!rowIsNa && (
-            <OrgKpiFileUpload
-              existingUrl={row.evidenceUrl}
-              onUploadComplete={(url) => onValueChange(row.scopeId, 'evidenceUrl', url)}
-            />
+            <div className="flex items-center gap-1">
+              <OrgKpiFileUpload
+                existingUrl={row.evidenceUrl}
+                onUploadComplete={(url) => onValueChange(row.scopeId, 'evidenceUrl', url)}
+              />
+              <PerRowManageFiles okvId={row.okvId} kpiName={kpiName ?? 'KPI'} scopeName={row.scopeName} />
+            </div>
           )}
         </TableCell>
 
@@ -930,9 +999,10 @@ interface DepartmentRowProps {
   isPropagating?: boolean;
   hasSelectionFeature: boolean;
   hasRowPropagation: boolean;
+  kpiName?: string;
 }
 
-function DepartmentRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, sentBackInfo, isSelected, onToggleRow, onPropagateRow, isPropagating, hasSelectionFeature, hasRowPropagation }: DepartmentRowProps) {
+function DepartmentRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, sentBackInfo, isSelected, onToggleRow, onPropagateRow, isPropagating, hasSelectionFeature, hasRowPropagation, kpiName }: DepartmentRowProps) {
   const rowIsNa = row.isNa ?? false;
   const effectiveTarget = row.targetValue != null ? row.targetValue : targetValue;
   const effectiveUom = row.uom != null ? row.uom : uom;
@@ -1062,10 +1132,13 @@ function DepartmentRow({ row, onValueChange, ratingThresholds, targetValue, uom,
       </TableCell>
       <TableCell className="py-1.5 w-24">
         {!rowIsNa && (
-          <OrgKpiFileUpload
-            existingUrl={row.evidenceUrl}
-            onUploadComplete={(url) => onValueChange(row.scopeId, 'evidenceUrl', url)}
-          />
+          <div className="flex items-center gap-1">
+            <OrgKpiFileUpload
+              existingUrl={row.evidenceUrl}
+              onUploadComplete={(url) => onValueChange(row.scopeId, 'evidenceUrl', url)}
+            />
+            <PerRowManageFiles okvId={row.okvId} kpiName={kpiName ?? 'KPI'} scopeName={row.scopeName} />
+          </div>
         )}
       </TableCell>
       {hasRowPropagation && (
