@@ -1,0 +1,67 @@
+# Phase 1 — Hardening Baseline (locked)
+
+This is the single page Phase 2+ must not regress. Any deviation is a
+Stop Condition under `docs/safety-integration-governance.md`.
+
+## Schema
+
+- 33 `safety_*` tables, all RLS-enabled.
+- 6 `mv_safety_*` materialized views, served exclusively by
+  `safety-analytics` edge fn (target state — see T-001).
+- Enum `safety_app_role` with 8 values: `admin, safety_head,
+  safety_officer, bu_head, manager, supervisor, worker, auditor`.
+- Idempotency column: `safety_incidents.client_submission_id` (UUID).
+- Incident stage constant: `rca` (NOT `root_cause_analysis`).
+
+## RPCs that are the only allowed status-mutation paths
+
+- `transition_safety_incident(incident, to_stage, payload)`
+- `assign_permit_number`, `submit_permit`, `activate_permit`,
+  `suspend_permit`, `close_permit`, `decide_permit_level`.
+- Trigger guards in place: `safety_incident_fsm_guard`,
+  `guard_permit_status_write`, `safety_audit_runs_block_status_writes`,
+  `safety_drills_block_status_writes`,
+  `safety_training_block_status_writes`.
+
+## Edge functions
+
+- `check-safety-sla` — cron + admin/head only. Code-level auth check.
+- `grant-safety-role` — PMS admin or Safety admin only. Code-level auth.
+- `safety-analytics` — caller-JWT read; depends on T-001 for full safety.
+
+## RBAC
+
+- Authority: `safety_user_roles` only. Never `public.app_role`.
+- Role grants always trigger `log_safety_role_change` for audit.
+
+## Cache & isolation
+
+- All Safety React-Query keys prefixed `'safety'`. No PMS file imports
+  Safety code; no Safety file imports PMS business logic.
+- Cross-module invalidation allowed only: `useSafetyRoles` invalidates
+  `['modules']`.
+
+## Offline & evidence
+
+- IndexedDB queue in `src/lib/safetyOfflineQueue.ts`.
+- Submissions mint UUID `client_submission_id`; server dedup via
+  `safety_incident_before_insert`.
+
+## Outstanding hardening tickets (Phase 1.5 — block Phase 2)
+
+- **T-001** — REVOKE `mv_safety_*` from `anon`/`authenticated`.
+- **T-003** — Add Safety tables + `safety-evidence` bucket to
+  `create-backup` and verify restore.
+
+## Non-blocking improvements
+
+- **T-002** — Consolidated `search_path` audit on SECURITY DEFINER fns.
+- **T-004** — Tighten `check-safety-sla` anon-key bypass to service-role only.
+- **T-005** — Declare `verify_jwt` for `grant-safety-role` in `supabase/config.toml`.
+- **F-RLS-02** — Switch `{public}` policies to `{authenticated}` for consistency.
+
+## Phase 2 gate prerequisites
+
+- T-001 + T-003 merged and verified.
+- Architecture + Engineering Manager + Product Owner approvals recorded.
+- Memory `mem://features/safety/hardening-baseline` reflects this doc.
