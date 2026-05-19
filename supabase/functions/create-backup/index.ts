@@ -5,7 +5,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 }
 
-// All 81 public tables — grouped by dependency tier
 const TABLES_TO_BACKUP = [
   // Tier 1: Root/independent tables
   'companies', 'divisions', 'designations', 'pms_grades', 'kra_categories', 'modules',
@@ -52,16 +51,44 @@ const TABLES_TO_BACKUP = [
   'training_needs',
   // Tier 12: Backup meta (last)
   'backup_logs',
+  // ───────────────────────────────────────────────────────────────
+  // Safety module (T-003, Phase 1.5) — appended after PMS tiers so
+  // dependency order is preserved (Safety references profiles,
+  // business_units, departments which are restored above).
+  // ───────────────────────────────────────────────────────────────
+  // Safety Tier 1: Root/config
+  'safety_module_access', 'safety_settings', 'safety_severity_sla',
+  'safety_sops', 'safety_quizzes', 'safety_quiz_questions',
+  'safety_emergency_contacts', 'safety_permit_type_config',
+  'safety_audit_templates', 'safety_audit_template_items',
+  // Safety Tier 2: Depend on Tier 1 + profiles/business_units
+  'safety_user_roles', 'safety_hours_worked', 'safety_assets',
+  'safety_emergency_drills', 'safety_audit_runs',
+  'safety_training_assignments',
+  // Safety Tier 3
+  'safety_asset_calibrations', 'safety_asset_evidence',
+  'safety_drill_participants', 'safety_drill_findings',
+  'safety_audit_run_responses', 'safety_training_attempts',
+  'safety_permits',
+  // Safety Tier 4
+  'safety_permit_approvals', 'safety_permit_evidence',
+  'safety_permit_hira', 'safety_permit_loto_steps',
+  'safety_incidents',
+  // Safety Tier 5
+  'safety_incident_evidence', 'safety_incident_progress_logs',
+  'safety_incident_timeline', 'safety_sla_escalations',
+  'safety_notifications', 'safety_audit_log',
 ]
 
 // Buckets to inventory for storage manifest
-const STORAGE_BUCKETS = ['review-evidence', 'avatars']
+const STORAGE_BUCKETS = ['review-evidence', 'avatars', 'safety-media']
 
 // Tables with high-volume transient data — prune rows older than 90 days
 const PRUNE_TABLES: Record<string, string> = {
   notifications: 'created_at',
   email_logs: 'created_at',
   email_dispatch_queue: 'created_at',
+  safety_notifications: 'created_at',
 }
 
 const NINETY_DAYS_AGO = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
