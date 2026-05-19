@@ -1,98 +1,73 @@
 ## Goal
-On **KPI Standardization → Build Registry**, every variant in a merge group should show **Freq + R0–R5** (plus criteria / UoM context) so admins can confirm at a glance that fuzzy / duplicate KPIs are truly the same metric before merging.
+Add **Freq**, **R0–R5**, and a small **Criteria / UoM** column to the **View KPIs** drill-in table (`AffectedKpisTable`) so admins can verify per-employee scoring details without leaving the row, mirroring the new variant scale strip.
 
-Today the variant card only shows: KRA name, KPI name, employee count, row count, Exact/Fuzzy badge. Frequency and rating scale (R0–R5) are hidden — admins must drill into "View KPIs" to verify, which is what makes finalising hard.
+Today the table only shows: Employee · Period · Weightage · Status. The user wants the same scale fields visible per row so a single non-matching row inside an otherwise-uniform variant is immediately spotted (e.g. one employee on Quarterly while everyone else is Monthly).
 
 ---
 
-## What the new variant card will look like
+## New table layout
 
 ```text
-┌─ Group: "complete all planned monthly preventive maintenance…"  [Fuzzy match]  [10 variants] ┐
-│                                                                                              │
-│  [A] [Skip]  Preventive Maintenance                                          [Exact]         │
-│              Complete all planned monthly preventive maintenance…                             │
-│              1 employees · 1 rows                                                            │
-│              ┌────────────────────────────────────────────────────────────────────────┐      │
-│              │ Freq      R0      R1       R2        R3      R4       R5              │      │
-│              │ Monthly   <98%    98%      98.5%     99%     99.5%    100%            │      │
-│              │ Higher-is-Better · UoM: %                                              │      │
-│              └────────────────────────────────────────────────────────────────────────┘      │
-│                                                                                              │
-│  [A] [Skip]  Preventive Maintenance                                          [Fuzzy 100%]    │
-│              Complete all planned monthly preventive maintenance for critical equipment…     │
-│              3 employees · 22 rows                                                           │
-│              ┌────────────────────────────────────────────────────────────────────────┐      │
-│              │ Freq      R0      R1       R2        R3      R4       R5              │      │
-│              │ Monthly   <98%    98%      98.5%     99%     99.5%    100%   ✓ match  │      │
-│              │ Higher-is-Better · UoM: %                                              │      │
-│              └────────────────────────────────────────────────────────────────────────┘      │
-│                                                                                              │
-│  [B] [Skip]  Preventive Maintenance (Non-critical)                           [Fuzzy 82%]    │
-│              …                                                                               │
-│              2 employees · 6 rows                                                            │
-│              ┌────────────────────────────────────────────────────────────────────────┐      │
-│              │ Freq      R0      R1       R2        R3      R4       R5              │      │
-│              │ Monthly   <95%    95%      96%       97%     98%      100%   ⚠ differs│      │
-│              │ Higher-is-Better · UoM: %                                              │      │
-│              └────────────────────────────────────────────────────────────────────────┘      │
-└──────────────────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────┬───────────┬───────┬─────────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┬─────────────┐
+│ Employee     │ Period    │ Wt    │ Status  │ Freq │  R0  │  R1  │  R2  │  R3  │  R4  │  R5  │ Crit · UoM  │
+├──────────────┼───────────┼───────┼─────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┼─────────────┤
+│ K Srinivasa  │ Apr 2026  │  5    │ approved│ Mon  │ <98% │ 98%  │ 98.5%│ 99%  │ 99.5%│ 100% │ Higher · %  │
+│ Mandala N.R. │ Mar 2026  │  5    │ approved│ Mon  │ <98% │ 98%  │ 98.5%│ 99%  │ 99.5%│ 100% │ Higher · %  │
+│ Mandala N.R. │ May 2026  │  5    │ kra_set │ Mon  │ <95% │ 95%  │ 96%  │ 97%  │ 98%  │ 100% │ Higher · %  │  ← amber
+└──────────────┴───────────┴───────┴─────────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┴─────────────┘
 ```
 
 ### Behaviour
-- **Compact 7-column strip** (`Freq · R0 · R1 · R2 · R3 · R4 · R5`) on every variant. Tabular-nums, `text-xs`, monospace-friendly so columns align across variants.
-- **Cross-variant comparison highlight.** The first variant in the group is the baseline. Any cell whose value differs from the baseline is shown in **amber** with a small `⚠ differs` chip at the row's end. Matching variants get a faint `✓ match` chip. This is what makes "same KPI or not?" a one-glance decision.
-- **Binary / Tiered KPIs.** When the KPI's criteria is `Binary` or `Tiered`, R-cells show the qualitative label instead of a raw number, e.g. `R5: Yes` / `R0: No`, or `R5: Tier 1`, `R3: Tier 3`. Logic reuses `src/lib/qualitativeUom.ts` so display matches the rest of the app.
-- **Mixed-within-variant indicator.** If a single variant spans multiple `kpis` rows that disagree on a value (e.g. some rows have `Monthly`, some `Quarterly`), show a small amber dot next to that cell with tooltip *"Underlying KPIs disagree — N rows show X, M show Y"*. Same idea as `CompareCell` in the Suggestions tab.
-- **Context line** below the strip: `Higher-is-Better · UoM: %` (or `Lower-is-Better · UoM: count`). Pulled from `kpis.criteria` + `kpis.uom` (mode).
-- **Missing data** renders as `—` muted (some legacy KPIs have no R0).
-- No new tabs, no new pages — purely additive to the existing variant rows in **Build Registry**.
+- **Compact additional columns** at the right: `Freq · R0 · R1 · R2 · R3 · R4 · R5 · Criteria / UoM`. Tabular-nums, `text-[11px]`, `whitespace-nowrap`.
+- **Outlier highlighting (optional, scoped):** when this table is opened from a scanner variant whose baseline values are known (Build Registry → View KPIs), any cell whose value differs from the **mode** within the currently-loaded page is tinted amber. Computed client-side from the rows already fetched — no extra query. Falls back to no-tinting when called from contexts that don't supply a comparison baseline (Review Registry, Correct May KPIs).
+- **Missing values** render as `—` muted.
+- **Horizontal scroll** at the table container instead of width-blowing the panel (`overflow-x-auto`). Existing `max-h-72` vertical scroll preserved.
+- **Sticky Employee column** on horizontal scroll so the row identity stays visible while scrolling right (`sticky left-0 bg-background z-10`).
+
+### Optional toggle
+A small "Show scale" toggle (default ON) lets admins collapse the scale columns when they only need workflow status. State is local to the component and remembered in `localStorage` under key `affectedKpisTable.showScale`.
 
 ---
 
 ## Technical details
 
-### 1. DB — extend `scan_kpi_duplicate_groups`
-Migration adds these per-variant fields (mode across the kpis rows that match the variant):
-- `frequency text`, `r0..r5 text`, `criteria text`, `uom text`
-- `*_mixed boolean` flags for `frequency`, `criteria`, `uom`, and each `r0..r5` — true when the underlying `kpis` rows disagree.
+### 1. `AffectedKpisTable.tsx`
+- Extend the `select(...)` projection to include `frequency, criteria, uom, r0, r1, r2, r3, r4, r5`.
+- Render seven new compact columns. Reuse the same `Cell`-style differs highlighting helper that `VariantScaleStrip` uses (extract a small pure helper `src/lib/scannerCellHighlight.ts` so both consumers share it — already covered by `VariantScaleStrip.test.tsx`).
+- Compute per-column "mode" across the loaded page once per fetch:
 
-Implementation: in the existing variant CTE, wrap each column in `mode() WITHIN GROUP (ORDER BY col) AS col` and add `(COUNT(DISTINCT col) FILTER (WHERE col IS NOT NULL)) > 1 AS col_mixed`. No change to grouping keys, fuzzy logic, skip filtering, or alias-aware exclusion — the §"Scanner invariant" and §"Grouped-column rule" contracts in `mem/features/admin/kpi-standardization-registry` stay intact. Function signature gains no new parameters.
+  ```ts
+  function modeValue(values: (string | null)[]): string | null {
+    const counts = new Map<string, number>();
+    for (const v of values) {
+      const k = (v ?? '').trim();
+      if (!k) continue;
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    let best: string | null = null;
+    let bestN = 0;
+    counts.forEach((n, v) => { if (n > bestN) { best = v; bestN = n; } });
+    return best;
+  }
+  ```
 
-### 2. Types
-- `src/lib/scanGroupsDedup.ts` → extend `ScannerVariant` with the new optional fields. `dedupeVariants` keeps the first-seen values (variants are already deduped by key, so this is a no-op in practice).
-- `src/hooks/useKpiRegistry.ts` → `DuplicateGroup` inherits via `ScannerVariant`.
+  A cell is amber when its value is non-empty and differs from the column's mode AND the column has at least 2 distinct non-empty values across the page.
+- Add `showScale` toggle (`Switch` from `@/components/ui/switch`) above the table, right-aligned next to the "Showing X of Y" counter.
+- No change to the parent prop contract — extension is purely additive.
 
-### 3. New component — `src/components/admin/kpi-standardization/VariantScaleStrip.tsx`
-Props: `{ variant: ScannerVariant; baseline?: ScannerVariant }`. Renders the 7-column strip + context line + match/differs chip. Uses `qualitativeUom.ts` to translate numeric thresholds to Binary/Tiered labels when applicable. Pure presentational — unit tests in `VariantScaleStrip.test.tsx` cover:
-  - numeric Higher-is-Better display
-  - Binary label translation (R5=Yes / R0=No)
-  - Tiered label translation
-  - differs vs match highlighting against a baseline
-  - mixed-cell indicator dot
-  - missing R-value fallback to `—`
+### 2. Shared helper — `src/lib/scannerCellHighlight.ts`
+- `pageModes(rows, keys)` → `Record<key, string | null>` (mode per column across the page).
+- `isOutlier(value, mode, columnHasVariety)` → boolean.
+- Unit tests in `scannerCellHighlight.test.tsx` cover: all-equal column (no outliers), single outlier flagged, empty column (no flag), tie-mode (deterministic first-wins).
 
-### 4. `BuildRegistryTab.tsx` integration
-Single insertion point inside the existing `group.variants.map(...)` block (around line 380–410), right under the `employee_count / row_count / Exact|Fuzzy` badge row:
-
-```tsx
-<VariantScaleStrip
-  variant={variant}
-  baseline={group.variants[0]}
-/>
-```
-
-No changes to bucket assignment, Skip logic, canonical edit, approval flow, or `summarizeBuckets`.
-
-### 5. Memory + docs
-- Append a section to `mem/features/admin/kpi-standardization-registry` ("Variant scale strip — Build Registry, May 2026") describing the new strip, mixed-indicator semantics, and the mode/mixed contract on the RPC.
-- New ADR-066: *Variant Frequency + Rating Scale visibility in Build Registry*.
+### 3. Memory
+Append a "Drill-in table — Freq + R0–R5" section to `mem://features/admin/kpi-standardization-registry` describing the new columns, outlier rule, and `localStorage` key for the toggle.
 
 ---
 
 ## Risk & Impact
-- **Data Impact:** Read-only RPC extension. No schema change, no data writes. Forward-only KPIs unaffected. Pre-May-2026 freeze unaffected (this RPC already only scans May-2026+ rows for variant detection).
-- **Workflow Impact:** None — purely informational; approval flow, bucket logic, skip flow, undo all unchanged.
-- **UI/UX:** Variant rows grow ~24px taller. Within current Build Registry layout budget. No new tabs.
-- **Regression Risk:** Low. RPC change is additive columns + mode aggregates over already-grouped CTE → cannot affect group emission. Defensive `dedupeScannerGroups` already tolerates extra fields. Suggestions tab's `CompareCell` (recently added) is untouched.
-- **Mitigation:** RPC change wrapped in a single migration; new component is fully unit-tested; mixed-flag tooltips disclose any underlying drift so admins are never misled by a single "mode" value.
+- **Data Impact:** Read-only — adds columns to an existing `select`. No schema or RPC change.
+- **Workflow Impact:** None; purely informational.
+- **UI/UX:** Drill-in panel widens horizontally; sticky Employee column + `overflow-x-auto` keep it usable inside the existing card. No layout regression for the parent group card (table is already inside a constrained container).
+- **Regression Risk:** Very low. `AffectedKpisTable` is also used by Review Registry and Correct May KPIs — adding columns there is harmless and matches what admins already wanted in those flows too.
+- **Mitigation:** New helper is unit-tested; `showScale` toggle lets admins hide the columns on small screens; no DB writes.
