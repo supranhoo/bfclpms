@@ -24,7 +24,15 @@ import { useSentBackOrgKpiEmployees, type SentBackInfo } from '@/hooks/useSentBa
 import { isComplianceKpi, useBulkEmployeeSubmissionDates } from '@/hooks/useComplianceSubFactors';
 import { scopedRowsSignature } from '@/lib/orgKpiCounts';
 import { useDiagnoseOrgKpiGap, useRepairOrgKpiGap, type DiagnoseGapRow } from '@/hooks/useRepairOrgKpiPropagationGap';
-import { Wrench } from 'lucide-react';
+import { Wrench, Paperclip } from 'lucide-react';
+import {
+  useOrgScopeOkvId,
+  useOrgKpiEvidenceFiles,
+  useOrgKpiEvidenceParity,
+} from '@/hooks/useOrgKpiEvidenceFiles';
+import { OrgKpiEvidenceManagerSheet } from '@/components/admin/OrgKpiEvidenceManagerSheet';
+import { OrgKpiEvidenceStatusChip } from '@/components/admin/OrgKpiEvidenceStatusChip';
+import { OrgKpiParityBadge } from '@/components/admin/OrgKpiParityBadge';
 
 export interface OrgKpiCardData {
   categoryId: string;
