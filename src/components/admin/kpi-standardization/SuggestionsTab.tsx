@@ -173,6 +173,13 @@ export function SuggestionsTab() {
                     <TableHead className="text-xs">Definition A</TableHead>
                     <TableHead className="text-xs">Definition B</TableHead>
                     <TableHead className="text-xs text-right">Similarity</TableHead>
+                    <TableHead className="text-[10px] text-center px-1" title="Frequency — A on top, B below">Freq</TableHead>
+                    <TableHead className="text-[10px] text-center px-1">R0</TableHead>
+                    <TableHead className="text-[10px] text-center px-1">R1</TableHead>
+                    <TableHead className="text-[10px] text-center px-1">R2</TableHead>
+                    <TableHead className="text-[10px] text-center px-1">R3</TableHead>
+                    <TableHead className="text-[10px] text-center px-1">R4</TableHead>
+                    <TableHead className="text-[10px] text-center px-1">R5</TableHead>
                     <TableHead className="text-xs text-right">Aliases (A / B)</TableHead>
                     <TableHead className="text-xs text-right">Linked KPIs (A / B)</TableHead>
                     <TableHead className="text-xs text-right whitespace-nowrap">Actions</TableHead>
@@ -193,6 +200,13 @@ export function SuggestionsTab() {
                       <TableCell className="text-xs text-right tabular-nums">
                         <SimilarityBadge value={row.similarity} />
                       </TableCell>
+                      <TableCell className="px-1"><CompareCell a={row.left_frequency} b={row.right_frequency} mixedA={row.left_frequency_mixed} mixedB={row.right_frequency_mixed} /></TableCell>
+                      <TableCell className="px-1"><CompareCell a={row.left_r0} b={row.right_r0} mixedA={row.left_r_mixed} mixedB={row.right_r_mixed} /></TableCell>
+                      <TableCell className="px-1"><CompareCell a={row.left_r1} b={row.right_r1} mixedA={row.left_r_mixed} mixedB={row.right_r_mixed} /></TableCell>
+                      <TableCell className="px-1"><CompareCell a={row.left_r2} b={row.right_r2} mixedA={row.left_r_mixed} mixedB={row.right_r_mixed} /></TableCell>
+                      <TableCell className="px-1"><CompareCell a={row.left_r3} b={row.right_r3} mixedA={row.left_r_mixed} mixedB={row.right_r_mixed} /></TableCell>
+                      <TableCell className="px-1"><CompareCell a={row.left_r4} b={row.right_r4} mixedA={row.left_r_mixed} mixedB={row.right_r_mixed} /></TableCell>
+                      <TableCell className="px-1"><CompareCell a={row.left_r5} b={row.right_r5} mixedA={row.left_r_mixed} mixedB={row.right_r_mixed} /></TableCell>
                       <TableCell className="text-xs text-right tabular-nums">
                         {row.left_alias_count} / {row.right_alias_count}
                       </TableCell>
