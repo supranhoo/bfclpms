@@ -85,7 +85,10 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
     );
   }, [groups, debouncedSearch]);
 
-  const visibleGroups = filteredGroups.filter(g => !processedGroups.has(groupKey(g)));
+  const visibleGroups = useMemo(
+    () => sortGroupsByMatch(filteredGroups.filter(g => !processedGroups.has(groupKey(g)))),
+    [filteredGroups, processedGroups],
+  );
   const skippedCount = filteredGroups.filter(g => g.is_skipped).length;
   const pendingCount = visibleGroups.filter(g => !g.is_skipped).length;
   const pagedGroups = useMemo(
