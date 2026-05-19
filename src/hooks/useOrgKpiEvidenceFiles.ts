@@ -8,6 +8,42 @@ export interface OrgKpiEvidenceFile {
   label: string | null;
   added_by: string | null;
   added_at: string | null;
+  /** Optional list of employee ids this file applies to. Empty/undefined = applies to everyone in scope. */
+  applies_to_employee_ids?: string[];
+  /** Optional list of department ids this file applies to. Empty/undefined = applies to everyone in scope. */
+  applies_to_department_ids?: string[];
+}
+
+export interface OrgKpiEvidenceTargetingRow {
+  employee_id: string;
+  employee_name: string;
+  department_id: string | null;
+  department_name: string;
+  kpi_id: string;
+  kpi_status: string;
+  expected_files: OrgKpiEvidenceFile[];
+  current_urls: string[];
+  drift_kind: 'in_sync' | 'not_propagated' | 'missing_files' | 'extra_files' | 'mismatch';
+}
+
+/**
+ * Per-employee distribution preview for an Org KPI.
+ * Returns who is mapped, what files they SHOULD have (after per-file targeting filter)
+ * and what files they CURRENTLY have on their review_submission row.
+ */
+export function useOrgKpiEvidenceTargeting(okvId: string | null | undefined) {
+  const { isReady, user } = useAuth();
+  return useQuery({
+    queryKey: ['org-kpi-evidence-targeting', okvId, user?.id],
+    enabled: isReady && !!user && !!okvId,
+    queryFn: async (): Promise<OrgKpiEvidenceTargetingRow[]> => {
+      const { data, error } = await supabase.rpc('org_kpi_evidence_targeting' as any, {
+        p_okv_id: okvId as string,
+      });
+      if (error) throw error;
+      return ((data as any[]) || []) as OrgKpiEvidenceTargetingRow[];
+    },
+  });
 }
 
 /**
