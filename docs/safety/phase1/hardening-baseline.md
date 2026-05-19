@@ -21,9 +21,21 @@ row-counted against the batch manifest; failures degrade the log
 status to `completed_with_errors` and the result is embedded in
 `manifest.json` under `integrity` for post-hoc forensics.
 
-Next: run a sandbox backup→restore drill and verify recovery of at
-least one row from `safety_incidents`, `safety_permits`, and
-`safety_audit_runs`, then kick off Phase 2 (Incident UX).
+## Drill verification — shipped
+
+Sandbox backup→restore drill is now first-class:
+
+- Isolated `safety_drill` schema mirrors the three flagship tables.
+- `safety-drill` edge function round-trips snapshots through storage.
+- One-click drill on `/admin/settings` → Backup & Restore with per-table
+  baseline vs after pass/fail.
+- Memory regression in `restore-backup` (worker `Memory limit exceeded`)
+  fixed: 250-row upsert batches, explicit array release, and tighter
+  packBatches insert defaults (2 tables / 2 000 rows max).
+
+See `docs/safety/phase1/backup-restore-drill.md` for the runbook.
+
+Next: kick off Phase 2 (Incident UX).
 # Phase 1 — Hardening Baseline (locked)
 
 This is the single page Phase 2+ must not regress. Any deviation is a
