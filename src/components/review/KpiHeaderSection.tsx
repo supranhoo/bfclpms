@@ -147,6 +147,21 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
               Quarterly: {getCycleLabel('Quarterly', selectedPeriod, selectedYear, kpi.frequency_cycle_start, freqConfig)}
             </Badge>
           )}
+          {kpi.frequency === 'Half-Yearly' && (
+            <Badge variant="outline" className="text-xs border-amber-300 text-amber-700 dark:border-amber-600 dark:text-amber-400">
+              Half-Yearly: {getCycleLabel('Half-Yearly', selectedPeriod, selectedYear, kpi.frequency_cycle_start, freqConfig)}
+            </Badge>
+          )}
+          {kpi.frequency === 'Yearly' && (
+            <Badge variant="outline" className="text-xs border-rose-300 text-rose-700 dark:border-rose-600 dark:text-rose-400">
+              Yearly: {getCycleLabel('Yearly', selectedPeriod, selectedYear, kpi.frequency_cycle_start, freqConfig)}
+            </Badge>
+          )}
+          {kpi.frequency === 'Weekly' && (
+            <Badge variant="outline" className="text-xs border-sky-300 text-sky-700 dark:border-sky-600 dark:text-sky-400">
+              Weekly
+            </Badge>
+          )}
           {onOpenTimeline && (
             <Button
               variant="outline"

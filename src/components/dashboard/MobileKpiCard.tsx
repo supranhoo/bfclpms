@@ -8,6 +8,7 @@ import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { getKpiSummaryText } from '@/lib/textFormatting';
 import { getQualitativeTargetLabel } from '@/lib/qualitativeUom';
 import { AuditKpiAssignPopover } from '@/components/review/AuditKpiAssignPopover';
+import { FrequencyBadge } from '@/components/review/FrequencyBadge';
 import type { AuditKpiAssignment } from '@/hooks/useAuditKpiAssignments';
 
 interface MobileKpiCardProps {
@@ -72,16 +73,7 @@ export function MobileKpiCard({
           )}
         </div>
         <div className="flex items-center gap-1">
-          {kpi.frequency === 'Bi-Monthly' && (
-            <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-violet-300 text-violet-700 dark:border-violet-600 dark:text-violet-400">
-              Bi-Monthly
-            </Badge>
-          )}
-          {kpi.frequency === 'Quarterly' && (
-            <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-teal-300 text-teal-700 dark:border-teal-600 dark:text-teal-400">
-              Quarterly
-            </Badge>
-          )}
+          <FrequencyBadge frequency={kpi.frequency} size="xs" />
           {kpi.status ? (
             <Badge className={`text-xs ${statusColors[kpi.status]}`}>
               {statusLabels[kpi.status]}
