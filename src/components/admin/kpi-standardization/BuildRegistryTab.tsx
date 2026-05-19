@@ -14,6 +14,7 @@ import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDial
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { RegistryPager, pagedSlice } from './RegistryPager';
+import { sortGroupsByMatch } from './buildRegistrySort';
 import {
   BucketId,
   SKIP_BUCKET,
