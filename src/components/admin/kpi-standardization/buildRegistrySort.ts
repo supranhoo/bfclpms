@@ -1,11 +1,21 @@
-import type { ScannerGroup } from '@/lib/scanGroupsDedup';
-
 /**
  * Match strength for a scanner group, used to sort the Build Registry list
  * from "most similar" (top) down to "least similar". Exact-match groups score
  * 1; fuzzy groups use the highest variant similarity in the cluster.
  */
-export function groupMatchScore(group: Pick<ScannerGroup, 'variants'>): number {
+interface SortableVariant {
+  match_type?: 'exact' | 'fuzzy';
+  similarity?: number;
+  row_count?: number;
+}
+
+interface SortableGroup {
+  variants: SortableVariant[];
+  normalized_kpi?: string;
+  row_count?: number;
+}
+
+export function groupMatchScore(group: { variants: SortableVariant[] }): number {
   const variants = group.variants ?? [];
   if (variants.some(v => v.match_type === 'exact')) return 1;
   let max = 0;
@@ -13,10 +23,6 @@ export function groupMatchScore(group: Pick<ScannerGroup, 'variants'>): number {
     if (typeof v.similarity === 'number' && v.similarity > max) max = v.similarity;
   }
   return max;
-}
-
-interface SortableGroup extends Pick<ScannerGroup, 'variants' | 'normalized_kpi'> {
-  row_count?: number;
 }
 
 const totalRowCount = (g: SortableGroup): number =>
