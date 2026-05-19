@@ -16,11 +16,11 @@ const base: ScannerVariant = {
 
 describe('VariantScaleStrip', () => {
   it('renders all scale cells with numeric values', () => {
-    const { container, getByTitle } = render(<VariantScaleStrip variant={base} isBaseline />);
+    const { container } = render(<VariantScaleStrip variant={base} isBaseline />);
     expect(container.textContent).toContain('Monthly');
     expect(container.textContent).toContain('100%');
     expect(container.textContent).toContain('<98%');
-    expect(getByTitle('Criteria: Higher is Better')).toBeTruthy();
+    expect(container.textContent).toContain('Higher is Better');
   });
 
   it('shows em-dash for missing R values', () => {
