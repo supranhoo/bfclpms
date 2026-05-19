@@ -278,6 +278,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     queryClient.invalidateQueries({ queryKey: ['profiles-by-workflow-stage'] });
     queryClient.invalidateQueries({ queryKey: ['team-members'] });
     queryClient.invalidateQueries({ queryKey: ['skip-level-team-members'] });
+    // v2.66.11.18 — Manager / Designation / Grade picker caches in
+    // useEmployeeFilterOptions. They previously raced auth bootstrap and
+    // returned 0 rows, leaving the Manager filter dropdown empty on HR PMS
+    // Review and other reviewer surfaces.
+    queryClient.invalidateQueries({ queryKey: ['managers-list'] });
+    queryClient.invalidateQueries({ queryKey: ['distinct-designations'] });
+    queryClient.invalidateQueries({ queryKey: ['distinct-grades'] });
   }, [isReady, user?.id, queryClient]);
 
   const signIn = async (email: string, password: string, rememberMe: boolean = true) => {
