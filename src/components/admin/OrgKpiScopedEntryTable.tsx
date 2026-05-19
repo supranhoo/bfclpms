@@ -915,10 +915,13 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
         {/* File */}
         <TableCell className="py-1.5 w-24">
           {!rowIsNa && (
-            <OrgKpiFileUpload
-              existingUrl={row.evidenceUrl}
-              onUploadComplete={(url) => onValueChange(row.scopeId, 'evidenceUrl', url)}
-            />
+            <div className="flex items-center gap-1">
+              <OrgKpiFileUpload
+                existingUrl={row.evidenceUrl}
+                onUploadComplete={(url) => onValueChange(row.scopeId, 'evidenceUrl', url)}
+              />
+              <PerRowManageFiles okvId={row.okvId} kpiName={kpiName ?? 'KPI'} scopeName={row.scopeName} />
+            </div>
           )}
         </TableCell>
 
@@ -1129,10 +1132,13 @@ function DepartmentRow({ row, onValueChange, ratingThresholds, targetValue, uom,
       </TableCell>
       <TableCell className="py-1.5 w-24">
         {!rowIsNa && (
-          <OrgKpiFileUpload
-            existingUrl={row.evidenceUrl}
-            onUploadComplete={(url) => onValueChange(row.scopeId, 'evidenceUrl', url)}
-          />
+          <div className="flex items-center gap-1">
+            <OrgKpiFileUpload
+              existingUrl={row.evidenceUrl}
+              onUploadComplete={(url) => onValueChange(row.scopeId, 'evidenceUrl', url)}
+            />
+            <PerRowManageFiles okvId={row.okvId} kpiName={kpiName ?? 'KPI'} scopeName={row.scopeName} />
+          </div>
         )}
       </TableCell>
       {hasRowPropagation && (
