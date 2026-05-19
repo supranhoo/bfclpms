@@ -630,7 +630,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                 {data.employeeCount} employee{data.employeeCount !== 1 ? 's' : ''}
               </Badge>
             )}
-            {data.scope === 'organization' && orgOkvId && (
+            {hasEvidenceControls && (
               <>
                 <OrgKpiEvidenceStatusChip
                   count={evidenceCount}
