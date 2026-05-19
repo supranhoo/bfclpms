@@ -212,11 +212,12 @@ export function OrgKpiEvidenceManagerSheet({ open, onOpenChange, okvId, kpiName 
 
       <ConfirmDestructiveDialog
         open={confirmReplace}
-        onOpenChange={setConfirmReplace}
         title="Replace supporting files and step back?"
         description="This will overwrite the supporting files on every mapped employee's scorecard and send rows that have advanced past self-review back to self-review for re-acknowledgement. The action is fully audited."
-        confirmText="Replace + step back"
+        confirmLabel="Replace + step back"
         onConfirm={() => doResync('replace_with_stepback')}
+        onCancel={() => setConfirmReplace(false)}
+        isLoading={resync.isPending}
       />
     </>
   );
