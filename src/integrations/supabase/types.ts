@@ -8707,15 +8707,33 @@ export type Database = {
           category_id: string
           category_name: string
           left_alias_count: number
+          left_frequency: string
+          left_frequency_mixed: boolean
           left_id: string
           left_kpi_name: string
           left_kra_name: string
           left_linked_kpi_count: number
+          left_r_mixed: boolean
+          left_r0: string
+          left_r1: string
+          left_r2: string
+          left_r3: string
+          left_r4: string
+          left_r5: string
           right_alias_count: number
+          right_frequency: string
+          right_frequency_mixed: boolean
           right_id: string
           right_kpi_name: string
           right_kra_name: string
           right_linked_kpi_count: number
+          right_r_mixed: boolean
+          right_r0: string
+          right_r1: string
+          right_r2: string
+          right_r3: string
+          right_r4: string
+          right_r5: string
           similarity: number
         }[]
       }
