@@ -1674,6 +1674,7 @@ export default function ImportData() {
         level: 'Level 1',
         managerEmployeeId: '100002',
         managerName: 'Jane Smith',
+        employeeStatus: 'Active',
       },
     ];
 
@@ -1692,7 +1693,7 @@ export default function ImportData() {
       const allProfiles = await fetchAllPaged<any>((from, to) =>
         supabase
           .from('profiles')
-          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, department_id, reporting_manager_id')
+          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, department_id, reporting_manager_id, is_active')
           .order('id')
           .range(from, to)
       );
@@ -1740,6 +1741,7 @@ export default function ImportData() {
           email: profile.email || '',
           designation: profile.designation || '',
           role: roleMap.get(profile.id) || 'employee',
+          employeeStatus: profile.is_active === false ? 'Inactive' : 'Active',
           companyCode: companyObj?.code || companyObj?.name || '',
           division: div?.name || '',
           businessUnit: bu?.name || '',
