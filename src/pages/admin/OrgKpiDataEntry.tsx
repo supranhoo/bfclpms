@@ -1246,7 +1246,10 @@ export default function OrgKpiDataEntry() {
         kpiIds: candidateIds,
         newAchieved: typeof newAchieved === 'number' ? newAchieved : null,
         newSelfScore: typeof newSelfScore === 'number' ? newSelfScore : null,
-        overwritePolicy: 'pre_review_only',
+        // ADR-064: align preview eligibility with the policy the live RPC
+        // will use, so admins see how many rows will be overwritten and
+        // stepped back before they commit.
+        overwritePolicy: isAdmin ? 'overwrite_and_stepback' : 'pre_review_only',
       });
       setPreviewState((s) => ({ ...s, loading: false, result }));
     } catch (err: any) {
