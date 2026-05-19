@@ -64,3 +64,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Team Reviews Zero-KPI RCA](mem://features/review/team-reviews-zero-kpi-rca) — KRA-issuance flows must invalidate ['kpis-by-period-ranges']; KRA Issuance has Managers Without KRAs panel; reviewer scope ignores department
 - [HR PMS Reviewed Tile Semantics](mem://features/review/hr-pms-reviewed-tile-semantics) — Three-rule classification: signature, N/A, structural advancement
 - [Weekly Review Windows Config](mem://features/admin/weekly-review-windows-config) — Admin-configurable Weekly KPI submission windows in frequency_config.review_window_rules; widened defaults eliminate dead-zone gaps (Jyoti RCA May 2026)
+- [Org KPI Evidence Targeting](mem://features/admin/org-kpi-evidence-targeting) — Per-file employee/department targeting + Distribution Preview matrix
