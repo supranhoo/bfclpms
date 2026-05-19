@@ -1,89 +1,87 @@
 
-# Add Frequency + R0–R5 columns to the Definition Merge Candidates table
+# Wire "Evidence & Parity" into Organization KPI Data Entry, per scope
 
-## Where
-KPI Standardization → **Suggestions** tab → "Definition Merge Candidates" table (`src/components/admin/kpi-standardization/SuggestionsTab.tsx`, ~line 167–245).
+## Current state (verified)
+- `OrgKpiEntryCard.tsx` **already** imports and renders the Evidence chip, Parity badge, "Manage files" button, and `OrgKpiEvidenceManagerSheet` — but **only when `data.scope === 'organization'`** (lines 218–225 and 578–600). For Department- and Employee-scope KPIs, the chip/badge/sheet never appear, so admins perceive the feature as "not implemented" on the Org KPI Data Entry page.
+- The standalone `/admin/org-kpi-evidence-demo` page (`OrgKpiEvidenceDemo.tsx`) is the only place all three scopes render today. It was a preview surface and should not be the production entry point.
 
-This is the table where admins decide whether to merge two canonical KPI definitions (Keep A / Keep B). Today it shows only Category, Definition A, Definition B, Similarity, Aliases count, Linked KPIs count. Without **Frequency** and the **R0–R5 scoring scale anchors**, admins cannot safely confirm a merge — they can't tell whether the two definitions actually measure the same thing on the same scale at the same cadence.
+## Goal
+The Evidence & Parity controls live **inline on each KPI inside the Organization KPI Data Entry page**, and adapt to the KPI's Scope:
 
-## What the admin will see (one row)
+| Scope         | Where the controls live                                     | What the sheet manages                              |
+|---------------|--------------------------------------------------------------|------------------------------------------------------|
+| Organization  | KPI card header (today's location, unchanged)               | One OKV row → files distributed to all mapped employees |
+| Department    | KPI card header **and** per-row in the scoped table         | Header sheet = roll-up across all dept OKV rows; row sheet = files on that one department's OKV row |
+| Employee      | KPI card header **and** per-row in the scoped table         | Header sheet = roll-up across all employee OKV rows; row sheet = files on that one employee's OKV row |
 
-```
-Category  Definition A           Definition B           Sim  Freq  R0   R1   R2   R3   R4   R5  Aliases  Links  Actions
-HR        Attrition % (left A)   Attrition Rate (B)    0.87  M·M  ≤2   3    4    5    6   ≥7   3/2      8/4    [Keep A][Keep B][×]
-                                                              ⚠   ✓    ✓    ✓    ✓    ✓    ✓
-```
+This matches how the KPI is actually scoped — admins manage org-shared files for org KPIs, department-scoped files for dept KPIs, etc.
 
-Rules for each cell:
-- `Freq` shows two stacked badges: `A · B`. Same colour when equal, amber + ⚠ icon when different.
-- `R0…R5` cells show the **A value over B value** (compact, two-line). Green tick when equal, amber when different, "—" when missing on either side.
-- If linked KPIs *within* one definition disagree on a value (e.g. Definition A has 5 KPIs with different R3 thresholds), show the most common value with a small "mixed" dot indicator and a tooltip listing the variants.
+## Implementation
 
-This way the merge is safe-by-default: if everything is green ticks, you're merging look-alike rows; if anything is amber, you're warned before clicking Keep A/B.
+### 1. Backend — generalize OKV-id resolution beyond organization scope
 
-## Data source
+`useOrgScopeOkvId` today resolves a single OKV row for an org-scope KPI. Add two siblings (or one parameterised hook) in `src/hooks/useOrgKpiEvidenceFiles.ts`:
 
-`kpi_definitions` itself only stores canonical names — frequency and R0..R5 live on the linked `kpis` rows (and `kpi_templates`). So we enrich the suggestion RPC server-side, never client-side roundtrips.
+- `useScopedOkvIds({ categoryId, kraName, kpiName, reviewPeriod, reviewYear, scope })` — returns a `Map<scopeId, okvId>` for department/employee scope KPIs by querying `org_kpi_values` filtered on `kpi_definition_id` (or kra+kpi+category fallback) for the period, where `department_id IS NOT NULL` (dept scope) or `employee_id IS NOT NULL` (employee scope). One round-trip per card.
+- `useAggregateEvidenceForScope(okvIds[])` — returns the union of `evidence_files` across the supplied OKV rows, plus a per-OKV breakdown. Used by the **card-header** sheet for dept/employee KPIs so the admin can see "all evidence across all departments/employees on this KPI" in one place.
 
-### Backend (one migration)
+No new RPC required for the row-level sheet — it just re-uses the existing `useOrgKpiEvidenceFiles(okvId)`.
 
-Update `suggest_definition_merges(p_min_similarity, p_limit)` to additionally return, for each side:
+### 2. Frontend — `OrgKpiEntryCard.tsx`
 
-```
-left_frequency           text         -- mode of linked kpis.frequency
-left_frequency_mixed     boolean      -- true if more than one distinct frequency
-left_r0..left_r5         text         -- mode of linked kpis.r0..r5
-left_r_mixed             boolean      -- true if any of r0..r5 has more than one distinct value
-right_frequency / mixed  text/bool
-right_r0..right_r5       text
-right_r_mixed            boolean
-```
+- Drop the `data.scope === 'organization'` gate around the Evidence chip / Parity badge / Manage files button. Render them for all scopes.
+- For dept/employee scopes:
+  - Compute `aggregateOkvIds` via the new hook.
+  - The chip shows the **total file count across all scoped OKV rows**, with a tooltip like "12 files across 4 departments".
+  - The Parity badge shows aggregate parity (worst-case wins: if any underlying OKV has drift, show drift).
+  - "Manage files" opens the sheet in **roll-up mode**: a small scope selector at the top of the sheet lets the admin pick "All <scope>s" or a single dept/employee to edit just that OKV. Targeting still works exactly as today inside the sheet.
 
-Implementation:
-- For each candidate pair, compute the mode of `frequency`, `r0`..`r5` over `kpis` joined on `definition_id`.
-- Use a CTE with `array_agg(distinct …)` → if `array_length` > 1, set `*_mixed = true` and pick the most frequent value.
-- If a definition has 0 linked kpis (rare; orphan canonical entry), fall back to NULL for all enrichment columns and surface a "—" in the UI.
-- Indexed read: rely on existing `idx_kpis_definition_id` (or add if missing inside the same migration). One pass; no N+1.
+### 3. Frontend — `OrgKpiScopedEntryTable.tsx`
 
-### Frontend
+- Extend `ScopedRow` with optional `okvId?: string`. Populated by the parent when the row maps to an existing `org_kpi_values` record. (For not-yet-propagated rows, `okvId` is undefined and the row controls are disabled with a "Save first" hint.)
+- Add a slim trailing cell rendered after the existing Evidence column:
+  - `OrgKpiEvidenceStatusChip` (file count for that row's OKV)
+  - `OrgKpiParityBadge` (parity for that one OKV)
+  - Paperclip "Manage" icon button opening `OrgKpiEvidenceManagerSheet` scoped to that single OKV.
+- Reuses the existing components verbatim — no new UI primitives.
 
-1. **`src/hooks/useRegistrySuggestions.ts`** — extend `DefinitionMergeSuggestion` with the new fields. No behaviour change otherwise.
+### 4. `OrgKpiEvidenceManagerSheet.tsx` — small additive change
 
-2. **`src/components/admin/kpi-standardization/SuggestionsTab.tsx`** — replace the current table layout with the enriched layout above:
-   - Add `<TableHead>` for Frequency and R0..R5 (six columns, kept narrow with `w-12 text-[10px] tabular-nums`).
-   - Per row, render `<CompareCell a={…} b={…} mixedA={…} mixedB={…} />` for each compared cell.
-   - Move Aliases / Linked KPIs to the right (still visible) and keep Actions pinned at end with `sticky right-0`.
-   - On narrow viewports (< lg) collapse R0..R5 into a single "Scale" cell that opens a small popover showing the full 6-row comparison. Keeps the table usable on laptops.
+- Accept an optional `okvIds: string[]` (multi-OKV roll-up) alongside today's `okvId: string`.
+- When multiple ids are passed, render a scope picker at the top of the sheet ("All departments" / per-dept) that swaps the loaded OKV id. Each individual edit still hits exactly one OKV row.
+- When a single id is passed (today's behaviour, including row-level use), the picker is hidden. Zero regression.
 
-3. **New tiny component** `src/components/admin/kpi-standardization/CompareCell.tsx`:
-   - Inputs: `a`, `b`, optional `mixedA`, `mixedB`, optional `label`.
-   - Renders A over B stacked, with equality state (green = equal, amber = differ, muted = either missing), plus a `mixed` dot when applicable.
-   - Pure, no data fetching. Unit-testable.
+### 5. Retire the standalone demo route
 
-4. **`docs/adr/ADR-064.md`** — short ADR recording: "enriched merge suggestions with frequency + R0–R5 mode aggregates; mixed flag surfaces internal inconsistency".
+- Keep `OrgKpiEvidenceDemo.tsx` as a Storybook-style preview at the same URL but add a yellow banner "Demo only — the production controls live inline on Org KPI Data Entry". This avoids confusing admins who already bookmarked the link.
+- Optional: remove the demo route from any sidebar entry (search and remove if present).
 
-5. **`mem://features/admin/kpi-standardization-registry`** — append a paragraph: "Definition merge candidates surface Frequency and R0–R5 (mode of linked KPIs) with mixed-warning dots and per-cell equality state."
+### 6. Documentation & memory
 
-## Out of scope (call out)
-- No change to alias-candidate table — alias candidates don't carry scales/frequency so the same enrichment isn't meaningful there.
-- No change to `merge_definitions` itself. Merge semantics stay identical.
-- No auto-blocking of merges when frequency/scale differ — purely informational warnings, so admins keep full control (some legitimate merges do reconcile differing historic scales).
+- Update `mem://features/admin/org-kpi-management-suite` with: "Evidence & Parity controls render inline per KPI on Org KPI Data Entry for all scopes; dept/employee scopes also expose a row-level Manage-files action."
+- Append a "Scope-aware Evidence Manager" section to the existing Org KPI Evidence doc.
+- New ADR `docs/adr/ADR-065.md` covering the roll-up vs row-level dual entry pattern.
+
+## Files to touch
+- `src/hooks/useOrgKpiEvidenceFiles.ts` — add `useScopedOkvIds`, `useAggregateEvidenceForScope`.
+- `src/components/admin/OrgKpiEntryCard.tsx` — remove scope gate; wire aggregate hook; pass `okvIds[]` to sheet.
+- `src/components/admin/OrgKpiEvidenceManagerSheet.tsx` — accept `okvIds[]` + render scope picker.
+- `src/components/admin/OrgKpiScopedEntryTable.tsx` — new column with chip/badge/manage button; thread `okvId` into `ScopedRow`.
+- `src/pages/admin/OrgKpiDataEntry.tsx` — populate `okvId` on `ScopedRow[]` from the existing scoped fetch (already has the OKV ids in its query).
+- `src/pages/admin/OrgKpiEvidenceDemo.tsx` — add "Demo only" banner.
+- `mem/features/admin/org-kpi-management-suite` — append paragraph.
+- `docs/adr/ADR-065.md` — new.
 
 ## Risk & Impact Report
 
-- **Data impact:** None. RPC returns extra columns; no schema writes.
-- **Workflow impact:** None — the Keep A / Keep B / Dismiss flow is unchanged.
-- **UI/UX:** Wider table. Mitigated with narrow tabular-nums columns and the lg-breakpoint collapse to a popover.
-- **Regression risk:** The RPC signature stays compatible (same args, extra return columns). The hook just maps additional fields; old callers ignoring them keep working. Low.
-- **Performance:** Enrichment is a single grouped scan over `kpis` per candidate pair. The result set is capped at 100 by the existing `p_limit`. Negligible cost on the existing index.
-- **Mitigation:** Add a Vitest for `CompareCell` (equal / differ / mixed / missing). Smoke test the RPC by running `EXPLAIN ANALYZE` post-migration and confirming no seq scan over `kpis`.
+- **Data impact:** None. Pure UI surfacing on top of existing OKV rows. No schema or RPC writes; new hooks are reads only.
+- **Workflow impact:** Admins gain row-level control today missing for dept/employee scope. Existing org-scope flow unchanged.
+- **UI/UX consistency:** Reuses the same chip/badge/sheet/popover components, so the visual language stays identical across scopes.
+- **Regression risk:** Low. The sheet's existing single-OKV mode keeps its current contract (`okvIds` is additive and optional). Removing the `scope === 'organization'` gate only adds rendering — does not change existing branches. Mitigation: keep one Vitest snapshot for the org-scope card to prove no header layout shift.
+- **Performance:** One extra OKV lookup per card for non-org scopes (already loaded server-side as part of the existing scoped fetch on `OrgKpiDataEntry.tsx`, so we just thread it through — no new query). Aggregate evidence count is computed client-side from the already-fetched JSONB.
+- **Mitigation:** Conditional render guards stay in place (`okvId` must exist before showing row chip), and the disabled-with-tooltip state covers not-yet-propagated rows so admins never see broken controls.
 
-## Files to touch
-
-- New migration (extends `suggest_definition_merges`).
-- `src/hooks/useRegistrySuggestions.ts` (extend type).
-- `src/components/admin/kpi-standardization/SuggestionsTab.tsx` (table columns + responsive collapse).
-- New `src/components/admin/kpi-standardization/CompareCell.tsx`.
-- New `src/components/admin/kpi-standardization/CompareCell.test.tsx`.
-- `docs/adr/ADR-064.md` (new).
-- `mem/features/admin/kpi-standardization-registry` (append).
+## Out of scope
+- Changing how evidence files are stored or how targeting works (per-employee/per-dept targeting from the prior change stays exactly as-is).
+- Removing or renaming the demo route's URL — only banner-flag it.
+- Any change to non-admin views.
