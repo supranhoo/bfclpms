@@ -483,6 +483,8 @@ export function BackupRestoreTab() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* Phase 1.5 — Safety backup→restore sandbox drill */}
+      <SafetyDrillCard />
     </div>
   );
 }
