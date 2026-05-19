@@ -610,6 +610,21 @@ export default function OrgKpiDataEntry() {
           const fallbackIsNa = okvHasValue
             ? !!val?.is_na
             : (fb ? fb.isNa : false);
+          // Employee → Admin parity (RCA 2026-05-19): when the OKV row is
+          // empty for remarks / evidence, surface what the employee already
+          // entered on their self-review so admin sees the same data the
+          // employee sees. OKV still wins when admin has entered anything.
+          const okvHasRemark = !!(val?.remarks && val.remarks.trim());
+          const okvEvidencePlural: string[] = Array.isArray((val as any)?.evidence_urls)
+            ? ((val as any).evidence_urls as string[]).filter((u): u is string => typeof u === 'string' && !!u)
+            : [];
+          const okvHasEvidence = !!val?.evidence_url || okvEvidencePlural.length > 0;
+          const effRemarks = okvHasRemark
+            ? (val!.remarks as string)
+            : (fb?.selfRemarks ?? '');
+          const effEvidenceUrl = okvHasEvidence
+            ? (val?.evidence_url ?? (okvEvidencePlural[0] ?? null))
+            : (fb?.selfEvidenceUrls && fb.selfEvidenceUrls.length > 0 ? fb.selfEvidenceUrls[0] : null);
           // RCA-2026-05-08 — Per-row "Propagated" badge must reflect the
           // SCORECARD truth (review_submissions exists), not the OKV
           // status field. OKV.status is only set after a successful
@@ -642,8 +657,8 @@ export default function OrgKpiDataEntry() {
             // ADR-063 — raw OKV value (pre-fallback) so the per-row pill can
             // detect unsaved local edits ("data shown but not in DB yet").
             dbAchievedValue: val?.achieved_value ?? null,
-            remarks: val?.remarks ?? '',
-            evidenceUrl: val?.evidence_url ?? null,
+            remarks: effRemarks,
+            evidenceUrl: effEvidenceUrl,
             isNa: fallbackIsNa,
             targetValue: empTarget?.target_value ?? null,
             uom: empTarget?.uom ?? null,
