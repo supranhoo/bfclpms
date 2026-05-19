@@ -24,7 +24,15 @@ import { useSentBackOrgKpiEmployees, type SentBackInfo } from '@/hooks/useSentBa
 import { isComplianceKpi, useBulkEmployeeSubmissionDates } from '@/hooks/useComplianceSubFactors';
 import { scopedRowsSignature } from '@/lib/orgKpiCounts';
 import { useDiagnoseOrgKpiGap, useRepairOrgKpiGap, type DiagnoseGapRow } from '@/hooks/useRepairOrgKpiPropagationGap';
-import { Wrench } from 'lucide-react';
+import { Wrench, Paperclip } from 'lucide-react';
+import {
+  useOrgScopeOkvId,
+  useOrgKpiEvidenceFiles,
+  useOrgKpiEvidenceParity,
+} from '@/hooks/useOrgKpiEvidenceFiles';
+import { OrgKpiEvidenceManagerSheet } from '@/components/admin/OrgKpiEvidenceManagerSheet';
+import { OrgKpiEvidenceStatusChip } from '@/components/admin/OrgKpiEvidenceStatusChip';
+import { OrgKpiParityBadge } from '@/components/admin/OrgKpiParityBadge';
 
 export interface OrgKpiCardData {
   categoryId: string;
@@ -204,6 +212,21 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [showRepairDialog, setShowRepairDialog] = useState(false);
   const [repairRows, setRepairRows] = useState<DiagnoseGapRow[] | null>(null);
+  const [showEvidenceSheet, setShowEvidenceSheet] = useState(false);
+
+  // Evidence manager — for org-scope, resolve the single OKV row id.
+  const { data: orgOkvId } = useOrgScopeOkvId({
+    categoryId: data.categoryId,
+    kraName: data.kraName,
+    kpiName: data.kpiName,
+    reviewPeriod,
+    reviewYear,
+    enabled: data.scope === 'organization',
+  });
+  const { data: evidenceFiles } = useOrgKpiEvidenceFiles(orgOkvId);
+  const { data: parityMap } = useOrgKpiEvidenceParity(reviewPeriod, reviewYear);
+  const parityRow = orgOkvId ? parityMap?.get(orgOkvId) : undefined;
+  const evidenceCount = evidenceFiles?.length ?? 0;
   const diagnoseGap = useDiagnoseOrgKpiGap();
   const repairGap = useRepairOrgKpiGap();
   const openRepairDialog = useCallback(async () => {
@@ -551,6 +574,29 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                 <Users className="h-3 w-3" />
                 {data.employeeCount} employee{data.employeeCount !== 1 ? 's' : ''}
               </Badge>
+            )}
+            {data.scope === 'organization' && orgOkvId && (
+              <>
+                <OrgKpiEvidenceStatusChip
+                  count={evidenceCount}
+                  onClick={() => setShowEvidenceSheet(true)}
+                />
+                <OrgKpiParityBadge
+                  parity={parityRow}
+                  onClick={() => setShowEvidenceSheet(true)}
+                />
+                {isAdmin && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 px-2 text-[10px] gap-1"
+                    onClick={() => setShowEvidenceSheet(true)}
+                  >
+                    <Paperclip className="h-3 w-3" />
+                    Manage files
+                  </Button>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -1137,6 +1183,14 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
         }}
         currentScope={data.scope}
         newScope={scopeChangeTarget}
+      />
+    )}
+    {data.scope === 'organization' && (
+      <OrgKpiEvidenceManagerSheet
+        open={showEvidenceSheet}
+        onOpenChange={setShowEvidenceSheet}
+        okvId={orgOkvId ?? null}
+        kpiName={data.kpiName}
       />
     )}
     {isAdmin && (
