@@ -8660,6 +8660,9 @@ export type Database = {
         }[]
       }
       run_safety_sla_escalations: { Args: never; Returns: Json }
+      safety_drill_counts: { Args: never; Returns: Json }
+      safety_drill_seed: { Args: never; Returns: Json }
+      safety_drill_truncate: { Args: never; Returns: undefined }
       scan_kpi_duplicate_groups: {
         Args: { p_fuzzy_threshold?: number; p_include_skipped?: boolean }
         Returns: Json
