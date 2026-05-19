@@ -7898,6 +7898,10 @@ export type Database = {
       }
     }
     Functions: {
+      _filter_files_for_employee: {
+        Args: { p_department_id: string; p_employee_id: string; p_files: Json }
+        Returns: Json
+      }
       activate_permit: { Args: { p_permit_id: string }; Returns: Json }
       aggregate_sub_period_scores: {
         Args: { p_kpi_id: string; p_month: string; p_year: number }
@@ -8419,6 +8423,20 @@ export type Database = {
           not_propagated: number
           okv_id: string
           total_emps: number
+        }[]
+      }
+      org_kpi_evidence_targeting: {
+        Args: { p_okv_id: string }
+        Returns: {
+          current_urls: Json
+          department_id: string
+          department_name: string
+          drift_kind: string
+          employee_id: string
+          employee_name: string
+          expected_files: Json
+          kpi_id: string
+          kpi_status: string
         }[]
       }
       preview_org_kpi_propagation: {

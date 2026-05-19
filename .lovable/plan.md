@@ -1,113 +1,94 @@
-# Org KPI Evidence — Deep-Dive Brainstorm
 
-Scope: Discussion + design options only. No code changes in this turn.
+# Per-File Employee Targeting for Org KPI Supporting
 
-## Current state (RCA)
+## Goal
+Make it explicit and controllable **which supporting file goes to which employee** on an Org KPI — without breaking the current "everyone gets the same file" default and without inventing a new scope concept. Targeting is always *within* the KPI's existing scope (organization / department / per-employee).
 
-**Schema (`org_kpi_values`)**
+## Behaviour by Org KPI scope
 
-- `evidence_url text` — legacy single attachment.
-- `evidence_urls jsonb default '[]'` — added Feb 2026, designed for multi-file. **Not yet wired into the UI.**
+| KPI scope | Default | Targeting allowed? | Whom can a file be targeted to? |
+|---|---|---|---|
+| `organization` | File goes to **all mapped employees** | Yes (optional) | Any subset of the mapped employees (resolved via `useOrgKpiMappedEmployees`) |
+| `department` | File goes to **all mapped employees in the mapped departments** | Yes (optional) | Any subset of mapped employees, OR any subset of mapped departments (department selection expands to its members at propagation time) |
+| `per-employee` / `scoped` | File belongs to **that one employee's OKV row** | N/A — already 1:1 | n/a |
 
-**UI (`OrgKpiFileUpload` + `OrgKpiEntryCard` + `OrgKpiScopedEntryTable`)**
+Empty targeting = "applies to everyone in scope" (today's behaviour). This keeps the simple case one click and only adds friction when an admin actually needs targeting.
 
-- Single slot per row. "Upload" button → on success replaces `evidenceUrl`. Existing file shows `View | X (remove)`.
-- No multi-file UI, no "Add another", no listing of `evidence_urls[]`.
-- View action uses `openStorageFile(existingUrl)` — works only when a URL exists in `evidence_url`.
+## Data model
 
-**Propagation (`propagate_org_kpi_value`)**
+Extend each entry in `org_kpi_values.evidence_files` (JSONB) with two optional fields — no new tables, fully backward compatible:
 
-- Copies `okv.evidence_url` → `review_submissions.self_evidence_url` and `okv.evidence_urls` → `self_evidence_urls`, **by-value**, with `COALESCE(EXCLUDED.x, review_submissions.x)` (only fills if employee row is null — never overwrites).
-- Eligibility gate: row must still be in `kra_set` status (ADR / memory §16, §18, §19). Once any sibling self-reviews, that employee's row is excluded from future propagation → admin edits to OKV evidence don't reach already-advanced rows.
+```jsonc
+{
+  "url": "...",
+  "label": "Q1 Safety Cert",
+  "added_by": "uuid",
+  "added_at": "2026-05-19T...",
+  // NEW (both optional, both empty = applies to all in scope)
+  "applies_to_employee_ids": ["uuid", "uuid"],
+  "applies_to_department_ids": ["uuid"]   // only meaningful for department-scope KPIs
+}
+```
 
-**Employee dashboard read path**
+Rules enforced in the propagate / resync RPCs:
+- If both arrays empty → file applies to every mapped employee (current behaviour).
+- Else → file applies to `union(applies_to_employee_ids, members_of(applies_to_department_ids))` **intersected with the KPI's mapped employee set** (defensive: stale IDs are ignored).
+- Per-employee scope KPIs: targeting fields are not exposed in the UI and are ignored if present.
 
-- Dashboards/Scorecards read from `review_submissions.self_evidence_url[s]` per employee, NOT from `org_kpi_values`. After propagation the two are decoupled by design (POLICY §88, snapshot immutability).
+## Backend changes
 
-## The four questions, answered
+1. **Migration**
+   - No schema change to the column (it's JSONB). Add a CHECK/validation trigger on `org_kpi_values` that, when `evidence_files` is set, validates each element shape (url required; arrays are uuid[] if present).
+   - Update `resync_org_kpi_evidence(p_okv_id, p_mode)`:
+     - Compute the per-employee file list = filter `evidence_files` where `(applies_to_employee_ids = [] AND applies_to_department_ids = [])` OR employee is in `applies_to_employee_ids` OR employee's department is in `applies_to_department_ids`.
+     - Push that *filtered* array (urls + labels) into each `review_submissions.evidence_urls` / `evidence_url`.
+     - `append_only` still only adds URLs not already present per employee.
+     - `replace_with_stepback` replaces with the filtered list and steps back rows past `self_review`.
+   - Update `propagate_org_kpi_value` similarly so initial propagation respects targeting (uses the same overwrite policy ladder from ADR-053 — no change to that ladder).
+   - Update `org_kpi_evidence_parity` to compute drift against the **filtered expected list per employee**, not the raw OKV array. Add a sibling RPC `org_kpi_evidence_targeting(p_okv_id)` that returns `{ employee_id, expected_urls[], current_urls[], drift_kind }` for the matrix view.
 
-### 1) How do we ensure "Supporting is showing on display" at the OKV entry point?
+2. **Audit**
+   - Every change to targeting arrays emits `ORG_KPI_EVIDENCE_TARGETING_CHANGED` to `kpi_audit_logs` with diff of added/removed employee/department IDs per file. Honors the System Performer Attribution rule (`performed_by = NULL` when triggered by automated rules).
 
-Today there is **no explicit indicator** beyond the file pill — if `evidence_url IS NULL` and `evidence_urls = []` you just see the "Upload" button; admins can't tell at a glance:
+## UI changes (Evidence Manager Sheet)
 
-- whether a file was ever attached and later removed,
-- whether the file in storage is actually reachable (orphan URL),
-- whether the scoped row inherited propagated employee evidence.
+Inside `OrgKpiEvidenceManagerSheet.tsx`, each file row gains a compact "Applies to" control:
 
-Proposal:
+- **Org-scope KPI:** badge showing `All mapped employees (N)` by default. Click → popover with a searchable multi-select of mapped employees. Selecting any subset switches the badge to `N of M employees` with a small "× clear" to revert to default.
+- **Department-scope KPI:** badge showing `All mapped departments (N)` by default. Popover has two tabs: **Departments** (multi-select) and **Employees** (multi-select within mapped departments). Effective coverage count shown live ("Will reach 14 employees").
+- **Per-employee scope:** no targeting control (file is implicitly 1:1).
 
-- **Evidence status chip per row**: `None` / `1 file` / `N files` / `Broken link` (resolved with a lightweight HEAD check, cached).
-- **Resolution rule** for what counts as "shown": `coalesce(jsonb_array_length(evidence_urls), 0) + (evidence_url IS NOT NULL)::int > 0`. Surface that count in `OrgKpiScopedEntryTable` and in the propagation preview dialog.
-- **Tile-level rollup** on the Org KPI Data Entry tile: include an "Evidence: x/y rows" sub-count next to the existing Entered/Propagated chip (shared helper `deriveOrgKpiTileStatus`, mem §16/17).
-- **Storage integrity guard**: nightly job (or on-demand "Verify Evidence" button) that flags `evidence_url` values whose storage object 404s and writes to `org_kpi_audit_log` (`ORG_KPI_EVIDENCE_BROKEN`).
+New small panel below the file list: **"Distribution preview"** — a read-only table:
 
-### 2) Uploading **additional** supporting files on an Org KPI
+```
+Employee            Dept       Files this employee will receive
+─────────────────────────────────────────────────────────────
+Asha Patel          Plant A    Q1 Cert, Plant-A Audit
+Ravi Kumar          Plant B    Q1 Cert
+…                                                          [Show 12 more]
+```
 
-Schema already supports it (`evidence_urls jsonb[]`); the UI does not.
+Driven by `org_kpi_evidence_targeting` RPC. This is the direct answer to "which supporting is attached with which employee".
 
-Proposal — convert `OrgKpiFileUpload` into a true multi-file control:
+Resync buttons unchanged in label; their behaviour now respects targeting.
 
-- Render a chip-list of all current files (legacy `evidence_url` + every entry in `evidence_urls`), each with View / Remove.
-- "+ Add file" button + Ctrl+V paste appends; total file count + cumulative size capped via `useUploadLimits` (per-file cap stays; add `max_org_kpi_files` setting, default 10).
-- Save path: write the unified array into `evidence_urls`; mirror the first entry into `evidence_url` for backwards compat until a sweep migration retires the scalar column.
-- Validation: dedupe by URL, sanitize filenames, keep the existing `org-kpi-evidence/` folder convention so the `iac_leaver_revoke` and storage RLS continue to work.
-- Audit: emit `ORG_KPI_EVIDENCE_ADDED` / `ORG_KPI_EVIDENCE_REMOVED` per file with actor + URL hash.
+## Files to touch
 
-This is a **purely additive** UI/storage change — no propagation contract changes.
+- New migration: `evidence_files` shape validation trigger + updated `propagate_org_kpi_value`, `resync_org_kpi_evidence`, `org_kpi_evidence_parity`, new `org_kpi_evidence_targeting`.
+- `src/hooks/useOrgKpiEvidenceFiles.ts` — extend `OrgKpiEvidenceFile` type; add `useOrgKpiEvidenceTargeting(okvId)`.
+- `src/components/admin/OrgKpiEvidenceManagerSheet.tsx` — per-row targeting popover + distribution preview panel.
+- New `src/components/admin/EvidenceTargetPopover.tsx` — reusable employee/department multi-select bound to mapped scope.
+- `src/components/admin/OrgKpiParityBadge.tsx` — tooltip lists per-employee drift detail from the new RPC (no visual chrome change).
+- `src/pages/admin/OrgKpiEvidenceDemo.tsx` — add a third mock card showing a targeted file.
+- `DOCUMENTATION.md` + `POLICY.md` — add "Per-file targeting" section under Org KPI Evidence; bump Version History.
+- New ADR `docs/adr/ADR-064.md` — record the decision and the "empty targeting = applies to all in scope" default.
+- Memory: append a new entry under "Multi-File Evidence Storage" or add a sibling `mem://features/admin/org-kpi-evidence-targeting`.
 
-### 3) Adding/replacing supporting **after** the data has propagated, without breaking workflow
+## Risk & Impact Report
 
-Hard constraint we must preserve (POLICY §88, mem org-kpi-management-suite §13): once a per-employee `review_submissions` row has advanced past `self_review`, admin edits to the OKV must **not** silently mutate that employee's evidence — HR audit law. So we need an explicit, audited path.
-
-Three options (pick one; recommend B):
-
-**A. OKV-only addendum (lightest touch)**
-
-- Admin can add files to `org_kpi_values.evidence_urls` at any time. Already-propagated employee rows are **not** touched.
-- Pros: zero workflow disruption, immutable history.
-- Cons: dashboard drift — employees never see the new evidence (fails Q4).
-
-**B. Forward-only re-sync with explicit action (recommended)**
-
-- New RPC `resync_org_kpi_evidence(p_okv_id, p_mode)` with two modes:
-  - `append_only` — merges any **new** URLs into `review_submissions.self_evidence_urls` for every mapped employee regardless of stage, **without** stepping the workflow back or altering `achieved_value`. Replacements/removals are blocked in this mode.
-  - `replace_with_stepback` — full replace; for rows already advanced past `self_review`, triggers the existing `request_org_kpi_revision` send-back flow per row (re-uses ADR-053 step-back guarantees in mem `workflow-resilient-status-stepback`).
-- UI: an "Update supporting files" sheet on the OKV row showing per-employee current stage + the diff (added / removed / replaced) before commit, gated by `ConfirmDestructiveDialog`.
-- Audit: `ORG_KPI_EVIDENCE_RESYNCED` per affected `kpi_id`, mirroring the per-KPI granularity rule (mem §14).
-
-**C. Side-channel "Org KPI attachments" table**
-
-- New `org_kpi_attachments(okv_id, url, added_by, added_at, visible_to_employees)` queried as a union by both the OKV editor and the per-employee Scorecard. No mutation of `review_submissions` ever.
-- Pros: cleanest audit trail, no workflow risk.
-- Cons: changes the read path on every employee-facing surface (Scorecard, KpiTimeline, KpiJourneySection, exports, reports) — large blast radius.
-
-### 4) Parity between OKV Data Entry view and Employee Dashboard
-
-Today they can diverge for three legitimate reasons: propagation snapshot immutability, employee overrides during self-review, and OKV edits made after advancement. We need observability, not forced equality.
-
-Proposal — a **Parity panel** on the OKV editor (and a matching badge on the tile):
-
-- **Parity badge per row** with three states:
-  - `In sync` — every mapped employee's `self_achieved_value` / `self_evidence_urls` equals the current OKV snapshot.
-  - `Drift: pre-propagation` — OKV updated, propagation pending (already covered by §16 tile chip; reuse).
-  - `Drift: post-propagation` — at least one employee row diverges from current OKV (value or evidence). Hover reveals: "3 of 12 employees have different evidence; 1 employee has a different achieved value (self-edited)."
-- **Drift drilldown** = reuse `OrgKpiImpactSheet` + new "Evidence diff" tab listing per-employee files vs OKV files.
-- **Re-sync action** invokes the Option-B RPC from Q3 with the same audit/stepback semantics.
-- **Source of truth contract** documented in POLICY: OKV is the source of truth **for new data and unadvanced rows only**; employee `review_submissions` is the source of truth **for any row that has progressed past `self_review**`. Drift is expected, not a bug — visibility + on-demand reconciliation is the control.
-
-### Technical notes / risk
-
-- All three Q3 options must respect `review_period_locks` and the `is_org_kpi_data_owner_for_profile` RLS (ADR-060) so non-admin data owners can't push files to employees outside their scope.
-- Storage: keep `review-evidence/org-kpi-evidence/` prefix to inherit current RLS and leaver-revoke triggers.
-- Propagation RPC stays untouched; the new resync RPC is a separate, narrowly-scoped function — does not re-introduce a second overload of `preview_org_kpi_propagation` (ADR-058).
-- Tests required: multi-file upload UI, append-only resync vs replace-with-stepback, parity badge derivations, broken-link detection, snapshot immutability still holds for `achieved_value` after evidence-only resync.
-- Memory updates on implement: extend `org-kpi-management-suite` with new §21 (multi-file evidence) and §22 (evidence resync contract); new ADR for the resync RPC + parity contract.
-
-### What to decide next
-
-Confirm before I plan implementation:
-
-1. Multi-file UI scope — do we want per-file labels/captions or just URLs? - let's move with  "per-file labels/captions"
-2. Q3 path — **B (recommended)**, A, or C? let's move with   "B"
-3. Drift parity — show on tile + row, or row only? - show on tile + row
-4. Whether to retire the scalar `evidence_url` column in a follow-up sweep, or keep dual-write indefinitely. - whichever will be best fit for this process. 
+- **Data impact:** Additive JSONB fields, no destructive schema change. Existing rows continue to mean "applies to all". Validation trigger could reject malformed historical rows — migration includes a one-time normalise pass to coerce missing fields to `[]`.
+- **Workflow impact:** Targeting changes that *narrow* the audience for an already-propagated file behave like "replace_with_stepback" for newly-excluded employees (their evidence is removed and they are sent back to self_review if past it). Targeting changes that *broaden* audience behave like "append_only" for newly-included employees. Both branches are audited.
+- **UI/UX:** Default path is unchanged (zero clicks for the common org-wide certificate). Popover is opt-in. Distribution preview is collapsible.
+- **Regression risk:** `propagate_org_kpi_value` is shared with non-evidence flows; changes are gated behind a new internal helper `_filter_files_for_employee(...)` invoked only inside the evidence projection block. Score/value propagation paths are untouched.
+- **Security:** RLS unchanged — `evidence_files` continues to live on `org_kpi_values` (admin-managed). Per-employee read access continues via `review_submissions` RLS.
+- **Mitigation:** Unit tests for `_filter_files_for_employee` (empty arrays = all; subset; department expansion; stale id ignored; per-employee scope ignores targeting). Integration test on `resync_org_kpi_evidence` covering append vs replace with mixed targeted/untargeted files. Mock fixtures in `OrgKpiEvidenceDemo.tsx` cover all three scope types.

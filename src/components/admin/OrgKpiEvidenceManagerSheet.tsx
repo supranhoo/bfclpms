@@ -16,8 +16,10 @@ import {
   useOrgKpiEvidenceFiles,
   useUpsertOrgKpiEvidenceFiles,
   useResyncOrgKpiEvidence,
+  useOrgKpiEvidenceTargeting,
   type OrgKpiEvidenceFile,
 } from '@/hooks/useOrgKpiEvidenceFiles';
+import { EvidenceTargetPopover, DistributionPreview } from './EvidenceTargetPopover';
 
 interface Props {
   open: boolean;
@@ -37,6 +39,7 @@ export function OrgKpiEvidenceManagerSheet({ open, onOpenChange, okvId, kpiName 
   const { data: serverFiles, isLoading } = useOrgKpiEvidenceFiles(okvId);
   const upsert = useUpsertOrgKpiEvidenceFiles();
   const resync = useResyncOrgKpiEvidence();
+  const { data: targetingRows = [], isLoading: targetingLoading } = useOrgKpiEvidenceTargeting(okvId);
 
   const [files, setFiles] = useState<OrgKpiEvidenceFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -79,6 +82,10 @@ export function OrgKpiEvidenceManagerSheet({ open, onOpenChange, okvId, kpiName 
     setFiles(prev => prev.map((f, i) => i === idx ? { ...f, label } : f));
   const handleRemove = (idx: number) =>
     setFiles(prev => prev.filter((_, i) => i !== idx));
+  const handleTargetChange = (idx: number, next: { employeeIds: string[]; departmentIds: string[] }) =>
+    setFiles(prev => prev.map((f, i) => i === idx
+      ? { ...f, applies_to_employee_ids: next.employeeIds, applies_to_department_ids: next.departmentIds }
+      : f));
 
   const handleSave = async () => {
     if (!okvId) return;
@@ -149,6 +156,15 @@ export function OrgKpiEvidenceManagerSheet({ open, onOpenChange, okvId, kpiName 
                         Added {new Date(f.added_at).toLocaleDateString()}
                       </p>
                     )}
+                    <div className="flex items-center justify-between pt-1 border-t border-border/40">
+                      <span className="text-[10px] text-muted-foreground">Applies to:</span>
+                      <EvidenceTargetPopover
+                        employeeIds={f.applies_to_employee_ids ?? []}
+                        departmentIds={f.applies_to_department_ids ?? []}
+                        mappedRows={targetingRows}
+                        onChange={(next) => handleTargetChange(idx, next)}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -166,6 +182,18 @@ export function OrgKpiEvidenceManagerSheet({ open, onOpenChange, okvId, kpiName 
                 Save changes
               </Button>
               {dirty && <Badge variant="outline" className="text-[10px] text-amber-700 border-amber-300">Unsaved</Badge>}
+            </div>
+
+            <Separator />
+
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold flex items-center gap-2">
+                <FileText className="h-3.5 w-3.5" /> Distribution preview
+              </h4>
+              <p className="text-[11px] text-muted-foreground">
+                Which supporting file each mapped employee will receive (after per-file targeting).
+              </p>
+              <DistributionPreview rows={targetingRows} isLoading={targetingLoading} />
             </div>
 
             <Separator />
