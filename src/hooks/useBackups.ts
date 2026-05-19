@@ -237,17 +237,89 @@ export function useTriggerRestore() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      const response = await supabase.functions.invoke('restore-backup', {
+      // Phase 1: INIT — get ordered delete/insert batches (or run legacy single-shot)
+      const initResponse = await supabase.functions.invoke('restore-backup', {
         body: { backup_id: backupId },
       });
+      if (initResponse.error) throw initResponse.error;
 
-      if (response.error) throw response.error;
-      return response.data;
+      // Legacy/uploaded backups complete in one call
+      if (initResponse.data?.mode === 'legacy') {
+        return {
+          tables_restored: initResponse.data.tables_restored ?? 0,
+          errors: initResponse.data.errors ?? [],
+        };
+      }
+
+      const { delete_batches, insert_batches, total_tables } = initResponse.data as {
+        delete_batches: string[][];
+        insert_batches: string[][];
+        total_tables: number;
+      };
+
+      const allErrors: string[] = [];
+
+      // Phase 2: DELETE — sequentially, with one retry per batch
+      for (let i = 0; i < delete_batches.length; i++) {
+        const batch = delete_batches[i];
+        let attempts = 2;
+        while (attempts > 0) {
+          const r = await supabase.functions.invoke('restore-backup', {
+            body: { backup_id: backupId, phase: 'delete', tables: batch },
+          });
+          if (!r.error) {
+            if (Array.isArray(r.data?.errors)) allErrors.push(...r.data.errors);
+            break;
+          }
+          attempts--;
+          if (attempts === 0) {
+            allErrors.push(`Delete batch ${i + 1} failed: ${r.error.message}`);
+          }
+        }
+      }
+
+      // Phase 3: INSERT — sequentially, with one retry per batch
+      let tablesRestored = 0;
+      for (let i = 0; i < insert_batches.length; i++) {
+        const batch = insert_batches[i];
+        let attempts = 2;
+        while (attempts > 0) {
+          const r = await supabase.functions.invoke('restore-backup', {
+            body: { backup_id: backupId, phase: 'insert', tables: batch },
+          });
+          if (!r.error) {
+            tablesRestored += r.data?.tables_processed ?? 0;
+            if (Array.isArray(r.data?.errors)) allErrors.push(...r.data.errors);
+            break;
+          }
+          attempts--;
+          if (attempts === 0) {
+            allErrors.push(`Insert batch ${i + 1} failed: ${r.error.message}`);
+          }
+        }
+      }
+
+      // Phase 4: FINALIZE — audit log + storage manifest check
+      const finalizeResponse = await supabase.functions.invoke('restore-backup', {
+        body: {
+          backup_id: backupId,
+          phase: 'finalize',
+          tables_restored: tablesRestored,
+          errors: allErrors,
+        },
+      });
+      if (finalizeResponse.error) throw finalizeResponse.error;
+
+      return {
+        tables_restored: tablesRestored,
+        errors: allErrors,
+        total_tables,
+      };
     },
     onSuccess: (data) => {
       if (data.errors && data.errors.length > 0) {
         toast.warning(`Restore completed with ${data.errors.length} warnings. ${data.tables_restored} tables restored.`, {
-          description: data.errors.join(' | '),
+          description: data.errors.slice(0, 5).join(' | '),
           duration: 15000,
         });
       } else {
