@@ -10,7 +10,14 @@
   `STORAGE_BUCKETS` now includes `safety-media`. `safety_notifications`
   added to `PRUNE_TABLES` (90-day window).
 
-Next: backup→restore drill in sandbox before Phase 2 kickoff.
+`restore-backup` was updated in lockstep: the 33 `safety_*` tables are
+now in both `DELETE_ORDER` (leaves first) and `INSERT_ORDER` (parents
+first), appended after PMS tiers. All three functions
+(`create-backup`, `restore-backup`, `safety-analytics`) are deployed.
+
+Next: run a sandbox backup→restore drill and verify recovery of at
+least one row from `safety_incidents`, `safety_permits`, and
+`safety_audit_runs`, then kick off Phase 2 (Incident UX).
 # Phase 1 — Hardening Baseline (locked)
 
 This is the single page Phase 2+ must not regress. Any deviation is a
