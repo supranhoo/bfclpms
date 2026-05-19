@@ -1,76 +1,93 @@
-## What the screenshot is actually showing
+## Problem
 
-For "Proactive Safety Reporting" (May 2026, Per-Employee scope), six rows (Deepak, Pradip, Anant, Mrutyunjaya, Parshu, Badal, V.A.V.S.S.) display **`0`** in the input and a red **`0 – Not Achieved`** rating chip, yet the pill says **`Not propagated`** and the footer shows **`Saving…`**.
+For a Half-Yearly KPI with **Cycle Start = Financial Year (Apr Start)** the cycles are:
+- H1: Apr–Sep → today's `activeMonth = 9` (review in September, the last month of the cycle)
+- H2: Oct–Mar → today's `activeMonth = 3` (review in March)
 
-### Database truth (just verified)
-| Source | Value |
-|---|---|
-| `org_kpi_values.achieved_value` | **NULL** for all 6 |
-| `org_kpi_values.status` | `entered` |
-| `review_submissions` for child `kpis.id` | **no row exists** |
-| `kpis.status` | `kra_set` (eligible) |
+Business reality (e.g. stock-audit variance KPI): the review can only happen **after** the half closes — i.e. **April** (for H2 Oct–Mar) and **October** (for H1 Apr–Sep). The current rigid terminal-month rule blocks this:
 
-So `buildCardData` legitimately returns `achievedValue = null` for those rows. The `0` you see in the input is **local React state from this editing session** — either typed by the user or filled by a bulk/repair action — that has not yet been persisted (`Saving…` is still in flight, or it was silently dropped on a prior save).
+> "Half-Yearly KPI cannot be reviewed for April. Only the terminal month of the cycle is reviewable."
 
-### Why "Not propagated" stays red even though `0` is visible
-Two code paths intentionally suppress zero values:
+Admins have no way to express "review one month after the cycle ends".
 
-- `src/pages/admin/OrgKpiDataEntry.tsx` line 905 (v2.65.4 guard):
-  ```ts
-  if (!sv._touched && sv.achievedValue === 0 && !sv.isNa) {
-    consideredScopeIds.push(sv.scopeId);
-    continue;   // ← Propagate skips this row silently
-  }
-  ```
-- The same file's `handleCardSave` writes `0` to OKV correctly **only when `_touched` is set**. If the `0` arrived from a bulk-fill / Repair Gap path that didn't flag `_touched`, the save short-circuits and OKV remains `NULL`.
+## Goal
 
-Result: the user sees `0`, the chip says `0 – Not Achieved`, but the DB never received the value, so propagation has nothing to push → pill stays "Not propagated". This is **not the same regression as the earlier RCAs** (ADR-053/055/061) — those were about values existing but not flowing. This one is about values that look saved but were silently dropped because of the un-touched-zero guard.
+Introduce a new selectable Half-Yearly cycle option **"Financial Year — Review in Apr & Oct"** that:
+- Keeps the same H1 (Apr–Sep) / H2 (Oct–Mar) cycles
+- Moves the review (terminal) month to **October** for H1 and **April** for H2
+- Locks all other months of each cycle the same way
+
+This is opt-in per KPI (existing per-KPI `frequency_cycle_start` override field — already wired through `resolveEffectiveCycleOption`) and also available as a global default in Frequency Cycle Settings.
+
+## Risk & Impact Report
+
+| Area | Impact | Mitigation |
+|---|---|---|
+| Data schema | None — reuses existing `frequency_cycle_start` text column and `frequency_config.sub_frequency` / `locked_months` / `active_month` | New value strings only; no migration of historical data |
+| Workflow | Only affects KPIs whose admin explicitly selects the new option | Existing KPIs untouched (default option unchanged) |
+| Multi-month percolation | `percolate_multimonth_score` resolves terminal via `get_cycle_months` + last-element-of-array rule. Need to confirm terminal resolution for a cycle whose "review month" sits **outside** the data-collection months works correctly | See "Open question" below — may require extending `get_cycle_months` or storing terminal explicitly |
+| Frequency lock | `enforce_frequency_lock_on_submission` reads `locked_months` from `frequency_config`. New option provides correct locked-months map | Covered by config row |
+| UI | Cycle Start dropdown gets one extra row in Admin KPI editor and Frequency Cycle Settings | Pure additive |
+| Regression | Existing Apr-Sep option (`activeMonth: 9`) untouched | New option has different `value` key |
+
+## Open question (needs your confirmation before build)
+
+The current model assumes the **terminal/review month is one of the cycle's data months**. The new pattern says "review in the month **after** the cycle ends" (April reviews data from Oct–Mar; October reviews data from Apr–Sep). Two ways to model it:
+
+**Option A — Shift the cycle boundary** (simplest, no engine changes)
+- H1 = May–Oct (review month = Oct), H2 = Nov–Apr (review month = Apr)
+- Pros: zero changes to `get_cycle_months` / percolation triggers
+- Cons: the "cycle label" no longer matches the financial half exactly
+
+**Option B — Keep Apr–Sep / Oct–Mar cycles, add explicit `review_month`** (cleanest semantically)
+- Cycle months stay Apr–Sep and Oct–Mar (matches FY half)
+- New `review_month` field tells the workflow engine "open the review in the month after the last data month"
+- Requires: extending `frequency_config` with `review_month`, updating `get_cycle_months` / `getActiveMonthForCycle` / `enforce_frequency_lock_on_submission` / sibling-creation logic in `useCreateKpi`
+- Higher blast radius — touches POLICY §54
+
+I recommend **Option A** unless you specifically need the cycle label to read "Apr–Sep". It satisfies the business need (review happens in Apr & Oct) with zero engine risk.
+
+## Plan (assuming Option A is approved)
+
+### 1. `src/lib/frequencyCycleOptions.ts`
+Add to `HALF_YEARLY_OPTIONS`:
+```
+{
+  value: 'May-Oct',
+  label: 'Financial Year — Review in Apr & Oct',
+  description: 'H1: May–Oct (review in Oct), H2: Nov–Apr (review in Apr)',
+  subFrequency: 'May-Oct,Nov-Apr',
+  lockedMonths: { H1: [5,6,7,8,9], H2: [11,12,1,2,3] },
+  activeMonth: 10,   // primary terminal; secondary terminal (Apr) handled by cycle array
+}
+```
+
+### 2. DB seed — extend `frequency_config` choices
+Migration to UPSERT the new sub_frequency entry into `frequency_config` so the dropdown in Frequency Cycle Settings can persist it globally. (No schema changes — data only.)
+
+### 3. Verify `get_cycle_months` handles the wrap (Nov–Apr crosses year boundary)
+Quick read-only check of the function; existing Dec→Jan wrap rule for Bi-Monthly `Dec-Jan` already covers this pattern, so behavior should be inherited.
+
+### 4. UI surfaces
+- `AdminKpiEditorForm` / KPI create dialog — Cycle Start dropdown auto-picks up new option from `HALF_YEARLY_OPTIONS`
+- `FrequencyCycleSettings.tsx` — Half-Yearly section gets the third radio card automatically
+- No component refactor needed; both already iterate `HALF_YEARLY_OPTIONS`
+
+### 5. Tests
+- `frequencyCycleOptions.test.ts` — assert the new option resolves correctly via `resolveEffectiveCycleOption`
+- `frequencyUtils.test.ts` — terminal-month resolution for `May-Oct` returns October; for `Nov-Apr` returns April (handles year wrap)
+- Mock KPI fixture with `frequency='Half-Yearly'`, `frequency_cycle_start='May-Oct'` — submitting in April for the Nov–Apr cycle passes the lock, submitting in March is blocked
+
+### 6. Docs / policy
+- `POLICY.md` §54 — add v5.1 note: "Half-Yearly supports an additional FY-aligned variant where review opens in the month following the data-collection half."
+- New ADR-064: "Configurable Half-Yearly review-month for post-cycle audits"
+- Update `mem/architecture/pms/multimonth-percolation` with the new option string
+
+## Out of scope
+- No changes to scoring math, score percolation behavior, or workflow stage engine
+- No retroactive migration of existing Apr–Sep KPIs — admins migrate manually if desired
+- No changes to Quarterly / Bi-Monthly / Yearly cycles (can be added later with the same pattern if needed)
 
 ---
 
-## Fix plan (UI + safety only — no migration)
-
-### 1. Make the per-row pill explain itself
-In `src/components/admin/OrgKpiScopedEntryTable.tsx`, when `row.status === 'not_propagated'`, render one of three reason micro-labels under the pill:
-- `"No value entered"` — `achievedValue === null && !isNa`
-- `"0 not saved — click into cell"` — `achievedValue === 0 && !isNa && OKV value is null` (detected via a new `dbAchievedValue` prop carried through `buildCardData`)
-- `"Saving… retry Propagate"` — there is an in-flight save mutation for this scopeId
-- `"Reviewer locked"` — child KPI past `kra_set`
-This collapses the current ambiguity into a single readable cause without changing any business rule.
-
-### 2. Tighten the silent-zero guard
-- Replace the `Propagate` skip at line 905 with a **dialog warning** ("3 rows hold `0` but were not edited this session — propagate them anyway?") instead of a silent `continue`. Default action = "Skip"; user can opt-in to push.
-- In `handleCardSave`, when an untouched `0` is being skipped from persistence, also log a console warning **and** raise a toast: *"3 rows show 0 but were not flagged as edited; click into each cell once and Save again."* No silent drops.
-
-### 3. Self-heal stale local `0` from bulk paths
-Audit the four places that mutate `scopedValues.achievedValue` without flipping `_touched`:
-- `OrgKpiScopedEntryTable.handleBulkFill` (already touches — verify)
-- `OrgKpiInheritanceReconciler` write-back
-- `useRepairOrgKpiPropagationGap` write-back  
-- the keyboard "fill remaining" shortcut
-
-For each, mark `_touched = true` on the scope rows it mutates so the existing guards no longer apply.
-
-### 4. Make the OKV row "value matches DB" visible
-Pass `dbAchievedValue` (raw `org_kpi_values.achieved_value`) into `ScopedRow`. When `dbAchievedValue !== achievedValue` AND there's no in-flight save, render an amber "unsaved" badge next to the input. Eliminates the "is this number actually in the DB?" guessing game for owners.
-
-### 5. Regression coverage
-- `src/test/orgKpiZeroPropagationGuard.test.ts` — locks: (a) touched `0` ⇒ propagates, (b) untouched `0` ⇒ confirm dialog appears, (c) NULL OKV with local `0` ⇒ row pill says `"0 not saved"`.
-- Extend `src/test/orgKpiTileStatusChipParity.test.ts` with the per-employee `Not propagated + visible 0` case.
-
-### 6. Docs
-- New ADR-063: "Silent zero-skip guard surfaced + user-confirmable".
-- Update `mem/features/admin/org-kpi-propagation-truth.md` with the three new pill reasons.
-- POLICY.md §111.7: "Propagate must never silently skip a row that shows a value to the user; either the value is pushed, or the user is told why it can't be."
-
----
-
-## Risk & impact
-
-- **Data**: no schema change. OKV/`kpis`/`review_submissions` semantics unchanged. The propagation RPC is untouched — only the client decides whether to call it.
-- **Workflow**: net effect = fewer surprises. The only behaviour change is that an *untouched 0* now triggers a confirm dialog instead of a silent skip.
-- **UI/UX**: three small reason labels + one amber "unsaved" badge. No layout change.
-- **Regression**: low — guarded by the two test files above and the existing 8 tile-status tests.
-- **Mitigation**: ship behind no flag; reason labels are additive; guard change is opt-in via dialog, defaulting to current behaviour.
-
-After you approve, I'll implement (1)–(5) in one pass and write ADR-063 + the POLICY update in the same step.
+**Please confirm:** Option A (shift cycles to May–Oct / Nov–Apr) or Option B (keep Apr–Sep / Oct–Mar and add a separate review-month engine field)?

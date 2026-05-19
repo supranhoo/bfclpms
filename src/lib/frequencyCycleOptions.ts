@@ -104,6 +104,14 @@ export const HALF_YEARLY_OPTIONS: CycleOption[] = [
     lockedMonths: { H1: [7, 8, 9, 10, 11], H2: [1, 2, 3, 4, 5] },
     activeMonth: 12,
   },
+  {
+    value: 'May-Oct',
+    label: 'Financial Year — Review in Apr & Oct',
+    description: 'H1: May–Oct (review in Oct), H2: Nov–Apr (review in Apr). For KPIs reviewed after the FY half closes (e.g. post-cycle stock audits).',
+    subFrequency: 'May-Oct,Nov-Apr',
+    lockedMonths: { H1: [5, 6, 7, 8, 9], H2: [11, 12, 1, 2, 3] },
+    activeMonth: 10,
+  },
 ];
 
 export const YEARLY_OPTIONS: CycleOption[] = [
