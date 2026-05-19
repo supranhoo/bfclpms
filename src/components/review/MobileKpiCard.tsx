@@ -13,6 +13,7 @@ import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { getKpiSummaryText } from '@/lib/textFormatting';
 import { cn } from '@/lib/utils';
 import { canReviewKpi } from '@/lib/workflowEngine';
+import { FrequencyBadge } from '@/components/review/FrequencyBadge';
 import { 
   Lock, Info, Building2, Users, User, CheckCircle2, Eye, Calendar, 
   Undo2, ChevronDown, ChevronUp, Clock 
