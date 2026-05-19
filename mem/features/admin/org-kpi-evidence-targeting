@@ -1,0 +1,24 @@
+---
+name: Org KPI evidence per-file targeting
+description: Per-file employee/department targeting on Org KPI supporting files. Empty arrays = applies to everyone in scope (backward compatible). Resync filters per-employee.
+type: feature
+---
+Each entry in `org_kpi_values.evidence_files` (JSONB) carries optional
+`applies_to_employee_ids` and `applies_to_department_ids` arrays.
+
+Rules (enforced in `_filter_files_for_employee` and `resync_org_kpi_evidence`):
+- Both arrays empty/null → file applies to every mapped employee (legacy default; the common org-wide certificate case).
+- Otherwise → file applies if `employee_id` is in `applies_to_employee_ids` OR the employee's `department_id` is in `applies_to_department_ids`.
+- Per-employee scope OKVs ignore targeting (always 1:1).
+
+Resync paths:
+- `append_only` adds only the filtered URLs missing from each employee's `review_submissions.self_evidence_urls`.
+- `replace_with_stepback` replaces with the filtered list; rows past `self_review` are sent back to `self_review` and audited as `ORG_KPI_EVIDENCE_STEPBACK`.
+
+Visibility:
+- `org_kpi_evidence_targeting(p_okv_id)` returns per-employee `{expected_files, current_urls, drift_kind}` driving the Distribution Preview in `OrgKpiEvidenceManagerSheet`.
+- Targeting changes are audited via `ORG_KPI_EVIDENCE_TARGETING_CHANGED` (trigger `trg_audit_okv_evidence_targeting`).
+
+UI:
+- `EvidenceTargetPopover` (per file row) — employees/departments tabs, search, "Reaches N of M" live counter.
+- `DistributionPreview` (panel under file list) — read-only matrix answering "which supporting goes to which employee".
