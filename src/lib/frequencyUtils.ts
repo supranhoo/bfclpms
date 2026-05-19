@@ -76,11 +76,14 @@ export const MONTHS = [
 ] as const;
 
 export const WEEKLY_REVIEW_WINDOWS: Record<string, WeeklyReviewWindow> = {
-  'week_1': { start: 8, end: 10 },
-  'week_2': { start: 15, end: 18 },
-  'week_3': { start: 22, end: 24 },
+  // POLICY §Weekly Review Windows — widened so consecutive weeks have no
+  // dead-zone gap (Jyoti RCA, May 2026). Admin can override per-tenant via
+  // frequency_config.review_window_rules; see useWeeklyReviewWindowsResolved.
+  'week_1': { start: 8,  end: 14 },
+  'week_2': { start: 15, end: 21 },
+  'week_3': { start: 22, end: 28 },
   'week_4': { start: 29, end: 31 },
-  'week_5': { start: 5, end: 8, nextMonth: true },
+  'week_5': { start: 5,  end: 14, nextMonth: true },
 };
 
 /**
@@ -164,7 +167,15 @@ export function getDailySubPeriods(currentDate: Date, reviewMonth: string, revie
  * Get available sub-periods for Weekly frequency
  * Returns week numbers with their review window status
  */
-export function getWeeklySubPeriods(currentDate: Date, reviewMonth: string, reviewYear: number): SubPeriodOption[] {
+export function getWeeklySubPeriods(
+  currentDate: Date,
+  reviewMonth: string,
+  reviewYear: number,
+  windowsOverride?: Record<string, WeeklyReviewWindow> | null,
+): SubPeriodOption[] {
+  const windows = windowsOverride && Object.keys(windowsOverride).length > 0
+    ? windowsOverride
+    : WEEKLY_REVIEW_WINDOWS;
   const dayOfMonth = currentDate.getDate();
   const currentMonth = format(currentDate, 'MMMM');
   const currentYear = currentDate.getFullYear();
@@ -173,8 +184,9 @@ export function getWeeklySubPeriods(currentDate: Date, reviewMonth: string, revi
   
   // Week 1-4 for the review month
   for (let week = 1; week <= 4; week++) {
-    const windowKey = `week_${week}` as keyof typeof WEEKLY_REVIEW_WINDOWS;
-    const window = WEEKLY_REVIEW_WINDOWS[windowKey];
+    const windowKey = `week_${week}`;
+    const window = windows[windowKey];
+    if (!window) continue;
     
     // Check if we're in the review window for this week
     const isInWindow = 
@@ -193,7 +205,8 @@ export function getWeeklySubPeriods(currentDate: Date, reviewMonth: string, revi
   // Week 5 (if applicable) - reviewed in next month
   const daysInMonth = getDaysInMonth(new Date(reviewYear, getMonthNumber(reviewMonth) - 1));
   if (daysInMonth > 28) {
-    const week5Window = WEEKLY_REVIEW_WINDOWS['week_5'];
+    const week5Window = windows['week_5'];
+    if (!week5Window) return options;
     const nextMonth = getMonthNumber(reviewMonth) === 12 ? 'January' : getMonthName(getMonthNumber(reviewMonth) + 1);
     const nextYear = getMonthNumber(reviewMonth) === 12 ? reviewYear + 1 : reviewYear;
     
@@ -573,9 +586,13 @@ export function canSubmitForSubPeriod(
   subPeriodValue: string,
   currentDate: Date,
   reviewMonth: string,
-  reviewYear: number
+  reviewYear: number,
+  windowsOverride?: Record<string, WeeklyReviewWindow> | null,
 ): boolean {
   if (!frequency) return true;
+  const windows = windowsOverride && Object.keys(windowsOverride).length > 0
+    ? windowsOverride
+    : WEEKLY_REVIEW_WINDOWS;
   
   switch (frequency) {
     case 'Daily':
@@ -593,7 +610,8 @@ export function canSubmitForSubPeriod(
       const currentYear = currentDate.getFullYear();
       
       if (weekNum <= 4) {
-        const window = WEEKLY_REVIEW_WINDOWS[`week_${weekNum}`];
+        const window = windows[`week_${weekNum}`];
+        if (!window) return false;
         return (
           currentMonth === reviewMonth &&
           currentYear === reviewYear &&
@@ -602,7 +620,8 @@ export function canSubmitForSubPeriod(
         );
       } else {
         // Week 5 - reviewed in next month
-        const week5Window = WEEKLY_REVIEW_WINDOWS['week_5'];
+        const week5Window = windows['week_5'];
+        if (!week5Window) return false;
         const nextMonth = getMonthNumber(reviewMonth) === 12 ? 'January' : getMonthName(getMonthNumber(reviewMonth) + 1);
         const nextYear = getMonthNumber(reviewMonth) === 12 ? reviewYear + 1 : reviewYear;
         

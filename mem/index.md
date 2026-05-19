@@ -63,3 +63,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Org KPI Propagation Truth](mem://features/admin/org-kpi-propagation-truth) — Row "Propagated" badge = review_submissions presence, not OKV.status; RPC mapper handles both result shapes
 - [Team Reviews Zero-KPI RCA](mem://features/review/team-reviews-zero-kpi-rca) — KRA-issuance flows must invalidate ['kpis-by-period-ranges']; KRA Issuance has Managers Without KRAs panel; reviewer scope ignores department
 - [HR PMS Reviewed Tile Semantics](mem://features/review/hr-pms-reviewed-tile-semantics) — Three-rule classification: signature, N/A, structural advancement
+- [Weekly Review Windows Config](mem://features/admin/weekly-review-windows-config) — Admin-configurable Weekly KPI submission windows in frequency_config.review_window_rules; widened defaults eliminate dead-zone gaps (Jyoti RCA May 2026)

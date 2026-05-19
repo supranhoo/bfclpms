@@ -1,0 +1,22 @@
+---
+name: Weekly Review Windows Config
+description: Admin-configurable Weekly KPI submission windows stored in frequency_config.review_window_rules with widened gap-free defaults
+type: feature
+---
+Weekly KPI submission windows are stored in `frequency_config` row `frequency='Weekly'`, JSONB column `review_window_rules`. Keys `week_1`…`week_5`, each `{start, end, next_month?}` (day-of-month).
+
+**Defaults (Jyoti RCA, May 2026)** — widened to eliminate dead zones between consecutive weeks:
+- week_1: 8–14, week_2: 15–21, week_3: 22–28, week_4: 29–31, week_5: 5–14 (next_month).
+
+**Resolution chain**: `useWeeklyReviewWindowsResolved()` reads DB → normalises `next_month`→`nextMonth` → falls back to `WEEKLY_REVIEW_WINDOWS` constants if row missing/empty.
+
+**Call sites must pass resolved windows**:
+- `getWeeklySubPeriods(date, month, year, windowsOverride?)`
+- `canSubmitForSubPeriod(freq, value, date, month, year, windowsOverride?)`
+- UI: `SubPeriodSelector`, `WeeklySubmissionTable` both call the hook and pass overrides.
+
+**Admin UI**: `WeeklyWindowEditor` (rendered inside `FrequencyCycleSettings`). Validation: 1≤start≤end≤31, only Week 5 may set `nextMonth`, Week 5 MUST set it.
+
+**Mutation**: `useUpdateWeeklyReviewWindows()` writes camelCase `nextMonth` back as snake_case `next_month`.
+
+Regression test: `src/lib/weeklyWindowsResolution.test.ts` guards the no-gap invariant for days 8–31 and the May 19 Jyoti scenario.

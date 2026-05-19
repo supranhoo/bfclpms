@@ -11,6 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { openStorageFile, buildEvidenceFileName } from '@/lib/storageDownload';
 import { SubPeriodSubmission, useSubmitSubPeriod } from '@/hooks/useSubPeriodSubmissions';
 import { getWeeklySubPeriods, WEEKLY_REVIEW_WINDOWS } from '@/lib/frequencyUtils';
+import { useWeeklyReviewWindowsResolved } from '@/hooks/useFrequencyConfig';
 import { QualitativeOption, BINARY_OPTIONS, scoreToRatingLevel } from '@/lib/qualitativeUom';
 import { QualitativeSelect } from './QualitativeSelect';
 import {
@@ -82,16 +83,17 @@ export function WeeklySubmissionTable({
   const isQualitative = uomType === 'binary' || uomType === 'tiered';
 
   const currentDate = new Date();
+  const weeklyWindows = useWeeklyReviewWindowsResolved();
 
   // Build week entries
   const weekEntries = useMemo((): WeekEntry[] => {
-    const availableWeeks = getWeeklySubPeriods(currentDate, reviewMonth, reviewYear);
+    const availableWeeks = getWeeklySubPeriods(currentDate, reviewMonth, reviewYear, weeklyWindows);
     
     return availableWeeks.map(week => {
       const weekNum = parseInt(week.value);
       const submission = submissions.find(s => s.sub_period_value === week.value);
-      const windowKey = `week_${weekNum}` as keyof typeof WEEKLY_REVIEW_WINDOWS;
-      const window = WEEKLY_REVIEW_WINDOWS[windowKey];
+      const windowKey = `week_${weekNum}`;
+      const window = weeklyWindows[windowKey] ?? WEEKLY_REVIEW_WINDOWS[windowKey as keyof typeof WEEKLY_REVIEW_WINDOWS];
       
       return {
         weekNum,
@@ -109,7 +111,7 @@ export function WeeklySubmissionTable({
         evidenceUrls: (submission?.evidence_urls as string[] | null) || [],
       };
     });
-  }, [submissions, reviewMonth, reviewYear, currentDate.toDateString()]);
+  }, [submissions, reviewMonth, reviewYear, currentDate.toDateString(), weeklyWindows]);
 
   // Helper to display achieved value for qualitative KPIs
   const getDisplayValue = (entry: WeekEntry) => {
