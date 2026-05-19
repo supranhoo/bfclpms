@@ -151,6 +151,19 @@ interface EmployeeImportRow {
   managerName?: string;
   role?: string;
   portalAccess?: string;
+  employeeStatus?: string;
+}
+
+// Parse Active/Inactive status cell into a boolean (or undefined if empty/unset).
+// Accepts: active|inactive|yes|no|true|false|1|0 (case-insensitive). Anything
+// else returns the sentinel string 'INVALID' so callers can surface a row error.
+function parseEmployeeStatus(raw: string | undefined): boolean | undefined | 'INVALID' {
+  if (raw === undefined || raw === null) return undefined;
+  const v = String(raw).trim().toLowerCase();
+  if (v === '') return undefined;
+  if (['active', 'yes', 'true', '1', 'y'].includes(v)) return true;
+  if (['inactive', 'no', 'false', '0', 'n'].includes(v)) return false;
+  return 'INVALID';
 }
 
 export default function ImportData() {
@@ -707,6 +720,7 @@ export default function ImportData() {
       managerName: getValue(['managerName', 'managername', 'manager_name', 'reportingManager', 'reportingmanager', 'reporting_manager', 'supervisor']),
       role: getValue(['role', 'appRole', 'approle', 'app_role', 'userRole', 'userrole', 'user_role', 'systemRole', 'systemrole', 'system_role']),
       portalAccess: getValue(['portalAccess', 'portalaccess', 'portal_access', 'loginAccess', 'loginaccess', 'login_access']),
+      employeeStatus: getValue(['employeeStatus', 'employee_status', 'status', 'active', 'isActive', 'is_active']),
     };
   };
 
