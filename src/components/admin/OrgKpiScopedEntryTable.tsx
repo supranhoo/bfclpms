@@ -24,6 +24,13 @@ import type { SentBackInfo } from '@/hooks/useSentBackOrgKpiEmployees';
 export interface ScopedRow {
   scopeId: string;
   scopeName: string;
+  /**
+   * `org_kpi_values.id` for this scoped row, when an OKV row already exists.
+   * Drives the per-row "Manage Files" action and the Evidence chip / Parity
+   * badge that mirror what the card-header sheet does for org-scope KPIs.
+   * Undefined until the admin saves the row at least once.
+   */
+  okvId?: string;
   scopeSubText?: string;
   departmentName?: string;
   designation?: string;
