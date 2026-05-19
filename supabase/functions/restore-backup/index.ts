@@ -156,28 +156,6 @@ interface ManifestV2 {
   storage_manifest_file?: string
 }
 
-async function loadChunkedBackupData(
-  supabase: ReturnType<typeof createClient>,
-  manifest: ManifestV2
-): Promise<Record<string, unknown[]>> {
-  const backupData: Record<string, unknown[]> = {}
-  for (const entry of manifest.tables) {
-    try {
-      const { data: fileData, error } = await supabase.storage
-        .from('database-backups')
-        .download(entry.file)
-      if (error || !fileData) {
-        console.warn(`Warning: Could not download ${entry.table}: ${error?.message}`)
-        continue
-      }
-      backupData[entry.table] = JSON.parse(await fileData.text())
-    } catch (err) {
-      console.warn(`Warning: Skipping table ${entry.table}: ${err}`)
-    }
-  }
-  return backupData
-}
-
 async function loadLegacyBackupData(
   supabase: ReturnType<typeof createClient>,
   filePath: string
@@ -190,6 +168,89 @@ async function loadLegacyBackupData(
   }
   const content = JSON.parse(await fileData.text())
   return content.data || content
+}
+
+/**
+ * Pack ordered table list into small batches, respecting both a row cap and
+ * a table cap, so each edge-function invocation stays well within the
+ * 150s/256MB worker limits.
+ */
+function packBatches(
+  order: string[],
+  manifestByTable: Record<string, { rows: number; file: string }>,
+  opts: { maxTables: number; maxRows: number }
+): string[][] {
+  const batches: string[][] = []
+  let cur: string[] = []
+  let curRows = 0
+  for (const t of order) {
+    const entry = manifestByTable[t]
+    if (!entry) continue
+    if (cur.length >= opts.maxTables || (cur.length > 0 && curRows + entry.rows > opts.maxRows)) {
+      batches.push(cur); cur = []; curRows = 0
+    }
+    cur.push(t)
+    curRows += entry.rows
+  }
+  if (cur.length) batches.push(cur)
+  return batches
+}
+
+async function deleteTables(
+  supabase: ReturnType<typeof createClient>,
+  tables: string[]
+): Promise<string[]> {
+  const errors: string[] = []
+  for (const tableName of tables) {
+    try {
+      const { error } = await supabase
+        .from(tableName)
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000')
+      if (error) errors.push(`Delete ${tableName}: ${error.message}`)
+    } catch (err) {
+      errors.push(`Delete ${tableName}: ${err}`)
+    }
+  }
+  return errors
+}
+
+async function insertTablesFromStorage(
+  supabase: ReturnType<typeof createClient>,
+  manifest: ManifestV2,
+  tables: string[]
+): Promise<{ errors: string[]; tablesProcessed: number }> {
+  const errors: string[] = []
+  let tablesProcessed = 0
+  const byTable: Record<string, { rows: number; file: string }> = {}
+  for (const e of manifest.tables) byTable[e.table] = { rows: e.rows, file: e.file }
+
+  for (const tableName of tables) {
+    const entry = byTable[tableName]
+    if (!entry || entry.rows === 0) { tablesProcessed++; continue }
+    try {
+      const { data: fileData, error: dlErr } = await supabase.storage
+        .from('database-backups')
+        .download(entry.file)
+      if (dlErr || !fileData) {
+        errors.push(`Download ${tableName}: ${dlErr?.message ?? 'no file'}`)
+        continue
+      }
+      const rows = JSON.parse(await fileData.text()) as unknown[]
+      const batchSize = 500
+      for (let i = 0; i < rows.length; i += batchSize) {
+        const batch = rows.slice(i, i + batchSize)
+        const { error } = await supabase
+          .from(tableName)
+          .upsert(batch, { onConflict: 'id', ignoreDuplicates: false })
+        if (error) errors.push(`Insert ${tableName} (batch ${Math.floor(i / batchSize) + 1}): ${error.message}`)
+      }
+      tablesProcessed++
+    } catch (err) {
+      errors.push(`Insert ${tableName}: ${err}`)
+    }
+  }
+  return { errors, tablesProcessed }
 }
 
 async function restoreData(
@@ -322,7 +383,14 @@ Deno.serve(async (req) => {
       })
     }
 
-    const { backup_id } = await req.json()
+    const body = await req.json()
+    const { backup_id, phase, tables, tables_restored, errors: clientErrors } = body as {
+      backup_id?: string
+      phase?: 'delete' | 'insert' | 'finalize'
+      tables?: string[]
+      tables_restored?: number
+      errors?: string[]
+    }
     if (!backup_id) {
       return new Response(JSON.stringify({ error: 'backup_id is required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -344,65 +412,130 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Detect format and load data
-    let backupData: Record<string, unknown[]>
-    let manifest: ManifestV2 | null = null
     const isChunked = backupLog.file_path.endsWith('manifest.json')
 
-    if (isChunked) {
-      const { data: manifestFile, error: dlError } = await supabase.storage
-        .from('database-backups')
-        .download(backupLog.file_path)
-      if (dlError || !manifestFile) {
-        return new Response(JSON.stringify({ error: `Failed to download manifest: ${dlError?.message}` }), {
-          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    // ---------- Legacy / uploaded single-file backups (small) ----------
+    if (!isChunked) {
+      const backupData = await loadLegacyBackupData(supabase, backupLog.file_path)
+      if (!backupData || Object.keys(backupData).length === 0) {
+        return new Response(JSON.stringify({ error: 'Invalid backup format or empty data' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
-      manifest = JSON.parse(await manifestFile.text())
-      backupData = await loadChunkedBackupData(supabase, manifest!)
-    } else {
-      backupData = await loadLegacyBackupData(supabase, backupLog.file_path)
-    }
-
-    if (!backupData || Object.keys(backupData).length === 0) {
-      return new Response(JSON.stringify({ error: 'Invalid backup format or empty data' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
-    const { tablesRestored, errors } = await restoreData(supabase, backupData)
-
-    // Validate storage manifest if available
-    let storageWarnings: string[] = []
-    if (manifest) {
-      storageWarnings = await validateStorageManifest(supabase, manifest)
-    }
-
-    // Log the restore action
-    try {
-      await supabase.from('kpi_audit_logs').insert({
-        kpi_id: '00000000-0000-0000-0000-000000000000',
-        action: 'database_restore',
-        performed_by: user.id,
-        metadata: {
-          backup_id,
-          backup_date: backupLog.created_at,
+      const { tablesRestored, errors } = await restoreData(supabase, backupData)
+      try {
+        await supabase.from('kpi_audit_logs').insert({
+          kpi_id: '00000000-0000-0000-0000-000000000000',
+          action: 'database_restore',
+          performed_by: user.id,
+          metadata: {
+            backup_id,
+            backup_date: backupLog.created_at,
+            tables_restored: tablesRestored,
+            errors: errors.length > 0 ? errors : null,
+          },
+        })
+      } catch { /* ignore */ }
+      return new Response(
+        JSON.stringify({
+          mode: 'legacy',
+          success: errors.length === 0,
           tables_restored: tablesRestored,
           errors: errors.length > 0 ? errors : null,
-          storage_warnings: storageWarnings.length > 0 ? storageWarnings : null,
-        },
-      })
-    } catch { /* Don't fail restore if audit log fails */ }
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
 
-    return new Response(
-      JSON.stringify({
-        success: errors.length === 0,
-        tables_restored: tablesRestored,
-        errors: errors.length > 0 ? errors : null,
-        storage_warnings: storageWarnings.length > 0 ? storageWarnings : null,
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    // ---------- Chunked backups — phased orchestration ----------
+    const { data: manifestFile, error: dlError } = await supabase.storage
+      .from('database-backups')
+      .download(backupLog.file_path)
+    if (dlError || !manifestFile) {
+      return new Response(JSON.stringify({ error: `Failed to download manifest: ${dlError?.message}` }), {
+        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+    const manifest = JSON.parse(await manifestFile.text()) as ManifestV2
+    const byTable: Record<string, { rows: number; file: string }> = {}
+    for (const e of manifest.tables) byTable[e.table] = { rows: e.rows, file: e.file }
+
+    // Phase: INIT — return ordered batches for the client to orchestrate
+    if (!phase) {
+      const deleteBatches = packBatches(DELETE_ORDER, byTable, { maxTables: 20, maxRows: Number.POSITIVE_INFINITY })
+      const insertBatches = packBatches(INSERT_ORDER, byTable, { maxTables: 4, maxRows: 5000 })
+      const totalTables = manifest.tables.length
+      return new Response(
+        JSON.stringify({
+          mode: 'chunked',
+          backup_id,
+          delete_batches: deleteBatches,
+          insert_batches: insertBatches,
+          total_tables: totalTables,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Phase: DELETE
+    if (phase === 'delete') {
+      if (!Array.isArray(tables) || tables.length === 0) {
+        return new Response(JSON.stringify({ error: 'tables[] required for delete phase' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      const errs = await deleteTables(supabase, tables)
+      return new Response(JSON.stringify({ phase: 'delete', tables, errors: errs }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // Phase: INSERT
+    if (phase === 'insert') {
+      if (!Array.isArray(tables) || tables.length === 0) {
+        return new Response(JSON.stringify({ error: 'tables[] required for insert phase' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      const { errors: errs, tablesProcessed } = await insertTablesFromStorage(supabase, manifest, tables)
+      return new Response(
+        JSON.stringify({ phase: 'insert', tables_processed: tablesProcessed, errors: errs }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Phase: FINALIZE
+    if (phase === 'finalize') {
+      const storageWarnings = await validateStorageManifest(supabase, manifest)
+      try {
+        await supabase.from('kpi_audit_logs').insert({
+          kpi_id: '00000000-0000-0000-0000-000000000000',
+          action: 'database_restore',
+          performed_by: user.id,
+          metadata: {
+            backup_id,
+            backup_date: backupLog.created_at,
+            tables_restored: tables_restored ?? null,
+            errors: clientErrors && clientErrors.length > 0 ? clientErrors : null,
+            storage_warnings: storageWarnings.length > 0 ? storageWarnings : null,
+          },
+        })
+      } catch { /* ignore */ }
+      return new Response(
+        JSON.stringify({
+          mode: 'chunked',
+          success: !clientErrors || clientErrors.length === 0,
+          tables_restored: tables_restored ?? 0,
+          errors: clientErrors && clientErrors.length > 0 ? clientErrors : null,
+          storage_warnings: storageWarnings.length > 0 ? storageWarnings : null,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    return new Response(JSON.stringify({ error: `Unknown phase: ${phase}` }), {
+      status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
   } catch (error) {
     console.error('Restore error:', error)
     return new Response(
