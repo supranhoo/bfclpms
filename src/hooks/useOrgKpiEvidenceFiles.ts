@@ -72,6 +72,42 @@ export function useUpsertOrgKpiEvidenceFiles() {
   });
 }
 
+/**
+ * Resolve the org_kpi_values row id for an org-scope KPI identity tuple.
+ * Returns null if no row exists yet (e.g. nothing has been entered).
+ */
+export function useOrgScopeOkvId(args: {
+  categoryId: string | undefined;
+  kraName: string | undefined;
+  kpiName: string | undefined;
+  reviewPeriod: string | undefined;
+  reviewYear: number | undefined;
+  enabled?: boolean;
+}) {
+  const { isReady, user } = useAuth();
+  const { categoryId, kraName, kpiName, reviewPeriod, reviewYear, enabled = true } = args;
+  return useQuery({
+    queryKey: ['org-scope-okv-id', categoryId, kraName, kpiName, reviewPeriod, reviewYear, user?.id],
+    enabled:
+      isReady && !!user && enabled &&
+      !!categoryId && !!kraName && !!kpiName && !!reviewPeriod && !!reviewYear,
+    queryFn: async (): Promise<string | null> => {
+      const { data, error } = await supabase
+        .from('org_kpi_values')
+        .select('id')
+        .eq('category_id', categoryId as string)
+        .eq('kra_name', kraName as string)
+        .eq('kpi_name', kpiName as string)
+        .eq('review_period', reviewPeriod as string)
+        .eq('review_year', reviewYear as number)
+        .is('employee_id', null)
+        .maybeSingle();
+      if (error) throw error;
+      return data?.id ?? null;
+    },
+  });
+}
+
 export interface OrgKpiEvidenceParityRow {
   okv_id: string;
   category_id: string;
