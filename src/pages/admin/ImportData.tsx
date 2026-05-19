@@ -796,6 +796,12 @@ export default function ImportData() {
           if (row.designation && !desigNames.has(row.designation.toLowerCase())) {
             rowErrs.push(`Designation '${row.designation}' does not exist in the system`);
           }
+          if (row.employeeStatus) {
+            const parsed = parseEmployeeStatus(row.employeeStatus);
+            if (parsed === 'INVALID') {
+              rowErrs.push(`Employee Status '${row.employeeStatus}' is invalid (use Active or Inactive)`);
+            }
+          }
           if (rowErrs.length > 0) {
             perRowErrors.set(index, rowErrs);
           }
