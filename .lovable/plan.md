@@ -1,73 +1,61 @@
-## Risk & Impact Report
+# Add "Employee Status" column to Employee Bulk Import
 
-- **Data Impact**: No schema change. `frequency_config.review_window_rules` (JSONB) already exists for the `Weekly` row; only its values are widened. Historical sub_period_submissions are untouched.
-- **Workflow Impact**: Employees gain a wider window to log Weekly KPIs. Manager/auditor/management stages unaffected. No RLS changes.
-- **UI/UX**: SubPeriodSelector and WeeklySubmissionTable will show more enabled weeks at once (the most recently completed week stays available until the next one closes). Admin gets a new editor.
-- **Regression Risk**: Low. The two existing call sites (`getWeeklySubPeriods`, `canSubmitForSubPeriod` case `'Weekly'`) read the same constant; switching to a single shared helper avoids drift. Daily logic and multi-month logic are not touched.
-- **Mitigation**: New unit tests cover dead-zone scenarios for May 19/20/21 and month-boundary Week 5. The `frequency_config` row is updated via migration so existing tenants get the widened windows immediately; defaults in `WEEKLY_REVIEW_WINDOWS` (used as fallback when DB is absent) are widened in lockstep.
+Adds an `employeeStatus` (Active / Inactive) column to the Employee Bulk Import workflow on Admin → Import Data, backed by the existing `profiles.is_active` boolean. Keeps the Zero-Hardcoding rule: status values are normalized through a tiny mapper, not scattered string literals.
 
-## Root Cause Recap
+## Scope (single file + one edge function tweak)
 
-`getWeeklySubPeriods()` and `canSubmitForSubPeriod()` both use the hardcoded `WEEKLY_REVIEW_WINDOWS` map: Week 2 closes day 18 and Week 3 opens day 22. Days 19–21 are dead — the picker shows "No available periods" so the employee cannot submit. The DB has the same windows in `frequency_config.Weekly.review_window_rules`, currently unread by the helper.
+### 1. `src/pages/admin/ImportData.tsx`
 
-## Plan
+- **`EmployeeImportRow` interface** — add `employeeStatus?: string`.
+- **`downloadEmployeeTemplate()`** — append `employeeStatus: 'Active'` to the sample row so the column appears in the generated XLSX.
+- **`exportEmployeeData()`**
+  - Include `is_active` in the `profiles` select.
+  - Add `employeeStatus: profile.is_active === false ? 'Inactive' : 'Active'` to each export row (column placed right after `role` for visibility).
+- **`normalizeEmployeeRow()`** — add `employeeStatus: getValue(['employeeStatus','employee_status','status','active','isActive','is_active'])`.
+- **Validation pass** (in `handleEmployeeFileUpload`) — if value provided, must normalize to Active/Inactive (accepts `active|inactive|yes|no|true|false|1|0`), else push row error.
+- **`processEmployee()`**
+  - Helper `parseStatus(val) → boolean | undefined` (undefined ⇒ leave untouched).
+  - **Update path**: include `is_active` in the `profiles.update({...})` payload when provided.
+  - **Create path**: pass `is_active` in the `create-employee` invoke body when provided.
 
-### 1. Database — widen Weekly windows (migration update of seed row)
+### 2. `supabase/functions/create-employee/index.ts`
 
-Update the `Weekly` row's `review_window_rules` to remove gaps. New windows mean "you can log Week N from the day after Week N ends until Week N+1's window closes":
+- Accept optional `is_active: boolean` in the request body and forward it into the `profiles` insert (defaults to `true` if omitted, preserving current behavior).
 
-```text
-week_1: days  8–14         (was 8–10)
-week_2: days 15–21         (was 15–18)
-week_3: days 22–28         (was 22–24)
-week_4: days 29–end-of-month (was 29–31)
-week_5: days  5–14 next month (was 5–8 next month)
-```
+## Behavior
 
-### 2. Hook — expose Weekly windows reactively
+| Input cell | Stored `is_active` |
+|---|---|
+| empty / missing column | unchanged (update) or `true` (create) |
+| Active / Yes / True / 1 | `true` |
+| Inactive / No / False / 0 | `false` |
+| anything else | row-level validation error |
 
-In `src/hooks/useFrequencyConfig.ts`, add `useWeeklyReviewWindowsResolved()` that returns the parsed `Record<week_key, {start, end, next_month?}>` from the Weekly config row, normalised to the same shape as `WEEKLY_REVIEW_WINDOWS`. Falls back to the hardcoded constants if the row is missing.
+Deactivating via import will fire the existing `iac_leaver_revoke` trigger, which already revokes portal access — no extra wiring needed.
 
-### 3. Helper refactor — `src/lib/frequencyUtils.ts`
+## Risk & Impact
 
-- Add optional `windowsOverride?: Record<string, WeeklyReviewWindow>` parameter to:
-  - `getWeeklySubPeriods(currentDate, reviewMonth, reviewYear, windowsOverride?)`
-  - `canSubmitForSubPeriod(...)` Weekly branch
-- Both fall back to `WEEKLY_REVIEW_WINDOWS` constants when no override is passed (keeps unit tests and any non-hook callers working).
-- Widen the hardcoded `WEEKLY_REVIEW_WINDOWS` constants to match the new DB defaults so SSR/test environments stay consistent.
+- **Data**: no schema change. Uses existing `profiles.is_active`. Existing exports gain one new column (additive, non-breaking for downstream consumers that key by column name).
+- **Workflow**: bulk import can now flip active status. Guarded by the same RLS the rest of `processEmployee` already relies on (admin-only page).
+- **Security**: status changes go through the same admin path; trigger-based access revocation handles deactivation side-effects.
+- **Regression**: minimal — additive column on template/export, optional field on import. Existing import files without the column behave exactly as today.
 
-### 4. Wire the override at call sites
+## Tests (new + updated)
 
-- `src/components/review/SubPeriodSelector.tsx`: call `useWeeklyReviewWindowsResolved()` and pass to `getWeeklySubPeriods`.
-- `src/components/review/WeeklySubmissionTable.tsx`: same — use resolved windows for the per-row "Closed" badge and submit-disabled logic.
-- Any save-path call to `canSubmitForSubPeriod` for Weekly: pass the resolved windows so the client-side guard matches the picker.
+- `src/lib/importValidation.test.ts` (or new `employeeStatusParsing.test.ts`):
+  - parses Active/Inactive variants correctly
+  - rejects garbage values
+  - empty value ⇒ undefined (no overwrite)
+- Update existing employee-import mock fixtures to include the new column.
 
-### 5. Admin UI — make Weekly windows editable
+## Docs
 
-Extend `src/components/admin/FrequencyCycleSettings.tsx` with a new `WeeklyWindowEditor` card:
+- `DOCUMENTATION.md` → Import Data section: document new column + accepted values.
+- `POLICY.md` → note that bulk import can now toggle employee active status (admin-only).
+- Add Version History entry.
 
-- One row per week (1–5) with two number inputs (start day, end day) plus a "next month" checkbox for Week 5.
-- Validates: `1 ≤ start ≤ end ≤ 31`, weeks 1–4 must not have `next_month`, Week 5 must.
-- Saves via new mutation `useUpdateWeeklyReviewWindows()` in `useFrequencyConfig.ts` that patches only `review_window_rules` on the Weekly row.
-- Renders read-only preview: "Week 2 — open May 15 to May 21".
+## Out of scope
 
-### 6. Tests
-
-New: `src/lib/weeklyWindowsResolution.test.ts`
-- May 19, 2026 with widened defaults → Week 2 enabled, Week 3 disabled. (Currently both disabled — regression for Jyoti's bug.)
-- May 22 → Week 2 still enabled (within its 15-21 window? No — 22 > 21, so Week 2 disabled, Week 3 enabled). Adjust assertion to "exactly one week always enabled in days 8-end".
-- Custom override (admin-edited windows) is honored by both `getWeeklySubPeriods` and `canSubmitForSubPeriod`.
-- Month-boundary: June 3 with reviewMonth=May should enable Week 5 (5–14 next month) for May.
-
-Existing tests in `src/lib/frequencyUtils.test.ts` updated to reflect new default windows (and a `WHY` comment pointing to this plan).
-
-### 7. Documentation
-
-- `DOCUMENTATION.md` and `POLICY.md`: add §“Weekly Review Windows — DB-driven” entry under Frequency Policy, with table of new defaults and admin-edit instructions.
-- `mem://features/admin/dynamic-working-days-config` mentions Daily; create sibling memory `mem://features/admin/weekly-review-windows-config` summarising the new contract and the Jyoti RCA.
-
-## Out of Scope
-
-- Daily window logic (already configurable via `useDailySubmissionWindow`).
-- Multi-month cycle locking (`isKpiLockedForPeriod`).
-- Backfilling missed submissions for days 19–21 of past months — admins can use existing Admin Data Entry path.
+- No UI changes outside the Import Data page.
+- No changes to single-employee create/edit forms.
+- No bulk-status-only tool (separate workflow).
