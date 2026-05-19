@@ -8661,6 +8661,11 @@ export type Database = {
       }
       run_safety_sla_escalations: { Args: never; Returns: Json }
       safety_drill_counts: { Args: never; Returns: Json }
+      safety_drill_dump: { Args: { _table: string }; Returns: Json }
+      safety_drill_load: {
+        Args: { _rows: Json; _table: string }
+        Returns: number
+      }
       safety_drill_seed: { Args: never; Returns: Json }
       safety_drill_truncate: { Args: never; Returns: undefined }
       scan_kpi_duplicate_groups: {
