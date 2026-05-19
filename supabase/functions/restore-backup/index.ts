@@ -237,7 +237,10 @@ async function insertTablesFromStorage(
         continue
       }
       const rows = JSON.parse(await fileData.text()) as unknown[]
-      const batchSize = 500
+      // Memory hardening (Phase 1.5 drill follow-up): keep the in-flight
+      // upsert batch small so a 50k-row table file doesn't compound the
+      // already-loaded JSON array in heap. Worker cap is 256 MB.
+      const batchSize = 250
       for (let i = 0; i < rows.length; i += batchSize) {
         const batch = rows.slice(i, i + batchSize)
         const { error } = await supabase
@@ -246,6 +249,8 @@ async function insertTablesFromStorage(
         if (error) errors.push(`Insert ${tableName} (batch ${Math.floor(i / batchSize) + 1}): ${error.message}`)
       }
       tablesProcessed++
+      // Help V8 reclaim the parsed array before moving to the next table.
+      rows.length = 0
     } catch (err) {
       errors.push(`Insert ${tableName}: ${err}`)
     }
@@ -463,7 +468,9 @@ Deno.serve(async (req) => {
     // Phase: INIT — return ordered batches for the client to orchestrate
     if (!phase) {
       const deleteBatches = packBatches(DELETE_ORDER, byTable, { maxTables: 20, maxRows: Number.POSITIVE_INFINITY })
-      const insertBatches = packBatches(INSERT_ORDER, byTable, { maxTables: 4, maxRows: 5000 })
+      // Tighter insert batches — 2 tables / 2k rows max keeps peak heap
+      // well under the 256 MB worker limit even for large PMS tables.
+      const insertBatches = packBatches(INSERT_ORDER, byTable, { maxTables: 2, maxRows: 2000 })
       const totalTables = manifest.tables.length
       return new Response(
         JSON.stringify({
