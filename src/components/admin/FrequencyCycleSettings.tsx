@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Save, CalendarDays } from 'lucide-react';
 import { useFrequencyConfigs, useUpdateFrequencyConfig } from '@/hooks/useFrequencyConfig';
 import { toast } from 'sonner';
+import { WeeklyWindowEditor } from './WeeklyWindowEditor';
 import {
   CycleOption,
   BI_MONTHLY_OPTIONS,
@@ -193,6 +194,8 @@ export function FrequencyCycleSettings() {
         onSave={handleSave}
         isSaving={updateConfig.isPending}
       />
+
+      <WeeklyWindowEditor />
     </div>
   );
 }
