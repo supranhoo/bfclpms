@@ -8,6 +8,7 @@ import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { getKpiSummaryText } from '@/lib/textFormatting';
 import { getQualitativeTargetLabel } from '@/lib/qualitativeUom';
 import { AuditKpiAssignPopover } from '@/components/review/AuditKpiAssignPopover';
+import { FrequencyBadge } from '@/components/review/FrequencyBadge';
 import type { AuditKpiAssignment } from '@/hooks/useAuditKpiAssignments';
 
 interface MobileKpiCardProps {
