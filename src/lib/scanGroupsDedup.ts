@@ -13,6 +13,26 @@ export interface ScannerVariant {
   row_count: number;
   match_type?: 'exact' | 'fuzzy';
   similarity?: number;
+  // Scale & context metadata (mode across underlying kpis rows).
+  frequency?: string | null;
+  criteria?: string | null;
+  uom?: string | null;
+  r0?: string | null;
+  r1?: string | null;
+  r2?: string | null;
+  r3?: string | null;
+  r4?: string | null;
+  r5?: string | null;
+  // "Mixed" flags — true when underlying kpis rows disagree on this field.
+  frequency_mixed?: boolean;
+  criteria_mixed?: boolean;
+  uom_mixed?: boolean;
+  r0_mixed?: boolean;
+  r1_mixed?: boolean;
+  r2_mixed?: boolean;
+  r3_mixed?: boolean;
+  r4_mixed?: boolean;
+  r5_mixed?: boolean;
 }
 
 export interface ScannerGroup {
