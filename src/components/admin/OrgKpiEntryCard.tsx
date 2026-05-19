@@ -291,22 +291,31 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
   // Idempotent server-side; we fire once per card mount when admin is
   // viewing a dept/employee-scope card with no OKV rows yet.
   const ensureScopeRows = useEnsureOrgKpiScopeRows();
-  const didEnsureRef = useRef(false);
-  useEffect(() => {
-    if (didEnsureRef.current) return;
-    if (!isAdmin) return;
-    if (data.scope === 'organization') return;
-    const hasMapped = (data.scopedRows ?? []).length > 0;
-    if (!hasMapped) return;
-    if (scopedOkvIds.length > 0) return;
-    didEnsureRef.current = true;
-    ensureScopeRows.mutate({
-      categoryId: data.categoryId,
-      kraName: data.kraName,
-      kpiName: data.kpiName,
-      reviewPeriod,
-      reviewYear,
-    });
+  // RCA 2026-05-19 (v2) — Lazy on-demand materialisation.
+  // Previously this fired on every card mount, causing a 183x RPC storm on
+  // the Org KPI Data Entry page (one card per KPI). Now we only call the
+  // RPC the first time the admin actually opens this card's file controls.
+  const openEvidenceSheet = useCallback(async () => {
+    if (
+      isAdmin &&
+      data.scope !== 'organization' &&
+      scopedOkvIds.length === 0 &&
+      (data.scopedRows ?? []).length > 0 &&
+      !ensureScopeRows.isPending
+    ) {
+      try {
+        await ensureScopeRows.mutateAsync({
+          categoryId: data.categoryId,
+          kraName: data.kraName,
+          kpiName: data.kpiName,
+          reviewPeriod,
+          reviewYear,
+        });
+      } catch {
+        // Non-fatal — sheet still opens; user can retry from inside it.
+      }
+    }
+    setShowEvidenceSheet(true);
   }, [
     isAdmin,
     data.scope,
@@ -669,21 +678,22 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               <>
                 <OrgKpiEvidenceStatusChip
                   count={evidenceCount}
-                  onClick={() => setShowEvidenceSheet(true)}
+                  onClick={openEvidenceSheet}
                 />
                 <OrgKpiParityBadge
                   parity={parityRow}
-                  onClick={() => setShowEvidenceSheet(true)}
+                  onClick={openEvidenceSheet}
                 />
                 {isAdmin && (
                   <Button
                     variant="outline"
                     size="sm"
                     className="h-6 px-2 text-[10px] gap-1"
-                    onClick={() => setShowEvidenceSheet(true)}
+                    onClick={openEvidenceSheet}
+                    disabled={ensureScopeRows.isPending}
                   >
                     <Paperclip className="h-3 w-3" />
-                    Manage files
+                    {ensureScopeRows.isPending ? 'Preparing…' : 'Manage files'}
                   </Button>
                 )}
               </>
