@@ -1,87 +1,98 @@
-
-# Wire "Evidence & Parity" into Organization KPI Data Entry, per scope
-
-## Current state (verified)
-- `OrgKpiEntryCard.tsx` **already** imports and renders the Evidence chip, Parity badge, "Manage files" button, and `OrgKpiEvidenceManagerSheet` — but **only when `data.scope === 'organization'`** (lines 218–225 and 578–600). For Department- and Employee-scope KPIs, the chip/badge/sheet never appear, so admins perceive the feature as "not implemented" on the Org KPI Data Entry page.
-- The standalone `/admin/org-kpi-evidence-demo` page (`OrgKpiEvidenceDemo.tsx`) is the only place all three scopes render today. It was a preview surface and should not be the production entry point.
-
 ## Goal
-The Evidence & Parity controls live **inline on each KPI inside the Organization KPI Data Entry page**, and adapt to the KPI's Scope:
+On **KPI Standardization → Build Registry**, every variant in a merge group should show **Freq + R0–R5** (plus criteria / UoM context) so admins can confirm at a glance that fuzzy / duplicate KPIs are truly the same metric before merging.
 
-| Scope         | Where the controls live                                     | What the sheet manages                              |
-|---------------|--------------------------------------------------------------|------------------------------------------------------|
-| Organization  | KPI card header (today's location, unchanged)               | One OKV row → files distributed to all mapped employees |
-| Department    | KPI card header **and** per-row in the scoped table         | Header sheet = roll-up across all dept OKV rows; row sheet = files on that one department's OKV row |
-| Employee      | KPI card header **and** per-row in the scoped table         | Header sheet = roll-up across all employee OKV rows; row sheet = files on that one employee's OKV row |
+Today the variant card only shows: KRA name, KPI name, employee count, row count, Exact/Fuzzy badge. Frequency and rating scale (R0–R5) are hidden — admins must drill into "View KPIs" to verify, which is what makes finalising hard.
 
-This matches how the KPI is actually scoped — admins manage org-shared files for org KPIs, department-scoped files for dept KPIs, etc.
+---
 
-## Implementation
+## What the new variant card will look like
 
-### 1. Backend — generalize OKV-id resolution beyond organization scope
+```text
+┌─ Group: "complete all planned monthly preventive maintenance…"  [Fuzzy match]  [10 variants] ┐
+│                                                                                              │
+│  [A] [Skip]  Preventive Maintenance                                          [Exact]         │
+│              Complete all planned monthly preventive maintenance…                             │
+│              1 employees · 1 rows                                                            │
+│              ┌────────────────────────────────────────────────────────────────────────┐      │
+│              │ Freq      R0      R1       R2        R3      R4       R5              │      │
+│              │ Monthly   <98%    98%      98.5%     99%     99.5%    100%            │      │
+│              │ Higher-is-Better · UoM: %                                              │      │
+│              └────────────────────────────────────────────────────────────────────────┘      │
+│                                                                                              │
+│  [A] [Skip]  Preventive Maintenance                                          [Fuzzy 100%]    │
+│              Complete all planned monthly preventive maintenance for critical equipment…     │
+│              3 employees · 22 rows                                                           │
+│              ┌────────────────────────────────────────────────────────────────────────┐      │
+│              │ Freq      R0      R1       R2        R3      R4       R5              │      │
+│              │ Monthly   <98%    98%      98.5%     99%     99.5%    100%   ✓ match  │      │
+│              │ Higher-is-Better · UoM: %                                              │      │
+│              └────────────────────────────────────────────────────────────────────────┘      │
+│                                                                                              │
+│  [B] [Skip]  Preventive Maintenance (Non-critical)                           [Fuzzy 82%]    │
+│              …                                                                               │
+│              2 employees · 6 rows                                                            │
+│              ┌────────────────────────────────────────────────────────────────────────┐      │
+│              │ Freq      R0      R1       R2        R3      R4       R5              │      │
+│              │ Monthly   <95%    95%      96%       97%     98%      100%   ⚠ differs│      │
+│              │ Higher-is-Better · UoM: %                                              │      │
+│              └────────────────────────────────────────────────────────────────────────┘      │
+└──────────────────────────────────────────────────────────────────────────────────────────────┘
+```
 
-`useOrgScopeOkvId` today resolves a single OKV row for an org-scope KPI. Add two siblings (or one parameterised hook) in `src/hooks/useOrgKpiEvidenceFiles.ts`:
+### Behaviour
+- **Compact 7-column strip** (`Freq · R0 · R1 · R2 · R3 · R4 · R5`) on every variant. Tabular-nums, `text-xs`, monospace-friendly so columns align across variants.
+- **Cross-variant comparison highlight.** The first variant in the group is the baseline. Any cell whose value differs from the baseline is shown in **amber** with a small `⚠ differs` chip at the row's end. Matching variants get a faint `✓ match` chip. This is what makes "same KPI or not?" a one-glance decision.
+- **Binary / Tiered KPIs.** When the KPI's criteria is `Binary` or `Tiered`, R-cells show the qualitative label instead of a raw number, e.g. `R5: Yes` / `R0: No`, or `R5: Tier 1`, `R3: Tier 3`. Logic reuses `src/lib/qualitativeUom.ts` so display matches the rest of the app.
+- **Mixed-within-variant indicator.** If a single variant spans multiple `kpis` rows that disagree on a value (e.g. some rows have `Monthly`, some `Quarterly`), show a small amber dot next to that cell with tooltip *"Underlying KPIs disagree — N rows show X, M show Y"*. Same idea as `CompareCell` in the Suggestions tab.
+- **Context line** below the strip: `Higher-is-Better · UoM: %` (or `Lower-is-Better · UoM: count`). Pulled from `kpis.criteria` + `kpis.uom` (mode).
+- **Missing data** renders as `—` muted (some legacy KPIs have no R0).
+- No new tabs, no new pages — purely additive to the existing variant rows in **Build Registry**.
 
-- `useScopedOkvIds({ categoryId, kraName, kpiName, reviewPeriod, reviewYear, scope })` — returns a `Map<scopeId, okvId>` for department/employee scope KPIs by querying `org_kpi_values` filtered on `kpi_definition_id` (or kra+kpi+category fallback) for the period, where `department_id IS NOT NULL` (dept scope) or `employee_id IS NOT NULL` (employee scope). One round-trip per card.
-- `useAggregateEvidenceForScope(okvIds[])` — returns the union of `evidence_files` across the supplied OKV rows, plus a per-OKV breakdown. Used by the **card-header** sheet for dept/employee KPIs so the admin can see "all evidence across all departments/employees on this KPI" in one place.
+---
 
-No new RPC required for the row-level sheet — it just re-uses the existing `useOrgKpiEvidenceFiles(okvId)`.
+## Technical details
 
-### 2. Frontend — `OrgKpiEntryCard.tsx`
+### 1. DB — extend `scan_kpi_duplicate_groups`
+Migration adds these per-variant fields (mode across the kpis rows that match the variant):
+- `frequency text`, `r0..r5 text`, `criteria text`, `uom text`
+- `*_mixed boolean` flags for `frequency`, `criteria`, `uom`, and each `r0..r5` — true when the underlying `kpis` rows disagree.
 
-- Drop the `data.scope === 'organization'` gate around the Evidence chip / Parity badge / Manage files button. Render them for all scopes.
-- For dept/employee scopes:
-  - Compute `aggregateOkvIds` via the new hook.
-  - The chip shows the **total file count across all scoped OKV rows**, with a tooltip like "12 files across 4 departments".
-  - The Parity badge shows aggregate parity (worst-case wins: if any underlying OKV has drift, show drift).
-  - "Manage files" opens the sheet in **roll-up mode**: a small scope selector at the top of the sheet lets the admin pick "All <scope>s" or a single dept/employee to edit just that OKV. Targeting still works exactly as today inside the sheet.
+Implementation: in the existing variant CTE, wrap each column in `mode() WITHIN GROUP (ORDER BY col) AS col` and add `(COUNT(DISTINCT col) FILTER (WHERE col IS NOT NULL)) > 1 AS col_mixed`. No change to grouping keys, fuzzy logic, skip filtering, or alias-aware exclusion — the §"Scanner invariant" and §"Grouped-column rule" contracts in `mem/features/admin/kpi-standardization-registry` stay intact. Function signature gains no new parameters.
 
-### 3. Frontend — `OrgKpiScopedEntryTable.tsx`
+### 2. Types
+- `src/lib/scanGroupsDedup.ts` → extend `ScannerVariant` with the new optional fields. `dedupeVariants` keeps the first-seen values (variants are already deduped by key, so this is a no-op in practice).
+- `src/hooks/useKpiRegistry.ts` → `DuplicateGroup` inherits via `ScannerVariant`.
 
-- Extend `ScopedRow` with optional `okvId?: string`. Populated by the parent when the row maps to an existing `org_kpi_values` record. (For not-yet-propagated rows, `okvId` is undefined and the row controls are disabled with a "Save first" hint.)
-- Add a slim trailing cell rendered after the existing Evidence column:
-  - `OrgKpiEvidenceStatusChip` (file count for that row's OKV)
-  - `OrgKpiParityBadge` (parity for that one OKV)
-  - Paperclip "Manage" icon button opening `OrgKpiEvidenceManagerSheet` scoped to that single OKV.
-- Reuses the existing components verbatim — no new UI primitives.
+### 3. New component — `src/components/admin/kpi-standardization/VariantScaleStrip.tsx`
+Props: `{ variant: ScannerVariant; baseline?: ScannerVariant }`. Renders the 7-column strip + context line + match/differs chip. Uses `qualitativeUom.ts` to translate numeric thresholds to Binary/Tiered labels when applicable. Pure presentational — unit tests in `VariantScaleStrip.test.tsx` cover:
+  - numeric Higher-is-Better display
+  - Binary label translation (R5=Yes / R0=No)
+  - Tiered label translation
+  - differs vs match highlighting against a baseline
+  - mixed-cell indicator dot
+  - missing R-value fallback to `—`
 
-### 4. `OrgKpiEvidenceManagerSheet.tsx` — small additive change
+### 4. `BuildRegistryTab.tsx` integration
+Single insertion point inside the existing `group.variants.map(...)` block (around line 380–410), right under the `employee_count / row_count / Exact|Fuzzy` badge row:
 
-- Accept an optional `okvIds: string[]` (multi-OKV roll-up) alongside today's `okvId: string`.
-- When multiple ids are passed, render a scope picker at the top of the sheet ("All departments" / per-dept) that swaps the loaded OKV id. Each individual edit still hits exactly one OKV row.
-- When a single id is passed (today's behaviour, including row-level use), the picker is hidden. Zero regression.
+```tsx
+<VariantScaleStrip
+  variant={variant}
+  baseline={group.variants[0]}
+/>
+```
 
-### 5. Retire the standalone demo route
+No changes to bucket assignment, Skip logic, canonical edit, approval flow, or `summarizeBuckets`.
 
-- Keep `OrgKpiEvidenceDemo.tsx` as a Storybook-style preview at the same URL but add a yellow banner "Demo only — the production controls live inline on Org KPI Data Entry". This avoids confusing admins who already bookmarked the link.
-- Optional: remove the demo route from any sidebar entry (search and remove if present).
+### 5. Memory + docs
+- Append a section to `mem/features/admin/kpi-standardization-registry` ("Variant scale strip — Build Registry, May 2026") describing the new strip, mixed-indicator semantics, and the mode/mixed contract on the RPC.
+- New ADR-066: *Variant Frequency + Rating Scale visibility in Build Registry*.
 
-### 6. Documentation & memory
+---
 
-- Update `mem://features/admin/org-kpi-management-suite` with: "Evidence & Parity controls render inline per KPI on Org KPI Data Entry for all scopes; dept/employee scopes also expose a row-level Manage-files action."
-- Append a "Scope-aware Evidence Manager" section to the existing Org KPI Evidence doc.
-- New ADR `docs/adr/ADR-065.md` covering the roll-up vs row-level dual entry pattern.
-
-## Files to touch
-- `src/hooks/useOrgKpiEvidenceFiles.ts` — add `useScopedOkvIds`, `useAggregateEvidenceForScope`.
-- `src/components/admin/OrgKpiEntryCard.tsx` — remove scope gate; wire aggregate hook; pass `okvIds[]` to sheet.
-- `src/components/admin/OrgKpiEvidenceManagerSheet.tsx` — accept `okvIds[]` + render scope picker.
-- `src/components/admin/OrgKpiScopedEntryTable.tsx` — new column with chip/badge/manage button; thread `okvId` into `ScopedRow`.
-- `src/pages/admin/OrgKpiDataEntry.tsx` — populate `okvId` on `ScopedRow[]` from the existing scoped fetch (already has the OKV ids in its query).
-- `src/pages/admin/OrgKpiEvidenceDemo.tsx` — add "Demo only" banner.
-- `mem/features/admin/org-kpi-management-suite` — append paragraph.
-- `docs/adr/ADR-065.md` — new.
-
-## Risk & Impact Report
-
-- **Data impact:** None. Pure UI surfacing on top of existing OKV rows. No schema or RPC writes; new hooks are reads only.
-- **Workflow impact:** Admins gain row-level control today missing for dept/employee scope. Existing org-scope flow unchanged.
-- **UI/UX consistency:** Reuses the same chip/badge/sheet/popover components, so the visual language stays identical across scopes.
-- **Regression risk:** Low. The sheet's existing single-OKV mode keeps its current contract (`okvIds` is additive and optional). Removing the `scope === 'organization'` gate only adds rendering — does not change existing branches. Mitigation: keep one Vitest snapshot for the org-scope card to prove no header layout shift.
-- **Performance:** One extra OKV lookup per card for non-org scopes (already loaded server-side as part of the existing scoped fetch on `OrgKpiDataEntry.tsx`, so we just thread it through — no new query). Aggregate evidence count is computed client-side from the already-fetched JSONB.
-- **Mitigation:** Conditional render guards stay in place (`okvId` must exist before showing row chip), and the disabled-with-tooltip state covers not-yet-propagated rows so admins never see broken controls.
-
-## Out of scope
-- Changing how evidence files are stored or how targeting works (per-employee/per-dept targeting from the prior change stays exactly as-is).
-- Removing or renaming the demo route's URL — only banner-flag it.
-- Any change to non-admin views.
+## Risk & Impact
+- **Data Impact:** Read-only RPC extension. No schema change, no data writes. Forward-only KPIs unaffected. Pre-May-2026 freeze unaffected (this RPC already only scans May-2026+ rows for variant detection).
+- **Workflow Impact:** None — purely informational; approval flow, bucket logic, skip flow, undo all unchanged.
+- **UI/UX:** Variant rows grow ~24px taller. Within current Build Registry layout budget. No new tabs.
+- **Regression Risk:** Low. RPC change is additive columns + mode aggregates over already-grouped CTE → cannot affect group emission. Defensive `dedupeScannerGroups` already tolerates extra fields. Suggestions tab's `CompareCell` (recently added) is untouched.
+- **Mitigation:** RPC change wrapped in a single migration; new component is fully unit-tested; mixed-flag tooltips disclose any underlying drift so admins are never misled by a single "mode" value.
