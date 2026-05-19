@@ -41,6 +41,7 @@ const SHOW_SCALE_LS_KEY = 'affectedKpisTable.showScale';
 
 type FilterKey =
   | 'employee'
+  | 'department'
   | 'period'
   | 'status'
   | 'frequency'
@@ -181,7 +182,7 @@ function criteriaUomLabel(r: any): string {
 
 export function AffectedKpisTable({ categoryId, kraName, kpiName, reviewPeriod, reviewYear }: Props) {
   const [allRows, setAllRows] = useState<any[]>([]);
-  const [employees, setEmployees] = useState<Record<string, { name: string }>>({});
+  const [employees, setEmployees] = useState<Record<string, { name: string; code: string | null; department: string | null }>>({});
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [capped, setCapped] = useState(false);
@@ -228,10 +229,16 @@ export function AffectedKpisTable({ categoryId, kraName, kpiName, reviewPeriod, 
       if (empIds.length > 0) {
         const { data: profs } = await supabase
           .from('profiles')
-          .select('id, full_name')
+          .select('id, full_name, employee_code, departments(name)')
           .in('id', empIds);
-        const map: Record<string, { name: string }> = {};
-        (profs || []).forEach((p: any) => { map[p.id] = { name: p.full_name }; });
+        const map: Record<string, { name: string; code: string | null; department: string | null }> = {};
+        (profs || []).forEach((p: any) => {
+          map[p.id] = {
+            name: p.full_name,
+            code: p.employee_code ?? null,
+            department: p.departments?.name ?? null,
+          };
+        });
         setEmployees(map);
       } else {
         setEmployees({});
@@ -247,12 +254,18 @@ export function AffectedKpisTable({ categoryId, kraName, kpiName, reviewPeriod, 
 
   // Build derived columns (employee, period, criteria/uom) on every row.
   const enriched = useMemo(
-    () => allRows.map(r => ({
-      ...r,
-      employee: employees[r.employee_id]?.name ?? r.employee_id?.slice(0, 8) ?? '',
-      period: periodLabel(r),
-      criteria_uom: criteriaUomLabel(r),
-    })),
+    () => allRows.map(r => {
+      const emp = employees[r.employee_id];
+      const name = emp?.name ?? r.employee_id?.slice(0, 8) ?? '';
+      const employeeLabel = emp?.code ? `${name} (${emp.code})` : name;
+      return {
+        ...r,
+        employee: employeeLabel,
+        department: emp?.department ?? '',
+        period: periodLabel(r),
+        criteria_uom: criteriaUomLabel(r),
+      };
+    }),
     [allRows, employees],
   );
 
@@ -271,6 +284,7 @@ export function AffectedKpisTable({ categoryId, kraName, kpiName, reviewPeriod, 
   // Distinct values for each filterable column, computed over the full set.
   const distinct = useMemo(() => ({
     employee: distinctValues(enriched, 'employee'),
+    department: distinctValues(enriched, 'department'),
     period: distinctValues(enriched, 'period'),
     status: distinctValues(enriched, 'status'),
     frequency: distinctValues(enriched, 'frequency'),
@@ -361,6 +375,10 @@ export function AffectedKpisTable({ categoryId, kraName, kpiName, reviewPeriod, 
                 <ColumnFilterPopover label="Employee" values={distinct.employee} selected={filters.employee} onChange={setColFilter('employee')} />
               </th>
               <th className="text-left px-2 py-1.5 whitespace-nowrap">
+                Department
+                <ColumnFilterPopover label="Department" values={distinct.department} selected={filters.department} onChange={setColFilter('department')} />
+              </th>
+              <th className="text-left px-2 py-1.5 whitespace-nowrap">
                 Period
                 <ColumnFilterPopover label="Period" values={distinct.period} selected={filters.period} onChange={setColFilter('period')} />
               </th>
@@ -392,7 +410,7 @@ export function AffectedKpisTable({ categoryId, kraName, kpiName, reviewPeriod, 
           <tbody>
             {pageRows.length === 0 && (
               <tr>
-                <td colSpan={showScale ? 12 : 4} className="px-2 py-3 text-center text-muted-foreground text-xs">
+                <td colSpan={showScale ? 13 : 5} className="px-2 py-3 text-center text-muted-foreground text-xs">
                   No rows match the current filters.
                 </td>
               </tr>
@@ -401,6 +419,7 @@ export function AffectedKpisTable({ categoryId, kraName, kpiName, reviewPeriod, 
               return (
                 <tr key={r.id} className="border-t">
                   <td className="px-2 py-1.5 sticky left-0 bg-background z-10 whitespace-nowrap">{r.employee}</td>
+                  <td className="px-2 py-1.5 whitespace-nowrap">{r.department || '—'}</td>
                   <td className="px-2 py-1.5 whitespace-nowrap">{r.period}</td>
                   <td className="px-2 py-1.5">{r.weightage ?? '—'}</td>
                   <td className="px-2 py-1.5"><Badge variant="outline" className="text-[10px]">{r.status || '—'}</Badge></td>
