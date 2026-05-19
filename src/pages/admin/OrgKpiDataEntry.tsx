@@ -554,6 +554,7 @@ export default function OrgKpiDataEntry() {
         return {
             scopeId: deptId,
             scopeName: deptName,
+            okvId: val?.id,
             scopeSubText,
             achievedValue: deptAchieved,
             // ADR-063 — see employee-branch note below.
