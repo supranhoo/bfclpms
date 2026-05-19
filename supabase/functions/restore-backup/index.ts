@@ -7,6 +7,28 @@ const corsHeaders = {
 
 // Delete order: leaf tables first (reverse of insert order)
 const DELETE_ORDER = [
+  // Safety Tier 5 (leaves) — delete first
+  'safety_audit_log', 'safety_notifications', 'safety_sla_escalations',
+  'safety_incident_timeline', 'safety_incident_progress_logs',
+  'safety_incident_evidence',
+  // Safety Tier 4
+  'safety_incidents',
+  'safety_permit_loto_steps', 'safety_permit_hira',
+  'safety_permit_evidence', 'safety_permit_approvals',
+  // Safety Tier 3
+  'safety_permits',
+  'safety_training_attempts', 'safety_audit_run_responses',
+  'safety_drill_findings', 'safety_drill_participants',
+  'safety_asset_evidence', 'safety_asset_calibrations',
+  // Safety Tier 2
+  'safety_training_assignments', 'safety_audit_runs',
+  'safety_emergency_drills', 'safety_assets',
+  'safety_hours_worked', 'safety_user_roles',
+  // Safety Tier 1
+  'safety_audit_template_items', 'safety_audit_templates',
+  'safety_permit_type_config', 'safety_emergency_contacts',
+  'safety_quiz_questions', 'safety_quizzes', 'safety_sops',
+  'safety_severity_sla', 'safety_settings', 'safety_module_access',
   // Tier 12: Backup meta
   'backup_logs',
   // Tier 11: PIP + Training
@@ -99,6 +121,32 @@ const INSERT_ORDER = [
   'performance_improvement_plans', 'pip_milestones', 'pip_audit_logs',
   'training_needs',
   // Tier 12 (backup_logs deliberately excluded from restore insert — would be self-referential)
+  // ───────────────────────────────────────────────────────────────
+  // Safety module (T-003) — mirrors create-backup tiers; appended
+  // after PMS so profiles/business_units are restored first.
+  // ───────────────────────────────────────────────────────────────
+  // Safety Tier 1
+  'safety_module_access', 'safety_settings', 'safety_severity_sla',
+  'safety_sops', 'safety_quizzes', 'safety_quiz_questions',
+  'safety_emergency_contacts', 'safety_permit_type_config',
+  'safety_audit_templates', 'safety_audit_template_items',
+  // Safety Tier 2
+  'safety_user_roles', 'safety_hours_worked', 'safety_assets',
+  'safety_emergency_drills', 'safety_audit_runs',
+  'safety_training_assignments',
+  // Safety Tier 3
+  'safety_asset_calibrations', 'safety_asset_evidence',
+  'safety_drill_participants', 'safety_drill_findings',
+  'safety_audit_run_responses', 'safety_training_attempts',
+  'safety_permits',
+  // Safety Tier 4
+  'safety_permit_approvals', 'safety_permit_evidence',
+  'safety_permit_hira', 'safety_permit_loto_steps',
+  'safety_incidents',
+  // Safety Tier 5
+  'safety_incident_evidence', 'safety_incident_progress_logs',
+  'safety_incident_timeline', 'safety_sla_escalations',
+  'safety_notifications', 'safety_audit_log',
 ]
 
 interface ManifestV2 {
