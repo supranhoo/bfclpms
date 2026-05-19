@@ -17,9 +17,17 @@ interface SortableGroup {
 
 export function groupMatchScore(group: { variants: SortableVariant[] }): number {
   const variants = group.variants ?? [];
-  if (variants.some(v => v.match_type === 'exact')) return 1;
+  // Every cluster includes a representative variant with similarity = 1.0
+  // (it matches itself). Using that for ranking makes every group tie at 1.
+  // The true "match strength" of a group is the strongest *fuzzy* link —
+  // i.e. the highest similarity among non-representative variants.
+  const fuzzy = variants.filter(v => v.match_type === 'fuzzy');
+  if (fuzzy.length === 0) {
+    // Pure exact-only group: all variants matched the representative exactly.
+    return 1;
+  }
   let max = 0;
-  for (const v of variants) {
+  for (const v of fuzzy) {
     if (typeof v.similarity === 'number' && v.similarity > max) max = v.similarity;
   }
   return max;
