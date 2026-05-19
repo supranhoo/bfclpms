@@ -1,3 +1,16 @@
+
+## Phase 1.5 remediation — shipped
+
+- **T-001**: `revoke select` on the 6 `mv_safety_*` views from `anon` /
+  `authenticated`; `service_role` retains read. `safety-analytics` now
+  uses a service-role client gated by `has_any_safety_role(auth.uid())`
+  with explicit 401/403 responses.
+- **T-003**: `create-backup` `TABLES_TO_BACKUP` extended with the 33
+  `safety_*` tables in 5 dependency tiers appended after PMS tiers.
+  `STORAGE_BUCKETS` now includes `safety-media`. `safety_notifications`
+  added to `PRUNE_TABLES` (90-day window).
+
+Next: backup→restore drill in sandbox before Phase 2 kickoff.
 # Phase 1 — Hardening Baseline (locked)
 
 This is the single page Phase 2+ must not regress. Any deviation is a
