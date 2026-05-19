@@ -21,10 +21,26 @@ import {
 } from '@/hooks/useOrgKpiEvidenceFiles';
 import { EvidenceTargetPopover, DistributionPreview } from './EvidenceTargetPopover';
 
+export interface OrgKpiEvidenceScopeOption {
+  okvId: string;
+  label: string;
+  /** Optional sub-label (e.g. department name for an employee scope) */
+  subLabel?: string;
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  okvId: string | null;
+  /** Single OKV mode (org scope, or a per-row open from a scoped table). */
+  okvId?: string | null;
+  /**
+   * Multi-OKV mode (dept/employee scope card-header open).
+   * When provided and length > 1, the sheet renders a scope picker at the
+   * top and edits one OKV row at a time. `okvId` is ignored in this mode.
+   */
+  okvScopes?: OrgKpiEvidenceScopeOption[];
+  /** Optional label shown above the picker, e.g. "Department" or "Employee". */
+  scopeLabel?: string;
   kpiName: string;
 }
 
@@ -32,14 +48,30 @@ interface Props {
  * Multi-file supporting manager for a single Org KPI value row.
  * Handles upload + per-file label/caption + resync to per-employee scorecards.
  */
-export function OrgKpiEvidenceManagerSheet({ open, onOpenChange, okvId, kpiName }: Props) {
+export function OrgKpiEvidenceManagerSheet({ open, onOpenChange, okvId, okvScopes, scopeLabel, kpiName }: Props) {
   const { user } = useAuth();
   const { toast } = useToast();
   const { maxFileSizeMb, maxFileSizeBytes } = useUploadLimits();
-  const { data: serverFiles, isLoading } = useOrgKpiEvidenceFiles(okvId);
+  const isMulti = !!okvScopes && okvScopes.length > 0;
+  const [selectedOkvId, setSelectedOkvId] = useState<string | null>(null);
+
+  // Initialize / reset the picker when the sheet opens or scopes change.
+  useEffect(() => {
+    if (!open) return;
+    if (isMulti) {
+      setSelectedOkvId(prev =>
+        prev && okvScopes!.some(o => o.okvId === prev) ? prev : (okvScopes![0]?.okvId ?? null)
+      );
+    } else {
+      setSelectedOkvId(okvId ?? null);
+    }
+  }, [open, isMulti, okvId, okvScopes]);
+
+  const activeOkvId = selectedOkvId;
+  const { data: serverFiles, isLoading } = useOrgKpiEvidenceFiles(activeOkvId);
   const upsert = useUpsertOrgKpiEvidenceFiles();
   const resync = useResyncOrgKpiEvidence();
-  const { data: targetingRows = [], isLoading: targetingLoading } = useOrgKpiEvidenceTargeting(okvId);
+  const { data: targetingRows = [], isLoading: targetingLoading } = useOrgKpiEvidenceTargeting(activeOkvId);
 
   const [files, setFiles] = useState<OrgKpiEvidenceFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -88,15 +120,15 @@ export function OrgKpiEvidenceManagerSheet({ open, onOpenChange, okvId, kpiName 
       : f));
 
   const handleSave = async () => {
-    if (!okvId) return;
-    await upsert.mutateAsync({ okvId, files });
+    if (!activeOkvId) return;
+    await upsert.mutateAsync({ okvId: activeOkvId, files });
     toast({ title: 'Supporting files saved' });
   };
 
   const doResync = async (mode: 'append_only' | 'replace_with_stepback') => {
-    if (!okvId) return;
-    if (dirty) await upsert.mutateAsync({ okvId, files });
-    await resync.mutateAsync({ okvId, mode });
+    if (!activeOkvId) return;
+    if (dirty) await upsert.mutateAsync({ okvId: activeOkvId, files });
+    await resync.mutateAsync({ okvId: activeOkvId, mode });
     setConfirmReplace(false);
   };
 
@@ -112,6 +144,26 @@ export function OrgKpiEvidenceManagerSheet({ open, onOpenChange, okvId, kpiName 
           </SheetHeader>
 
           <div className="space-y-3 mt-4">
+            {isMulti && (
+              <div className="rounded-md border bg-muted/40 p-2 space-y-1">
+                <label className="text-[11px] font-medium text-muted-foreground">
+                  {scopeLabel ? `${scopeLabel} scope` : 'Scope'}
+                  <span className="ml-1 text-[10px] font-normal">({okvScopes!.length} options — files are managed per row)</span>
+                </label>
+                <select
+                  value={activeOkvId ?? ''}
+                  onChange={(e) => setSelectedOkvId(e.target.value || null)}
+                  className="w-full h-8 text-xs rounded border bg-background px-2"
+                >
+                  {okvScopes!.map(opt => (
+                    <option key={opt.okvId} value={opt.okvId}>
+                      {opt.label}{opt.subLabel ? ` — ${opt.subLabel}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {isLoading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
                 <Loader2 className="h-4 w-4 animate-spin" /> Loading files…
@@ -210,7 +262,7 @@ export function OrgKpiEvidenceManagerSheet({ open, onOpenChange, okvId, kpiName 
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={!okvId || resync.isPending}
+                  disabled={!activeOkvId || resync.isPending}
                   onClick={() => doResync('append_only')}
                 >
                   {resync.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
@@ -219,7 +271,7 @@ export function OrgKpiEvidenceManagerSheet({ open, onOpenChange, okvId, kpiName 
                 <Button
                   size="sm"
                   variant="destructive"
-                  disabled={!okvId || resync.isPending}
+                  disabled={!activeOkvId || resync.isPending}
                   onClick={() => setConfirmReplace(true)}
                 >
                   Replace + step back
