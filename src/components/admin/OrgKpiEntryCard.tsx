@@ -24,6 +24,7 @@ import { useSentBackOrgKpiEmployees, type SentBackInfo } from '@/hooks/useSentBa
 import { isComplianceKpi, useBulkEmployeeSubmissionDates } from '@/hooks/useComplianceSubFactors';
 import { scopedRowsSignature } from '@/lib/orgKpiCounts';
 import { useDiagnoseOrgKpiGap, useRepairOrgKpiGap, type DiagnoseGapRow } from '@/hooks/useRepairOrgKpiPropagationGap';
+import { useEnsureOrgKpiScopeRows } from '@/hooks/useEnsureOrgKpiScopeRows';
 import { Wrench, Paperclip } from 'lucide-react';
 import {
   useOrgScopeOkvId,
