@@ -218,6 +218,108 @@ async function listBucketFiles(
   return allFiles
 }
 
+// ─── Integrity verification ─────────────────────────────────────────────────
+// After all batches upload, confirm each expected <table>.json exists in
+// storage and that its parsed row count matches the count we reported
+// during the batch phase. Runs in small concurrent groups to keep peak
+// memory under the worker limit.
+
+type IntegrityIssues = {
+  missing: string[]
+  unreadable: Array<{ table: string; reason: string }>
+  row_mismatch: Array<{ table: string; expected: number; actual: number }>
+}
+
+export type IntegrityReport = {
+  status: 'ok' | 'failed'
+  verified_tables: number
+  verified_at: string
+  missing: string[]
+  unreadable: Array<{ table: string; reason: string }>
+  row_mismatch: Array<{ table: string; expected: number; actual: number }>
+}
+
+async function verifyBackupIntegrity(
+  supabase: ReturnType<typeof createClient>,
+  folderPath: string,
+  tableManifest: Array<{ table: string; rows: number; file: string }>
+): Promise<IntegrityReport> {
+  const issues: IntegrityIssues = { missing: [], unreadable: [], row_mismatch: [] }
+
+  // Pre-list folder once so existence checks don't hammer the API.
+  const presentSizes = new Map<string, number>()
+  try {
+    const { data: listed } = await supabase.storage
+      .from('database-backups')
+      .list(folderPath, { limit: 1000 })
+    if (listed) {
+      for (const item of listed) {
+        const size = item.metadata?.size as number | undefined
+        if (typeof size === 'number') presentSizes.set(item.name, size)
+      }
+    }
+  } catch (err) {
+    console.warn('Integrity: folder list failed, falling back to per-file checks:', err)
+  }
+
+  const CONCURRENCY = 4
+  for (let i = 0; i < tableManifest.length; i += CONCURRENCY) {
+    const slice = tableManifest.slice(i, i + CONCURRENCY)
+    await Promise.all(
+      slice.map(async (entry) => {
+        const fileName = `${entry.table}.json`
+        const sizeFromList = presentSizes.get(fileName)
+
+        if (presentSizes.size > 0 && (sizeFromList === undefined || sizeFromList === 0)) {
+          issues.missing.push(entry.table)
+          return
+        }
+
+        try {
+          const { data: blob, error } = await supabase.storage
+            .from('database-backups')
+            .download(entry.file)
+          if (error || !blob) {
+            issues.unreadable.push({ table: entry.table, reason: error?.message || 'empty blob' })
+            return
+          }
+          const text = await blob.text()
+          let parsed: unknown
+          try {
+            parsed = JSON.parse(text)
+          } catch (e) {
+            issues.unreadable.push({ table: entry.table, reason: `parse error: ${e}` })
+            return
+          }
+          if (!Array.isArray(parsed)) {
+            issues.unreadable.push({ table: entry.table, reason: 'payload is not an array' })
+            return
+          }
+          if (parsed.length !== entry.rows) {
+            issues.row_mismatch.push({ table: entry.table, expected: entry.rows, actual: parsed.length })
+          }
+        } catch (err) {
+          issues.unreadable.push({ table: entry.table, reason: String(err) })
+        }
+      })
+    )
+  }
+
+  const ok =
+    issues.missing.length === 0 &&
+    issues.unreadable.length === 0 &&
+    issues.row_mismatch.length === 0
+
+  return {
+    status: ok ? 'ok' : 'failed',
+    verified_tables: tableManifest.length,
+    verified_at: new Date().toISOString(),
+    missing: issues.missing,
+    unreadable: issues.unreadable,
+    row_mismatch: issues.row_mismatch,
+  }
+}
+
 // ─── Auth helpers ───────────────────────────────────────────────────────────
 
 async function authenticateRequest(
@@ -379,6 +481,9 @@ async function handleFinalize(
   totalSizeBytes: number,
   tableManifest: Array<{ table: string; rows: number; file: string }>
 ): Promise<Response> {
+  // Run integrity verification first so the manifest can record the outcome.
+  const integrity = await verifyBackupIntegrity(supabase, folderPath, tableManifest)
+
   // Generate storage manifest
   const storageManifest: Record<string, Array<{ name: string; size: number; created_at: string }>> = {}
   let totalStorageFiles = 0
@@ -414,6 +519,7 @@ async function handleFinalize(
     prune_cutoff: NINETY_DAYS_AGO,
     tables: tableManifest,
     storage_manifest_file: storageManifestPath,
+    integrity,
   }
 
   const manifestPath = `${folderPath}/manifest.json`
@@ -432,14 +538,20 @@ async function handleFinalize(
     throw new Error(`Failed to upload manifest: ${manifestUploadError.message}`)
   }
 
-  // Update log as completed
+  // Update log — degrade status if integrity failed.
+  const integritySummary =
+    integrity.status === 'failed'
+      ? `Integrity: ${integrity.missing.length} missing, ${integrity.unreadable.length} unreadable, ${integrity.row_mismatch.length} row mismatch`
+      : null
+
   await supabase.from('backup_logs').update({
-    status: 'completed',
+    status: integrity.status === 'ok' ? 'completed' : 'completed_with_errors',
     file_path: manifestPath,
     file_size_bytes: totalSizeBytes,
     tables_count: tablesCount,
     total_rows: totalRows,
     completed_at: new Date().toISOString(),
+    error_message: integritySummary,
   }).eq('id', backupId)
 
   return new Response(
@@ -451,6 +563,7 @@ async function handleFinalize(
       total_rows: totalRows,
       file_size_bytes: totalSizeBytes,
       storage_files_inventoried: totalStorageFiles,
+      integrity,
     }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   )

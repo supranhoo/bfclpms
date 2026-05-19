@@ -15,6 +15,12 @@ now in both `DELETE_ORDER` (leaves first) and `INSERT_ORDER` (parents
 first), appended after PMS tiers. All three functions
 (`create-backup`, `restore-backup`, `safety-analytics`) are deployed.
 
+`create-backup` finalize now runs a built-in integrity check
+(`verifyBackupIntegrity`) — every `<table>.json` is re-listed and
+row-counted against the batch manifest; failures degrade the log
+status to `completed_with_errors` and the result is embedded in
+`manifest.json` under `integrity` for post-hoc forensics.
+
 Next: run a sandbox backup→restore drill and verify recovery of at
 least one row from `safety_incidents`, `safety_permits`, and
 `safety_audit_runs`, then kick off Phase 2 (Incident UX).

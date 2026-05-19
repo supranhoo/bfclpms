@@ -175,16 +175,44 @@ export function useTriggerBackup() {
         tables_count: tablesProcessed,
         total_rows: totalRows,
         errors: allErrors,
+        integrity: finalizeResponse.data?.integrity as
+          | {
+              status: 'ok' | 'failed';
+              verified_tables: number;
+              missing: string[];
+              unreadable: Array<{ table: string; reason: string }>;
+              row_mismatch: Array<{ table: string; expected: number; actual: number }>;
+            }
+          | undefined,
       };
     },
     onSuccess: (data) => {
+      if (data.integrity && data.integrity.status === 'failed') {
+        const { missing, unreadable, row_mismatch } = data.integrity;
+        toast.error(
+          `Backup integrity check failed: ${missing.length} missing, ${unreadable.length} unreadable, ${row_mismatch.length} row mismatch`,
+          {
+            description: [
+              missing.length ? `Missing: ${missing.slice(0, 5).join(', ')}` : null,
+              row_mismatch.length
+                ? `Mismatch: ${row_mismatch.slice(0, 3).map(m => `${m.table} (${m.actual}/${m.expected})`).join(', ')}`
+                : null,
+            ].filter(Boolean).join(' | '),
+            duration: 20000,
+          },
+        );
+        queryClient.invalidateQueries({ queryKey: ['backup-logs'] });
+        return;
+      }
       if (data.errors && data.errors.length > 0) {
         toast.warning(`Backup completed with ${data.errors.length} warnings. ${data.tables_count} tables, ${data.total_rows} rows.`, {
           description: data.errors.slice(0, 5).join(' | '),
           duration: 15000,
         });
       } else {
-        toast.success(`Backup completed: ${data.tables_count} tables, ${data.total_rows} rows`);
+        toast.success(
+          `Backup completed & verified: ${data.tables_count} tables, ${data.total_rows} rows`,
+        );
       }
       queryClient.invalidateQueries({ queryKey: ['backup-logs'] });
     },

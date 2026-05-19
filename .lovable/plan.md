@@ -1,87 +1,69 @@
-## Phase 1 — Production Hardening Validation
+# Backup Integrity Check at Finalize
 
-Read-only / low-risk validation phase per `docs/safety-integration-governance.md`. No runtime code or schema changes. All output lands under `docs/safety/phase1/` plus one memory file.
+## Goal
 
-## Deliverables
+After all batches upload, verify each expected `<table>.json` file actually
+exists in storage and that its row count matches what `processTableBatch`
+reported. Fail (or warn) the backup if any file is missing, unreadable, or
+has mismatched row counts.
 
-### 1. `docs/safety/phase1/rls-matrix.md`
+## Where it runs
 
-Per Safety table × Safety role (`safety_admin`, `safety_manager`, `safety_officer`, `safety_viewer`, etc. — sourced from `safety_app_role` enum), document SELECT/INSERT/UPDATE/DELETE policy outcomes. Built from `pg_policies` + `has_safety_role` checks. Flag any table with RLS disabled or with a permissive `USING (true)` policy.
+`supabase/functions/create-backup/index.ts` → `handleFinalize`, immediately
+before generating `manifest.json` (so the manifest can record the result).
 
-### 2. `docs/safety/phase1/security-scan.md`
+## Verification logic
 
-Run `security--run_security_scan` + `supabase--linter`, filter for `safety_*` findings, list each with severity, current disposition (accept / fix-now / defer), and link to ADR if accepted.
+For every entry in `tableManifest` (`{ table, rows, file }`):
 
-### 3. `docs/safety/phase1/edge-function-auth.md`
+1. **Existence + size** — `storage.from('database-backups').list(folderPath, { search: '<table>.json' })`
+   in batches; confirm the object exists and `metadata.size > 0`.
+2. **Row count** — `storage.download(entry.file)`, `JSON.parse`, and assert
+   `Array.isArray(data) && data.length === entry.rows`.
+3. Process tables **sequentially in small groups (e.g. 4 at a time)** to
+   stay under the worker memory limit (same reason batch size was lowered).
+4. Collect three buckets of issues:
+   - `missing[]` — file not found / zero bytes
+   - `unreadable[]` — download or JSON parse failed
+   - `row_mismatch[]` — `{ table, expected, actual }`
 
-For each of `check-safety-sla`, `grant-safety-role`, `safety-analytics`:
+## Outcome handling
 
-- header inspection (`verify_jwt` in `supabase/config.toml`),
-- in-function auth check (service-role vs session role assertion),
-- caller allowlist,
-- expected failure modes (401 / 403).
-Recommend hardening only if a gap is found; defer fix to its own ticket if any.
+- **All clean** → proceed as today; manifest gains
+  `integrity: { status: 'ok', verified_tables: N, verified_at }`.
+  `backup_logs.status = 'completed'`.
+- **Any issue found** → manifest still uploads with
+  `integrity: { status: 'failed', missing, unreadable, row_mismatch, verified_at }`.
+  `backup_logs.status = 'completed_with_errors'` and `error_message`
+  summarises counts (e.g. `"Integrity: 2 missing, 1 row mismatch"`).
+  The function response includes the same `integrity` object so the UI
+  can surface it.
 
-### 4. `docs/safety/phase1/backup-coverage.md`
+## UI surface (minimal)
 
-List Safety tables vs the project's backup engine inventory (see `mem://infrastructure/database/optimized-backup-engine`). Confirm every `safety_*` table is in scope. Flag any missing.
+`src/hooks/useBackups.ts` already toasts `data.errors`. Extend
+`useTriggerBackup.onSuccess` to also surface `data.integrity` when present
+— a `toast.error` for `failed`, otherwise a quiet success. No new screens.
 
-### 5. `docs/safety/phase1/module-isolation.md`
+## Out of scope
 
-- Re-run `src/test/safetyShellIsolation.test.tsx` and capture pass/fail.
-- Static grep: PMS files importing from `src/{pages,components,hooks,lib}/safety/*` (must be zero except module-gate plumbing).
-- Static grep: Safety files importing PMS business logic (allowed: shared `ui/*`, `lib/utils`, supabase client; everything else flagged).
-- Produce remediation list (no fixes applied in Phase 1).
+- Checksums/hashes (row count + existence is sufficient for now).
+- Re-uploading failed tables automatically (operator decides via existing
+  Backup Now retry).
+- Verifying the storage-manifest bucket inventory.
 
-### 6. `docs/safety/phase1/hardening-baseline.md`
+## Technical notes
 
-Single-page summary that is the source of truth for Phase 2+ "what we must not regress".
+- Reuses the existing service-role `supabase` client in `handleFinalize`.
+- New `backup_logs.status` value `completed_with_errors` is already a free
+  text column — no migration needed.
+- Add a new `verifyBackupIntegrity(supabase, folderPath, tableManifest)`
+  helper near `processTableBatch` for testability.
 
-### 7. Memory write
+## Files touched
 
-Create `mem://features/safety/hardening-baseline` with the locked invariants:
-
-- RLS enabled on all `safety_*` tables;
-- Stage constant `rca` is canonical;
-- `client_submission_id` is the only idempotency column;
-- Write paths go through the RPCs listed in `phase0/rpc-diff.md`;
-- Edge-function auth posture as documented.
-
-Update `mem://index.md` to reference it.
-
-## Forbidden in this phase
-
-- Any source code change.
-- Any schema migration.
-- Any RLS policy edit (even if a gap is found — that becomes its own ticket gated separately).
-- Any edge function redeploy.
-
-## Stop conditions
-
-- A `safety_*` table is found with RLS off → halt, escalate, do not proceed to Phase 2.
-- A write path bypassing the documented RPCs is found in production code → halt, raise as a Phase 1.5 fix request.
-- Module isolation tests fail → halt; fix is its own scoped ticket.
-
-## Risk & impact
-
-- Data: none (read-only).
-- Workflow: none.
-- Auth: none.
-- Regression: zero — no runtime code changed.
-
-## Order of execution (single run)
-
-1. Pull `pg_policies` for `safety_*` → write `rls-matrix.md`.
-2. Run security scan + linter → write `security-scan.md`.
-3. Read `supabase/config.toml` + the three edge functions → write `edge-function-auth.md`.
-4. Cross-check backup engine config → write `backup-coverage.md`.
-5. Re-run isolation test + greps → write `module-isolation.md`.
-6. Roll up into `hardening-baseline.md` + memory file + index update.
-7. Report results in chat, list any Stop Conditions hit, then pause for the Phase 2 approval gate (Architect + EM + PO).
-
-## Open confirmations (carrying over from the master plan)
-
-- Phase order after this: **3 before 4** (incident UX, then offline UX) — confirm
-- Phase 6 import scope: **Assets / Training assignments / Emergency contacts** — confirm
-
-These don't block Phase 1; answer when convenient before the Phase 2 gate.
+- `supabase/functions/create-backup/index.ts` — add helper + wire into
+  `handleFinalize`; extend response payload and `backup_logs` update.
+- `src/hooks/useBackups.ts` — surface `integrity` in the success toast.
+- `docs/safety/phase1/hardening-baseline.md` — note that backup finalize
+  now self-verifies (Phase 1.5 closeout).
