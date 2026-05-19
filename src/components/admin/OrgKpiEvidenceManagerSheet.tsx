@@ -16,8 +16,10 @@ import {
   useOrgKpiEvidenceFiles,
   useUpsertOrgKpiEvidenceFiles,
   useResyncOrgKpiEvidence,
+  useOrgKpiEvidenceTargeting,
   type OrgKpiEvidenceFile,
 } from '@/hooks/useOrgKpiEvidenceFiles';
+import { EvidenceTargetPopover, DistributionPreview } from './EvidenceTargetPopover';
 
 interface Props {
   open: boolean;
@@ -37,6 +39,7 @@ export function OrgKpiEvidenceManagerSheet({ open, onOpenChange, okvId, kpiName 
   const { data: serverFiles, isLoading } = useOrgKpiEvidenceFiles(okvId);
   const upsert = useUpsertOrgKpiEvidenceFiles();
   const resync = useResyncOrgKpiEvidence();
+  const { data: targetingRows = [], isLoading: targetingLoading } = useOrgKpiEvidenceTargeting(okvId);
 
   const [files, setFiles] = useState<OrgKpiEvidenceFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -79,6 +82,10 @@ export function OrgKpiEvidenceManagerSheet({ open, onOpenChange, okvId, kpiName 
     setFiles(prev => prev.map((f, i) => i === idx ? { ...f, label } : f));
   const handleRemove = (idx: number) =>
     setFiles(prev => prev.filter((_, i) => i !== idx));
+  const handleTargetChange = (idx: number, next: { employeeIds: string[]; departmentIds: string[] }) =>
+    setFiles(prev => prev.map((f, i) => i === idx
+      ? { ...f, applies_to_employee_ids: next.employeeIds, applies_to_department_ids: next.departmentIds }
+      : f));
 
   const handleSave = async () => {
     if (!okvId) return;
