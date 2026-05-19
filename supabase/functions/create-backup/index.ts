@@ -143,14 +143,19 @@ async function processTableBatch(
   const results: Array<{ table: string; rows: number; file: string; sizeBytes: number }> = []
   const errors: string[] = []
 
-  const promises = tables.map(async (tableName) => {
+  // Process tables sequentially within a batch to keep peak memory low.
+  // Parallel Promise.all here caused WORKER_RESOURCE_LIMIT once the 33
+  // safety_* tables were added — multiple large table payloads were held
+  // in RAM simultaneously (rows array + JSON string + Blob copy).
+  for (const tableName of tables) {
     try {
       const pruneColumn = PRUNE_TABLES[tableName]
       const rows = await fetchAllRows(supabase, tableName, pruneColumn)
 
       const filePath = `${folderPath}/${tableName}.json`
       const json = JSON.stringify(rows)
-      const sizeBytes = new Blob([json]).size
+      // Byte length without allocating a Blob copy.
+      const sizeBytes = new TextEncoder().encode(json).byteLength
 
       const { error: uploadError } = await supabase.storage
         .from('database-backups')
@@ -158,19 +163,12 @@ async function processTableBatch(
 
       if (uploadError) {
         errors.push(`Failed to upload ${tableName}: ${uploadError.message}`)
-        return null
+      } else {
+        results.push({ table: tableName, rows: rows.length, file: filePath, sizeBytes })
       }
-
-      return { table: tableName, rows: rows.length, file: filePath, sizeBytes }
     } catch (err) {
       errors.push(`Skipping table ${tableName}: ${err}`)
-      return null
     }
-  })
-
-  const settled = await Promise.all(promises)
-  for (const result of settled) {
-    if (result) results.push(result)
   }
 
   return { results, errors }
