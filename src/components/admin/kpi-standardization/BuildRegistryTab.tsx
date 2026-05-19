@@ -425,11 +425,6 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
                             {drillIdx === idx ? 'Hide' : 'View'} KPIs
                           </Button>
                         </div>
-                        <VariantScaleStrip
-                          variant={variant}
-                          baseline={group.variants[0]}
-                          isBaseline={idx === 0}
-                        />
                         {drillIdx === idx && (
                           <div className="mt-2">
                             <AffectedKpisTable
