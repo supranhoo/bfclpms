@@ -481,6 +481,9 @@ async function handleFinalize(
   totalSizeBytes: number,
   tableManifest: Array<{ table: string; rows: number; file: string }>
 ): Promise<Response> {
+  // Run integrity verification first so the manifest can record the outcome.
+  const integrity = await verifyBackupIntegrity(supabase, folderPath, tableManifest)
+
   // Generate storage manifest
   const storageManifest: Record<string, Array<{ name: string; size: number; created_at: string }>> = {}
   let totalStorageFiles = 0
@@ -516,6 +519,7 @@ async function handleFinalize(
     prune_cutoff: NINETY_DAYS_AGO,
     tables: tableManifest,
     storage_manifest_file: storageManifestPath,
+    integrity,
   }
 
   const manifestPath = `${folderPath}/manifest.json`
@@ -534,14 +538,20 @@ async function handleFinalize(
     throw new Error(`Failed to upload manifest: ${manifestUploadError.message}`)
   }
 
-  // Update log as completed
+  // Update log — degrade status if integrity failed.
+  const integritySummary =
+    integrity.status === 'failed'
+      ? `Integrity: ${integrity.missing.length} missing, ${integrity.unreadable.length} unreadable, ${integrity.row_mismatch.length} row mismatch`
+      : null
+
   await supabase.from('backup_logs').update({
-    status: 'completed',
+    status: integrity.status === 'ok' ? 'completed' : 'completed_with_errors',
     file_path: manifestPath,
     file_size_bytes: totalSizeBytes,
     tables_count: tablesCount,
     total_rows: totalRows,
     completed_at: new Date().toISOString(),
+    error_message: integritySummary,
   }).eq('id', backupId)
 
   return new Response(
@@ -553,6 +563,7 @@ async function handleFinalize(
       total_rows: totalRows,
       file_size_bytes: totalSizeBytes,
       storage_files_inventoried: totalStorageFiles,
+      integrity,
     }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   )
