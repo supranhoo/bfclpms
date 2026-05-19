@@ -14,7 +14,6 @@ import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDial
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { RegistryPager, pagedSlice } from './RegistryPager';
-import { VariantScaleStrip } from './VariantScaleStrip';
 import {
   BucketId,
   SKIP_BUCKET,
@@ -426,11 +425,6 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
                             {drillIdx === idx ? 'Hide' : 'View'} KPIs
                           </Button>
                         </div>
-                        <VariantScaleStrip
-                          variant={variant}
-                          baseline={group.variants[0]}
-                          isBaseline={idx === 0}
-                        />
                         {drillIdx === idx && (
                           <div className="mt-2">
                             <AffectedKpisTable
