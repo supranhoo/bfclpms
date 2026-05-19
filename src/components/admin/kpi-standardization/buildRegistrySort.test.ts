@@ -10,16 +10,49 @@ const g = (normalized_kpi: string, variants: Array<{ match_type?: 'exact' | 'fuz
 });
 
 describe('compareGroupsByMatch', () => {
-  it('puts exact groups above any fuzzy group', () => {
+  it('pure-exact group (score 1) outranks weaker fuzzy group', () => {
     const exact = g('a', [{ match_type: 'exact' }]);
-    const fuzzy = g('b', [{ match_type: 'fuzzy', similarity: 0.99 }]);
+    const fuzzy = g('b', [
+      { match_type: 'exact', similarity: 1 },           // representative
+      { match_type: 'fuzzy', similarity: 0.5 },
+    ]);
     expect(sortGroupsByMatch([fuzzy, exact])[0]).toBe(exact);
   });
 
-  it('sorts fuzzy groups by max similarity descending', () => {
+  it('ignores the cluster representative (similarity=1) when ranking fuzzy groups', () => {
+    // Real scanner shape: every group has a representative variant with
+    // similarity=1.0. Ranking must use the strongest *fuzzy* variant only.
+    const weak = g('a', [
+      { match_type: 'exact', similarity: 1 },
+      { match_type: 'fuzzy', similarity: 0.4 },
+    ]);
+    const strong = g('b', [
+      { match_type: 'exact', similarity: 1 },
+      { match_type: 'fuzzy', similarity: 0.95 },
+    ]);
+    expect(sortGroupsByMatch([weak, strong])[0]).toBe(strong);
+  });
+
+  it('sorts fuzzy groups by max fuzzy similarity descending', () => {
     const low = g('a', [{ match_type: 'fuzzy', similarity: 0.4 }]);
     const high = g('b', [{ match_type: 'fuzzy', similarity: 0.9 }]);
     expect(sortGroupsByMatch([low, high])[0]).toBe(high);
+  });
+
+  it('reproduces user-reported sequence Exact, 40%, 100%, 46%, 46%, 49% → sorted 100%, Exact, 49%, 46%, 46%, 40%', () => {
+    const exactOnly = g('exact', [{ match_type: 'exact' }]);
+    const f40 = g('f40', [{ match_type: 'exact', similarity: 1 }, { match_type: 'fuzzy', similarity: 0.40 }]);
+    const f100 = g('f100', [{ match_type: 'exact', similarity: 1 }, { match_type: 'fuzzy', similarity: 1.0 }]);
+    const f46a = g('f46a', [{ match_type: 'exact', similarity: 1 }, { match_type: 'fuzzy', similarity: 0.46 }]);
+    const f46b = g('f46b', [{ match_type: 'exact', similarity: 1 }, { match_type: 'fuzzy', similarity: 0.46 }]);
+    const f49 = g('f49', [{ match_type: 'exact', similarity: 1 }, { match_type: 'fuzzy', similarity: 0.49 }]);
+    const sorted = sortGroupsByMatch([exactOnly, f40, f100, f46a, f46b, f49]);
+    // 100 and exact-only tie at score 1 → order between them is row-count/alpha,
+    // but both must precede the 49/46/46/40 tail.
+    expect(sorted.slice(0, 2)).toEqual(expect.arrayContaining([exactOnly, f100]));
+    expect(sorted[2]).toBe(f49);
+    expect(sorted.slice(3, 5)).toEqual(expect.arrayContaining([f46a, f46b]));
+    expect(sorted[5]).toBe(f40);
   });
 
   it('tie on similarity → higher row_count wins', () => {

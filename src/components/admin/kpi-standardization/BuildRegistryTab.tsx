@@ -350,7 +350,26 @@ export function BuildRegistryTab({ onRegistryUpdated }: Props) {
                   });
                   usedLetters.add(nextAvailableBucket(assignments));
                   const sharedBucketOptions = [...usedLetters].sort();
-                  return group.variants.map((variant, idx) => {
+                  // Render variants by Match% high → low so admins read the
+                  // strongest similarities first. Keep the ORIGINAL index for
+                  // bucket-assignment state, which is keyed by source index.
+                  const orderedVariants = group.variants
+                    .map((variant, idx) => ({ variant, idx }))
+                    .sort((a, b) => {
+                      const sa = a.variant.match_type === 'exact'
+                        ? 1
+                        : (a.variant.similarity ?? 0);
+                      const sb = b.variant.match_type === 'exact'
+                        ? 1
+                        : (b.variant.similarity ?? 0);
+                      if (sb !== sa) return sb - sa;
+                      // Stable tiebreakers: more rows first, then kpi name.
+                      const ra = a.variant.row_count ?? 0;
+                      const rb = b.variant.row_count ?? 0;
+                      if (rb !== ra) return rb - ra;
+                      return (a.variant.kpi_name ?? '').localeCompare(b.variant.kpi_name ?? '');
+                    });
+                  return orderedVariants.map(({ variant, idx }) => {
                   const currentBucket = assignments[idx] ?? 'A';
                   const bucketOptions = sharedBucketOptions;
                   return (

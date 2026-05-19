@@ -1,35 +1,26 @@
-# Sort Build Registry groups by match strength
+Risk & Impact Report
+- Data Impact: No schema, RLS, or historical data changes. This is display-only sorting.
+- Workflow Impact: No approval, skip, or registry creation logic changes.
+- UI/UX Consistency: Keeps the existing card UI; only changes ordering and adds/adjusts tests.
+- Regression Risk: Low, but current behavior shows the previous implementation treated Exact as 100%, which explains Exact appearing before Fuzzy 100%.
+- Mitigation Plan: Update pure sorting helpers and tests so fuzzy percentages sort strictly high-to-low, while Exact uses 100% only as a tie score and does not incorrectly outrank Fuzzy 100%.
 
-## Change
-In `src/components/admin/kpi-standardization/BuildRegistryTab.tsx`, sort `visibleGroups` so the highest-similarity groups appear first — making it easier for the admin to scan from "most similar" down to "least similar".
+Plan
+1. Fix group-level Match% sorting in `buildRegistrySort.ts`
+   - Compute a numeric display score from the variants.
+   - Fuzzy groups sort by their highest `similarity` value.
+   - Exact groups sort as `1.0` only for score comparison, not as a special “always first” category.
+   - Tie-breakers stay stable: more rows, more variants, then KPI text alphabetically.
 
-## Sort key (per group)
-For each group, compute a `matchScore`:
-- If the group has any `match_type === 'exact'` variant → score = `1` (exact stays at the top).
-- Else → score = `max(variant.similarity ?? 0)` across all variants (the strongest fuzzy match).
+2. Fix variant ordering inside each Standardization card
+   - Before rendering `group.variants.map(...)`, sort variants by match strength high-to-low.
+   - This will make the sequence inside a group show `Fuzzy 100%`, then `Exact`/other 100% ties, then 49%, 46%, 40%, etc., instead of database-return order.
+   - Preserve bucket assignment behavior by carrying the original variant index through the sorted render list, so approvals still reference the correct variant.
 
-Sort descending by `matchScore`. Tiebreakers (preserve stable, predictable order):
-1. Higher `row_count` first (bigger impact).
-2. Higher `variants.length` first.
-3. `normalized_kpi` alphabetical (stable fallback).
+3. Add regression tests
+   - Cover the user-reported order: Exact, 40%, 100%, 46%, 46%, 49% should render/sort as 100%, Exact/100 tie, 49%, 46%, 46%, 40% depending on tie-breakers.
+   - Cover that Fuzzy 100% is no longer placed below Exact just because Exact is present.
+   - Keep existing row-count and alphabetical tie-breaker tests.
 
-Skipped groups (`is_skipped`) remain in their existing flow — they're already dimmed and toggle-controlled; we do **not** force them to the bottom (keeps current "Include skipped" UX intact).
-
-## Implementation
-- Add a small `groupMatchScore(group)` helper in the same file (or co-locate next to `groupKey`).
-- Wrap the existing `filteredGroups`/`visibleGroups` derivation: sort `visibleGroups` with the comparator above before slicing into `pagedGroups`. Memoize via `useMemo`.
-- No changes to `useScanDuplicates`, the scanner SQL, dedupe helper, or the variant-level UI badges.
-
-## Tests
-Add `src/components/admin/kpi-standardization/buildRegistrySort.test.ts` (pure helper extracted alongside) covering:
-- Exact group ranks above any fuzzy group.
-- Two fuzzy groups sort by max similarity desc.
-- Tie on similarity → higher `row_count` wins.
-- Tie on similarity + row_count → alphabetical `normalized_kpi`.
-
-## Risk & Impact
-- **Data**: none (read-only presentation).
-- **Workflow**: none — same approval flow, only display order changes.
-- **UI/UX**: pagination resets are already keyed on `resetKey`; sort change is deterministic per scan so no extra reset needed.
-- **Regression**: very low; isolated to one memo + one helper.
-- **Mitigation**: unit tests on the comparator lock the contract.
+4. Documentation sync
+   - Update `DOCUMENTATION.md`, `POLICY.md`, and the current changelog entry to document that Standardization scanner ordering is Match% high-to-low for admin review efficiency.
