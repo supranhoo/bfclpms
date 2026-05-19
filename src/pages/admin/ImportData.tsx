@@ -1320,6 +1320,10 @@ export default function ImportData() {
             level: row.level || (existingEmployee as any).level,
             reporting_manager_id: managerId || existingEmployee.reporting_manager_id,
             ...(resolvedCompanyId ? { company_id: resolvedCompanyId } : {}),
+            ...(() => {
+              const s = parseEmployeeStatus(row.employeeStatus);
+              return s === true || s === false ? { is_active: s } : {};
+            })(),
           } as any)
           .eq('id', existingEmployee.id);
 
@@ -1383,6 +1387,10 @@ export default function ImportData() {
             company_id: newCompanyId,
             location: sanitizeText(row.location) || undefined,
             portal_access: hasPortalAccess,
+            ...(() => {
+              const s = parseEmployeeStatus(row.employeeStatus);
+              return s === true || s === false ? { is_active: s } : {};
+            })(),
           },
         });
 
