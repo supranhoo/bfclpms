@@ -302,7 +302,10 @@ async function handleInit(
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
   const folderPath = `chunked/${timestamp}`
-  const BATCH_SIZE = 9
+  // Smaller batches reduce per-invocation peak memory. Each batch runs in
+  // its own edge worker, so reducing batch size trades a few extra
+  // invocations for staying well under the 256MB worker limit.
+  const BATCH_SIZE = 4
   const batches = splitIntoBatches(TABLES_TO_BACKUP, BATCH_SIZE)
 
   return new Response(
