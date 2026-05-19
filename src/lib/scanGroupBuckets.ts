@@ -14,7 +14,8 @@ export type BucketId = string; // 'A' | 'B' | ... | 'SKIP'
 
 export const SKIP_BUCKET: BucketId = 'SKIP';
 
-const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+// A–Z: up to 26 buckets per group (raised from 8 to support large fuzzy clusters).
+const LETTERS = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
 
 export interface VariantLite {
   kra_name: string;
