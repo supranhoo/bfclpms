@@ -76,52 +76,36 @@ function ColumnFilterPopover({ label, values, selected, onChange }: ColumnFilter
     return values.filter(v => v.display.toLowerCase().includes(q));
   }, [values, search]);
 
-  // Working draft set so user can stage Apply/Clear.
-  const [draft, setDraft] = useState<Set<string>>(new Set(selected ?? []));
+  // Draft = the set of currently checked tokens. When the popover opens we
+  // seed it with the existing filter, or with ALL values if no filter is set.
+  const allTokens = useMemo(() => new Set(values.map(v => v.token)), [values]);
+  const [draft, setDraft] = useState<Set<string>>(() => new Set(selected ?? allTokens));
   useEffect(() => {
-    if (open) setDraft(new Set(selected ?? []));
-  }, [open, selected]);
-
-  const allChecked = filtered.length > 0 && filtered.every(v => draft.has(v.token) || draft.size === 0);
-  const isAllUnfiltered = draft.size === 0;
+    if (open) setDraft(new Set(selected ?? allTokens));
+  }, [open, selected, allTokens]);
 
   const toggle = (token: string) => {
     setDraft(prev => {
       const next = new Set(prev);
-      // Initial empty = "all checked"; on first toggle, seed with full set then remove.
-      if (next.size === 0) {
-        values.forEach(v => next.add(v.token));
-      }
       if (next.has(token)) next.delete(token);
       else next.add(token);
-      // If everything is included, treat as "no filter".
-      if (next.size === values.length) return new Set();
       return next;
     });
   };
 
-  const selectAll = () => setDraft(new Set());
-  const clearAll = () => setDraft(new Set([])); // empty selection = nothing passes
-  // Distinguish: "all" via selectAll() → empty set; clear → empty too. Use a flag.
-  const [clearedExplicitly, setClearedExplicitly] = useState(false);
-
   const handleApply = () => {
-    if (clearedExplicitly && draft.size === 0) {
-      // user wants nothing — that filters everything out. Represent with sentinel.
-      onChange(new Set(['__NONE__']));
-    } else if (draft.size === 0) {
-      onChange(undefined);
+    if (draft.size === 0 || draft.size === allTokens.size) {
+      // Nothing checked → filter everything out is not useful; treat as no-op.
+      // All checked → no filter.
+      onChange(draft.size === allTokens.size ? undefined : new Set(draft));
     } else {
       onChange(new Set(draft));
     }
-    setClearedExplicitly(false);
     setOpen(false);
   };
 
   const handleClearFilter = () => {
     onChange(undefined);
-    setDraft(new Set());
-    setClearedExplicitly(false);
     setOpen(false);
   };
 
@@ -148,10 +132,10 @@ function ColumnFilterPopover({ label, values, selected, onChange }: ColumnFilter
           className="h-7 text-xs mb-2"
         />
         <div className="flex items-center justify-between text-[11px] mb-1">
-          <button type="button" className="text-primary hover:underline" onClick={() => { setDraft(new Set()); setClearedExplicitly(false); }}>
+          <button type="button" className="text-primary hover:underline" onClick={() => setDraft(new Set(allTokens))}>
             Select all
           </button>
-          <button type="button" className="text-muted-foreground hover:underline" onClick={() => { setDraft(new Set()); setClearedExplicitly(true); }}>
+          <button type="button" className="text-muted-foreground hover:underline" onClick={() => setDraft(new Set())}>
             Clear
           </button>
         </div>
@@ -159,21 +143,18 @@ function ColumnFilterPopover({ label, values, selected, onChange }: ColumnFilter
           {filtered.length === 0 && (
             <div className="text-[11px] text-muted-foreground px-2 py-2">No values</div>
           )}
-          {filtered.map(v => {
-            const checked = isAllUnfiltered && !clearedExplicitly ? true : draft.has(v.token);
-            return (
-              <label
-                key={v.token}
-                className="flex items-center gap-2 px-2 py-1 text-xs hover:bg-muted/50 cursor-pointer"
-              >
-                <Checkbox
-                  checked={checked}
-                  onCheckedChange={() => { setClearedExplicitly(false); toggle(v.token); }}
-                />
-                <span className="truncate" title={v.display}>{v.display}</span>
-              </label>
-            );
-          })}
+          {filtered.map(v => (
+            <label
+              key={v.token}
+              className="flex items-center gap-2 px-2 py-1 text-xs hover:bg-muted/50 cursor-pointer"
+            >
+              <Checkbox
+                checked={draft.has(v.token)}
+                onCheckedChange={() => toggle(v.token)}
+              />
+              <span className="truncate" title={v.display}>{v.display}</span>
+            </label>
+          ))}
         </div>
         <div className="flex items-center justify-end gap-2 mt-2">
           <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={handleClearFilter} disabled={!active}>
