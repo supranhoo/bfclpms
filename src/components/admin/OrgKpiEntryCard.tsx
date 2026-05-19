@@ -1240,11 +1240,13 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
         newScope={scopeChangeTarget}
       />
     )}
-    {data.scope === 'organization' && (
+    {hasEvidenceControls && (
       <OrgKpiEvidenceManagerSheet
         open={showEvidenceSheet}
         onOpenChange={setShowEvidenceSheet}
-        okvId={orgOkvId ?? null}
+        okvId={data.scope === 'organization' ? (orgOkvId ?? null) : null}
+        okvScopes={data.scope === 'organization' ? undefined : scopedOkvOptions}
+        scopeLabel={data.scope === 'department' ? 'Department' : data.scope === 'employee' ? 'Employee' : undefined}
         kpiName={data.kpiName}
       />
     )}
