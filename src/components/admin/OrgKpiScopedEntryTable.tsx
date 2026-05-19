@@ -350,6 +350,7 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
                     hasRowPropagation={hasRowPropagation}
                     isComplianceKpi={isComplianceKpi}
                     submissionDates={submissionDates}
+                    kpiName={kpiName}
                   />
                 ))
               ) : (
@@ -369,6 +370,7 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
                     isPropagating={isPropagating}
                     hasSelectionFeature={hasSelectionFeature}
                     hasRowPropagation={hasRowPropagation}
+                    kpiName={kpiName}
                   />
                 ))
               )}
