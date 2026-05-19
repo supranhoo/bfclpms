@@ -12,7 +12,8 @@ export interface PropagationPreviewBreakdownItem {
     | 'not_in_kra_set'
     | 'kpi_not_found'
     | 'reviewer_locked'
-    | 'self_review_existing';
+    | 'self_review_existing'
+    | 'approved_immutable';
   current_achieved?: number | null;
   current_self_score?: number | null;
   new_achieved?: number | null;
@@ -27,7 +28,11 @@ export interface PropagationPreviewResult {
   breakdown: PropagationPreviewBreakdownItem[];
 }
 
-export type OverwritePolicy = 'safe' | 'pre_review_only' | 'force_pre_terminal';
+export type OverwritePolicy =
+  | 'safe'
+  | 'pre_review_only'
+  | 'force_pre_terminal'
+  | 'overwrite_and_stepback';
 
 interface PreviewArgs {
   kpiIds: string[];

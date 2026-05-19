@@ -913,6 +913,10 @@ export default function OrgKpiDataEntry() {
         naRemarks: values.naRemarks,
         remarks: values.remarks || undefined,
         evidenceUrl: values.evidenceUrl || undefined,
+        // ADR-064: admin OKV is source of truth — overwrite any prior
+        // self-review and step the row back to self_review if it has
+        // already moved to a reviewer stage. Approved rows stay immutable.
+        overwritePolicy: isAdmin ? 'overwrite_and_stepback' : 'pre_review_only',
       });
       totalPropagated = result.propagatedCount;
       propagatedScopeIds.push('organization');
@@ -948,6 +952,8 @@ export default function OrgKpiDataEntry() {
           evidenceUrl: sv.evidenceUrl || undefined,
           // v2.66.8 — silence per-scope toasts; we emit one summary below
           silent: true,
+          // ADR-064: admin OKV is source of truth.
+          overwritePolicy: isAdmin ? 'overwrite_and_stepback' : 'pre_review_only',
         });
         totalPropagated += result.propagatedCount;
         // Aggregate skip reasons for the summary toast
@@ -958,7 +964,12 @@ export default function OrgKpiDataEntry() {
           // returned nothing — already advanced, RLS-hidden, or name drift)
           // are benign workflow conditions, NOT failures. Bucketing them
           // as "hard" caused a misleading red toast.
-          if (s.reason === 'not_in_kra_set' || s.reason === 'reviewer_locked' || s.reason === 'no_target_rows') {
+          if (
+            s.reason === 'not_in_kra_set' ||
+            s.reason === 'reviewer_locked' ||
+            s.reason === 'no_target_rows' ||
+            s.reason === 'approved_immutable'
+          ) {
             totalSkippedBenign++;
           } else {
             totalSkippedHard++;
@@ -1235,7 +1246,10 @@ export default function OrgKpiDataEntry() {
         kpiIds: candidateIds,
         newAchieved: typeof newAchieved === 'number' ? newAchieved : null,
         newSelfScore: typeof newSelfScore === 'number' ? newSelfScore : null,
-        overwritePolicy: 'pre_review_only',
+        // ADR-064: align preview eligibility with the policy the live RPC
+        // will use, so admins see how many rows will be overwritten and
+        // stepped back before they commit.
+        overwritePolicy: isAdmin ? 'overwrite_and_stepback' : 'pre_review_only',
       });
       setPreviewState((s) => ({ ...s, loading: false, result }));
     } catch (err: any) {

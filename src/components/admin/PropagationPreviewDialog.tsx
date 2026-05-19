@@ -27,6 +27,7 @@ const REASON_LABEL: Record<string, string> = {
   reviewer_locked: 'Reviewer-locked',
   self_review_existing: 'Already in self-review',
   kpi_not_found: 'KPI row missing',
+  approved_immutable: 'Approved — immutable',
 };
 
 function fmt(v: number | null | undefined) {
@@ -44,6 +45,18 @@ export function PropagationPreviewDialog({
   const verdict = summarisePropagationPreview(preview?.breakdown ?? []);
   const { total, willAdvance, willSkip, lockedCount, overwriteCount, effectivelyPropagated } = verdict;
   const allSkipped = total > 0 && willAdvance === 0;
+  // ADR-064 — count rows that would be stepped back from a reviewer stage
+  // back to self_review by the overwrite_and_stepback policy.
+  const stepBackCount = (preview?.breakdown ?? []).filter(
+    (r) =>
+      r.will_advance &&
+      ['manager_check', 'audit', 'auditor_check', 'skip_level_check', 'hr_pms_review', 'management_review'].includes(
+        r.current_status,
+      ),
+  ).length;
+  const approvedImmutable = (preview?.breakdown ?? []).filter(
+    (r) => r.reason === 'approved_immutable',
+  ).length;
 
   return (
     <AlertDialog open={open} onOpenChange={(v) => !v && onCancel()}>
@@ -86,7 +99,30 @@ export function PropagationPreviewDialog({
                         <span>{overwriteCount} will overwrite existing self-review</span>
                       </Badge>
                     )}
+                    {stepBackCount > 0 && (
+                      <Badge variant="outline" className="gap-1 border-amber-600 text-amber-800">
+                        <AlertTriangle className="h-3 w-3" />
+                        <span>{stepBackCount} will be sent back to Self-Review</span>
+                      </Badge>
+                    )}
+                    {approvedImmutable > 0 && (
+                      <Badge variant="outline" className="gap-1 border-muted-foreground text-muted-foreground">
+                        <Lock className="h-3 w-3" />
+                        <span>{approvedImmutable} approved (skipped)</span>
+                      </Badge>
+                    )}
                   </div>
+
+                  {stepBackCount > 0 && (
+                    <div className="rounded-md border border-amber-500/40 bg-amber-50 p-3 text-xs text-amber-900">
+                      <strong>Heads up:</strong> {stepBackCount} employee
+                      {stepBackCount === 1 ? '' : 's'} have already moved into a
+                      reviewer stage. Saving will overwrite their self-review
+                      values and remarks, clear all reviewer scores, and reset
+                      them back to <strong>Self-Review</strong> so the chain
+                      re-runs. Approved rows are not touched.
+                    </div>
+                  )}
 
                   {allSkipped && (
                     <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
