@@ -282,9 +282,43 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
       })();
   const hasEvidenceControls = data.scope === 'organization'
     ? !!orgOkvId
-    : scopedOkvIds.length > 0;
+    : (scopedOkvIds.length > 0 || !!isAdmin);
   const diagnoseGap = useDiagnoseOrgKpiGap();
   const repairGap = useRepairOrgKpiGap();
+
+  // RCA 2026-05-19 — Lazily materialise OKV rows for mapped employees so
+  // the Supporting / Parity / Manage-files chips always render in admin.
+  // Idempotent server-side; we fire once per card mount when admin is
+  // viewing a dept/employee-scope card with no OKV rows yet.
+  const ensureScopeRows = useEnsureOrgKpiScopeRows();
+  const didEnsureRef = useRef(false);
+  useEffect(() => {
+    if (didEnsureRef.current) return;
+    if (!isAdmin) return;
+    if (data.scope === 'organization') return;
+    const hasMapped = (data.scopedRows ?? []).length > 0;
+    if (!hasMapped) return;
+    if (scopedOkvIds.length > 0) return;
+    didEnsureRef.current = true;
+    ensureScopeRows.mutate({
+      categoryId: data.categoryId,
+      kraName: data.kraName,
+      kpiName: data.kpiName,
+      reviewPeriod,
+      reviewYear,
+    });
+  }, [
+    isAdmin,
+    data.scope,
+    data.scopedRows,
+    data.categoryId,
+    data.kraName,
+    data.kpiName,
+    reviewPeriod,
+    reviewYear,
+    scopedOkvIds.length,
+    ensureScopeRows,
+  ]);
   const openRepairDialog = useCallback(async () => {
     setShowRepairDialog(true);
     setRepairRows(null);
