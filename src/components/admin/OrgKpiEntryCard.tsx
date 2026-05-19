@@ -1185,6 +1185,14 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
         newScope={scopeChangeTarget}
       />
     )}
+    {data.scope === 'organization' && (
+      <OrgKpiEvidenceManagerSheet
+        open={showEvidenceSheet}
+        onOpenChange={setShowEvidenceSheet}
+        okvId={orgOkvId ?? null}
+        kpiName={data.kpiName}
+      />
+    )}
     {isAdmin && (
       <AlertDialog open={showRepairDialog} onOpenChange={setShowRepairDialog}>
         <AlertDialogContent className="max-w-2xl">
