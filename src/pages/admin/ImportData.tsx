@@ -151,6 +151,19 @@ interface EmployeeImportRow {
   managerName?: string;
   role?: string;
   portalAccess?: string;
+  employeeStatus?: string;
+}
+
+// Parse Active/Inactive status cell into a boolean (or undefined if empty/unset).
+// Accepts: active|inactive|yes|no|true|false|1|0 (case-insensitive). Anything
+// else returns the sentinel string 'INVALID' so callers can surface a row error.
+function parseEmployeeStatus(raw: string | undefined): boolean | undefined | 'INVALID' {
+  if (raw === undefined || raw === null) return undefined;
+  const v = String(raw).trim().toLowerCase();
+  if (v === '') return undefined;
+  if (['active', 'yes', 'true', '1', 'y'].includes(v)) return true;
+  if (['inactive', 'no', 'false', '0', 'n'].includes(v)) return false;
+  return 'INVALID';
 }
 
 export default function ImportData() {
@@ -707,6 +720,7 @@ export default function ImportData() {
       managerName: getValue(['managerName', 'managername', 'manager_name', 'reportingManager', 'reportingmanager', 'reporting_manager', 'supervisor']),
       role: getValue(['role', 'appRole', 'approle', 'app_role', 'userRole', 'userrole', 'user_role', 'systemRole', 'systemrole', 'system_role']),
       portalAccess: getValue(['portalAccess', 'portalaccess', 'portal_access', 'loginAccess', 'loginaccess', 'login_access']),
+      employeeStatus: getValue(['employeeStatus', 'employee_status', 'status', 'active', 'isActive', 'is_active']),
     };
   };
 
@@ -781,6 +795,12 @@ export default function ImportData() {
           }
           if (row.designation && !desigNames.has(row.designation.toLowerCase())) {
             rowErrs.push(`Designation '${row.designation}' does not exist in the system`);
+          }
+          if (row.employeeStatus) {
+            const parsed = parseEmployeeStatus(row.employeeStatus);
+            if (parsed === 'INVALID') {
+              rowErrs.push(`Employee Status '${row.employeeStatus}' is invalid (use Active or Inactive)`);
+            }
           }
           if (rowErrs.length > 0) {
             perRowErrors.set(index, rowErrs);
@@ -1300,6 +1320,10 @@ export default function ImportData() {
             level: row.level || (existingEmployee as any).level,
             reporting_manager_id: managerId || existingEmployee.reporting_manager_id,
             ...(resolvedCompanyId ? { company_id: resolvedCompanyId } : {}),
+            ...(() => {
+              const s = parseEmployeeStatus(row.employeeStatus);
+              return s === true || s === false ? { is_active: s } : {};
+            })(),
           } as any)
           .eq('id', existingEmployee.id);
 
@@ -1363,6 +1387,10 @@ export default function ImportData() {
             company_id: newCompanyId,
             location: sanitizeText(row.location) || undefined,
             portal_access: hasPortalAccess,
+            ...(() => {
+              const s = parseEmployeeStatus(row.employeeStatus);
+              return s === true || s === false ? { is_active: s } : {};
+            })(),
           },
         });
 
@@ -1646,6 +1674,7 @@ export default function ImportData() {
         level: 'Level 1',
         managerEmployeeId: '100002',
         managerName: 'Jane Smith',
+        employeeStatus: 'Active',
       },
     ];
 
@@ -1664,7 +1693,7 @@ export default function ImportData() {
       const allProfiles = await fetchAllPaged<any>((from, to) =>
         supabase
           .from('profiles')
-          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, department_id, reporting_manager_id')
+          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, department_id, reporting_manager_id, is_active')
           .order('id')
           .range(from, to)
       );
@@ -1712,6 +1741,7 @@ export default function ImportData() {
           email: profile.email || '',
           designation: profile.designation || '',
           role: roleMap.get(profile.id) || 'employee',
+          employeeStatus: profile.is_active === false ? 'Inactive' : 'Active',
           companyCode: companyObj?.code || companyObj?.name || '',
           division: div?.name || '',
           businessUnit: bu?.name || '',

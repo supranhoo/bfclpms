@@ -18,6 +18,7 @@ interface CreateEmployeeRequest {
   company_id?: string;
   location?: string;
   portal_access?: boolean;
+  is_active?: boolean;
 }
 
 Deno.serve(async (req) => {
@@ -109,6 +110,7 @@ Deno.serve(async (req) => {
       location_id: locationId,
       portal_access: portalAccess,
       has_real_email: !!body.email, // FALSE when no email provided -> employee-code login
+      ...(typeof body.is_active === 'boolean' ? { is_active: body.is_active } : {}),
     }
 
     // Admin account protection — never overwrite this profile
