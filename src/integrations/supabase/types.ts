@@ -5695,6 +5695,54 @@ export type Database = {
           },
         ]
       }
+      safety_drill_runs: {
+        Row: {
+          after: Json
+          backup_id: string | null
+          baseline: Json
+          created_at: string
+          deltas: Json
+          drill_id: string
+          errors: Json | null
+          finished_at: string
+          id: string
+          ok: boolean
+          performed_by: string | null
+          started_at: string
+          system_run: boolean
+        }
+        Insert: {
+          after?: Json
+          backup_id?: string | null
+          baseline?: Json
+          created_at?: string
+          deltas?: Json
+          drill_id: string
+          errors?: Json | null
+          finished_at: string
+          id?: string
+          ok: boolean
+          performed_by?: string | null
+          started_at: string
+          system_run?: boolean
+        }
+        Update: {
+          after?: Json
+          backup_id?: string | null
+          baseline?: Json
+          created_at?: string
+          deltas?: Json
+          drill_id?: string
+          errors?: Json | null
+          finished_at?: string
+          id?: string
+          ok?: boolean
+          performed_by?: string | null
+          started_at?: string
+          system_run?: boolean
+        }
+        Relationships: []
+      }
       safety_emergency_contacts: {
         Row: {
           business_unit_id: string | null
