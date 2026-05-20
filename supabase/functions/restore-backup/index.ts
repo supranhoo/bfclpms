@@ -5,8 +5,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 }
 
-// Delete order: leaf tables first (reverse of insert order)
-const DELETE_ORDER = [
+// Legacy hardcoded orders retained ONLY as a fallback if the
+// `get_backup_table_order` RPC is unavailable. The runtime path uses the
+// dynamic discovery helpers below so every table in `public` (minus the
+// denylist) is restored in correct FK order automatically.
+const LEGACY_DELETE_ORDER = [
   // Safety Tier 5 (leaves) — delete first
   'safety_audit_log', 'safety_notifications', 'safety_sla_escalations',
   'safety_incident_timeline', 'safety_incident_progress_logs',
@@ -77,8 +80,7 @@ const DELETE_ORDER = [
   'companies',
 ]
 
-// Insert order: parent tables first (reverse of delete order)
-const INSERT_ORDER = [
+const LEGACY_INSERT_ORDER = [
   // Tier 1
   'companies', 'divisions', 'designations', 'pms_grades', 'kra_categories', 'modules',
   'system_settings', 'app_settings', 'workflow_templates', 'frequency_config',
