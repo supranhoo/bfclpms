@@ -18,6 +18,7 @@ import {
   validateCalibrationDraft,
 } from '@/lib/safetyAssets';
 import { AssetCalibrationBadge } from '@/components/safety/AssetCalibrationBadge';
+import { SafetySkeletonBlock } from '@/components/safety/SafetySkeletonBlock';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
