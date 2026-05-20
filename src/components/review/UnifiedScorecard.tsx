@@ -1583,7 +1583,7 @@ export function UnifiedScorecard({
             <CardTitle className="text-sm flex items-center gap-2 flex-wrap">
               <span>Performance by Category</span>
               <span
-                title="Total weightage of all KPIs assigned this period. Should equal 100%. N/A KPIs are excluded."
+                title="Total weightage of all KPIs mapped this period (all frequencies, including N/A). Should equal 100%."
                 className={`text-xs font-medium px-1.5 py-0.5 rounded ${
                   Math.round(fullAssignedWeight) === 100
                     ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
