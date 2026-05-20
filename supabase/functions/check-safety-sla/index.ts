@@ -29,12 +29,13 @@ serve(async (req) => {
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
     // Authorize: accept service-role calls (cron) or admin user JWTs.
+    // T-004: anon-key bypass removed — anon-key is a public value and must
+    // never grant cron-equivalent powers.
     const authHeader = req.headers.get("Authorization") || "";
     const apiKey = req.headers.get("apikey") || "";
     const isServiceCall =
       authHeader === `Bearer ${serviceKey}` ||
-      apiKey === serviceKey ||
-      apiKey === anonKey;
+      apiKey === serviceKey;
 
     if (!isServiceCall) {
       // Validate user JWT and check safety admin role
