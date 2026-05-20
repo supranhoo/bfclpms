@@ -79,3 +79,9 @@ verify_jwt = false
 verify_jwt = false
 [functions.iac-sweep-expired]
 verify_jwt = false
+
+[functions.grant-safety-role]
+verify_jwt = false
+
+[functions.check-safety-sla]
+verify_jwt = false

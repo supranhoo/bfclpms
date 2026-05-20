@@ -17,3 +17,10 @@ for extension-aware funcs) to each missing function.
 ## Rollback
 
 `alter function … reset search_path` per function.
+
+## Resolution (2026-05-20)
+
+Verified via `pg_proc` scan: zero SECURITY DEFINER functions in `public`
+with names matching Safety (`safety_%`, `has_safety%`, `%_safety_%`,
+`%permit%`, `%incident%`) are missing `set search_path`. Ticket closed
+with no migration required.
