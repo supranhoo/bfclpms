@@ -2,16 +2,17 @@ import { describe, it, expect } from 'vitest';
 
 /**
  * Pure logic test for the "Performance by Category" weightage badge.
- * The badge displays the rounded sum of ASSIGNED KPI weightages for the period
- * (excluding N/A KPIs only) — independent of whether they have been scored.
- * Green at 100%, amber otherwise. This is a sanity check that KRA mapping
- * sums to 100%.
+ * The badge displays the rounded sum of ALL ASSIGNED KPI weightages for the
+ * period — independent of `is_na`, frequency cycle, and scoring status. It is
+ * a structural KRA-mapping integrity check (should equal 100%). Quarterly /
+ * annual KPIs auto-N/A'd in a non-cycle-end month still count toward the total.
+ * Green at 100%, amber otherwise.
  */
 
 interface KpiLite { weightage: number; isNa?: boolean; scored?: boolean }
 
 function assignedWeight(kpis: KpiLite[]): number {
-  return kpis.reduce((sum, k) => sum + (k.isNa ? 0 : k.weightage), 0);
+  return kpis.reduce((sum, k) => sum + k.weightage, 0);
 }
 
 function badgeLabel(w: number): string {
@@ -33,14 +34,14 @@ describe('Performance by Category weightage badge', () => {
     expect(badgeTone(w)).toBe('green');
   });
 
-  it('excludes N/A KPI weight: 40+30+(N/A 30) -> (70%) amber', () => {
+  it('includes quarterly KPI auto-N/A by frequency: 40+30+(N/A 30) -> (100%) green', () => {
     const w = assignedWeight([
       { weightage: 40 },
       { weightage: 30 },
-      { weightage: 30, isNa: true },
+      { weightage: 30, isNa: true }, // e.g. Quarterly KPI in non-cycle-end month
     ]);
-    expect(badgeLabel(w)).toBe('(70%)');
-    expect(badgeTone(w)).toBe('amber');
+    expect(badgeLabel(w)).toBe('(100%)');
+    expect(badgeTone(w)).toBe('green');
   });
 
   it('flags incomplete KRA mapping: 40+30+20 -> (90%) amber', () => {

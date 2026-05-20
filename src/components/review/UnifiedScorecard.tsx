@@ -586,16 +586,14 @@ export function UnifiedScorecard({
 
   // Calculate scores
   // Filtered KPIs for charts based on status filter
-  // Total assigned weightage across ALL KPIs (unfiltered) for the badge.
-  // This must always reflect the full period mapping, regardless of status filter.
+  // Total assigned weightage across ALL KPIs mapped this period for the badge.
+  // Intentionally independent of `is_na`, frequency cycle, and scoring status:
+  // this badge is a KRA-mapping integrity check (should equal 100%). A Quarterly
+  // KPI auto-N/A'd in a non-cycle-end month still counts toward the mapping total.
   const fullAssignedWeight = useMemo(() => {
-    if (!kpis?.length || !submissions) return 0;
-    return kpis.reduce((sum, kpi) => {
-      const submission = submissionMap.get(kpi.id);
-      if (submission?.is_na) return sum;
-      return sum + (kpi.weightage || 0);
-    }, 0);
-  }, [kpis, submissions, submissionMap]);
+    if (!kpis?.length) return 0;
+    return kpis.reduce((sum, kpi) => sum + (kpi.weightage || 0), 0);
+  }, [kpis]);
 
   const displayKpis = useMemo(() => {
     if (!kpis) return [];
@@ -1585,7 +1583,7 @@ export function UnifiedScorecard({
             <CardTitle className="text-sm flex items-center gap-2 flex-wrap">
               <span>Performance by Category</span>
               <span
-                title="Total weightage of all KPIs assigned this period. Should equal 100%. N/A KPIs are excluded."
+                title="Total weightage of all KPIs mapped this period (all frequencies, including N/A). Should equal 100%."
                 className={`text-xs font-medium px-1.5 py-0.5 rounded ${
                   Math.round(fullAssignedWeight) === 100
                     ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
