@@ -24,6 +24,7 @@ import { SAFETY_ROLE_LABEL } from '@/lib/safetyRoles';
 import { PermitStatusBadge } from '@/components/safety/PermitStatusBadge';
 import { useMySafetyRoles } from '@/hooks/useSafetyRoles';
 import { useAuth } from '@/contexts/AuthContext';
+import { SafetySkeletonBlock } from '@/components/safety/SafetySkeletonBlock';
 
 /**
  * Permit detail — single source for inspecting and acting on a permit.
