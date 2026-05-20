@@ -91,12 +91,18 @@ Stop Condition under `docs/safety-integration-governance.md`.
 - **T-003** — Add Safety tables + `safety-evidence` bucket to
   `create-backup` and verify restore.
 
-## Non-blocking improvements
+## Non-blocking improvements — all shipped
 
-- **T-002** — Consolidated `search_path` audit on SECURITY DEFINER fns.
-- **T-004** — Tighten `check-safety-sla` anon-key bypass to service-role only.
-- **T-005** — Declare `verify_jwt` for `grant-safety-role` in `supabase/config.toml`.
-- **F-RLS-02** — Switch `{public}` policies to `{authenticated}` for consistency.
+- **T-002** — `search_path` audit confirmed: zero Safety SECURITY DEFINER
+  functions are missing `set search_path`. No migration required.
+- **T-004** — `check-safety-sla` anon-key bypass removed. Only
+  service-role (header or apikey) or admin / safety_head JWT calls are
+  accepted.
+- **T-005** — `verify_jwt = false` declared for `grant-safety-role`
+  (and `check-safety-sla`) in `supabase/config.toml`. Behavior unchanged;
+  declaration prevents drift.
+- **F-RLS-02** — All 22 Safety RLS policies recreated `TO authenticated`.
+  USING / WITH CHECK clauses unchanged.
 
 ## Phase 2 gate prerequisites
 
