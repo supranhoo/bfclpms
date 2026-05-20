@@ -14,6 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useManualQuery, type ManualQueryFetcherArgs } from '@/hooks/useManualQuery';
 import { SafetyFilterBar } from '@/components/safety/SafetyFilterBar';
 import { SafetyDataTable } from '@/components/safety/SafetyDataTable';
+import { SafetySkeletonBlock } from '@/components/safety/SafetySkeletonBlock';
 import type { SafetyAssetRow } from '@/hooks/useSafetyAssets';
 import {
   SAFETY_ASSET_STATUSES,
@@ -150,6 +151,7 @@ export default function SafetyAssets() {
         totalPages={totalPages}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
+        loadingSkeleton={<SafetySkeletonBlock variant="list" />}
       >
         <Table>
           <TableHeader>
