@@ -165,13 +165,23 @@ export default function SafetyAssetNew() {
         </CardContent>
       </Card>
 
-      <div className="flex justify-end gap-2">
+      <div className="hidden md:flex justify-end gap-2">
         <Button variant="outline" asChild><Link to="/safety/assets">Cancel</Link></Button>
         <Button onClick={onSubmit} disabled={create.isPending}>
           {create.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
           Register Asset
         </Button>
       </div>
+
+      <SafetyStickyActionBar>
+        <Button variant="outline" className="h-11" asChild>
+          <Link to="/safety/assets">Cancel</Link>
+        </Button>
+        <Button className="h-11" onClick={onSubmit} disabled={create.isPending}>
+          {create.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+          Register
+        </Button>
+      </SafetyStickyActionBar>
     </div>
   );
 }
