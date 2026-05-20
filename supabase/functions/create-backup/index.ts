@@ -375,7 +375,9 @@ async function handleInit(
   // its own edge worker, so reducing batch size trades a few extra
   // invocations for staying well under the 256MB worker limit.
   const BATCH_SIZE = 4
-  const batches = splitIntoBatches(TABLES_TO_BACKUP, BATCH_SIZE)
+  const tablesToBackup = await fetchBackupTableOrder(supabase)
+  await assertCoverageNotShrunk(supabase, tablesToBackup.length)
+  const batches = splitIntoBatches(tablesToBackup, BATCH_SIZE)
 
   return new Response(
     JSON.stringify({
@@ -384,7 +386,7 @@ async function handleInit(
       folder_path: folderPath,
       backup_type: backupType,
       batches,
-      total_tables: TABLES_TO_BACKUP.length,
+      total_tables: tablesToBackup.length,
     }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   )
