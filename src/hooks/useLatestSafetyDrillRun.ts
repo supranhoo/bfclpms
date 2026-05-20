@@ -32,7 +32,7 @@ export function useLatestSafetyDrillRun() {
         .limit(1)
         .maybeSingle();
       if (error) throw new Error(error.message);
-      return (data as SafetyDrillRunRow | null) ?? null;
+      return (data as unknown as SafetyDrillRunRow | null) ?? null;
     },
     staleTime: 30_000,
   });
