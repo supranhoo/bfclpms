@@ -45,6 +45,7 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const cronSecret = Deno.env.get('CRON_SECRET') ?? ''
 
     // Caller auth: must be authenticated; RPC enforces admin/safety_head.
     const authHeader = req.headers.get('Authorization') ?? ''
@@ -53,9 +54,13 @@ Deno.serve(async (req) => {
     // Service-role client targeting public for RPC + storage.
     const admin = createClient(supabaseUrl, serviceKey)
 
-    // Detect system mode (scheduled cron uses the service-role key directly).
+    // Detect system mode. Scheduled cron sends either the service-role key
+    // or the shared CRON_SECRET (preferred — service key never leaves the
+    // edge function environment).
     const bearer = authHeader.replace(/^Bearer\s+/i, '')
-    const isSystem = bearer === serviceKey
+    const isSystem =
+      bearer === serviceKey ||
+      (cronSecret.length > 0 && bearer === cronSecret)
 
     let performedBy: string | null = null
     if (!isSystem) {
