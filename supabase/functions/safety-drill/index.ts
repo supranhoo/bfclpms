@@ -45,6 +45,7 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const cronSecret = Deno.env.get('CRON_SECRET') ?? ''
 
     // Caller auth: must be authenticated; RPC enforces admin/safety_head.
     const authHeader = req.headers.get('Authorization') ?? ''
@@ -52,25 +53,39 @@ Deno.serve(async (req) => {
 
     // Service-role client targeting public for RPC + storage.
     const admin = createClient(supabaseUrl, serviceKey)
-    // Caller-scoped client just to validate JWT identity for audit trail.
-    const caller = createClient(supabaseUrl, serviceKey, {
-      global: { headers: { Authorization: authHeader } },
-    })
-    const { data: userRes } = await caller.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    )
-    const user = userRes?.user
-    if (!user) return jsonRes({ error: 'Invalid token' }, 401)
+
+    // Detect system mode. Scheduled cron sends either the service-role key
+    // or the shared CRON_SECRET (preferred — service key never leaves the
+    // edge function environment).
+    const bearer = authHeader.replace(/^Bearer\s+/i, '')
+    const isSystem =
+      bearer === serviceKey ||
+      (cronSecret.length > 0 && bearer === cronSecret)
+
+    let performedBy: string | null = null
+    if (!isSystem) {
+      const caller = createClient(supabaseUrl, serviceKey, {
+        global: { headers: { Authorization: authHeader } },
+      })
+      const { data: userRes } = await caller.auth.getUser(bearer)
+      const user = userRes?.user
+      if (!user) return jsonRes({ error: 'Invalid token' }, 401)
+      performedBy = user.id
+    }
 
     const body = (await req.json().catch(() => ({}))) as { backup_id?: string }
     const drillId = crypto.randomUUID()
     const startedAt = new Date().toISOString()
 
+    // For user calls we must pass the user JWT so RPC role checks see auth.uid().
+    // For system calls we use the service-role admin client (RPCs allow service_role).
+    const callerRpc = isSystem
+      ? admin
+      : createClient(supabaseUrl, serviceKey, {
+          global: { headers: { Authorization: authHeader } },
+        })
+
     // ---------- Phase 1: seed sandbox from live tables (RPC enforces RBAC) ----------
-    // We need to call the RPC AS the user (so has_role/has_safety_role can see auth.uid()).
-    const callerRpc = createClient(supabaseUrl, serviceKey, {
-      global: { headers: { Authorization: authHeader } },
-    })
     const { data: seedRes, error: seedErr } = await callerRpc.rpc('safety_drill_seed')
     if (seedErr) return jsonRes({ error: `seed failed: ${seedErr.message}` }, 403)
     const baseline = seedRes as Counts
@@ -157,18 +172,40 @@ Deno.serve(async (req) => {
       }))
     const allOk = deltas.every((d) => d.ok) && insertErrors.length === 0
 
-    return jsonRes({
+    const finishedAt = new Date().toISOString()
+    const result = {
       ok: allOk,
       drill_id: drillId,
       backup_id: body.backup_id ?? null,
       started_at: startedAt,
-      finished_at: new Date().toISOString(),
+      finished_at: finishedAt,
       baseline,
       after,
       deltas,
       errors: insertErrors.length ? insertErrors : null,
-      performed_by: user.id,
-    })
+      performed_by: performedBy,
+    }
+
+    // Persist run history (best-effort; never block the response on logging).
+    try {
+      await admin.from('safety_drill_runs').insert({
+        drill_id: drillId,
+        backup_id: body.backup_id ?? null,
+        ok: allOk,
+        started_at: startedAt,
+        finished_at: finishedAt,
+        baseline,
+        after,
+        deltas,
+        errors: insertErrors.length ? insertErrors : null,
+        performed_by: performedBy,
+        system_run: isSystem,
+      })
+    } catch (logErr) {
+      console.error('safety-drill: failed to log run', logErr)
+    }
+
+    return jsonRes(result)
   } catch (err) {
     console.error('safety-drill error:', err)
     return jsonRes({ error: String((err as Error).message ?? err) }, 500)

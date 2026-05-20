@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,18 +17,43 @@ import {
 import { ShieldCheck, Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useSafetyDrill, type SafetyDrillResult } from '@/hooks/useSafetyDrill';
+import { useLatestSafetyDrillRun } from '@/hooks/useLatestSafetyDrillRun';
 
 export function SafetyDrillCard() {
   const drill = useSafetyDrill();
+  const queryClient = useQueryClient();
+  const { data: latestRun } = useLatestSafetyDrillRun();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [lastResult, setLastResult] = useState<SafetyDrillResult | null>(null);
 
   const handleRun = () => {
     setConfirmOpen(false);
     drill.mutate(undefined, {
-      onSuccess: (res) => setLastResult(res),
+      onSuccess: (res) => {
+        setLastResult(res);
+        queryClient.invalidateQueries({ queryKey: ['safety-drill-runs', 'latest'] });
+      },
     });
   };
+
+  // Prefer the in-session manual result, then fall back to the persisted latest run.
+  const display = lastResult
+    ? {
+        finished_at: lastResult.finished_at,
+        ok: lastResult.ok,
+        deltas: lastResult.deltas,
+        errors: lastResult.errors,
+        system_run: false,
+      }
+    : latestRun
+      ? {
+          finished_at: latestRun.finished_at,
+          ok: latestRun.ok,
+          deltas: latestRun.deltas,
+          errors: latestRun.errors,
+          system_run: latestRun.system_run,
+        }
+      : null;
 
   return (
     <Card>
@@ -39,21 +65,25 @@ export function SafetyDrillCard() {
         <CardDescription>
           Round-trips <code>safety_incidents</code>, <code>safety_permits</code>, and{' '}
           <code>safety_audit_runs</code> through storage into the isolated{' '}
-          <code>safety_drill</code> schema. Live data is never modified.
+          <code>safety_drill</code> schema. Live data is never modified. Runs
+          automatically every Sunday 02:00 UTC.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div className="text-sm text-muted-foreground">
-            {lastResult ? (
+            {display ? (
               <>
-                Last run: {format(new Date(lastResult.finished_at), 'PPpp')}{' '}
-                <Badge variant={lastResult.ok ? 'default' : 'destructive'} className="ml-2">
-                  {lastResult.ok ? 'passed' : 'failed'}
+                Last run: {format(new Date(display.finished_at), 'PPpp')}{' '}
+                <Badge variant={display.ok ? 'default' : 'destructive'} className="ml-2">
+                  {display.ok ? 'passed' : 'failed'}
                 </Badge>
+                {display.system_run && (
+                  <Badge variant="outline" className="ml-2">scheduled</Badge>
+                )}
               </>
             ) : (
-              <>No drill run in this session yet.</>
+              <>No drill runs recorded yet.</>
             )}
           </div>
           <Button onClick={() => setConfirmOpen(true)} disabled={drill.isPending}>
@@ -67,19 +97,19 @@ export function SafetyDrillCard() {
           </Button>
         </div>
 
-        {lastResult && (
-          <Alert variant={lastResult.ok ? 'default' : 'destructive'}>
-            {lastResult.ok ? (
+        {display && (
+          <Alert variant={display.ok ? 'default' : 'destructive'}>
+            {display.ok ? (
               <CheckCircle2 className="h-4 w-4" />
             ) : (
               <AlertTriangle className="h-4 w-4" />
             )}
             <AlertTitle>
-              {lastResult.ok ? 'Round-trip verified' : 'Drift detected'}
+              {display.ok ? 'Round-trip verified' : 'Drift detected'}
             </AlertTitle>
             <AlertDescription>
               <ul className="mt-2 space-y-1 text-sm">
-                {lastResult.deltas.map((d) => (
+                {display.deltas.map((d) => (
                   <li key={d.table} className="flex items-center gap-2">
                     <span className="font-mono">{d.table}</span>
                     <span className="text-muted-foreground">
@@ -91,9 +121,9 @@ export function SafetyDrillCard() {
                   </li>
                 ))}
               </ul>
-              {lastResult.errors?.length ? (
+              {display.errors?.length ? (
                 <p className="mt-2 text-destructive">
-                  Errors: {lastResult.errors.join('; ')}
+                  Errors: {display.errors.join('; ')}
                 </p>
               ) : null}
             </AlertDescription>
