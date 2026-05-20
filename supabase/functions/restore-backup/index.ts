@@ -296,8 +296,12 @@ async function restoreData(
   const errors: string[] = []
   let tablesRestored = 0
 
+  const manifestTables = Object.keys(backupData)
+  const insertOrder = await fetchInsertOrder(supabase, manifestTables)
+  const deleteOrder = deriveDeleteOrder(insertOrder)
+
   // Step 1: Delete all data in reverse dependency order
-  for (const tableName of DELETE_ORDER) {
+  for (const tableName of deleteOrder) {
     if (backupData[tableName] !== undefined) {
       try {
         const { error } = await supabase
@@ -315,7 +319,7 @@ async function restoreData(
   }
 
   // Step 2: Insert data in dependency order
-  for (const tableName of INSERT_ORDER) {
+  for (const tableName of insertOrder) {
     const rows = backupData[tableName]
     if (!rows || rows.length === 0) continue
     try {
