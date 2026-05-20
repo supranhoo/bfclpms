@@ -502,10 +502,13 @@ Deno.serve(async (req) => {
 
     // Phase: INIT — return ordered batches for the client to orchestrate
     if (!phase) {
-      const deleteBatches = packBatches(DELETE_ORDER, byTable, { maxTables: 20, maxRows: Number.POSITIVE_INFINITY })
+      const manifestTables = manifest.tables.map((t) => t.table)
+      const insertOrder = await fetchInsertOrder(supabase, manifestTables)
+      const deleteOrder = deriveDeleteOrder(insertOrder)
+      const deleteBatches = packBatches(deleteOrder, byTable, { maxTables: 20, maxRows: Number.POSITIVE_INFINITY })
       // Tighter insert batches — 2 tables / 2k rows max keeps peak heap
       // well under the 256 MB worker limit even for large PMS tables.
-      const insertBatches = packBatches(INSERT_ORDER, byTable, { maxTables: 2, maxRows: 2000 })
+      const insertBatches = packBatches(insertOrder, byTable, { maxTables: 2, maxRows: 2000 })
       const totalTables = manifest.tables.length
       return new Response(
         JSON.stringify({
