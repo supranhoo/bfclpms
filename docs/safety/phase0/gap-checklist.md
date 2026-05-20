@@ -31,8 +31,8 @@ Classification per governance standard:
 |---|---|---|---|
 | List/new/detail | Present | Keep | — |
 | HIRA / LOTO / approvals | Present | Keep | — |
-| Loading skeletons | Partial | Candidate | 2 |
-| Sticky action bar parity on New | Partial | Candidate | 2 |
+| Loading skeletons | Done (Phase 2) | Keep | 2 |
+| Sticky action bar parity on New | Done (Phase 2) | Keep | 2 |
 
 ## Assets
 
@@ -40,7 +40,7 @@ Classification per governance standard:
 |---|---|---|---|
 | Asset register + calibration + evidence | Present | Keep | — |
 | CSV import | Missing | Conditional | 6 |
-| Skeleton + empty-state coverage | Partial | Candidate | 2 |
+| Skeleton + empty-state coverage | Done (Phase 2) | Keep | 2 |
 
 ## Audits
 
