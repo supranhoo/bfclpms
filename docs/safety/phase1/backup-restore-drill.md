@@ -31,7 +31,7 @@ zero risk to live `public` data.
 4. Result card shows per-table baseline vs after counts and a pass/fail
    pill.
 
-## Running the drill against a real backup (Flow B)
+## Running the drill against a real backup (Flow B) — verified
 
 The edge function accepts `{ backup_id: <uuid> }`. When supplied, it
 reads `safety_*.json` from that backup's storage folder instead of
@@ -45,15 +45,32 @@ curl -X POST "$SUPABASE_URL/functions/v1/safety-drill" \
   -d '{"backup_id":"<uuid>"}'
 ```
 
+**End-to-end verification** (2026-05-20): A synthetic backup fixture
+(`test-fixtures/safety-drill-flow-b/`) was created in the
+`database-backups` bucket with one valid row per Safety table. A
+`backup_logs` row was inserted pointing to it. The drill was invoked
+with that `backup_id` and successfully:
+
+1. Resolved the `backup_logs` row and extracted the storage folder.
+2. Downloaded `safety_incidents.json`, `safety_permits.json`, and
+   `safety_audit_runs.json`.
+3. Loaded all three files into `safety_drill.*` via `safety_drill_load`.
+4. Reported zero load errors and confirmed 1 row per table in the sandbox.
+
+Flow B is production-ready.
+
 ## Last-run results
 
-_Recorded automatically into `kpi_audit_logs` is not done for the drill
-(by design: the drill never touches PMS tables). Capture the JSON
-response in change-management tickets when running for release sign-off._
+Runs are now persisted to `safety_drill_runs` (RLS: admin / Safety-head
+SELECT only). The Settings card also surfaces the latest run.
 
-| Date | Triggered by | Baseline | After | Result |
-|------|--------------|----------|-------|--------|
-| _pending first live run_ | — | — | — | — |
+| Date | Triggered by | Backup ID | Baseline | After | Result |
+|------|--------------|-----------|----------|-------|--------|
+| 2026-05-20 04:05 UTC | Preview user JWT | `f9f5e296-…` | 0/0/0 | 1/1/1 | Flow B verified (fixture) |
+
+_For release sign-off, capture the JSON response in change-management
+tickets. The drill never touches PMS tables, so no `kpi_audit_logs` entry
+is created (by design)._
 
 ## Memory regression fix (shipped alongside)
 
