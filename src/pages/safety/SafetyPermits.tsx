@@ -15,6 +15,7 @@ import { SafetyFilterSheet } from '@/components/safety/SafetyFilterSheet';
 import { SafetyResponsiveList } from '@/components/safety/SafetyResponsiveList';
 import { SafetyMobileListCard } from '@/components/safety/SafetyMobileListCard';
 import { SafetyStickyActionBar } from '@/components/safety/SafetyStickyActionBar';
+import { SafetySkeletonBlock } from '@/components/safety/SafetySkeletonBlock';
 import {
   SAFETY_PERMIT_STATUSES,
   SAFETY_PERMIT_STATUS_LABEL,
