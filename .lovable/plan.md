@@ -1,70 +1,77 @@
-## Root cause — found it
+## Goal
+Reverse the "everyone got Skip-Level" symptom by restoring the per-employee Global workflow overrides that were wiped on 2026-05-19 at 19:21 UTC.
 
-`workflow_config` is **empty** (0 rows; the table's last autovacuum is at `2026-05-19 19:22:34 UTC`, one second after the bulk `kpis` rewrite at `19:21:35`).
+## Source of truth
+`Workflow_Configuration_Report_1.xlsx` (uploaded). Employee Overrides sheet: **178 rows total**, 177 with employee codes.
+- **72 Global** rows → fully restorable (no period/year needed).
+- **106 Period-Specific** rows → NOT restorable from this file (Review Period and Review Year both `—`). Deferred to Phase 2.
 
-With `workflow_config` empty, **every** employee's workflow falls back to the default template `self_l1_l2_hr_pms`:
+## Phase 1 — Restore Global overrides (now)
 
+### Step 1. Stage the file into the DB
+Parse the XLSX locally, build a CSV of:
+`employee_code, template_display_name`
+…for the 72 Global rows, and load it into a temporary staging table `_workflow_config_restore_2026_05_19` via `psql COPY`.
+
+### Step 2. Pre-flight validation (read-only)
+Before any write, confirm:
+- Every `employee_code` in the staging table resolves to exactly one active `profiles.id`.
+- Every `template_display_name` resolves to exactly one row in `workflow_templates` (active or archived).
+- Report any unmatched rows back to you. **Do not proceed unless all 72 resolve.**
+
+### Step 3. Disable cascading triggers (migration)
+Temporarily disable on `public.workflow_config`:
+- `trg_workflow_change_step_back`
+- `trg_repercolate_on_workflow_config_change`
+
+This prevents the re-insert from triggering a fresh global `kpis` rewrite.
+
+### Step 4. Re-insert the 72 Global rows (data write)
 ```
-kra_set → self_review → manager_check → skip_level_check → hr_pms_review → approved
+INSERT INTO public.workflow_config
+  (config_type, config_value, workflow_template_id, review_period, review_year, is_ongoing)
+SELECT 'employee', p.id, t.id, NULL, NULL, false
+FROM _workflow_config_restore_2026_05_19 s
+JOIN profiles p ON p.employee_code = s.employee_code
+JOIN workflow_templates t ON t.display_name = s.template_display_name
+ON CONFLICT ON CONSTRAINT workflow_config_global_unique
+DO UPDATE SET workflow_template_id = EXCLUDED.workflow_template_id,
+              updated_at = now();
 ```
 
-That is exactly why Ankit — and everyone else — now appears to have a Skip-Level stage they didn't have yesterday. Their per-employee / per-department / per-grade overrides in `workflow_config` were wiped.
+### Step 5. Re-enable triggers (migration)
+Re-enable both triggers immediately after Step 4 completes.
 
-### What actually happened (timeline, May 19 UTC)
+### Step 6. Reconcile April 2026 statuses
+Run `reconcile_workflow_statuses(p_review_period := 'April', p_review_year := 2026)`. This re-aligns any in-flight KPI whose current `status` no longer matches its newly-restored template (e.g. removes "awaiting skip-level" for employees whose Global template has no Skip-Level stage). It leaves `approved` rows alone.
 
-| Time | Event | Source of evidence |
-|---|---|---|
-| 19:21:35 | 6 026 `kpis` rows rewritten in one transaction | `kpis.updated_at` distribution |
-| 19:22:00 | 3 292 `review_submissions` rows rewritten | `review_submissions.updated_at` |
-| 19:22:34 | `workflow_config` autovacuumed → 0 live rows | `pg_stat_user_tables` |
-| 19:27:19 | `backup_logs` entry: **`uploaded`** restore (`uploads/restore-1779218798446.json`, 106 MB) | `backup_logs` row |
+### Step 7. Verification (read-only)
+- `SELECT count(*) FROM workflow_config WHERE config_type='employee' AND review_period IS NULL;` → expect **72**.
+- Per-template breakdown matches the XLSX expectation.
+- Spot-check **Ankit (`535d9a14-e4aa-4676-af92-f535373ffc8d`)** + 4 random employees from the file: resolved workflow on dashboard matches the template named in the XLSX, no Skip-Level if absent.
+- `SELECT count(*) FROM kpis;` unchanged vs pre-Step 4 count (proves no cascade fired).
+- Drop the staging table.
 
-An admin ran a **Restore-from-Uploaded-Backup** at ~19:21 UTC. That uploaded JSON either did not contain `workflow_config` or contained an empty version, so the restore wiped it. The `kpis` / `review_submissions` mass-rewrites in the same minute came from the same restore. Confirmed migrations from the past 13 h did NOT touch workflow data.
+## Phase 2 — Period-Specific overrides (deferred)
+The 106 Period-Specific rows cannot be restored from this file. Two options to unblock:
+1. **Lovable Cloud PITR**: request a snapshot of `public.workflow_config` at ≤ 2026-05-19 19:20 UTC. Re-run Steps 3–6 scoped to those rows.
+2. **Older export**: any pre-19:21 XLSX/CSV that includes the `Review Period` + `Review Year` columns.
 
-### What's recoverable
-- **The default template (`self_l1_l2_hr_pms`)** is still in `workflow_templates` — it was never deleted. Good.
-- **The per-employee overrides** are gone from the live DB and gone from the visible `backup_logs` history (only the post-wipe restore backup remains). They are *not* recoverable from app-level backups.
-- They ARE recoverable from **Lovable Cloud point-in-time recovery (PITR)** — yesterday's snapshot before 19:21:35 UTC still holds the full `workflow_config` table.
+Until then, those 106 employees fall back to their newly-restored Global template, which is correct for 72 of them and still wrong for ~34 who relied on period overrides. Acceptable interim state vs the current "everyone gets Skip-Level".
 
----
+## Phase 3 — Export bug fix (small follow-up)
+Patch `src/components/admin/WorkflowConfigExport.tsx` so the Employee Overrides sheet:
+- Always populates Employee Name / Code / Email (current export sometimes writes `—` even when profile exists).
+- Always writes the actual `review_period` and `review_year` for period-scoped rows.
 
-## Reversal plan — restore yesterday's `workflow_config`
+This is unrelated to the restore but prevents the same data-loss-with-no-recovery situation if it happens again.
 
-This is a data-only, scoped restore — no schema or code changes needed.
+## Risk & Impact Report
+- **Data Impact**: 72 INSERTs into `workflow_config`. No other table written. Triggers disabled only for the duration of one transaction.
+- **Workflow Impact**: Restores the pre-wipe reviewer chain for ~72 employees. Removes spurious Skip-Level / HR PMS stages they shouldn't see.
+- **UI/UX**: No code change in Phase 1. Phase 3 is a UI tweak with no behavior change.
+- **Regression Risk**: Low. Triggers re-enabled in same migration. `reconcile_workflow_statuses` is scoped to April 2026 and skips `approved` rows.
+- **Mitigation**: Pre-flight validation (Step 2) aborts before any write if anything is unmatched. KPI count check (Step 7) catches accidental cascades.
 
-### Step 1 — Recover the snapshot
-Two paths, in order of preference:
-
-**Path A (recommended): PITR-scoped table extraction.** Use the Lovable Cloud point-in-time backup at `2026-05-19 19:00 UTC` (~21 min before the wipe). From it, pull a CSV/SQL dump of exactly two tables: `public.workflow_config` and `public.workflow_templates` (templates as a safety mirror). Nothing else.
-
-**Path B (fallback): user-side export.** Ask the admin if anyone has a recent `workflow_config` CSV/JSON export from the Admin → Workflow Configuration screen before yesterday. If yes, that file feeds Step 2 directly.
-
-### Step 2 — Re-insert the rows
-Insert the recovered `workflow_config` rows back via the standard insert path. **Critical guardrails before insert:**
-
-1. Temporarily disable the two triggers on `workflow_config` so re-inserting overrides does NOT re-trigger another global `kpis` cascade:
-   - `trg_workflow_change_step_back`
-   - `trg_repercolate_on_workflow_config_change`
-2. Bulk `INSERT … ON CONFLICT DO UPDATE` into `workflow_config` (the unique keys `workflow_config_global_unique` and `workflow_config_period_unique` keep it idempotent).
-3. Re-enable both triggers.
-4. Run `reconcile_workflow_statuses()` **scoped to April 2026 only** (the one in-flight cycle). This will:
-   - leave `approved` rows alone (it skips them),
-   - re-align any non-approved KPI whose status doesn't fit its newly-restored template (e.g. an employee whose restored workflow has no Skip-Level shouldn't show "awaiting skip-level").
-
-### Step 3 — Verify
-- `SELECT count(*) FROM workflow_config;` matches yesterday's expected count.
-- Spot-check 3–5 employees including **Ankit (`535d9a14-e4aa-4676-af92-f535373ffc8d`)**: the resolved workflow on their dashboard should match what they had yesterday (no Skip-Level if that's correct for them).
-- Confirm `kpis` row count is unchanged (no cascades fired).
-
-### Step 4 — Preventive guardrails (optional, recommended)
-- Add a confirm-step + size diff preview on the **Restore-from-Uploaded-Backup** screen so an upload that would empty `workflow_config` (or any table) requires explicit "I understand 0 rows will replace N rows" acknowledgement.
-- Mirror `workflow_config` and `workflow_templates` writes into `template_change_logs` (table exists, currently has no entries for this event).
-
----
-
-## What I need from you to proceed
-1. **Confirm path** — A (PITR extraction by Lovable Cloud) or B (you upload a pre-19:21 export of `workflow_config`).
-2. **Approval** to disable/re-enable the two `workflow_config` triggers around the re-insert (zero risk; they fire on every insert/update normally).
-3. **Approval** to run `reconcile_workflow_statuses()` scoped to `review_period='April', review_year=2026` after the restore.
-
-Once you confirm, I'll implement Steps 2–3 in a single migration + insert sequence.
+## What I need from you to start
+- Confirm Phase 1 only (defer 106 period-specific rows), or wait until you also have a PITR snapshot and do both in one shot.
