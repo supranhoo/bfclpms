@@ -1,62 +1,63 @@
-## Goal
+# Phase 2 — Safety UX Polish (Permits & Assets)
 
-Close the four remaining non-blocking Safety hardening tickets so the Phase 1 baseline doc has no outstanding items, without altering any user-facing behavior.
+Closes the three `Candidate / Phase 2` gaps from `docs/safety/phase0/gap-checklist.md`:
+
+1. **Permits** — Loading skeletons (Partial → Done)
+2. **Permits/New** — Sticky action bar parity (Partial → Done)
+3. **Assets** — Skeleton + empty-state coverage (Partial → Done)
+
+Pure presentation work. No schema, RPC, route, or business-logic changes.
 
 ## Risk & Impact Report
 
-- **Data Impact**: No schema changes. Only RLS policy role-scope swap and edge-fn auth tightening. No row-level data touched.
-- **Workflow Impact**: None — same callers, same RPCs, same UIs.
-- **UI/UX Consistency**: None — no UI code modified.
-- **Regression Risk**: Low. Three subtle areas:
-  1. F-RLS-02 swap `{public}` → `{authenticated}` on Safety policies could lock out an unauthenticated path. Mitigation: Safety routes are already auth-gated; verified no anon entry points.
-  2. T-004 drops the anon-key bypass on `check-safety-sla`. Mitigation: cron uses service-role; admin/head still pass via JWT role check.
-  3. T-005 sets `verify_jwt = false` explicitly. Already the deployed behavior — purely declarative.
-- **Mitigation**: Each ticket gets its own migration/config edit and an existing-test rerun. No new business logic.
+- **Data Impact**: None.
+- **Workflow Impact**: None — same forms, same submit handlers, same role gates.
+- **UI/UX Consistency**: Replaces inline `Loader2` spinners with sanctioned skeletons; aligns Permit/New action bar with the Incident/New pattern that already exists.
+- **Regression Risk**: Low. Mitigation: keep mutation handlers, validation, and `isPending` wiring untouched; only swap the wrapper markup.
 
 ## Scope
 
-### T-002 — search_path audit (verification only)
-DB query confirms zero Safety SECURITY DEFINER functions are missing `set search_path`. Action: mark ticket complete in `hardening-baseline.md`; no migration needed.
+### A. Shared primitive (new, small)
+Create `src/components/safety/SafetySkeletonBlock.tsx` — a thin wrapper around shadcn `<Skeleton>` exposing two presets:
+- `variant="list"` (table-row stack for list pages)
+- `variant="detail"` (header + 2 content cards for detail pages)
 
-### T-004 — `check-safety-sla` anon-key bypass removal
-Edit `supabase/functions/check-safety-sla/index.ts`:
-- Remove `apiKey === anonKey` branch from the bypass check.
-- Keep `Authorization === Bearer <service-role>` and admin/head JWT paths.
-- Redeploy the function.
+This gives Permits, Assets, and any future Safety page one sanctioned skeleton, matching the policy "no ad-hoc UI primitives in Safety" rule.
 
-### T-005 — declare `verify_jwt = false` for `grant-safety-role`
-Append to `supabase/config.toml`:
-```toml
-[functions.grant-safety-role]
-verify_jwt = false
-```
-Function already self-validates; this is declarative only.
+### B. Permits
 
-### F-RLS-02 — `{public}` → `{authenticated}` on 22 Safety policies
-Single migration that drops and recreates the 22 affected policies on these tables with `TO authenticated`:
-- `safety_drill_findings` (2), `safety_drill_participants` (2)
-- `safety_emergency_contacts` (2), `safety_emergency_drills` (4)
-- `safety_incident_evidence` (3), `safety_incident_progress_logs` (2), `safety_incident_timeline` (1)
-- `safety_incidents` (4), `safety_severity_sla` (2)
+1. **`SafetyPermits.tsx`** — pass a `loadingSkeleton` slot to `SafetyResponsiveList` (extend the component to accept one and prefer it over the `Loader2` block when provided). Use `variant="list"`.
+2. **`SafetyPermitDetail.tsx`** — replace the centred spinner with `<SafetySkeletonBlock variant="detail" />`. Keep the not-found `<Card>` branch intact.
+3. **`SafetyPermitNew.tsx`** — wrap the existing Cancel / Save Draft / Submit for Approval buttons in `<SafetyStickyActionBar>`, matching `SafetyIncidentNew.tsx`. Keep the disabled / pending logic identical; only the container changes.
 
-Each policy keeps its exact `USING` / `WITH CHECK` clause — only the role list changes. SECURITY DEFINER helpers (`has_safety_role`, etc.) handle access checks, so anon callers (none expected on `/safety/*`) cleanly receive 401-equivalent empty result sets.
+### C. Assets
+
+1. **`SafetyAssets.tsx`** — same `loadingSkeleton` slot wired to `SafetyResponsiveList` (variant `"list"`).
+2. **`SafetyAssetDetail.tsx`** — swap centred spinner for `<SafetySkeletonBlock variant="detail" />`; keep the "not found" message branch.
+3. **`SafetyAssetNew.tsx`** — wrap the Cancel / Register Asset buttons in `<SafetyStickyActionBar>` for parity with Permit/New and Incident/New. No new validation.
+
+### D. `SafetyResponsiveList` extension
+Add optional `loadingSkeleton?: ReactNode`. When provided and `showLoading` is true, render it instead of the existing `Loader2` block. Backward compatible — all current callers keep the spinner if they don't pass the prop.
 
 ## Verification
 
-1. `supabase--linter` — no new ERROR/WARN introduced.
-2. Run existing `src/test/safety/**` suites (incident, permit, drill, training, audit, analytics).
-3. Curl `check-safety-sla` with: anon-key (expect 401), service-role (expect 200), admin JWT (expect 200).
-4. Manual: load `/safety/incidents` and `/safety/permits` as a Safety user → rows visible as before.
+- Rerun `src/test/safety/**` (incident, permit, drill, training, audit, analytics) — must stay green.
+- Manual:
+  - `/safety/permits` and `/safety/assets` show skeleton rows on first load (no spinner flash).
+  - `/safety/permits/:id` and `/safety/assets/:id` show skeleton on first load; not-found card still appears when applicable.
+  - `/safety/permits/new` and `/safety/assets/new` show sticky action bar on mobile and desktop, identical to `/safety/incidents/new`.
+- Mobile viewport (≤768px) — sticky action bar pinned to bottom; safe-area inset respected (already handled by `SafetyStickyActionBar`).
 
 ## Docs to update atomically
 
-- `docs/safety/phase1/hardening-baseline.md` — move T-002/T-004/T-005/F-RLS-02 from "Non-blocking" to "shipped".
-- `docs/safety/phase1/tickets/T-002…T-005.md` — append "Resolution" notes with migration / commit refs.
-- `.lovable/plan.md` — replace stale drill issue with this hardening-closeout summary.
-- `mem://features/safety/hardening-baseline` — note the four closures.
+- `docs/safety/phase0/gap-checklist.md` — flip the three Phase-2 rows from `Partial` to `Done`.
+- New `docs/safety/phase2/ux-polish.md` — record what changed, screenshots/refs, verification steps.
+- `.lovable/plan.md` — replace Phase 1.5 closeout with this Phase 2 summary.
+- `mem://features/safety/hardening-baseline` (or new `mem://features/safety/ux-polish-phase2`) — note the new `SafetySkeletonBlock` and `loadingSkeleton` slot so future agents don't reinvent.
 
 ## Out of scope
 
-- Project-wide linter cleanup of non-Safety functions (separate workstream).
-- Any UI changes.
-- Phase 2+ Safety features.
+- Any non-Safety pages (general Skeleton refactor stays out).
+- Stage-aware copy, day-grouped timeline, RCA polish — those are Phase 3.
+- Analytics / TRIR / LTIFR cards — Phase 7.
+- Conflict UX / queue inspector — Phase 4.
