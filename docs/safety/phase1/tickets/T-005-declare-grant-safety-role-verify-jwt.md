@@ -15,3 +15,10 @@ declaration should be explicit to prevent drift.
 [functions.grant-safety-role]
 verify_jwt = false
 ```
+
+## Resolution (2026-05-20)
+
+Added explicit `[functions.grant-safety-role] verify_jwt = false` and
+`[functions.check-safety-sla] verify_jwt = false` blocks to
+`supabase/config.toml`. Runtime behavior unchanged — these functions
+already validate auth in code.
