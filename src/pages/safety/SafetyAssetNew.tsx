@@ -18,6 +18,7 @@ import {
   type SafetyAssetStatus,
 } from '@/lib/safetyAssets';
 import { useCreateAsset } from '@/hooks/useSafetyAssets';
+import { SafetyStickyActionBar } from '@/components/safety/SafetyStickyActionBar';
 import { toast } from 'sonner';
 
 /**
