@@ -573,7 +573,9 @@ async function runScheduledChunked(
 ): Promise<void> {
   const startTime = Date.now()
   const BATCH_SIZE = 9
-  const batches = splitIntoBatches(TABLES_TO_BACKUP, BATCH_SIZE)
+  const tablesToBackup = await fetchBackupTableOrder(supabase)
+  await assertCoverageNotShrunk(supabase, tablesToBackup.length)
+  const batches = splitIntoBatches(tablesToBackup, BATCH_SIZE)
   const tableManifest: Array<{ table: string; rows: number; file: string }> = []
   let totalRows = 0
   let totalSize = 0
