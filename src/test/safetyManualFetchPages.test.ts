@@ -24,11 +24,13 @@ function read(name: string) {
 }
 
 describe('Safety manual-fetch policy (POLICY §113)', () => {
-  it.each(MIGRATED_PAGES)('%s uses useManualQuery + SafetyFilterBar + SafetyDataTable', (name) => {
+  it.each(MIGRATED_PAGES)('%s uses useManualQuery + a sanctioned filter + a sanctioned list', (name) => {
     const src = read(name);
     expect(src).toMatch(/useManualQuery/);
-    expect(src).toMatch(/SafetyFilterBar/);
-    expect(src).toMatch(/SafetyDataTable/);
+    // SafetyFilterBar (desktop-only) or SafetyFilterSheet (responsive) — both sanctioned.
+    expect(src).toMatch(/SafetyFilterBar|SafetyFilterSheet/);
+    // SafetyDataTable (table-only) or SafetyResponsiveList (table + mobile cards) — both sanctioned.
+    expect(src).toMatch(/SafetyDataTable|SafetyResponsiveList/);
   });
 
   it.each(MIGRATED_PAGES)('%s does not auto-fetch lists with useQuery({ enabled: true })', (name) => {

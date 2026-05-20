@@ -15,6 +15,7 @@ import { SafetyFilterSheet } from '@/components/safety/SafetyFilterSheet';
 import { SafetyResponsiveList } from '@/components/safety/SafetyResponsiveList';
 import { SafetyMobileListCard } from '@/components/safety/SafetyMobileListCard';
 import { SafetyStickyActionBar } from '@/components/safety/SafetyStickyActionBar';
+import { SafetySkeletonBlock } from '@/components/safety/SafetySkeletonBlock';
 import {
   SAFETY_PERMIT_STATUSES,
   SAFETY_PERMIT_STATUS_LABEL,
@@ -153,6 +154,7 @@ export default function SafetyPermits() {
         pageSize={pageSize}
         totalPages={totalPages}
         onPageChange={setPage}
+        loadingSkeleton={<SafetySkeletonBlock variant="list" />}
         mobileRender={(r) => (
           <SafetyMobileListCard
             onClick={() => navigate(`/safety/permits/${r.id}`)}

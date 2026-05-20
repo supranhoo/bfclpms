@@ -36,6 +36,11 @@ export interface SafetyResponsiveListProps<T> {
   headerActions?: ReactNode;
   /** Optional desktop-only pagination footer (rows/size). Hidden on mobile. */
   desktopFooter?: ReactNode;
+  /**
+   * Optional skeleton to render in place of the spinner while `isLoading`.
+   * Pass `<SafetySkeletonBlock variant="list" />` for sanctioned UX.
+   */
+  loadingSkeleton?: ReactNode;
 }
 
 export function SafetyResponsiveList<T>({
@@ -51,6 +56,7 @@ export function SafetyResponsiveList<T>({
   children,
   headerActions,
   desktopFooter,
+  loadingSkeleton,
 }: SafetyResponsiveListProps<T>) {
   const isMobile = useIsMobile();
   const showAwaiting = !hasSubmitted;
@@ -75,10 +81,12 @@ export function SafetyResponsiveList<T>({
         {showAwaiting && <SafetyEmptyState variant="awaiting-search" />}
 
         {showLoading && (
-          <div className="flex items-center justify-center py-12 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin mr-2" />
-            Loading…
-          </div>
+          loadingSkeleton ?? (
+            <div className="flex items-center justify-center py-12 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin mr-2" />
+              Loading…
+            </div>
+          )
         )}
 
         {showEmpty && <SafetyEmptyState variant="no-results" />}

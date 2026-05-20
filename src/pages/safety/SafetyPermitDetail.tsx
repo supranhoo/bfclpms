@@ -24,6 +24,7 @@ import { SAFETY_ROLE_LABEL } from '@/lib/safetyRoles';
 import { PermitStatusBadge } from '@/components/safety/PermitStatusBadge';
 import { useMySafetyRoles } from '@/hooks/useSafetyRoles';
 import { useAuth } from '@/contexts/AuthContext';
+import { SafetySkeletonBlock } from '@/components/safety/SafetySkeletonBlock';
 
 /**
  * Permit detail — single source for inspecting and acting on a permit.
@@ -53,9 +54,7 @@ export default function SafetyPermitDetail() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12 text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading permit…
-      </div>
+      <SafetySkeletonBlock variant="detail" />
     );
   }
   if (error || !permit) {

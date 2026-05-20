@@ -13,6 +13,7 @@ import {
   ArrowLeft, FileSignature, Loader2, Plus, X, Save, Send,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { SafetyStickyActionBar } from '@/components/safety/SafetyStickyActionBar';
 import { useBusinessUnits, useDepartments } from '@/hooks/useSafetyOrg';
 import {
   useCreatePermitDraft, useSubmitPermit,
@@ -254,7 +255,7 @@ export default function SafetyPermitNew() {
             <LotoEditor rows={loto} onChange={setLoto} />
           )}
 
-          <div className="flex flex-wrap justify-end gap-2 pt-2 border-t">
+          <div className="hidden md:flex flex-wrap justify-end gap-2 pt-2 border-t">
             <Button type="button" variant="outline" onClick={() => navigate('/safety/permits')}>
               Cancel
             </Button>
@@ -278,6 +279,36 @@ export default function SafetyPermitNew() {
           </div>
         </CardContent>
       </Card>
+
+      <SafetyStickyActionBar>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-11"
+          onClick={() => navigate('/safety/permits')}
+        >
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          className="h-11"
+          onClick={onSaveDraft}
+          disabled={!baseValid || create.isPending}
+        >
+          {create.isPending && !submit.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+          <Save className="h-4 w-4 mr-2" /> Draft
+        </Button>
+        <Button
+          type="button"
+          className="h-11"
+          onClick={onSubmitForApproval}
+          disabled={!submitValid || create.isPending || submit.isPending}
+        >
+          {(create.isPending || submit.isPending) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+          <Send className="h-4 w-4 mr-2" /> Submit
+        </Button>
+      </SafetyStickyActionBar>
     </div>
   );
 }
