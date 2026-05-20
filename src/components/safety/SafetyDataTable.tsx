@@ -38,6 +38,11 @@ export interface SafetyDataTableProps {
   children: ReactNode;
   /** Optional right-side header slot (e.g. an Export button). */
   headerActions?: ReactNode;
+  /**
+   * Optional skeleton to render in place of the spinner while `isLoading`.
+   * Pass `<SafetySkeletonBlock variant="list" />` for sanctioned UX.
+   */
+  loadingSkeleton?: ReactNode;
 }
 
 export function SafetyDataTable({
@@ -53,6 +58,7 @@ export function SafetyDataTable({
   onPageSizeChange,
   children,
   headerActions,
+  loadingSkeleton,
 }: SafetyDataTableProps) {
   const showAwaiting = !hasSubmitted;
   const showLoading = hasSubmitted && isLoading;
@@ -76,10 +82,12 @@ export function SafetyDataTable({
         {showAwaiting && <SafetyEmptyState variant="awaiting-search" />}
 
         {showLoading && (
-          <div className="flex items-center justify-center py-12 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin mr-2" />
-            Loading…
-          </div>
+          loadingSkeleton ?? (
+            <div className="flex items-center justify-center py-12 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin mr-2" />
+              Loading…
+            </div>
+          )
         )}
 
         {showEmpty && <SafetyEmptyState variant="no-results" />}
