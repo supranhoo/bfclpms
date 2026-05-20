@@ -158,6 +158,35 @@ interface ManifestV2 {
   storage_manifest_file?: string
 }
 
+// Fetch authoritative insert order from the DB (parents → children).
+// Falls back to LEGACY_INSERT_ORDER if the RPC is unavailable. Manifest
+// tables not represented in the DB order (e.g. dropped/renamed) are
+// appended at the end so restore still attempts them.
+async function fetchInsertOrder(
+  supabase: ReturnType<typeof createClient>,
+  manifestTables: string[]
+): Promise<string[]> {
+  let dbOrder: string[] = []
+  try {
+    const { data, error } = await supabase.rpc('get_backup_table_order')
+    if (!error && Array.isArray(data) && data.length > 0) {
+      dbOrder = (data as Array<{ table_name: string; sort_rank: number }>)
+        .sort((a, b) => a.sort_rank - b.sort_rank)
+        .map((r) => r.table_name)
+    }
+  } catch (e) {
+    console.warn('get_backup_table_order RPC unavailable, falling back to legacy order:', e)
+  }
+  const order = dbOrder.length > 0 ? dbOrder : LEGACY_INSERT_ORDER
+  const known = new Set(order)
+  const extras = manifestTables.filter((t) => !known.has(t))
+  return [...order, ...extras]
+}
+
+function deriveDeleteOrder(insertOrder: string[]): string[] {
+  return [...insertOrder].reverse()
+}
+
 async function loadLegacyBackupData(
   supabase: ReturnType<typeof createClient>,
   filePath: string
