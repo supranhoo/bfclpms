@@ -1,57 +1,106 @@
-# Phase 2 — Restore 106 Period-Specific Workflow Overrides
+## Backup Coverage Gap — Risk Report and Recovery Plan
 
-## Context
-- Phase 1 restored **71 Global** `workflow_config` rows from `Workflow_Configuration_Report_1.xlsx` (✅ done).
-- The same file's `Employee Overrides` sheet also contains **106 Period-Specific rows**, each with a valid `Employee Code`, `Assigned Template`, `Review Period` (month name), and `Review Year` (e.g. Ankit: Feb 2026 = `Self + L1 + HR PMS`, Mar 2026 = `Self + L1 + Audit`).
-- The DB resolver does NOT carry-forward across months. A month with no `workflow_config` row falls back to the Global override (just restored in Phase 1). The export already captured every period override as a literal row, so restoring those 106 rows faithfully reproduces the pre-incident state.
+### Findings
 
-## Risk & Impact
-- **Data**: Inserts 106 rows into `public.workflow_config` with `config_type='employee'`, `review_period=<month>`, `review_year=<int>`, `is_ongoing=false`. No schema changes. Idempotent via `ON CONFLICT (workflow_config_period_unique) DO UPDATE`.
-- **Workflow**: After insert, in-flight April/May/June 2026 KPIs for the affected ~80 employees may now resolve to a different template than they did 30 min ago. Reconciliation auto-advances or rolls back stages to align — same mechanism Phase 1 used. Approved KPIs untouched.
-- **UI**: None — read-only consumers (`get_employee_workflow`, dashboards) just see the restored rows.
-- **Regression risk**: Low. Triggers `trg_workflow_change_step_back` and `trg_repercolate_on_workflow_config_change` are disabled during the bulk insert (same pattern as Phase 1) to prevent cascading `kpis.status` thrash. Re-enabled before commit.
-- **Mitigation**: Pre-flight validates every (employee_code → profile, template_name → template_id, month name → canonical period token). Aborts on any unmatched row, listing them in the migration output.
+The current backup edge function `supabase/functions/create-backup/index.ts` has a hardcoded `TABLES_TO_BACKUP` array containing **115 tables**. The live database has **142 base tables in `public`**. **27 tables are NOT being backed up.**
 
-## Execution
+This is why the recent restore felt "thin" — anything outside the 115-table allowlist was not in the snapshot and therefore could not be restored. Whatever was in those 27 tables at the moment of restore is whatever currently exists; if a restore overwrote/deleted rows there, they are gone from this database. Lovable Cloud retains its own platform-level snapshots that may still contain them.
 
-### Step 1 — Parse & stage (locally, no DB writes)
-Build `(employee_id, template_id, review_period_token, review_year)` tuples from the XLSX, normalising:
-- Month → canonical period token (`February` → `February`, already matches `review_periods` constant).
-- `Assigned Template` display name → `workflow_templates.id` via case-insensitive match on `display_name` (trim whitespace; the file has known double-space artifacts like `"Self + L1  + HR PMS"` and `"Self + L1 +Audit"`).
-- `Employee Code` → `profiles.id` via `employee_code` (already validated in Phase 1; same 71 employees plus the period-only ones).
+### The 27 missing tables (current row counts)
 
-Load into staging table `_workflow_config_restore_2026_05_19_ps` (col: emp_code, emp_id, template_display, template_id, review_period, review_year). Abort if any row has NULL emp_id or template_id and surface the list.
+**A. KPI Standardization Registry (HIGH value — active feature data)**
+- `kpi_definitions` — 120 rows
+- `kpi_name_aliases` — 260 rows
+- `kpi_standardization_actions` — 245 rows
+- `kpi_scanner_skips` — 6 rows
+- `kpi_registry_audit_log` — 0 (audit trail; future writes will be lost)
+- `registry_suggestion_dismissals` — 0
 
-### Step 2 — Migration
-```sql
-ALTER TABLE public.workflow_config DISABLE TRIGGER trg_workflow_change_step_back;
-ALTER TABLE public.workflow_config DISABLE TRIGGER trg_repercolate_on_workflow_config_change;
+**B. Access Profile / Menu Access (HIGH value — RBAC config)**
+- `access_profiles` — 0
+- `access_profile_assignments` — 0
+- `access_profile_menu_rights` — 0
+- `access_profile_org_scope` — 0
+- (All currently empty, but feature is live — any future config would silently be lost.)
 
-INSERT INTO public.workflow_config
-  (config_type, config_value, template_id, review_period, review_year, is_ongoing, created_at, updated_at)
-SELECT 'employee', emp_id::text, template_id, review_period, review_year, false, now(), now()
-FROM _workflow_config_restore_2026_05_19_ps
-ON CONFLICT ON CONSTRAINT workflow_config_period_unique
-DO UPDATE SET template_id = EXCLUDED.template_id, updated_at = now();
+**C. IAC (Identity/Access Capability) framework (MEDIUM)**
+- `iac_roles`, `iac_capabilities`, `iac_role_capabilities`, `iac_user_role_assignments` — 0 each
+- `iac_audit_log` — 7 rows
 
-ALTER TABLE public.workflow_config ENABLE TRIGGER trg_workflow_change_step_back;
-ALTER TABLE public.workflow_config ENABLE TRIGGER trg_repercolate_on_workflow_config_change;
+**D. PMS infrastructure / housekeeping (MEDIUM)**
+- `pms_evidence_compression_jobs` — 730 rows (compression job history)
+- `okv_migration_history` — 172 rows (Org KPI Value migration ledger — needed to avoid re-running migrations)
+- `org_kpi_owner_key_backup` — 233 rows (prior owner-key snapshot)
+- `org_kpi_owner_key_backup_2026_05` — 0
+- `import_field_settings` — 0
+- `custom_reports` — 0
+- `locations` — 0
+- `review_action_notes` — 0
 
-DROP TABLE _workflow_config_restore_2026_05_19_ps;
+**E. Audit / security trails (HIGH — compliance)**
+- `system_audit_logs` — 1 row
+- `email_change_audit` — 5 rows
+- `auth_lookup_attempts` — 0
+
+**F. Safety**
+- `safety_drill_runs` — 4 rows (parent of `safety_drill_participants` / `safety_drill_findings`, which ARE backed up — restoring children without this parent would break FKs)
+
+### Recovery plan (from Lovable Cloud platform snapshots)
+
+Lovable Cloud / Supabase retains automated daily Point-in-Time-Recovery snapshots independent of our app-level backup. The path:
+
+1. **Identify the cutover** — Pick the timestamp just before the last app-level restore (the action that wiped these tables to current state).
+2. **Open a platform restore window** — Request a PITR snapshot from Lovable Cloud at that timestamp into a *staging* schema (not over production) — exposed as `restore_<timestamp>.<table>`.
+3. **Selective copy-back** — For each of the 27 tables, diff staging vs production and `INSERT … ON CONFLICT DO NOTHING` the missing rows. Tables to prioritize in order: D + A + E + F + C + B (highest row count and feature criticality first).
+4. **Reconcile FKs** — Specifically, restore `safety_drill_runs` BEFORE re-validating already-restored `safety_drill_participants` / `safety_drill_findings`.
+5. **Verify** — Row counts per table, plus spot-check 3 records from each.
+
+This step requires the user to request the PITR window from Lovable Cloud support / Cloud → Database → PITR. The migration to copy data back will be authored once the staging schema is available.
+
+### Permanent fix — eliminate the allowlist
+
+Replace the hardcoded `TABLES_TO_BACKUP` array with a **dynamic discovery query** so every new table is backed up automatically the moment it is created.
+
+Implementation in `supabase/functions/create-backup/index.ts`:
+
+```text
+1. On init, query information_schema.tables to fetch every
+   base table in 'public' (excluding any explicit DENYLIST).
+2. Order tables by FK dependency using pg_constraint topological sort
+   (so restore order stays valid) — falls back to current tier order
+   for unknown deps.
+3. Build TABLES_TO_BACKUP at runtime from that query.
+4. Maintain only a small DENYLIST for things we intentionally skip
+   (e.g. transient cache tables, or supabase-internal schemas — none
+   today). New tables are INCLUDED by default.
+5. Add a guard: if discovered_count < last_successful_backup_count,
+   abort and alert (prevents accidental shrink).
 ```
 
-### Step 3 — Reconcile affected periods
-Run `reconcile_workflow_statuses(p_review_period, p_review_year)` once per distinct (period, year) pair present in the 106 rows. Likely just a handful of (Apr/May/Jun 2026) calls plus any historical ones (Feb/Mar 2026).
+### Core directive (workspace-wide rule)
 
-### Step 4 — Verification
-- `SELECT count(*) FROM workflow_config WHERE config_type='employee' AND review_period IS NOT NULL` = expected pre-incident PS count + any new ones added since. Compare to 106 from XLSX.
-- Spot-check Ankit: `get_employee_workflow(<ankit_id>, 'February', 2026)` → `Self + L1 + HR PMS`; `get_employee_workflow(<ankit_id>, 'March', 2026)` → `Self + L1 + Audit`; `get_employee_workflow(<ankit_id>, 'April', 2026)` → Global (`Self + L1 + HR PMS`).
-- Pick 5 random period-specific rows and verify resolver matches XLSX.
-- KPI row count unchanged (insert touches `workflow_config` only).
+Add the following entry to project memory under Core so every future Lovable session enforces it:
 
-### Step 5 — Memory & docs
-- Add note to `mem://features/admin/workflow-configuration-report` that the export carries both Global and Period-Specific rows and is the canonical recovery artifact.
-- Append an ADR entry referencing the May 19 incident and the two-phase restore.
+> **Backup coverage is automatic.** The backup edge function MUST discover tables dynamically from `information_schema`. NEVER reintroduce a hardcoded allowlist. Any new table in `public` is backed up by default; exclusions require explicit DENYLIST entry with written reason. The function must abort with an alert if the discovered table count drops below the previous successful run.
 
-## Out of scope (deferred)
-- **Phase 3 export bug fix** in `src/components/admin/WorkflowConfigExport.tsx` — defensive write of employee identifiers + period/year. This file's export is already correct, so Phase 3 is precautionary only; will be filed as a separate ticket.
+Also adds the same rule to `DOCUMENTATION.md` and `POLICY.md` per SSOT policy.
+
+### Regression protection
+
+- Unit test (`src/test/safety/backup-coverage.test.ts`): asserts that the table-discovery query returns ALL `public` base tables and that the DENYLIST is empty or justified.
+- Drill update: extend `safety-drill` to fail if any `public` table is absent from the latest backup manifest.
+
+### Risk & Impact
+
+- **Data impact:** No schema change. Backup payloads grow modestly (27 tables, most empty).
+- **Workflow impact:** Future backups will take slightly longer; batch size already tuned for memory.
+- **Regression risk:** Low. Dynamic ordering must preserve FK order — mitigated by topological sort with safe fallback.
+- **Mitigation:** Run one manual backup immediately after deploy, diff manifest against `information_schema` to confirm 100% coverage.
+
+### Deliverables (on approval)
+
+1. Refactor `create-backup` edge function (dynamic discovery + denylist + count-shrink guard).
+2. Mirror dynamic ordering in `restore-backup` so unknown-to-prior-version tables still restore.
+3. Add unit test for coverage.
+4. Update `DOCUMENTATION.md`, `POLICY.md`, project memory Core rule.
+5. Author migration to copy 27 missing tables back from PITR staging (once user enables the platform restore window).

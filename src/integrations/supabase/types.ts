@@ -397,6 +397,27 @@ export type Database = {
         }
         Relationships: []
       }
+      backup_denylist: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          reason: string
+          table_name: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          reason: string
+          table_name: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          reason?: string
+          table_name?: string
+        }
+        Relationships: []
+      }
       backup_logs: {
         Row: {
           backup_format: string
@@ -8139,6 +8160,13 @@ export type Database = {
           kpi_id: string
           raised_by: string
           reason: string
+        }[]
+      }
+      get_backup_table_order: {
+        Args: never
+        Returns: {
+          sort_rank: number
+          table_name: string
         }[]
       }
       get_bulk_employee_workflows: {

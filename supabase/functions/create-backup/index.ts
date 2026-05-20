@@ -5,80 +5,47 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 }
 
-const TABLES_TO_BACKUP = [
-  // Tier 1: Root/independent tables
-  'companies', 'divisions', 'designations', 'pms_grades', 'kra_categories', 'modules',
-  'system_settings', 'app_settings', 'workflow_templates', 'frequency_config',
-  'review_periods', 'levels', 'report_access_config', 'incentive_program_types',
-  'incentive_slab_categories',
-  // Tier 2: Depend on tier 1
-  'business_units', 'departments', 'menu_access_config',
-  'review_period_locks', 'review_period_stages', 'review_period_auto_rules',
-  'incentive_programs',
-  // Tier 3: Depend on tier 2
-  'sub_branches', 'business_unit_sub_units', 'employee_job_descriptions',
-  'incentive_program_mappings', 'incentive_program_custom_tabs',
-  'incentive_slabs', 'incentive_allocation_rules', 'incentive_disqualification_rules',
-  'incentive_eligibility_fields', 'incentive_production_rates', 'incentive_vessel_rates',
-  // Tier 4: Profiles (depends on departments, designations, etc.)
-  'profiles', 'user_roles', 'skill_competencies',
-  'menu_access_user_overrides',
-  // Tier 5: Depend on profiles
-  'password_rollout_logs', 'employee_working_days', 'org_kpi_data_owners',
-  'audit_kpi_assignments', 'kpi_templates', 'template_bundles',
-  'report_access_user_overrides',
-  'production_targets', 'production_daily_entries', 'vessel_monthly_entries',
-  'employee_incentive_eligibility', 'incentive_custom_tab_data',
-  // Tier 6: Depend on tier 5
-  'template_bundle_items', 'bundle_assignment_logs', 'template_change_logs',
-  'workflow_config', 'workflow_settings',
-  // Tier 7: KPIs (depend on profiles, categories, templates)
-  'kpis', 'kpi_rollback_requests', 'kpi_mention_access',
-  'audit_kpi_level_assignments',
-  // Tier 8: Depend on KPIs
-  'review_submissions', 'sub_period_submissions', 'performance_reviews',
-  'kpi_queries', 'kpi_audit_logs', 'kpi_observations',
-  'org_kpi_values', 'org_kpi_data_entry_logs',
-  'employee_incentive_records', 'incentive_score_revisions',
-  // Tier 9: Depend on tier 8
-  'kpi_observation_replies', 'org_kpi_value_history',
-  // Tier 10: Transient/operational
-  'notifications', 'email_logs', 'email_dispatch_queue',
-  'kra_rollover_logs', 'import_progress',
-  'review_period_audit_log',
-  // Tier 11: PIP
-  'performance_improvement_plans', 'pip_milestones', 'pip_audit_logs',
-  'training_needs',
-  // Tier 12: Backup meta (last)
-  'backup_logs',
-  // ───────────────────────────────────────────────────────────────
-  // Safety module (T-003, Phase 1.5) — appended after PMS tiers so
-  // dependency order is preserved (Safety references profiles,
-  // business_units, departments which are restored above).
-  // ───────────────────────────────────────────────────────────────
-  // Safety Tier 1: Root/config
-  'safety_module_access', 'safety_settings', 'safety_severity_sla',
-  'safety_sops', 'safety_quizzes', 'safety_quiz_questions',
-  'safety_emergency_contacts', 'safety_permit_type_config',
-  'safety_audit_templates', 'safety_audit_template_items',
-  // Safety Tier 2: Depend on Tier 1 + profiles/business_units
-  'safety_user_roles', 'safety_hours_worked', 'safety_assets',
-  'safety_emergency_drills', 'safety_audit_runs',
-  'safety_training_assignments',
-  // Safety Tier 3
-  'safety_asset_calibrations', 'safety_asset_evidence',
-  'safety_drill_participants', 'safety_drill_findings',
-  'safety_audit_run_responses', 'safety_training_attempts',
-  'safety_permits',
-  // Safety Tier 4
-  'safety_permit_approvals', 'safety_permit_evidence',
-  'safety_permit_hira', 'safety_permit_loto_steps',
-  'safety_incidents',
-  // Safety Tier 5
-  'safety_incident_evidence', 'safety_incident_progress_logs',
-  'safety_incident_timeline', 'safety_sla_escalations',
-  'safety_notifications', 'safety_audit_log',
-]
+// Backup coverage is automatic. Tables are discovered dynamically from
+// information_schema via the `get_backup_table_order` RPC so every new
+// `public` table is backed up by default. Exclusions go in the
+// `backup_denylist` table (with a documented reason) — never in code.
+async function fetchBackupTableOrder(
+  supabase: ReturnType<typeof createClient>
+): Promise<string[]> {
+  const { data, error } = await supabase.rpc('get_backup_table_order')
+  if (error) throw new Error(`Failed to discover backup tables: ${error.message}`)
+  if (!data || !Array.isArray(data) || data.length === 0) {
+    throw new Error('get_backup_table_order returned no tables — refusing to run an empty backup')
+  }
+  return (data as Array<{ table_name: string; sort_rank: number }>)
+    .sort((a, b) => a.sort_rank - b.sort_rank)
+    .map((r) => r.table_name)
+}
+
+// Coverage shrink-guard: refuse to run a backup that covers fewer tables
+// than the most recent successful run (prevents accidental drop of a
+// table from coverage going unnoticed). Tolerance of 0 — any shrink aborts.
+async function assertCoverageNotShrunk(
+  supabase: ReturnType<typeof createClient>,
+  discoveredCount: number
+): Promise<void> {
+  const { data } = await supabase
+    .from('backup_logs')
+    .select('tables_count')
+    .in('status', ['completed', 'completed_with_errors'])
+    .order('completed_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const prev = (data as { tables_count: number | null } | null)?.tables_count ?? 0
+  if (prev > 0 && discoveredCount < prev) {
+    throw new Error(
+      `Backup coverage shrink detected: discovered ${discoveredCount} tables, ` +
+      `last successful backup covered ${prev}. Refusing to run. ` +
+      `If a table was intentionally removed, add it to public.backup_denylist with a reason ` +
+      `or update the previous backup_logs row.`
+    )
+  }
+}
 
 // Buckets to inventory for storage manifest
 const STORAGE_BUCKETS = ['review-evidence', 'avatars', 'safety-media']
@@ -408,7 +375,9 @@ async function handleInit(
   // its own edge worker, so reducing batch size trades a few extra
   // invocations for staying well under the 256MB worker limit.
   const BATCH_SIZE = 4
-  const batches = splitIntoBatches(TABLES_TO_BACKUP, BATCH_SIZE)
+  const tablesToBackup = await fetchBackupTableOrder(supabase)
+  await assertCoverageNotShrunk(supabase, tablesToBackup.length)
+  const batches = splitIntoBatches(tablesToBackup, BATCH_SIZE)
 
   return new Response(
     JSON.stringify({
@@ -417,7 +386,7 @@ async function handleInit(
       folder_path: folderPath,
       backup_type: backupType,
       batches,
-      total_tables: TABLES_TO_BACKUP.length,
+      total_tables: tablesToBackup.length,
     }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   )
@@ -604,7 +573,9 @@ async function runScheduledChunked(
 ): Promise<void> {
   const startTime = Date.now()
   const BATCH_SIZE = 9
-  const batches = splitIntoBatches(TABLES_TO_BACKUP, BATCH_SIZE)
+  const tablesToBackup = await fetchBackupTableOrder(supabase)
+  await assertCoverageNotShrunk(supabase, tablesToBackup.length)
+  const batches = splitIntoBatches(tablesToBackup, BATCH_SIZE)
   const tableManifest: Array<{ table: string; rows: number; file: string }> = []
   let totalRows = 0
   let totalSize = 0

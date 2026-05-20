@@ -5,8 +5,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 }
 
-// Delete order: leaf tables first (reverse of insert order)
-const DELETE_ORDER = [
+// Legacy hardcoded orders retained ONLY as a fallback if the
+// `get_backup_table_order` RPC is unavailable. The runtime path uses the
+// dynamic discovery helpers below so every table in `public` (minus the
+// denylist) is restored in correct FK order automatically.
+const LEGACY_DELETE_ORDER = [
   // Safety Tier 5 (leaves) — delete first
   'safety_audit_log', 'safety_notifications', 'safety_sla_escalations',
   'safety_incident_timeline', 'safety_incident_progress_logs',
@@ -77,8 +80,7 @@ const DELETE_ORDER = [
   'companies',
 ]
 
-// Insert order: parent tables first (reverse of delete order)
-const INSERT_ORDER = [
+const LEGACY_INSERT_ORDER = [
   // Tier 1
   'companies', 'divisions', 'designations', 'pms_grades', 'kra_categories', 'modules',
   'system_settings', 'app_settings', 'workflow_templates', 'frequency_config',
@@ -154,6 +156,35 @@ interface ManifestV2 {
   format: string
   tables: Array<{ table: string; rows: number; file: string }>
   storage_manifest_file?: string
+}
+
+// Fetch authoritative insert order from the DB (parents → children).
+// Falls back to LEGACY_INSERT_ORDER if the RPC is unavailable. Manifest
+// tables not represented in the DB order (e.g. dropped/renamed) are
+// appended at the end so restore still attempts them.
+async function fetchInsertOrder(
+  supabase: ReturnType<typeof createClient>,
+  manifestTables: string[]
+): Promise<string[]> {
+  let dbOrder: string[] = []
+  try {
+    const { data, error } = await supabase.rpc('get_backup_table_order')
+    if (!error && Array.isArray(data) && data.length > 0) {
+      dbOrder = (data as Array<{ table_name: string; sort_rank: number }>)
+        .sort((a, b) => a.sort_rank - b.sort_rank)
+        .map((r) => r.table_name)
+    }
+  } catch (e) {
+    console.warn('get_backup_table_order RPC unavailable, falling back to legacy order:', e)
+  }
+  const order = dbOrder.length > 0 ? dbOrder : LEGACY_INSERT_ORDER
+  const known = new Set(order)
+  const extras = manifestTables.filter((t) => !known.has(t))
+  return [...order, ...extras]
+}
+
+function deriveDeleteOrder(insertOrder: string[]): string[] {
+  return [...insertOrder].reverse()
 }
 
 async function loadLegacyBackupData(
@@ -265,8 +296,12 @@ async function restoreData(
   const errors: string[] = []
   let tablesRestored = 0
 
+  const manifestTables = Object.keys(backupData)
+  const insertOrder = await fetchInsertOrder(supabase, manifestTables)
+  const deleteOrder = deriveDeleteOrder(insertOrder)
+
   // Step 1: Delete all data in reverse dependency order
-  for (const tableName of DELETE_ORDER) {
+  for (const tableName of deleteOrder) {
     if (backupData[tableName] !== undefined) {
       try {
         const { error } = await supabase
@@ -284,7 +319,7 @@ async function restoreData(
   }
 
   // Step 2: Insert data in dependency order
-  for (const tableName of INSERT_ORDER) {
+  for (const tableName of insertOrder) {
     const rows = backupData[tableName]
     if (!rows || rows.length === 0) continue
     try {
@@ -467,10 +502,13 @@ Deno.serve(async (req) => {
 
     // Phase: INIT — return ordered batches for the client to orchestrate
     if (!phase) {
-      const deleteBatches = packBatches(DELETE_ORDER, byTable, { maxTables: 20, maxRows: Number.POSITIVE_INFINITY })
+      const manifestTables = manifest.tables.map((t) => t.table)
+      const insertOrder = await fetchInsertOrder(supabase, manifestTables)
+      const deleteOrder = deriveDeleteOrder(insertOrder)
+      const deleteBatches = packBatches(deleteOrder, byTable, { maxTables: 20, maxRows: Number.POSITIVE_INFINITY })
       // Tighter insert batches — 2 tables / 2k rows max keeps peak heap
       // well under the 256 MB worker limit even for large PMS tables.
-      const insertBatches = packBatches(INSERT_ORDER, byTable, { maxTables: 2, maxRows: 2000 })
+      const insertBatches = packBatches(insertOrder, byTable, { maxTables: 2, maxRows: 2000 })
       const totalTables = manifest.tables.length
       return new Response(
         JSON.stringify({

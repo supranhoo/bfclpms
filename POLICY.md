@@ -2930,3 +2930,25 @@ For periods that were rolled over BEFORE §132 carry-forward existed, Admin MAY 
 6. **Idempotent.** Re-running the same backfill is a no-op.
 
 Regression: `src/test/backfillAuditAssignments.test.ts` (6 tests — happy path, already-assigned preservation, walk-further-back recency, source-without-auditor, no-signature-match, signature-boundary integrity).
+
+## §133 — Backup Coverage Is Dynamic (v2.66.11.20)
+
+**Rule.** The `create-backup` and `restore-backup` edge functions MUST discover their table list at runtime via the `public.get_backup_table_order()` RPC. Hardcoded allowlists are forbidden.
+
+**Mechanics.**
+1. `public.get_backup_table_order()` returns every `BASE TABLE` in schema `public` in foreign-key dependency order (parents before children), excluding any row present in `public.backup_denylist`.
+2. `create-backup` calls the RPC on init AND in `runScheduledChunked`. Empty result aborts the run.
+3. `create-backup` enforces a coverage shrink-guard via `assertCoverageNotShrunk`: if the discovered count is less than the most recent `completed` / `completed_with_errors` `backup_logs.tables_count`, the backup aborts with an explanatory error.
+4. `restore-backup` uses `fetchInsertOrder(manifestTables)` for INIT/legacy paths; tables present in the manifest but unknown to the current DB order are appended at the tail so older backups still restore.
+5. Exclusions require a row in `public.backup_denylist(table_name, reason)` — admin-only RLS for writes, read-open to authenticated.
+
+**Rationale.** Pre-§133 the backup edge function maintained a hardcoded 115-table array against a 142-table schema, silently excluding 27 tables (`access_profile_*`, `iac_*`, `kpi_definitions`, `kpi_name_aliases`, `kpi_standardization_actions`, `pms_evidence_compression_jobs`, `safety_drill_runs`, `system_audit_logs`, etc.) from every snapshot. Restores from those snapshots could not recover those tables. Dynamic discovery removes the maintenance burden and guarantees forward coverage as new tables are added.
+
+**Recovery for pre-§133 data loss.** Tables that were excluded prior to v2.66.11.20 must be recovered from Lovable Cloud platform PITR snapshots (separate from app-level backups). The cutover timestamp is the most recent app-level restore that wiped them.
+
+**Forbidden.**
+- Reintroducing a hardcoded `TABLES_TO_BACKUP` / `INSERT_ORDER` / `DELETE_ORDER` array as the source of truth.
+- Skipping `assertCoverageNotShrunk`.
+- Excluding a table by quietly removing it from any list — exclusions go in `backup_denylist` with a written `reason`.
+
+Regression: future tests in `src/test/safety/backup-coverage.test.ts` assert that `get_backup_table_order()` returns the union of all `public` base tables minus the denylist.
