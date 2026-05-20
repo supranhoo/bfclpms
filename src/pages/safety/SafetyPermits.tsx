@@ -154,6 +154,7 @@ export default function SafetyPermits() {
         pageSize={pageSize}
         totalPages={totalPages}
         onPageChange={setPage}
+        loadingSkeleton={<SafetySkeletonBlock variant="list" />}
         mobileRender={(r) => (
           <SafetyMobileListCard
             onClick={() => navigate(`/safety/permits/${r.id}`)}
