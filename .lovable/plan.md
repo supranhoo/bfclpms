@@ -1,173 +1,144 @@
+# Bulk Scoring Dashboard — Redesigned PRD v1.1
 
-# PRD — Group-Based & Departmental KPI Scoring at Scale
-
-**Deliverable:** Write `docs/prd/PRD-group-scoring.md` (~800-1200 lines) plus a short architecture addendum `docs/adr/ADR-064.md`. No code changes in this round — PRD only.
-
-**Reuse-first principle:** The platform already ships ~70% of the building blocks needed. The PRD must explicitly map each requirement to an existing feature and only call out *gaps*. No greenfield duplication.
+Replaces the modal/grid concept from PRD v1.0 with a **full-page dashboard** at `/review/bulk-scoring`, designed for reviewing entire Org / BU / Department slices, with **deferred (click-to-load) data fetching** to control Cloud compute cost and keep first paint instant.
 
 ---
 
-## What already exists (reuse inventory)
+## 1. North-Star UX
 
-| Capability | Existing surface | PRD reuses as |
-|---|---|---|
-| Org-level KPI definition + scoping (Org/Dept/Employee) | `org_kpi_data_owners`, `change_org_kpi_scope_cascading`, `OrgKpiOverview`, `OrgKpiScopeChangeDialog` | Group-KPI master |
-| One-value-to-many propagation | `propagate_org_kpi_value` RPC, `usePropagateOrgKpiValue`, `PropagationPreviewDialog` | Bulk score writer |
-| Snapshot read path (no RLS timeout) | `get_org_kpi_data_entry_snapshot` RPC | Bulk grid loader |
-| Per-row / per-card status pills | `deriveScopedRowStatus`, `deriveOrgKpiTileStatus` (ADR-055) | Group grid status column |
-| KPI canonical grouping across name variants | `kpi_definitions` + `kpi_name_aliases`, `canonicalGroupKey` | Cross-employee KPI rollup |
-| Matrix view (KPI × Employee) | `useKpiEmployeeMatrix`, `KpiMappingMatrix` page | Bulk scoring grid skeleton |
-| Bulk template / zero-score / grant flows | `BulkTemplateAssignDialog`, `BulkZeroScoreSection`, `BulkGrantAccessDialog` | UX pattern reference |
-| Workflow engine (per-employee status) | `workflow_config`, ADR-055, POLICY §88 immutability | Per-stage gating for group writes |
-| Audit trail | `system_audit_logs`, ORG_KPI_AUTOPULLED, etc. | Group-write audit events |
-| Frequency & cycle locks | `resolve_terminal_period`, KPI Frequency Indicators memory | Cycle gating for group entry |
+A single dashboard that opens **empty** (filter shell + KPI summary cards only). The reviewer sets scope → clicks **Load Scope** → grid + analytics hydrate. No filter change ever auto-fires a query.
 
-**Gap list driving new work in PRD:**
-1. No reviewer-facing **bulk scoring grid** (KPI rows × employee columns) — current Org KPI Data Entry is for the *Data Owner* writing one value, not for *Manager/Auditor/HR PMS/Management* scoring across a team.
-2. No concept of a **KPI group** independent of "org-level" (e.g. an Individual KPI that happens to be common across 30 employees but isn't owned by a Data Owner).
-3. No **per-stage bulk approve / send-back** across an employee column.
-4. No **override-on-cell** UX (group value applied, then one cell individually adjusted) with audit linkage.
-5. No **department × KPI heatmap** for Management/Audit roles.
-
----
-
-## PRD document structure (to be written)
-
-The PRD file follows the user's exact 12-section spec. Each section will be filled per below.
-
-### 1. Problem Statement
-- Today: scoring is per `review_submissions` row, one employee at a time, walked through 7 workflow stages each.
-- At 50 employees × ~12 KPIs × 7 stages = **4,200 individual cell-actions per cycle per department**. Manager step alone = ~600 clicks.
-- ~60% of those KPIs are *identical* across the department (Safety, Compliance, Attendance, Dept revenue share) but are scored independently → drift, inconsistency, time loss.
-- Existing Org-KPI propagation solves the *data-entry* side but not the *reviewer* side.
-
-### 2. Objectives (measurable)
-- Cut Manager-stage scoring time per department from ~90 min → **≤ 15 min** (-83%).
-- Reduce same-KPI score variance across a department from current avg σ ≈ 0.6 → **≤ 0.1** (only intentional overrides).
-- 100% of group-scored KPIs carry a traceable audit row identifying group-write vs override.
-- Zero regression on POLICY §88 (immutability of approved `final_score`).
-
-### 3. Scope
-- **In:** Manager, Auditor, HR PMS, Skip-Level, Management bulk scoring; group definitions; override UX; dashboards.
-- **Out (Phase 1):** Self-review bulk (employees still self-score individually); cross-department groups; AI auto-score.
-
-### 4. Functional Requirements (detailed)
-
-**FR-1 KPI Group Model**
-- Introduce `kpi_group_type` per KPI: `individual` | `departmental` | `org` (org already exists).
-- `departmental` = scored once per department, applied to all employees in that dept for that period.
-- Group inferred automatically when ≥ N employees in same department share canonical `kpi_definitions.id` and weightage — admin can confirm/override.
-
-**FR-2 Bulk Scoring Grid (new page `/review/bulk-scoring`)**
-- Rows: canonical KPI (grouped via `canonicalGroupKey`).
-- Columns: employees in selected scope (BU → Division → Dept → Team filter chain, reuse `OrgFilterCombobox`).
-- Cell: shows current best-score (8-stage fallback) + reviewer's editable score for *their* stage only (gated by `workflow_config` per employee).
-- Header row per KPI: "Group score" input — writing it fans out to every unlocked cell in that row via existing `propagate_org_kpi_value` pattern (extended to reviewer stages).
-- Per-cell override: edit one cell → group value remains, override flagged with badge + audit event `BULK_SCORE_OVERRIDE`.
-
-**FR-3 Bulk Stage Transition**
-- "Approve column" / "Send back column" actions on each employee column — batched server-side via new RPC `bulk_advance_workflow_stage(emp_ids[], stage, period)` (mirrors single-employee path; reuses RLS).
-- Hard guards: skip rows where `final_score IS NOT NULL` (POLICY §88), skip rows past current stage, skip N/A.
-
-**FR-4 Scope Filters**
-- Reuse Reports filter stack (Company → BU → Division → Dept → Designation → Grade → Manager).
-- Persist filter set in URL (Dashboard View Persistence memory).
-
-**FR-5 Override & Reconciliation**
-- Per-cell override stored on `review_submissions.<stage>_score` as today; new boolean `is_group_override` + `group_write_batch_id` for traceability.
-- "Reset to group value" link on overridden cells.
-
-**FR-6 Role-scoped variants**
-- Manager: own direct + indirect reports, own stage.
-- Auditor: assigned KPIs only (reuse `audit_kpi_assignments`).
-- HR PMS / Skip-Level / Management: their stage, full org scope.
-- Admin: read-only grid for governance.
-
-**FR-7 Notifications**
-- Single batched notification per group-write (reuse notification engine), not N per employee.
-
-### 5. Non-Functional Requirements
-- **Perf:** grid renders 50 emp × 30 KPI = 1500 cells under 2s; uses snapshot RPC + virtualized table (`@tanstack/react-virtual`, already in deps).
-- **Concurrency:** optimistic locking on `review_submissions.updated_at`; conflict toast on stale writes.
-- **Security:** all writes go through RPC under `SECURITY DEFINER` with role + assignment check (Edge Function Security memory).
-- **Accuracy:** numeric inputs validated against KPI scale/UoM; high-threshold warnings (Data Entry Validation Guardrails memory).
-- **Auditability:** every bulk write produces 1 `system_audit_logs` summary row + per-cell rows linked by `group_write_batch_id`.
-
-### 6. User Workflow
 ```text
-Manager → Reviews → "Bulk Scoring" tab
-  → Pick Period + Dept (filters persisted in URL)
-  → Grid loads (KPI rows × emp cols, status pills per cell)
-  → For each Departmental KPI row:
-      enter Group score in header → preview dialog ("Apply 4.0 to 28 employees, 2 locked, 1 N/A skipped") → Confirm
-  → For Individual KPI rows: score per cell
-  → Override any group cell as needed (badge appears)
-  → "Submit column" per employee OR "Submit all unlocked" → batch advance
-  → Notifications fan out (batched)
-Auditor / HR PMS / Skip-Level / Management → same grid, scoped to their stage
-Admin → read-only grid + Audit log filtered by group_write_batch_id
+┌──────────────────────────────────────────────────────────────────────────┐
+│ Bulk Scoring Dashboard                            [Period: Apr-2026 ▾]  │
+├──────────────────────────────────────────────────────────────────────────┤
+│ Scope:  [Company▾][Division▾][BU▾][Dept▾][Manager▾][KPI Group▾]         │
+│ Stage:  ( ) Self  (•) Manager  ( ) Skip  ( ) HR  ( ) Auditor            │
+│ Filters:[Pending only ▢] [Hide N/A ▢] [Hide approved ▢]  [Load Scope ▶] │
+├──────────────────────────────────────────────────────────────────────────┤
+│ ── KPI cards (live only after load) ───────────────────────────────────  │
+│ [Employees: 142] [KPIs in scope: 38] [Pending cells: 1,204] [SLA: 3d]   │
+├──────────────────────────────────────────────────────────────────────────┤
+│ ── Bulk Scoring Grid (virtualized) ─────────────────────────────────────│
+│             E1   E2   E3 … E142          [Apply to All] [Send Back ▾]   │
+│  KPI-1 ☐    -    -    -                                                 │
+│  KPI-2 ☐    3    -    4                                                 │
+│  …                                                                       │
+├──────────────────────────────────────────────────────────────────────────┤
+│ ── Side panel (on cell/row select) ─ KPI history · Evidence · Audit ─── │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 7. UI/UX Concepts
-- **Layout:** Sticky left column (KPI + canonical name + weightage + group/individual chip). Sticky top row (employee chips with status dot + workflow stage badge).
-- **Group row affordance:** subtle background tint, "↧ Apply to all" inline button next to input.
-- **Cell states:** `pending` (empty), `entered` (blue), `group-applied` (teal), `override` (amber dot), `locked` (gray padlock), `na` (dash), `approved` (green check).
-- **Bulk action bar (sticky bottom):** "Apply group values", "Submit selected columns", "Send back selected".
-- **Heatmap view toggle** for Management/Audit: dept × KPI matrix colored by avg score.
-- Reuse `ConfirmDestructiveDialog` for any group action affecting >10 cells.
-- Mobile: collapses to single-employee view (existing UnifiedScorecard).
+---
 
-### 8. Data Model
-- **New columns** on `review_submissions`:
-  - `is_group_override BOOLEAN DEFAULT false`
-  - `group_write_batch_id UUID NULL`
-  - `kpi_group_type TEXT` (denormalized for fast filter)
-- **New table** `bulk_score_batches`:
-  - `id, period, year, scope_type (dept|org|custom), scope_id, kpi_definition_id, stage, applied_value, performed_by, employee_count, override_count, created_at`
-- **Reuse:** `kpi_definitions` (canonical), `org_kpi_data_owners` (group ownership), `workflow_config` (stage gating), `system_audit_logs`.
-- **No FK to auth.users** (project rule). Automated rows: `performed_by = NULL` (System Performer Attribution memory).
+## 2. Click-to-Load Architecture (Cost Control)
 
-### 9. Edge Cases
-- Mixed-frequency group (monthly + quarterly KPI in same dept): group write only fans to employees whose period is in active cycle (KPI Frequency memory).
-- Late joiner mid-cycle: snapshot RPC auto-includes; group write applies; existing `trg_autopull_propagated_org_kpi` already handles back-fill.
-- Employee marked inactive after group write: write succeeds for active set only; inactive excluded (Employee Status Management memory).
-- Approved (`final_score` set) cells: always skipped, listed in preview dialog with reason.
-- Sent-back KPI in group: skipped from group write to preserve Send-Back Data Preservation rules.
-- Mid-cycle KPI weightage change: blocked during open bulk session (existing variance acknowledgement pattern).
-- Override then group re-apply: override survives unless reviewer explicitly clicks "Reset to group".
-- Cross-department employee (matrix org): treated as individual until admin assigns to a dept group.
+| Stage | Trigger | What loads |
+|---|---|---|
+| **T0 — Shell** | Page mount | Filter options only (cached `useProfilesWithHierarchy`, KPI categories). **Zero** submission/KPI row reads. |
+| **T1 — Scope counts** | Filter change | Single lightweight RPC `bulk_scope_preview(filters)` returning `{emp_count, kpi_count, pending_cells, est_payload_kb}`. ≤50 ms. |
+| **T2 — Load Scope** | Explicit button click | Paged RPC `bulk_scoring_snapshot(filters, page, page_size=200)` returns canonical KPI rows × employee cells. Server-side filtered, projected (slim columns). |
+| **T3 — Drill-in** | Row/cell click | `kpi_cell_detail(kpi_id, emp_id)` — history, evidence, audit. On demand only. |
+| **T4 — Write** | Save | `propagate_org_kpi_value(stage)` or `bulk_advance_workflow_stage`. Optimistic UI; rollback on RPC error. |
 
-### 10. Benefits & Impact
-- 80%+ reduction in reviewer click-time.
-- Consistency: identical KPIs share identical scores by default → cleaner analytics, fairer comparisons.
-- Faster cycle close → earlier incentive computation.
-- Lower data-entry error rate (one input vs N).
-
-### 11. Risks & Mitigation
-| Risk | Mitigation |
-|---|---|
-| Loss of individual accountability | Override-on-cell + `is_group_override` flag visible everywhere; reports surface override % per reviewer |
-| Reviewer rubber-stamps group score without thinking | Preview dialog forces value review; Audit role can filter "group-only, never overridden" KPIs as a quality signal |
-| POLICY §88 violation if approved scores get overwritten | Server RPC hard-skips rows where `final_score IS NOT NULL`; unit-tested |
-| Concurrent reviewers double-writing | `updated_at` optimistic lock; conflict toast |
-| Frequency drift (quarterly KPI written in non-cycle month) | Reuse `resolve_terminal_period`; preview shows skipped cycles |
-| Notification storm | Batched per `group_write_batch_id`, single inbox row per recipient |
-| Over-generalization (true individual KPIs forced into group) | Admin toggle `kpi_group_type` per KPI; default to `individual` unless ≥70% dept overlap detected |
-
-### 12. Future Enhancements
-- AI-suggested group scores from historical median + variance.
-- Cross-department groups (e.g. all Plant Heads org-wide).
-- Self-review bulk for employees with multiple identical reportees.
-- Drilldown analytics: override rate per reviewer, score drift per KPI.
-- Mobile-first bulk approve via swipe.
+**Guardrails**
+- **Hard cap:** `est_payload_kb > 5 MB` or `emp_count × kpi_count > 25 000` → button disabled with banner "Narrow scope (max 25k cells per load)". Forces dept-level slicing.
+- **Stale-while-revalidate:** loaded scope cached in React Query keyed by `(filters, period)` for 5 min; reviewer can switch filters and return without refetch.
+- **No realtime subscriptions** on this page — polling is opt-in via "Refresh" pill (POLICY §120 §5).
 
 ---
 
-## Deliverables in this round (plan mode → on approval)
+## 3. Performance Budget
 
-1. `docs/prd/PRD-group-scoring.md` — full PRD per spec above (~800-1200 lines, with example screenshots referenced as TBD wireframes).
-2. `docs/adr/ADR-064.md` — short architecture record: "Bulk scoring grid reuses Org KPI propagation pattern; new `bulk_score_batches` table + 2 columns on `review_submissions`; no new auth surface."
-3. `mem/features/review/group-based-scoring.md` — memory entry summarising the contract for future agents.
-4. Update `mem/index.md` to reference (3).
+| Metric | Target | Mechanism |
+|---|---|---|
+| First paint | < 400 ms | Shell-only; no data queries |
+| Scope preview | < 80 ms p95 | Single index-only count RPC |
+| Snapshot load (200×30) | < 900 ms p95 | Server RPC, slim projection, gzip |
+| Grid scroll | 60 fps | `@tanstack/react-virtual` on rows + cols |
+| Save batch (100 cells) | < 1.2 s | Single RPC, one DB transaction |
+| Memory | < 120 MB heap | Virtualization + page eviction |
 
-**No code, no migrations, no schema changes in this round.** Implementation will be a separate, approval-gated plan after stakeholder sign-off on the PRD.
+**Why this lowers Cloud compute cost**
+- Filter cascades don't hit Postgres until user commits via Load Scope.
+- One snapshot RPC replaces N+1 client queries (today's pattern in `useKpiEmployeeMatrix` issues many `.in()` batches).
+- Server projects only `id, score columns, is_na, status` (~80 B/row) instead of full join payloads.
+- Virtualization keeps DOM nodes ≤ 1.5k regardless of scope size.
+
+---
+
+## 4. Page Anatomy (Reused Components First)
+
+| Section | Reuse | New |
+|---|---|---|
+| Period selector | `usePeriodSelector` | — |
+| Org filter strip | `OrgFilterCombobox`, `useKpiFilters` cascade | `BulkScopeBar` wrapper |
+| KPI summary cards | `Card`, `Skeleton` | `ScopeMetricsRow` |
+| Grid | virt patterns from `KpiWeightageDashboard` | `BulkScoringGrid` (rows × cols virtualized) |
+| Cell editor | `ScoreInputCell` from `UnifiedScorecard` | `BulkCellEditor` (adds "Apply to all in row") |
+| Send-back | `SendBackDialog` | — |
+| Confirm destructive | `ConfirmDestructiveDialog` | — |
+| Side drawer | `Sheet` | `KpiCellDrawer` |
+| Audit trail | existing audit timeline | — |
+
+---
+
+## 5. Future Enhancement Slots (Built-in seams)
+
+1. **AI Score Suggestions** — placeholder side-panel "Suggest" button calling Lovable AI Gateway (`google/gemini-2.5-flash`) with last 3 cycles of context. Disabled flag `feature_ai_bulk_suggest`.
+2. **Saved Scopes** — `bulk_saved_scopes` table (filter JSON + name); chip row above filter bar.
+3. **Analytics tab** — second tab on the page: variance heatmap, manager calibration, KPI distribution. Lazy-mounted.
+4. **Calibration mode** — colored cell variance vs dept median, toggle.
+5. **Export** — async CSV via existing `large-export-pagination-policy`.
+6. **Mobile drill-down** — single KPI × employees list view, reuse `SafetySkeletonBlock`.
+
+---
+
+## 6. Data & RPC Contract (no new code yet)
+
+```sql
+-- Lightweight preview (counts only, no rows)
+bulk_scope_preview(
+  p_period TEXT, p_year INT, p_filters JSONB
+) RETURNS TABLE(emp_count INT, kpi_count INT, pending_cells INT, est_payload_kb INT)
+
+-- Paged snapshot (rows = canonical KPIs, cols = employees)
+bulk_scoring_snapshot(
+  p_period TEXT, p_year INT, p_stage workflow_stage,
+  p_filters JSONB, p_page INT, p_page_size INT DEFAULT 200
+) RETURNS JSONB  -- {rows:[{kpi, weightage, cells:[{emp_id, score, status, is_na, final_locked}]}], total_rows, total_emps}
+
+-- Write paths (already specified in PRD v1.0)
+propagate_org_kpi_value(... , p_stage)
+bulk_advance_workflow_stage(emp_ids[], stage, period, year)
+```
+
+All RPCs `SECURITY DEFINER`, RLS-equivalent role check inside, must respect POLICY §88 (skip `final_score IS NOT NULL`).
+
+---
+
+## 7. Risk & Impact Report
+
+| Risk | Mitigation |
+|---|---|
+| Scope explodes Cloud CPU | Hard cell-count cap + server-side projection + click-gated load |
+| POLICY §88 regression | RPC-layer skip + unit test on `bulk_scoring_snapshot` returning `final_locked:true` |
+| Reviewer over-applies "Apply to all" | `ConfirmDestructiveDialog` with affected-count, batch-id audit, "Reset to group" undo per cell |
+| Filter UI confuses with existing scorecard | New route `/review/bulk-scoring`, distinct breadcrumb; not a modal over existing pages |
+| Stale cache after another reviewer writes | "Refresh scope" pill + 5-min SWR; full realtime deferred to Phase 2 |
+| Daily-frequency KPIs misused | Hidden from grid (E12 invariant) — surfaced in side drawer with link to per-employee daily entry |
+
+---
+
+## 8. Deliverables (Plan-mode only)
+
+1. Rewrite `docs/prd/PRD-group-scoring.md` → v1.1 with sections above + ASCII wireframes (full-page, no modal).
+2. Update `docs/adr/ADR-064.md` — add §"Click-to-Load Architecture" and RPC budget table.
+3. Update `mem/features/review/group-based-scoring.md` — note v1.1 invariants: click-gated load, 25k-cell cap, two new RPCs (`bulk_scope_preview`, `bulk_scoring_snapshot`), virtualization mandate.
+4. Update `mem/index.md` reference description.
+
+**Out of scope this round:** any migration, RPC body, React component, or route change. Implementation is a separate approval-gated plan after stakeholder sign-off on v1.1.
+
+---
+
+Used the redesign skill (pinned: full-page dashboard register, deferred-load taste, perf-first composition).
