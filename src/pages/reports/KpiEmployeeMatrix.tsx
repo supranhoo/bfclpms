@@ -575,10 +575,11 @@ export default function KpiEmployeeMatrix() {
                           lastCat = row.categoryName;
                           const collapsed = collapsedCategories.has(row.categoryName);
                           elements.push(
-                            <tr key={`cat-${row.categoryName}`} className="bg-muted/40 sticky-cat">
+                            <tr key={`cat-${row.categoryName}`} className="bg-muted/60 backdrop-blur-sm">
                               <td
                                 colSpan={2 + empSlice.length}
-                                className="sticky left-0 z-10 border-b px-3 py-1.5 cursor-pointer hover:bg-muted/60"
+                                style={{ top: COL.headerH }}
+                                className="sticky left-0 z-20 border-b px-2.5 py-1.5 cursor-pointer hover:bg-muted/80 bg-muted/60 backdrop-blur-sm"
                                 onClick={() => {
                                   setCollapsedCategories(prev => {
                                     const next = new Set(prev);
