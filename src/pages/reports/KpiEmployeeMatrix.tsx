@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
@@ -6,7 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Download, Search, Users, Target, AlertTriangle, BarChart3, Play } from 'lucide-react';
+import { Loader2, Download, Search, Users, Target, AlertTriangle, BarChart3, Play, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useKpiEmployeeMatrix, useKpiEmployeeMatrixScope, MATRIX_CELL_CAP, type MatrixFilters } from '@/hooks/useKpiEmployeeMatrix';
 import { useDepartments, useBusinessUnits, useKraCategories, useDivisions } from '@/hooks/useOrganization';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
@@ -15,7 +19,25 @@ import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const ROWS_PER_PAGE = 50;
+const ROW_PAGE_OPTIONS = [25, 50, 100] as const;
+const EMP_PAGE_OPTIONS = [25, 50, 100] as const;
+
+// Sticky-pane column widths (px) — single source of truth so left offsets stay aligned.
+const COL = {
+  sr: 44,
+  kpi: 320,
+  wt: 56,
+  emp: 48,
+  cell: 72, // employee column width
+  headerH: 140,
+  rowH: 44,
+} as const;
+const STICKY_KPI_LEFT = COL.sr;
+const STICKY_WT_LEFT = COL.sr + COL.kpi;
+const STICKY_EMP_LEFT = COL.sr + COL.kpi + COL.wt;
+const STICKY_TOTAL = COL.sr + COL.kpi + COL.wt + COL.emp;
+
+type ViewMode = 'weightage' | 'score' | 'both';
 
 export default function KpiEmployeeMatrix() {
   const { toast } = useToast();
@@ -32,7 +54,16 @@ export default function KpiEmployeeMatrix() {
   const [categoryId, setCategoryId] = useState<string>('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState<number>(50);
   const [loaded, setLoaded] = useState(false);
+
+  // UX state (presentation only)
+  const [viewMode, setViewMode] = useState<ViewMode>('weightage');
+  const [hideUnmapped, setHideUnmapped] = useState(true);
+  const [empPage, setEmpPage] = useState(0);
+  const [empPageSize, setEmpPageSize] = useState<number>(25);
+  const [hoverEmpId, setHoverEmpId] = useState<string | null>(null);
+  const filtersRef = useRef<HTMLDivElement>(null);
 
   // Company filter
   const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany } = useCompanyFilter();
@@ -94,15 +125,39 @@ export default function KpiEmployeeMatrix() {
     }));
   }, [data, selectedCompanyId, filteredEmployees]);
 
-  // Pagination
-  const totalPages = Math.ceil(filteredRows.length / ROWS_PER_PAGE);
-  const pagedRows = filteredRows.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE);
+  // Hide-unmapped: keep only employees who appear in at least one filtered row.
+  const visibleEmployees = useMemo(() => {
+    if (!hideUnmapped) return filteredEmployees;
+    const mappedIds = new Set<string>();
+    for (const r of filteredRows) {
+      for (const eid of Object.keys(r.employeeScores)) mappedIds.add(eid);
+    }
+    return filteredEmployees.filter(e => mappedIds.has(e.id));
+  }, [filteredEmployees, filteredRows, hideUnmapped]);
+
+  // Reset employee paging when the visible set changes
+  useEffect(() => { setEmpPage(0); }, [visibleEmployees.length, empPageSize]);
+
+  // KPI row pagination
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
+  const pagedRows = filteredRows.slice(page * rowsPerPage, (page + 1) * rowsPerPage);
+
+  // Employee column window
+  const empTotalPages = Math.max(1, Math.ceil(visibleEmployees.length / empPageSize));
+  const empStart = empPage * empPageSize;
+  const empEnd = Math.min(empStart + empPageSize, visibleEmployees.length);
+  const empSlice = visibleEmployees.slice(empStart, empEnd);
 
   // Reset page on filter change
   const handleFilterChange = useCallback((setter: (v: any) => void, value: any) => {
     setter(value);
     setPage(0);
+    setEmpPage(0);
     setLoaded(false);
+  }, []);
+
+  const scrollToFilters = useCallback(() => {
+    filtersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
   // Export to Excel
@@ -200,15 +255,10 @@ export default function KpiEmployeeMatrix() {
       />
 
       {/* Filters */}
-      <Card>
+      <Card ref={filtersRef as any}>
         <CardContent className="p-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-            <CompanyFilter
-              companies={companies}
-              selectedCompanyId={selectedCompanyId}
-              onCompanyChange={setSelectedCompanyId}
-            />
-
+          {/* Row 1: Primary controls (period + search + view options) */}
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             <Select value={reviewPeriod} onValueChange={v => handleFilterChange(setReviewPeriod, v)}>
               <SelectTrigger><SelectValue placeholder="Month" /></SelectTrigger>
               <SelectContent>
@@ -224,6 +274,42 @@ export default function KpiEmployeeMatrix() {
                 ))}
               </SelectContent>
             </Select>
+
+            <div className="relative col-span-2">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search KPI / Employee..."
+                className="pl-8"
+                value={search}
+                onChange={e => handleFilterChange(setSearch, e.target.value)}
+              />
+            </div>
+
+            <ToggleGroup
+              type="single"
+              value={viewMode}
+              onValueChange={(v) => v && setViewMode(v as ViewMode)}
+              className="justify-start"
+              size="sm"
+            >
+              <ToggleGroupItem value="weightage" className="text-xs">Wt%</ToggleGroupItem>
+              <ToggleGroupItem value="score" className="text-xs">Score</ToggleGroupItem>
+              <ToggleGroupItem value="both" className="text-xs">Both</ToggleGroupItem>
+            </ToggleGroup>
+
+            <div className="flex items-center gap-2 px-2">
+              <Switch id="hide-unmapped" checked={hideUnmapped} onCheckedChange={setHideUnmapped} />
+              <Label htmlFor="hide-unmapped" className="text-xs cursor-pointer">Hide empty employees</Label>
+            </div>
+          </div>
+
+          {/* Row 2: Scope filters */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mt-3 pt-3 border-t">
+            <CompanyFilter
+              companies={companies}
+              selectedCompanyId={selectedCompanyId}
+              onCompanyChange={setSelectedCompanyId}
+            />
 
             <Select value={divisionId || 'all'} onValueChange={v => {
               handleFilterChange(setDivisionId, v === 'all' ? '' : v);
@@ -265,16 +351,6 @@ export default function KpiEmployeeMatrix() {
                 {categories?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
-
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search KPI / Employee..."
-                className="pl-8"
-                value={search}
-                onChange={e => handleFilterChange(setSearch, e.target.value)}
-              />
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -319,12 +395,42 @@ export default function KpiEmployeeMatrix() {
         </Card>
       </div>
 
-      {/* Export */}
-      <div className="flex justify-end">
-        <Button variant="outline" size="sm" onClick={exportToExcel} disabled={!loaded || isLoading || !filteredRows.length}>
-          <Download className="h-4 w-4 mr-1" /> Export Excel
-        </Button>
-      </div>
+      {/* Employee paging + Export */}
+      {loaded && !!filteredRows.length && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>
+              Employees{' '}
+              <span className="font-medium text-foreground">
+                {visibleEmployees.length === 0 ? 0 : empStart + 1}–{empEnd}
+              </span>{' '}
+              of <span className="font-medium text-foreground">{visibleEmployees.length}</span>
+              {hideUnmapped && filteredEmployees.length !== visibleEmployees.length && (
+                <span className="ml-1 text-xs">({filteredEmployees.length - visibleEmployees.length} hidden)</span>
+              )}
+            </span>
+            <Button
+              variant="outline" size="icon" className="h-7 w-7"
+              disabled={empPage === 0}
+              onClick={() => setEmpPage(p => Math.max(0, p - 1))}
+            ><ChevronLeft className="h-4 w-4" /></Button>
+            <Button
+              variant="outline" size="icon" className="h-7 w-7"
+              disabled={empPage >= empTotalPages - 1}
+              onClick={() => setEmpPage(p => Math.min(empTotalPages - 1, p + 1))}
+            ><ChevronRight className="h-4 w-4" /></Button>
+            <Select value={String(empPageSize)} onValueChange={(v) => setEmpPageSize(Number(v))}>
+              <SelectTrigger className="h-7 w-[80px] text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {EMP_PAGE_OPTIONS.map(n => <SelectItem key={n} value={String(n)}>{n}/page</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button variant="outline" size="sm" onClick={exportToExcel} disabled={!loaded || isLoading || !filteredRows.length}>
+            <Download className="h-4 w-4 mr-1" /> Export Excel
+          </Button>
+        </div>
+      )}
 
       {/* Click-to-load gate */}
       {!loaded ? (
@@ -352,6 +458,7 @@ export default function KpiEmployeeMatrix() {
                     Narrow the Division / Business Unit / Department / Category to reduce scope.
                   </p>
                 </div>
+                <Button variant="outline" size="sm" onClick={scrollToFilters}>Refine filters</Button>
               </>
             ) : (
               <>
