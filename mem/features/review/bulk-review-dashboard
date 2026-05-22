@@ -4,7 +4,7 @@ description: Flag-gated parallel-stage review at /review/bulk-scoring with audit
 type: feature
 ---
 
-**Status:** M1 (schema) + M2 (read RPCs + shell) shipped. M3 (virtualized grid + drawer), M4 (parallel writes), M5 (re-open + edge cases) pending.
+**Status:** M1 (schema) + M2 (read RPCs + shell) + M3 (cell drawer + variance badges) + M4 (parallel writes) + M5 (re-open) shipped. Pending polish: row/col virtualization with @tanstack/react-virtual, batched HR-PMS-override notifications, E16 auto-revert cron.
 
 **Master switch:** `admin_feature_flags.feature_bulk_review_dashboard` (default `false`). Off = sidebar entry hidden + RPCs throw `feature disabled`. `mgmt_can_reopen` (default `false`) controls whether Management can re-open vs Admin-only.
 
@@ -41,6 +41,18 @@ type: feature
 - Variance badge: fixed 1.0 absolute on 0–5 rating.
 
 **Pending milestones:**
-- M3: `@tanstack/react-virtual` rows+cols, cell drawer (history/evidence/observations/revisions), variance badges, stage progress strip.
-- M4: `bulk_write_stage_scores`, `bulk_management_approve`, `propagate_org_kpi_value(p_stage)` overload, Auditor>HR rule, batched notifications.
-- M5: `bulk_reopen_cells` with 4-eyes guard, E16 auto-revert cron, all 21 edge cases.
+**Write RPCs (M4):**
+- `bulk_write_stage_scores(p_stage, p_cells, p_batch_reason)` — per-stage column write, skips cells with `final_score IS NOT NULL` (Policy §88), rejects HR PMS write when `auditor_score IS NOT NULL`, enforces `expected_row_version` (E9), stamps `group_write_batch_id` + `row_version+1` + `bulk_review_batches` audit row with skip reasons.
+- `bulk_management_approve(p_cells, p_batch_reason)` — picks `final_score` from highest-priority completed stage (auditor>hr_pms>skip_level>manager), records `skipped_by_management` JSONB, requires `ConfirmDestructiveDialog`.
+
+**Re-open (M5):**
+- `bulk_reopen_cells(p_cells, p_stages_to_unlock, p_reason)` — Admin always; Management only when `is_mgmt_reopen_enabled()` is true. Reason min 8 chars. Inserts `final_score_revisions` row, bumps `final_revision_no`, NULLs `final_score` + selected stage scores, increments `row_version`.
+
+**Frontend (M3/M4/M5):**
+- `BulkCellDrawer` (Sheet) shows stage strip, variance badge, write form (gated to viewer stage + non-final), re-open form (gated to admin/management + final), raw audit JSON.
+- Dashboard adds row selection + sticky "Bulk Approve (Mgmt)" toolbar (admin+management only) with `ConfirmDestructiveDialog`. Row variance Δ badge inline.
+
+**Still pending (Phase 2):**
+- Row/col virtualization via `@tanstack/react-virtual` (current limit 200/page renders fine without it).
+- Batched HR-PMS-override notification template wired to Notification Engine.
+- E16 auto-revert scheduled job at period close.

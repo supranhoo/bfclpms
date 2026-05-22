@@ -8138,6 +8138,14 @@ export type Database = {
         Args: { kpis_json: Json }
         Returns: number
       }
+      bulk_management_approve: {
+        Args: { p_batch_reason?: string; p_cells: Json }
+        Returns: Json
+      }
+      bulk_reopen_cells: {
+        Args: { p_cells: Json; p_reason: string; p_stages_to_unlock: string[] }
+        Returns: Json
+      }
       bulk_review_snapshot: {
         Args: {
           p_filters?: Json
@@ -8151,6 +8159,10 @@ export type Database = {
       }
       bulk_scope_preview: {
         Args: { p_filters?: Json; p_period: string; p_year: number }
+        Returns: Json
+      }
+      bulk_write_stage_scores: {
+        Args: { p_batch_reason?: string; p_cells: Json; p_stage: string }
         Returns: Json
       }
       can_view_safety_incident: {
