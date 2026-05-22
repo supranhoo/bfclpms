@@ -26,7 +26,7 @@ type: feature
 **RPCs (M2 read-side):**
 - `bulk_scope_preview(p_period, p_year, p_filters)` — counts + cap check (25k cells / 5MB)
 - `bulk_review_snapshot(p_period, p_year, p_viewer_stage, p_filters, p_page, p_page_size DEFAULT 200, max 500)`
-- `kpi_cell_detail(p_kpi_id, p_emp_id)`
+- `kpi_cell_detail(p_kpi_id, p_emp_id)` — per-click only. Returns `{ kpi, submission, revisions, employee, kpi_history{kpis,submissions}, queries, workflow, org_kpi }` so the drawer can render the **same `KpiReviewPanel`** as "View KPI Details" (rating-scale-derived rating, evidence links, history, queries, journey). Lean-load (ADR-064/066) preserved — grid never pre-fetches this payload.
 - All flag-gated (`is_bulk_review_enabled()`) + role-gated (admin/manager/skip_level/hr_pms/auditor/management).
 - Daily-frequency KPIs excluded (E12).
 

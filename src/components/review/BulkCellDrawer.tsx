@@ -17,6 +17,7 @@ import {
   type BulkReviewRow,
 } from '@/hooks/useBulkReview';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
+import { KpiReviewPanel, type ViewLevel } from './KpiReviewPanel';
 
 type Stage = 'manager' | 'skip_level' | 'hr_pms' | 'auditor';
 
@@ -33,6 +34,16 @@ const STAGE_LABEL: Record<Stage, string> = {
   skip_level: 'Skip-Level',
   hr_pms: 'HR PMS',
   auditor: 'Auditor',
+};
+
+/** Map bulk drawer viewer stage → KpiReviewPanel ViewLevel. */
+const VIEWER_TO_VIEWLEVEL: Record<string, ViewLevel> = {
+  manager: 'manager',
+  skip_level: 'skip_level',
+  hr_pms: 'hr_pms',
+  auditor: 'auditor',
+  management: 'management',
+  admin: 'admin',
 };
 
 export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen }: Props) {
@@ -120,7 +131,7 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
+      <SheetContent className="w-full sm:max-w-[1100px] overflow-y-auto p-4 sm:p-6">
         <SheetHeader>
           <SheetTitle className="text-base">
             {row.employee_name}
@@ -134,25 +145,51 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
         </SheetHeader>
 
         <div className="space-y-5 mt-4">
-          {/* Stage scores strip */}
-          <div>
-            <div className="text-xs font-medium text-muted-foreground mb-2">Stage scores</div>
-            <div className="grid grid-cols-3 gap-2">
-              {scores.map((s) => (
-                <div key={s.stage} className="rounded-md border p-2">
-                  <div className="text-[10px] uppercase text-muted-foreground">{s.label}</div>
-                  <div className="text-lg font-semibold">{s.value === null || s.value === undefined ? '—' : Number(s.value).toFixed(1)}</div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-2 flex items-center gap-2">
-              {variance > 1.0 && (
-                <Badge variant="destructive" className="text-[10px]">Variance {variance.toFixed(1)}</Badge>
-              )}
-              {isFinal && <Badge className="text-[10px]">Final · rev {row.final_revision_no ?? 0}</Badge>}
-              {row.is_na && <Badge variant="outline" className="text-[10px]">N/A</Badge>}
-            </div>
+          {/* Status badges strip */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {variance > 1.0 && (
+              <Badge variant="destructive" className="text-[10px]">Variance {variance.toFixed(1)}</Badge>
+            )}
+            {isFinal && <Badge className="text-[10px]">Final · rev {row.final_revision_no ?? 0}</Badge>}
+            {row.is_na && <Badge variant="outline" className="text-[10px]">N/A</Badge>}
           </div>
+
+          {/* Full KPI Review Panel — parity with "View KPI Details" */}
+          {detail.isLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-48 w-full" />
+            </div>
+          ) : detail.error ? (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="text-xs">{(detail.error as Error).message}</AlertDescription>
+            </Alert>
+          ) : detail.data?.kpi ? (
+            <KpiReviewPanel
+              kpi={detail.data.kpi}
+              submission={detail.data.submission}
+              allKpis={detail.data.kpi_history?.kpis ?? []}
+              allSubmissions={detail.data.kpi_history?.submissions ?? []}
+              queries={detail.data.queries ?? []}
+              viewLevel={VIEWER_TO_VIEWLEVEL[viewerStage] ?? 'admin'}
+              selectedPeriod={row.kpi_id ? (detail.data.kpi.review_period as string) : ''}
+              selectedYear={detail.data.kpi.review_year as number}
+              employeeName={detail.data.employee?.full_name ?? row.employee_name}
+              employeeCode={detail.data.employee?.employee_code ?? row.employee_code ?? undefined}
+              reportingManagerName={detail.data.employee?.reporting_manager_name ?? undefined}
+              workflowStages={
+                Array.isArray(detail.data.workflow?.stages)
+                  ? (detail.data.workflow.stages as string[])
+                  : Array.isArray(detail.data.workflow?.workflow_stages)
+                    ? (detail.data.workflow.workflow_stages as string[])
+                    : undefined
+              }
+              orgKpiEnteredByName={detail.data.org_kpi?.entered_by ?? null}
+              orgAchievedValue={detail.data.org_kpi?.achieved_value ?? null}
+              exploreMode={false}
+            />
+          ) : null}
 
           <Separator />
 
@@ -248,23 +285,20 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
             </>
           )}
 
-          {/* Audit log */}
-          <Separator />
-          <div>
-            <div className="text-xs font-medium text-muted-foreground mb-2">Audit & revisions</div>
-            {detail.isLoading ? (
-              <Skeleton className="h-16 w-full" />
-            ) : detail.error ? (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription className="text-xs">{(detail.error as Error).message}</AlertDescription>
-              </Alert>
-            ) : (
-              <pre className="text-[10px] bg-muted/40 rounded p-2 max-h-48 overflow-auto">
-{JSON.stringify(detail.data ?? {}, null, 2)}
-              </pre>
-            )}
-          </div>
+          {/* Final-score revisions (raw) */}
+          {detail.data?.revisions && detail.data.revisions.length > 0 && (
+            <>
+              <Separator />
+              <div>
+                <div className="text-xs font-medium text-muted-foreground mb-2">
+                  Final-score revisions ({detail.data.revisions.length})
+                </div>
+                <pre className="text-[10px] bg-muted/40 rounded p-2 max-h-40 overflow-auto">
+{JSON.stringify(detail.data.revisions, null, 2)}
+                </pre>
+              </div>
+            </>
+          )}
         </div>
 
         <ConfirmDestructiveDialog

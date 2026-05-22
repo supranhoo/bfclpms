@@ -122,8 +122,34 @@ export function useBulkReviewSnapshot(
 }
 
 // ============= M3: Cell detail =============
+/**
+ * Rich per-cell detail used by the BulkCellDrawer to render the same
+ * KpiReviewPanel as "View KPI Details" — KPI header, rating-scale-derived
+ * rating, evidence, history, queries, workflow stages, org-KPI source.
+ *
+ * Per-click only (no grid pre-fetch — preserves ADR-064 lean-load).
+ */
+export interface KpiCellDetail {
+  kpi: any;
+  submission: any | null;
+  revisions: any[];
+  employee: {
+    id: string;
+    full_name: string | null;
+    employee_code: string | null;
+    designation: string | null;
+    department_id: string | null;
+    reporting_manager_id: string | null;
+    reporting_manager_name: string | null;
+  } | null;
+  kpi_history: { kpis: any[]; submissions: any[] };
+  queries: any[];
+  workflow: any | null;
+  org_kpi: any | null;
+}
+
 export function useKpiCellDetail(kpiId: string | null, empId: string | null, enabled: boolean) {
-  return useQuery({
+  return useQuery<KpiCellDetail>({
     queryKey: ['kpi_cell_detail', kpiId, empId],
     enabled: enabled && !!kpiId && !!empId,
     staleTime: 60 * 1000,
@@ -132,7 +158,7 @@ export function useKpiCellDetail(kpiId: string | null, empId: string | null, ena
         p_kpi_id: kpiId, p_emp_id: empId,
       });
       if (error) throw error;
-      return data as any;
+      return data as unknown as KpiCellDetail;
     },
   });
 }
