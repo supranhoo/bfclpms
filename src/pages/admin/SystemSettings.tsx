@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle, Mail, Building2, CalendarDays, SlidersHorizontal, Database, KeyRound, Upload, Shield, Menu, LogOut, Undo2, LayoutGrid } from 'lucide-react';
+import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle, Mail, Building2, CalendarDays, SlidersHorizontal, Database, KeyRound, Upload, Shield, Menu, LogOut, Undo2, LayoutGrid, Flag } from 'lucide-react';
 import { useScoreCalculationMode, useUpdateSystemSetting, ScoreCalculationMode, useAutoRolloverSetting, useRolloverLogs, useDailyAggregationMethod, DailyAggregationMethod, useSystemSetting, useAutoLogoutMinutes } from '@/hooks/useSystemSettings';
 import { useRecallWindowHours } from '@/hooks/useRecallSubmission';
 import { useState, useEffect } from 'react';
@@ -26,6 +26,7 @@ import { DataRepairTab } from '@/components/admin/DataRepairTab';
 import { ReportBuilderTab } from '@/components/admin/ReportBuilderTab';
 import { UploadSettingsTab } from '@/components/admin/UploadSettingsTab';
 import { OrgKpiGovernanceSettings } from '@/components/admin/OrgKpiGovernanceSettings';
+import { FeatureFlagsTab } from '@/components/admin/FeatureFlagsTab';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -47,6 +48,7 @@ const SETTINGS_SECTIONS = [
   { key: 'report-builder', label: 'Report Builder', icon: LayoutGrid },
   { key: 'backups', label: 'Backups', icon: Database },
   { key: 'data-repair', label: 'Data Repair', icon: Undo2 },
+  { key: 'feature-flags', label: 'Feature Flags', icon: Flag },
 ] as const;
 
 type SectionKey = typeof SETTINGS_SECTIONS[number]['key'];
@@ -637,6 +639,8 @@ export default function SystemSettings() {
         return <BackupRestoreTab />;
       case 'data-repair':
         return <DataRepairTab />;
+      case 'feature-flags':
+        return <FeatureFlagsTab />;
       default:
         return null;
     }
