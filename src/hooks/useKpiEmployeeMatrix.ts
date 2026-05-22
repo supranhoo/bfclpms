@@ -45,6 +45,16 @@ export interface MatrixFilters {
   reviewYear: number;
 }
 
+export interface MatrixScopePreview {
+  employeeCount: number;
+  uniqueKpiCount: number;
+  totalCells: number;
+  exceedsCap: boolean;
+}
+
+/** Hard cap on rendered cells — matches PRD v1.1 click-to-load policy */
+export const MATRIX_CELL_CAP = 25_000;
+
 // ─── Score fallback logic ───────────────────────────────────
 
 function getBestScore(sub: Record<string, any>): number | null {
@@ -58,71 +68,116 @@ function getBestScore(sub: Record<string, any>): number | null {
     ?? null;
 }
 
-// ─── Hook ───────────────────────────────────────────────────
+// ─── RPC helpers ────────────────────────────────────────────
 
-export function useKpiEmployeeMatrix(filters: MatrixFilters) {
+async function fetchScope(filters: MatrixFilters): Promise<Array<{ employee_id: string; kpi_count: number }>> {
+  const { data, error } = await supabase.rpc('rpc_kpi_employee_matrix_scope', {
+    p_period: filters.reviewPeriod,
+    p_year: filters.reviewYear,
+    p_division_id: filters.divisionId || null,
+    p_bu_id: filters.businessUnitId || null,
+    p_dept_id: filters.departmentId || null,
+    p_category_id: filters.categoryId || null,
+    p_search: filters.search || null,
+  });
+  if (error) throw error;
+  return (data || []) as Array<{ employee_id: string; kpi_count: number }>;
+}
+
+/**
+ * Lightweight preview — returns employee/KPI counts without paying the
+ * cost of fetching profile metadata or submissions. Drives the "Load
+ * Matrix" affordance so admins see scope before paying CPU.
+ */
+export function useKpiEmployeeMatrixScope(filters: MatrixFilters) {
+  return useQuery({
+    queryKey: ['kpi-employee-matrix-scope', filters],
+    queryFn: async (): Promise<MatrixScopePreview> => {
+      const rows = await fetchScope(filters);
+      const employeeCount = rows.length;
+      const uniqueKpiCount = rows.reduce((acc, r) => acc + Number(r.kpi_count || 0), 0);
+      // Cells are employees × distinct (kra,kpi) — we don't know distinct count
+      // server-side without an extra query, so we use total KPI rows as the
+      // upper-bound cell estimate. This is conservative (over-counts), which
+      // is the right side to err on for a cap.
+      const totalCells = uniqueKpiCount;
+      return {
+        employeeCount,
+        uniqueKpiCount,
+        totalCells,
+        exceedsCap: totalCells > MATRIX_CELL_CAP,
+      };
+    },
+    enabled: !!filters.reviewPeriod && !!filters.reviewYear,
+    staleTime: 60_000,
+  });
+}
+
+// ─── Main hook ──────────────────────────────────────────────
+
+export function useKpiEmployeeMatrix(filters: MatrixFilters, options?: { enabled?: boolean }) {
+  const enabled = options?.enabled !== false
+    && !!filters.reviewPeriod
+    && !!filters.reviewYear;
   return useQuery({
     queryKey: ['kpi-employee-matrix', filters],
     queryFn: async () => {
-      const PAGE_SIZE = 1000;
+      // ── 1. Server-side scope: who has KPIs in this filter set? ──
+      const scopeRows = await fetchScope(filters);
+      const employeeIds = scopeRows.map(r => r.employee_id);
 
-      // ── 0. Fetch dept→BU / dept→Division mapping if needed ──
-      let deptBuMap: Map<string, string> | null = null;
-      let deptDivMap: Map<string, string> | null = null;
-      if (filters.businessUnitId || filters.divisionId) {
-        const { data: depts } = await supabase
-          .from('departments')
-          .select('id, business_unit_id, business_units(division_id)');
-        deptBuMap = new Map((depts ?? []).map((d: any) => [d.id, d.business_unit_id ?? '']));
-        deptDivMap = new Map(
-          (depts ?? []).map((d: any) => [d.id, (d.business_units?.division_id as string) ?? ''])
-        );
+      if (employeeIds.length === 0) {
+        return {
+          rows: [],
+          employees: [],
+          summary: { totalKpis: 0, totalEmployees: 0, orphanKpis: 0, avgKpisPerEmployee: 0 },
+          exceededCap: false,
+        };
       }
 
-      // ── 1. Fetch KPIs for the period ──────────────────────
-      let allKpis: any[] = [];
-      let page = 0;
-      let hasMore = true;
-
-      while (hasMore) {
-        const selectStr = `
-            id,
-            employee_id,
-            kra_name,
-            kpi_name,
-            weightage,
-            category_id,
-            kra_categories(name),
-            profiles!kpis_employee_id_fkey(
-              full_name, employee_code, department_id, designation,
-              pms_grade, is_active,
-              departments(name)
-            )
-          `;
-
-        let q = (supabase.from('kpis') as any).select(selectStr)
-          .eq('review_period', filters.reviewPeriod)
-          .eq('review_year', filters.reviewYear);
-
-        if (filters.categoryId) {
-          q = q.eq('category_id', filters.categoryId);
-        }
-
-        const { data: kpiData, error: kpiError } = await q
-          .order('kra_name')
-          .order('kpi_name')
-          .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-
-        if (kpiError) throw kpiError;
-        allKpis = allKpis.concat(kpiData ?? []);
-        hasMore = (kpiData?.length ?? 0) === PAGE_SIZE;
-        page++;
+      // Cap guard
+      const estimatedCells = scopeRows.reduce((a, r) => a + Number(r.kpi_count || 0), 0);
+      if (estimatedCells > MATRIX_CELL_CAP) {
+        return {
+          rows: [],
+          employees: [],
+          summary: { totalKpis: 0, totalEmployees: employeeIds.length, orphanKpis: 0, avgKpisPerEmployee: 0 },
+          exceededCap: true,
+        };
       }
 
-      // ── 2. Fetch submissions for these KPI ids ────────────
-      const kpiIds = allKpis.map(k => k.id);
+      // ── 2. Fetch profile display metadata for those employees ──
+      const profileMap = new Map<string, any>();
+      for (let i = 0; i < employeeIds.length; i += 500) {
+        const batch = employeeIds.slice(i, i + 500);
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, full_name, employee_code, department_id, designation, pms_grade, is_active, departments(name)')
+          .in('id', batch);
+        if (error) throw error;
+        (data || []).forEach((p: any) => profileMap.set(p.id, p));
+      }
+
+      // ── 3. Fetch KPI rows (no nested profiles join) ──
+      const kpiRows: Array<{
+        kpi_id: string; employee_id: string; kra_name: string; kpi_name: string;
+        weightage: number | null; category_id: string | null; category_name: string | null;
+      }> = [];
+      for (let i = 0; i < employeeIds.length; i += 500) {
+        const batch = employeeIds.slice(i, i + 500);
+        const { data, error } = await supabase.rpc('rpc_kpi_employee_matrix_rows', {
+          p_period: filters.reviewPeriod,
+          p_year: filters.reviewYear,
+          p_employee_ids: batch,
+          p_category_id: filters.categoryId || null,
+        });
+        if (error) throw error;
+        kpiRows.push(...((data || []) as any[]));
+      }
+
+      // ── 4. Fetch submissions for these KPI ids ──
+      const kpiIds = kpiRows.map(k => k.kpi_id);
       const subMap = new Map<string, any>();
-
       for (let i = 0; i < kpiIds.length; i += 500) {
         const batch = kpiIds.slice(i, i + 500);
         const { data } = await supabase
@@ -132,47 +187,21 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters) {
         (data ?? []).forEach(s => subMap.set(s.kpi_id, s));
       }
 
-      // ── 3. Build employee set & apply filters ─────────────
+      // ── 5. Build employee map & KPI row pivot ──
       const employeeMap = new Map<string, MatrixEmployee>();
       const kpiRowMap = new Map<string, MatrixKpiRow>(); // key = kra_name|kpi_name
 
-      for (const kpi of allKpis) {
-        const profile = kpi.profiles as any;
+      for (const kpi of kpiRows) {
+        const profile = profileMap.get(kpi.employee_id);
         if (!profile) continue;
-
         const empId = kpi.employee_id;
-        const deptId = profile.department_id;
 
-        // Division filter (narrower — takes precedence when both set)
-        if (filters.divisionId && deptDivMap) {
-          const divId = deptId ? deptDivMap.get(deptId) : undefined;
-          if (divId !== filters.divisionId) continue;
-        } else if (filters.businessUnitId && deptBuMap) {
-          // Business Unit filter
-          const buId = deptId ? deptBuMap.get(deptId) : undefined;
-          if (buId !== filters.businessUnitId) continue;
-        }
-
-        // Department filter
-        if (filters.departmentId && deptId !== filters.departmentId) continue;
-
-        // Search filter
-        if (filters.search) {
-          const s = filters.search.toLowerCase();
-          const name = (profile.full_name || '').toLowerCase();
-          const code = (profile.employee_code || '').toLowerCase();
-          const kpiMatch = kpi.kpi_name.toLowerCase().includes(s);
-          const kraMatch = kpi.kra_name.toLowerCase().includes(s);
-          if (!name.includes(s) && !code.includes(s) && !kpiMatch && !kraMatch) continue;
-        }
-
-        // Register employee
         if (!employeeMap.has(empId)) {
           employeeMap.set(empId, {
             id: empId,
             fullName: profile.full_name || 'Unknown',
             employeeCode: profile.employee_code || '',
-            departmentId: deptId,
+            departmentId: profile.department_id,
             departmentName: profile.departments?.name || '',
             designationId: null,
             designationName: profile.designation || '',
@@ -187,7 +216,7 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters) {
         if (!kpiRowMap.has(rowKey)) {
           kpiRowMap.set(rowKey, {
             key: rowKey,
-            categoryName: (kpi.kra_categories as any)?.name || 'Uncategorized',
+            categoryName: kpi.category_name || 'Uncategorized',
             categoryId: kpi.category_id || '',
             kraName: kpi.kra_name,
             kpiName: kpi.kpi_name,
@@ -201,7 +230,7 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters) {
         const row = kpiRowMap.get(rowKey)!;
 
         // Calculate weighted score
-        const sub = subMap.get(kpi.id);
+        const sub = subMap.get(kpi.kpi_id);
         let cellValue: number | null = null;
         if (sub && !sub.is_na) {
           const bestScore = getBestScore(sub);
@@ -249,9 +278,10 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters) {
           orphanKpis,
           avgKpisPerEmployee: avgCoverage,
         },
+        exceededCap: false,
       };
     },
-    enabled: !!filters.reviewPeriod && !!filters.reviewYear,
+    enabled,
     staleTime: 5 * 60 * 1000,
   });
 }
