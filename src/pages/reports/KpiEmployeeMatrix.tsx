@@ -253,6 +253,12 @@ export default function KpiEmployeeMatrix() {
     return { totalKpis: filteredRows.length, totalEmployees: filteredEmployees.length, orphanKpis, avgKpisPerEmployee: avgKpis };
   }, [filteredRows, filteredEmployees]);
 
+  // Active filter count (drives the "Filters (n)" badge)
+  const activeFilterCount = useMemo(() => {
+    return [businessUnitId, divisionId, departmentId, categoryId, selectedCompanyId !== 'all' ? selectedCompanyId : '']
+      .filter(Boolean).length;
+  }, [businessUnitId, divisionId, departmentId, categoryId, selectedCompanyId]);
+
   return (
     <div className="space-y-3">
       {/* ── Unified sticky toolbar ───────────────────────────────── */}
