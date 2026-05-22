@@ -24,7 +24,7 @@ const EMP_PAGE_OPTIONS = [25, 50, 100] as const;
 // Sticky-pane column widths (px) — single source of truth so left offsets stay aligned.
 const COL = {
   sr: 44,
-  kpi: 256,
+  kpi: 360,
   cell: 64, // employee column width
   headerH: 130,
   rowH: 36,
@@ -620,13 +620,13 @@ export default function KpiEmployeeMatrix() {
                                   });
                                 }}
                               >
-                                <div className="flex items-center gap-2 text-[11px] font-medium text-foreground pl-4">
+                                <div className="flex items-center gap-2 text-[11px] font-medium text-foreground pl-4 truncate" style={{ maxWidth: COL.sr + COL.kpi - 8 }}>
                                   <ChevronDown
                                     className={`h-3 w-3 transition-transform text-muted-foreground ${kraCollapsed ? '-rotate-90' : ''}`}
                                   />
                                   <span className="text-primary">KRA:</span>
-                                  <span>{row.kraName}</span>
-                                  <span className="text-muted-foreground font-normal">
+                                  <span className="truncate">{row.kraName}</span>
+                                  <span className="text-muted-foreground font-normal shrink-0">
                                     · {kraCounts[kraKey]} KPI{kraCounts[kraKey] === 1 ? '' : 's'}
                                   </span>
                                 </div>
@@ -638,7 +638,7 @@ export default function KpiEmployeeMatrix() {
                       const isEven = idx % 2 === 1;
                       const rowBg = isEven ? 'bg-muted/20' : 'bg-background';
                       elements.push(
-                        <tr key={row.key} style={{ height: COL.rowH }} className="group hover:bg-accent/20">
+                        <tr key={row.key} className="group hover:bg-accent/20">
                           <td className={`sticky left-0 z-20 border-b border-r text-center text-xs text-muted-foreground ${rowBg} group-hover:bg-accent/20`}>
                             {page * rowsPerPage + idx + 1}
                           </td>
@@ -648,13 +648,13 @@ export default function KpiEmployeeMatrix() {
                           >
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <div className="cursor-default min-w-0 py-1 pl-7 pr-1">
-                                  <div className="flex items-baseline gap-1.5 min-w-0">
-                                    <span className="font-medium text-foreground truncate leading-tight">{row.kpiName}</span>
-                                    <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums">{row.weightage}%</span>
+                                <div className="cursor-default py-1.5 pl-7 pr-1" style={{ width: COL.kpi - 4 }}>
+                                  <div className="flex items-baseline gap-1.5">
+                                    <span className="font-medium text-foreground leading-snug text-xs line-clamp-2 break-words">{row.kpiName}</span>
+                                    <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums ml-auto">{row.weightage}%</span>
                                   </div>
                                   {row.description && (
-                                    <div className="text-[10px] text-muted-foreground truncate leading-tight mt-0.5">
+                                    <div className="text-[10px] text-muted-foreground leading-snug mt-0.5 line-clamp-2 break-words whitespace-normal">
                                       {row.description}
                                     </div>
                                   )}

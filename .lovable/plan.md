@@ -1,73 +1,26 @@
-## Goal
+## Problem
 
-Reshape the left (frozen) pane of `/reports/kpi-employee-matrix` into a 3-level hierarchy — **Category → KRA → KPI** — matching the reference. Category becomes the top group (sticky band, as today), KRA sits as a collapsible sub-group under it, and each KPI row shows name + one-line description. Employee score columns continue to scroll horizontally; the left pane stays frozen.
+Current screenshot shows KPI name + description rendering as a single long line that visually bleeds across the employee score columns. Root cause: the sticky KPI `<td>` has a column width of 256px but no width constraint on its inner content, so `truncate` has no effective max-width and the row content overflows the frozen pane. Comparison reference (the earlier dashboard-style screenshot, image-951) wraps the KPI/description across multiple lines inside a fixed-width cell — that's what the user means by "fix the width just like dashboard".
 
-## Risk & Impact Report
+## Fix (presentation only)
 
-- **Data Impact**: Additive. `rpc_kpi_employee_matrix_rows` gains a `description text` column; hook adds `description` to `MatrixKpiRow`. No schema, RLS, or scoring change.
-- **Workflow Impact**: None — presentation only.
-- **UI/UX Impact**: Left pane widens from 224px → ~300px (Sr 44 + KRA/KPI 256). Category column is removed (Category becomes the top sticky band only). KRA becomes a collapsible sub-band. Per-row chevron and global "Show KRA · Wt%" switch are retired.
-- **Regression Risk**: Sticky offsets and z-index stacking (Category band > KRA band > rows). Excel export unchanged (still flat KRA + KPI columns).
-- **Scalability**: Description is `text`; payload grows ~10–15%. No new queries.
-- **Mitigation**: Type-check, smoke on Commercial-Plant Accounts, Safety & Health, Support Function (50 emp/page). Tooltip still carries full KRA, KPI, description, base weightage, category.
+Single file: `src/pages/reports/KpiEmployeeMatrix.tsx`.
 
-## Layout (left pane only)
-
-```text
-┌────┬─────────────────────────────────────┬──── employees ───▶
-│ Sr │ KRA / KPI                           │ (scroll-x)
-├────┴─────────────────────────────────────┼────────────────────
-│ ● EXCELLENCE & PROCESS IMPROVEMENT  · 6  │   ← Category band (sticky top)
-│   ▼ KRA: PMS                              │   ← KRA sub-band (sticky top, indent)
-│ 1   On-time Completion (HR-PMS)          │ … scores …
-│       Ensures all monthly reviews…        │   ← description (muted, truncate)
-│ 2   On-time Completion (Director's)      │ … scores …
-│   ▼ KRA: Reporting                        │
-│ 3   Monthly Scorecard Submission         │ … scores …
-│ ● QUALITY · 4                             │
-│   ▼ KRA: First-Pass Yield                 │
-│ 4   FPY %                                 │ … scores …
-└──────────────────────────────────────────┴────────────────────
-```
-
-- **Category band** (level 1): existing sticky band — top of group, full-width, dot + uppercase label + KPI count. `top: COL.headerH`, `z-25`.
-- **KRA sub-band** (level 2, NEW): sticky `left-0`, indented, chevron toggles collapse of the KRA's KPIs. Stacks below the Category band visually but does NOT need to stick simultaneously — only `left` sticky so it stays visible during horizontal scroll. Light divider, slightly tinted `bg-muted/30`.
-- **KPI row** (level 3): Sr + KPI cell. KPI cell shows name (bold, truncate 1 line) and description (`text-[10px] text-muted-foreground` truncate 1 line). Indented to align under the KRA band.
-
-## Implementation
-
-### 1. `src/hooks/useKpiEmployeeMatrix.ts`
-- Add `description: string` to `MatrixKpiRow`.
-- Read `kpi.description` from RPC; first-occurrence wins (same pattern as `weightage`).
-
-### 2. Migration: `rpc_kpi_employee_matrix_rows`
-- `CREATE OR REPLACE FUNCTION` adding `description text` to `RETURNS TABLE` and `SELECT k.description`. Pure additive; no caller breakage.
-
-### 3. `src/pages/reports/KpiEmployeeMatrix.tsx`
-- `COL` update: `kpi: 180 → 256`. Keep `sr: 44`. Drop any Category column.
-- New state: `collapsedKras: Set<string>` keyed by `${categoryName}|${kraName}`.
-- Retire `expandedRows`, `expandAll`, and the "Show KRA · Wt%" switch in the filter bar.
-- `<tbody>` render order:
-  1. On `categoryName` change → existing sticky Category band row (kept).
-  2. On `kraName` change within category → new sticky-left **KRA sub-band** with chevron, KRA name, KPI count.
-  3. KPI rows under that KRA (skip if collapsed).
-- KPI sticky `<td>`: `KPI name` + muted `description` (truncate). Tooltip retains KRA, Category, Base Weightage, full description.
-- Z-index discipline preserved: thead `z-30`, header intersection `z-40`, Category band `z-25`, body sticky cells `z-20`.
-
-### 4. Docs / memory
-- `mem/features/reports/kpi-employee-matrix-report.md` — replace layout invariants block: 3-level Category → KRA → KPI hierarchy, KRA collapse, description, `COL.kpi=256`.
-- `DOCUMENTATION.md` — version history entry `v2026-05-22b`.
-- `POLICY.md` — N/A.
-
-### 5. Tests
-- Extend `useKpiEmployeeMatrix` fixtures (or add a focused unit test) asserting `description` flows into `MatrixKpiRow`.
+1. **Widen the frozen KPI column** from `COL.kpi = 256` → `COL.kpi = 360` (matches the dashboard reference: comfortable two-line wrap for KPI name and one-to-two-line description).
+2. **Constrain the inner content to that width**: wrap the cell contents in `<div style={{ width: COL.kpi }}>` so flex/text children honor the column width even though `<td>` width is enforced via `<colgroup>`.
+3. **Switch from truncate → wrap with line clamp**:
+   - KPI name: `line-clamp-2` (allows up to 2 lines, no horizontal overflow).
+   - Description: `line-clamp-2 whitespace-normal break-words`.
+4. **Row height becomes auto** (drop the fixed `height: COL.rowH` on KPI rows so wrapped content has room). Score cells already center vertically — they will follow the taller row naturally.
+5. **KRA sub-band**: keep one-line, but add `truncate` with the same `width: COL.kpi + COL.sr` wrapper so long KRA names don't break the band.
+6. **Tooltip**: unchanged — still carries full KPI, KRA, category, weightage, description.
 
 ## Out of scope
 
-Matrix pivot, Excel format, scoring, RLS, mobile redesign, new filters.
+Hook, RPC, RLS, scoring, Excel export, mobile redesign. No new state.
 
 ## Verification
 
 1. `bunx tsc --noEmit` clean.
-2. Preview `/reports/kpi-employee-matrix` at 1681px — confirm Category band > KRA sub-band > KPI rows stack correctly; KRA collapse toggles only its KPIs; employee columns scroll horizontally with left pane frozen.
-3. Spot-check Support Function (50 emp/page) and Commercial-Plant Accounts.
+2. Preview `/reports/kpi-employee-matrix` at 1493px viewport — confirm KPI text wraps inside the frozen pane and does not bleed over employee columns; KRA sub-band stays one line; horizontal scroll still works for employees.
+3. Spot check rows with very long KPI names (e.g. "Timeliness of Production Entry Recording & Stock Reconciliation").
