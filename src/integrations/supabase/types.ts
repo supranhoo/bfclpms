@@ -8712,6 +8712,7 @@ export type Database = {
         Returns: {
           category_id: string
           category_name: string
+          description: string
           employee_id: string
           kpi_id: string
           kpi_name: string
