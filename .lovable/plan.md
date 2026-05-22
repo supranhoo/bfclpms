@@ -1,144 +1,74 @@
-# Bulk Scoring Dashboard — Redesigned PRD v1.1
+# Fix: KPI-Employee Matrix page times out → "No KPI data found"
 
-Replaces the modal/grid concept from PRD v1.0 with a **full-page dashboard** at `/review/bulk-scoring`, designed for reviewing entire Org / BU / Department slices, with **deferred (click-to-load) data fetching** to control Cloud compute cost and keep first paint instant.
+## Root cause (confirmed)
 
----
+`useKpiEmployeeMatrix` fetches every KPI for the selected month with deeply nested PostgREST joins (`kra_categories`, `profiles → departments`), then filters Division / BU / Department / Search **client-side**. For April 2026 (2,267 rows) the query exceeds the 8 s statement timeout → `500 / 57014` → React Query returns empty → UI renders the empty state. Network panel confirms repeated `canceling statement due to statement timeout` on `/rest/v1/kpis`.
 
-## 1. North-Star UX
+This is the same anti-pattern POLICY §114 / §114.5 already fixed for the KPI Weightage Dashboard. The Matrix never got that treatment.
 
-A single dashboard that opens **empty** (filter shell + KPI summary cards only). The reviewer sets scope → clicks **Load Scope** → grid + analytics hydrate. No filter change ever auto-fires a query.
+## Risk & Impact Report
 
+- **Data Impact**: New SECURITY DEFINER RPC only (read-only). No schema/RLS changes. Score formula, fallback chain, weightage logic unchanged.
+- **Workflow Impact**: None. Same filters, same columns, same export.
+- **UI/UX Impact**: Adds a "Load Matrix" affordance + scope preview (count of employees / KPIs) before fetch. Mirrors PRD v1.1 click-to-load pattern. Pagination/summary cards unchanged.
+- **Regression Risk**: Medium-low. Hook signature stays the same; we ship a unit test for the scope resolver and snapshot the matrix output against fixtures before/after.
+- **Mitigation**: Keep the old hook path behind an internal feature flag for one release; cap snapshot at 25k cells / 5 MB; add Vitest covering Division-precedence-over-BU, Department filter, Category filter, Search filter, orphan KPIs, weighted-score rounding.
+
+## Changes
+
+### 1. New RPC `rpc_kpi_employee_matrix_scope`
 ```text
-┌──────────────────────────────────────────────────────────────────────────┐
-│ Bulk Scoring Dashboard                            [Period: Apr-2026 ▾]  │
-├──────────────────────────────────────────────────────────────────────────┤
-│ Scope:  [Company▾][Division▾][BU▾][Dept▾][Manager▾][KPI Group▾]         │
-│ Stage:  ( ) Self  (•) Manager  ( ) Skip  ( ) HR  ( ) Auditor            │
-│ Filters:[Pending only ▢] [Hide N/A ▢] [Hide approved ▢]  [Load Scope ▶] │
-├──────────────────────────────────────────────────────────────────────────┤
-│ ── KPI cards (live only after load) ───────────────────────────────────  │
-│ [Employees: 142] [KPIs in scope: 38] [Pending cells: 1,204] [SLA: 3d]   │
-├──────────────────────────────────────────────────────────────────────────┤
-│ ── Bulk Scoring Grid (virtualized) ─────────────────────────────────────│
-│             E1   E2   E3 … E142          [Apply to All] [Send Back ▾]   │
-│  KPI-1 ☐    -    -    -                                                 │
-│  KPI-2 ☐    3    -    4                                                 │
-│  …                                                                       │
-├──────────────────────────────────────────────────────────────────────────┤
-│ ── Side panel (on cell/row select) ─ KPI history · Evidence · Audit ─── │
-└──────────────────────────────────────────────────────────────────────────┘
+in:  p_period text, p_year int,
+     p_division_id uuid, p_bu_id uuid, p_dept_id uuid,
+     p_category_id uuid, p_company_id uuid, p_search text
+out: employee_id uuid, kpi_count int
 ```
+- Joins `kpis → profiles → departments → business_units (division_id)` server-side with indexed equality filters.
+- Division beats BU when both set (matches current client logic).
+- Search runs as ILIKE on `profiles.full_name`, `employee_code`, `kpis.kra_name`, `kpis.kpi_name`.
+- Returns only employees who actually have ≥1 matching KPI in the period.
 
----
-
-## 2. Click-to-Load Architecture (Cost Control)
-
-| Stage | Trigger | What loads |
-|---|---|---|
-| **T0 — Shell** | Page mount | Filter options only (cached `useProfilesWithHierarchy`, KPI categories). **Zero** submission/KPI row reads. |
-| **T1 — Scope counts** | Filter change | Single lightweight RPC `bulk_scope_preview(filters)` returning `{emp_count, kpi_count, pending_cells, est_payload_kb}`. ≤50 ms. |
-| **T2 — Load Scope** | Explicit button click | Paged RPC `bulk_scoring_snapshot(filters, page, page_size=200)` returns canonical KPI rows × employee cells. Server-side filtered, projected (slim columns). |
-| **T3 — Drill-in** | Row/cell click | `kpi_cell_detail(kpi_id, emp_id)` — history, evidence, audit. On demand only. |
-| **T4 — Write** | Save | `propagate_org_kpi_value(stage)` or `bulk_advance_workflow_stage`. Optimistic UI; rollback on RPC error. |
-
-**Guardrails**
-- **Hard cap:** `est_payload_kb > 5 MB` or `emp_count × kpi_count > 25 000` → button disabled with banner "Narrow scope (max 25k cells per load)". Forces dept-level slicing.
-- **Stale-while-revalidate:** loaded scope cached in React Query keyed by `(filters, period)` for 5 min; reviewer can switch filters and return without refetch.
-- **No realtime subscriptions** on this page — polling is opt-in via "Refresh" pill (POLICY §120 §5).
-
----
-
-## 3. Performance Budget
-
-| Metric | Target | Mechanism |
-|---|---|---|
-| First paint | < 400 ms | Shell-only; no data queries |
-| Scope preview | < 80 ms p95 | Single index-only count RPC |
-| Snapshot load (200×30) | < 900 ms p95 | Server RPC, slim projection, gzip |
-| Grid scroll | 60 fps | `@tanstack/react-virtual` on rows + cols |
-| Save batch (100 cells) | < 1.2 s | Single RPC, one DB transaction |
-| Memory | < 120 MB heap | Virtualization + page eviction |
-
-**Why this lowers Cloud compute cost**
-- Filter cascades don't hit Postgres until user commits via Load Scope.
-- One snapshot RPC replaces N+1 client queries (today's pattern in `useKpiEmployeeMatrix` issues many `.in()` batches).
-- Server projects only `id, score columns, is_na, status` (~80 B/row) instead of full join payloads.
-- Virtualization keeps DOM nodes ≤ 1.5k regardless of scope size.
-
----
-
-## 4. Page Anatomy (Reused Components First)
-
-| Section | Reuse | New |
-|---|---|---|
-| Period selector | `usePeriodSelector` | — |
-| Org filter strip | `OrgFilterCombobox`, `useKpiFilters` cascade | `BulkScopeBar` wrapper |
-| KPI summary cards | `Card`, `Skeleton` | `ScopeMetricsRow` |
-| Grid | virt patterns from `KpiWeightageDashboard` | `BulkScoringGrid` (rows × cols virtualized) |
-| Cell editor | `ScoreInputCell` from `UnifiedScorecard` | `BulkCellEditor` (adds "Apply to all in row") |
-| Send-back | `SendBackDialog` | — |
-| Confirm destructive | `ConfirmDestructiveDialog` | — |
-| Side drawer | `Sheet` | `KpiCellDrawer` |
-| Audit trail | existing audit timeline | — |
-
----
-
-## 5. Future Enhancement Slots (Built-in seams)
-
-1. **AI Score Suggestions** — placeholder side-panel "Suggest" button calling Lovable AI Gateway (`google/gemini-2.5-flash`) with last 3 cycles of context. Disabled flag `feature_ai_bulk_suggest`.
-2. **Saved Scopes** — `bulk_saved_scopes` table (filter JSON + name); chip row above filter bar.
-3. **Analytics tab** — second tab on the page: variance heatmap, manager calibration, KPI distribution. Lazy-mounted.
-4. **Calibration mode** — colored cell variance vs dept median, toggle.
-5. **Export** — async CSV via existing `large-export-pagination-policy`.
-6. **Mobile drill-down** — single KPI × employees list view, reuse `SafetySkeletonBlock`.
-
----
-
-## 6. Data & RPC Contract (no new code yet)
-
-```sql
--- Lightweight preview (counts only, no rows)
-bulk_scope_preview(
-  p_period TEXT, p_year INT, p_filters JSONB
-) RETURNS TABLE(emp_count INT, kpi_count INT, pending_cells INT, est_payload_kb INT)
-
--- Paged snapshot (rows = canonical KPIs, cols = employees)
-bulk_scoring_snapshot(
-  p_period TEXT, p_year INT, p_stage workflow_stage,
-  p_filters JSONB, p_page INT, p_page_size INT DEFAULT 200
-) RETURNS JSONB  -- {rows:[{kpi, weightage, cells:[{emp_id, score, status, is_na, final_locked}]}], total_rows, total_emps}
-
--- Write paths (already specified in PRD v1.0)
-propagate_org_kpi_value(... , p_stage)
-bulk_advance_workflow_stage(emp_ids[], stage, period, year)
+### 2. New RPC `rpc_kpi_employee_matrix_rows`
+```text
+in:  p_period, p_year, p_category_id, p_employee_ids uuid[]
+out: kpi_id, employee_id, kra_name, kpi_name, weightage,
+     category_id, category_name
 ```
+- Batched in chunks of 500 employee IDs client-side.
+- Drops the nested `profiles → departments` join entirely — profiles already came back from the scope step.
 
-All RPCs `SECURITY DEFINER`, RLS-equivalent role check inside, must respect POLICY §88 (skip `final_score IS NOT NULL`).
+### 3. Hook rewrite — `src/hooks/useKpiEmployeeMatrix.ts`
+- Step A: call scope RPC → eligible employee IDs (gated by `enabled` flag).
+- Step B: page profiles via `.in('id', pageIds)` for display metadata.
+- Step C: call rows RPC + existing `review_submissions` batched fetch.
+- Hard cap: if `employees × distinct_kpis > 25_000`, return `tooLarge: true` and show "Refine filters" banner instead of fetching.
 
----
+### 4. Page UX — `src/pages/reports/KpiEmployeeMatrix.tsx`
+- Filter bar unchanged.
+- Below filters: **Scope preview strip** ("≈ 46 employees · 563 KPI cells — Load Matrix") driven by a lightweight `bulk_scope_preview` style RPC call (counts only, ~80 ms).
+- Matrix body stays empty until "Load Matrix" pressed OR a saved-view auto-load flag is set.
+- Re-clicking any filter invalidates loaded data and re-shows the preview strip.
+- Summary cards + Export Excel become enabled only post-load.
 
-## 7. Risk & Impact Report
+### 5. Tests
+- `src/hooks/useKpiEmployeeMatrix.test.ts` — Division-precedence, BU fallback, Dept narrowing, Category filter, Search, orphan KPI counting, weighted score rounding, 25k-cap guard.
+- Mock data: 3 divisions × 2 BUs × 3 depts × ~10 employees covering Support Function / Commercial / April-2026 reproducer.
 
-| Risk | Mitigation |
-|---|---|
-| Scope explodes Cloud CPU | Hard cell-count cap + server-side projection + click-gated load |
-| POLICY §88 regression | RPC-layer skip + unit test on `bulk_scoring_snapshot` returning `final_locked:true` |
-| Reviewer over-applies "Apply to all" | `ConfirmDestructiveDialog` with affected-count, batch-id audit, "Reset to group" undo per cell |
-| Filter UI confuses with existing scorecard | New route `/review/bulk-scoring`, distinct breadcrumb; not a modal over existing pages |
-| Stale cache after another reviewer writes | "Refresh scope" pill + 5-min SWR; full realtime deferred to Phase 2 |
-| Daily-frequency KPIs misused | Hidden from grid (E12 invariant) — surfaced in side drawer with link to per-employee daily entry |
+### 6. Documentation & memory
+- `DOCUMENTATION.md`: add §"KPI-Employee Matrix — Click-to-Load Architecture".
+- `POLICY.md`: extend §114 to cover the Matrix report.
+- `mem/features/reports/kpi-employee-matrix-report.md`: append the new RPC contract + 25k cap.
+- `docs/adr/ADR-065.md` (new): record "Server-side scoping RPC for report matrices".
 
----
+## Out of scope
 
-## 8. Deliverables (Plan-mode only)
+- Layout/visual redesign of the report.
+- Changing the scoring fallback or weightage formula.
+- Touching other reports (handled separately if same timeout pattern reappears).
 
-1. Rewrite `docs/prd/PRD-group-scoring.md` → v1.1 with sections above + ASCII wireframes (full-page, no modal).
-2. Update `docs/adr/ADR-064.md` — add §"Click-to-Load Architecture" and RPC budget table.
-3. Update `mem/features/review/group-based-scoring.md` — note v1.1 invariants: click-gated load, 25k-cell cap, two new RPCs (`bulk_scope_preview`, `bulk_scoring_snapshot`), virtualization mandate.
-4. Update `mem/index.md` reference description.
+## Acceptance
 
-**Out of scope this round:** any migration, RPC body, React component, or route change. Implementation is a separate approval-gated plan after stakeholder sign-off on v1.1.
-
----
-
-Used the redesign skill (pinned: full-page dashboard register, deferred-load taste, perf-first composition).
+- April 2026, Division = Support Function, BU = Commercial loads in < 1.5 s, shows the 46 employees / 563 KPIs.
+- No PostgREST 500/57014 in network panel.
+- All existing filters behave identically.
+- Vitest suite passes.

@@ -8702,6 +8702,38 @@ export type Database = {
           review_year: number
         }[]
       }
+      rpc_kpi_employee_matrix_rows: {
+        Args: {
+          p_category_id?: string
+          p_employee_ids: string[]
+          p_period: string
+          p_year: number
+        }
+        Returns: {
+          category_id: string
+          category_name: string
+          employee_id: string
+          kpi_id: string
+          kpi_name: string
+          kra_name: string
+          weightage: number
+        }[]
+      }
+      rpc_kpi_employee_matrix_scope: {
+        Args: {
+          p_bu_id?: string
+          p_category_id?: string
+          p_dept_id?: string
+          p_division_id?: string
+          p_period: string
+          p_search?: string
+          p_year: number
+        }
+        Returns: {
+          employee_id: string
+          kpi_count: number
+        }[]
+      }
       rpc_open_query_counts: {
         Args: { p_kpi_ids: string[] }
         Returns: {
