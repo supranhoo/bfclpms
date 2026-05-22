@@ -1,74 +1,85 @@
-# Fix: KPI-Employee Matrix page times out → "No KPI data found"
+# KPI-Employee Matrix — Usability Pass
 
-## Root cause (confirmed)
+Scope: `src/pages/reports/KpiEmployeeMatrix.tsx` only (presentation). No changes to hooks, RPCs, scoring logic, RLS, or exports' data shape.
 
-`useKpiEmployeeMatrix` fetches every KPI for the selected month with deeply nested PostgREST joins (`kra_categories`, `profiles → departments`), then filters Division / BU / Department / Search **client-side**. For April 2026 (2,267 rows) the query exceeds the 8 s statement timeout → `500 / 57014` → React Query returns empty → UI renders the empty state. Network panel confirms repeated `canceling statement due to statement timeout` on `/rest/v1/kpis`.
+## Problems observed (from current screenshot)
 
-This is the same anti-pattern POLICY §114 / §114.5 already fixed for the KPI Weightage Dashboard. The Matrix never got that treatment.
+1. Employee names use vertical-rl rotated text at 10–12px — illegible at this density.
+2. Left "Sr / Category / KRA / KPI / Wt% / Emp#" pane is sticky with hand-computed pixel offsets that don't match column widths, so the freeze drifts when you scroll horizontally.
+3. Each cell crams `Wt%` and weighted score on two lines in 80px — both numbers compete and neither stands out.
+4. Massive blank area: most employees only own ~5 of 54 KPIs, so >70% of the grid is empty cells.
+5. No way to focus: no row hover highlight, no column highlight on hover, no "jump to employee" affordance.
+6. Only 27 employees fit here, but Support Function scopes load 200+ employees → headers become unreadable. Need employee paging.
+7. Filter bar is one long row of 8 controls — hard to scan; primary (Period/Year) buried among hierarchy filters.
 
-## Risk & Impact Report
+## What changes (UI only)
 
-- **Data Impact**: New SECURITY DEFINER RPC only (read-only). No schema/RLS changes. Score formula, fallback chain, weightage logic unchanged.
-- **Workflow Impact**: None. Same filters, same columns, same export.
-- **UI/UX Impact**: Adds a "Load Matrix" affordance + scope preview (count of employees / KPIs) before fetch. Mirrors PRD v1.1 click-to-load pattern. Pagination/summary cards unchanged.
-- **Regression Risk**: Medium-low. Hook signature stays the same; we ship a unit test for the scope resolver and snapshot the matrix output against fixtures before/after.
-- **Mitigation**: Keep the old hook path behind an internal feature flag for one release; cap snapshot at 25k cells / 5 MB; add Vitest covering Division-precedence-over-BU, Department filter, Category filter, Search filter, orphan KPIs, weighted-score rounding.
+### 1. Filter bar
+- Split into 2 rows: top = **Period · Year · Search · View mode · Hide empty employees** (the dials admins touch every time). Bottom = **Company · Division · BU · Department · Category** (scope filters).
+- Add a small "Active filters" chip strip with one-click clear per filter.
 
-## Changes
+### 2. View mode toggle (new)
+SegmentedControl (Tabs) above the table:
+- **Weightage** — cell shows `Wt%` only (default).
+- **Score** — cell shows weighted score only.
+- **Both** — current stacked layout (kept for parity).
+This kills the cramped two-line cell for the 95% case.
 
-### 1. New RPC `rpc_kpi_employee_matrix_scope`
-```text
-in:  p_period text, p_year int,
-     p_division_id uuid, p_bu_id uuid, p_dept_id uuid,
-     p_category_id uuid, p_company_id uuid, p_search text
-out: employee_id uuid, kpi_count int
-```
-- Joins `kpis → profiles → departments → business_units (division_id)` server-side with indexed equality filters.
-- Division beats BU when both set (matches current client logic).
-- Search runs as ILIKE on `profiles.full_name`, `employee_code`, `kpis.kra_name`, `kpis.kpi_name`.
-- Returns only employees who actually have ≥1 matching KPI in the period.
+### 3. "Hide unmapped employees" toggle (new, on by default)
+When ON, employee columns with zero mapped KPIs in the current page filter set are hidden. Counter shows `Showing X of Y employees`. Export remains on the full set so reports are unaffected.
 
-### 2. New RPC `rpc_kpi_employee_matrix_rows`
-```text
-in:  p_period, p_year, p_category_id, p_employee_ids uuid[]
-out: kpi_id, employee_id, kra_name, kpi_name, weightage,
-     category_id, category_name
-```
-- Batched in chunks of 500 employee IDs client-side.
-- Drops the nested `profiles → departments` join entirely — profiles already came back from the scope step.
+### 4. Employee paging strip (new)
+Above the grid: `‹ Employees 1–25 of 73 ›` with page-size 25/50/100. Renders only the visible window of employee columns. Sticky left pane stays put; only the right pane scrolls/changes.
 
-### 3. Hook rewrite — `src/hooks/useKpiEmployeeMatrix.ts`
-- Step A: call scope RPC → eligible employee IDs (gated by `enabled` flag).
-- Step B: page profiles via `.in('id', pageIds)` for display metadata.
-- Step C: call rows RPC + existing `review_submissions` batched fetch.
-- Hard cap: if `employees × distinct_kpis > 25_000`, return `tooLarge: true` and show "Refine filters" banner instead of fetching.
+### 5. Fix sticky panes
+Rewrite the left freeze using a CSS-grid-style approach: explicit column widths in a constant, and `left` offsets computed from those widths so Category/KRA/KPI never drift. Same fix for sticky header row. Add a subtle right-border shadow on the last sticky column to make the freeze edge visible.
 
-### 4. Page UX — `src/pages/reports/KpiEmployeeMatrix.tsx`
-- Filter bar unchanged.
-- Below filters: **Scope preview strip** ("≈ 46 employees · 563 KPI cells — Load Matrix") driven by a lightweight `bulk_scope_preview` style RPC call (counts only, ~80 ms).
-- Matrix body stays empty until "Load Matrix" pressed OR a saved-view auto-load flag is set.
-- Re-clicking any filter invalidates loaded data and re-shows the preview strip.
-- Summary cards + Export Excel become enabled only post-load.
+### 6. Employee column header redesign
+- Drop vertical-rl text. Instead, render headers at 35° rotation in a 140px-tall header row with: full name (bold), employee code below in muted text.
+- Increase header font from 12 → 13px.
+- Hover on a header highlights its full column (subtle `bg-accent/30`).
 
-### 5. Tests
-- `src/hooks/useKpiEmployeeMatrix.test.ts` — Division-precedence, BU fallback, Dept narrowing, Category filter, Search, orphan KPI counting, weighted score rounding, 25k-cap guard.
-- Mock data: 3 divisions × 2 BUs × 3 depts × ~10 employees covering Support Function / Commercial / April-2026 reproducer.
+### 7. Cell density & legibility
+- Increase row height (h-9 → h-11), cell font-size to 13px.
+- Mapped-but-unscored cells: light dotted background instead of solid grey, so the eye skips them.
+- Mapped + scored: use a gentle data-bar background scaled to `score / weightage` so coverage is visible at a glance. No new business logic — just CSS width proportional to the existing numbers.
+- Zebra rows (`even:bg-muted/20`).
+- Row hover: highlight whole row including sticky pane.
 
-### 6. Documentation & memory
-- `DOCUMENTATION.md`: add §"KPI-Employee Matrix — Click-to-Load Architecture".
-- `POLICY.md`: extend §114 to cover the Matrix report.
-- `mem/features/reports/kpi-employee-matrix-report.md`: append the new RPC contract + 25k cap.
-- `docs/adr/ADR-065.md` (new): record "Server-side scoping RPC for report matrices".
+### 8. KPI row left pane
+- Collapse `Category / KRA / KPI` into a single 320px cell: KPI name bold, KRA + Category in a muted second line. Reclaims ~14rem of horizontal space for employee columns. (`Wt%` and `Emp#` stay as their own narrow columns.)
+- Tooltip on hover still shows full text.
+
+### 9. Empty / scope states
+- Keep click-to-load shell. Add an inline "Refine filters" button on the >25k-cell banner that scrolls focus to the filter bar.
+
+### 10. Pagination footer polish
+- Add page-size selector (25 / 50 / 100 KPI rows). Default stays 50.
+- Show "Page 1 of 2" alongside Previous/Next.
 
 ## Out of scope
+- Hook/RPC changes, scoring formula, RLS, Excel structure, mobile breakpoint redesign, sort by employee score (can come later).
 
-- Layout/visual redesign of the report.
-- Changing the scoring fallback or weightage formula.
-- Touching other reports (handled separately if same timeout pattern reappears).
+## Risk & Impact
 
-## Acceptance
+| Area | Impact |
+|---|---|
+| Data | None — read-only presentation changes |
+| Workflow | None |
+| UI/UX | Significant improvement in scanability; layout shifts only on this page |
+| Regression | Low; sticky-pane rewrite is the main risk → covered by snapshot/visual test |
+| Scalability | Better — employee paging caps DOM nodes to ~50 cols × 50 rows = 2,500 cells regardless of scope |
+| Rollback | Trivial — single file, revert commit |
 
-- April 2026, Division = Support Function, BU = Commercial loads in < 1.5 s, shows the 46 employees / 563 KPIs.
-- No PostgREST 500/57014 in network panel.
-- All existing filters behave identically.
-- Vitest suite passes.
+## Verification
+
+1. Vitest: extend `useKpiEmployeeMatrix` tests with a small render test that asserts (a) hide-unmapped removes zero-KPI columns, (b) view-mode toggle renders only the chosen number, (c) employee paging slices columns correctly.
+2. Manual: load `Commercial-Plant Accounts / April 2026` (current screenshot scope) — left pane stays frozen at every horizontal scroll position, headers readable without head-tilt, default Weightage view fits ~15 employees on screen at 1080p without zoom.
+3. Manual: switch to `Support Function` (large scope, post-load) — employee paging caps render; FPS stays smooth.
+4. Excel export byte-for-byte identical to current output (full employee set, no view-mode filtering).
+
+## Docs / Memory updates
+- `DOCUMENTATION.md` → KPI-Employee Matrix section: list view modes, hide-unmapped, employee paging.
+- `mem/features/reports/kpi-employee-matrix-report.md` → add UX policy: "Default to Weightage view; hide unmapped employees by default; export always uses full employee set."
+
+Awaiting approval to implement.

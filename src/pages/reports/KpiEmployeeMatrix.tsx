@@ -1,12 +1,15 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Download, Search, Users, Target, AlertTriangle, BarChart3, Play } from 'lucide-react';
+import { Loader2, Download, Search, Users, Target, AlertTriangle, BarChart3, Play, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useKpiEmployeeMatrix, useKpiEmployeeMatrixScope, MATRIX_CELL_CAP, type MatrixFilters } from '@/hooks/useKpiEmployeeMatrix';
 import { useDepartments, useBusinessUnits, useKraCategories, useDivisions } from '@/hooks/useOrganization';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
@@ -15,7 +18,25 @@ import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const ROWS_PER_PAGE = 50;
+const ROW_PAGE_OPTIONS = [25, 50, 100] as const;
+const EMP_PAGE_OPTIONS = [25, 50, 100] as const;
+
+// Sticky-pane column widths (px) — single source of truth so left offsets stay aligned.
+const COL = {
+  sr: 44,
+  kpi: 320,
+  wt: 56,
+  emp: 48,
+  cell: 72, // employee column width
+  headerH: 140,
+  rowH: 44,
+} as const;
+const STICKY_KPI_LEFT = COL.sr;
+const STICKY_WT_LEFT = COL.sr + COL.kpi;
+const STICKY_EMP_LEFT = COL.sr + COL.kpi + COL.wt;
+const STICKY_TOTAL = COL.sr + COL.kpi + COL.wt + COL.emp;
+
+type ViewMode = 'weightage' | 'score' | 'both';
 
 export default function KpiEmployeeMatrix() {
   const { toast } = useToast();
@@ -32,7 +53,16 @@ export default function KpiEmployeeMatrix() {
   const [categoryId, setCategoryId] = useState<string>('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState<number>(50);
   const [loaded, setLoaded] = useState(false);
+
+  // UX state (presentation only)
+  const [viewMode, setViewMode] = useState<ViewMode>('weightage');
+  const [hideUnmapped, setHideUnmapped] = useState(true);
+  const [empPage, setEmpPage] = useState(0);
+  const [empPageSize, setEmpPageSize] = useState<number>(25);
+  const [hoverEmpId, setHoverEmpId] = useState<string | null>(null);
+  const filtersRef = useRef<HTMLDivElement>(null);
 
   // Company filter
   const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany } = useCompanyFilter();
@@ -94,15 +124,39 @@ export default function KpiEmployeeMatrix() {
     }));
   }, [data, selectedCompanyId, filteredEmployees]);
 
-  // Pagination
-  const totalPages = Math.ceil(filteredRows.length / ROWS_PER_PAGE);
-  const pagedRows = filteredRows.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE);
+  // Hide-unmapped: keep only employees who appear in at least one filtered row.
+  const visibleEmployees = useMemo(() => {
+    if (!hideUnmapped) return filteredEmployees;
+    const mappedIds = new Set<string>();
+    for (const r of filteredRows) {
+      for (const eid of Object.keys(r.employeeScores)) mappedIds.add(eid);
+    }
+    return filteredEmployees.filter(e => mappedIds.has(e.id));
+  }, [filteredEmployees, filteredRows, hideUnmapped]);
+
+  // Reset employee paging when the visible set changes
+  useEffect(() => { setEmpPage(0); }, [visibleEmployees.length, empPageSize]);
+
+  // KPI row pagination
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
+  const pagedRows = filteredRows.slice(page * rowsPerPage, (page + 1) * rowsPerPage);
+
+  // Employee column window
+  const empTotalPages = Math.max(1, Math.ceil(visibleEmployees.length / empPageSize));
+  const empStart = empPage * empPageSize;
+  const empEnd = Math.min(empStart + empPageSize, visibleEmployees.length);
+  const empSlice = visibleEmployees.slice(empStart, empEnd);
 
   // Reset page on filter change
   const handleFilterChange = useCallback((setter: (v: any) => void, value: any) => {
     setter(value);
     setPage(0);
+    setEmpPage(0);
     setLoaded(false);
+  }, []);
+
+  const scrollToFilters = useCallback(() => {
+    filtersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
   // Export to Excel
@@ -200,15 +254,10 @@ export default function KpiEmployeeMatrix() {
       />
 
       {/* Filters */}
-      <Card>
+      <Card ref={filtersRef as any}>
         <CardContent className="p-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-            <CompanyFilter
-              companies={companies}
-              selectedCompanyId={selectedCompanyId}
-              onCompanyChange={setSelectedCompanyId}
-            />
-
+          {/* Row 1: Primary controls (period + search + view options) */}
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             <Select value={reviewPeriod} onValueChange={v => handleFilterChange(setReviewPeriod, v)}>
               <SelectTrigger><SelectValue placeholder="Month" /></SelectTrigger>
               <SelectContent>
@@ -224,6 +273,42 @@ export default function KpiEmployeeMatrix() {
                 ))}
               </SelectContent>
             </Select>
+
+            <div className="relative col-span-2">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search KPI / Employee..."
+                className="pl-8"
+                value={search}
+                onChange={e => handleFilterChange(setSearch, e.target.value)}
+              />
+            </div>
+
+            <ToggleGroup
+              type="single"
+              value={viewMode}
+              onValueChange={(v) => v && setViewMode(v as ViewMode)}
+              className="justify-start"
+              size="sm"
+            >
+              <ToggleGroupItem value="weightage" className="text-xs">Wt%</ToggleGroupItem>
+              <ToggleGroupItem value="score" className="text-xs">Score</ToggleGroupItem>
+              <ToggleGroupItem value="both" className="text-xs">Both</ToggleGroupItem>
+            </ToggleGroup>
+
+            <div className="flex items-center gap-2 px-2">
+              <Switch id="hide-unmapped" checked={hideUnmapped} onCheckedChange={setHideUnmapped} />
+              <Label htmlFor="hide-unmapped" className="text-xs cursor-pointer">Hide empty employees</Label>
+            </div>
+          </div>
+
+          {/* Row 2: Scope filters */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mt-3 pt-3 border-t">
+            <CompanyFilter
+              companies={companies}
+              selectedCompanyId={selectedCompanyId}
+              onCompanyChange={setSelectedCompanyId}
+            />
 
             <Select value={divisionId || 'all'} onValueChange={v => {
               handleFilterChange(setDivisionId, v === 'all' ? '' : v);
@@ -265,16 +350,6 @@ export default function KpiEmployeeMatrix() {
                 {categories?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
-
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search KPI / Employee..."
-                className="pl-8"
-                value={search}
-                onChange={e => handleFilterChange(setSearch, e.target.value)}
-              />
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -319,12 +394,42 @@ export default function KpiEmployeeMatrix() {
         </Card>
       </div>
 
-      {/* Export */}
-      <div className="flex justify-end">
-        <Button variant="outline" size="sm" onClick={exportToExcel} disabled={!loaded || isLoading || !filteredRows.length}>
-          <Download className="h-4 w-4 mr-1" /> Export Excel
-        </Button>
-      </div>
+      {/* Employee paging + Export */}
+      {loaded && !!filteredRows.length && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>
+              Employees{' '}
+              <span className="font-medium text-foreground">
+                {visibleEmployees.length === 0 ? 0 : empStart + 1}–{empEnd}
+              </span>{' '}
+              of <span className="font-medium text-foreground">{visibleEmployees.length}</span>
+              {hideUnmapped && filteredEmployees.length !== visibleEmployees.length && (
+                <span className="ml-1 text-xs">({filteredEmployees.length - visibleEmployees.length} hidden)</span>
+              )}
+            </span>
+            <Button
+              variant="outline" size="icon" className="h-7 w-7"
+              disabled={empPage === 0}
+              onClick={() => setEmpPage(p => Math.max(0, p - 1))}
+            ><ChevronLeft className="h-4 w-4" /></Button>
+            <Button
+              variant="outline" size="icon" className="h-7 w-7"
+              disabled={empPage >= empTotalPages - 1}
+              onClick={() => setEmpPage(p => Math.min(empTotalPages - 1, p + 1))}
+            ><ChevronRight className="h-4 w-4" /></Button>
+            <Select value={String(empPageSize)} onValueChange={(v) => setEmpPageSize(Number(v))}>
+              <SelectTrigger className="h-7 w-[80px] text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {EMP_PAGE_OPTIONS.map(n => <SelectItem key={n} value={String(n)}>{n}/page</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button variant="outline" size="sm" onClick={exportToExcel} disabled={!loaded || isLoading || !filteredRows.length}>
+            <Download className="h-4 w-4 mr-1" /> Export Excel
+          </Button>
+        </div>
+      )}
 
       {/* Click-to-load gate */}
       {!loaded ? (
@@ -352,6 +457,7 @@ export default function KpiEmployeeMatrix() {
                     Narrow the Division / Business Unit / Department / Category to reduce scope.
                   </p>
                 </div>
+                <Button variant="outline" size="sm" onClick={scrollToFilters}>Refine filters</Button>
               </>
             ) : (
               <>
@@ -392,94 +498,202 @@ export default function KpiEmployeeMatrix() {
       ) : (
         <Card>
           <CardContent className="p-0">
-            <div className="overflow-auto max-h-[65vh]">
-              <Table className="table-fixed">
-                <TableHeader className="sticky top-0 z-10 bg-background">
-                  <TableRow>
-                    <TableHead className="w-12 text-center sticky left-0 z-20 bg-background">Sr.</TableHead>
-                    <TableHead className="w-36 sticky left-12 z-20 bg-background">Category</TableHead>
-                    <TableHead className="w-44 sticky left-48 z-20 bg-background">KRA</TableHead>
-                    <TableHead className="w-56 sticky left-[calc(12rem+11rem)] z-20 bg-background">KPI</TableHead>
-                    <TableHead className="w-14 text-center">Wt%</TableHead>
-                    <TableHead className="w-12 text-center">Emp#</TableHead>
-                    {filteredEmployees.map(emp => (
-                      <TableHead key={emp.id} className="w-20 text-center p-1">
-                        <div
-                          className="whitespace-nowrap text-xs font-medium"
-                          style={{
-                            writingMode: 'vertical-rl',
-                            transform: 'rotate(180deg)',
-                            maxHeight: '120px',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                          }}
-                          title={`${emp.fullName} (${emp.employeeCode})`}
-                        >
-                          {emp.fullName}
-                        </div>
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pagedRows.map((row, idx) => (
-                    <TableRow key={row.key}>
-                      <TableCell className="text-center text-xs sticky left-0 bg-background">
-                        {page * ROWS_PER_PAGE + idx + 1}
-                      </TableCell>
-                      <TableCell className="text-xs truncate sticky left-12 bg-background" title={row.categoryName}>
-                        {row.categoryName}
-                      </TableCell>
-                      <TableCell className="text-xs truncate sticky left-48 bg-background" title={row.kraName}>
-                        {row.kraName}
-                      </TableCell>
-                      <TableCell className="text-xs truncate sticky left-[calc(12rem+11rem)] bg-background" title={row.kpiName}>
-                        {row.kpiName}
-                      </TableCell>
-                      <TableCell className="text-center text-xs font-medium">{row.weightage}</TableCell>
-                      <TableCell className="text-center text-xs">{row.employeeCount}</TableCell>
-                      {filteredEmployees.map(emp => {
-                        const score = row.employeeScores[emp.id];
-                        const wt = row.employeeWeightages[emp.id];
-                        const isMapped = emp.id in row.employeeScores;
+            <TooltipProvider delayDuration={300}>
+              <div className="overflow-auto max-h-[68vh] relative">
+                <table className="border-collapse text-[13px] w-full">
+                  <colgroup>
+                    <col style={{ width: COL.sr }} />
+                    <col style={{ width: COL.kpi }} />
+                    <col style={{ width: COL.wt }} />
+                    <col style={{ width: COL.emp }} />
+                    {empSlice.map(e => <col key={e.id} style={{ width: COL.cell }} />)}
+                  </colgroup>
+                  <thead className="sticky top-0 z-20">
+                    <tr style={{ height: COL.headerH }}>
+                      <th className="sticky left-0 z-30 bg-background border-b border-r text-xs font-semibold text-muted-foreground align-bottom pb-2">
+                        <div className="text-center">Sr.</div>
+                      </th>
+                      <th
+                        style={{ left: STICKY_KPI_LEFT }}
+                        className="sticky z-30 bg-background border-b border-r text-xs font-semibold text-muted-foreground align-bottom pb-2 px-3 text-left"
+                      >
+                        KPI / KRA / Category
+                      </th>
+                      <th
+                        style={{ left: STICKY_WT_LEFT }}
+                        className="sticky z-30 bg-background border-b border-r text-xs font-semibold text-muted-foreground align-bottom pb-2 text-center"
+                      >
+                        Wt%
+                      </th>
+                      <th
+                        style={{ left: STICKY_EMP_LEFT }}
+                        className="sticky z-30 bg-background border-b text-xs font-semibold text-muted-foreground align-bottom pb-2 text-center shadow-[2px_0_0_0_hsl(var(--border))]"
+                      >
+                        Emp#
+                      </th>
+                      {empSlice.map(emp => {
+                        const isHover = hoverEmpId === emp.id;
                         return (
-                          <TableCell
+                          <th
                             key={emp.id}
-                            className={`text-center text-xs ${isMapped ? (score != null ? 'bg-primary/5' : 'bg-muted/30') : ''}`}
+                            className={`bg-background border-b align-bottom p-0 ${isHover ? 'bg-accent/30' : ''}`}
+                            onMouseEnter={() => setHoverEmpId(emp.id)}
+                            onMouseLeave={() => setHoverEmpId(null)}
                           >
-                            {isMapped ? (
-                              <div className="flex flex-col items-center gap-0.5">
-                                <span className="font-semibold">{wt != null ? `${wt}%` : '—'}</span>
-                                {score != null && (
-                                  <span className="text-[10px] text-muted-foreground">{score}</span>
-                                )}
+                            <div className="h-full flex items-end justify-center pb-2 pr-1">
+                              <div
+                                style={{
+                                  transform: 'rotate(-40deg)',
+                                  transformOrigin: 'left bottom',
+                                  whiteSpace: 'nowrap',
+                                  width: 0,
+                                }}
+                                className="font-medium text-foreground"
+                                title={`${emp.fullName} (${emp.employeeCode})`}
+                              >
+                                {emp.fullName}
+                                <span className="ml-1 text-[10px] text-muted-foreground">
+                                  {emp.employeeCode}
+                                </span>
                               </div>
-                            ) : ''}
-                          </TableCell>
+                            </div>
+                          </th>
                         );
                       })}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedRows.map((row, idx) => {
+                      const isEven = idx % 2 === 1;
+                      const rowBg = isEven ? 'bg-muted/20' : 'bg-background';
+                      return (
+                        <tr key={row.key} style={{ height: COL.rowH }} className="group hover:bg-accent/20">
+                          <td className={`sticky left-0 z-10 border-b border-r text-center text-xs text-muted-foreground ${rowBg} group-hover:bg-accent/20`}>
+                            {page * rowsPerPage + idx + 1}
+                          </td>
+                          <td
+                            style={{ left: STICKY_KPI_LEFT }}
+                            className={`sticky z-10 border-b border-r px-3 ${rowBg} group-hover:bg-accent/20`}
+                          >
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="cursor-default">
+                                  <div className="font-medium text-foreground truncate">{row.kpiName}</div>
+                                  <div className="text-[11px] text-muted-foreground truncate">
+                                    {row.kraName} · {row.categoryName}
+                                  </div>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-md">
+                                <div className="font-medium">{row.kpiName}</div>
+                                <div className="text-xs opacity-80 mt-1">KRA: {row.kraName}</div>
+                                <div className="text-xs opacity-80">Category: {row.categoryName}</div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </td>
+                          <td
+                            style={{ left: STICKY_WT_LEFT }}
+                            className={`sticky z-10 border-b border-r text-center text-xs font-semibold ${rowBg} group-hover:bg-accent/20`}
+                          >
+                            {row.weightage}
+                          </td>
+                          <td
+                            style={{ left: STICKY_EMP_LEFT }}
+                            className={`sticky z-10 border-b text-center text-xs text-muted-foreground ${rowBg} group-hover:bg-accent/20 shadow-[2px_0_0_0_hsl(var(--border))]`}
+                          >
+                            {row.employeeCount}
+                          </td>
+                          {empSlice.map(emp => {
+                            const score = row.employeeScores[emp.id];
+                            const wt = row.employeeWeightages[emp.id];
+                            const isMapped = emp.id in row.employeeScores;
+                            const isColHover = hoverEmpId === emp.id;
+                            // Data-bar width proportional to coverage (score / weightage)
+                            const cov = (score != null && wt) ? Math.max(0, Math.min(1, score / (wt as number))) : 0;
+                            return (
+                              <td
+                                key={emp.id}
+                                onMouseEnter={() => setHoverEmpId(emp.id)}
+                                onMouseLeave={() => setHoverEmpId(null)}
+                                className={`relative border-b text-center align-middle ${isColHover ? 'bg-accent/30' : ''}`}
+                                title={isMapped ? `${emp.fullName}\nWeightage: ${wt ?? '—'}%\nWeighted Score: ${score ?? '—'}` : ''}
+                              >
+                                {isMapped ? (
+                                  <>
+                                    {score != null && cov > 0 && (
+                                      <div
+                                        aria-hidden
+                                        className="absolute inset-y-1 left-1 right-1 rounded-sm bg-primary/10 pointer-events-none"
+                                        style={{ width: `calc(${cov * 100}% - 8px)` }}
+                                      />
+                                    )}
+                                    {!isColHover && score == null && (
+                                      <div
+                                        aria-hidden
+                                        className="absolute inset-1 pointer-events-none opacity-40"
+                                        style={{
+                                          backgroundImage: 'radial-gradient(circle, hsl(var(--muted-foreground)) 0.5px, transparent 0.5px)',
+                                          backgroundSize: '4px 4px',
+                                        }}
+                                      />
+                                    )}
+                                    <div className="relative font-medium leading-tight">
+                                      {viewMode === 'weightage' && (
+                                        <span>{wt != null ? `${wt}%` : '—'}</span>
+                                      )}
+                                      {viewMode === 'score' && (
+                                        <span className={score == null ? 'text-muted-foreground' : ''}>
+                                          {score != null ? score : '—'}
+                                        </span>
+                                      )}
+                                      {viewMode === 'both' && (
+                                        <div className="flex flex-col items-center gap-0.5">
+                                          <span>{wt != null ? `${wt}%` : '—'}</span>
+                                          {score != null && (
+                                            <span className="text-[10px] text-muted-foreground">{score}</span>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </>
+                                ) : (
+                                  <span className="text-muted-foreground/30">·</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </TooltipProvider>
 
             {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t">
-                <p className="text-sm text-muted-foreground">
-                  Showing {page * ROWS_PER_PAGE + 1}–{Math.min((page + 1) * ROWS_PER_PAGE, filteredRows.length)} of {filteredRows.length} KPIs
-                </p>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
-                    Previous
-                  </Button>
-                  <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>
-                    Next
-                  </Button>
-                </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t">
+              <p className="text-sm text-muted-foreground">
+                Showing <span className="font-medium text-foreground">{page * rowsPerPage + 1}–{Math.min((page + 1) * rowsPerPage, filteredRows.length)}</span> of{' '}
+                <span className="font-medium text-foreground">{filteredRows.length}</span> KPIs
+              </p>
+              <div className="flex items-center gap-2">
+                <Select value={String(rowsPerPage)} onValueChange={(v) => { setRowsPerPage(Number(v)); setPage(0); }}>
+                  <SelectTrigger className="h-8 w-[90px] text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {ROW_PAGE_OPTIONS.map(n => <SelectItem key={n} value={String(n)}>{n}/page</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <span className="text-xs text-muted-foreground px-1">
+                  Page {page + 1} of {totalPages}
+                </span>
+                <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
+                  Previous
+                </Button>
+                <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>
+                  Next
+                </Button>
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
       )}
