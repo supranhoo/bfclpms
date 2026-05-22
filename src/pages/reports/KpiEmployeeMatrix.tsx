@@ -555,21 +555,29 @@ export default function KpiEmployeeMatrix() {
                     {(() => {
                       const elements: JSX.Element[] = [];
                       let lastCat: string | null = null;
+                      let lastKra: string | null = null;
                       // Pre-compute category counts within the visible page
                       const catCounts = pagedRows.reduce<Record<string, number>>((acc, r) => {
                         acc[r.categoryName] = (acc[r.categoryName] || 0) + 1;
                         return acc;
                       }, {});
+                      // Pre-compute KRA counts within the visible page (scoped by category)
+                      const kraCounts = pagedRows.reduce<Record<string, number>>((acc, r) => {
+                        const k = `${r.categoryName}|${r.kraName}`;
+                        acc[k] = (acc[k] || 0) + 1;
+                        return acc;
+                      }, {});
                       pagedRows.forEach((row, idx) => {
                         if (row.categoryName !== lastCat) {
                           lastCat = row.categoryName;
+                          lastKra = null;
                           const collapsed = collapsedCategories.has(row.categoryName);
                           elements.push(
                             <tr key={`cat-${row.categoryName}`} className="bg-muted/60 backdrop-blur-sm">
                               <td
                                 colSpan={2 + empSlice.length}
                                 style={{ top: COL.headerH }}
-                                className="sticky left-0 z-20 border-b px-2.5 py-1.5 cursor-pointer hover:bg-muted/80 bg-muted/60 backdrop-blur-sm"
+                                className="sticky left-0 z-[25] border-b px-2.5 py-1.5 cursor-pointer hover:bg-muted/80 bg-muted/60 backdrop-blur-sm"
                                 onClick={() => {
                                   setCollapsedCategories(prev => {
                                     const next = new Set(prev);
@@ -593,6 +601,40 @@ export default function KpiEmployeeMatrix() {
                           );
                         }
                         if (collapsedCategories.has(row.categoryName)) return;
+                        // KRA sub-band: shown once per (category, KRA) pair when KRA changes
+                        if (row.kraName !== lastKra) {
+                          lastKra = row.kraName;
+                          const kraKey = `${row.categoryName}|${row.kraName}`;
+                          const kraCollapsed = collapsedKras.has(kraKey);
+                          elements.push(
+                            <tr key={`kra-${kraKey}`} className="bg-muted/30">
+                              <td
+                                colSpan={2 + empSlice.length}
+                                className="sticky left-0 z-20 border-b px-2.5 py-1 cursor-pointer hover:bg-muted/50 bg-muted/30"
+                                onClick={() => {
+                                  setCollapsedKras(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(kraKey)) next.delete(kraKey);
+                                    else next.add(kraKey);
+                                    return next;
+                                  });
+                                }}
+                              >
+                                <div className="flex items-center gap-2 text-[11px] font-medium text-foreground pl-4">
+                                  <ChevronDown
+                                    className={`h-3 w-3 transition-transform text-muted-foreground ${kraCollapsed ? '-rotate-90' : ''}`}
+                                  />
+                                  <span className="text-primary">KRA:</span>
+                                  <span>{row.kraName}</span>
+                                  <span className="text-muted-foreground font-normal">
+                                    · {kraCounts[kraKey]} KPI{kraCounts[kraKey] === 1 ? '' : 's'}
+                                  </span>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        }
+                        if (collapsedKras.has(`${row.categoryName}|${row.kraName}`)) return;
                       const isEven = idx % 2 === 1;
                       const rowBg = isEven ? 'bg-muted/20' : 'bg-background';
                       elements.push(
@@ -606,33 +648,16 @@ export default function KpiEmployeeMatrix() {
                           >
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <div className="cursor-default flex items-start gap-1 min-w-0">
-                                  <button
-                                    type="button"
-                                    aria-label={expandedRows.has(row.key) || expandAll ? 'Collapse details' : 'Show KRA and Wt%'}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setExpandedRows(prev => {
-                                        const next = new Set(prev);
-                                        if (next.has(row.key)) next.delete(row.key);
-                                        else next.add(row.key);
-                                        return next;
-                                      });
-                                    }}
-                                    className="mt-0.5 shrink-0 text-muted-foreground/60 hover:text-foreground"
-                                  >
-                                    <ChevronDown
-                                      className={`h-3 w-3 transition-transform ${(expandedRows.has(row.key) || expandAll) ? '' : '-rotate-90'}`}
-                                    />
-                                  </button>
-                                  <div className="min-w-0 flex-1">
-                                    <div className="font-medium text-foreground truncate leading-tight">{row.kpiName}</div>
-                                    {(expandedRows.has(row.key) || expandAll) && (
-                                      <div className="text-[10px] text-muted-foreground truncate leading-tight mt-0.5">
-                                        {row.kraName} · {row.weightage}%
-                                      </div>
-                                    )}
+                                <div className="cursor-default min-w-0 py-1 pl-7 pr-1">
+                                  <div className="flex items-baseline gap-1.5 min-w-0">
+                                    <span className="font-medium text-foreground truncate leading-tight">{row.kpiName}</span>
+                                    <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums">{row.weightage}%</span>
                                   </div>
+                                  {row.description && (
+                                    <div className="text-[10px] text-muted-foreground truncate leading-tight mt-0.5">
+                                      {row.description}
+                                    </div>
+                                  )}
                                 </div>
                               </TooltipTrigger>
                               <TooltipContent className="max-w-md">
@@ -640,6 +665,9 @@ export default function KpiEmployeeMatrix() {
                                 <div className="text-xs opacity-80 mt-1">KRA: {row.kraName}</div>
                                 <div className="text-xs opacity-80">Category: {row.categoryName}</div>
                                 <div className="text-xs opacity-80">Base Weightage: {row.weightage}%</div>
+                                {row.description && (
+                                  <div className="text-xs opacity-80 mt-1 whitespace-pre-wrap">{row.description}</div>
+                                )}
                               </TooltipContent>
                             </Tooltip>
                           </td>
