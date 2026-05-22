@@ -529,9 +529,9 @@ export default function KpiEmployeeMatrix() {
         </Card>
       ) : (
         <Card>
-          <CardContent className="p-0">
+          <CardContent className="p-0 min-w-0">
             <TooltipProvider delayDuration={300} disableHoverableContent>
-              <div ref={scrollContainerRef} className="overflow-auto max-h-[68vh] relative">
+              <div ref={scrollContainerRef} className="w-full max-w-full overflow-auto max-h-[68vh] relative">
                 <table className="border-collapse text-[12px] w-full">
                   <colgroup>
                     <col style={{ width: COL.sr }} />
