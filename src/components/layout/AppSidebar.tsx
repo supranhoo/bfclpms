@@ -165,7 +165,6 @@ export function AppSidebar() {
         title: 'Bulk Review (Beta)',
         icon: Layers,
         path: '/review/bulk-scoring',
-        menuKey: 'bulk-review-dashboard',
         roles: ['admin', 'manager', 'skip_level', 'hr_pms', 'auditor', 'management'],
       } as any,
     ];
