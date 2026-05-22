@@ -701,7 +701,7 @@ export default function KpiEmployeeMatrix() {
                                   )}
                                 </div>
                               </TooltipTrigger>
-                              <TooltipContent className="max-w-md">
+                              <TooltipContent side="right" align="start" sideOffset={8} collisionPadding={12} className="max-w-md z-50">
                                 <div className="font-medium">{row.kpiName}</div>
                                 <div className="text-xs opacity-80 mt-1">KRA: {row.kraName}</div>
                                 <div className="text-xs opacity-80">Category: {row.categoryName}</div>
