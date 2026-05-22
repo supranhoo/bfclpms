@@ -52,9 +52,9 @@ type: feature
 - `BulkCellDrawer` (Sheet) shows stage strip, variance badge, write form (gated to viewer stage + non-final), re-open form (gated to admin/management + final), raw audit JSON.
 - Dashboard adds row selection + sticky "Bulk Approve (Mgmt)" toolbar (admin+management only) with `ConfirmDestructiveDialog`. Row variance Δ badge inline.
 
-**Still pending (Phase 2):**
-- Row/col virtualization via `@tanstack/react-virtual` (current limit 200/page renders fine without it).
-- Batched HR-PMS-override notification template wired to Notification Engine.
+**Phase 2 polish (shipped):**
+- Row virtualization: `BulkReviewVirtualGrid` uses `@tanstack/react-virtual` with CSS-grid column template, overscan 12, sticky header, 36px row height. Replaces the legacy `<table>` rendering in the dashboard.
+- HR-PMS override notification: `bulk_write_stage_scores` counts cells where `hr_pms_score IS NOT NULL` at write time and (when stage = `auditor`) inserts one `notifications` row per active HR PMS user, `type = 'auditor_override_of_hr'`, metadata = `{ batch_id, affected_count, period, year, deep_link }`. Wrapped in `EXCEPTION WHEN OTHERS THEN NULL` so the notification step can never roll back the underlying score write.
 
 **E16 auto-revert (M5):**
 - Edge function `bulk-review-auto-revert` scans `final_score_revisions` rows with `new_final_score IS NULL` and reverts them to `prev_final_score` once the underlying `(review_period, review_year)` is globally locked or `current_stage='closed'`. Stamps the revision with `auto_reverted=true` and `new_final_score=prev_final_score` so the audit row is closed immutably. Daily cron, x-cron-secret guarded, 2000-row chunk.
