@@ -572,7 +572,11 @@ async function runScheduledChunked(
   folderPath: string
 ): Promise<void> {
   const startTime = Date.now()
-  const BATCH_SIZE = 9
+  // Must match the manual path (handleInit, line ~377). The scheduled worker
+  // shares the same 256 MB Deno Deploy cap; sizes > 4 have been observed to
+  // OOM on batch 14/16 with HTTP 546, silently dropping ~5 tables from the
+  // backup manifest. See docs/changelog and POLICY.md §Backup.
+  const BATCH_SIZE = 4
   const tablesToBackup = await fetchBackupTableOrder(supabase)
   await assertCoverageNotShrunk(supabase, tablesToBackup.length)
   const batches = splitIntoBatches(tablesToBackup, BATCH_SIZE)
@@ -581,6 +585,7 @@ async function runScheduledChunked(
   let totalSize = 0
   let tablesCount = 0
   const errors: string[] = []
+  const discoveredCount = tablesToBackup.length
 
   for (let i = 0; i < batches.length; i++) {
     const batch = batches[i]
@@ -631,9 +636,21 @@ async function runScheduledChunked(
   const elapsed = Math.round((Date.now() - startTime) / 1000)
   console.log(`Scheduled backup ${backupId} completed in ${elapsed}s: ${tablesCount} tables, ${totalRows} rows`)
 
-  if (errors.length > 0) {
+  // Post-finalize coverage check. If any batch failed OR fewer tables landed
+  // in the manifest than were discovered, downgrade the status so the UI no
+  // longer shows a plain "completed" pill for a partial run.
+  const shrunk = tablesCount < discoveredCount
+  if (errors.length > 0 || shrunk) {
+    const parts: string[] = []
+    if (shrunk) {
+      parts.push(`Coverage shrink: ${tablesCount}/${discoveredCount} tables backed up`)
+    }
+    if (errors.length > 0) {
+      parts.push(`${errors.length} warning(s): ${errors.slice(0, 3).join('; ')}`)
+    }
     await supabase.from('backup_logs').update({
-      error_message: `Completed with ${errors.length} warning(s): ${errors.slice(0, 3).join('; ')}`,
+      status: 'completed_with_errors',
+      error_message: parts.join(' — '),
     }).eq('id', backupId)
   }
 }
