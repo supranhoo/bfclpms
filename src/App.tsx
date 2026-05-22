@@ -285,6 +285,11 @@ const App = () => (
                     <ReviewNotes />
                   </ProtectedRoute>
                 } />
+                <Route path="/review/bulk-scoring" element={
+                  <ProtectedRoute allowedRoles={['admin', 'manager', 'skip_level', 'hr_pms', 'auditor', 'management']}>
+                    <BulkReviewDashboard />
+                  </ProtectedRoute>
+                } />
               <Route path="/admin/module-hub" element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <Suspense fallback={<PageFallback />}><ModuleHubSettings /></Suspense>
