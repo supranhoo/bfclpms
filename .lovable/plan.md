@@ -1,63 +1,90 @@
-# RCA: Why the new backup has fewer rows than the previous one
+## Goal
+Ship PRD v2.0 Phase 1: a flag-gated, additive Bulk Review Dashboard with parallel reviewer stages and audited post-approval re-open. Zero impact on legacy flows when flag is OFF (default).
 
-## What the data actually shows (`backup_logs`)
+## §0 Non-Regression Contract (locked)
+All 12 clauses from PRD §0 are binding. No legacy route, column, RPC signature, RLS policy, or notification template is modified. All new behaviour ships behind `feature_bulk_review_dashboard` (default `false`).
 
-| Created | Type | Tables | Rows | Status |
-|---|---|---:|---:|---|
-| 2026-05-22 16:19 | manual | **139** | 125,812 | completed_with_errors (1 unreadable) |
-| 2026-05-21 17:00 | scheduled | **134** | 124,244 | completed — *Batch 14/16 failed: HTTP 546* |
-| 2026-05-20 17:00 | scheduled | **134** | 124,559 | completed — *Batch 14/16 failed: HTTP 546* |
-| 2026-05-20 07:22 | manual | **139** | 126,709 | completed (clean) |
-
-Two distinct anomalies, not one.
-
-### Anomaly 1 — Scheduled backups are silently dropping 5 tables every night
-
-`runScheduledChunked` (line 569) splits 139 tables into 16 batches of 9 (`BATCH_SIZE = 9`) and calls the function recursively for each batch. **Batch 14 fails with HTTP 546** (Deno Deploy "worker memory limit exceeded") on *every* scheduled run. The loop has `continue` on failure (line 597), so the run is finalized as `completed` with only 134 tables and whatever rows those 134 contained — the 5 tables in batch 14 are missing from the manifest entirely.
-
-The shrink-guard (`assertCoverageNotShrunk`) only checks **discovered** table count vs last successful run, not **successfully backed up** count, so it never fires.
-
-→ The screenshot's 21-May (124,244) vs 20-May (124,559) delta of −315 rows is mostly the same 5 missing tables plus normal day-over-day churn in pruned tables (`notifications`, `email_logs`, `email_dispatch_queue`, `safety_notifications` — 90-day rolling window, line 54-59).
-
-### Anomaly 2 — Manual backup on 22-May lost ~900 rows vs 20-May
-
-Both manual runs covered all 139 tables, but 22-May reports `0 missing, 1 unreadable, 0 row mismatch`. One table failed its integrity read and its rows are excluded from the count. Also expected drift from the 4 PRUNE_TABLES (90-day window advanced 2 days).
-
-## Root cause summary
-
-1. **Memory regression in scheduled path.** `BATCH_SIZE = 9` for scheduled (vs `4` for manual at line 377) pushes batch 14 over the 256 MB worker cap → HTTP 546 → 5 tables silently skipped.
-2. **Shrink-guard is blind to partial failures.** It validates *discovered* count, not *backed up* count, so a partial run looks healthy in the UI ("completed", green pill) even though coverage shrank.
-3. **One unreadable table** in the 22-May manual run (separate, smaller issue — needs log inspection to identify which table).
+## Stakeholder answers (locked from clarifications)
+- Flag default: **OFF** for every tenant
+- `mgmt_can_reopen` default: **false** (Admin-granted only)
+- E16 period close: **auto-revert** with `auto_reverted=true` revision row
+- Variance badge: **fixed 1.0 absolute** on the 0–5 rating
+- Open questions 1, 6, 7 from Appendix A are deferred (sensible defaults applied; called out in M1 docs)
 
 ## Risk & Impact Report
+| Dimension | Impact | Mitigation |
+|---|---|---|
+| Data | New columns are NOT NULL with safe defaults; new tables only. Auto-included in backup via `get_backup_table_order()`. | Strictly additive DDL. Migration is forward-only. Rollback = flip flag OFF. |
+| Workflow | None when flag OFF. When ON, parallel stages activate only on the new page; legacy scorecard remains sequential source of truth. | Flag-gated at both UI route and RPC entry (`RAISE EXCEPTION 'feature disabled'`). |
+| UI/UX | New sidebar entry "Bulk Review (Beta)" (Admin-gated). New full-page route. No edits to existing pages. | Empty state on mount; click-to-load only. |
+| Regression | High blast radius if `propagate_org_kpi_value` is altered. | Add a new overload (`p_stage` arg) instead of editing the existing signature. Legacy snapshot tests must pass byte-identical. |
+| Scalability | 25k cell cap, 5MB payload, paged snapshots (200/page), `@tanstack/react-virtual` rows + cols, SWR 5min, no realtime. | Hard caps enforced at RPC layer + UI Load button disabled. |
+| Rollback | Disable flag → dashboard hides, RPCs reject. New columns retain defaults; new tables stay populated but unread. | No destructive rollback path needed. |
 
-- **Data Impact:** No data loss in `public` — only in backup artifacts. Restoring last night's scheduled backup would recover only 134/139 tables. Rollback integrity broken for the 5 affected tables (in batch 14 of the canonical table order).
-- **Workflow Impact:** None for end users; critical for DR/restore.
-- **UI Impact:** Backup History card currently shows misleading "completed" pill for partially-failed runs.
-- **Regression Risk:** Low — fixes are additive (smaller batches, stricter guard, clearer status).
-- **Mitigation:** Align scheduled BATCH_SIZE with manual, harden shrink-guard, surface partial-failure state in UI.
+## Delivery milestones (each is an independent PR)
 
-## Plan (Phase 1 — diagnose, Phase 2 — fix)
+### M1 — Schema, flag, and feature gate (DB + infra only, no UI)
+- New migration (strictly additive):
+  - `kpis.kpi_group_type` (`individual`|`departmental`|`org`, default `individual`)
+  - `review_submissions`: `is_group_override`, `group_write_batch_id`, `is_auditor_override_of_hr`, `skipped_by_management JSONB`, `final_revision_no INT DEFAULT 0`, `row_version INT DEFAULT 1` (for E9 concurrency)
+  - New tables `bulk_review_batches`, `final_score_revisions` (with RLS, Admin-read + SECURITY DEFINER write only)
+  - `admin_feature_flags` table (if absent) + seed `feature_bulk_review_dashboard=false`, `mgmt_can_reopen=false`
+  - `has_bulk_review_flag()` SECURITY DEFINER helper
+- DOCUMENTATION.md + POLICY.md updated (POLICY §88 amended to reference revisions as the only legal post-approval mutation path).
+- Unit tests: flag defaults, table existence, RLS lockdown on new tables.
 
-### Phase 1 — Confirm the failing batch (read-only, no code)
-1. Pull `function_edge_logs` for `create-backup` around `2026-05-21 17:00 UTC` and `2026-05-22 16:20 UTC` to (a) confirm batch 14's exact tables and the OOM signature, (b) identify the "1 unreadable" table from 22-May. *Verification: log lines reference the 5 missing table names + the unreadable table name.*
+### M2 — Read RPCs + empty dashboard shell
+- New SECURITY DEFINER RPCs (all guarded by flag):
+  - `bulk_scope_preview(p_period, p_year, p_filters)` — counts only
+  - `bulk_review_snapshot(p_period, p_year, p_viewer_stage, p_filters, p_page, p_page_size DEFAULT 200)`
+  - `kpi_cell_detail(p_kpi_id, p_emp_id)`
+- New page `/review/bulk-scoring`:
+  - Route + sidebar entry "Bulk Review (Beta)" gated on (Admin flag enabled) AND (user role ∈ reviewer set)
+  - Empty-state shell: filter bar (`OrgFilterCombobox`, `CompanyFilter`), Period/Stage selectors, Load Scope button, skeletons
+  - **Zero DB reads** on mount or filter change beyond `bulk_scope_preview` (counts).
+- Hook: `useBulkScopePreview`, `useBulkReviewSnapshot` (TanStack Query, SWR 5min, no realtime)
+- Tests: empty-mount = zero `kpis`/`review_submissions` queries; 25k cell cap disables Load button; flag OFF returns "disabled by admin".
 
-### Phase 2 — Fix (separate build-mode session, gated on Phase 1 findings)
-1. **`supabase/functions/create-backup/index.ts`** — change `BATCH_SIZE = 9` → `BATCH_SIZE = 4` in `runScheduledChunked` (line 575) to match the proven manual path. *Verification: next scheduled run completes 16/16 batches with 139 tables.*
-2. **Harden `assertCoverageNotShrunk`** — also compare `tables_count` written to `backup_logs` against the previous successful run; if it drops, mark status `completed_with_errors` (never plain `completed`). *Verification: simulated batch failure produces `completed_with_errors`, not `completed`.*
-3. **UI** — in `BackupHistory` card, render `completed_with_errors` with an amber pill + tooltip showing `error_message`, so partial runs are no longer indistinguishable from clean ones. *Verification: 21-May row renders amber with the HTTP 546 message visible on hover.*
-4. **Unit tests + mock data** — `splitIntoBatches` edge case (139 tables, batch 4), shrink-guard partial-failure assertion, BackupHistory amber-pill render test.
-5. **DOCUMENTATION.md + POLICY.md** — record the 256 MB worker limit as the binding constraint on `BATCH_SIZE`, and the policy "any drop in `tables_count` vs the prior successful backup must downgrade status".
+### M3 — Virtualized grid + cell drawer (read-only)
+- Grid component using `@tanstack/react-virtual` (rows + cols).
+- Cell shows viewer-stage score; hover chip strip; variance badge (|max−min| > 1.0 across completed stages).
+- Drawer: KPI history, stage scores, evidence, observations, audit log, revisions (reuses existing `Sheet`, `KpiHistoryCard`, `KpiObservationsSection`).
+- Stage progress strip + tiles (Pending mine / Variance / Awaiting Mgmt / SLA).
+- Manual Refresh pill (no realtime).
+- Tests: virt thresholds, variance math, drawer renders all sections.
 
-### Out of scope (separate ticket)
-- The "1 unreadable" table on 22-May — fix after Phase 1 identifies which table and why (likely a row containing a value the JSON serializer chokes on).
-- Backfilling missing tables from the 134-table scheduled runs by re-running batch 14 against historical data (not possible — backups are point-in-time; just take a fresh full backup once the fix lands).
+### M4 — Parallel-stage writes
+- New SECURITY DEFINER RPCs:
+  - `bulk_write_stage_scores(p_stage, p_cells JSONB, p_batch_reason TEXT)` — requires `self_submitted=true`; rejects `hr_pms` write when `auditor_score IS NOT NULL`; skips rows where `final_score IS NOT NULL` (POLICY §88 guard); `row_version` check; writes `bulk_review_batches` row + per-cell audit + `group_write_batch_id` stamp.
+  - `bulk_management_approve(p_cells JSONB, p_batch_reason TEXT)` — stamps `final_score` from highest-priority completed stage; records `skipped_by_management` JSONB; `ConfirmDestructiveDialog` in UI.
+  - New overload `propagate_org_kpi_value(..., p_stage)` — original signature untouched.
+- Stage-write toolbar in grid: "Apply to row", "Send back" (reuses `SendBackDialog`), "Bulk approve".
+- Auditor > HR PMS UI: override badge + inbox notification to HR PMS (Notification Engine batched per `batch_id`).
+- Tests: §88 skip, Auditor>HR rule, concurrency reject, batched notifications (one row per recipient per batch).
 
-## Decision justification
+### M5 — Post-approval re-open + edge cases
+- `bulk_reopen_cells(p_cells JSONB, p_stages_to_unlock TEXT[], p_reason TEXT)` — Admin always, Management only if `mgmt_can_reopen=true`; 4-eyes guard (re-opener ≠ next approver) for Management, bypass+audit for Admin; inserts `final_score_revisions`, bumps `final_revision_no`, NULLs `final_score`, unlocks stages.
+- Re-open UI in drawer (only when approved + role allows).
+- E16 cron / period-close hook: auto-revert open revisions at lock with `auto_reverted=true`.
+- Weekly Admin "Re-opens this week" report tile.
+- All 21 edge cases (E1–E21) covered with unit tests.
 
-- **Why match BATCH_SIZE to manual's 4 instead of tuning higher:** The manual path has been stable at 4 for months; 9 was an optimistic regression. Matching is the smallest safe change.
-- **Rejected alternative — increase worker memory cap:** Not user-configurable on Edge Functions; reducing batch size is the only durable fix.
-- **Rejected alternative — retry failed batches inline:** A retry of an OOM batch with the same size will OOM again. Size reduction is the real fix; retry can be added later as belt-and-suspenders.
+## Out of scope (Phase 2+)
+Cross-dept groups, AI suggestions, Daily-frequency bulk, Self-Review bulk entry, mobile bulk view, deprecation of legacy reviewer grids.
 
-## Ask before I build
-Confirm you want me to (a) just run the Phase 1 log pull and report which 5 tables were skipped + which table was unreadable, or (b) go straight to Phase 2 with `BATCH_SIZE = 4` + shrink-guard + UI pill?
+## Documentation deliverables (per milestone)
+- DOCUMENTATION.md — new section "Bulk Review Dashboard"
+- POLICY.md — §88 amendment + new §121 "Parallel-Stage Review & Re-open"
+- New memory: `mem/features/review/bulk-review-dashboard` (replaces the v1.1 `group-based-scoring` memory)
+- ADR-066 — "Parallel-stage review with audited re-open"
+- Version history bumped on each milestone
+
+## Suggested first PR (M1) — concrete file list
+- `supabase/migrations/<ts>_bulk_review_dashboard_schema.sql`
+- `mem/features/review/bulk-review-dashboard` (new)
+- `mem/index.md` (entry added)
+- `docs/adr/ADR-066.md`
+- `DOCUMENTATION.md`, `POLICY.md` updates
+- Tests in `src/test/bulkReview/schema.test.ts`
+
+Ready for your approval to start M1.
