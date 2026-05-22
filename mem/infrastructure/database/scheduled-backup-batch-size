@@ -1,0 +1,10 @@
+---
+name: Scheduled Backup Batch Size
+description: Scheduled and manual create-backup paths MUST share BATCH_SIZE=4 to stay under the 256 MB Deno Deploy worker cap
+type: constraint
+---
+`supabase/functions/create-backup/index.ts` — both `handleInit` (manual) and `runScheduledChunked` (scheduled) MUST use `BATCH_SIZE = 4`. Larger sizes (observed: 9) OOM on batch 14/16 with HTTP 546 and silently drop ~5 tables from the manifest. The orchestrator catches the batch failure with `continue`, finalizes the run, and the shrink-guard only checks discovered count (not backed-up count).
+
+Post-finalize, the scheduled path downgrades status to `completed_with_errors` whenever `tablesCount < discoveredCount` OR any batch error occurred. The Backup History UI (`src/components/admin/BackupRestoreTab.tsx`) renders this status as an amber "completed (warnings)" pill with `error_message` exposed via tooltip and inline text, and still allows download/restore.
+
+**Why:** Restoring a partial backup would miss 5 tables — broken DR. Plain "completed" pill hid the regression.

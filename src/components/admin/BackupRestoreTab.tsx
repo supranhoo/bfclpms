@@ -372,10 +372,22 @@ export function BackupRestoreTab() {
                             ? 'default'
                             : backup.status === 'running'
                             ? 'secondary'
+                            : backup.status === 'completed_with_errors'
+                            ? 'outline'
                             : 'destructive'
                         }
+                        className={
+                          backup.status === 'completed_with_errors'
+                            ? 'border-amber-500 text-amber-700 dark:text-amber-400'
+                            : undefined
+                        }
+                        title={
+                          backup.status === 'completed_with_errors' && backup.error_message
+                            ? backup.error_message
+                            : undefined
+                        }
                       >
-                        {backup.status}
+                        {backup.status === 'completed_with_errors' ? 'completed (warnings)' : backup.status}
                       </Badge>
                     </TableCell>
                     <TableCell>{formatBytes(backup.file_size_bytes)}</TableCell>
@@ -383,7 +395,7 @@ export function BackupRestoreTab() {
                     <TableCell>{backup.total_rows ?? '—'}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
-                        {backup.status === 'completed' && backup.file_path && (
+                        {(backup.status === 'completed' || backup.status === 'completed_with_errors') && backup.file_path && (
                           <>
                             <Button
                               variant="ghost"
@@ -403,8 +415,15 @@ export function BackupRestoreTab() {
                             </Button>
                           </>
                         )}
-                        {backup.status === 'failed' && backup.error_message && (
-                          <span className="text-xs text-destructive max-w-[200px] truncate" title={backup.error_message}>
+                        {(backup.status === 'failed' || backup.status === 'completed_with_errors') && backup.error_message && (
+                          <span
+                            className={`text-xs max-w-[200px] truncate ${
+                              backup.status === 'completed_with_errors'
+                                ? 'text-amber-700 dark:text-amber-400'
+                                : 'text-destructive'
+                            }`}
+                            title={backup.error_message}
+                          >
                             {backup.error_message}
                           </span>
                         )}
