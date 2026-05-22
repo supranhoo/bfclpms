@@ -1,82 +1,71 @@
 ## Goal
-Make the KPI–Employee Weighted Score Matrix readable on a standard 1080p/1440p screen without zoom-out, while preserving all scoring data and the existing hooks/RPCs/RLS.
+Address the two concrete usability complaints on `/reports/kpi-employee-matrix`:
+1. **KPI/KRA left column eats too much horizontal space** — shrink it the same way the dashboard does (single tight column, expand on demand).
+2. **KPI labels must remain visible while scrolling employees** — already sticky horizontally, but make the freeze rock-solid and add vertical sticky behavior so KPI rows stay anchored when scrolling long employee lists.
 
-## Scope
-Presentation-only changes in `src/pages/reports/KpiEmployeeMatrix.tsx`. No hook, RPC, export, or scoring logic changes.
+Presentation-only changes inside `src/pages/reports/KpiEmployeeMatrix.tsx`. No hooks, RPCs, scoring, RLS, or export changes.
+
+## Why no visual ritual
+The redesign skill expects palette/type/layout choices. This is a data-grid density problem, not a brand/mood one. Running the ritual here would burn three questions without changing the outcome. If you want a fresh visual identity for the reports surface separately, say the word and I'll run the full ritual on the Reports Hub.
 
 ## Risk & Impact
-- **Data**: None. Wt% removed from UI only; export keeps full data.
-- **Workflow**: None.
-- **UI/UX**: Major visual change to the matrix grid.
-- **Regression**: Low — file is self-contained; sticky-pane refactor is the only risky bit.
-- **Mitigation**: Keep the existing `COL` constants pattern; verify with Commercial-Plant Accounts (small) + Support Function (large) scopes.
+- **Data**: none.
+- **Workflow**: none.
+- **UI/UX**: left pane shrinks ~50%; sticky behavior tightened.
+- **Regression**: low — confined to one file's render layer.
+- **Mitigation**: keep `COL` constants as single source of truth for sticky offsets; verify on Commercial-Plant Accounts (small) + Support Function (large) + Safety & Health (medium) scopes.
 
-## Layout Strategy
+## Layout Changes
 
-### 1. Remove dead weight
-- Drop the **Wt%** sticky column entirely (header, body cell, offset math).
-- Drop the **Emp#** (KPI coverage count) sticky column — low-value, reclaims ~48px.
-- Employee headers show **name only** (no employee code line).
-- Result: left pane shrinks from `44+320+56+48 = 468px` to `44+280 = 324px` → ~144px reclaimed for KPI columns.
+### 1. Compact KPI/KRA column (dashboard parity)
+Current: 280px column with KPI name + KRA subtitle + Wt inline.
 
-### 2. Cell density tuned for fit
-- Cell column width: **64px** (was 72px). At 1793px viewport with 324px sticky pane: `(1793-324)/64 ≈ 22` employees on screen without scroll. Most scopes (Plant Accounts ~15, Safety ~12) fit fully.
-- Row height: `h-9` (36px). Header rotation **-35°** in a 130px header band.
-- Body font: `text-[12px]`, header text `text-[11px] font-medium`.
-- Cell content rule (since Wt% column is gone):
-  - **Score view (default)**: show only the weighted score, blank if unscored.
-  - **Weightage view**: show only Wt% per cell.
-  - **Both view**: stacked score/Wt% (kept for power users via the toggle).
+Target: **180px** column, single line, dashboard-style.
+- KPI name only, bold, single-line truncate.
+- Hover → existing tooltip already shows KRA + Category + Weightage (no info lost).
+- Optional row-level expand: a tiny chevron toggles a second muted line showing KRA · Wt%. State held in `expandedRows: Set<string>` so admins who want both views can opt in per row. Bulk "Expand all" toggle next to the view-mode switch.
+- Result: left pane drops from `44+280 = 324px` to `44+180 = 224px` → reclaims **100px** for employee columns (~1.5 extra employees visible at 64px cell width).
 
-### 3. Sticky & grouping
-- Sticky table head (KPI column headers stay on vertical scroll).
-- Sticky left pane: Sr + KPI/KRA/Category merged cell (280px).
-- **Category grouping**: render a full-width muted band row between category changes (e.g. "Safety & Health · 12 KPIs") with a small chevron to collapse the category. State held in `collapsedCategories: Set<string>`.
-- Subtle zebra striping (`even:bg-muted/30`) and row hover that also highlights the hovered employee column.
+### 2. Rock-solid sticky behavior
+Current behavior: KPI column is `position: sticky; left: STICKY_KPI_LEFT`. Header row is `sticky top-0`.
 
-### 4. Readability without clutter
-- KPI cell in left pane: KPI name bold (1 line, truncate w/ tooltip), KRA muted small below. Category moves to the group band (no longer per row).
-- Data bars: keep the proportional background fill in score cells (score/weightage) — already provides at-a-glance color cue.
-- Score color coding (accessible, minimal): cells with ratio ≥ 0.8 → soft green tint; 0.4–0.8 → neutral; < 0.4 → soft amber tint. Uses semantic tokens (`bg-emerald-500/10`, `bg-amber-500/10`).
-- Hover tooltip on each score cell shows: KPI · Employee · Wt% · Weighted Score · Raw Score — so Wt% remains discoverable without taking column space.
+Tightening:
+- Add a real right-edge shadow on the sticky KPI column (`shadow-[2px_0_0_0_hsl(var(--border))]` already there — promote to `shadow-[4px_0_8px_-4px_hsl(var(--foreground)/0.08)]`) so the freeze line is obvious during horizontal scroll.
+- Add `z-index` discipline: sticky-thead `z-30`, sticky-left-pane body cells `z-20`, intersection (Sr + KPI header cells) `z-40`. Fixes the rare flicker where a body cell paints over the header during fast scroll.
+- Category group rows already render `colSpan`; mark them `sticky left-0` with `z-20` so the category label stays visible during horizontal scroll (right now it scrolls off).
+- Verify on Safari/Firefox — sticky inside `overflow-auto` requires the table cells, not the table itself, to carry `position: sticky`. Current implementation is correct; keep it.
 
-### 5. Header band
-- Employee headers in a single 130px rotated band, name only (`text-[11px]`, two-line truncate at ~16 chars). Tooltip on hover shows full name + department.
-- Column hover highlights the full vertical strip.
+### 3. Sticky KPI rows during vertical scroll (in-category anchor)
+"KPI should be visible on screen" reading: when the admin scrolls vertically through 40+ KPIs, the **category band** for the current group should stick to the top of the scroll container (below the employee header). Same pattern dashboard uses for section headers.
 
-### 6. Pagination + filters (kept)
-- Employee paging strip and dual-row filter bar from current implementation kept as-is.
-- Default page size raised to **50** (still well within DOM budget thanks to narrower cells and removed columns).
+Implementation:
+- Category band row gets `position: sticky; top: COL.headerH` and `z-25`.
+- When the next category band scrolls up, it pushes the previous one out — standard sticky stacking.
+- No JS scroll listeners needed; pure CSS.
 
-## Layout sketch
-```text
-┌─Filters (2 rows)─────────────────────────────────────────────────────────┐
-├─Scope cards │ Employee pager │ View toggle │ Export──────────────────────┤
-├──────────┬────────────────────────────────────────────────────────────┐
-│ Sr │ KPI │  E1   E2   E3   E4 … (rotated -35°, name only, 130px)     │
-│────┼─────┼────────────────────────────────────────────────────────────│
-│ ▼ Safety & Health · 12 KPIs                            (group band)   │
-│ 1  │ KPI │  85   ··   72   ··                                          │
-│ 2  │ KPI │  ··   60   ··   90                                          │
-│ ▼ Compliance · 8 KPIs                                                  │
-│ 3  │ KPI │  …                                                          │
-└──────────┴────────────────────────────────────────────────────────────┘
-```
-
-## Implementation Steps
-1. Update `COL` constants: remove `wt` and `emp`; set `cell: 64`, `kpi: 280`.
-2. Strip Wt%/Emp# from `<thead>` and `<tbody>` rendering; recompute sticky `left` offsets.
-3. Replace employee header content with name-only + tooltip.
-4. Insert category group rows in the row map; add `collapsedCategories` state + toggle.
-5. Add score color tinting helper (`tintForRatio`) using semantic tokens.
-6. Wrap each score cell in `<Tooltip>` exposing Wt% + raw + weighted score.
-7. Bump default page size to 50; verify pager math.
-8. Quick type-check; spot-check Commercial-Plant Accounts (April 2026) and Support Function scopes.
+### 4. Density polish (small, deterministic)
+- Row height: keep `h-9` (36px).
+- KPI column padding: `px-2.5` (was `px-3`).
+- Score cell font: `text-[12px]` stays; numbers `tabular-nums` for column alignment.
 
 ## Out of Scope
-Hooks, RPCs, RLS, scoring formulas, Excel export, mobile redesign.
+- Pivoting the matrix (employees as rows, KPIs as columns) — different report.
+- Hook/RPC/Excel changes.
+- New filters or scoring tweaks.
+
+## Implementation Steps
+1. Update `COL.kpi` from 280 → 180.
+2. Strip KRA subtitle + Wt inline from KPI cell; keep tooltip as the disclosure path. Add per-row chevron + `expandedRows` state for opt-in second line.
+3. Promote sticky shadows and re-layer `z-index` for thead/tbody sticky cells.
+4. Make category band `sticky top-{COL.headerH} left-0 z-25`.
+5. Add `tabular-nums` to score cells.
+6. Type-check; spot-check three scopes against the 1681×1080 viewport you're on.
+
+## Verification
+- Commercial-Plant Accounts / April 2026 → 15 employees, all on screen, no horizontal scroll.
+- Safety & Health / April 2026 → ~12 employees, category band sticks while scrolling KPIs.
+- Support Function / April 2026 → 50 employees per page, horizontal scroll smooth, KPI column never drifts.
 
 ## Docs
-- Update `mem/features/reports/kpi-employee-matrix-report.md` with the new layout contract (no Wt% column, name-only headers, category grouping, score tinting thresholds, default page size 50).
+- Update `mem/features/reports/kpi-employee-matrix-report.md`: new `COL.kpi = 180`, expand-on-demand pattern, sticky category bands.
 - Append entry to `DOCUMENTATION.md` Version History.
-- Note in `POLICY.md` §114 #6: "Matrix reports MUST surface Wt% via tooltip/secondary view, not a dedicated column, to preserve horizontal density."

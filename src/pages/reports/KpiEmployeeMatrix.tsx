@@ -24,7 +24,7 @@ const EMP_PAGE_OPTIONS = [25, 50, 100] as const;
 // Sticky-pane column widths (px) — single source of truth so left offsets stay aligned.
 const COL = {
   sr: 44,
-  kpi: 280,
+  kpi: 180,
   cell: 64, // employee column width
   headerH: 130,
   rowH: 36,
@@ -58,6 +58,8 @@ export default function KpiEmployeeMatrix() {
   const [empPageSize, setEmpPageSize] = useState<number>(50);
   const [hoverEmpId, setHoverEmpId] = useState<string | null>(null);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [expandAll, setExpandAll] = useState(false);
   const filtersRef = useRef<HTMLDivElement>(null);
 
   // Company filter
@@ -296,6 +298,15 @@ export default function KpiEmployeeMatrix() {
               <Switch id="hide-unmapped" checked={hideUnmapped} onCheckedChange={setHideUnmapped} />
               <Label htmlFor="hide-unmapped" className="text-xs cursor-pointer">Hide empty employees</Label>
             </div>
+
+            <div className="flex items-center gap-2 px-2">
+              <Switch
+                id="expand-all"
+                checked={expandAll}
+                onCheckedChange={(v) => { setExpandAll(v); if (v) setExpandedRows(new Set()); }}
+              />
+              <Label htmlFor="expand-all" className="text-xs cursor-pointer">Show KRA · Wt%</Label>
+            </div>
           </div>
 
           {/* Row 2: Scope filters */}
@@ -502,14 +513,14 @@ export default function KpiEmployeeMatrix() {
                     <col style={{ width: COL.kpi }} />
                     {empSlice.map(e => <col key={e.id} style={{ width: COL.cell }} />)}
                   </colgroup>
-                  <thead className="sticky top-0 z-20">
+                  <thead className="sticky top-0 z-30">
                     <tr style={{ height: COL.headerH }}>
-                      <th className="sticky left-0 z-30 bg-background border-b border-r text-xs font-semibold text-muted-foreground align-bottom pb-2">
+                      <th className="sticky left-0 z-40 bg-background border-b border-r text-xs font-semibold text-muted-foreground align-bottom pb-2">
                         <div className="text-center">Sr.</div>
                       </th>
                       <th
                         style={{ left: STICKY_KPI_LEFT }}
-                        className="sticky z-30 bg-background border-b text-xs font-semibold text-muted-foreground align-bottom pb-2 px-3 text-left shadow-[2px_0_0_0_hsl(var(--border))]"
+                        className="sticky z-40 bg-background border-b text-xs font-semibold text-muted-foreground align-bottom pb-2 px-2.5 text-left shadow-[4px_0_8px_-4px_hsl(var(--foreground)/0.12)]"
                       >
                         KPI / KRA
                       </th>
@@ -564,10 +575,11 @@ export default function KpiEmployeeMatrix() {
                           lastCat = row.categoryName;
                           const collapsed = collapsedCategories.has(row.categoryName);
                           elements.push(
-                            <tr key={`cat-${row.categoryName}`} className="bg-muted/40 sticky-cat">
+                            <tr key={`cat-${row.categoryName}`} className="bg-muted/60 backdrop-blur-sm">
                               <td
                                 colSpan={2 + empSlice.length}
-                                className="sticky left-0 z-10 border-b px-3 py-1.5 cursor-pointer hover:bg-muted/60"
+                                style={{ top: COL.headerH }}
+                                className="sticky left-0 z-20 border-b px-2.5 py-1.5 cursor-pointer hover:bg-muted/80 bg-muted/60 backdrop-blur-sm"
                                 onClick={() => {
                                   setCollapsedCategories(prev => {
                                     const next = new Set(prev);
@@ -595,20 +607,41 @@ export default function KpiEmployeeMatrix() {
                       const rowBg = isEven ? 'bg-muted/20' : 'bg-background';
                       elements.push(
                         <tr key={row.key} style={{ height: COL.rowH }} className="group hover:bg-accent/20">
-                          <td className={`sticky left-0 z-10 border-b border-r text-center text-xs text-muted-foreground ${rowBg} group-hover:bg-accent/20`}>
+                          <td className={`sticky left-0 z-20 border-b border-r text-center text-xs text-muted-foreground ${rowBg} group-hover:bg-accent/20`}>
                             {page * rowsPerPage + idx + 1}
                           </td>
                           <td
                             style={{ left: STICKY_KPI_LEFT }}
-                            className={`sticky z-10 border-b px-3 ${rowBg} group-hover:bg-accent/20 shadow-[2px_0_0_0_hsl(var(--border))]`}
+                            className={`sticky z-20 border-b px-2.5 ${rowBg} group-hover:bg-accent/20 shadow-[4px_0_8px_-4px_hsl(var(--foreground)/0.12)]`}
                           >
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <div className="cursor-default">
-                                  <div className="font-medium text-foreground truncate leading-tight">{row.kpiName}</div>
-                                  <div className="text-[11px] text-muted-foreground truncate">
-                                    {row.kraName}
-                                    <span className="ml-2 text-[10px]">Wt: {row.weightage}%</span>
+                                <div className="cursor-default flex items-start gap-1 min-w-0">
+                                  <button
+                                    type="button"
+                                    aria-label={expandedRows.has(row.key) || expandAll ? 'Collapse details' : 'Show KRA and Wt%'}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setExpandedRows(prev => {
+                                        const next = new Set(prev);
+                                        if (next.has(row.key)) next.delete(row.key);
+                                        else next.add(row.key);
+                                        return next;
+                                      });
+                                    }}
+                                    className="mt-0.5 shrink-0 text-muted-foreground/60 hover:text-foreground"
+                                  >
+                                    <ChevronDown
+                                      className={`h-3 w-3 transition-transform ${(expandedRows.has(row.key) || expandAll) ? '' : '-rotate-90'}`}
+                                    />
+                                  </button>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="font-medium text-foreground truncate leading-tight">{row.kpiName}</div>
+                                    {(expandedRows.has(row.key) || expandAll) && (
+                                      <div className="text-[10px] text-muted-foreground truncate leading-tight mt-0.5">
+                                        {row.kraName} · {row.weightage}%
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               </TooltipTrigger>
@@ -662,7 +695,7 @@ export default function KpiEmployeeMatrix() {
                                             }}
                                           />
                                         )}
-                                        <div className="relative font-medium leading-tight py-1.5">
+                                        <div className="relative font-medium leading-tight py-1.5 tabular-nums">
                                           {viewMode === 'weightage' && (
                                             <span>{wt != null ? `${wt}%` : '—'}</span>
                                           )}
