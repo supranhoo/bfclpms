@@ -620,13 +620,13 @@ export default function KpiEmployeeMatrix() {
                                   });
                                 }}
                               >
-                                <div className="flex items-center gap-2 text-[11px] font-medium text-foreground pl-4">
+                                <div className="flex items-center gap-2 text-[11px] font-medium text-foreground pl-4 truncate" style={{ maxWidth: COL.sr + COL.kpi - 8 }}>
                                   <ChevronDown
                                     className={`h-3 w-3 transition-transform text-muted-foreground ${kraCollapsed ? '-rotate-90' : ''}`}
                                   />
                                   <span className="text-primary">KRA:</span>
-                                  <span>{row.kraName}</span>
-                                  <span className="text-muted-foreground font-normal">
+                                  <span className="truncate">{row.kraName}</span>
+                                  <span className="text-muted-foreground font-normal shrink-0">
                                     · {kraCounts[kraKey]} KPI{kraCounts[kraKey] === 1 ? '' : 's'}
                                   </span>
                                 </div>
