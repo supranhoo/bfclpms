@@ -16,7 +16,7 @@ import {
   useBulkReopenCells,
   type BulkReviewRow,
 } from '@/hooks/useBulkReview';
-import { ConfirmDestructiveDialog } from '@/components/common/ConfirmDestructiveDialog';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 type Stage = 'manager' | 'skip_level' | 'hr_pms' | 'auditor';
 
@@ -269,11 +269,12 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
 
         <ConfirmDestructiveDialog
           open={confirmReopen}
-          onOpenChange={setConfirmReopen}
+          onCancel={() => setConfirmReopen(false)}
+          onConfirm={() => { setConfirmReopen(false); handleReopen(); }}
           title="Re-open approved cell?"
           description={`This will clear the final score, log an immutable revision (no. ${(row.final_revision_no ?? 0) + 1}), and unlock: ${reopenStages.join(', ')}.`}
-          confirmText="Re-open"
-          onConfirm={handleReopen}
+          confirmLabel="Re-open"
+          isLoading={reopen.isPending}
         />
       </SheetContent>
     </Sheet>
