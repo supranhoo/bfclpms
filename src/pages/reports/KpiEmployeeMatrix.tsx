@@ -695,7 +695,7 @@ export default function KpiEmployeeMatrix() {
                                             }}
                                           />
                                         )}
-                                        <div className="relative font-medium leading-tight py-1.5">
+                                        <div className="relative font-medium leading-tight py-1.5 tabular-nums">
                                           {viewMode === 'weightage' && (
                                             <span>{wt != null ? `${wt}%` : '—'}</span>
                                           )}
