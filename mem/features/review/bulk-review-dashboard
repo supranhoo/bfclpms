@@ -8,6 +8,8 @@ type: feature
 
 **Master switch:** `admin_feature_flags.feature_bulk_review_dashboard` (default `false`). Off = sidebar entry hidden + RPCs throw `feature disabled`. `mgmt_can_reopen` (default `false`) controls whether Management can re-open vs Admin-only.
 
+**Gradual rollout (May 2026):** `admin_feature_flags` now carries `target_roles app_role[]` and `target_user_ids uuid[]`. Both empty = enabled for everyone when value=true. Non-empty = enabled only for matching role OR explicit user. **Admins always bypass targeting** once master switch is ON. Evaluation centralised in SECURITY DEFINER RPC `is_feature_flag_enabled_for_me(p_key)`; the client hook `useBulkReviewFlag` calls this RPC (do NOT re-evaluate targeting in the SDK). Admin UI lives at Admin → Settings → **Feature Flags** (`FeatureFlagsTab.tsx`).
+
 **§0 Non-Regression Contract (LOCKED):**
 - Strictly additive: no existing column/RPC signature/RLS policy/notification template modified.
 - New route `/review/bulk-scoring` only. Legacy `/dashboard?view=*` paths byte-identical.

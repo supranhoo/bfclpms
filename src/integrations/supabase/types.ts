@@ -191,6 +191,8 @@ export type Database = {
           created_at: string
           description: string | null
           key: string
+          target_roles: Database["public"]["Enums"]["app_role"][]
+          target_user_ids: string[]
           updated_at: string
           updated_by: string | null
           value: Json
@@ -199,6 +201,8 @@ export type Database = {
           created_at?: string
           description?: string | null
           key: string
+          target_roles?: Database["public"]["Enums"]["app_role"][]
+          target_user_ids?: string[]
           updated_at?: string
           updated_by?: string | null
           value?: Json
@@ -207,6 +211,8 @@ export type Database = {
           created_at?: string
           description?: string | null
           key?: string
+          target_roles?: Database["public"]["Enums"]["app_role"][]
+          target_user_ids?: string[]
           updated_at?: string
           updated_by?: string | null
           value?: Json
@@ -8599,6 +8605,10 @@ export type Database = {
       }
       is_data_owner_for_employee: {
         Args: { p_employee_id: string; p_owner_id: string }
+        Returns: boolean
+      }
+      is_feature_flag_enabled_for_me: {
+        Args: { p_key: string }
         Returns: boolean
       }
       is_image_url: { Args: { p_url: string }; Returns: boolean }
