@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Download, Search, Users, Target, AlertTriangle, BarChart3, Play, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, Download, Search, Users, Target, AlertTriangle, BarChart3, Play, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -24,17 +24,12 @@ const EMP_PAGE_OPTIONS = [25, 50, 100] as const;
 // Sticky-pane column widths (px) — single source of truth so left offsets stay aligned.
 const COL = {
   sr: 44,
-  kpi: 320,
-  wt: 56,
-  emp: 48,
-  cell: 72, // employee column width
-  headerH: 140,
-  rowH: 44,
+  kpi: 280,
+  cell: 64, // employee column width
+  headerH: 130,
+  rowH: 36,
 } as const;
 const STICKY_KPI_LEFT = COL.sr;
-const STICKY_WT_LEFT = COL.sr + COL.kpi;
-const STICKY_EMP_LEFT = COL.sr + COL.kpi + COL.wt;
-const STICKY_TOTAL = COL.sr + COL.kpi + COL.wt + COL.emp;
 
 type ViewMode = 'weightage' | 'score' | 'both';
 
@@ -57,11 +52,12 @@ export default function KpiEmployeeMatrix() {
   const [loaded, setLoaded] = useState(false);
 
   // UX state (presentation only)
-  const [viewMode, setViewMode] = useState<ViewMode>('weightage');
+  const [viewMode, setViewMode] = useState<ViewMode>('score');
   const [hideUnmapped, setHideUnmapped] = useState(true);
   const [empPage, setEmpPage] = useState(0);
-  const [empPageSize, setEmpPageSize] = useState<number>(25);
+  const [empPageSize, setEmpPageSize] = useState<number>(50);
   const [hoverEmpId, setHoverEmpId] = useState<string | null>(null);
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const filtersRef = useRef<HTMLDivElement>(null);
 
   // Company filter
