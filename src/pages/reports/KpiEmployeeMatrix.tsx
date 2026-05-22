@@ -499,94 +499,202 @@ export default function KpiEmployeeMatrix() {
       ) : (
         <Card>
           <CardContent className="p-0">
-            <div className="overflow-auto max-h-[65vh]">
-              <Table className="table-fixed">
-                <TableHeader className="sticky top-0 z-10 bg-background">
-                  <TableRow>
-                    <TableHead className="w-12 text-center sticky left-0 z-20 bg-background">Sr.</TableHead>
-                    <TableHead className="w-36 sticky left-12 z-20 bg-background">Category</TableHead>
-                    <TableHead className="w-44 sticky left-48 z-20 bg-background">KRA</TableHead>
-                    <TableHead className="w-56 sticky left-[calc(12rem+11rem)] z-20 bg-background">KPI</TableHead>
-                    <TableHead className="w-14 text-center">Wt%</TableHead>
-                    <TableHead className="w-12 text-center">Emp#</TableHead>
-                    {filteredEmployees.map(emp => (
-                      <TableHead key={emp.id} className="w-20 text-center p-1">
-                        <div
-                          className="whitespace-nowrap text-xs font-medium"
-                          style={{
-                            writingMode: 'vertical-rl',
-                            transform: 'rotate(180deg)',
-                            maxHeight: '120px',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                          }}
-                          title={`${emp.fullName} (${emp.employeeCode})`}
-                        >
-                          {emp.fullName}
-                        </div>
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pagedRows.map((row, idx) => (
-                    <TableRow key={row.key}>
-                      <TableCell className="text-center text-xs sticky left-0 bg-background">
-                        {page * ROWS_PER_PAGE + idx + 1}
-                      </TableCell>
-                      <TableCell className="text-xs truncate sticky left-12 bg-background" title={row.categoryName}>
-                        {row.categoryName}
-                      </TableCell>
-                      <TableCell className="text-xs truncate sticky left-48 bg-background" title={row.kraName}>
-                        {row.kraName}
-                      </TableCell>
-                      <TableCell className="text-xs truncate sticky left-[calc(12rem+11rem)] bg-background" title={row.kpiName}>
-                        {row.kpiName}
-                      </TableCell>
-                      <TableCell className="text-center text-xs font-medium">{row.weightage}</TableCell>
-                      <TableCell className="text-center text-xs">{row.employeeCount}</TableCell>
-                      {filteredEmployees.map(emp => {
-                        const score = row.employeeScores[emp.id];
-                        const wt = row.employeeWeightages[emp.id];
-                        const isMapped = emp.id in row.employeeScores;
+            <TooltipProvider delayDuration={300}>
+              <div className="overflow-auto max-h-[68vh] relative">
+                <table className="border-collapse text-[13px] w-full">
+                  <colgroup>
+                    <col style={{ width: COL.sr }} />
+                    <col style={{ width: COL.kpi }} />
+                    <col style={{ width: COL.wt }} />
+                    <col style={{ width: COL.emp }} />
+                    {empSlice.map(e => <col key={e.id} style={{ width: COL.cell }} />)}
+                  </colgroup>
+                  <thead className="sticky top-0 z-20">
+                    <tr style={{ height: COL.headerH }}>
+                      <th className="sticky left-0 z-30 bg-background border-b border-r text-xs font-semibold text-muted-foreground align-bottom pb-2">
+                        <div className="text-center">Sr.</div>
+                      </th>
+                      <th
+                        style={{ left: STICKY_KPI_LEFT }}
+                        className="sticky z-30 bg-background border-b border-r text-xs font-semibold text-muted-foreground align-bottom pb-2 px-3 text-left"
+                      >
+                        KPI / KRA / Category
+                      </th>
+                      <th
+                        style={{ left: STICKY_WT_LEFT }}
+                        className="sticky z-30 bg-background border-b border-r text-xs font-semibold text-muted-foreground align-bottom pb-2 text-center"
+                      >
+                        Wt%
+                      </th>
+                      <th
+                        style={{ left: STICKY_EMP_LEFT }}
+                        className="sticky z-30 bg-background border-b text-xs font-semibold text-muted-foreground align-bottom pb-2 text-center shadow-[2px_0_0_0_hsl(var(--border))]"
+                      >
+                        Emp#
+                      </th>
+                      {empSlice.map(emp => {
+                        const isHover = hoverEmpId === emp.id;
                         return (
-                          <TableCell
+                          <th
                             key={emp.id}
-                            className={`text-center text-xs ${isMapped ? (score != null ? 'bg-primary/5' : 'bg-muted/30') : ''}`}
+                            className={`bg-background border-b align-bottom p-0 ${isHover ? 'bg-accent/30' : ''}`}
+                            onMouseEnter={() => setHoverEmpId(emp.id)}
+                            onMouseLeave={() => setHoverEmpId(null)}
                           >
-                            {isMapped ? (
-                              <div className="flex flex-col items-center gap-0.5">
-                                <span className="font-semibold">{wt != null ? `${wt}%` : '—'}</span>
-                                {score != null && (
-                                  <span className="text-[10px] text-muted-foreground">{score}</span>
-                                )}
+                            <div className="h-full flex items-end justify-center pb-2 pr-1">
+                              <div
+                                style={{
+                                  transform: 'rotate(-40deg)',
+                                  transformOrigin: 'left bottom',
+                                  whiteSpace: 'nowrap',
+                                  width: 0,
+                                }}
+                                className="font-medium text-foreground"
+                                title={`${emp.fullName} (${emp.employeeCode})`}
+                              >
+                                {emp.fullName}
+                                <span className="ml-1 text-[10px] text-muted-foreground">
+                                  {emp.employeeCode}
+                                </span>
                               </div>
-                            ) : ''}
-                          </TableCell>
+                            </div>
+                          </th>
                         );
                       })}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedRows.map((row, idx) => {
+                      const isEven = idx % 2 === 1;
+                      const rowBg = isEven ? 'bg-muted/20' : 'bg-background';
+                      return (
+                        <tr key={row.key} style={{ height: COL.rowH }} className="group hover:bg-accent/20">
+                          <td className={`sticky left-0 z-10 border-b border-r text-center text-xs text-muted-foreground ${rowBg} group-hover:bg-accent/20`}>
+                            {page * rowsPerPage + idx + 1}
+                          </td>
+                          <td
+                            style={{ left: STICKY_KPI_LEFT }}
+                            className={`sticky z-10 border-b border-r px-3 ${rowBg} group-hover:bg-accent/20`}
+                          >
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="cursor-default">
+                                  <div className="font-medium text-foreground truncate">{row.kpiName}</div>
+                                  <div className="text-[11px] text-muted-foreground truncate">
+                                    {row.kraName} · {row.categoryName}
+                                  </div>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-md">
+                                <div className="font-medium">{row.kpiName}</div>
+                                <div className="text-xs opacity-80 mt-1">KRA: {row.kraName}</div>
+                                <div className="text-xs opacity-80">Category: {row.categoryName}</div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </td>
+                          <td
+                            style={{ left: STICKY_WT_LEFT }}
+                            className={`sticky z-10 border-b border-r text-center text-xs font-semibold ${rowBg} group-hover:bg-accent/20`}
+                          >
+                            {row.weightage}
+                          </td>
+                          <td
+                            style={{ left: STICKY_EMP_LEFT }}
+                            className={`sticky z-10 border-b text-center text-xs text-muted-foreground ${rowBg} group-hover:bg-accent/20 shadow-[2px_0_0_0_hsl(var(--border))]`}
+                          >
+                            {row.employeeCount}
+                          </td>
+                          {empSlice.map(emp => {
+                            const score = row.employeeScores[emp.id];
+                            const wt = row.employeeWeightages[emp.id];
+                            const isMapped = emp.id in row.employeeScores;
+                            const isColHover = hoverEmpId === emp.id;
+                            // Data-bar width proportional to coverage (score / weightage)
+                            const cov = (score != null && wt) ? Math.max(0, Math.min(1, score / (wt as number))) : 0;
+                            return (
+                              <td
+                                key={emp.id}
+                                onMouseEnter={() => setHoverEmpId(emp.id)}
+                                onMouseLeave={() => setHoverEmpId(null)}
+                                className={`relative border-b text-center align-middle ${isColHover ? 'bg-accent/30' : ''}`}
+                                title={isMapped ? `${emp.fullName}\nWeightage: ${wt ?? '—'}%\nWeighted Score: ${score ?? '—'}` : ''}
+                              >
+                                {isMapped ? (
+                                  <>
+                                    {score != null && cov > 0 && (
+                                      <div
+                                        aria-hidden
+                                        className="absolute inset-y-1 left-1 right-1 rounded-sm bg-primary/10 pointer-events-none"
+                                        style={{ width: `calc(${cov * 100}% - 8px)` }}
+                                      />
+                                    )}
+                                    {!isColHover && score == null && (
+                                      <div
+                                        aria-hidden
+                                        className="absolute inset-1 pointer-events-none opacity-40"
+                                        style={{
+                                          backgroundImage: 'radial-gradient(circle, hsl(var(--muted-foreground)) 0.5px, transparent 0.5px)',
+                                          backgroundSize: '4px 4px',
+                                        }}
+                                      />
+                                    )}
+                                    <div className="relative font-medium leading-tight">
+                                      {viewMode === 'weightage' && (
+                                        <span>{wt != null ? `${wt}%` : '—'}</span>
+                                      )}
+                                      {viewMode === 'score' && (
+                                        <span className={score == null ? 'text-muted-foreground' : ''}>
+                                          {score != null ? score : '—'}
+                                        </span>
+                                      )}
+                                      {viewMode === 'both' && (
+                                        <div className="flex flex-col items-center gap-0.5">
+                                          <span>{wt != null ? `${wt}%` : '—'}</span>
+                                          {score != null && (
+                                            <span className="text-[10px] text-muted-foreground">{score}</span>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </>
+                                ) : (
+                                  <span className="text-muted-foreground/30">·</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </TooltipProvider>
 
             {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t">
-                <p className="text-sm text-muted-foreground">
-                  Showing {page * ROWS_PER_PAGE + 1}–{Math.min((page + 1) * ROWS_PER_PAGE, filteredRows.length)} of {filteredRows.length} KPIs
-                </p>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
-                    Previous
-                  </Button>
-                  <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>
-                    Next
-                  </Button>
-                </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t">
+              <p className="text-sm text-muted-foreground">
+                Showing <span className="font-medium text-foreground">{page * rowsPerPage + 1}–{Math.min((page + 1) * rowsPerPage, filteredRows.length)}</span> of{' '}
+                <span className="font-medium text-foreground">{filteredRows.length}</span> KPIs
+              </p>
+              <div className="flex items-center gap-2">
+                <Select value={String(rowsPerPage)} onValueChange={(v) => { setRowsPerPage(Number(v)); setPage(0); }}>
+                  <SelectTrigger className="h-8 w-[90px] text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {ROW_PAGE_OPTIONS.map(n => <SelectItem key={n} value={String(n)}>{n}/page</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <span className="text-xs text-muted-foreground px-1">
+                  Page {page + 1} of {totalPages}
+                </span>
+                <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
+                  Previous
+                </Button>
+                <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>
+                  Next
+                </Button>
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
       )}
