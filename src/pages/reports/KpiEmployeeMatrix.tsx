@@ -102,6 +102,7 @@ export default function KpiEmployeeMatrix() {
   const handleFilterChange = useCallback((setter: (v: any) => void, value: any) => {
     setter(value);
     setPage(0);
+    setLoaded(false);
   }, []);
 
   // Export to Excel
