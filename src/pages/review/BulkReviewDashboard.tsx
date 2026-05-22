@@ -25,7 +25,7 @@ import {
   type BulkReviewRow,
 } from '@/hooks/useBulkReview';
 import { BulkCellDrawer } from '@/components/review/BulkCellDrawer';
-import { Checkbox } from '@/components/ui/checkbox';
+import { BulkReviewVirtualGrid } from '@/components/review/BulkReviewVirtualGrid';
 import { useToast } from '@/hooks/use-toast';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
@@ -280,9 +280,9 @@ export default function BulkReviewDashboard() {
 
           <Card>
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <CardTitle className="text-base">Grid (read-only preview)</CardTitle>
+              <CardTitle className="text-base">Review grid</CardTitle>
               <div className="text-xs text-muted-foreground">
-                M3 will add virtualization, cell drawer, and write actions
+                Click a row to score or re-open · variance Δ highlighted
               </div>
             </CardHeader>
             <CardContent>
@@ -303,70 +303,13 @@ export default function BulkReviewDashboard() {
                   No KPIs match the selected scope.
                 </p>
               ) : (
-                <div className="overflow-auto max-h-[60vh] border rounded-md">
-                  <table className="w-full text-xs">
-                    <thead className="bg-muted/50 sticky top-0">
-                      <tr>
-                        <th className="p-2 w-8">
-                          <Checkbox
-                            checked={loadedRows.length > 0 && selectedIds.size === loadedRows.length}
-                            onCheckedChange={toggleAll}
-                          />
-                        </th>
-                        <th className="text-left p-2">Employee</th>
-                        <th className="text-left p-2">KRA / KPI</th>
-                        <th className="text-right p-2">Self</th>
-                        <th className="text-right p-2">Mgr</th>
-                        <th className="text-right p-2">Skip</th>
-                        <th className="text-right p-2">HR</th>
-                        <th className="text-right p-2">Aud</th>
-                        <th className="text-right p-2">Mgmt</th>
-                        <th className="text-right p-2">Final</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {loadedRows.map((r) => {
-                        const scores = [r.self_score, r.manager_score, r.skip_level_score, r.hr_pms_score, r.auditor_score, r.management_score].filter((s): s is number => s !== null && s !== undefined);
-                        const rowVar = scores.length >= 2 ? Math.max(...scores) - Math.min(...scores) : 0;
-                        const checked = r.submission_id ? selectedIds.has(r.submission_id) : false;
-                        return (
-                        <tr
-                          key={r.kpi_id + ':' + r.employee_id}
-                          className="border-t hover:bg-muted/30 cursor-pointer"
-                          onClick={() => setActiveRow(r)}
-                        >
-                          <td className="p-2" onClick={(e) => e.stopPropagation()}>
-                            <Checkbox
-                              checked={checked}
-                              disabled={!r.submission_id}
-                              onCheckedChange={() => r.submission_id && toggleOne(r.submission_id)}
-                            />
-                          </td>
-                          <td className="p-2">
-                            {r.employee_name}
-                            {r.employee_code && (
-                              <span className="text-muted-foreground ml-1">· {r.employee_code}</span>
-                            )}
-                          </td>
-                          <td className="p-2">
-                            <div className="truncate max-w-xs flex items-center gap-2" title={`${r.kra_name} · ${r.kpi_name}`}>
-                              <span className="truncate"><span className="text-muted-foreground">{r.kra_name}</span> · {r.kpi_name}</span>
-                              {rowVar > 1.0 && <Badge variant="destructive" className="text-[10px] shrink-0">Δ {rowVar.toFixed(1)}</Badge>}
-                            </div>
-                          </td>
-                          <td className="text-right p-2">{fmt(r.self_score)}</td>
-                          <td className="text-right p-2">{fmt(r.manager_score)}</td>
-                          <td className="text-right p-2">{fmt(r.skip_level_score)}</td>
-                          <td className="text-right p-2">{fmt(r.hr_pms_score)}</td>
-                          <td className="text-right p-2">{fmt(r.auditor_score)}</td>
-                          <td className="text-right p-2">{fmt(r.management_score)}</td>
-                          <td className="text-right p-2 font-medium">{fmt(r.final_score)}</td>
-                        </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                <BulkReviewVirtualGrid
+                  rows={loadedRows}
+                  selectedIds={selectedIds}
+                  onToggleOne={toggleOne}
+                  onToggleAll={toggleAll}
+                  onRowClick={setActiveRow}
+                />
               )}
 
               {/* Pagination */}
@@ -447,9 +390,4 @@ function Tile({ label, value }: { label: string; value: number | string }) {
       </CardContent>
     </Card>
   );
-}
-
-function fmt(n: number | null | undefined): string {
-  if (n === null || n === undefined) return '—';
-  return Number(n).toFixed(1);
 }
