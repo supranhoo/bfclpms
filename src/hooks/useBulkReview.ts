@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 /** Master switch read — used by sidebar gate + route gate. */
@@ -120,6 +120,104 @@ export function useBulkReviewSnapshot(
       });
       if (error) throw error;
       return data as unknown as BulkReviewSnapshot;
+    },
+  });
+}
+
+// ============= M3: Cell detail =============
+export function useKpiCellDetail(kpiId: string | null, empId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ['kpi_cell_detail', kpiId, empId],
+    enabled: enabled && !!kpiId && !!empId,
+    staleTime: 60 * 1000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('kpi_cell_detail' as any, {
+        p_kpi_id: kpiId, p_emp_id: empId,
+      });
+      if (error) throw error;
+      return data as any;
+    },
+  });
+}
+
+// ============= M4: Write RPCs =============
+export interface BulkWriteCell {
+  submission_id: string;
+  score?: number | null;
+  remarks?: string | null;
+  expected_row_version?: number | null;
+}
+
+export interface BulkWriteResult {
+  batch_id: string;
+  applied: number;
+  skipped: Array<{ submission_id: string; reason: string }>;
+}
+
+export function useBulkWriteStageScores() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      stage: 'manager' | 'skip_level' | 'hr_pms' | 'auditor';
+      cells: BulkWriteCell[];
+      reason?: string;
+    }): Promise<BulkWriteResult> => {
+      const { data, error } = await supabase.rpc('bulk_write_stage_scores' as any, {
+        p_stage: args.stage,
+        p_cells: args.cells as any,
+        p_batch_reason: args.reason ?? null,
+      });
+      if (error) throw error;
+      return data as unknown as BulkWriteResult;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['bulk_review_snapshot'] });
+      qc.invalidateQueries({ queryKey: ['kpi_cell_detail'] });
+    },
+  });
+}
+
+export function useBulkManagementApprove() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      cells: Array<{ submission_id: string; expected_row_version?: number | null }>;
+      reason?: string;
+    }): Promise<BulkWriteResult> => {
+      const { data, error } = await supabase.rpc('bulk_management_approve' as any, {
+        p_cells: args.cells as any,
+        p_batch_reason: args.reason ?? null,
+      });
+      if (error) throw error;
+      return data as unknown as BulkWriteResult;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['bulk_review_snapshot'] });
+      qc.invalidateQueries({ queryKey: ['kpi_cell_detail'] });
+    },
+  });
+}
+
+// ============= M5: Re-open =============
+export function useBulkReopenCells() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      cells: Array<{ submission_id: string }>;
+      stages_to_unlock: Array<'manager' | 'skip_level' | 'hr_pms' | 'auditor'>;
+      reason: string;
+    }): Promise<BulkWriteResult> => {
+      const { data, error } = await supabase.rpc('bulk_reopen_cells' as any, {
+        p_cells: args.cells as any,
+        p_stages_to_unlock: args.stages_to_unlock as any,
+        p_reason: args.reason,
+      });
+      if (error) throw error;
+      return data as unknown as BulkWriteResult;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['bulk_review_snapshot'] });
+      qc.invalidateQueries({ queryKey: ['kpi_cell_detail'] });
     },
   });
 }
