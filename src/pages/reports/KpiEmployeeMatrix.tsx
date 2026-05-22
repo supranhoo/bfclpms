@@ -70,6 +70,22 @@ export default function KpiEmployeeMatrix() {
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [collapsedKras, setCollapsedKras] = useState<Set<string>>(new Set());
   const filtersRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Force-close any open Radix tooltip when the matrix is scrolled.
+  // Radix tooltips occasionally fail to dismiss when the pointer leaves the
+  // trigger via fast scroll inside an overflow container — dispatching a
+  // pointer/keyboard event clears the open state reliably.
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const close = () => {
+      // Radix listens for Escape on document to close tooltips.
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    };
+    el.addEventListener('scroll', close, { passive: true });
+    return () => el.removeEventListener('scroll', close);
+  }, [loaded]);
 
   // Company filter
   const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany } = useCompanyFilter();
@@ -511,8 +527,8 @@ export default function KpiEmployeeMatrix() {
       ) : (
         <Card>
           <CardContent className="p-0">
-            <TooltipProvider delayDuration={300}>
-              <div className="overflow-auto max-h-[68vh] relative">
+            <TooltipProvider delayDuration={300} disableHoverableContent>
+              <div ref={scrollContainerRef} className="overflow-auto max-h-[68vh] relative">
                 <table className="border-collapse text-[12px] w-full">
                   <colgroup>
                     <col style={{ width: COL.sr }} />
@@ -595,11 +611,11 @@ export default function KpiEmployeeMatrix() {
                           lastKra = null;
                           const collapsed = collapsedCategories.has(row.categoryName);
                           elements.push(
-                            <tr key={`cat-${row.categoryName}`} className="bg-muted/60 backdrop-blur-sm">
+                            <tr key={`cat-${row.categoryName}`} className="bg-muted">
                               <td
                                 colSpan={2 + empSlice.length}
                                 style={{ top: COL.headerH }}
-                                className="sticky left-0 z-[25] border-b px-2.5 py-1.5 cursor-pointer hover:bg-muted/80 bg-muted/60 backdrop-blur-sm"
+                                className="sticky left-0 z-[25] border-b border-border px-2 py-1.5 cursor-pointer hover:bg-muted/90 bg-muted shadow-[0_2px_4px_-2px_hsl(var(--foreground)/0.08)]"
                                 onClick={() => {
                                   setCollapsedCategories(prev => {
                                     const next = new Set(prev);
@@ -629,10 +645,10 @@ export default function KpiEmployeeMatrix() {
                           const kraKey = `${row.categoryName}|${row.kraName}`;
                           const kraCollapsed = collapsedKras.has(kraKey);
                           elements.push(
-                            <tr key={`kra-${kraKey}`} className="bg-muted/30">
+                            <tr key={`kra-${kraKey}`} className="bg-background">
                               <td
                                 colSpan={2 + empSlice.length}
-                                className="sticky left-0 z-20 border-b px-2.5 py-1 cursor-pointer hover:bg-muted/50 bg-muted/30"
+                                className="sticky left-0 z-20 border-b border-border px-2.5 py-1 cursor-pointer hover:bg-muted/60 bg-muted/95"
                                 onClick={() => {
                                   setCollapsedKras(prev => {
                                     const next = new Set(prev);
