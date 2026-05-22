@@ -8138,6 +8138,21 @@ export type Database = {
         Args: { kpis_json: Json }
         Returns: number
       }
+      bulk_review_snapshot: {
+        Args: {
+          p_filters?: Json
+          p_page?: number
+          p_page_size?: number
+          p_period: string
+          p_viewer_stage: string
+          p_year: number
+        }
+        Returns: Json
+      }
+      bulk_scope_preview: {
+        Args: { p_filters?: Json; p_period: string; p_year: number }
+        Returns: Json
+      }
       can_view_safety_incident: {
         Args: { _incident_id: string }
         Returns: boolean
@@ -8597,6 +8612,10 @@ export type Database = {
         Returns: boolean
       }
       jsonb_url_set_equal: { Args: { a: Json; b: Json }; Returns: boolean }
+      kpi_cell_detail: {
+        Args: { p_emp_id: string; p_kpi_id: string }
+        Returns: Json
+      }
       log_standardization_action: {
         Args: {
           p_action_type: string
