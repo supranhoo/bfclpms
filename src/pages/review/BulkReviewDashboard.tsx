@@ -20,8 +20,14 @@ import {
   useBulkReviewFlag,
   useBulkScopePreview,
   useBulkReviewSnapshot,
+  useBulkManagementApprove,
   type BulkScopeFilters,
+  type BulkReviewRow,
 } from '@/hooks/useBulkReview';
+import { BulkCellDrawer } from '@/components/review/BulkCellDrawer';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useToast } from '@/hooks/use-toast';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 const PERIOD_OPTIONS = [
   'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep',
@@ -48,6 +54,7 @@ const VIEWER_STAGES = [
  */
 export default function BulkReviewDashboard() {
   const { effectiveRole } = useAuth();
+  const { toast } = useToast();
   const flagQuery = useBulkReviewFlag();
 
   const now = new Date();
@@ -67,6 +74,10 @@ export default function BulkReviewDashboard() {
   const [filters] = useState<BulkScopeFilters>({});
   const [scopeLoaded, setScopeLoaded] = useState(false);
   const [page, setPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [activeRow, setActiveRow] = useState<BulkReviewRow | null>(null);
+  const [confirmApprove, setConfirmApprove] = useState(false);
+  const approve = useBulkManagementApprove();
 
   const flagOn = flagQuery.data === true;
 
@@ -95,6 +106,38 @@ export default function BulkReviewDashboard() {
     }
     return count;
   }, [loadedRows]);
+
+  const canApprove = effectiveRole === 'management' || effectiveRole === 'admin';
+  const canReopen = effectiveRole === 'admin' || effectiveRole === 'management';
+
+  const toggleOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const toggleAll = () => {
+    if (selectedIds.size === loadedRows.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(loadedRows.filter(r => r.submission_id).map(r => r.submission_id!)));
+  };
+
+  const handleBulkApprove = async () => {
+    const cells = loadedRows
+      .filter(r => r.submission_id && selectedIds.has(r.submission_id))
+      .map(r => ({ submission_id: r.submission_id!, expected_row_version: r.row_version ?? null }));
+    if (cells.length === 0) return;
+    try {
+      const res = await approve.mutateAsync({ cells, reason: 'Bulk approval from dashboard' });
+      toast({
+        title: `Approved ${res.applied} / ${cells.length}`,
+        description: res.skipped.length ? `${res.skipped.length} skipped — see audit log` : undefined,
+      });
+      setSelectedIds(new Set());
+    } catch (e: any) {
+      toast({ title: 'Approval failed', description: e.message, variant: 'destructive' });
+    }
+  };
 
   // Flag OFF → hard refuse
   if (flagQuery.isLoading) {
@@ -264,6 +307,12 @@ export default function BulkReviewDashboard() {
                   <table className="w-full text-xs">
                     <thead className="bg-muted/50 sticky top-0">
                       <tr>
+                        <th className="p-2 w-8">
+                          <Checkbox
+                            checked={loadedRows.length > 0 && selectedIds.size === loadedRows.length}
+                            onCheckedChange={toggleAll}
+                          />
+                        </th>
                         <th className="text-left p-2">Employee</th>
                         <th className="text-left p-2">KRA / KPI</th>
                         <th className="text-right p-2">Self</th>
@@ -276,8 +325,23 @@ export default function BulkReviewDashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {loadedRows.map((r) => (
-                        <tr key={r.kpi_id} className="border-t hover:bg-muted/30">
+                      {loadedRows.map((r) => {
+                        const scores = [r.self_score, r.manager_score, r.skip_level_score, r.hr_pms_score, r.auditor_score, r.management_score].filter((s): s is number => s !== null && s !== undefined);
+                        const rowVar = scores.length >= 2 ? Math.max(...scores) - Math.min(...scores) : 0;
+                        const checked = r.submission_id ? selectedIds.has(r.submission_id) : false;
+                        return (
+                        <tr
+                          key={r.kpi_id + ':' + r.employee_id}
+                          className="border-t hover:bg-muted/30 cursor-pointer"
+                          onClick={() => setActiveRow(r)}
+                        >
+                          <td className="p-2" onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              checked={checked}
+                              disabled={!r.submission_id}
+                              onCheckedChange={() => r.submission_id && toggleOne(r.submission_id)}
+                            />
+                          </td>
                           <td className="p-2">
                             {r.employee_name}
                             {r.employee_code && (
@@ -285,8 +349,9 @@ export default function BulkReviewDashboard() {
                             )}
                           </td>
                           <td className="p-2">
-                            <div className="truncate max-w-xs" title={`${r.kra_name} · ${r.kpi_name}`}>
-                              <span className="text-muted-foreground">{r.kra_name}</span> · {r.kpi_name}
+                            <div className="truncate max-w-xs flex items-center gap-2" title={`${r.kra_name} · ${r.kpi_name}`}>
+                              <span className="truncate"><span className="text-muted-foreground">{r.kra_name}</span> · {r.kpi_name}</span>
+                              {rowVar > 1.0 && <Badge variant="destructive" className="text-[10px] shrink-0">Δ {rowVar.toFixed(1)}</Badge>}
                             </div>
                           </td>
                           <td className="text-right p-2">{fmt(r.self_score)}</td>
@@ -297,7 +362,8 @@ export default function BulkReviewDashboard() {
                           <td className="text-right p-2">{fmt(r.management_score)}</td>
                           <td className="text-right p-2 font-medium">{fmt(r.final_score)}</td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -325,8 +391,49 @@ export default function BulkReviewDashboard() {
               )}
             </CardContent>
           </Card>
+
+          {/* Action toolbar */}
+          {selectedIds.size > 0 && (
+            <div className="sticky bottom-4 z-10 mx-auto max-w-fit">
+              <Card className="shadow-lg">
+                <CardContent className="py-3 px-4 flex items-center gap-3">
+                  <span className="text-sm font-medium">{selectedIds.size} selected</span>
+                  <Button size="sm" variant="outline" onClick={() => setSelectedIds(new Set())}>
+                    Clear
+                  </Button>
+                  {canApprove && (
+                    <Button
+                      size="sm"
+                      onClick={() => setConfirmApprove(true)}
+                      disabled={approve.isPending}
+                    >
+                      {approve.isPending ? 'Approving…' : 'Bulk Approve (Mgmt)'}
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </>
       )}
+
+      <BulkCellDrawer
+        row={activeRow}
+        viewerStage={viewerStage}
+        open={!!activeRow}
+        onOpenChange={(o) => !o && setActiveRow(null)}
+        canReopen={canReopen}
+      />
+
+      <ConfirmDestructiveDialog
+        open={confirmApprove}
+        onCancel={() => setConfirmApprove(false)}
+        onConfirm={() => { setConfirmApprove(false); handleBulkApprove(); }}
+        title={`Bulk approve ${selectedIds.size} cells?`}
+        description="Final scores will be stamped from the highest-priority completed stage (Auditor > HR PMS > Skip-Level > Manager). Per Policy §88 this is immutable except via Re-open."
+        confirmLabel="Approve"
+        isLoading={approve.isPending}
+      />
     </div>
   );
 }
