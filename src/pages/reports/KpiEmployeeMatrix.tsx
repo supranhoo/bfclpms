@@ -297,15 +297,6 @@ export default function KpiEmployeeMatrix() {
               <Switch id="hide-unmapped" checked={hideUnmapped} onCheckedChange={setHideUnmapped} />
               <Label htmlFor="hide-unmapped" className="text-xs cursor-pointer">Hide empty employees</Label>
             </div>
-
-            <div className="flex items-center gap-2 px-2">
-              <Switch
-                id="expand-all"
-                checked={expandAll}
-                onCheckedChange={(v) => { setExpandAll(v); if (v) setExpandedRows(new Set()); }}
-              />
-              <Label htmlFor="expand-all" className="text-xs cursor-pointer">Show KRA · Wt%</Label>
-            </div>
           </div>
 
           {/* Row 2: Scope filters */}
