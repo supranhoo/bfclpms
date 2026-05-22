@@ -571,7 +571,7 @@ export default function KpiEmployeeMatrix() {
                                   </span>
                                 </div>
                               </TooltipTrigger>
-                              <TooltipContent>
+                              <TooltipContent side="bottom" align="center" sideOffset={8} collisionPadding={12} className="z-50">
                                 <div className="font-medium">{emp.fullName}</div>
                                 {emp.employeeCode && (
                                   <div className="text-xs opacity-80">Code: {emp.employeeCode}</div>
