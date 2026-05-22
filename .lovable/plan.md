@@ -1,68 +1,74 @@
-## QA Pass + Smoke Test — Bulk Review Dashboard
+## Goal
 
-### Assumptions
-- `feature_bulk_review_dashboard` flag is ON for at least the logged-in admin (or admin bypass applies). If not, step 1 will surface that and we flip it before continuing.
-- Smoke test will write real rows via `bulk_write_stage_scores`. To stay safe, we scope writes to a single throwaway employee × single KPI × current period, capture the prior state, and revert after.
-- HR PMS users with `is_active = true` exist; otherwise the override-notification branch is a no-op and we'll mark that sub-check as N/A.
+Replace the bulk drawer's basic "Stage scores" strip + JSON dump with the full `KpiReviewPanel` used by "View KPI Details" — so reviewers see:
+- KPI header (category, frequency, UoM, scale thresholds)
+- Rating scale display (e.g. "5 if value = 20")
+- Per-stage cards with **Value → computed Rating** + **Evidence file links** + remarks
+- KPI history (last few months)
+- Queries / observations / timeline
 
-### Risk & Impact Report
-- **Data Impact:** Low. One cell write at `auditor` stage on one KPI for one employee in the current period, captured & reverted via a follow-up `bulk_write_stage_scores` call restoring the original value (or NULL).
-- **Workflow Impact:** None beyond that one cell; no status promotion if we keep the value identical to the existing auditor score (preferred path).
-- **UI/UX:** Read-only inspection at 1364px (current viewport). No layout or token changes.
-- **Regression Risk:** None — no code edits planned. If QA uncovers a bug, we stop and report before touching code.
-- **Scalability:** Virtualization check uses whatever dataset the current period returns; if rows < 30, we note that virtualization can't be visibly stressed and rely on the implementation review already in memory.
-- **Mitigation:** All writes idempotent and reverted; HR-PMS notification check uses `metadata->>'batch_id'` lookup so we can clean up the test notification afterward.
+…while keeping the bulk write/re-open fast-path that already lives in the drawer, and **without** pre-fetching panel data for the whole grid (preserves ADR-064 lean-load).
 
-### Plan
+## Risk & Impact
 
-```text
-1. Preview load & feature flag    →  navigate to /review/bulk-scoring, screenshot, confirm grid renders
-2. Virtualized grid sanity        →  sticky header, scroll, selection, variance badges, column count = 9
-3. Drawer + RPC happy path        →  open BulkCellDrawer on a non-empty cell, confirm read fields
-4. Smoke write (idempotent)       →  call bulk_write_stage_scores with stage=auditor, value=existing score, 1 cell
-5. HR-PMS override notification   →  inspect notifications table for type='auditor_override_of_hr' tied to batch_id
-6. Cleanup                        →  revert the cell write if value changed; delete the test notification row(s)
-7. Report                         →  list pass/fail per check, capture any console errors, update memory log
+- **Data**: no schema changes. Existing `review_submissions` already stores per-stage `*_achieved_value`, `*_rating`, `*_evidence_urls`. Extra read happens only when a row is opened.
+- **Workflow**: none. Drawer write/re-open paths unchanged.
+- **UI/UX**: drawer becomes the same rich panel reviewers know — consistent mental model. Same Sheet width (`sm:max-w-xl`) widens to `sm:max-w-[1100px]` to fit the two-column panel.
+- **Regression risk**: low. `KpiReviewPanel` is rendered read-only (no editing inside it). Bulk write button remains the only mutation path in the drawer.
+- **Scalability**: per-click RPC only — grid load is unchanged. Cell detail RPC stays cached 60 s.
+
+## Plan
+
+### 1. DB — extend `kpi_cell_detail` RPC
+Augment the existing RPC (already returns `kpi`, `submission`, `revisions`) to also return everything `KpiReviewPanel` needs for one cell:
+
+- `employee`: `id, full_name, employee_code, reporting_manager_id` + `reporting_manager_name`
+- `kpi_history`: same `kra_name + kpi_name + employee_id`, last 6 review_periods, joined with their submissions (for `KpiHistoryCard`)
+- `queries`: rows from `kpi_queries` for this `kpi_id`
+- `workflow_stages`: result of `resolve_workflow_for_employee_period(employee_id, period, year)` (already used elsewhere)
+- `org_kpi`: matching `org_kpi_values` row (entered_by_name, achieved_value, data_owner_names) when `kpi.is_org_kpi`
+
+All in one `SECURITY DEFINER` call. No new tables, no RLS changes.
+
+### 2. Hook — extend `useKpiCellDetail`
+Type the response so it returns:
+```ts
+{ kpi, submission, revisions, employee, kpi_history, queries, workflow_stages, org_kpi }
 ```
+Stay on the same 60 s `staleTime`.
 
-### UI Changes
-Not Applicable — QA only.
+### 3. Drawer — replace stage strip + JSON with `<KpiReviewPanel>`
+In `src/components/review/BulkCellDrawer.tsx`:
+- Widen the `SheetContent` to `sm:max-w-[1100px]`.
+- When `detail.data` is loaded, render `<KpiReviewPanel>` with:
+  - `kpi = detail.data.kpi`
+  - `submission = detail.data.submission`
+  - `allKpis = detail.data.kpi_history`
+  - `allSubmissions = (history submissions)`
+  - `queries = detail.data.queries`
+  - `viewLevel = viewerStage` (mapped to ViewLevel)
+  - `selectedPeriod`, `selectedYear` from row
+  - `employeeName/Code`, `workflowStages`, `orgKpi*` from the new fields
+  - **no edit callbacks** (timeline/history modals only open inline if we wire them — out of scope for v1)
+- Keep the existing "Write as Manager/Skip/HR/Auditor" form + "Re-open" block below the panel.
+- Drop the `<pre>{JSON.stringify(detail.data)}</pre>` dump and the basic stage scores grid (now redundant with `KpiJourneySection`).
+- Keep variance / final / N/A badges in the header strip.
 
-### Technical Details
-- **Tools used:** `browser--navigate_to_sandbox` → `browser--screenshot` / `browser--observe` for UI checks; `supabase--read_query` to pick a safe target cell, snapshot existing state, and verify notifications; `supabase--insert` (only if cleanup needs UPDATE/DELETE — otherwise a second `bulk_write_stage_scores` call handles revert).
-- **Target selection query (read-only preview):**
-  ```sql
-  select rh.id, rh.profile_id, rh.kpi_name, rh.period, rh.year,
-         rh.auditor_score, rh.hr_pms_score
-  from public.review_history rh
-  where rh.auditor_score is not null
-    and rh.status = 'auditor'
-    and rh.period = (select period from public.review_periods where is_current = true limit 1)
-  limit 1;
-  ```
-- **Smoke RPC call** uses identical `auditor_score` value → no state change, just exercises the write path & notification branch.
-- **Notification verification:**
-  ```sql
-  select id, user_id, type, metadata
-  from public.notifications
-  where type = 'auditor_override_of_hr'
-    and metadata->>'batch_id' = '<batch_from_rpc_response>';
-  ```
+### 4. Tests
+- Unit test `kpi_cell_detail` returns the new keys (mock kpi + submission + history rows) — extend `src/test/bulkReview/*` if present, otherwise add `src/test/bulkReview/kpiCellDetail.test.ts`.
+- Component test: render `BulkCellDrawer` with a mocked detail response and assert that `KpiReviewPanel` renders (look for a header element it owns, e.g. KPI name) and the Write form is still present.
 
-### Tests
-Not Applicable for this QA loop — option 3 (unit tests + mock data) was offered separately and not selected. If smoke test fails, I'll stop and we'll add unit tests as part of the fix.
+### 5. Docs / Policy
+- Update `mem/features/review/bulk-review-dashboard` — note that the cell drawer reuses `KpiReviewPanel` for parity with "View KPI Details", and that detail is per-click only (lean-load preserved).
+- Append POLICY.md entry under the Bulk Review section: "Bulk drawer must match View KPI Details parity — Value, computed Rating from scale, Evidence links, history, queries."
+- Add ADR-066: "Bulk Review cell drawer parity with View KPI Details" (rationale: avoid two divergent review surfaces).
 
-### DOCUMENTATION.md / POLICY.md updates
-Not Applicable — no behavior change. Memory log already reflects shipped state.
+## Out of scope (v1)
 
-### Post-implementation notes
-After the run I'll report:
-- ✅/❌ per check
-- Any console or network errors
-- Whether HR-PMS notification fired (or N/A if no active HR PMS users)
-- Confirmation that test data was reverted
+- Inline editing of org KPI values, queries, or observations from inside the bulk drawer (still done via the normal scorecard route).
+- Timeline / full-history modals inside the drawer (links can be added in a follow-up).
+- Changing the bulk grid itself.
 
-### Rollback Strategy
-No code changes → nothing to roll back. Data side: cleanup step restores the cell and deletes the test notification, both gated on the captured `batch_id`.
+## Rollback
 
-Approve to switch to build mode and execute the QA pass.
+Revert the migration (drop-and-recreate prior `kpi_cell_detail` body) and revert `BulkCellDrawer.tsx` + `useBulkReview.ts` to the previous commit. No data destroyed.
