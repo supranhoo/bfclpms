@@ -661,16 +661,26 @@ export default function KpiEmployeeMatrix() {
                                   });
                                 }}
                               >
-                                <div className="flex items-center gap-2 text-[11px] font-medium text-foreground pl-4 truncate" style={{ maxWidth: COL.sr + COL.kpi - 8 }}>
-                                  <ChevronDown
-                                    className={`h-3 w-3 transition-transform text-muted-foreground ${kraCollapsed ? '-rotate-90' : ''}`}
-                                  />
-                                  <span className="text-primary">KRA:</span>
-                                  <span className="truncate">{row.kraName}</span>
-                                  <span className="text-muted-foreground font-normal shrink-0">
-                                    · {kraCounts[kraKey]} KPI{kraCounts[kraKey] === 1 ? '' : 's'}
-                                  </span>
-                                </div>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="flex items-center gap-2 text-[11px] font-medium text-foreground pl-4 truncate" style={{ maxWidth: COL.sr + COL.kpi - 8 }}>
+                                      <ChevronDown
+                                        className={`h-3 w-3 transition-transform text-muted-foreground ${kraCollapsed ? '-rotate-90' : ''}`}
+                                      />
+                                      <span className="text-primary">KRA:</span>
+                                      <span className="truncate">{row.kraName}</span>
+                                      <span className="text-muted-foreground font-normal shrink-0">
+                                        · {kraCounts[kraKey]} KPI{kraCounts[kraKey] === 1 ? '' : 's'}
+                                      </span>
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="right" align="start" sideOffset={8} collisionPadding={12} className="max-w-md z-50">
+                                    <div className="font-medium">{row.kraName}</div>
+                                    <div className="text-xs opacity-80 mt-1">Category: {row.categoryName}</div>
+                                    <div className="text-xs opacity-80">{kraCounts[kraKey]} KPI{kraCounts[kraKey] === 1 ? '' : 's'} in this page</div>
+                                    <div className="text-[10px] opacity-60 mt-1">Click to {kraCollapsed ? 'expand' : 'collapse'}</div>
+                                  </TooltipContent>
+                                </Tooltip>
                               </td>
                             </tr>
                           );
