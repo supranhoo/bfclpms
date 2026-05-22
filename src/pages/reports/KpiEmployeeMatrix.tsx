@@ -321,16 +321,68 @@ export default function KpiEmployeeMatrix() {
 
       {/* Export */}
       <div className="flex justify-end">
-        <Button variant="outline" size="sm" onClick={exportToExcel} disabled={isLoading || !filteredRows.length}>
+        <Button variant="outline" size="sm" onClick={exportToExcel} disabled={!loaded || isLoading || !filteredRows.length}>
           <Download className="h-4 w-4 mr-1" /> Export Excel
         </Button>
       </div>
 
-      {/* Matrix Table */}
-      {isLoading ? (
+      {/* Click-to-load gate */}
+      {!loaded ? (
+        <Card>
+          <CardContent className="p-8 flex flex-col items-center gap-4 text-center">
+            {scopeLoading ? (
+              <>
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Estimating scope…</p>
+              </>
+            ) : scope && scope.employeeCount === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No employees have KPIs in <span className="font-medium">{reviewPeriod} {reviewYear}</span> for the selected filters. Adjust filters and try again.
+              </p>
+            ) : scope?.exceedsCap ? (
+              <>
+                <AlertTriangle className="h-8 w-8 text-warning" />
+                <div>
+                  <p className="font-medium">Result set too large</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    ≈ {scope.employeeCount.toLocaleString()} employees · {scope.uniqueKpiCount.toLocaleString()} KPI cells
+                    {' '}— exceeds the {MATRIX_CELL_CAP.toLocaleString()}-cell cap.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Narrow the Division / Business Unit / Department / Category to reduce scope.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <Target className="h-8 w-8 text-primary" />
+                <div>
+                  <p className="text-sm">
+                    Ready to load{' '}
+                    <span className="font-semibold">{scope?.employeeCount ?? 0}</span> employees ·{' '}
+                    <span className="font-semibold">{scope?.uniqueKpiCount ?? 0}</span> KPI cells
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {reviewPeriod} {reviewYear} — click below to fetch the full matrix.
+                  </p>
+                </div>
+                <Button onClick={() => setLoaded(true)} disabled={!scope || scope.employeeCount === 0}>
+                  <Play className="h-4 w-4 mr-1" /> Load Matrix
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      ) : isLoading || isFetching ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
+      ) : data?.exceededCap ? (
+        <Card>
+          <CardContent className="p-12 text-center text-muted-foreground">
+            Result set exceeded the {MATRIX_CELL_CAP.toLocaleString()}-cell cap. Refine your filters and reload.
+          </CardContent>
+        </Card>
       ) : !filteredRows.length ? (
         <Card>
           <CardContent className="p-12 text-center text-muted-foreground">
