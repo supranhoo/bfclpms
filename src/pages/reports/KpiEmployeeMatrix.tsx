@@ -1,15 +1,17 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
-import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Download, Search, Users, Target, AlertTriangle, BarChart3, Play, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { Loader2, Download, Search, Target, AlertTriangle, Play, ChevronLeft, ChevronRight, ChevronDown, SlidersHorizontal, EyeOff } from 'lucide-react';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { useKpiEmployeeMatrix, useKpiEmployeeMatrixScope, MATRIX_CELL_CAP, type MatrixFilters } from '@/hooks/useKpiEmployeeMatrix';
 import { useDepartments, useBusinessUnits, useKraCategories, useDivisions } from '@/hooks/useOrganization';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
@@ -26,12 +28,20 @@ const COL = {
   sr: 44,
   kpi: 360,
   cell: 64, // employee column width
-  headerH: 130,
+  headerH: 68,
   rowH: 36,
 } as const;
 const STICKY_KPI_LEFT = COL.sr;
 
 type ViewMode = 'weightage' | 'score' | 'both';
+
+// 2-letter initials from a full name
+function initialsOf(name: string): string {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 export default function KpiEmployeeMatrix() {
   const { toast } = useToast();
@@ -242,191 +252,197 @@ export default function KpiEmployeeMatrix() {
     return { totalKpis: filteredRows.length, totalEmployees: filteredEmployees.length, orphanKpis, avgKpisPerEmployee: avgKpis };
   }, [filteredRows, filteredEmployees]);
 
+  // Active filter count (drives the "Filters (n)" badge)
+  const activeFilterCount = useMemo(() => {
+    return [businessUnitId, divisionId, departmentId, categoryId, selectedCompanyId !== 'all' ? selectedCompanyId : '']
+      .filter(Boolean).length;
+  }, [businessUnitId, divisionId, departmentId, categoryId, selectedCompanyId]);
+
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="KPI-Employee Weighted Score Matrix"
-        description="Cross-tab view of KPIs vs Employees with weighted scores — useful for role planning and KPI flow analysis"
-        backTo="/reports"
-      />
-
-      {/* Filters */}
-      <Card ref={filtersRef as any}>
-        <CardContent className="p-4">
-          {/* Row 1: Primary controls (period + search + view options) */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            <Select value={reviewPeriod} onValueChange={v => handleFilterChange(setReviewPeriod, v)}>
-              <SelectTrigger><SelectValue placeholder="Month" /></SelectTrigger>
-              <SelectContent>
-                {MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-              </SelectContent>
-            </Select>
-
-            <Select value={String(reviewYear)} onValueChange={v => handleFilterChange(setReviewYear, Number(v))}>
-              <SelectTrigger><SelectValue placeholder="Year" /></SelectTrigger>
-              <SelectContent>
-                {Array.from({ length: 5 }, (_, i) => currentYear - 2 + i).map(y => (
-                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <div className="relative col-span-2">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search KPI / Employee..."
-                className="pl-8"
-                value={search}
-                onChange={e => handleFilterChange(setSearch, e.target.value)}
-              />
-            </div>
-
-            <ToggleGroup
-              type="single"
-              value={viewMode}
-              onValueChange={(v) => v && setViewMode(v as ViewMode)}
-              className="justify-start"
-              size="sm"
-            >
-              <ToggleGroupItem value="weightage" className="text-xs">Wt%</ToggleGroupItem>
-              <ToggleGroupItem value="score" className="text-xs">Score</ToggleGroupItem>
-              <ToggleGroupItem value="both" className="text-xs">Both</ToggleGroupItem>
-            </ToggleGroup>
-
-            <div className="flex items-center gap-2 px-2">
-              <Switch id="hide-unmapped" checked={hideUnmapped} onCheckedChange={setHideUnmapped} />
-              <Label htmlFor="hide-unmapped" className="text-xs cursor-pointer">Hide empty employees</Label>
-            </div>
+    <div className="space-y-3">
+      {/* ── Unified sticky toolbar ───────────────────────────────── */}
+      <div ref={filtersRef as any} className="sticky top-0 z-40 -mx-1 px-1 pt-1 pb-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70 border-b">
+        {/* Row A: title + primary controls */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 mr-auto min-w-0">
+            <Button variant="ghost" size="sm" className="h-8 px-2" asChild>
+              <a href="/reports"><ChevronLeft className="h-4 w-4" /></a>
+            </Button>
+            <h1 className="text-base font-semibold truncate">KPI-Employee Matrix</h1>
+            <Badge variant="secondary" className="text-[10px] font-normal">
+              {reviewPeriod.slice(0, 3)} {reviewYear}
+            </Badge>
           </div>
 
-          {/* Row 2: Scope filters */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mt-3 pt-3 border-t">
-            <CompanyFilter
-              companies={companies}
-              selectedCompanyId={selectedCompanyId}
-              onCompanyChange={setSelectedCompanyId}
+          <div className="relative w-[240px]">
+            <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search KPI / Employee…"
+              className="pl-7 h-8 text-xs"
+              value={search}
+              onChange={e => handleFilterChange(setSearch, e.target.value)}
             />
-
-            <Select value={divisionId || 'all'} onValueChange={v => {
-              handleFilterChange(setDivisionId, v === 'all' ? '' : v);
-              setBusinessUnitId('');
-              setDepartmentId('');
-            }}>
-              <SelectTrigger><SelectValue placeholder="Division" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Divisions</SelectItem>
-                {divisions?.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-
-            <Select value={businessUnitId || 'all'} onValueChange={v => {
-              handleFilterChange(setBusinessUnitId, v === 'all' ? '' : v);
-              setDepartmentId('');
-            }}>
-              <SelectTrigger><SelectValue placeholder="Business Unit" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Business Units</SelectItem>
-                {(divisionId ? businessUnits?.filter(bu => bu.division_id === divisionId) : businessUnits)?.map(bu => (
-                  <SelectItem key={bu.id} value={bu.id}>{bu.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={departmentId || 'all'} onValueChange={v => handleFilterChange(setDepartmentId, v === 'all' ? '' : v)}>
-              <SelectTrigger><SelectValue placeholder="Department" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Departments</SelectItem>
-                {filteredDepartments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-
-            <Select value={categoryId || 'all'} onValueChange={v => handleFilterChange(setCategoryId, v === 'all' ? '' : v)}>
-              <SelectTrigger><SelectValue placeholder="Category" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
-                {categories?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <Target className="h-8 w-8 text-primary" />
-            <div>
-              <p className="text-2xl font-bold">{summary.totalKpis}</p>
-              <p className="text-xs text-muted-foreground">Unique KPIs</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <Users className="h-8 w-8 text-primary/70" />
-            <div>
-              <p className="text-2xl font-bold">{summary.totalEmployees}</p>
-              <p className="text-xs text-muted-foreground">Employees</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <BarChart3 className="h-8 w-8 text-accent-foreground" />
-            <div>
-              <p className="text-2xl font-bold">{summary.avgKpisPerEmployee}</p>
-              <p className="text-xs text-muted-foreground">Avg KPIs / Employee</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <AlertTriangle className="h-8 w-8 text-warning" />
-            <div>
-              <p className="text-2xl font-bold">{summary.orphanKpis}</p>
-              <p className="text-xs text-muted-foreground">Orphan KPIs</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          <ToggleGroup
+            type="single"
+            value={viewMode}
+            onValueChange={(v) => v && setViewMode(v as ViewMode)}
+            size="sm"
+            className="h-8"
+          >
+            <ToggleGroupItem value="weightage" className="h-8 px-2 text-xs">Wt%</ToggleGroupItem>
+            <ToggleGroupItem value="score" className="h-8 px-2 text-xs">Score</ToggleGroupItem>
+            <ToggleGroupItem value="both" className="h-8 px-2 text-xs">Both</ToggleGroupItem>
+          </ToggleGroup>
 
-      {/* Employee paging + Export */}
-      {loaded && !!filteredRows.length && (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span>
-              Employees{' '}
-              <span className="font-medium text-foreground">
-                {visibleEmployees.length === 0 ? 0 : empStart + 1}–{empEnd}
-              </span>{' '}
-              of <span className="font-medium text-foreground">{visibleEmployees.length}</span>
-              {hideUnmapped && filteredEmployees.length !== visibleEmployees.length && (
-                <span className="ml-1 text-xs">({filteredEmployees.length - visibleEmployees.length} hidden)</span>
-              )}
-            </span>
-            <Button
-              variant="outline" size="icon" className="h-7 w-7"
-              disabled={empPage === 0}
-              onClick={() => setEmpPage(p => Math.max(0, p - 1))}
-            ><ChevronLeft className="h-4 w-4" /></Button>
-            <Button
-              variant="outline" size="icon" className="h-7 w-7"
-              disabled={empPage >= empTotalPages - 1}
-              onClick={() => setEmpPage(p => Math.min(empTotalPages - 1, p + 1))}
-            ><ChevronRight className="h-4 w-4" /></Button>
-            <Select value={String(empPageSize)} onValueChange={(v) => setEmpPageSize(Number(v))}>
-              <SelectTrigger className="h-7 w-[80px] text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {EMP_PAGE_OPTIONS.map(n => <SelectItem key={n} value={String(n)}>{n}/page</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <Button variant="outline" size="sm" onClick={exportToExcel} disabled={!loaded || isLoading || !filteredRows.length}>
-            <Download className="h-4 w-4 mr-1" /> Export Excel
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={hideUnmapped ? 'secondary' : 'ghost'}
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setHideUnmapped(v => !v)}
+                  aria-label="Hide empty employees"
+                >
+                  <EyeOff className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{hideUnmapped ? 'Showing only mapped employees' : 'Showing all employees'}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 gap-1.5">
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <Badge variant="default" className="ml-0.5 h-4 px-1 text-[10px]">{activeFilterCount}</Badge>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-[480px] p-3">
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Month</Label>
+                  <Select value={reviewPeriod} onValueChange={v => handleFilterChange(setReviewPeriod, v)}>
+                    <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Year</Label>
+                  <Select value={String(reviewYear)} onValueChange={v => handleFilterChange(setReviewYear, Number(v))}>
+                    <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 5 }, (_, i) => currentYear - 2 + i).map(y => (
+                        <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Company</Label>
+                  <div className="mt-1">
+                    <CompanyFilter
+                      companies={companies}
+                      selectedCompanyId={selectedCompanyId}
+                      onCompanyChange={setSelectedCompanyId}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Division</Label>
+                  <Select value={divisionId || 'all'} onValueChange={v => {
+                    handleFilterChange(setDivisionId, v === 'all' ? '' : v);
+                    setBusinessUnitId(''); setDepartmentId('');
+                  }}>
+                    <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Division" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Divisions</SelectItem>
+                      {divisions?.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Business Unit</Label>
+                  <Select value={businessUnitId || 'all'} onValueChange={v => {
+                    handleFilterChange(setBusinessUnitId, v === 'all' ? '' : v); setDepartmentId('');
+                  }}>
+                    <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Business Unit" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Business Units</SelectItem>
+                      {(divisionId ? businessUnits?.filter(bu => bu.division_id === divisionId) : businessUnits)?.map(bu => (
+                        <SelectItem key={bu.id} value={bu.id}>{bu.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Department</Label>
+                  <Select value={departmentId || 'all'} onValueChange={v => handleFilterChange(setDepartmentId, v === 'all' ? '' : v)}>
+                    <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Department" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Departments</SelectItem>
+                      {filteredDepartments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Category</Label>
+                  <Select value={categoryId || 'all'} onValueChange={v => handleFilterChange(setCategoryId, v === 'all' ? '' : v)}>
+                    <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Category" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Categories</SelectItem>
+                      {categories?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          <Button variant="outline" size="sm" className="h-8" onClick={exportToExcel} disabled={!loaded || isLoading || !filteredRows.length}>
+            <Download className="h-3.5 w-3.5 mr-1" /> Export
           </Button>
         </div>
-      )}
+
+        {/* Row B: inline stats + employee pager (only after load) */}
+        {loaded && !!filteredRows.length && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <span><span className="font-semibold text-foreground tabular-nums">{summary.totalKpis}</span> KPIs</span>
+            <span className="text-muted-foreground/40">·</span>
+            <span><span className="font-semibold text-foreground tabular-nums">{summary.totalEmployees}</span> employees</span>
+            <span className="text-muted-foreground/40">·</span>
+            <span><span className="font-semibold text-foreground tabular-nums">{summary.avgKpisPerEmployee}</span> avg KPIs/emp</span>
+            {summary.orphanKpis > 0 && (
+              <>
+                <span className="text-muted-foreground/40">·</span>
+                <span className="text-warning"><AlertTriangle className="inline h-3 w-3 mr-0.5" /><span className="font-semibold tabular-nums">{summary.orphanKpis}</span> orphan</span>
+              </>
+            )}
+            <div className="ml-auto flex items-center gap-1.5">
+              <span>
+                Emp <span className="font-medium text-foreground tabular-nums">{visibleEmployees.length === 0 ? 0 : empStart + 1}–{empEnd}</span> / <span className="tabular-nums">{visibleEmployees.length}</span>
+              </span>
+              <Button variant="outline" size="icon" className="h-6 w-6" disabled={empPage === 0} onClick={() => setEmpPage(p => Math.max(0, p - 1))}>
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </Button>
+              <Button variant="outline" size="icon" className="h-6 w-6" disabled={empPage >= empTotalPages - 1} onClick={() => setEmpPage(p => Math.min(empTotalPages - 1, p + 1))}>
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+              <Select value={String(empPageSize)} onValueChange={(v) => setEmpPageSize(Number(v))}>
+                <SelectTrigger className="h-6 w-[72px] text-[11px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {EMP_PAGE_OPTIONS.map(n => <SelectItem key={n} value={String(n)}>{n}/page</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Click-to-load gate */}
       {!loaded ? (
@@ -525,24 +541,30 @@ export default function KpiEmployeeMatrix() {
                           >
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <div className="h-full flex items-end justify-center pb-2 pr-1 cursor-default">
-                                  <div
-                                    style={{
-                                      transform: 'rotate(-35deg)',
-                                      transformOrigin: 'left bottom',
-                                      whiteSpace: 'nowrap',
-                                      width: 0,
-                                    }}
-                                    className="font-medium text-foreground text-[11px]"
-                                  >
-                                    {emp.fullName}
-                                  </div>
+                                <div className="h-full flex flex-col items-center justify-end gap-1 pb-1.5 px-0.5 cursor-default">
+                                  <Avatar className="h-7 w-7">
+                                    <AvatarFallback className="text-[10px] font-semibold bg-primary/10 text-primary">
+                                      {initialsOf(emp.fullName)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span className="text-[9px] font-medium text-muted-foreground tabular-nums leading-none truncate max-w-full">
+                                    {emp.employeeCode || '—'}
+                                  </span>
                                 </div>
                               </TooltipTrigger>
                               <TooltipContent>
                                 <div className="font-medium">{emp.fullName}</div>
+                                {emp.employeeCode && (
+                                  <div className="text-xs opacity-80">Code: {emp.employeeCode}</div>
+                                )}
                                 {emp.departmentName && (
                                   <div className="text-xs opacity-80">{emp.departmentName}</div>
+                                )}
+                                {emp.designationName && (
+                                  <div className="text-xs opacity-80">{emp.designationName}</div>
+                                )}
+                                {emp.gradeName && (
+                                  <div className="text-xs opacity-80">Grade: {emp.gradeName}</div>
                                 )}
                               </TooltipContent>
                             </Tooltip>
