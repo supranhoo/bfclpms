@@ -1,234 +1,276 @@
-# PRD: Bulk Scoring Dashboard (Group-Based KPI Scoring)
-**Version:** 1.1 — Full-page dashboard, click-to-load
-**Supersedes:** v1.0 (modal/grid concept)
-**Status:** Awaiting stakeholder sign-off
-**Owner:** PMS Product
+# PRD: Bulk Review Dashboard (Parallel-Stage Review) — ADDITIVE
+Version: 2.0
+Supersedes: v1.1 (sequential group-scoring)
+Status: Awaiting stakeholder sign-off
+Owner: PMS Product
+Last updated: 2026-05-22
 
----
+## §0 Non-Regression Contract
+
+This release is **additive only**. Sign-off is conditional on:
+
+1. **No legacy route is removed or redirected** in Phase 1.
+   - `/review/team`, `/review/auditor`, `/review/hr-pms`, `/review/management`, `/admin/*`, `/reports/*` stay byte-identical.
+   - The new dashboard lives at the **new** path `/review/bulk-scoring`. It is reachable only via a new sidebar entry "Bulk Review (Beta)" gated by an Admin flag.
+2. **No existing table column is renamed, retyped, or dropped.** Schema changes are strictly `ADD COLUMN … NOT NULL DEFAULT …` or new tables. Triggers are additive; existing triggers are not modified.
+3. **No existing RPC signature is altered.** New behaviour ships as new RPCs (`bulk_*`). Where an existing function must learn a new mode (e.g. `propagate_org_kpi_value`), we ship a **new overload** with an extra param and leave the old signature untouched.
+4. **No existing RLS policy is widened or removed.** New RLS is added only on new tables / new columns. RPCs use `SECURITY DEFINER` with internal role checks; underlying tables stay locked down.
+5. **No write goes through a code path the legacy UI does not already use**, except through the three new `bulk_*` RPCs. Edits made via the legacy per-employee scorecard remain the source-of-truth path and continue to work whether or not the dashboard exists.
+6. **No notification template, email subject, or inbox row format used by legacy flows is changed.** Bulk batches use new templates; legacy single-cell flows stay on existing ones.
+7. **Backup / restore coverage is automatic** for new tables via `get_backup_table_order()` — no allow-list edit (Core rule).
+8. **Feature flag `feature_bulk_review_dashboard` defaults to `false`** at go-live for every tenant. Admin must explicitly enable. When `false`, no new RPCs are callable from the UI and the sidebar entry is hidden.
+9. **Parallel review semantics are gated on the same flag.** With the flag off, the existing sequential stage progression (`status` = last completed stage, sequential reviewer order) is unchanged.
+10. **POLICY §88 (Submission Snapshot Immutability) is preserved.** Post-approval re-open is a new, explicit, audited operation requiring a `final_score_revisions` row — it does NOT silently mutate any historical submission. With the flag off, re-open is unreachable.
+11. **Regression test gate:** the existing test suites for Team Reviews, Auditor flow, HR PMS flow, Management approval, Org KPI propagation, Rollback Requests, Self-Review recall, Notification Engine, and Backup/Restore must pass unchanged. Build will fail if any legacy snapshot test changes output.
+12. **Rollback path:** disable the flag → dashboard hides → legacy flows continue unaffected. No data needs to be unwound; new columns retain their defaults; new tables remain empty or untouched.
+
+Any change request that violates §0 must be rejected at PR review.
 
 ## 1. Problem
-Reviewers of large departments (100+ employees, 30–40 shared KPIs) perform 3,000–4,000 individual cell scorings per cycle. ~60% of KPIs are structurally identical across the dept (org/department KPIs), yet each is scored individually, causing:
-- Manager-stage review time: ~90 min/dept/cycle
-- Same-KPI score variance σ ≈ 0.6 (drift)
-- Frequent "missed employee" rework
-- Cloud compute strain from N+1 client fetches
+- Reviewers (Manager, Skip, HR PMS, Auditor, Management) currently process KPIs sequentially. Wall-clock per cycle ≈ 21 days with 5–7 idle days per stage.
+- Same KPI is scored 4× independently with σ ≈ 0.6 drift across stages.
+- Post-approval findings have no formal in-system path; teams use Rollback Requests which clear downstream stages — destructive.
+- Large departments (100+ emp × 30–40 KPI) consume 90 min per stage per dept.
 
-## 2. Objectives & Success Metrics
-| Metric | Today | Target |
-|---|---|---|
-| Manager-stage time per dept | ~90 min | ≤ 15 min (−83%) |
-| Same-KPI cross-emp variance | σ ≈ 0.6 | ≤ 0.1 |
-| Cells written per click | 1 | 1–N (audited batch) |
-| First paint (bulk page) | n/a | < 400 ms |
-| POLICY §88 regressions | 0 | 0 (hard guard) |
-| Audit-trail completeness | 100% | 100% (batch-linked) |
+## 2. Success Metrics (no regression to legacy metrics)
+| Metric | Today | Target (new dashboard usage) | Legacy guard |
+|---|---|---|---|
+| Cycle wall-clock (Self → Final) | 21 d | ≤ 10 d | Legacy ≥ today |
+| Idle days per stage | 5–7 | ≤ 1 | Legacy unchanged |
+| Stage-time per dept | 90 min | ≤ 15 min | Legacy unchanged |
+| Same-KPI σ across stages | 0.6 | ≤ 0.15 | Reported, not enforced |
+| Post-approval findings inside system | 0% | 100% via revisions | Rollback Requests still work |
+| POLICY §88 regressions | 0 | 0 (hard guard) | Hard guard |
+| Audit-trail completeness | 100% | 100% batch-linked | 100% |
 
 ## 3. Scope
-**In:** Reviewer-stage bulk scoring (Self, Manager, Skip, HR PMS, Auditor, Management), full-page dashboard, KPI-group taxonomy, click-gated load, per-cell override, batch audit.
-**Out (Phase 1):** Cross-department groups, AI suggestions (slot reserved), historical migration (forward-only), self-review bulk, Daily-frequency KPIs (E12).
+**In Phase 1 (flag-gated, additive)**
+- New page `/review/bulk-scoring` with full-page dashboard, click-gated load, 25 k cell cap, virtualized grid.
+- Parallel reviewer stages after Self gate (Manager, Skip, HR PMS, Auditor) — resolved per employee's `workflow_config` via `get_employee_workflow`.
+- Auditor → HR PMS supremacy (Auditor may override HR PMS score on the same KPI; HR PMS may not overwrite Auditor).
+- Management Final Approve anytime after Self.
+- Post-approval re-open by Admin (always) or Management (flag) — explicit, audited, revision-row.
+- New sidebar entry "Bulk Review (Beta)" behind Admin flag.
 
----
+**Out (Phase 2+)**
+- Cross-dept groups, AI suggestions, Daily-frequency bulk, Self-Review bulk entry, mobile bulk view, deprecation of legacy reviewer grids.
 
-## 4. North-Star UX — Full-Page Dashboard at `/review/bulk-scoring`
+## 4. Workflow Model (only active when flag = ON)
 
-Opens **empty**: filter shell + summary skeletons only. No DB queries until the reviewer clicks **Load Scope**.
+### 4.1 State machine
+```text
+draft / kra_set
+      │ Self submit (employee OR Org KPI Data Entry)
+      ▼
+self_submitted  ── GATE ──────────────────────────────────────
+      │ unlock every stage in this employee's workflow_config
+   ┌──┴────┬────────┬────────┐
+   ▼       ▼        ▼        ▼
+manager  skip    hr_pms   auditor          (run in any order, any time)
+                    ▲────── overridden_by ─┤
+                                           ▼
+                              management_approved (anytime after self)
+                                           │ Admin / Mgmt(flag) reopen
+                                           ▼
+                              reopened (rev N) ──► management_approved (rev N+1)
+```
+
+### 4.2 Per-employee stage set
+Resolved via `get_employee_workflow(emp_id, period, year)`. Templates like `self_l1_audit`, `self_hr_pms`, `self_audit_mgmt`, etc. each project a different parallel set. **No hardcoded stage array.**
+
+### 4.3 Auditor > HR PMS rule
+- HR PMS may set `hr_pms_score` only when `auditor_score IS NULL`.
+- Auditor may always set `auditor_score`, AND may set `hr_pms_score` on the same cell with `is_auditor_override_of_hr = true`.
+- Universal 8-Stage Fallback already prefers Auditor > HR PMS, so display is correct without extra logic.
+
+### 4.4 Management Final Approve
+- Enabled cell-by-cell or row-by-row as long as `self_submitted = true`.
+- On approve: stamp `final_score` from the highest-priority completed stage; non-acted reviewer stages get an audit row `skipped_by_management = true` (not a fake score).
+- Bulk-approve uses `ConfirmDestructiveDialog`.
+
+### 4.5 Post-approval re-open (NEW)
+- Triggers: Admin role, OR Management with `mgmt_can_reopen = true`.
+- Flow: reason required → choose stages to unlock → cell re-opens → on next approval, insert a `final_score_revisions` row (delta, before/after, reason, batch_id) and bump `final_revision_no`.
+- Prior `final_score` is **never deleted**; the revision supersedes via `revision_no`.
+- 4-eyes rule for Management: re-opener ≠ next approver. Admin bypasses 4-eyes (audited).
+- Notification: inbox + email to employee, manager, original approver.
+
+## 5. UX — Full-Page Dashboard at `/review/bulk-scoring`
+
+Opens empty: filter shell + skeletons. No DB reads until **Load Scope** click.
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────┐
-│ Bulk Scoring Dashboard                            [Period: Apr-2026 ▾]  │
+│ Bulk Review Dashboard (Beta)         [Period Apr-2026 ▾]  [My Stage ▾] │
 ├──────────────────────────────────────────────────────────────────────────┤
-│ Scope:  [Company▾][Division▾][BU▾][Dept▾][Manager▾][KPI Group▾]         │
-│ Stage:  ( ) Self  (•) Manager  ( ) Skip  ( ) HR  ( ) Auditor            │
-│ Filters:[Pending only ▢] [Hide N/A ▢] [Hide approved ▢]  [Load Scope ▶] │
+│ Scope: [Company▾][Division▾][BU▾][Dept▾][Manager▾][KPI Group▾][Tpl▾]   │
+│ Filters:[Pending mine▢][Hide N/A▢][Hide approved▢][Variance>0.5▢] [▶]  │
 ├──────────────────────────────────────────────────────────────────────────┤
-│ Preview (auto, lightweight):                                            │
-│ Employees: 142  |  KPIs: 38  |  Cells: 5,396  |  Est: 0.4 MB  |  OK ✓   │
+│ Stage progress strip (parallel-aware):                                  │
+│ Self ████████ 142/142 │ Mgr ██░ 60/142 │ Skip ███ 80/142                │
+│ HR PMS ████ 110/142 │ Auditor ██ 55/142 │ Mgmt ░░ 12/142                │
 ├──────────────────────────────────────────────────────────────────────────┤
-│ KPI metric cards (after Load):                                          │
-│ [Pending 1,204] [In progress 312] [Approved 3,880] [SLA breach 18]      │
+│ Tiles: [Pending mine 480][Variance 32][Awaiting Mgmt 312][SLA 8]        │
 ├──────────────────────────────────────────────────────────────────────────┤
-│ Bulk Scoring Grid (virtualized rows × cols):                            │
-│             E1   E2   E3   ... E142    [Apply to All Row ▼] [Send Back] │
-│  KPI-1 ▢    —    —    —                                                 │
-│  KPI-2 ▢    3    —    4                                                 │
-│  ...                                                                     │
+│ Grid (virtualized rows×cols). Cell shows viewer-stage score; hover =    │
+│ chip strip "Self 3 · Mgr 3 · HR 2 · Aud 3 · Mgmt –" with names+times.   │
+│ Variance badge if max-min completed > 1.0.                              │
+│ [Apply to row ▼] [Send back] [Bulk approve]  (role-gated)               │
 ├──────────────────────────────────────────────────────────────────────────┤
-│ Side drawer (click cell): KPI history · Evidence · Audit · Observations │
+│ Drawer (cell click): KPI history · all stage scores · evidence ·        │
+│ observations · audit log · revisions · Re-open (if approved & allowed)  │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 4.1 Empty-state copy
-> "Select Company / BU / Department and a Stage, then click **Load Scope**. Nothing is fetched until you do — keeping your dashboard fast."
+Empty-state copy: "Pick a scope and click **Load Scope**. Nothing is fetched until you do — your dashboard stays fast and Cloud-friendly."
 
----
+## 6. Click-to-Load Architecture
 
-## 5. Click-to-Load Architecture (Cost & Speed Control)
-
-| Stage | Trigger | What loads | Budget |
+| Tier | Trigger | RPC | Budget |
 |---|---|---|---|
-| T0 Shell | Page mount | Filter options only (cached) | <400 ms paint, 0 row reads |
-| T1 Preview | Filter change | `bulk_scope_preview(filters)` returns counts + est_payload_kb | <80 ms p95 |
-| T2 Load Scope | **Button click** | `bulk_scoring_snapshot(filters, page=0, size=200)` — slim columns, server-projected | <900 ms p95 |
-| T3 Drill | Cell click | `kpi_cell_detail(kpi_id, emp_id)` | <250 ms |
-| T4 Write | Save | `propagate_org_kpi_value(..., stage)` or `bulk_advance_workflow_stage` | <1.2 s for 100 cells |
+| T0 | Page mount | filter options cache | < 400 ms paint |
+| T1 | Filter change | `bulk_scope_preview` | < 80 ms p95 |
+| T2 | Load Scope click | `bulk_review_snapshot` | < 900 ms p95 |
+| T3 | Cell click | `kpi_cell_detail` | < 250 ms |
+| T4 | Write | `bulk_write_stage_scores` / `bulk_management_approve` / `bulk_reopen_cells` | < 1.2 s / 100 cells |
 
-### 5.1 Hard guardrails
-- **Cell cap:** `emp_count × kpi_count > 25,000` OR `est_payload_kb > 5 MB` → Load button disabled with: "Narrow scope (max 25,000 cells per load)."
-- **Stale-while-revalidate:** React Query keyed by `(filters, period)` 5 min; switching filters and back does not refetch.
-- **No realtime subscriptions** on this page. A manual "Refresh" pill triggers re-snapshot (POLICY §120 §5).
-- **Pagination:** Snapshot returns pages of 200 KPI-rows; lazy-load on grid scroll.
+Guardrails: 25 k cell cap, 5 MB payload, SWR 5 min, no realtime, manual Refresh pill.
 
-### 5.2 Why this reduces Cloud compute
-- Filter cascades stay client-side until commit. No speculative reads.
-- Single snapshot RPC replaces today's N+1 pattern in `useKpiEmployeeMatrix`.
-- Server-side projection (~80 B/row) vs full-join payload (~600 B/row).
-- Row+col virtualization keeps DOM <1.5k nodes for any scope.
+## 7. Data Model (strictly additive)
 
----
-
-## 6. Performance Budget
-
-| Metric | Target | Mechanism |
-|---|---|---|
-| First paint | <400 ms | Shell-only, no queries |
-| Scope preview | <80 ms p95 | Index-only count RPC |
-| Snapshot (200×30) | <900 ms p95 | Server RPC, slim, gzip |
-| Scroll | 60 fps | `@tanstack/react-virtual` |
-| Save (100 cells) | <1.2 s | Single tx RPC |
-| Heap | <120 MB | Page eviction |
-
----
-
-## 7. Page Anatomy (Reuse First)
-
-| Section | Reuse | New |
-|---|---|---|
-| Period selector | `usePeriodSelector` | — |
-| Filter strip | `OrgFilterCombobox`, `useKpiFilters`, `CompanyFilter` | `BulkScopeBar` |
-| Preview metrics | `Card`, `Skeleton` | `ScopePreviewRow` |
-| Grid | virt patterns from `KpiWeightageDashboard` | `BulkScoringGrid` |
-| Cell editor | `ScoreInputCell` (UnifiedScorecard) | `BulkCellEditor` ("Apply to row") |
-| Confirm | `ConfirmDestructiveDialog` | — |
-| Send-back | `SendBackDialog` | — |
-| Drawer | `Sheet` | `KpiCellDrawer` |
-
----
-
-## 8. Data Model & RPC Contract
-
-### 8.1 Schema additions
 ```sql
--- kpis
 ALTER TABLE kpis ADD COLUMN kpi_group_type TEXT NOT NULL DEFAULT 'individual'
   CHECK (kpi_group_type IN ('individual','departmental','org'));
 
--- review_submissions
 ALTER TABLE review_submissions
   ADD COLUMN is_group_override BOOLEAN NOT NULL DEFAULT false,
   ADD COLUMN group_write_batch_id UUID NULL,
-  ADD COLUMN kpi_group_type TEXT NULL;
+  ADD COLUMN is_auditor_override_of_hr BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN skipped_by_management JSONB NULL,
+  ADD COLUMN final_revision_no INT NOT NULL DEFAULT 0;
 
--- New batch ledger
-CREATE TABLE bulk_score_batches (
+CREATE TABLE bulk_review_batches (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  performed_by UUID NULL,   -- NULL for system (System Performer Attribution)
+  performed_by UUID NULL,
   stage TEXT NOT NULL,
   scope_filters JSONB NOT NULL,
   affected_count INT NOT NULL,
-  skipped JSONB NOT NULL,   -- {not_in_kra_set, reviewer_locked, no_target_rows, approved, na, sent_back}
+  skipped JSONB NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-```
-Auto-included in `get_backup_table_order()` — no allow-list edits.
 
-### 8.2 RPCs (all `SECURITY DEFINER`, role-checked, POLICY §88 enforced)
+CREATE TABLE final_score_revisions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  submission_id UUID NOT NULL REFERENCES review_submissions(id),
+  revision_no INT NOT NULL,
+  prev_final_score NUMERIC NULL,
+  new_final_score NUMERIC NULL,
+  reason TEXT NOT NULL,
+  reopened_stages TEXT[] NOT NULL,
+  performed_by UUID NULL,
+  batch_id UUID NULL REFERENCES bulk_review_batches(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(submission_id, revision_no)
+);
+
+INSERT INTO admin_feature_flags(key, value)
+  VALUES ('feature_bulk_review_dashboard', 'false')
+  ON CONFLICT DO NOTHING;
+```
+
+**No existing column is altered. No existing RPC signature changes.** Where `propagate_org_kpi_value` needs a `p_stage` argument, ship a new overload (Postgres function overloading), leaving the old signature in place.
+
+## 8. RPCs (all new, `SECURITY DEFINER`, role-checked)
+
 ```sql
-bulk_scope_preview(p_period TEXT, p_year INT, p_filters JSONB)
-  RETURNS TABLE(emp_count INT, kpi_count INT, pending_cells INT, est_payload_kb INT);
+bulk_scope_preview(p_period, p_year, p_filters)
+  RETURNS (emp_count, kpi_count, pending_by_stage JSONB, est_payload_kb);
 
-bulk_scoring_snapshot(p_period TEXT, p_year INT, p_stage TEXT,
-                      p_filters JSONB, p_page INT, p_page_size INT DEFAULT 200)
-  RETURNS JSONB;  -- {rows:[{kpi, weightage, cells:[{emp_id, score, status, is_na, final_locked}]}], total_rows, total_emps}
+bulk_review_snapshot(p_period, p_year, p_viewer_stage, p_filters, p_page, p_page_size DEFAULT 200)
+  RETURNS JSONB;
 
-propagate_org_kpi_value(... , p_stage TEXT);      -- extended from existing
-bulk_advance_workflow_stage(emp_ids UUID[], p_stage TEXT, p_period TEXT, p_year INT);
-kpi_cell_detail(p_kpi_id UUID, p_emp_id UUID) RETURNS JSONB;
+bulk_write_stage_scores(p_stage, p_cells JSONB, p_batch_reason TEXT)
+  -- require self_submitted = true
+  -- stage='hr_pms' AND auditor_score IS NOT NULL → reject row
+  -- POLICY §88: final_score IS NOT NULL → skip unless reopen ticket present
+
+bulk_management_approve(p_cells JSONB, p_batch_reason TEXT)
+  -- Stamps final_score, audits skipped_by_management for non-acted stages
+  -- require self_submitted = true
+
+bulk_reopen_cells(p_cells JSONB, p_stages_to_unlock TEXT[], p_reason TEXT)
+  -- Admin or Management(reopen). Inserts final_score_revisions row,
+  -- bumps final_revision_no, NULLs final_score, unlocks chosen stages,
+  -- audits as REOPEN_FINAL_SCORE. 4-eyes guard enforced.
+
+kpi_cell_detail(p_kpi_id, p_emp_id) RETURNS JSONB;
 ```
 
-### 8.3 Write semantics
-- Batch UPSERT; rows with `final_score IS NOT NULL` are **skipped** (POLICY §88), counted in `skipped.approved`.
-- Each write stamps `group_write_batch_id`; cell edits after batch flip `is_group_override=true`.
-- "Reset to group" reverts a cell to latest batch value, clears flag.
-- One inbox notification per recipient per `group_write_batch_id` (no storm).
-
----
+All RPCs short-circuit with `RAISE EXCEPTION 'feature disabled'` when `feature_bulk_review_dashboard = false`. Defence-in-depth even if the UI accidentally exposes the route.
 
 ## 9. Roles & Permissions
-| Role | Reads | Writes |
-|---|---|---|
-| Employee | self only — page hidden | — |
-| Manager | direct reports | their reviewer stage |
-| Skip-Level | indirect reports | skip stage |
-| HR PMS | org-wide | HR stage |
-| Auditor | assigned KPIs (Auditor Access Expansion) | audit stage |
-| Management | org-wide | management stage |
-| Admin | all | all stages |
-RLS enforced inside each RPC; reviewer's own profile excluded from grid (Reviewer Self-Exclusion).
-
----
+| Role | Read | Write | Re-open |
+|---|---|---|---|
+| Employee | self only — dashboard hidden | Self only | No |
+| Manager | direct reports | `manager` | No |
+| Skip-Level | indirect reports | `skip` | No |
+| HR PMS | org-wide | `hr_pms` (blocked if `auditor_score IS NOT NULL`) | No |
+| Auditor | assigned KPIs (Auditor Access Expansion) | `auditor` + override of `hr_pms` | No |
+| Management | org-wide | `management` (Final Approve anytime) | Flag |
+| Admin | all | all | Always |
 
 ## 10. Edge Cases
 | # | Case | Handling |
 |---|---|---|
-| E1 | Mixed-frequency group | Off-cycle KPIs auto-N/A, included in row but disabled |
-| E2 | Late joiner mid-cycle | Appears in next preview; batch write skips with reason `no_target_rows` |
+| E1 | Mixed-frequency group | Off-cycle KPIs auto-N/A, disabled |
+| E2 | Late joiner | Skipped with `no_target_rows`; next period |
 | E3 | Inactive employee | Excluded (Core rule) |
-| E4 | Mid-cycle weightage change | Locked period bypass per KPI Weightage Dashboard |
-| E5 | Override then re-apply group | Override preserved unless "Reset to group" clicked |
-| E6 | Cross-dept employee | Filtered out unless dept matches; surfaced in preview as `excluded_count` |
-| E7 | POLICY §88 finalized cell | Skipped, counted, never overwritten |
-| E8 | Sent-back KPI | Visible but read-only with badge (Governance Bypass Exceptions) |
-| E9 | Concurrent reviewers | Snapshot includes `version`; write rejects on stale version |
-| E10 | Empty scope after filters | Banner "No KPIs match this scope" |
-| E11 | Exceeds cell cap | Load disabled with guidance to narrow |
-| E12 | Daily-frequency KPI | Excluded from grid; drawer link to per-employee daily entry |
-
----
+| E4 | Mid-cycle weightage change | Locked-period bypass (KPI Weightage Dashboard) |
+| E5 | Override then re-apply group | Override preserved unless Reset to group |
+| E6 | Cross-dept employee | Filtered; surfaced as `excluded_count` |
+| E7 | POLICY §88 finalized cell | Skipped unless reopen ticket present |
+| E8 | Sent-back KPI | Read-only badge (Governance Bypass Exceptions) |
+| E9 | Concurrent writers | `row_version` check; stale → reject |
+| E10 | Empty scope | Banner "No KPIs match" |
+| E11 | Cell cap exceeded | Load disabled with guidance |
+| E12 | Daily-frequency KPI | Excluded; drawer link to daily entry |
+| E13 | Self-Review not submitted | All cells visible; stage writes rejected ("Self pending") |
+| E14 | HR PMS tries to write after Auditor | Rejected ("Auditor finalized; ask Auditor to amend") |
+| E15 | Mgmt approves with no reviewer scores | Allowed; `final_score = self_score`; audited |
+| E16 | Re-open then no new approval before period close | Auto-revert to prior `final_score` at lock; revision marked `auto_reverted=true` |
+| E17 | Re-opener = approver | Blocked for Management (4-eyes); Admin allowed (audited) |
+| E18 | Bulk notification storm | One inbox row per recipient per `batch_id` |
+| E19 | Multi-period aggregation | Read-only (Multi-Period Aggregation policy) |
+| E20 | Admin disables flag mid-cycle | Dashboard hides; in-flight RPC calls reject; legacy flows unaffected |
+| E21 | User opens dashboard while flag is off | Route shows "Bulk Review is disabled by your administrator" — no RPCs called |
 
 ## 11. Risks & Mitigation
 | Risk | Mitigation |
 |---|---|
-| Loss of individual accountability | `is_group_override` flag + per-cell audit + admin-set `kpi_group_type` default `individual` |
-| Cloud CPU spike | Click-gated load, server projection, 25k-cell cap, no realtime |
-| POLICY §88 regression | RPC-layer skip + unit test asserting `final_locked` rows untouched |
-| Reviewer over-applies "Apply to row" | `ConfirmDestructiveDialog` with affected-count + batch-id audit + Reset to group |
-| Cache staleness | "Refresh" pill + 5-min SWR |
-| Notification storm | Batched by `group_write_batch_id` — one inbox row/recipient/batch |
-| Over-generalization | Auto-detect ≥70% dept overlap is **advisory only**, never auto-writes `kpi_group_type` |
+| Loss of accountability under parallelism | Per-stage rows + audit + variance badge |
+| Mgmt approves before others see KPI | `skipped_by_management` audit + inbox to Manager/HR/Auditor |
+| Re-open abused | 4-eyes + reason + immutable revision row + weekly Admin report |
+| Auditor overrides HR PMS unfairly | UI badge + inbox to HR PMS + Observation thread |
+| RPC complexity | Only 3 write RPCs; unit tests per gate |
+| Cache staleness | `row_version` + 5 min SWR + Refresh pill |
+| RLS recursion | SECURITY DEFINER helpers per RLS Recursion Management memory |
+| Backup gap | Auto via `get_backup_table_order()` |
+| Legacy drift | §0 contract + regression test gate |
+| Flag accidentally enabled | Default `false`; flag flip audited; tenant-scoped |
 
----
+## 12. Reuse Map
+Reuses (OrgFilterCombobox, ConfirmDestructiveDialog, SendBackDialog, Sheet, Skeleton, `@tanstack/react-virtual`, Notification Engine), `get_employee_workflow`, `final-score-governance-and-immutability` memory (extended), `kpi-audit-logs-canonical` (new action types: `BULK_STAGE_WRITE`, `BULK_MGMT_APPROVE`, `REOPEN_FINAL_SCORE`, `AUDITOR_OVERRIDE_HR_PMS`), `incentive-score-revisions` pattern for `final_score_revisions`.
 
-## 12. Future Enhancement Slots (built-in seams)
-1. **AI Score Suggestions** — Lovable AI Gateway (`google/gemini-2.5-flash`), last 3 cycles context. Flag `feature_ai_bulk_suggest`.
-2. **Saved Scopes** — `bulk_saved_scopes` table; chip row above filter bar.
-3. **Analytics tab** — variance heatmap, manager calibration, KPI distribution (lazy-mounted).
-4. **Calibration mode** — cell color = variance vs dept median.
-5. **Async CSV export** — via `large-export-pagination-policy`.
-6. **Mobile drill-down** — single-KPI list view, reuses `SafetySkeletonBlock`.
-7. **Approval workflows** — bulk approve / send-back in one click (Management Bulk Approval parity).
-
----
-
-## Appendix A — Reuse Map
-Org KPI propagation; `useKpiEmployeeMatrix` (read-only inspiration); `canonicalGroupKey`; `workflow_config`; `audit_kpi_assignments`; `OrgFilterCombobox`; `PropagationPreviewDialog`; `ConfirmDestructiveDialog`; `SendBackDialog`; Notification & Dispatch Engine; `Skeleton`; `@tanstack/react-virtual`.
-
-## Appendix B — Open stakeholder questions
-1. Default `kpi_group_type` rollout: keep `individual` everywhere and admins opt-in, or seed `departmental` for KPIs with ≥90% dept overlap?
-2. Should Management role get bulk approve in Phase 1 or Phase 2?
-3. Hard cell cap value — 25,000 confirmed?
-
----
+## Appendix A — Open stakeholder questions
+1. Confirm `feature_bulk_review_dashboard` default = `false` at go-live, opt-in per tenant.
+2. 4-eyes rule for Management re-open — confirm.
+3. `mgmt_can_reopen` default — `false` (admin-granted) or `true` for all Management?
+4. Auto-revert on period close (E16) — keep, or hard-block period close while revisions are open?
+5. Variance badge threshold — 1.0 absolute or relative to KPI scale?
+6. Confirm Manager / Skip stages remain parallel-eligible when the template includes them.
+7. Confirm `final_score_revisions` table name & shape.
 
 ## Version History
-- **v1.1 (2026-05-20)** — Redesigned as full-page dashboard, added click-to-load architecture, perf budget, cell cap, `bulk_scope_preview` + `bulk_scoring_snapshot` RPCs, drawer for drill-in. Supersedes v1.0.
-- **v1.0 (2026-05-19)** — Initial PRD (modal/grid concept).
+- **v2.0 (2026-05-22)** — Additive Bulk Review Dashboard with parallel reviewer stages after Self gate, Auditor > HR PMS override, Management anytime-approve, post-approval re-open with `final_score_revisions`, behind `feature_bulk_review_dashboard` flag (default OFF). §0 Non-Regression Contract added. Supersedes v1.1.
+- **v1.1 (2026-05-20)** — Full-page dashboard, click-to-load, snapshot RPCs.
+- **v1.0 (2026-05-19)** — Initial modal/grid concept.
