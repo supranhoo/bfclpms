@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Download, Search, Users, Target, AlertTriangle, BarChart3 } from 'lucide-react';
-import { useKpiEmployeeMatrix, type MatrixFilters } from '@/hooks/useKpiEmployeeMatrix';
+import { Loader2, Download, Search, Users, Target, AlertTriangle, BarChart3, Play } from 'lucide-react';
+import { useKpiEmployeeMatrix, useKpiEmployeeMatrixScope, MATRIX_CELL_CAP, type MatrixFilters } from '@/hooks/useKpiEmployeeMatrix';
 import { useDepartments, useBusinessUnits, useKraCategories, useDivisions } from '@/hooks/useOrganization';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { CompanyFilter } from '@/components/reports/CompanyFilter';
@@ -32,6 +32,7 @@ export default function KpiEmployeeMatrix() {
   const [categoryId, setCategoryId] = useState<string>('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
+  const [loaded, setLoaded] = useState(false);
 
   // Company filter
   const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany } = useCompanyFilter();
@@ -66,7 +67,8 @@ export default function KpiEmployeeMatrix() {
     reviewYear,
   }), [businessUnitId, divisionId, departmentId, categoryId, search, reviewPeriod, reviewYear]);
 
-  const { data, isLoading } = useKpiEmployeeMatrix(filters);
+  const { data: scope, isLoading: scopeLoading } = useKpiEmployeeMatrixScope(filters);
+  const { data, isLoading, isFetching } = useKpiEmployeeMatrix(filters, { enabled: loaded });
 
   // Company-filter employees
   const filteredEmployees = useMemo(() => {
