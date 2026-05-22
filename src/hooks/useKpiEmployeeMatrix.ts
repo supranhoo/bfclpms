@@ -23,6 +23,8 @@ export interface MatrixKpiRow {
   categoryId: string;
   kraName: string;
   kpiName: string;
+  /** Short criteria/description text from kpis.criteria (first occurrence) */
+  description: string;
   /** Base weightage (first occurrence) */
   weightage: number;
   /** employee_id → assigned weightage % */
@@ -161,6 +163,7 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters, options?: { enabled
       // ── 3. Fetch KPI rows (no nested profiles join) ──
       const kpiRows: Array<{
         kpi_id: string; employee_id: string; kra_name: string; kpi_name: string;
+        description: string | null;
         weightage: number | null; category_id: string | null; category_name: string | null;
       }> = [];
       for (let i = 0; i < employeeIds.length; i += 500) {
@@ -220,6 +223,7 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters, options?: { enabled
             categoryId: kpi.category_id || '',
             kraName: kpi.kra_name,
             kpiName: kpi.kpi_name,
+            description: (kpi.description || '').toString(),
             weightage: Number(kpi.weightage) || 0,
             employeeWeightages: {},
             employeeScores: {},
