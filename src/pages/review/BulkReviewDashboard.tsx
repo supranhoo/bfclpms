@@ -123,10 +123,6 @@ export default function BulkReviewDashboard() {
       return next;
     });
   };
-  const toggleAll = () => {
-    if (selectedIds.size === loadedRows.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(loadedRows.filter(r => r.submission_id).map(r => r.submission_id!)));
-  };
   const toggleAllFromMatrix = (ids: string[]) => {
     setSelectedIds((prev) => {
       const allSelected = ids.length > 0 && ids.every(id => prev.has(id));
