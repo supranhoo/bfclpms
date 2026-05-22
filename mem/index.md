@@ -67,3 +67,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Org KPI Evidence Targeting](mem://features/admin/org-kpi-evidence-targeting) — Per-file employee/department targeting + Distribution Preview matrix
 - [Category Weightage Badge](mem://features/review/category-weightage-badge) — Performance-by-Category badge sums all mapped KPI weightages regardless of is_na/frequency
 - [Group-Based KPI Scoring (PRD v1.1)](mem://features/review/group-based-scoring) — Full-page Bulk Scoring Dashboard; click-gated load, 25k-cell cap, bulk_scope_preview + bulk_scoring_snapshot RPCs, virtualization, per-cell override, batch audit
+- [Scheduled Backup Batch Size](mem://infrastructure/database/scheduled-backup-batch-size) — Manual + scheduled create-backup MUST share BATCH_SIZE=4 (256 MB worker cap); shrink → completed_with_errors + amber UI pill
