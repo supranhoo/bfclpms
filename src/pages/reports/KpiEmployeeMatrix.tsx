@@ -542,24 +542,30 @@ export default function KpiEmployeeMatrix() {
                           >
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <div className="h-full flex items-end justify-center pb-2 pr-1 cursor-default">
-                                  <div
-                                    style={{
-                                      transform: 'rotate(-35deg)',
-                                      transformOrigin: 'left bottom',
-                                      whiteSpace: 'nowrap',
-                                      width: 0,
-                                    }}
-                                    className="font-medium text-foreground text-[11px]"
-                                  >
-                                    {emp.fullName}
-                                  </div>
+                                <div className="h-full flex flex-col items-center justify-end gap-1 pb-1.5 px-0.5 cursor-default">
+                                  <Avatar className="h-7 w-7">
+                                    <AvatarFallback className="text-[10px] font-semibold bg-primary/10 text-primary">
+                                      {initialsOf(emp.fullName)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span className="text-[9px] font-medium text-muted-foreground tabular-nums leading-none truncate max-w-full">
+                                    {emp.employeeCode || '—'}
+                                  </span>
                                 </div>
                               </TooltipTrigger>
                               <TooltipContent>
                                 <div className="font-medium">{emp.fullName}</div>
+                                {emp.employeeCode && (
+                                  <div className="text-xs opacity-80">Code: {emp.employeeCode}</div>
+                                )}
                                 {emp.departmentName && (
                                   <div className="text-xs opacity-80">{emp.departmentName}</div>
+                                )}
+                                {emp.designationName && (
+                                  <div className="text-xs opacity-80">{emp.designationName}</div>
+                                )}
+                                {emp.gradeName && (
+                                  <div className="text-xs opacity-80">Grade: {emp.gradeName}</div>
                                 )}
                               </TooltipContent>
                             </Tooltip>
