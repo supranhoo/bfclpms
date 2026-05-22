@@ -7,17 +7,14 @@ export function useBulkReviewFlag() {
     queryKey: ['admin_feature_flag', 'feature_bulk_review_dashboard'],
     staleTime: 5 * 60 * 1000,
     queryFn: async (): Promise<boolean> => {
-      const { data, error } = await supabase
-        .from('admin_feature_flags' as any)
-        .select('value')
-        .eq('key', 'feature_bulk_review_dashboard')
-        .maybeSingle();
+      // Evaluates master switch + target_roles + target_user_ids server-side
+      // (admins always bypass once the master switch is ON).
+      const { data, error } = await supabase.rpc(
+        'is_feature_flag_enabled_for_me' as any,
+        { p_key: 'feature_bulk_review_dashboard' },
+      );
       if (error) return false;
-      const raw = (data as any)?.value;
-      // value is stored as jsonb; SDK may return boolean or string
-      if (typeof raw === 'boolean') return raw;
-      if (typeof raw === 'string') return raw === 'true';
-      return false;
+      return data === true;
     },
   });
 }
