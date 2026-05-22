@@ -1,26 +1,45 @@
-## Problem
+## What's broken (from your screenshot)
 
-Current screenshot shows KPI name + description rendering as a single long line that visually bleeds across the employee score columns. Root cause: the sticky KPI `<td>` has a column width of 256px but no width constraint on its inner content, so `truncate` has no effective max-width and the row content overflows the frozen pane. Comparison reference (the earlier dashboard-style screenshot, image-951) wraps the KPI/description across multiple lines inside a fixed-width cell — that's what the user means by "fix the width just like dashboard".
+Three concrete defects, not styling preferences:
 
-## Fix (presentation only)
+1. **Stuck floating tooltip** — "Assistant Accountant / Grade: JE-SE" hangs over the header. The Radix tooltip on employee-avatar headers fails to dismiss when the cursor leaves the trigger via fast scroll or when a second tooltip opens.
+2. **Overlapping sticky category bands** — "MIS & REPORTING · 11 KPIs" visibly overlaps the previous category band ("…IMPROVEMENT · 6 KPIs"). Both rows are `position: sticky; top: 68px` with translucent backgrounds (`bg-muted/60 backdrop-blur-sm`), so when the next category scrolls into the stuck zone, both render simultaneously.
+3. **Text bleed-through** — "Lower is Better" from a KPI row shows *through* the sticky category band for the same reason (translucent band).
 
-Single file: `src/pages/reports/KpiEmployeeMatrix.tsx`.
+## Risk & impact
 
-1. **Widen the frozen KPI column** from `COL.kpi = 256` → `COL.kpi = 360` (matches the dashboard reference: comfortable two-line wrap for KPI name and one-to-two-line description).
-2. **Constrain the inner content to that width**: wrap the cell contents in `<div style={{ width: COL.kpi }}>` so flex/text children honor the column width even though `<td>` width is enforced via `<colgroup>`.
-3. **Switch from truncate → wrap with line clamp**:
-   - KPI name: `line-clamp-2` (allows up to 2 lines, no horizontal overflow).
-   - Description: `line-clamp-2 whitespace-normal break-words`.
-4. **Row height becomes auto** (drop the fixed `height: COL.rowH` on KPI rows so wrapped content has room). Score cells already center vertically — they will follow the taller row naturally.
-5. **KRA sub-band**: keep one-line, but add `truncate` with the same `width: COL.kpi + COL.sr` wrapper so long KRA names don't break the band.
-6. **Tooltip**: unchanged — still carries full KPI, KRA, category, weightage, description.
+- **Data impact:** None — pure presentation layer.
+- **Workflow impact:** None.
+- **Regression risk:** Low. Confined to one file. Sticky/z-index rules already documented in `mem://features/reports/kpi-employee-matrix-report.md` are preserved (thead z-30, sticky-left cells z-20, category band sticky-top).
+- **Mitigation:** Keep the documented sticky hierarchy intact; only change opacity + tooltip lifecycle. Verify with preview screenshot before/after.
 
-## Out of scope
+## Fixes (single file: `src/pages/reports/KpiEmployeeMatrix.tsx`)
 
-Hook, RPC, RLS, scoring, Excel export, mobile redesign. No new state.
+### Fix 1 — Tooltip dismiss
+- Set `<TooltipProvider delayDuration={300} disableHoverableContent>` so tooltips dismiss the instant the pointer leaves the trigger (no grace period to drift into a stuck state).
+- Add a `useEffect` that listens for `scroll` on the matrix overflow container and dispatches a `pointerdown`/blur to force-close any open Radix tooltip during scroll.
+
+### Fix 2 — Sticky band overlap
+- Replace category band background `bg-muted/60 backdrop-blur-sm` → **solid** `bg-muted` (no transparency, no blur). The newer band in DOM order paints over the older one, eliminating the visible overlap.
+- Same change for the KRA sub-band (`bg-muted/30` → `bg-muted/90` solid enough to mask).
+- Keep `sticky top: COL.headerH` and z-indices as documented.
+
+### Fix 3 — Text bleed
+- Resolved by Fix 2 (solid bg masks anything underneath).
+- Bonus: add `border-b border-border` already there; add subtle `shadow-[0_2px_4px_-2px_hsl(var(--foreground)/0.08)]` to the category band for a crisp seam.
+
+### Light polish (in scope)
+- Avatar header: round to `rounded-full ring-1 ring-border` and bump employee code to `text-[10px]` for legibility on the current viewport.
+- Add `tabular-nums` to inline stats counts (already present in most, ensure all four).
+- Category band: tighten left padding so the chevron aligns with the Sr. column gutter (`pl-2` instead of `px-2.5`).
 
 ## Verification
 
-1. `bunx tsc --noEmit` clean.
-2. Preview `/reports/kpi-employee-matrix` at 1493px viewport — confirm KPI text wraps inside the frozen pane and does not bleed over employee columns; KRA sub-band stays one line; horizontal scroll still works for employees.
-3. Spot check rows with very long KPI names (e.g. "Timeliness of Production Entry Recording & Stock Reconciliation").
+1. Reload `/reports/kpi-employee-matrix`, load matrix, scroll vertically through 3+ category transitions → confirm no overlapping bands, no bleed-through text.
+2. Hover an employee avatar → tooltip appears; move cursor away or scroll → tooltip disappears within ~100ms.
+3. Take browser screenshot after fix and visually compare to the broken state you shared.
+
+## Out of scope
+
+- No layout redesign, no palette changes, no new directions (you chose "Fix bugs + light polish").
+- No changes to `useKpiEmployeeMatrix.ts`, RPCs, or scoring logic.
