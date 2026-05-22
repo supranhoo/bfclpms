@@ -6,6 +6,7 @@ import { useUnreadNotificationCount } from '@/hooks/useNotifications';
 import { useAppSettings } from '@/hooks/useAppSettings';
 import { useIsAnyOrgKpiDataOwner } from '@/hooks/useOrgKpiDataOwner';
 import { useMenuAccess } from '@/hooks/useMenuAccess';
+import { useBulkReviewFlag } from '@/hooks/useBulkReview';
 import {
   Sidebar,
   SidebarContent,
@@ -54,6 +55,7 @@ import {
   Undo2,
   Percent,
   FileInput,
+  Layers,
 } from 'lucide-react';
 import { CollapsibleSidebarGroup } from './CollapsibleSidebarGroup';
 
@@ -149,9 +151,25 @@ export function AppSidebar() {
   const { data: appSettings } = useAppSettings();
   const { data: isDataOwner } = useIsAnyOrgKpiDataOwner();
   const { canAccess, canPerform, userOverrides } = useMenuAccess();
+  const { data: bulkReviewFlagOn } = useBulkReviewFlag();
 
   const policyVisibleRoles = appSettings?.pms_policy_visible_roles || ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms'];
   const menuItems = getStaticMenuItems(policyVisibleRoles);
+
+  // Flag-gated additive entry — PRD v2.0 §0 Non-Regression Contract.
+  // Hidden unless `feature_bulk_review_dashboard = true` AND user is a reviewer.
+  if (bulkReviewFlagOn) {
+    menuItems.manager = [
+      ...menuItems.manager,
+      {
+        title: 'Bulk Review (Beta)',
+        icon: Layers,
+        path: '/review/bulk-scoring',
+        menuKey: 'bulk-review-dashboard',
+        roles: ['admin', 'manager', 'skip_level', 'hr_pms', 'auditor', 'management'],
+      } as any,
+    ];
+  }
 
   // Track which sections are open
   const [openSections, setOpenSections] = useState<Set<string>>(() => {
