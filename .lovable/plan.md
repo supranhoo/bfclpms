@@ -1,74 +1,64 @@
-## Goal
+# Bulk Scoring → KPI-Employee Matrix Redesign
 
-Replace the bulk drawer's basic "Stage scores" strip + JSON dump with the full `KpiReviewPanel` used by "View KPI Details" — so reviewers see:
-- KPI header (category, frequency, UoM, scale thresholds)
-- Rating scale display (e.g. "5 if value = 20")
-- Per-stage cards with **Value → computed Rating** + **Evidence file links** + remarks
-- KPI history (last few months)
-- Queries / observations / timeline
+Inspired by `/reports/kpi-employee-matrix`. Pure UI/composition change. **Zero changes to RPCs, hooks, write paths, RLS, or the existing `KpiReviewPanel` drawer.**
 
-…while keeping the bulk write/re-open fast-path that already lives in the drawer, and **without** pre-fetching panel data for the whole grid (preserves ADR-064 lean-load).
+Locked design tokens (Navy Trust · Space Grotesk + DM Sans · dashboard shell):
+- `--background` paper `#e8edf3`, surface white, navy text `#0f1b3d`, accent `#3b6fa0`.
+- All score cells `tabular-nums`. Sticky thead `z-30`, header corner `z-40`, body sticky `z-20`.
+
+## Direction
+
+Default to **Reviewer Cockpit Matrix** (rows = KPI/KRA, columns = Employees) — the most direct mirror of the KPI-Employee Matrix screenshot the user pointed at. If you'd rather build **Inverse Employee Matrix** (rows = Employees, columns = stages per KPI) or **Heat Grid** (dense colored cells, no avatars), say so before I start and I'll swap.
+
+## What changes visually
+
+Top scope strip (compact, single row):
+- Period · Year · My Stage selects · scope counts (`emp · KPI · KB`) · `Load Scope` CTA · `Refresh` pill.
+- Tile row collapses into the strip — no more 4 big tile cards.
+
+Matrix surface (replaces the flat `BulkReviewVirtualGrid`):
+- **Sticky left pane** (`min-w-[280px]`): KPI name (bold) · KRA · Weightage % muted second line. Global "Show KRA · Wt%" switch + per-row chevron, mirroring the matrix report.
+- **Sticky thead**: Employee column headers — initials avatar circle + name + employee code. Width `min-w-[140px]`.
+- **Category bands**: sticky-left rows grouping by KRA category (collapsible).
+- **Cells**: viewer-stage score in `tabular-nums`, variance dot top-right (`emerald` ≤ 1.0 spread, `amber` 1.0–2.0, `red` > 2.0), `Pending` dashed placeholder when null. Click → opens existing `BulkCellDrawer` (no changes to it).
+- **Selection**: checkbox on each employee column header selects every cell for that employee in scope; checkbox in the corner = select-all. Selected cells get a navy ring.
+- **Frozen right-edge action rail** appears when selection > 0: shows count + "Bulk Approve (Mgmt)" (gated by `canApprove`, unchanged logic). Same `ConfirmDestructiveDialog` and `handleBulkApprove`.
+- **Pagination footer**: `Page X / Y`, Prev/Next, page-size unchanged (200 rows from snapshot).
+
+## What stays identical (non-negotiable)
+
+- All hooks: `useBulkReviewFlag`, `useBulkScopePreview`, `useBulkReviewSnapshot`, `useBulkManagementApprove`, `useBulkReopenCells`, `useKpiCellDetail`.
+- `bulk_scope_preview`, `bulk_review_snapshot`, `bulk_write_stage_scores`, `bulk_management_approve`, `bulk_reopen_cells`, `kpi_cell_detail` RPCs — no signature changes.
+- Click-to-load gate, 25k cell cap, no realtime, Refresh-only.
+- `BulkCellDrawer` + `KpiReviewPanel` parity untouched.
+- Feature flag `feature_bulk_review_dashboard` gating, role-based viewer-stage default.
+
+## Files
+
+- **Edit** `src/pages/review/BulkReviewDashboard.tsx` — replace the scope card + tile grid + `BulkReviewVirtualGrid` block with the new matrix shell (scope strip + `<BulkReviewMatrixGrid />`).
+- **Create** `src/components/review/BulkReviewMatrixGrid.tsx` — new component that pivots the existing flat `BulkReviewRow[]` (already returned by `bulk_review_snapshot`) into `(kraName + kpiName) × employee` cells in-memory. Sticky panes, category bands, variance dot, selection model. Props: `rows`, `viewerStage`, `selectedSubmissionIds`, `onToggleSubmission`, `onToggleEmployee`, `onCellClick`.
+- **Leave alone** `BulkReviewVirtualGrid.tsx` (kept as fallback / linked from elsewhere) — delete only if grep shows no other consumer.
 
 ## Risk & Impact
 
-- **Data**: no schema changes. Existing `review_submissions` already stores per-stage `*_achieved_value`, `*_rating`, `*_evidence_urls`. Extra read happens only when a row is opened.
-- **Workflow**: none. Drawer write/re-open paths unchanged.
-- **UI/UX**: drawer becomes the same rich panel reviewers know — consistent mental model. Same Sheet width (`sm:max-w-xl`) widens to `sm:max-w-[1100px]` to fit the two-column panel.
-- **Regression risk**: low. `KpiReviewPanel` is rendered read-only (no editing inside it). Bulk write button remains the only mutation path in the drawer.
-- **Scalability**: per-click RPC only — grid load is unchanged. Cell detail RPC stays cached 60 s.
-
-## Plan
-
-### 1. DB — extend `kpi_cell_detail` RPC
-Augment the existing RPC (already returns `kpi`, `submission`, `revisions`) to also return everything `KpiReviewPanel` needs for one cell:
-
-- `employee`: `id, full_name, employee_code, reporting_manager_id` + `reporting_manager_name`
-- `kpi_history`: same `kra_name + kpi_name + employee_id`, last 6 review_periods, joined with their submissions (for `KpiHistoryCard`)
-- `queries`: rows from `kpi_queries` for this `kpi_id`
-- `workflow_stages`: result of `resolve_workflow_for_employee_period(employee_id, period, year)` (already used elsewhere)
-- `org_kpi`: matching `org_kpi_values` row (entered_by_name, achieved_value, data_owner_names) when `kpi.is_org_kpi`
-
-All in one `SECURITY DEFINER` call. No new tables, no RLS changes.
-
-### 2. Hook — extend `useKpiCellDetail`
-Type the response so it returns:
-```ts
-{ kpi, submission, revisions, employee, kpi_history, queries, workflow_stages, org_kpi }
-```
-Stay on the same 60 s `staleTime`.
-
-### 3. Drawer — replace stage strip + JSON with `<KpiReviewPanel>`
-In `src/components/review/BulkCellDrawer.tsx`:
-- Widen the `SheetContent` to `sm:max-w-[1100px]`.
-- When `detail.data` is loaded, render `<KpiReviewPanel>` with:
-  - `kpi = detail.data.kpi`
-  - `submission = detail.data.submission`
-  - `allKpis = detail.data.kpi_history`
-  - `allSubmissions = (history submissions)`
-  - `queries = detail.data.queries`
-  - `viewLevel = viewerStage` (mapped to ViewLevel)
-  - `selectedPeriod`, `selectedYear` from row
-  - `employeeName/Code`, `workflowStages`, `orgKpi*` from the new fields
-  - **no edit callbacks** (timeline/history modals only open inline if we wire them — out of scope for v1)
-- Keep the existing "Write as Manager/Skip/HR/Auditor" form + "Re-open" block below the panel.
-- Drop the `<pre>{JSON.stringify(detail.data)}</pre>` dump and the basic stage scores grid (now redundant with `KpiJourneySection`).
-- Keep variance / final / N/A badges in the header strip.
-
-### 4. Tests
-- Unit test `kpi_cell_detail` returns the new keys (mock kpi + submission + history rows) — extend `src/test/bulkReview/*` if present, otherwise add `src/test/bulkReview/kpiCellDetail.test.ts`.
-- Component test: render `BulkCellDrawer` with a mocked detail response and assert that `KpiReviewPanel` renders (look for a header element it owns, e.g. KPI name) and the Write form is still present.
-
-### 5. Docs / Policy
-- Update `mem/features/review/bulk-review-dashboard` — note that the cell drawer reuses `KpiReviewPanel` for parity with "View KPI Details", and that detail is per-click only (lean-load preserved).
-- Append POLICY.md entry under the Bulk Review section: "Bulk drawer must match View KPI Details parity — Value, computed Rating from scale, Evidence links, history, queries."
-- Add ADR-066: "Bulk Review cell drawer parity with View KPI Details" (rationale: avoid two divergent review surfaces).
+- **Data**: none. No schema, RLS, or RPC changes.
+- **Workflow**: none. Same write paths, same approvals, same drawer.
+- **UI/UX**: significant — flat table → pivot grid. Mitigation: pivot is computed client-side from the same `snapshot.rows` payload already loaded; no extra fetches. Same pagination semantics (page of *KPI rows*, not employees, to keep payload cap honest).
+- **Performance**: pivot is `O(rows)` over ≤ 25k cells, already capped. Sticky columns use `position: sticky` (not virtualization) — acceptable for the 200-row page; if a future bigger page is needed we add `@tanstack/react-virtual` row windowing.
+- **Regression**: low. The drawer, write RPCs, ConfirmDestructiveDialog, and feature flag stay byte-identical. Worst case: revert one component import.
 
 ## Out of scope (v1)
 
-- Inline editing of org KPI values, queries, or observations from inside the bulk drawer (still done via the normal scorecard route).
-- Timeline / full-history modals inside the drawer (links can be added in a follow-up).
-- Changing the bulk grid itself.
+- Inline cell editing (still opens drawer to write).
+- Heat-grid color scale, vertical employee headers (Heat Grid direction).
+- Inverse-matrix orientation (Inverse Employee direction).
+- Stage-by-stage column expansion inside a KPI cell.
+- Export-to-Excel of the matrix.
 
-## Rollback
+## Verification
 
-Revert the migration (drop-and-recreate prior `kpi_cell_detail` body) and revert `BulkCellDrawer.tsx` + `useBulkReview.ts` to the previous commit. No data destroyed.
+- Load `/review/bulk-scoring`, click Load Scope on a populated period → matrix paints with sticky KPI pane + sticky employee header.
+- Click a cell → existing `KpiReviewPanel` drawer opens with rating-scale, evidence, history (unchanged).
+- Select cells → bottom-right action rail shows; Bulk Approve → confirm dialog → toast (unchanged path).
+- Scope-too-large badge still disables Load.
+- Flag OFF still renders the disabled alert.
