@@ -25,7 +25,7 @@ import {
   type BulkReviewRow,
 } from '@/hooks/useBulkReview';
 import { BulkCellDrawer } from '@/components/review/BulkCellDrawer';
-import { BulkReviewVirtualGrid } from '@/components/review/BulkReviewVirtualGrid';
+import { BulkReviewMatrixGrid } from '@/components/review/BulkReviewMatrixGrid';
 import { useToast } from '@/hooks/use-toast';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
@@ -126,6 +126,12 @@ export default function BulkReviewDashboard() {
   const toggleAll = () => {
     if (selectedIds.size === loadedRows.length) setSelectedIds(new Set());
     else setSelectedIds(new Set(loadedRows.filter(r => r.submission_id).map(r => r.submission_id!)));
+  };
+  const toggleAllFromMatrix = (ids: string[]) => {
+    setSelectedIds((prev) => {
+      const allSelected = ids.length > 0 && ids.every(id => prev.has(id));
+      return allSelected ? new Set() : new Set(ids);
+    });
   };
 
   const handleBulkApprove = async () => {
@@ -276,19 +282,18 @@ export default function BulkReviewDashboard() {
       {/* Loaded grid */}
       {scopeLoaded && (
         <>
-          {/* Tiles */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Tile label="Rows loaded" value={snapshot.data?.rows?.length ?? 0} />
-            <Tile label="Total in scope" value={snapshot.data?.total ?? 0} />
-            <Tile label="Variance > 1.0" value={variance} />
-            <Tile label="Page" value={`${page} / ${Math.max(1, Math.ceil((snapshot.data?.total ?? 0) / 200))}`} />
-          </div>
-
           <Card>
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <CardTitle className="text-base">Review grid</CardTitle>
-              <div className="text-xs text-muted-foreground">
-                Click a row to score or re-open · variance Δ highlighted
+              <div className="flex items-center gap-3">
+                <CardTitle className="text-base">Review Matrix</CardTitle>
+                <Badge variant="outline" className="text-[10px] font-medium">
+                  Page {page} / {Math.max(1, Math.ceil((snapshot.data?.total ?? 0) / 200))}
+                </Badge>
+              </div>
+              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                <span>Rows: <strong className="text-foreground tabular-nums">{snapshot.data?.rows?.length ?? 0}</strong></span>
+                <span>Total: <strong className="text-foreground tabular-nums">{snapshot.data?.total ?? 0}</strong></span>
+                <span>Variance &gt; 1.0: <strong className="text-foreground tabular-nums">{variance}</strong></span>
               </div>
             </CardHeader>
             <CardContent>
@@ -309,12 +314,13 @@ export default function BulkReviewDashboard() {
                   No KPIs match the selected scope.
                 </p>
               ) : (
-                <BulkReviewVirtualGrid
+                <BulkReviewMatrixGrid
                   rows={loadedRows}
-                  selectedIds={selectedIds}
-                  onToggleOne={toggleOne}
-                  onToggleAll={toggleAll}
-                  onRowClick={setActiveRow}
+                  viewerStage={viewerStage}
+                  selectedSubmissionIds={selectedIds}
+                  onToggleSubmission={toggleOne}
+                  onToggleAll={toggleAllFromMatrix}
+                  onCellClick={setActiveRow}
                 />
               )}
 
@@ -384,16 +390,5 @@ export default function BulkReviewDashboard() {
         isLoading={approve.isPending}
       />
     </div>
-  );
-}
-
-function Tile({ label, value }: { label: string; value: number | string }) {
-  return (
-    <Card>
-      <CardContent className="py-4">
-        <div className="text-xs text-muted-foreground">{label}</div>
-        <div className="text-2xl font-semibold">{value}</div>
-      </CardContent>
-    </Card>
   );
 }
