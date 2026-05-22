@@ -59,6 +59,7 @@ const ModuleHubSettings = lazy(() => import("./pages/admin/ModuleHubSettings"));
 const IdentityAccessConsole = lazy(() => import("./pages/admin/IdentityAccessConsole"));
 const KpiStandardization = lazy(() => import("./pages/admin/KpiStandardization"));
 const RegistryBrowser = lazy(() => import("./pages/RegistryBrowser"));
+const BulkReviewDashboard = lazy(() => import("./pages/review/BulkReviewDashboard"));
 
 // Safety module shell + pages
 const SafetyLayout = lazy(() =>
@@ -282,6 +283,11 @@ const App = () => (
                 <Route path="/hr/review-notes" element={
                   <ProtectedRoute allowedRoles={['admin', 'hr_pms', 'manager', 'skip_level', 'management', 'auditor', 'employee']}>
                     <ReviewNotes />
+                  </ProtectedRoute>
+                } />
+                <Route path="/review/bulk-scoring" element={
+                  <ProtectedRoute allowedRoles={['admin', 'manager', 'skip_level', 'hr_pms', 'auditor', 'management']}>
+                    <BulkReviewDashboard />
                   </ProtectedRoute>
                 } />
               <Route path="/admin/module-hub" element={

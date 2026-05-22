@@ -1,0 +1,46 @@
+---
+name: Bulk Review Dashboard (PRD v2.0)
+description: Flag-gated parallel-stage review at /review/bulk-scoring with audited post-approval re-open. Supersedes v1.1 group-scoring.
+type: feature
+---
+
+**Status:** M1 (schema) + M2 (read RPCs + shell) shipped. M3 (virtualized grid + drawer), M4 (parallel writes), M5 (re-open + edge cases) pending.
+
+**Master switch:** `admin_feature_flags.feature_bulk_review_dashboard` (default `false`). Off = sidebar entry hidden + RPCs throw `feature disabled`. `mgmt_can_reopen` (default `false`) controls whether Management can re-open vs Admin-only.
+
+**§0 Non-Regression Contract (LOCKED):**
+- Strictly additive: no existing column/RPC signature/RLS policy/notification template modified.
+- New route `/review/bulk-scoring` only. Legacy `/dashboard?view=*` paths byte-identical.
+- New tables auto-included in backup via `get_backup_table_order()` (no allowlist edit).
+- POLICY §88 preserved: post-approval mutations only via `final_score_revisions` rows.
+- Rollback = flip flag OFF; new columns retain defaults, new tables stay populated but unread.
+
+**Schema (M1):**
+- `kpis.kpi_group_type` ∈ {`individual`|`departmental`|`org`}, default `individual`
+- `review_submissions`: `is_group_override`, `group_write_batch_id`, `is_auditor_override_of_hr`, `skipped_by_management JSONB`, `final_revision_no INT`, `row_version INT` (E9 concurrency)
+- Tables: `admin_feature_flags`, `bulk_review_batches`, `final_score_revisions`
+- All writes to bulk tables go through SECURITY DEFINER RPCs only — no direct INSERT/UPDATE/DELETE policies.
+
+**RPCs (M2 read-side):**
+- `bulk_scope_preview(p_period, p_year, p_filters)` — counts + cap check (25k cells / 5MB)
+- `bulk_review_snapshot(p_period, p_year, p_viewer_stage, p_filters, p_page, p_page_size DEFAULT 200, max 500)`
+- `kpi_cell_detail(p_kpi_id, p_emp_id)`
+- All flag-gated (`is_bulk_review_enabled()`) + role-gated (admin/manager/skip_level/hr_pms/auditor/management).
+- Daily-frequency KPIs excluded (E12).
+
+**Frontend invariants:**
+- `useBulkReviewFlag` drives sidebar visibility + route gate.
+- Page mounts empty; `bulk_scope_preview` only when flag ON; `bulk_review_snapshot` only after explicit Load Scope click (`scopeLoaded` state).
+- 25k cell / 5MB cap disables Load button via `preview.cap_exceeded`.
+- No realtime; manual Refresh pill only; SWR 5min.
+
+**Stakeholder defaults (locked):**
+- Flag default OFF for every tenant.
+- `mgmt_can_reopen` default false (admin-granted only).
+- E16: auto-revert at period close with `auto_reverted=true` revision row.
+- Variance badge: fixed 1.0 absolute on 0–5 rating.
+
+**Pending milestones:**
+- M3: `@tanstack/react-virtual` rows+cols, cell drawer (history/evidence/observations/revisions), variance badges, stage progress strip.
+- M4: `bulk_write_stage_scores`, `bulk_management_approve`, `propagate_org_kpi_value(p_stage)` overload, Auditor>HR rule, batched notifications.
+- M5: `bulk_reopen_cells` with 4-eyes guard, E16 auto-revert cron, all 21 edge cases.

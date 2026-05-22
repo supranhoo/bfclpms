@@ -186,6 +186,33 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_feature_flags: {
+        Row: {
+          created_at: string
+          description: string | null
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: Json
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           app_name: string
@@ -460,6 +487,39 @@ export type Database = {
           status?: string
           tables_count?: number | null
           total_rows?: number | null
+        }
+        Relationships: []
+      }
+      bulk_review_batches: {
+        Row: {
+          affected_count: number
+          batch_reason: string | null
+          created_at: string
+          id: string
+          performed_by: string | null
+          scope_filters: Json
+          skipped: Json
+          stage: string
+        }
+        Insert: {
+          affected_count?: number
+          batch_reason?: string | null
+          created_at?: string
+          id?: string
+          performed_by?: string | null
+          scope_filters?: Json
+          skipped?: Json
+          stage: string
+        }
+        Update: {
+          affected_count?: number
+          batch_reason?: string | null
+          created_at?: string
+          id?: string
+          performed_by?: string | null
+          scope_filters?: Json
+          skipped?: Json
+          stage?: string
         }
         Relationships: []
       }
@@ -1209,6 +1269,63 @@ export type Database = {
             columns: ["employee_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      final_score_revisions: {
+        Row: {
+          auto_reverted: boolean
+          batch_id: string | null
+          created_at: string
+          id: string
+          new_final_score: number | null
+          performed_by: string | null
+          prev_final_score: number | null
+          reason: string
+          reopened_stages: string[]
+          revision_no: number
+          submission_id: string
+        }
+        Insert: {
+          auto_reverted?: boolean
+          batch_id?: string | null
+          created_at?: string
+          id?: string
+          new_final_score?: number | null
+          performed_by?: string | null
+          prev_final_score?: number | null
+          reason: string
+          reopened_stages?: string[]
+          revision_no: number
+          submission_id: string
+        }
+        Update: {
+          auto_reverted?: boolean
+          batch_id?: string | null
+          created_at?: string
+          id?: string
+          new_final_score?: number | null
+          performed_by?: string | null
+          prev_final_score?: number | null
+          reason?: string
+          reopened_stages?: string[]
+          revision_no?: number
+          submission_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "final_score_revisions_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "bulk_review_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "final_score_revisions_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "review_submissions"
             referencedColumns: ["id"]
           },
         ]
@@ -2885,6 +3002,7 @@ export type Database = {
           is_issued: boolean | null
           is_org_level: boolean | null
           kpi_definition_id: string | null
+          kpi_group_type: string
           kpi_name: string
           kra_name: string
           org_level_scope: string | null
@@ -2924,6 +3042,7 @@ export type Database = {
           is_issued?: boolean | null
           is_org_level?: boolean | null
           kpi_definition_id?: string | null
+          kpi_group_type?: string
           kpi_name: string
           kra_name: string
           org_level_scope?: string | null
@@ -2963,6 +3082,7 @@ export type Database = {
           is_issued?: boolean | null
           is_org_level?: boolean | null
           kpi_definition_id?: string | null
+          kpi_group_type?: string
           kpi_name?: string
           kra_name?: string
           org_level_scope?: string | null
@@ -5068,7 +5188,9 @@ export type Database = {
           auditor_score: number | null
           auto_advance_reason: string | null
           final_rating: Database["public"]["Enums"]["rating_level"] | null
+          final_revision_no: number
           final_score: number | null
+          group_write_batch_id: string | null
           hr_pms_achieved_value: number | null
           hr_pms_evidence_url: string | null
           hr_pms_evidence_urls: Json | null
@@ -5076,6 +5198,8 @@ export type Database = {
           hr_pms_remarks: string | null
           hr_pms_score: number | null
           id: string
+          is_auditor_override_of_hr: boolean
+          is_group_override: boolean
           is_na: boolean
           kpi_id: string
           kpi_status: Database["public"]["Enums"]["kpi_status"]
@@ -5093,6 +5217,7 @@ export type Database = {
           manager_score: number | null
           na_marked_by_role: string | null
           performance_review_id: string | null
+          row_version: number
           self_evidence_url: string | null
           self_evidence_urls: Json | null
           self_rating: Database["public"]["Enums"]["rating_level"] | null
@@ -5104,6 +5229,7 @@ export type Database = {
           skip_level_rating: Database["public"]["Enums"]["rating_level"] | null
           skip_level_remarks: string | null
           skip_level_score: number | null
+          skipped_by_management: Json | null
           submitted_at: string
           updated_at: string
         }
@@ -5117,7 +5243,9 @@ export type Database = {
           auditor_score?: number | null
           auto_advance_reason?: string | null
           final_rating?: Database["public"]["Enums"]["rating_level"] | null
+          final_revision_no?: number
           final_score?: number | null
+          group_write_batch_id?: string | null
           hr_pms_achieved_value?: number | null
           hr_pms_evidence_url?: string | null
           hr_pms_evidence_urls?: Json | null
@@ -5125,6 +5253,8 @@ export type Database = {
           hr_pms_remarks?: string | null
           hr_pms_score?: number | null
           id?: string
+          is_auditor_override_of_hr?: boolean
+          is_group_override?: boolean
           is_na?: boolean
           kpi_id: string
           kpi_status?: Database["public"]["Enums"]["kpi_status"]
@@ -5142,6 +5272,7 @@ export type Database = {
           manager_score?: number | null
           na_marked_by_role?: string | null
           performance_review_id?: string | null
+          row_version?: number
           self_evidence_url?: string | null
           self_evidence_urls?: Json | null
           self_rating?: Database["public"]["Enums"]["rating_level"] | null
@@ -5153,6 +5284,7 @@ export type Database = {
           skip_level_rating?: Database["public"]["Enums"]["rating_level"] | null
           skip_level_remarks?: string | null
           skip_level_score?: number | null
+          skipped_by_management?: Json | null
           submitted_at?: string
           updated_at?: string
         }
@@ -5166,7 +5298,9 @@ export type Database = {
           auditor_score?: number | null
           auto_advance_reason?: string | null
           final_rating?: Database["public"]["Enums"]["rating_level"] | null
+          final_revision_no?: number
           final_score?: number | null
+          group_write_batch_id?: string | null
           hr_pms_achieved_value?: number | null
           hr_pms_evidence_url?: string | null
           hr_pms_evidence_urls?: Json | null
@@ -5174,6 +5308,8 @@ export type Database = {
           hr_pms_remarks?: string | null
           hr_pms_score?: number | null
           id?: string
+          is_auditor_override_of_hr?: boolean
+          is_group_override?: boolean
           is_na?: boolean
           kpi_id?: string
           kpi_status?: Database["public"]["Enums"]["kpi_status"]
@@ -5191,6 +5327,7 @@ export type Database = {
           manager_score?: number | null
           na_marked_by_role?: string | null
           performance_review_id?: string | null
+          row_version?: number
           self_evidence_url?: string | null
           self_evidence_urls?: Json | null
           self_rating?: Database["public"]["Enums"]["rating_level"] | null
@@ -5202,6 +5339,7 @@ export type Database = {
           skip_level_rating?: Database["public"]["Enums"]["rating_level"] | null
           skip_level_remarks?: string | null
           skip_level_score?: number | null
+          skipped_by_management?: Json | null
           submitted_at?: string
           updated_at?: string
         }
@@ -8000,6 +8138,21 @@ export type Database = {
         Args: { kpis_json: Json }
         Returns: number
       }
+      bulk_review_snapshot: {
+        Args: {
+          p_filters?: Json
+          p_page?: number
+          p_page_size?: number
+          p_period: string
+          p_viewer_stage: string
+          p_year: number
+        }
+        Returns: Json
+      }
+      bulk_scope_preview: {
+        Args: { p_filters?: Json; p_period: string; p_year: number }
+        Returns: Json
+      }
       can_view_safety_incident: {
         Args: { _incident_id: string }
         Returns: boolean
@@ -8427,6 +8580,7 @@ export type Database = {
         Returns: undefined
       }
       iac_sweep_expired: { Args: never; Returns: number }
+      is_bulk_review_enabled: { Args: never; Returns: boolean }
       is_canonical_enforcement_period: {
         Args: { p_period: string; p_year: number }
         Returns: boolean
@@ -8436,6 +8590,7 @@ export type Database = {
         Returns: boolean
       }
       is_image_url: { Args: { p_url: string }; Returns: boolean }
+      is_mgmt_reopen_enabled: { Args: never; Returns: boolean }
       is_month_locked_for_frequency: {
         Args: { p_frequency: string; p_month: string; p_year: number }
         Returns: boolean
@@ -8457,6 +8612,10 @@ export type Database = {
         Returns: boolean
       }
       jsonb_url_set_equal: { Args: { a: Json; b: Json }; Returns: boolean }
+      kpi_cell_detail: {
+        Args: { p_emp_id: string; p_kpi_id: string }
+        Returns: Json
+      }
       log_standardization_action: {
         Args: {
           p_action_type: string
