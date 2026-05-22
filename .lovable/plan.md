@@ -1,45 +1,45 @@
-## What's broken (from your screenshot)
+## Reproduced bugs (browser-tested at 1366×768, dark mode)
 
-Three concrete defects, not styling preferences:
+### Bug 1 — Page-level horizontal overflow → sidebar bleeds through matrix
+The matrix scroll wrapper `<div className="overflow-auto max-h-[68vh] relative">` has **no width constraint**. With 132 employees × 64px columns, the natural table width (~8500px) blows past the viewport. Because the wrapper has no `w-full`/`max-w-full`, `overflow-auto` never activates horizontally — the table pushes its `Card` → `CardContent` → `SidebarInset` parent chain wider, the whole **document body** becomes scrollable horizontally, and the sidebar (which sits in the same CSS grid) is shoved off-screen left. The dark-mode visual artifact ("sidebar text showing through table") is just the sidebar peeking out from under the over-wide table.
 
-1. **Stuck floating tooltip** — "Assistant Accountant / Grade: JE-SE" hangs over the header. The Radix tooltip on employee-avatar headers fails to dismiss when the cursor leaves the trigger via fast scroll or when a second tooltip opens.
-2. **Overlapping sticky category bands** — "MIS & REPORTING · 11 KPIs" visibly overlaps the previous category band ("…IMPROVEMENT · 6 KPIs"). Both rows are `position: sticky; top: 68px` with translucent backgrounds (`bg-muted/60 backdrop-blur-sm`), so when the next category scrolls into the stuck zone, both render simultaneously.
-3. **Text bleed-through** — "Lower is Better" from a KPI row shows *through* the sticky category band for the same reason (translucent band).
+### Bug 2 — Employee avatar tooltip mis-placed
+Hovering an avatar in the sticky `<thead>` shows the name/grade tooltip pinned to the **top-left of the matrix area**, far from the avatar, partly clipped by the page header. Radix Tooltip has no explicit `side`/`sideOffset`/`collisionPadding`/`avoidCollisions`, and its collision math breaks for triggers inside `position: sticky` thead with an overflow ancestor.
+
+### Bonus — KRA band hover has no affordance
+The KRA sub-band truncates long names (`truncate` + `maxWidth`) but has no tooltip on hover, so the full name is unreadable. The user's "feels broken" complaint about KRA hover.
 
 ## Risk & impact
 
-- **Data impact:** None — pure presentation layer.
+- **Data impact:** None — presentation only.
 - **Workflow impact:** None.
-- **Regression risk:** Low. Confined to one file. Sticky/z-index rules already documented in `mem://features/reports/kpi-employee-matrix-report.md` are preserved (thead z-30, sticky-left cells z-20, category band sticky-top).
-- **Mitigation:** Keep the documented sticky hierarchy intact; only change opacity + tooltip lifecycle. Verify with preview screenshot before/after.
+- **Regression risk:** Low. Changes are CSS width constraints + Tooltip positioning props + wrapping one band in a Tooltip.
+- **Mitigation:** After patch, re-test with browser tool: load matrix → confirm no page-level horizontal scrollbar, sidebar stays put, avatar tooltip anchors below avatar, KRA hover shows tooltip with full name.
 
 ## Fixes (single file: `src/pages/reports/KpiEmployeeMatrix.tsx`)
 
-### Fix 1 — Tooltip dismiss
-- Set `<TooltipProvider delayDuration={300} disableHoverableContent>` so tooltips dismiss the instant the pointer leaves the trigger (no grace period to drift into a stuck state).
-- Add a `useEffect` that listens for `scroll` on the matrix overflow container and dispatches a `pointerdown`/blur to force-close any open Radix tooltip during scroll.
+### Fix 1 — Contain matrix width
+- Change the scroll wrapper to `className="w-full max-w-full overflow-auto max-h-[68vh] relative"`.
+- Add `min-w-0` to `<CardContent className="p-0 min-w-0">` so the CSS-grid `SidebarInset` doesn't let its child expand past the track. (Standard CSS-grid `min-width: auto` defense.)
 
-### Fix 2 — Sticky band overlap
-- Replace category band background `bg-muted/60 backdrop-blur-sm` → **solid** `bg-muted` (no transparency, no blur). The newer band in DOM order paints over the older one, eliminating the visible overlap.
-- Same change for the KRA sub-band (`bg-muted/30` → `bg-muted/90` solid enough to mask).
-- Keep `sticky top: COL.headerH` and z-indices as documented.
+### Fix 2 — Employee tooltip positioning
+- On the avatar header `<TooltipContent>`, add `side="bottom"`, `sideOffset={8}`, `align="center"`, `collisionPadding={12}`, and `className="z-50"` (above the sticky thead z-30).
+- Same hardening on the KPI row tooltip for consistency.
 
-### Fix 3 — Text bleed
-- Resolved by Fix 2 (solid bg masks anything underneath).
-- Bonus: add `border-b border-border` already there; add subtle `shadow-[0_2px_4px_-2px_hsl(var(--foreground)/0.08)]` to the category band for a crisp seam.
+### Fix 3 — KRA band tooltip
+- Wrap the KRA sub-band content in `<Tooltip>` with the full KRA name + KPI count visible on hover. The trigger stays the same `<div>` so the click-to-collapse behavior is preserved.
 
-### Light polish (in scope)
-- Avatar header: round to `rounded-full ring-1 ring-border` and bump employee code to `text-[10px]` for legibility on the current viewport.
-- Add `tabular-nums` to inline stats counts (already present in most, ensure all four).
-- Category band: tighten left padding so the chevron aligns with the Sr. column gutter (`pl-2` instead of `px-2.5`).
+### Cleanup — Remove the scroll→Escape side-effect
+The `useEffect` I added in the previous round dispatches a global `Escape` keydown on every matrix scroll. This is too broad — it can close unrelated Radix surfaces (sidebar sheet on mobile, open popovers, dropdowns). Replace it with a scoped approach: only call `document.dispatchEvent` if a Radix tooltip is currently open (check for `[data-radix-tooltip-content]` in the DOM). This keeps the dismiss-on-scroll behavior without the side-effects.
 
-## Verification
+## Verification (will run after patch)
 
-1. Reload `/reports/kpi-employee-matrix`, load matrix, scroll vertically through 3+ category transitions → confirm no overlapping bands, no bleed-through text.
-2. Hover an employee avatar → tooltip appears; move cursor away or scroll → tooltip disappears within ~100ms.
-3. Take browser screenshot after fix and visually compare to the broken state you shared.
+1. Reload `/reports/kpi-employee-matrix` in browser tool, click **Load Matrix**.
+2. Assert: no horizontal scrollbar on the page body (only inside the matrix wrapper). Sidebar fully visible, no text bleed-through.
+3. Hover employee avatar → tooltip anchors directly below the avatar, fully visible.
+4. Hover KRA band → tooltip shows full KRA name and KPI count.
+5. Scroll the matrix → no other UI surfaces (sidebar, popovers) close.
 
 ## Out of scope
-
-- No layout redesign, no palette changes, no new directions (you chose "Fix bugs + light polish").
-- No changes to `useKpiEmployeeMatrix.ts`, RPCs, or scoring logic.
+- No changes to data hooks, RPCs, or scoring logic.
+- No redesign of the layout — purely defect fixes + one missing tooltip.

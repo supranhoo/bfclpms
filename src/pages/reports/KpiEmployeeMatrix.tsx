@@ -80,8 +80,11 @@ export default function KpiEmployeeMatrix() {
     const el = scrollContainerRef.current;
     if (!el) return;
     const close = () => {
-      // Radix listens for Escape on document to close tooltips.
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      // Only dismiss when an actual Radix tooltip is open — avoids closing
+      // unrelated surfaces (sidebar sheet, popovers, dropdowns) on every scroll.
+      if (document.querySelector('[data-radix-tooltip-content]')) {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      }
     };
     el.addEventListener('scroll', close, { passive: true });
     return () => el.removeEventListener('scroll', close);
@@ -526,9 +529,9 @@ export default function KpiEmployeeMatrix() {
         </Card>
       ) : (
         <Card>
-          <CardContent className="p-0">
+          <CardContent className="p-0 min-w-0">
             <TooltipProvider delayDuration={300} disableHoverableContent>
-              <div ref={scrollContainerRef} className="overflow-auto max-h-[68vh] relative">
+              <div ref={scrollContainerRef} className="w-full max-w-full overflow-auto max-h-[68vh] relative">
                 <table className="border-collapse text-[12px] w-full">
                   <colgroup>
                     <col style={{ width: COL.sr }} />
@@ -568,7 +571,7 @@ export default function KpiEmployeeMatrix() {
                                   </span>
                                 </div>
                               </TooltipTrigger>
-                              <TooltipContent>
+                              <TooltipContent side="bottom" align="center" sideOffset={8} collisionPadding={12} className="z-50">
                                 <div className="font-medium">{emp.fullName}</div>
                                 {emp.employeeCode && (
                                   <div className="text-xs opacity-80">Code: {emp.employeeCode}</div>
@@ -658,16 +661,26 @@ export default function KpiEmployeeMatrix() {
                                   });
                                 }}
                               >
-                                <div className="flex items-center gap-2 text-[11px] font-medium text-foreground pl-4 truncate" style={{ maxWidth: COL.sr + COL.kpi - 8 }}>
-                                  <ChevronDown
-                                    className={`h-3 w-3 transition-transform text-muted-foreground ${kraCollapsed ? '-rotate-90' : ''}`}
-                                  />
-                                  <span className="text-primary">KRA:</span>
-                                  <span className="truncate">{row.kraName}</span>
-                                  <span className="text-muted-foreground font-normal shrink-0">
-                                    · {kraCounts[kraKey]} KPI{kraCounts[kraKey] === 1 ? '' : 's'}
-                                  </span>
-                                </div>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="flex items-center gap-2 text-[11px] font-medium text-foreground pl-4 truncate" style={{ maxWidth: COL.sr + COL.kpi - 8 }}>
+                                      <ChevronDown
+                                        className={`h-3 w-3 transition-transform text-muted-foreground ${kraCollapsed ? '-rotate-90' : ''}`}
+                                      />
+                                      <span className="text-primary">KRA:</span>
+                                      <span className="truncate">{row.kraName}</span>
+                                      <span className="text-muted-foreground font-normal shrink-0">
+                                        · {kraCounts[kraKey]} KPI{kraCounts[kraKey] === 1 ? '' : 's'}
+                                      </span>
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="right" align="start" sideOffset={8} collisionPadding={12} className="max-w-md z-50">
+                                    <div className="font-medium">{row.kraName}</div>
+                                    <div className="text-xs opacity-80 mt-1">Category: {row.categoryName}</div>
+                                    <div className="text-xs opacity-80">{kraCounts[kraKey]} KPI{kraCounts[kraKey] === 1 ? '' : 's'} in this page</div>
+                                    <div className="text-[10px] opacity-60 mt-1">Click to {kraCollapsed ? 'expand' : 'collapse'}</div>
+                                  </TooltipContent>
+                                </Tooltip>
                               </td>
                             </tr>
                           );
@@ -698,7 +711,7 @@ export default function KpiEmployeeMatrix() {
                                   )}
                                 </div>
                               </TooltipTrigger>
-                              <TooltipContent className="max-w-md">
+                              <TooltipContent side="right" align="start" sideOffset={8} collisionPadding={12} className="max-w-md z-50">
                                 <div className="font-medium">{row.kpiName}</div>
                                 <div className="text-xs opacity-80 mt-1">KRA: {row.kraName}</div>
                                 <div className="text-xs opacity-80">Category: {row.categoryName}</div>
