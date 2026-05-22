@@ -513,14 +513,14 @@ export default function KpiEmployeeMatrix() {
                     <col style={{ width: COL.kpi }} />
                     {empSlice.map(e => <col key={e.id} style={{ width: COL.cell }} />)}
                   </colgroup>
-                  <thead className="sticky top-0 z-20">
+                  <thead className="sticky top-0 z-30">
                     <tr style={{ height: COL.headerH }}>
-                      <th className="sticky left-0 z-30 bg-background border-b border-r text-xs font-semibold text-muted-foreground align-bottom pb-2">
+                      <th className="sticky left-0 z-40 bg-background border-b border-r text-xs font-semibold text-muted-foreground align-bottom pb-2">
                         <div className="text-center">Sr.</div>
                       </th>
                       <th
                         style={{ left: STICKY_KPI_LEFT }}
-                        className="sticky z-30 bg-background border-b text-xs font-semibold text-muted-foreground align-bottom pb-2 px-3 text-left shadow-[2px_0_0_0_hsl(var(--border))]"
+                        className="sticky z-40 bg-background border-b text-xs font-semibold text-muted-foreground align-bottom pb-2 px-2.5 text-left shadow-[4px_0_8px_-4px_hsl(var(--foreground)/0.12)]"
                       >
                         KPI / KRA
                       </th>
