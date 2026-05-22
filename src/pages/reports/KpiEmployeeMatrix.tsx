@@ -558,12 +558,12 @@ export default function KpiEmployeeMatrix() {
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <div className="h-full flex flex-col items-center justify-end gap-1 pb-1.5 px-0.5 cursor-default">
-                                  <Avatar className="h-7 w-7">
+                                  <Avatar className="h-7 w-7 ring-1 ring-border">
                                     <AvatarFallback className="text-[10px] font-semibold bg-primary/10 text-primary">
                                       {initialsOf(emp.fullName)}
                                     </AvatarFallback>
                                   </Avatar>
-                                  <span className="text-[9px] font-medium text-muted-foreground tabular-nums leading-none truncate max-w-full">
+                                  <span className="text-[10px] font-medium text-muted-foreground tabular-nums leading-none truncate max-w-full">
                                     {emp.employeeCode || '—'}
                                   </span>
                                 </div>
