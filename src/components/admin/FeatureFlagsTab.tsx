@@ -14,6 +14,7 @@ import { Flag, Save, Users, ShieldCheck, X } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { toast } from 'sonner';
 import type { Database } from '@/integrations/supabase/types';
+import { useProfiles } from '@/hooks/useOrganization';
 
 type AppRole = Database['public']['Enums']['app_role'];
 
@@ -80,22 +81,20 @@ function useTargetedProfiles(ids: string[]) {
 }
 
 function useProfileSearch(query: string) {
-  return useQuery({
-    queryKey: ['profile_search_flags', query],
-    enabled: query.trim().length >= 2,
-    queryFn: async (): Promise<ProfileLite[]> => {
-      const q = `%${query.trim()}%`;
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, employee_code')
-        .eq('is_active', true)
-        .or(`full_name.ilike.${q},employee_code.ilike.${q}`)
-        .limit(25);
-      if (error) throw error;
-      return (data ?? []) as ProfileLite[];
-    },
-    staleTime: 30_000,
-  });
+  const { data: profiles = [], isLoading } = useProfiles();
+  const trimmed = query.trim().toLowerCase();
+  const results = useMemo<ProfileLite[]>(() => {
+    if (trimmed.length < 2) return [];
+    return (profiles as any[])
+      .filter((p) => {
+        const name = (p.full_name ?? '').toLowerCase();
+        const code = (p.employee_code ?? '').toLowerCase();
+        return name.includes(trimmed) || code.includes(trimmed);
+      })
+      .slice(0, 25)
+      .map((p) => ({ id: p.id, full_name: p.full_name ?? null, employee_code: p.employee_code ?? null }));
+  }, [profiles, trimmed]);
+  return { data: results, isLoading };
 }
 
 function FlagCard({ flag }: { flag: FeatureFlag }) {
