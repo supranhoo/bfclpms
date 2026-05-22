@@ -607,20 +607,41 @@ export default function KpiEmployeeMatrix() {
                       const rowBg = isEven ? 'bg-muted/20' : 'bg-background';
                       elements.push(
                         <tr key={row.key} style={{ height: COL.rowH }} className="group hover:bg-accent/20">
-                          <td className={`sticky left-0 z-10 border-b border-r text-center text-xs text-muted-foreground ${rowBg} group-hover:bg-accent/20`}>
+                          <td className={`sticky left-0 z-20 border-b border-r text-center text-xs text-muted-foreground ${rowBg} group-hover:bg-accent/20`}>
                             {page * rowsPerPage + idx + 1}
                           </td>
                           <td
                             style={{ left: STICKY_KPI_LEFT }}
-                            className={`sticky z-10 border-b px-3 ${rowBg} group-hover:bg-accent/20 shadow-[2px_0_0_0_hsl(var(--border))]`}
+                            className={`sticky z-20 border-b px-2.5 ${rowBg} group-hover:bg-accent/20 shadow-[4px_0_8px_-4px_hsl(var(--foreground)/0.12)]`}
                           >
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <div className="cursor-default">
-                                  <div className="font-medium text-foreground truncate leading-tight">{row.kpiName}</div>
-                                  <div className="text-[11px] text-muted-foreground truncate">
-                                    {row.kraName}
-                                    <span className="ml-2 text-[10px]">Wt: {row.weightage}%</span>
+                                <div className="cursor-default flex items-start gap-1 min-w-0">
+                                  <button
+                                    type="button"
+                                    aria-label={expandedRows.has(row.key) || expandAll ? 'Collapse details' : 'Show KRA and Wt%'}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setExpandedRows(prev => {
+                                        const next = new Set(prev);
+                                        if (next.has(row.key)) next.delete(row.key);
+                                        else next.add(row.key);
+                                        return next;
+                                      });
+                                    }}
+                                    className="mt-0.5 shrink-0 text-muted-foreground/60 hover:text-foreground"
+                                  >
+                                    <ChevronDown
+                                      className={`h-3 w-3 transition-transform ${(expandedRows.has(row.key) || expandAll) ? '' : '-rotate-90'}`}
+                                    />
+                                  </button>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="font-medium text-foreground truncate leading-tight">{row.kpiName}</div>
+                                    {(expandedRows.has(row.key) || expandAll) && (
+                                      <div className="text-[10px] text-muted-foreground truncate leading-tight mt-0.5">
+                                        {row.kraName} · {row.weightage}%
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               </TooltipTrigger>
