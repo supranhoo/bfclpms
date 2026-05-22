@@ -24,7 +24,7 @@ const EMP_PAGE_OPTIONS = [25, 50, 100] as const;
 // Sticky-pane column widths (px) — single source of truth so left offsets stay aligned.
 const COL = {
   sr: 44,
-  kpi: 180,
+  kpi: 256,
   cell: 64, // employee column width
   headerH: 130,
   rowH: 36,
@@ -58,8 +58,7 @@ export default function KpiEmployeeMatrix() {
   const [empPageSize, setEmpPageSize] = useState<number>(50);
   const [hoverEmpId, setHoverEmpId] = useState<string | null>(null);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [expandAll, setExpandAll] = useState(false);
+  const [collapsedKras, setCollapsedKras] = useState<Set<string>>(new Set());
   const filtersRef = useRef<HTMLDivElement>(null);
 
   // Company filter
