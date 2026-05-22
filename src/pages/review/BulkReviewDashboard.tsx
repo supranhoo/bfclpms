@@ -29,9 +29,15 @@ import { BulkReviewVirtualGrid } from '@/components/review/BulkReviewVirtualGrid
 import { useToast } from '@/hooks/use-toast';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
+// Full month names — must match kpis.review_period exactly (DB stores 'April', 'May', ...).
+// Ordered by fiscal year (Apr → Mar) for display.
 const PERIOD_OPTIONS = [
-  'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep',
-  'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar',
+  'April', 'May', 'June', 'July', 'August', 'September',
+  'October', 'November', 'December', 'January', 'February', 'March',
+];
+const CALENDAR_MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
 const VIEWER_STAGES = [
@@ -58,7 +64,7 @@ export default function BulkReviewDashboard() {
   const flagQuery = useBulkReviewFlag();
 
   const now = new Date();
-  const defaultPeriod = PERIOD_OPTIONS[now.getMonth()] || 'Apr';
+  const defaultPeriod = CALENDAR_MONTHS[now.getMonth()] || 'April';
   const defaultYear = now.getFullYear();
 
   const [period, setPeriod] = useState<string>(defaultPeriod);
