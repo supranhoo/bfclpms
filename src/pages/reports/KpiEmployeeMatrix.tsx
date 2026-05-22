@@ -5,11 +5,14 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Download, Search, Users, Target, AlertTriangle, BarChart3, Play, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { Loader2, Download, Search, Target, AlertTriangle, Play, ChevronLeft, ChevronRight, ChevronDown, SlidersHorizontal, EyeOff } from 'lucide-react';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { useKpiEmployeeMatrix, useKpiEmployeeMatrixScope, MATRIX_CELL_CAP, type MatrixFilters } from '@/hooks/useKpiEmployeeMatrix';
 import { useDepartments, useBusinessUnits, useKraCategories, useDivisions } from '@/hooks/useOrganization';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
@@ -26,12 +29,20 @@ const COL = {
   sr: 44,
   kpi: 360,
   cell: 64, // employee column width
-  headerH: 130,
+  headerH: 68,
   rowH: 36,
 } as const;
 const STICKY_KPI_LEFT = COL.sr;
 
 type ViewMode = 'weightage' | 'score' | 'both';
+
+// 2-letter initials from a full name
+function initialsOf(name: string): string {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 export default function KpiEmployeeMatrix() {
   const { toast } = useToast();
