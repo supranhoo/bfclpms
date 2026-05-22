@@ -80,8 +80,11 @@ export default function KpiEmployeeMatrix() {
     const el = scrollContainerRef.current;
     if (!el) return;
     const close = () => {
-      // Radix listens for Escape on document to close tooltips.
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      // Only dismiss when an actual Radix tooltip is open — avoids closing
+      // unrelated surfaces (sidebar sheet, popovers, dropdowns) on every scroll.
+      if (document.querySelector('[data-radix-tooltip-content]')) {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      }
     };
     el.addEventListener('scroll', close, { passive: true });
     return () => el.removeEventListener('scroll', close);
