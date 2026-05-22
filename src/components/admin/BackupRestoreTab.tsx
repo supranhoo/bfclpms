@@ -416,7 +416,14 @@ export function BackupRestoreTab() {
                           </>
                         )}
                         {(backup.status === 'failed' || backup.status === 'completed_with_errors') && backup.error_message && (
-                          <span className="text-xs text-destructive max-w-[200px] truncate" title={backup.error_message}>
+                          <span
+                            className={`text-xs max-w-[200px] truncate ${
+                              backup.status === 'completed_with_errors'
+                                ? 'text-amber-700 dark:text-amber-400'
+                                : 'text-destructive'
+                            }`}
+                            title={backup.error_message}
+                          >
                             {backup.error_message}
                           </span>
                         )}
