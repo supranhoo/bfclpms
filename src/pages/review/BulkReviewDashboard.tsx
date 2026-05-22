@@ -391,8 +391,3 @@ function Tile({ label, value }: { label: string; value: number | string }) {
     </Card>
   );
 }
-
-function fmt(n: number | null | undefined): string {
-  if (n === null || n === undefined) return '—';
-  return Number(n).toFixed(1);
-}
