@@ -18,6 +18,7 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 ## Memories
 - [Page loading overlay pattern](mem://design/page-loading-overlay-pattern) — Centered PageLoadingOverlay wired in DashboardLayout (Suspense + RouteDataLoadingGate), rocket+chart art
 - [Lean-Load Policy](mem://architecture/performance/lean-load-policy) — Debounced inputs, slim KPI projection, paginated lists; rejects blanket select('*') rewrite & 20-row picker caps (POLICY §120)
+- [Bulk Review Dashboard](mem://features/review/bulk-review-dashboard) — PRD v2.0, flag-gated /review/bulk-scoring with parallel stages + audited re-open (M1+M2 shipped)
 - [Notification recipient guard](mem://architecture/database/notification-recipient-guard) — Non-login user FK guard for notification trigger inserts (BUG-037 / POLICY §108)
 - [KPI audit logs canonical](mem://architecture/database/kpi-audit-logs-canonical) — Canonical table & status vocabulary for workflow-transition aggregations (BUG-031)
 - [Per-employee workflow resolution](mem://architecture/database/per-employee-workflow-resolution) — Use canonical resolver in reports; never hardcode stage arrays (BUG-033)
