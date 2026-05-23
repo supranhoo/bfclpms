@@ -1,8 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useReportAccess } from '@/hooks/useReportAccess';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { useAuth } from '@/contexts/AuthContext';
+import { fetchAllPaged } from '@/lib/fetchAll';
 import { CompanyFilter } from '@/components/reports/CompanyFilter';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -87,6 +89,7 @@ export default function EmployeePerformanceSummary() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('employee-summary');
   const { getCompanyCode } = useCompanyFilter();
+  const { isReady, user } = useAuth();
   const currentYear = new Date().getFullYear();
   
   const [selectedYear, setSelectedYear] = useState(currentYear.toString());
@@ -104,7 +107,8 @@ export default function EmployeePerformanceSummary() {
 
   // Fetch all KPIs with separate submission query to avoid RLS timeout
   const { data: performanceData, isLoading } = useQuery({
-    queryKey: ['employee-performance-summary', selectedYear, selectedPeriod],
+    queryKey: ['employee-performance-summary', user?.id, selectedYear, selectedPeriod],
+    enabled: isReady && !!user,
     queryFn: async () => {
       const year = parseInt(selectedYear);
       
@@ -119,6 +123,7 @@ export default function EmployeePerformanceSummary() {
           .from('kpis')
           .select('id, employee_id, kra_name, kpi_name, weightage, status, review_period, review_year, frequency, frequency_cycle_start')
           .eq('review_year', year)
+          .order('id')
           .range(offset, offset + batchSize - 1);
 
         if (selectedPeriod !== 'all') {
@@ -157,19 +162,24 @@ export default function EmployeePerformanceSummary() {
         kpi.review_submissions = submissionMap.get(kpi.id) || null;
       });
 
-      // Fetch all profiles with department info
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select(`
-          id,
-          employee_code,
-          full_name,
-          designation,
-          reporting_manager_id,
-          is_active,
-          departments (name, business_units (name, divisions (name)))
-        `);
-      if (profilesError) throw profilesError;
+      // Fetch all profiles with department info. Must be paged: active roster
+      // exceeds PostgREST's 1000-row default cap, which otherwise drops most
+      // KPI owners and makes admin reports appear empty.
+      const profiles = await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('profiles')
+          .select(`
+            id,
+            employee_code,
+            full_name,
+            designation,
+            reporting_manager_id,
+            is_active,
+            departments (name, business_units (name, divisions (name)))
+          `)
+          .order('id')
+          .range(from, to)
+      );
 
       // Create profile lookup map
       const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
