@@ -248,18 +248,41 @@ export default function BulkReviewDashboard() {
 
   return (
     <div className="w-full">
-      {/* Sticky utility bar — title + toolbar + counters all in one strip */}
-      <div className="sticky top-0 z-30 bg-background/95 backdrop-blur border-b">
-        <div className="flex flex-wrap items-center gap-2 px-3 py-2 min-h-12">
-          {/* Title chip */}
-          <div className="flex items-center gap-1.5 pr-2 mr-1 border-r">
+      {/* Sticky 2-row header — strict grid rhythm */}
+      <div className="sticky top-0 z-30 bg-background/95 backdrop-blur border-b shadow-sm">
+        {/* Row 1 — identity · search · primary actions */}
+        <div className="flex items-center gap-3 px-4 h-12 border-b border-border/40">
+          {/* Title chip + inline counters */}
+          <div className="flex items-center gap-2 shrink-0">
             <Layers className="h-4 w-4 text-primary" />
             <h1 className="text-sm font-semibold whitespace-nowrap">Bulk Review</h1>
             <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">Beta</Badge>
+            {preview.isLoading ? (
+              <Skeleton className="h-3 w-32 ml-1" />
+            ) : preview.data ? (
+              <span className="hidden md:flex items-center gap-2 ml-1 text-[11px] text-muted-foreground tabular-nums">
+                <span><strong className="text-foreground">{preview.data.emp_count}</strong> emp</span>
+                <span className="opacity-40">·</span>
+                <span><strong className="text-foreground">{preview.data.kpi_count}</strong> KPI</span>
+                <span className="opacity-40">·</span>
+                <span>~{preview.data.est_payload_kb} KB</span>
+                {scopeLoaded && snapshot.data && (
+                  <>
+                    <span className="opacity-40">·</span>
+                    <span><strong className="text-foreground">{snapshot.data.rows?.length ?? 0}</strong>/<strong className="text-foreground">{snapshot.data.total ?? 0}</strong> rows</span>
+                    <span className="opacity-40">·</span>
+                    <span>Δ&gt;1: <strong className="text-foreground">{variance}</strong></span>
+                  </>
+                )}
+                {capExceeded && (
+                  <Badge variant="destructive" className="h-4 px-1.5 text-[10px] ml-1">Scope too large</Badge>
+                )}
+              </span>
+            ) : null}
           </div>
 
-          {/* Search */}
-          <div className="relative flex-1 min-w-[200px] max-w-md">
+          {/* Search — anchored, fills middle */}
+          <div className="relative flex-1 min-w-0">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             <Input
               value={search}
@@ -270,22 +293,21 @@ export default function BulkReviewDashboard() {
             />
           </div>
 
-          {/* Stage */}
-          <Select value={viewerStage} onValueChange={setViewerStage}>
-            <SelectTrigger className="h-9 w-[150px] text-xs" aria-label="Reviewer stage">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <UserCog className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <SelectValue placeholder="Stage" />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              {VIEWER_STAGES.map((s) => (
-                <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <div className="ml-auto flex items-center gap-2">
+          {/* Right action cluster */}
+          <div className="flex items-center gap-2 shrink-0 pl-3 border-l border-border/50">
+            <Select value={viewerStage} onValueChange={setViewerStage}>
+              <SelectTrigger className="h-9 w-[140px] text-xs" aria-label="Reviewer stage">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <UserCog className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <SelectValue placeholder="Stage" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                {VIEWER_STAGES.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button
               size="sm"
               className="h-9"
@@ -313,130 +335,132 @@ export default function BulkReviewDashboard() {
           </div>
         </div>
 
-        {/* Row 2 — Filters (icon + placeholder) · View mode */}
-        <div className="flex flex-wrap items-center gap-2 px-3 pb-2">
-          {/* Month */}
-          <Select value={period} onValueChange={(v) => { setPeriod(v); invalidateScope(); }}>
-            <SelectTrigger className="h-8 w-[130px] text-xs" aria-label="Month">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <SelectValue placeholder="Month" />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              {PERIOD_OPTIONS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-            </SelectContent>
-          </Select>
-
-          {/* Year */}
-          <div className="relative">
-            <CalendarDays className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-            <Input
-              type="number"
-              value={year}
-              onChange={(e) => { setYear(Number(e.target.value) || defaultYear); invalidateScope(); }}
-              className="h-8 w-[100px] pl-7 text-xs"
-              aria-label="Year"
-            />
-          </div>
-
-          {/* Company */}
-          {companies.length > 1 && (
-            <Select
-              value={selectedCompanyId}
-              onValueChange={(v) => { setSelectedCompanyId(v); invalidateScope(); }}
-            >
-              <SelectTrigger className="h-8 w-[160px] text-xs" aria-label="Company">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <SelectValue placeholder="All Companies" />
+        {/* Row 2 — strict 7-column filter grid + view-mode pill */}
+        <div className="flex items-center gap-2 px-4 h-11 bg-muted/30">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2 flex-1 min-w-0">
+            {/* Month */}
+            <Select value={period} onValueChange={(v) => { setPeriod(v); invalidateScope(); }}>
+              <SelectTrigger className="h-8 w-full text-xs" aria-label="Month">
+                <div className="flex items-center gap-1.5 min-w-0 truncate">
+                  <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <SelectValue placeholder="Month" />
                 </div>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Companies</SelectItem>
-                {companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                {PERIOD_OPTIONS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
               </SelectContent>
             </Select>
-          )}
 
-          {/* Division */}
-          <Select
-            value={divisionId || 'all'}
-            onValueChange={(v) => {
-              setDivisionId(v === 'all' ? '' : v);
-              setBusinessUnitId(''); setDepartmentId('');
-              invalidateScope();
-            }}
-          >
-            <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Division">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <Network className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <SelectValue placeholder="All Divisions" />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Divisions</SelectItem>
-              {(divisions ?? []).map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+            {/* Year */}
+            <div className="relative">
+              <CalendarDays className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                type="number"
+                value={year}
+                onChange={(e) => { setYear(Number(e.target.value) || defaultYear); invalidateScope(); }}
+                className="h-8 w-full pl-7 text-xs"
+                aria-label="Year"
+              />
+            </div>
 
-          {/* Business Unit */}
-          <Select
-            value={businessUnitId || 'all'}
-            onValueChange={(v) => {
-              setBusinessUnitId(v === 'all' ? '' : v);
-              setDepartmentId('');
-              invalidateScope();
-            }}
-          >
-            <SelectTrigger className="h-8 w-[160px] text-xs" aria-label="Business Unit">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <Factory className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <SelectValue placeholder="All Business Units" />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Business Units</SelectItem>
-              {filteredBusinessUnits.map((b: any) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+            {/* Company */}
+            {companies.length > 1 && (
+              <Select
+                value={selectedCompanyId}
+                onValueChange={(v) => { setSelectedCompanyId(v); invalidateScope(); }}
+              >
+                <SelectTrigger className="h-8 w-full text-xs" aria-label="Company">
+                  <div className="flex items-center gap-1.5 min-w-0 truncate">
+                    <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <SelectValue placeholder="Company" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Companies</SelectItem>
+                  {companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
 
-          {/* Department */}
-          <Select
-            value={departmentId || 'all'}
-            onValueChange={(v) => { setDepartmentId(v === 'all' ? '' : v); invalidateScope(); }}
-          >
-            <SelectTrigger className="h-8 w-[160px] text-xs" aria-label="Department">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <SelectValue placeholder="All Departments" />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Departments</SelectItem>
-              {filteredDepartments.map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+            {/* Division */}
+            <Select
+              value={divisionId || 'all'}
+              onValueChange={(v) => {
+                setDivisionId(v === 'all' ? '' : v);
+                setBusinessUnitId(''); setDepartmentId('');
+                invalidateScope();
+              }}
+            >
+              <SelectTrigger className="h-8 w-full text-xs" aria-label="Division">
+                <div className="flex items-center gap-1.5 min-w-0 truncate">
+                  <Network className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <SelectValue placeholder="Division" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Divisions</SelectItem>
+                {(divisions ?? []).map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
 
-          {/* Category */}
-          <Select
-            value={categoryId || 'all'}
-            onValueChange={(v) => { setCategoryId(v === 'all' ? '' : v); invalidateScope(); }}
-          >
-            <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Category">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <SelectValue placeholder="All Categories" />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {(categories ?? []).map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+            {/* Business Unit */}
+            <Select
+              value={businessUnitId || 'all'}
+              onValueChange={(v) => {
+                setBusinessUnitId(v === 'all' ? '' : v);
+                setDepartmentId('');
+                invalidateScope();
+              }}
+            >
+              <SelectTrigger className="h-8 w-full text-xs" aria-label="Business Unit">
+                <div className="flex items-center gap-1.5 min-w-0 truncate">
+                  <Factory className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <SelectValue placeholder="BU" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Business Units</SelectItem>
+                {filteredBusinessUnits.map((b: any) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
 
-          {/* View mode + hide-empty (right-aligned pill) */}
-          <div className="ml-auto flex items-center gap-1 rounded-md border p-0.5">
+            {/* Department */}
+            <Select
+              value={departmentId || 'all'}
+              onValueChange={(v) => { setDepartmentId(v === 'all' ? '' : v); invalidateScope(); }}
+            >
+              <SelectTrigger className="h-8 w-full text-xs" aria-label="Department">
+                <div className="flex items-center gap-1.5 min-w-0 truncate">
+                  <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <SelectValue placeholder="Department" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Departments</SelectItem>
+                {filteredDepartments.map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+
+            {/* Category */}
+            <Select
+              value={categoryId || 'all'}
+              onValueChange={(v) => { setCategoryId(v === 'all' ? '' : v); invalidateScope(); }}
+            >
+              <SelectTrigger className="h-8 w-full text-xs" aria-label="Category">
+                <div className="flex items-center gap-1.5 min-w-0 truncate">
+                  <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <SelectValue placeholder="Category" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {(categories ?? []).map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* View-mode pill — outside grid, anchored right */}
+          <div className="flex items-center gap-1 rounded-md border bg-background p-0.5 shrink-0 ml-2 pl-2 border-l border-border/50">
             <ToggleGroup
               type="single"
               value={displayMode}
@@ -459,32 +483,6 @@ export default function BulkReviewDashboard() {
               {hideEmpty ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
             </Button>
           </div>
-        </div>
-
-        {/* Meta strip — preview counters + matrix stats merged */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 pb-1.5 text-[11px] text-muted-foreground">
-          {preview.isLoading ? (
-            <Skeleton className="h-3 w-48" />
-          ) : preview.data ? (
-            <>
-              <span><strong className="text-foreground tabular-nums">{preview.data.emp_count}</strong> emp</span>
-              <span><strong className="text-foreground tabular-nums">{preview.data.kpi_count}</strong> KPI</span>
-              <span>~{preview.data.est_payload_kb} KB</span>
-              {capExceeded && (
-                <Badge variant="destructive" className="h-4 px-1.5 text-[10px]">
-                  Scope too large — narrow filters (cap: 25k cells / 5 MB)
-                </Badge>
-              )}
-            </>
-          ) : null}
-          {scopeLoaded && snapshot.data && (
-            <>
-              <span className="opacity-50">•</span>
-              <span>Page <strong className="text-foreground tabular-nums">{page}</strong>/<strong className="text-foreground tabular-nums">{Math.max(1, Math.ceil((snapshot.data.total ?? 0) / 200))}</strong></span>
-              <span><strong className="text-foreground tabular-nums">{snapshot.data.rows?.length ?? 0}</strong>/<strong className="text-foreground tabular-nums">{snapshot.data.total ?? 0}</strong> rows</span>
-              <span>Δ&gt;1: <strong className="text-foreground tabular-nums">{variance}</strong></span>
-            </>
-          )}
         </div>
       </div>
 
