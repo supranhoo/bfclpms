@@ -271,17 +271,22 @@ export function useKpisByPeriod(selectedPeriod: string | undefined, selectedYear
 
       let rows: any[];
       if (isMonthPeriod) {
-        // Split fetch: server-side month match + non-monthly frequencies that
-        // need client-side coverage resolution. Avoids the year-wide scan that
-        // was hitting statement_timeout.
+        // v2.66.12.2 — Route month-period reads through the SECURITY DEFINER
+        // RPC `get_reviewer_kpis_for_period`, which bypasses per-row RLS
+        // evaluation cost and lifts statement_timeout to 30s. Direct
+        // PostgREST scans on `kpis` for a full month (2k+ rows) were
+        // intermittently returning empty under heavy RLS load, leaving the
+        // Admin All KRAs dashboard showing 0 KPIs (POLICY §134-A). The RPC
+        // path is already proven by `useKpisByPeriodRanges`.
         const NON_MONTHLY = ['Quarterly', 'Half-Yearly', 'Yearly', 'Bi-Monthly', 'Custom'];
         const [monthRows, nonMonthlyRows] = await Promise.all([
-          paginate(() =>
-            supabase
-              .from('kpis')
-              .select(SLIM_KPI_SELECT)
-              .eq('review_year', selectedYear as number)
-              .eq('review_period', selectedPeriod as string),
+          fetchAllRpcPaged<any>((from, to) =>
+            (supabase as any)
+              .rpc('get_reviewer_kpis_for_period', {
+                p_period: selectedPeriod as string,
+                p_year: selectedYear as number,
+              })
+              .range(from, to),
           ),
           paginate(() =>
             supabase
