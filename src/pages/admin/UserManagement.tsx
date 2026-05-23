@@ -22,8 +22,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { invalidateProfileCaches } from '@/lib/profileCacheKeys';
-import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus, KeyRound, Copy, Check, Trash2, Package, Calendar, Phone, UserX, UserCheck, Sparkles } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus, KeyRound, Copy, Check, Trash2, Package, Calendar, Phone, UserX, UserCheck, Sparkles, GitBranch } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { SmartAssignmentDialog } from '@/components/admin/SmartAssignmentDialog';
 import { EmployeeWorkingDaysDialog } from '@/components/admin/EmployeeWorkingDaysDialog';
@@ -1224,7 +1224,7 @@ export default function UserManagement() {
                     <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Module Access & Login</h3>
                   </div>
                   <Separator />
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                     <button
                       type="button"
                       onClick={() => { const u = selectedUser; setEditDialogOpen(false); openAccessSheet(u, 'roles'); }}
@@ -1251,6 +1251,15 @@ export default function UserManagement() {
                       <Search className="h-5 w-5 text-primary mb-2" />
                       <p className="text-sm font-semibold">View access history</p>
                       <p className="text-xs text-muted-foreground mt-0.5">Recent grants, revokes, and email changes.</p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { const u = selectedUser; setEditDialogOpen(false); navigate(`/admin/workflow-config?employee=${u.id}`); }}
+                      className="text-left rounded-lg border p-4 hover:border-primary hover:bg-accent/50 transition-colors"
+                    >
+                      <GitBranch className="h-5 w-5 text-primary mb-2" />
+                      <p className="text-sm font-semibold">Workflow mapping</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Assign or change this user's review workflow template.</p>
                     </button>
                   </div>
                 </div>
