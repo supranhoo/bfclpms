@@ -1274,7 +1274,7 @@ describe('fetchAllRpcPaged: multi-page concatenation', () => {
   });
 });
 
-// v2.66.11.19: Employee Performance Summary showed 0 rows for Admin because
+// v2.66.11.21: Employee Performance Summary showed 0 rows for Admin because
 // the profiles lookup was a single unranged SELECT. With >1000 profiles,
 // PostgREST silently capped the result and March-2026 KPI owners were absent
 // from profileMap. The report must also wait for auth readiness before RLS reads.
@@ -1297,5 +1297,12 @@ describe('Employee Performance Summary auth and paging guards', () => {
     expect(profileBlock).toMatch(/\.from\(['"]profiles['"]\)/);
     expect(profileBlock).toMatch(/\.order\(['"]id['"]\)/);
     expect(profileBlock).toMatch(/\.range\(from,\s*to\)/);
+  });
+
+  it('AuthContext evicts employee summary caches after auth bootstrap', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/contexts/AuthContext.tsx', 'utf-8');
+    expect(src).toMatch(/queryKey:\s*\['employee-performance-summary'\]/);
+    expect(src).toMatch(/queryKey:\s*\['employee-performance-trends'\]/);
   });
 });
