@@ -2967,3 +2967,14 @@ KPI batch reads in this report MUST also use deterministic ordering before pagin
 RCA snapshot (2026-05-23): Mar-2026 backend data existed (1,756 KPI rows / 107 employees). Jitendra Bharti (101715) had 85 Mar-2026 KPI rows across 7 active direct reports and explicit `employee-summary` view/download override, but the UI could show 0 because the profile lookup was capped before grouping.
 
 Regression: `src/test/bugBountyFixes.test.ts` asserts auth gating, per-user cache keys, paged profile fetching, and auth-bootstrap cache eviction for Employee Performance Summary.
+
+
+## §134-A — Admin All KRAs Period Read Contract (v2.66.12.2)
+
+The Admin → All KRAs (`src/pages/admin/AllKpis.tsx`) dashboard MUST fetch month-scoped KPI data through the `get_reviewer_kpis_for_period` SECURITY DEFINER RPC, paged via `fetchAllRpcPaged`. Direct PostgREST `from('kpis').select(...).eq('review_period', ...)` scans for a full month are prohibited because per-row RLS on `kpis` (≥18 policies, including expensive `get_skip_level_manager()` and `has_report_access_override()` subqueries) intermittently exceeded statement timeout and returned empty results for admins — leaving the dashboard blank despite 2,000+ KPI rows existing.
+
+In addition, `hydrateKpiRelations` (relation backfill for `kpi.profiles` and `kpi.kra_categories`) MUST chunk `.in('id', ids)` lookups at ≤500 IDs per request. Single `.in()` calls over large ID lists silently truncate at the PostgREST 1000-row cap and drop profile hydration, which causes downstream employee grouping to skip valid KPI rows.
+
+Year-wide ("All Periods") and non-monthly-frequency cycle paths (Quarterly / Half-Yearly / Yearly / Bi-Monthly / Custom) may continue to use direct year-scoped `kpis` reads, as they are gated by `selectedPeriod === 'all'` or `frequency in (...)` and are not in the hot Admin All KRAs default path.
+
+RCA snapshot (2026-05-23): April 2026 had 2,267 KPI rows / 149 employees and May 2026 had 2,168 / 142, yet Admin (Jaspal) saw 0 in the dashboard. Routing through the RPC + chunked hydration restored visibility without any RLS, schema, or scoring change.
