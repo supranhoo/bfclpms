@@ -268,6 +268,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     queryClient.invalidateQueries({ queryKey: ['org-kpi-data-owner-names'] });
     queryClient.invalidateQueries({ queryKey: ['is-any-org-kpi-owner'] });
     queryClient.invalidateQueries({ queryKey: ['kpis'] });
+    queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
     queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
     queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
     // v2.66.11.13 — Manager Team Reviews dashboard caches must also re-fetch
