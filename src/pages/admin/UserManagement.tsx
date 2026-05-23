@@ -1343,15 +1343,7 @@ export default function UserManagement() {
                       <p className="text-sm font-semibold">View access history</p>
                       <p className="text-xs text-muted-foreground mt-0.5">Recent grants, revokes, and email changes.</p>
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => { const u = selectedUser; setEditDialogOpen(false); navigate(`/admin/workflow-config?employee=${u.id}`); }}
-                      className="text-left rounded-lg border p-4 hover:border-primary hover:bg-accent/50 transition-colors"
-                    >
-                      <GitBranch className="h-5 w-5 text-primary mb-2" />
-                      <p className="text-sm font-semibold">Workflow mapping</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Assign or change this user's review workflow template.</p>
-                    </button>
+                    <InlineWorkflowMappingCard employeeId={selectedUser.id} />
                   </div>
                 </div>
               )}
