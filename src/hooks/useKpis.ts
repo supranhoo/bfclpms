@@ -324,9 +324,10 @@ export function useKpisByPeriod(selectedPeriod: string | undefined, selectedYear
  * Batches all period combinations into parallel requests and deduplicates by KPI id.
  */
 export function useKpisByPeriodRanges(periodRanges: Array<{ month: string; year: number }>) {
+  const { isReady, user } = useAuth();
   return useQuery({
-    queryKey: ['kpis-by-period-ranges', periodRanges],
-    enabled: periodRanges.length > 0,
+    queryKey: ['kpis-by-period-ranges', periodRanges, user?.id],
+    enabled: isReady && !!user?.id && periodRanges.length > 0,
     placeholderData: keepPreviousData,
     queryFn: async () => {
       if (periodRanges.length === 0) return [];
