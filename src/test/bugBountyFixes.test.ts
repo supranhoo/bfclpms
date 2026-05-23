@@ -1273,3 +1273,36 @@ describe('fetchAllRpcPaged: multi-page concatenation', () => {
     expect(result[2531].id).toBe(2531);
   });
 });
+
+// v2.66.11.21: Employee Performance Summary showed 0 rows for Admin because
+// the profiles lookup was a single unranged SELECT. With >1000 profiles,
+// PostgREST silently capped the result and March-2026 KPI owners were absent
+// from profileMap. The report must also wait for auth readiness before RLS reads.
+describe('Employee Performance Summary auth and paging guards', () => {
+  it('uses auth readiness and per-user query keys for RLS-gated report queries', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/pages/reports/EmployeePerformanceSummary.tsx', 'utf-8');
+    expect(src).toMatch(/from\s+['"]@\/contexts\/AuthContext['"]/);
+    expect(src).toMatch(/const\s+\{\s*isReady,\s*user\s*\}\s*=\s*useAuth\(\)/);
+    expect(src).toMatch(/queryKey:\s*\['employee-performance-summary',\s*user\?\.id,/);
+    expect(src).toMatch(/enabled:\s*isReady\s*&&\s*!!user/);
+  });
+
+  it('fetches report profiles with fetchAllPaged and .range()', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/pages/reports/EmployeePerformanceSummary.tsx', 'utf-8');
+    expect(src).toMatch(/from\s+['"]@\/lib\/fetchAll['"]/);
+    const profileBlock = src.split('const profiles = await fetchAllPaged')[1]?.split('// Create profile lookup map')[0] ?? '';
+    expect(profileBlock, 'paged profiles block not found').toBeTruthy();
+    expect(profileBlock).toMatch(/\.from\(['"]profiles['"]\)/);
+    expect(profileBlock).toMatch(/\.order\(['"]id['"]\)/);
+    expect(profileBlock).toMatch(/\.range\(from,\s*to\)/);
+  });
+
+  it('AuthContext evicts employee summary caches after auth bootstrap', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/contexts/AuthContext.tsx', 'utf-8');
+    expect(src).toMatch(/queryKey:\s*\['employee-performance-summary'\]/);
+    expect(src).toMatch(/queryKey:\s*\['employee-performance-trends'\]/);
+  });
+});
