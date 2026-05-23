@@ -203,10 +203,11 @@ async function hydrateKpiRelations(kpis: any[]): Promise<any[]> {
 }
 
 export function useAllKpis(options?: { enabled?: boolean }) {
+  const { isReady, user } = useAuth();
   return useQuery({
-    queryKey: ['all-kpis'],
+    queryKey: ['all-kpis', user?.id],
     placeholderData: keepPreviousData,
-    enabled: options?.enabled !== false,
+    enabled: isReady && !!user?.id && options?.enabled !== false,
     staleTime: 5 * 60_000,
     queryFn: async () => {
       // Fetch all KPIs by paginating through results (Supabase default limit is 1000)
@@ -239,9 +240,10 @@ export function useAllKpis(options?: { enabled?: boolean }) {
 }
 
 export function useKpisByPeriod(selectedPeriod: string | undefined, selectedYear: number | undefined) {
+  const { isReady, user } = useAuth();
   return useQuery({
-    queryKey: ['kpis-by-period', selectedPeriod, selectedYear],
-    enabled: !!selectedPeriod && !!selectedYear,
+    queryKey: ['kpis-by-period', selectedPeriod, selectedYear, user?.id],
+    enabled: isReady && !!user?.id && !!selectedPeriod && !!selectedYear,
     placeholderData: keepPreviousData,
     staleTime: 5 * 60_000,
     queryFn: async () => {
