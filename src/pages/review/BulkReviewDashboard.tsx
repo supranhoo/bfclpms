@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, Layers, RefreshCw, Search, SlidersHorizontal, EyeOff, Eye } from 'lucide-react';
+import {
+  AlertCircle, Layers, RefreshCw, Search, EyeOff, Eye,
+  Calendar, CalendarDays, Building2, Network, Factory, Users, Tag, UserCog,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -15,9 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { CompanyFilter } from '@/components/reports/CompanyFilter';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import {
   useDepartments,
