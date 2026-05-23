@@ -1877,6 +1877,28 @@ export function EmployeeSelectorGrid({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+          {bulkReviewFlagOn && ['team', 'skip_level', 'hr_pms', 'audit', 'management'].includes(viewLevel) && (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate('/review/bulk-scoring')}
+                    className="gap-1.5"
+                    aria-label="Open bulk review"
+                  >
+                    <Layers className="h-4 w-4" />
+                    <span className="hidden sm:inline">Bulk Review</span>
+                    <Badge variant="secondary" className="ml-1 px-1 py-0 text-[9px] leading-none">Beta</Badge>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  Score this stage in bulk across all employees and KPIs.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           <Button variant="outline" size="sm" onClick={handleExportPendingKpis} className="gap-1.5">
             <Download className="h-4 w-4" />
             <span className="hidden sm:inline">Export Pending</span>
