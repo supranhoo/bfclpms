@@ -58,11 +58,13 @@ export interface BulkReviewMatrixGridProps {
   onToggleSubmission: (submissionId: string) => void;
   onToggleAll: (allIds: string[]) => void;
   onCellClick: (row: BulkReviewRow) => void;
+  displayMode?: 'score' | 'wt' | 'both';
 }
 
 export function BulkReviewMatrixGrid({
   rows, viewerStage, selectedSubmissionIds,
   onToggleSubmission, onToggleAll, onCellClick,
+  displayMode = 'score',
 }: BulkReviewMatrixGridProps) {
   const [showMeta, setShowMeta] = useState(false);
   const [collapsedKras, setCollapsedKras] = useState<Set<string>>(new Set());
@@ -276,14 +278,28 @@ export function BulkReviewMatrixGrid({
                               >
                                 {isNa ? (
                                   <span className="text-[10px] font-bold text-muted-foreground uppercase">N/A</span>
-                                ) : score != null ? (
-                                  <span className="text-sm font-bold tabular-nums text-foreground">
-                                    {Number(score).toFixed(1)}
-                                  </span>
                                 ) : (
-                                  <span className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wide border border-dashed border-border rounded px-2 py-0.5">
-                                    Pending
-                                  </span>
+                                  <div className="flex flex-col items-center leading-tight">
+                                    {(displayMode === 'wt' || displayMode === 'both') && kpi.weightage != null && (
+                                      <span className={cn(
+                                        'tabular-nums text-muted-foreground',
+                                        displayMode === 'wt' ? 'text-sm font-bold text-foreground' : 'text-[10px]',
+                                      )}>
+                                        {kpi.weightage}%
+                                      </span>
+                                    )}
+                                    {(displayMode === 'score' || displayMode === 'both') && (
+                                      score != null ? (
+                                        <span className="text-sm font-bold tabular-nums text-foreground">
+                                          {Number(score).toFixed(1)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wide border border-dashed border-border rounded px-1.5 py-0.5">
+                                          Pending
+                                        </span>
+                                      )
+                                    )}
+                                  </div>
                                 )}
                                 {tone && (
                                   <span
