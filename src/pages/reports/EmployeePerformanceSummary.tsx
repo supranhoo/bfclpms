@@ -298,7 +298,8 @@ export default function EmployeePerformanceSummary() {
 
   // Fetch comparison data (all periods for trend analysis)
   const { data: trendData } = useQuery({
-    queryKey: ['employee-performance-trends', selectedYear],
+    queryKey: ['employee-performance-trends', user?.id, selectedYear],
+    enabled: isReady && !!user && activeTab === 'comparison',
     queryFn: async () => {
       const year = parseInt(selectedYear);
       
@@ -313,6 +314,7 @@ export default function EmployeePerformanceSummary() {
             .from('kpis')
             .select('id, employee_id, weightage, status, review_period, review_year, frequency, frequency_cycle_start')
             .eq('review_year', year)
+            .order('id')
             .range(offset, offset + batchSize - 1);
 
         if (error) throw error;
@@ -383,7 +385,6 @@ export default function EmployeePerformanceSummary() {
 
       return employeeTrends;
     },
-    enabled: activeTab === 'comparison',
   });
 
   // getStatusPriority removed — statusCounts map replaces single-status logic
@@ -429,7 +430,7 @@ export default function EmployeePerformanceSummary() {
   }, [filteredData, currentPage, pageSize]);
 
   // Reset page when filters change
-  useMemo(() => {
+  useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, selectedYear, selectedPeriod, selectedStatus, pageSize, showFreqLocked]);
 
