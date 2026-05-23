@@ -286,6 +286,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     queryClient.invalidateQueries({ queryKey: ['managers-list'] });
     queryClient.invalidateQueries({ queryKey: ['distinct-designations'] });
     queryClient.invalidateQueries({ queryKey: ['distinct-grades'] });
+    // Employee Summary report is RLS-gated and must recover from any
+    // pre-bootstrap empty cache after login/refresh.
+    queryClient.invalidateQueries({ queryKey: ['employee-performance-summary'] });
+    queryClient.invalidateQueries({ queryKey: ['employee-performance-trends'] });
   }, [isReady, user?.id, queryClient]);
 
   const signIn = async (email: string, password: string, rememberMe: boolean = true) => {
