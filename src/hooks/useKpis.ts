@@ -177,23 +177,40 @@ async function hydrateKpiRelations(kpis: any[]): Promise<any[]> {
   const categoryIds = Array.from(new Set(kpis.map(k => k.category_id).filter(Boolean)));
   const employeeIds = Array.from(new Set(kpis.map(k => k.employee_id).filter(Boolean)));
 
-  const [catsRes, profsRes] = await Promise.all([
+  // v2.66.12.2 — Chunk .in() lookups so neither request can exceed the
+  // PostgREST 1000-row cap or a proxy URL/body limit. Previously a single
+  // .in() over 1000+ employee IDs silently truncated, dropping `kpi.profiles`
+  // hydration and causing All KRAs rows to be skipped during grouping.
+  const CHUNK = 500;
+  const chunked = async <T,>(ids: string[], fetcher: (slice: string[]) => Promise<{ data: T[] | null; error: any }>) => {
+    const out: T[] = [];
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const slice = ids.slice(i, i + CHUNK);
+      const { data, error } = await fetcher(slice);
+      if (error) throw error;
+      if (data) out.push(...data);
+    }
+    return out;
+  };
+
+  const [cats, profs] = await Promise.all([
     categoryIds.length
-      ? supabase.from('kra_categories').select('id, name, color, weightage').in('id', categoryIds)
-      : Promise.resolve({ data: [], error: null } as any),
+      ? chunked<any>(categoryIds, (slice) =>
+          supabase.from('kra_categories').select('id, name, color, weightage').in('id', slice),
+        )
+      : Promise.resolve([] as any[]),
     employeeIds.length
-      ? supabase
-          .from('profiles')
-          .select('id, full_name, email, employee_code, department_id, reporting_manager_id')
-          .in('id', employeeIds)
-      : Promise.resolve({ data: [], error: null } as any),
+      ? chunked<any>(employeeIds, (slice) =>
+          supabase
+            .from('profiles')
+            .select('id, full_name, email, employee_code, department_id, reporting_manager_id')
+            .in('id', slice),
+        )
+      : Promise.resolve([] as any[]),
   ]);
 
-  if (catsRes.error) throw catsRes.error;
-  if (profsRes.error) throw profsRes.error;
-
-  const catMap = new Map((catsRes.data || []).map((c: any) => [c.id, c]));
-  const profMap = new Map((profsRes.data || []).map((p: any) => [p.id, p]));
+  const catMap = new Map(cats.map((c: any) => [c.id, c]));
+  const profMap = new Map(profs.map((p: any) => [p.id, p]));
 
   return kpis.map(k => ({
     ...k,
