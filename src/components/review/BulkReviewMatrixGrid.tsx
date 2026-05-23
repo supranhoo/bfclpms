@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
@@ -153,13 +153,13 @@ export function BulkReviewMatrixGrid({
 
       {/* Matrix surface */}
       <div className="rounded-lg border border-border bg-card overflow-hidden">
-        <div className="overflow-auto max-h-[calc(100vh-360px)] relative">
+        <div className="overflow-auto max-h-[calc(100vh-260px)] relative">
           <table className="border-separate border-spacing-0 w-full">
             <thead>
               <tr>
                 {/* Top-left frozen corner */}
                 <th
-                  className="sticky top-0 left-0 z-40 bg-muted/40 border-b border-r border-border p-3 text-left shadow-[4px_0_8px_-4px_hsl(var(--foreground)/0.12)]"
+                  className="sticky top-0 left-0 z-50 bg-muted border-b border-r border-border p-3 text-left shadow-[4px_0_8px_-4px_hsl(var(--foreground)/0.12)]"
                   style={{ minWidth: KPI_COL_W, width: KPI_COL_W }}
                 >
                   <div className="flex items-center gap-2">
@@ -177,7 +177,7 @@ export function BulkReviewMatrixGrid({
                 {employees.map((e) => (
                   <th
                     key={e.id}
-                    className="sticky top-0 z-30 bg-muted/40 border-b border-r border-border p-2"
+                    className="sticky top-0 z-40 bg-muted border-b border-r border-border p-2"
                     style={{ minWidth: EMP_COL_W, width: EMP_COL_W }}
                   >
                     <div className="flex flex-col items-center gap-1.5">
@@ -201,12 +201,12 @@ export function BulkReviewMatrixGrid({
               {Array.from(kraGroups.entries()).map(([kraName, group]) => {
                 const collapsed = collapsedKras.has(kraName);
                 return (
-                  <>
+                  <Fragment key={kraName}>
                     {/* Category band */}
-                    <tr key={`band-${kraName}`} className="bg-muted/30">
+                    <tr className="bg-muted">
                       <td
                         colSpan={employees.length + 1}
-                        className="sticky left-0 z-20 px-3 py-1.5 border-b border-border bg-muted/30"
+                        className="px-3 py-1.5 border-b border-border bg-muted"
                       >
                         <button
                           onClick={() => toggleKra(kraName)}
@@ -330,7 +330,7 @@ export function BulkReviewMatrixGrid({
                         })}
                       </tr>
                     ))}
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>

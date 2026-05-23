@@ -1,78 +1,54 @@
-## Goal
-Give the Bulk Review Dashboard the same filter UX as the KPI-Employee Matrix report: a single **Filters** popover (Month, Year, Company, Division, Business Unit, Department, Category), a **Search KPI / Employee** input, and the **Wt% / Score / Both** toggle for displayed cell content.
+## Three targeted fixes on `/review/bulk-scoring`
+
+### Issue 1 — Matrix UI overlap (KRA bands clash with avatar headers)
+
+**Root cause:** In `BulkReviewMatrixGrid.tsx`, the KRA band rows are wrapped in a bare React `<>` fragment inside `.map()` without a `key`, which makes React mis-reconcile siblings on re-render. Combined with the `sticky left-0` on the band `<td colspan=N+1>`, this causes collapsed bands to visually stack/overlap with the sticky avatar header row.
+
+**Fix (presentation only, in `src/components/review/BulkReviewMatrixGrid.tsx`):**
+- Replace `<>...</>` with `<React.Fragment key={kraName}>...</React.Fragment>`.
+- Drop redundant `sticky left-0 z-20` on the band `<td>` so the band scrolls horizontally with the row (no more z-fighting with the avatar header).
+- Give the band row a solid `bg-muted` (no transparency) so even if it ever did stack against the header, content wouldn't bleed through.
+- Bump the avatar-header `<th>` z-index from `z-30` to `z-40` (and the top-left corner from `z-40` to `z-50`) so the header is unambiguously on top.
+
+### Issue 2 — Full-page view not utilising space
+
+**Root cause:** `BulkReviewDashboard.tsx` wraps the page in `max-w-[1800px] mx-auto`, and the matrix viewport is `max-h-[calc(100vh-360px)]`. On wide screens (user is on 1628px CSS, but custom 1920+ users will also be affected) the dashboard caps width artificially and the grid wastes vertical room.
+
+**Fix (presentation only, in `src/pages/review/BulkReviewDashboard.tsx` + `BulkReviewMatrixGrid.tsx`):**
+- Remove the `max-w-[1800px] mx-auto` cap; use `w-full` so the dashboard fills the available shell width.
+- Tighten outer paddings (`p-4 md:p-6` → `p-3 md:p-4`) to recover horizontal pixels.
+- Change matrix viewport from `max-h-[calc(100vh-360px)]` to `max-h-[calc(100vh-260px)]` so the grid uses the freed vertical room.
+
+### Issue 3 — Every employee shows the same Self → Manager → Auditor → Management
+
+**Root cause:** `kpi_cell_detail` already resolves per-employee workflow via `get_employee_workflow(emp, period, year)`, **but that function returns the stages JSONB array directly** (e.g. `["self","manager","auditor","management"]`). `BulkCellDrawer.tsx` reads `detail.data.workflow?.stages` / `?.workflow_stages`, both of which are `undefined` on an array — so `KpiReviewPanel` falls back to its default 4-stage strip for **every** employee. The per-employee data is there; the drawer just looks at the wrong key.
+
+**Fix (presentation only, in `src/components/review/BulkCellDrawer.tsx`):**
+- Replace the `workflowStages` prop derivation with:
+  ```ts
+  workflowStages={
+    Array.isArray(detail.data.workflow) ? (detail.data.workflow as string[])
+    : Array.isArray(detail.data.workflow?.stages) ? (detail.data.workflow.stages as string[])
+    : Array.isArray(detail.data.workflow?.workflow_stages) ? (detail.data.workflow.workflow_stages as string[])
+    : undefined
+  }
+  ```
+- No RPC change — the data is already returned correctly.
+
+## Out of scope
+- No DB / RPC / RLS / policy / write-path changes.
+- No new tables, no migration.
+- No changes to scoring, variance, or approval logic.
+- No virtualization work (still pending in PRD §Polish).
 
 ## Risk & Impact
-- **Data**: Additive — extends `bulk_scope_preview` / `bulk_review_snapshot` RPC `p_filters` JSONB to accept three new optional keys (`division_id`, `business_unit_id`, `category_id`). No schema changes, no RLS changes. Existing callers passing `{}` keep working.
-- **Workflow**: None.
-- **UI**: Replaces the current inline Period/Year/Stage row with the Matrix-style filters popover; adds search + Wt/Score/Both segmented control above the matrix grid. Stage selector stays inline (it's not a Matrix filter — it's "view as which reviewer").
-- **Regression risk**: Low. New filter keys are optional in RPC; search and Wt/Score toggle are presentational only.
-- **Scalability**: Server-side filtering still drives the scope cap (25k cells / 5 MB). Search is client-side over the loaded page only — same model as the Matrix.
-- **Mitigation**: Default values (`'all'` / empty string) preserve current behavior. Existing `useBulkScopePreview` / `useBulkReviewSnapshot` signatures unchanged; only the `BulkScopeFilters` type grows.
+- **Data:** none — no schema or query change.
+- **Workflow / Policy:** none — Policy §88, RLS, and bulk RPCs untouched.
+- **UI/UX:** wider dashboard, fixed band overlap, accurate per-employee stage strip in drawer. Other pages unaffected (changes scoped to bulk-scoring components only).
+- **Regression risk:** very low; all edits are presentational or a single prop-derivation fix. Existing tests for the matrix grid/drawer (if any) continue to pass since data contracts are unchanged.
+- **Rollback:** revert the three files; flag-OFF path still hides the route entirely.
 
-## What gets built
-
-### 1. RPC migration (new file under `supabase/migrations/`)
-Extend both functions to read three more optional keys from `p_filters`:
-- `division_id` → `p.division_id`
-- `business_unit_id` → `p.business_unit_id`
-- `category_id` → joins on `kpis.category_id` (or `kras.category_id` — verified during implementation)
-
-Add matching `AND (v_… IS NULL OR …)` clauses in the same WHERE blocks. Function signatures unchanged (still `p_filters JSONB`).
-
-### 2. `BulkScopeFilters` TypeScript type (`src/hooks/useBulkReview.ts`)
-Add the three optional UUID fields. No hook signature changes.
-
-### 3. `BulkReviewDashboard.tsx` header rewrite
-Replace the 4-column inline grid (Period / Year / Stage / Load Scope) with a header bar modeled on the Matrix screenshot:
-
-```
-[ 🔍 Search KPI / Employee… ]  [ Wt% | Score | Both ]  [ 👁 hide-zero ]  [ ⚙ Filters (n) ▼ ]
-```
-
-The **Filters** popover (re-uses `Popover` + the exact `CompanyFilter` component and `useDepartments / useBusinessUnits / useDivisions / useKraCategories` hooks already used by the Matrix) contains:
-- Month (Period dropdown — full month names, same options)
-- Year (numeric input)
-- Company
-- Division → cascades into BU → Department (same dependency chain as Matrix lines 376-410)
-- Business Unit
-- Department
-- Category
-
-Apply-on-change: any filter change calls `setScopeLoaded(false)` so the user must hit **Load Scope** again. Cheap `bulk_scope_preview` re-runs automatically. A **Filters (n)** badge counts active non-default filters, mirroring Matrix line 274-278.
-
-**Stage selector** stays separate (small inline `Select`) next to the search input — it's the viewer perspective, not a scope filter.
-
-### 4. Search + Wt/Score/Both display modes
-- **Search** filters `loadedRows` client-side by `kpi_name`, `kra_name`, `employee_name`, `employee_code` (case-insensitive). Mirrors Matrix.
-- **Wt% / Score / Both** controls what each matrix cell renders inside `BulkReviewMatrixGrid`:
-  - `score` (default, current behavior) — viewer-stage score + variance dot
-  - `wt` — KPI weightage % only
-  - `both` — weightage on top line, score on bottom
-
-  Passed as a `displayMode` prop to `BulkReviewMatrixGrid`.
-
-### 5. Hidden-zero toggle (optional, matches the eye-off icon in the screenshot)
-Eye-off icon toggle that hides matrix rows where every cell is `Pending` / null in the current page. Purely client-side over `loadedRows`.
-
-## UI Changes — visible to the user
-- New compact toolbar above the matrix: Search input, segmented Wt/Score/Both, hide-zero eye toggle, Filters popover button with active-count badge.
-- Period/Year/Stage inputs disappear from their current row; Period/Year live inside the Filters popover, Stage stays as a small inline `Select` next to Search.
-- "Load Scope" button stays — same gating, same cap.
-- Mobile: filters collapse into the popover already; search shrinks to icon-only; Wt/Score/Both stays as a 3-button segmented control.
-
-## Out of Scope
-- Server-side search (kept client-side over the loaded page, matching Matrix policy).
-- Saved/named filter presets.
-- Per-stage column expansion or export — handled separately.
-
-## Files
-- **New**: `supabase/migrations/<ts>_bulk_review_filter_extension.sql` (extends both RPCs).
-- **Edit**: `src/hooks/useBulkReview.ts` — extend `BulkScopeFilters` type only.
-- **Edit**: `src/pages/review/BulkReviewDashboard.tsx` — header toolbar rewrite, new filter state, search/displayMode plumbing.
-- **Edit**: `src/components/review/BulkReviewMatrixGrid.tsx` — accept `displayMode: 'wt' | 'score' | 'both'`, render accordingly; accept already-filtered rows from parent.
-
-## Tests
-- Manual: change each filter → Load Scope reverts to required state, preview counts update, snapshot honors filter.
-- Search: typing a KPI/employee name narrows visible rows/columns instantly.
-- Display mode: switching Wt%/Score/Both re-renders cell content without refetch.
-- RLS unchanged — same `bulk_scope_preview` / `bulk_review_snapshot` security definer pattern.
+## Files touched
+- `src/pages/review/BulkReviewDashboard.tsx` — width / padding tweaks.
+- `src/components/review/BulkReviewMatrixGrid.tsx` — Fragment key, band sticky/z-index, viewport height.
+- `src/components/review/BulkCellDrawer.tsx` — workflowStages derivation (array-aware).
