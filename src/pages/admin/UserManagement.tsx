@@ -60,6 +60,7 @@ const ITEMS_PER_PAGE = 10;
 
 export default function UserManagement() {
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
   const { data: profiles, isLoading } = useProfiles();
   const { data: departments } = useDepartments();
   const { data: designationsList } = useDesignations();
