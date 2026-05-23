@@ -182,7 +182,7 @@ async function hydrateKpiRelations(kpis: any[]): Promise<any[]> {
   // .in() over 1000+ employee IDs silently truncated, dropping `kpi.profiles`
   // hydration and causing All KRAs rows to be skipped during grouping.
   const CHUNK = 500;
-  const chunked = async <T,>(ids: string[], fetcher: (slice: string[]) => Promise<{ data: T[] | null; error: any }>) => {
+  const chunked = async <T,>(ids: string[], fetcher: (slice: string[]) => PromiseLike<{ data: T[] | null; error: any }>) => {
     const out: T[] = [];
     for (let i = 0; i < ids.length; i += CHUNK) {
       const slice = ids.slice(i, i + CHUNK);
@@ -193,12 +193,12 @@ async function hydrateKpiRelations(kpis: any[]): Promise<any[]> {
     return out;
   };
 
-  const [cats, profs] = await Promise.all([
+  const [cats, profs] = await Promise.all<any[]>([
     categoryIds.length
       ? chunked<any>(categoryIds, (slice) =>
           supabase.from('kra_categories').select('id, name, color, weightage').in('id', slice),
         )
-      : Promise.resolve([] as any[]),
+      : Promise.resolve<any[]>([]),
     employeeIds.length
       ? chunked<any>(employeeIds, (slice) =>
           supabase
@@ -206,7 +206,7 @@ async function hydrateKpiRelations(kpis: any[]): Promise<any[]> {
             .select('id, full_name, email, employee_code, department_id, reporting_manager_id')
             .in('id', slice),
         )
-      : Promise.resolve([] as any[]),
+      : Promise.resolve<any[]>([]),
   ]);
 
   const catMap = new Map(cats.map((c: any) => [c.id, c]));
