@@ -35,6 +35,96 @@ import { useSearchParams } from 'react-router-dom';
 
 import { ALL_APP_ROLES, type AppRole } from '@/lib/roles';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useWorkflowTemplates, useWorkflowConfigs, useUpsertWorkflowConfig, useDeleteWorkflowConfig, getStageLabel } from '@/hooks/useWorkflowConfig';
+
+// Inline card used inside Edit User → Access & Login to view/change the
+// employee's assigned (global) workflow template without leaving the dialog.
+function InlineWorkflowMappingCard({ employeeId }: { employeeId: string }) {
+  const { toast } = useToast();
+  const { data: templates, isLoading: tLoading } = useWorkflowTemplates(false);
+  const { data: configs, isLoading: cLoading } = useWorkflowConfigs();
+  const upsert = useUpsertWorkflowConfig();
+  const remove = useDeleteWorkflowConfig();
+
+  const existing = useMemo(
+    () => configs?.find(c => c.config_type === 'employee' && c.config_value === employeeId && !c.review_period) ?? null,
+    [configs, employeeId]
+  );
+  const selectedTemplate = useMemo(
+    () => templates?.find(t => t.id === existing?.workflow_template_id) ?? null,
+    [templates, existing]
+  );
+
+  const loading = tLoading || cLoading;
+
+  const onChange = (value: string) => {
+    upsert.mutate(
+      { configType: 'employee', configValue: employeeId, workflowTemplateId: value },
+      {
+        onSuccess: () => toast({ title: 'Workflow assigned', description: 'This user now uses the selected workflow.' }),
+        onError: (e: any) => toast({ title: 'Failed to assign workflow', description: e?.message ?? 'Try again.', variant: 'destructive' }),
+      }
+    );
+  };
+
+  const onReset = () => {
+    if (!existing) return;
+    remove.mutate(existing.id, {
+      onSuccess: () => toast({ title: 'Reset to default', description: 'This user now inherits the default workflow.' }),
+      onError: (e: any) => toast({ title: 'Failed to reset', description: e?.message ?? 'Try again.', variant: 'destructive' }),
+    });
+  };
+
+  return (
+    <div className="rounded-lg border p-4 md:col-span-2 lg:col-span-1">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <GitBranch className="h-5 w-5 text-primary" />
+          <p className="text-sm font-semibold">Workflow mapping</p>
+        </div>
+        {existing && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={onReset}
+            disabled={remove.isPending}
+          >
+            Reset to default
+          </Button>
+        )}
+      </div>
+      <Label className="text-xs text-muted-foreground">Assigned Workflow</Label>
+      <Select
+        value={existing?.workflow_template_id ?? ''}
+        onValueChange={onChange}
+        disabled={loading || upsert.isPending}
+      >
+        <SelectTrigger className="mt-1 h-9">
+          <SelectValue placeholder={loading ? 'Loading…' : 'Inherit (default)'} />
+        </SelectTrigger>
+        <SelectContent>
+          {templates?.map(t => (
+            <SelectItem key={t.id} value={t.id}>{t.display_name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {selectedTemplate && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {selectedTemplate.stages.map((s, i) => (
+            <span key={`${s}-${i}`} className="inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground bg-muted/40">
+              {getStageLabel(s)}
+            </span>
+          ))}
+        </div>
+      )}
+      {!existing && !loading && (
+        <p className="mt-2 text-xs text-muted-foreground">Currently inheriting the default workflow.</p>
+      )}
+    </div>
+  );
+}
 
 const roleColors: Record<AppRole, string> = {
   admin: 'bg-destructive/10 text-destructive',
@@ -1253,15 +1343,7 @@ export default function UserManagement() {
                       <p className="text-sm font-semibold">View access history</p>
                       <p className="text-xs text-muted-foreground mt-0.5">Recent grants, revokes, and email changes.</p>
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => { const u = selectedUser; setEditDialogOpen(false); navigate(`/admin/workflow-config?employee=${u.id}`); }}
-                      className="text-left rounded-lg border p-4 hover:border-primary hover:bg-accent/50 transition-colors"
-                    >
-                      <GitBranch className="h-5 w-5 text-primary mb-2" />
-                      <p className="text-sm font-semibold">Workflow mapping</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Assign or change this user's review workflow template.</p>
-                    </button>
+                    <InlineWorkflowMappingCard employeeId={selectedUser.id} />
                   </div>
                 </div>
               )}
