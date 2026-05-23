@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, Layers, RefreshCw, Search, SlidersHorizontal, EyeOff, Eye } from 'lucide-react';
+import {
+  AlertCircle, Layers, RefreshCw, Search, EyeOff, Eye,
+  Calendar, CalendarDays, Building2, Network, Factory, Users, Tag, UserCog,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -15,9 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { CompanyFilter } from '@/components/reports/CompanyFilter';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import {
   useDepartments,
@@ -259,155 +259,33 @@ export default function BulkReviewDashboard() {
           </div>
 
           {/* Search */}
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search KPI / Employee…"
-                className="pl-8 h-9"
-              />
-            </div>
+          <div className="relative flex-1 min-w-[200px] max-w-md">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search KPI / Employee…"
+              className="pl-8 h-9"
+              aria-label="Search KPI or employee"
+            />
+          </div>
 
-            {/* Wt% / Score / Both */}
-            <ToggleGroup
-              type="single"
-              value={displayMode}
-              onValueChange={(v) => v && setDisplayMode(v as 'score' | 'wt' | 'both')}
-              className="h-9"
-            >
-              <ToggleGroupItem value="wt" className="h-9 px-3 text-xs">Wt%</ToggleGroupItem>
-              <ToggleGroupItem value="score" className="h-9 px-3 text-xs">Score</ToggleGroupItem>
-              <ToggleGroupItem value="both" className="h-9 px-3 text-xs">Both</ToggleGroupItem>
-            </ToggleGroup>
+          {/* Stage */}
+          <Select value={viewerStage} onValueChange={setViewerStage}>
+            <SelectTrigger className="h-9 w-[150px] text-xs" aria-label="Reviewer stage">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <UserCog className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <SelectValue placeholder="Stage" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              {VIEWER_STAGES.map((s) => (
+                <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-            {/* Hide empty */}
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 gap-1.5"
-              onClick={() => setHideEmpty(v => !v)}
-              aria-pressed={hideEmpty}
-              title={hideEmpty ? 'Show all rows' : 'Hide unscored rows'}
-            >
-              {hideEmpty ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-            </Button>
-
-            {/* Stage (separate from scope filters) */}
-            <Select value={viewerStage} onValueChange={setViewerStage}>
-              <SelectTrigger className="h-9 w-[140px] text-xs"><SelectValue placeholder="Stage" /></SelectTrigger>
-              <SelectContent>
-                {VIEWER_STAGES.map((s) => (
-                  <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* Filters popover */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="h-9 gap-1.5">
-                  <SlidersHorizontal className="h-4 w-4" />
-                  Filters
-                  {activeFilterCount > 0 && (
-                    <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">{activeFilterCount}</Badge>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-[480px] p-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Month</Label>
-                    <Select value={period} onValueChange={(v) => { setPeriod(v); invalidateScope(); }}>
-                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {PERIOD_OPTIONS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Year</Label>
-                    <Input
-                      type="number"
-                      value={year}
-                      onChange={(e) => { setYear(Number(e.target.value) || defaultYear); invalidateScope(); }}
-                      className="h-8 text-xs mt-1"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Company</Label>
-                    <div className="mt-1">
-                      <CompanyFilter
-                        companies={companies}
-                        selectedCompanyId={selectedCompanyId}
-                        onCompanyChange={(v) => { setSelectedCompanyId(v); invalidateScope(); }}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Division</Label>
-                    <Select
-                      value={divisionId || 'all'}
-                      onValueChange={(v) => {
-                        setDivisionId(v === 'all' ? '' : v);
-                        setBusinessUnitId(''); setDepartmentId('');
-                        invalidateScope();
-                      }}
-                    >
-                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Division" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Divisions</SelectItem>
-                        {(divisions ?? []).map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Business Unit</Label>
-                    <Select
-                      value={businessUnitId || 'all'}
-                      onValueChange={(v) => {
-                        setBusinessUnitId(v === 'all' ? '' : v);
-                        setDepartmentId('');
-                        invalidateScope();
-                      }}
-                    >
-                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Business Unit" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Business Units</SelectItem>
-                        {filteredBusinessUnits.map((b: any) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Department</Label>
-                    <Select
-                      value={departmentId || 'all'}
-                      onValueChange={(v) => { setDepartmentId(v === 'all' ? '' : v); invalidateScope(); }}
-                    >
-                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Department" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Departments</SelectItem>
-                        {filteredDepartments.map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Category</Label>
-                    <Select
-                      value={categoryId || 'all'}
-                      onValueChange={(v) => { setCategoryId(v === 'all' ? '' : v); invalidateScope(); }}
-                    >
-                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Category" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Categories</SelectItem>
-                        {(categories ?? []).map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
-
+          <div className="ml-auto flex items-center gap-2">
             <Button
               size="sm"
               className="h-9"
@@ -415,20 +293,172 @@ export default function BulkReviewDashboard() {
               onClick={() => { setPage(1); setScopeLoaded(true); }}
             >
               Load Scope
+              {activeFilterCount > 0 && (
+                <Badge variant="secondary" className="ml-2 h-5 px-1.5 text-[10px]">{activeFilterCount}</Badge>
+              )}
             </Button>
+            {scopeLoaded && (
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9"
+                onClick={() => snapshot.refetch()}
+                disabled={snapshot.isFetching}
+                title="Refresh"
+                aria-label="Refresh snapshot"
+              >
+                <RefreshCw className={`h-4 w-4 ${snapshot.isFetching ? 'animate-spin' : ''}`} />
+              </Button>
+            )}
+          </div>
+        </div>
 
-          {scopeLoaded && (
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-9 w-9 ml-auto"
-              onClick={() => snapshot.refetch()}
-              disabled={snapshot.isFetching}
-              title="Refresh"
+        {/* Row 2 — Filters (icon + placeholder) · View mode */}
+        <div className="flex flex-wrap items-center gap-2 px-3 pb-2">
+          {/* Month */}
+          <Select value={period} onValueChange={(v) => { setPeriod(v); invalidateScope(); }}>
+            <SelectTrigger className="h-8 w-[130px] text-xs" aria-label="Month">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <SelectValue placeholder="Month" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              {PERIOD_OPTIONS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          {/* Year */}
+          <div className="relative">
+            <CalendarDays className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              type="number"
+              value={year}
+              onChange={(e) => { setYear(Number(e.target.value) || defaultYear); invalidateScope(); }}
+              className="h-8 w-[100px] pl-7 text-xs"
+              aria-label="Year"
+            />
+          </div>
+
+          {/* Company */}
+          {companies.length > 1 && (
+            <Select
+              value={selectedCompanyId}
+              onValueChange={(v) => { setSelectedCompanyId(v); invalidateScope(); }}
             >
-              <RefreshCw className={`h-4 w-4 ${snapshot.isFetching ? 'animate-spin' : ''}`} />
-            </Button>
+              <SelectTrigger className="h-8 w-[160px] text-xs" aria-label="Company">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <SelectValue placeholder="All Companies" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Companies</SelectItem>
+                {companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
           )}
+
+          {/* Division */}
+          <Select
+            value={divisionId || 'all'}
+            onValueChange={(v) => {
+              setDivisionId(v === 'all' ? '' : v);
+              setBusinessUnitId(''); setDepartmentId('');
+              invalidateScope();
+            }}
+          >
+            <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Division">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Network className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <SelectValue placeholder="All Divisions" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Divisions</SelectItem>
+              {(divisions ?? []).map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          {/* Business Unit */}
+          <Select
+            value={businessUnitId || 'all'}
+            onValueChange={(v) => {
+              setBusinessUnitId(v === 'all' ? '' : v);
+              setDepartmentId('');
+              invalidateScope();
+            }}
+          >
+            <SelectTrigger className="h-8 w-[160px] text-xs" aria-label="Business Unit">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Factory className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <SelectValue placeholder="All Business Units" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Business Units</SelectItem>
+              {filteredBusinessUnits.map((b: any) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          {/* Department */}
+          <Select
+            value={departmentId || 'all'}
+            onValueChange={(v) => { setDepartmentId(v === 'all' ? '' : v); invalidateScope(); }}
+          >
+            <SelectTrigger className="h-8 w-[160px] text-xs" aria-label="Department">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <SelectValue placeholder="All Departments" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
+              {filteredDepartments.map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          {/* Category */}
+          <Select
+            value={categoryId || 'all'}
+            onValueChange={(v) => { setCategoryId(v === 'all' ? '' : v); invalidateScope(); }}
+          >
+            <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Category">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <SelectValue placeholder="All Categories" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {(categories ?? []).map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          {/* View mode + hide-empty (right-aligned pill) */}
+          <div className="ml-auto flex items-center gap-1 rounded-md border p-0.5">
+            <ToggleGroup
+              type="single"
+              value={displayMode}
+              onValueChange={(v) => v && setDisplayMode(v as 'score' | 'wt' | 'both')}
+              className="h-7"
+            >
+              <ToggleGroupItem value="wt" className="h-7 px-2 text-[11px]">Wt%</ToggleGroupItem>
+              <ToggleGroupItem value="score" className="h-7 px-2 text-[11px]">Score</ToggleGroupItem>
+              <ToggleGroupItem value="both" className="h-7 px-2 text-[11px]">Both</ToggleGroupItem>
+            </ToggleGroup>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setHideEmpty(v => !v)}
+              aria-pressed={hideEmpty}
+              aria-label={hideEmpty ? 'Show all rows' : 'Hide unscored rows'}
+              title={hideEmpty ? 'Show all rows' : 'Hide unscored rows'}
+            >
+              {hideEmpty ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+            </Button>
+          </div>
         </div>
 
         {/* Meta strip — preview counters + matrix stats merged */}
