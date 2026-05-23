@@ -310,9 +310,17 @@ export default function AllKpis() {
     };
   }, [employeeData, filteredKpis, queryCountMap]);
 
-  // Check if any filters are active
-  const hasActiveFilters = selectedManager !== 'all' || selectedDepartment !== 'all' || 
-    selectedDivision !== 'all' || selectedPeriod !== 'all' || selectedYear !== 'all' || searchEmployee.trim() !== '';
+  // Treat current month/year as the neutral baseline — they don't count as "active" filters.
+  const isPeriodActive = selectedPeriod !== currentMonth;
+  const isYearActive = selectedYear !== currentYear.toString();
+  const activeFilterCount =
+    (selectedManager !== 'all' ? 1 : 0) +
+    (selectedDepartment !== 'all' ? 1 : 0) +
+    (selectedDivision !== 'all' ? 1 : 0) +
+    (isPeriodActive ? 1 : 0) +
+    (isYearActive ? 1 : 0) +
+    (searchEmployee.trim() ? 1 : 0);
+  const hasActiveFilters = activeFilterCount > 0;
 
   // Filter employeeData by search term
   const displayData = useMemo(() => {
@@ -328,8 +336,8 @@ export default function AllKpis() {
     setSelectedManager('all');
     setSelectedDepartment('all');
     setSelectedDivision('all');
-    setSelectedPeriod('all');
-    setSelectedYear('all');
+    setSelectedPeriod(currentMonth);
+    setSelectedYear(currentYear.toString());
     setSearchEmployee('');
     setVisibleCount(20);
   };
@@ -490,7 +498,7 @@ export default function AllKpis() {
             <span className="text-sm font-medium text-foreground">Filters</span>
             {hasActiveFilters && (
               <Badge variant="secondary" className="text-xs">
-                {[selectedManager, selectedDepartment, selectedDivision, selectedPeriod, selectedYear].filter(v => v !== 'all').length + (searchEmployee.trim() ? 1 : 0)} active
+                {activeFilterCount} active
               </Badge>
             )}
           </div>
