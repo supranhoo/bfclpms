@@ -203,10 +203,11 @@ async function hydrateKpiRelations(kpis: any[]): Promise<any[]> {
 }
 
 export function useAllKpis(options?: { enabled?: boolean }) {
+  const { isReady, user } = useAuth();
   return useQuery({
-    queryKey: ['all-kpis'],
+    queryKey: ['all-kpis', user?.id],
     placeholderData: keepPreviousData,
-    enabled: options?.enabled !== false,
+    enabled: isReady && !!user?.id && options?.enabled !== false,
     staleTime: 5 * 60_000,
     queryFn: async () => {
       // Fetch all KPIs by paginating through results (Supabase default limit is 1000)
@@ -239,9 +240,10 @@ export function useAllKpis(options?: { enabled?: boolean }) {
 }
 
 export function useKpisByPeriod(selectedPeriod: string | undefined, selectedYear: number | undefined) {
+  const { isReady, user } = useAuth();
   return useQuery({
-    queryKey: ['kpis-by-period', selectedPeriod, selectedYear],
-    enabled: !!selectedPeriod && !!selectedYear,
+    queryKey: ['kpis-by-period', selectedPeriod, selectedYear, user?.id],
+    enabled: isReady && !!user?.id && !!selectedPeriod && !!selectedYear,
     placeholderData: keepPreviousData,
     staleTime: 5 * 60_000,
     queryFn: async () => {
@@ -322,9 +324,10 @@ export function useKpisByPeriod(selectedPeriod: string | undefined, selectedYear
  * Batches all period combinations into parallel requests and deduplicates by KPI id.
  */
 export function useKpisByPeriodRanges(periodRanges: Array<{ month: string; year: number }>) {
+  const { isReady, user } = useAuth();
   return useQuery({
-    queryKey: ['kpis-by-period-ranges', periodRanges],
-    enabled: periodRanges.length > 0,
+    queryKey: ['kpis-by-period-ranges', periodRanges, user?.id],
+    enabled: isReady && !!user?.id && periodRanges.length > 0,
     placeholderData: keepPreviousData,
     queryFn: async () => {
       if (periodRanges.length === 0) return [];
@@ -1442,8 +1445,9 @@ export function useKpiQueries(kpiIds: string[]) {
 
 // Lightweight hook: returns a Map<kpi_id, open_query_count> via a single aggregate query
 export function useOpenQueryCounts(kpiIds: string[]) {
+  const { isReady, user } = useAuth();
   return useQuery({
-    queryKey: ['open-query-counts', kpiIds.length, kpiIds[0] ?? null, kpiIds[kpiIds.length - 1] ?? null],
+    queryKey: ['open-query-counts', kpiIds.length, kpiIds[0] ?? null, kpiIds[kpiIds.length - 1] ?? null, user?.id],
     queryFn: async () => {
       if (kpiIds.length === 0) return new Map<string, number>();
       const countMap = new Map<string, number>();
@@ -1480,14 +1484,16 @@ export function useOpenQueryCounts(kpiIds: string[]) {
       }
     },
     staleTime: 60_000,
-    enabled: kpiIds.length > 0,
+    enabled: isReady && !!user?.id && kpiIds.length > 0,
   });
 }
 
 // Lightweight hook: fetch distinct review_period + review_year combos without loading all KPIs
 export function useDistinctKpiPeriods() {
+  const { isReady, user } = useAuth();
   return useQuery({
-    queryKey: ['distinct-kpi-periods'],
+    queryKey: ['distinct-kpi-periods', user?.id],
+    enabled: isReady && !!user?.id,
     staleTime: 10 * 60 * 1000,
     queryFn: async () => {
       const monthOrder = [
