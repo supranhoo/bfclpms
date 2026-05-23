@@ -153,7 +153,7 @@ export function BulkReviewMatrixGrid({
 
       {/* Matrix surface */}
       <div className="rounded-lg border border-border bg-card overflow-hidden">
-        <div className="overflow-auto max-h-[calc(100vh-260px)] relative">
+        <div className="overflow-auto max-h-[calc(100vh-110px)] relative">
           <table className="border-separate border-spacing-0 w-full">
             <thead>
               <tr>
