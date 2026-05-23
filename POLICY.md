@@ -2953,3 +2953,17 @@ Regression: `src/test/backfillAuditAssignments.test.ts` (6 tests — happy path,
 - Excluding a table by quietly removing it from any list — exclusions go in `backup_denylist` with a written `reason`.
 
 Regression: future tests in `src/test/safety/backup-coverage.test.ts` assert that `get_backup_table_order()` returns the union of all `public` base tables minus the denylist.
+
+---
+
+## §134 — Employee Performance Summary Data Loading Contract (v2.66.11.21)
+
+The Employee Performance Summary report (`/reports/employee-summary`) is RLS-gated and roster-dependent. Its React Query reads MUST wait for `useAuth().isReady && !!user`, include `user?.id` in the query key, and be invalidated by `AuthContext` after first auth bootstrap.
+
+Any `profiles` list used to build the report's employee lookup MUST use `fetchAllPaged()` with stable ordering and `.range(from, to)`. Single-shot `profiles` SELECTs are forbidden because PostgREST caps unranged reads at 1,000 rows; with the current active roster this silently removes KPI owners from the map and can render a valid admin/manager report as “No data found”.
+
+KPI batch reads in this report MUST also use deterministic ordering before pagination.
+
+RCA snapshot (2026-05-23): Mar-2026 backend data existed (1,756 KPI rows / 107 employees). Jitendra Bharti (101715) had 85 Mar-2026 KPI rows across 7 active direct reports and explicit `employee-summary` view/download override, but the UI could show 0 because the profile lookup was capped before grouping.
+
+Regression: `src/test/bugBountyFixes.test.ts` asserts auth gating, per-user cache keys, paged profile fetching, and auth-bootstrap cache eviction for Employee Performance Summary.
