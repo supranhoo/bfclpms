@@ -1445,8 +1445,9 @@ export function useKpiQueries(kpiIds: string[]) {
 
 // Lightweight hook: returns a Map<kpi_id, open_query_count> via a single aggregate query
 export function useOpenQueryCounts(kpiIds: string[]) {
+  const { isReady, user } = useAuth();
   return useQuery({
-    queryKey: ['open-query-counts', kpiIds.length, kpiIds[0] ?? null, kpiIds[kpiIds.length - 1] ?? null],
+    queryKey: ['open-query-counts', kpiIds.length, kpiIds[0] ?? null, kpiIds[kpiIds.length - 1] ?? null, user?.id],
     queryFn: async () => {
       if (kpiIds.length === 0) return new Map<string, number>();
       const countMap = new Map<string, number>();
@@ -1483,14 +1484,16 @@ export function useOpenQueryCounts(kpiIds: string[]) {
       }
     },
     staleTime: 60_000,
-    enabled: kpiIds.length > 0,
+    enabled: isReady && !!user?.id && kpiIds.length > 0,
   });
 }
 
 // Lightweight hook: fetch distinct review_period + review_year combos without loading all KPIs
 export function useDistinctKpiPeriods() {
+  const { isReady, user } = useAuth();
   return useQuery({
-    queryKey: ['distinct-kpi-periods'],
+    queryKey: ['distinct-kpi-periods', user?.id],
+    enabled: isReady && !!user?.id,
     staleTime: 10 * 60 * 1000,
     queryFn: async () => {
       const monthOrder = [
