@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useUrlFilterState, useUrlFilterStateNullable, useClearAllFilters } from '@/hooks/useUrlFilterState';
 import { useMyAuditAssignments } from '@/hooks/useAuditAssignments';
 import { useMyKpiLevelAssignments } from '@/hooks/useMyKpiLevelAssignments';
@@ -25,9 +25,10 @@ import { EmployeeContactCard } from '@/components/review/EmployeeContactCard';
 import { TeamReviewsZeroDiagnostic } from '@/components/review/TeamReviewsZeroDiagnostic';
 import { supabase } from '@/integrations/supabase/client';
 import { formatEmployeeName } from '@/lib/utils';
-import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2, Download, ChevronDown, ChevronUp, Loader2, Info, Eye, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2, Download, ChevronDown, ChevronUp, Loader2, Info, Eye, AlertTriangle, RefreshCw, Layers } from 'lucide-react';
 import { Hourglass, Building2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { useBulkReviewFlag } from '@/hooks/useBulkReview';
 import { ViewMode } from './ViewModeToggle';
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -165,6 +166,8 @@ export function EmployeeSelectorGrid({
   const { user, effectiveRole: role } = useAuth();
   const queryClient = useQueryClient();
   const clearAllFilters = useClearAllFilters();
+  const navigate = useNavigate();
+  const { data: bulkReviewFlagOn } = useBulkReviewFlag();
   // Track in-flight fetches for the data this grid depends on so the refresh
   // button can show a spinner and stay disabled until refetches settle.
   const fetchingProfiles = useIsFetching({ queryKey: ['profiles-by-workflow-stage'] });
@@ -1876,6 +1879,28 @@ export function EmployeeSelectorGrid({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+          {bulkReviewFlagOn && ['team', 'skip_level', 'hr_pms', 'audit', 'management'].includes(viewLevel) && (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate('/review/bulk-scoring')}
+                    className="gap-1.5"
+                    aria-label="Open bulk review"
+                  >
+                    <Layers className="h-4 w-4" />
+                    <span className="hidden sm:inline">Bulk Review</span>
+                    <Badge variant="secondary" className="ml-1 px-1 py-0 text-[9px] leading-none">Beta</Badge>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  Score this stage in bulk across all employees and KPIs.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           <Button variant="outline" size="sm" onClick={handleExportPendingKpis} className="gap-1.5">
             <Download className="h-4 w-4" />
             <span className="hidden sm:inline">Export Pending</span>
