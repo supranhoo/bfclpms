@@ -247,33 +247,19 @@ export default function BulkReviewDashboard() {
   }
 
   return (
-    <div className="p-3 md:p-4 space-y-4 w-full">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2">
-          <Layers className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-semibold">Bulk Review Dashboard</h1>
-          <Badge variant="secondary">Beta</Badge>
-        </div>
-        {scopeLoaded && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => snapshot.refetch()}
-            disabled={snapshot.isFetching}
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${snapshot.isFetching ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-        )}
-      </div>
+    <div className="w-full">
+      {/* Sticky utility bar — title + toolbar + counters all in one strip */}
+      <div className="sticky top-0 z-30 bg-background/95 backdrop-blur border-b">
+        <div className="flex flex-wrap items-center gap-2 px-3 py-2 min-h-12">
+          {/* Title chip */}
+          <div className="flex items-center gap-1.5 pr-2 mr-1 border-r">
+            <Layers className="h-4 w-4 text-primary" />
+            <h1 className="text-sm font-semibold whitespace-nowrap">Bulk Review</h1>
+            <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">Beta</Badge>
+          </div>
 
-      {/* Toolbar — Matrix-style */}
-      <Card>
-        <CardContent className="py-3 space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Search */}
-            <div className="relative flex-1 min-w-[220px] max-w-md">
+          {/* Search */}
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
               <Input
                 value={search}
@@ -430,30 +416,51 @@ export default function BulkReviewDashboard() {
             >
               Load Scope
             </Button>
-          </div>
 
-          {/* Preview counters */}
-          <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-            {preview.isLoading ? (
-              <Skeleton className="h-4 w-48" />
-            ) : preview.data ? (
-              <>
-                <span><strong className="text-foreground tabular-nums">{preview.data.emp_count}</strong> employees</span>
-                <span><strong className="text-foreground tabular-nums">{preview.data.kpi_count}</strong> KPIs</span>
-                <span>~{preview.data.est_payload_kb} KB payload</span>
-                {capExceeded && (
-                  <Badge variant="destructive">
-                    Scope too large — narrow filters (cap: 25k cells / 5 MB)
-                  </Badge>
-                )}
-              </>
-            ) : null}
-          </div>
-        </CardContent>
-      </Card>
+          {scopeLoaded && (
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 ml-auto"
+              onClick={() => snapshot.refetch()}
+              disabled={snapshot.isFetching}
+              title="Refresh"
+            >
+              <RefreshCw className={`h-4 w-4 ${snapshot.isFetching ? 'animate-spin' : ''}`} />
+            </Button>
+          )}
+        </div>
+
+        {/* Meta strip — preview counters + matrix stats merged */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 pb-1.5 text-[11px] text-muted-foreground">
+          {preview.isLoading ? (
+            <Skeleton className="h-3 w-48" />
+          ) : preview.data ? (
+            <>
+              <span><strong className="text-foreground tabular-nums">{preview.data.emp_count}</strong> emp</span>
+              <span><strong className="text-foreground tabular-nums">{preview.data.kpi_count}</strong> KPI</span>
+              <span>~{preview.data.est_payload_kb} KB</span>
+              {capExceeded && (
+                <Badge variant="destructive" className="h-4 px-1.5 text-[10px]">
+                  Scope too large — narrow filters (cap: 25k cells / 5 MB)
+                </Badge>
+              )}
+            </>
+          ) : null}
+          {scopeLoaded && snapshot.data && (
+            <>
+              <span className="opacity-50">•</span>
+              <span>Page <strong className="text-foreground tabular-nums">{page}</strong>/<strong className="text-foreground tabular-nums">{Math.max(1, Math.ceil((snapshot.data.total ?? 0) / 200))}</strong></span>
+              <span><strong className="text-foreground tabular-nums">{snapshot.data.rows?.length ?? 0}</strong>/<strong className="text-foreground tabular-nums">{snapshot.data.total ?? 0}</strong> rows</span>
+              <span>Δ&gt;1: <strong className="text-foreground tabular-nums">{variance}</strong></span>
+            </>
+          )}
+        </div>
+      </div>
 
       {/* Empty state */}
       {!scopeLoaded && (
+        <div className="p-3 md:p-4">
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
             <Layers className="h-10 w-10 mx-auto mb-3 opacity-40" />
@@ -463,27 +470,13 @@ export default function BulkReviewDashboard() {
             </p>
           </CardContent>
         </Card>
+        </div>
       )}
 
       {/* Loaded grid */}
       {scopeLoaded && (
-        <>
-          <Card>
-            <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <div className="flex items-center gap-3">
-                <CardTitle className="text-base">Review Matrix</CardTitle>
-                <Badge variant="outline" className="text-[10px] font-medium">
-                  Page {page} / {Math.max(1, Math.ceil((snapshot.data?.total ?? 0) / 200))}
-                </Badge>
-              </div>
-              <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                <span>Rows: <strong className="text-foreground tabular-nums">{snapshot.data?.rows?.length ?? 0}</strong></span>
-                <span>Total: <strong className="text-foreground tabular-nums">{snapshot.data?.total ?? 0}</strong></span>
-                <span>Variance &gt; 1.0: <strong className="text-foreground tabular-nums">{variance}</strong></span>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {snapshot.isLoading ? (
+        <div className="px-2 md:px-3 pt-2 pb-3 space-y-2">
+          {snapshot.isLoading ? (
                 <div className="space-y-2">
                   {Array.from({ length: 6 }).map((_, i) => (
                     <Skeleton key={i} className="h-8 w-full" />
@@ -513,7 +506,7 @@ export default function BulkReviewDashboard() {
 
               {/* Pagination */}
               {snapshot.data && snapshot.data.total > 200 && (
-                <div className="flex items-center justify-between mt-3">
+                <div className="flex items-center justify-between mt-1">
                   <Button
                     variant="outline"
                     size="sm"
@@ -531,8 +524,6 @@ export default function BulkReviewDashboard() {
                   >Next</Button>
                 </div>
               )}
-            </CardContent>
-          </Card>
 
           {/* Action toolbar */}
           {selectedIds.size > 0 && (
@@ -556,7 +547,7 @@ export default function BulkReviewDashboard() {
               </Card>
             </div>
           )}
-        </>
+        </div>
       )}
 
       <BulkCellDrawer
