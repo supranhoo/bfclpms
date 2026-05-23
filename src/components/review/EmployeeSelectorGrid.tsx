@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useUrlFilterState, useUrlFilterStateNullable, useClearAllFilters } from '@/hooks/useUrlFilterState';
 import { useMyAuditAssignments } from '@/hooks/useAuditAssignments';
 import { useMyKpiLevelAssignments } from '@/hooks/useMyKpiLevelAssignments';
@@ -25,9 +25,10 @@ import { EmployeeContactCard } from '@/components/review/EmployeeContactCard';
 import { TeamReviewsZeroDiagnostic } from '@/components/review/TeamReviewsZeroDiagnostic';
 import { supabase } from '@/integrations/supabase/client';
 import { formatEmployeeName } from '@/lib/utils';
-import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2, Download, ChevronDown, ChevronUp, Loader2, Info, Eye, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2, Download, ChevronDown, ChevronUp, Loader2, Info, Eye, AlertTriangle, RefreshCw, Layers } from 'lucide-react';
 import { Hourglass, Building2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { useBulkReviewFlag } from '@/hooks/useBulkReview';
 import { ViewMode } from './ViewModeToggle';
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
