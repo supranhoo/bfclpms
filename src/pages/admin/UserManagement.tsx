@@ -18,7 +18,7 @@ import { UserManagementSkeleton } from '@/components/ui/LoadingSkeletons';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { invalidateProfileCaches } from '@/lib/profileCacheKeys';
@@ -756,9 +756,30 @@ export default function UserManagement() {
   };
 
   // Stats
-  const totalUsers = profiles?.length || 0;
-  const activeUsers = profiles?.filter(p => (p as any).is_active !== false).length || 0;
-  const inactiveUsers = totalUsers - activeUsers;
+  // v2.66.12 — `useProfiles()` is sourced from `get_reviewer_roster_slim`
+  // which returns ACTIVE employees only. Deriving inactive from that array
+  // always yields 0. Pull authoritative totals via lightweight head-count
+  // queries on `profiles` instead.
+  const { data: userStats } = useQuery({
+    queryKey: ['user-mgmt-stats'],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const [totalRes, inactiveRes] = await Promise.all([
+        supabase.from('profiles').select('*', { count: 'exact', head: true }),
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('is_active', false),
+      ]);
+      if (totalRes.error) throw totalRes.error;
+      if (inactiveRes.error) throw inactiveRes.error;
+      return {
+        total: totalRes.count ?? 0,
+        inactive: inactiveRes.count ?? 0,
+      };
+    },
+  });
+  const rosterLen = profiles?.length || 0;
+  const totalUsers = userStats?.total ?? rosterLen;
+  const inactiveUsers = userStats?.inactive ?? 0;
+  const activeUsers = Math.max(0, totalUsers - inactiveUsers);
   const admins = profiles?.filter(p => (p.user_roles as any)?.[0]?.role === 'admin').length || 0;
 
   if (isLoading) {
