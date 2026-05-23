@@ -179,11 +179,13 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
               employeeCode={detail.data.employee?.employee_code ?? row.employee_code ?? undefined}
               reportingManagerName={detail.data.employee?.reporting_manager_name ?? undefined}
               workflowStages={
-                Array.isArray(detail.data.workflow?.stages)
-                  ? (detail.data.workflow.stages as string[])
-                  : Array.isArray(detail.data.workflow?.workflow_stages)
-                    ? (detail.data.workflow.workflow_stages as string[])
-                    : undefined
+                Array.isArray(detail.data.workflow)
+                  ? (detail.data.workflow as string[])
+                  : Array.isArray(detail.data.workflow?.stages)
+                    ? (detail.data.workflow.stages as string[])
+                    : Array.isArray(detail.data.workflow?.workflow_stages)
+                      ? (detail.data.workflow.workflow_stages as string[])
+                      : undefined
               }
               orgKpiEnteredByName={detail.data.org_kpi?.entered_by ?? null}
               orgAchievedValue={detail.data.org_kpi?.achieved_value ?? null}
