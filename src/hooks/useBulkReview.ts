@@ -31,6 +31,9 @@ export interface BulkScopeFilters {
   department_id?: string | null;
   manager_id?: string | null;
   company_id?: string | null;
+  division_id?: string | null;
+  business_unit_id?: string | null;
+  category_id?: string | null;
 }
 
 /** Cheap counts. Always safe to call on filter change. */

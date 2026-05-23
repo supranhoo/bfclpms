@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, Layers, RefreshCw } from 'lucide-react';
+import { AlertCircle, Layers, RefreshCw, Search, SlidersHorizontal, EyeOff, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -15,6 +15,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { CompanyFilter } from '@/components/reports/CompanyFilter';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import {
+  useDepartments,
+  useBusinessUnits,
+  useDivisions,
+  useKraCategories,
+} from '@/hooks/useOrganization';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   useBulkReviewFlag,
@@ -77,13 +87,57 @@ export default function BulkReviewDashboard() {
       : effectiveRole === 'skip_level' ? 'skip_level'
       : 'manager'
   );
-  const [filters] = useState<BulkScopeFilters>({});
+  const [divisionId, setDivisionId] = useState<string>('');
+  const [businessUnitId, setBusinessUnitId] = useState<string>('');
+  const [departmentId, setDepartmentId] = useState<string>('');
+  const [categoryId, setCategoryId] = useState<string>('');
+  const [search, setSearch] = useState('');
+  const [displayMode, setDisplayMode] = useState<'score' | 'wt' | 'both'>('score');
+  const [hideEmpty, setHideEmpty] = useState(false);
   const [scopeLoaded, setScopeLoaded] = useState(false);
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeRow, setActiveRow] = useState<BulkReviewRow | null>(null);
   const [confirmApprove, setConfirmApprove] = useState(false);
   const approve = useBulkManagementApprove();
+
+  const { companies, selectedCompanyId, setSelectedCompanyId } = useCompanyFilter();
+  const { data: departments } = useDepartments();
+  const { data: businessUnits } = useBusinessUnits();
+  const { data: divisions } = useDivisions();
+  const { data: categories } = useKraCategories();
+
+  const filteredBusinessUnits = useMemo(() => {
+    if (!divisionId) return businessUnits ?? [];
+    return (businessUnits ?? []).filter((bu: any) => bu.division_id === divisionId);
+  }, [businessUnits, divisionId]);
+  const filteredDepartments = useMemo(() => {
+    let list = departments ?? [];
+    if (businessUnitId) list = list.filter((d: any) => d.business_unit_id === businessUnitId);
+    else if (divisionId) {
+      const buIds = new Set(filteredBusinessUnits.map((b: any) => b.id));
+      list = list.filter((d: any) => buIds.has(d.business_unit_id));
+    }
+    return list;
+  }, [departments, businessUnitId, divisionId, filteredBusinessUnits]);
+
+  const filters: BulkScopeFilters = useMemo(() => ({
+    department_id: departmentId || null,
+    company_id: selectedCompanyId && selectedCompanyId !== 'all' ? selectedCompanyId : null,
+    division_id: divisionId || null,
+    business_unit_id: businessUnitId || null,
+    category_id: categoryId || null,
+  }), [departmentId, selectedCompanyId, divisionId, businessUnitId, categoryId]);
+
+  const activeFilterCount = [
+    selectedCompanyId && selectedCompanyId !== 'all' ? 1 : 0,
+    divisionId ? 1 : 0,
+    businessUnitId ? 1 : 0,
+    departmentId ? 1 : 0,
+    categoryId ? 1 : 0,
+  ].reduce((a, b) => a + b, 0);
+
+  const invalidateScope = () => setScopeLoaded(false);
 
   const flagOn = flagQuery.data === true;
 
@@ -96,7 +150,27 @@ export default function BulkReviewDashboard() {
   const capExceeded = preview.data?.cap_exceeded ?? false;
   const canLoad = flagOn && !!preview.data && !capExceeded && (preview.data?.cell_count ?? 0) > 0;
 
-  const loadedRows = snapshot.data?.rows ?? [];
+  const rawRows = snapshot.data?.rows ?? [];
+  const loadedRows = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    let rows = rawRows;
+    if (term) {
+      rows = rows.filter(r =>
+        (r.kpi_name ?? '').toLowerCase().includes(term)
+        || (r.kra_name ?? '').toLowerCase().includes(term)
+        || (r.employee_name ?? '').toLowerCase().includes(term)
+        || (r.employee_code ?? '').toLowerCase().includes(term),
+      );
+    }
+    if (hideEmpty) {
+      rows = rows.filter(r => {
+        const scores = [r.self_score, r.manager_score, r.skip_level_score, r.hr_pms_score, r.auditor_score, r.management_score, r.final_score];
+        return scores.some(s => s !== null && s !== undefined);
+      });
+    }
+    return rows;
+  }, [rawRows, search, hideEmpty]);
+
   const variance = useMemo(() => {
     let count = 0;
     for (const r of loadedRows) {
@@ -194,62 +268,178 @@ export default function BulkReviewDashboard() {
         )}
       </div>
 
-      {/* Scope bar */}
+      {/* Toolbar — Matrix-style */}
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Scope</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="space-y-1">
-              <Label>Period</Label>
-              <Select value={period} onValueChange={(v) => { setPeriod(v); setScopeLoaded(false); }}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {PERIOD_OPTIONS.map((p) => (
-                    <SelectItem key={p} value={p}>{p}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>Year</Label>
+        <CardContent className="py-3 space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Search */}
+            <div className="relative flex-1 min-w-[220px] max-w-md">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
               <Input
-                type="number"
-                value={year}
-                onChange={(e) => { setYear(Number(e.target.value) || defaultYear); setScopeLoaded(false); }}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search KPI / Employee…"
+                className="pl-8 h-9"
               />
             </div>
-            <div className="space-y-1">
-              <Label>My Stage</Label>
-              <Select value={viewerStage} onValueChange={setViewerStage}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {VIEWER_STAGES.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-end">
-              <Button
-                className="w-full"
-                disabled={!canLoad}
-                onClick={() => { setPage(1); setScopeLoaded(true); }}
-              >
-                Load Scope
-              </Button>
-            </div>
+
+            {/* Wt% / Score / Both */}
+            <ToggleGroup
+              type="single"
+              value={displayMode}
+              onValueChange={(v) => v && setDisplayMode(v as 'score' | 'wt' | 'both')}
+              className="h-9"
+            >
+              <ToggleGroupItem value="wt" className="h-9 px-3 text-xs">Wt%</ToggleGroupItem>
+              <ToggleGroupItem value="score" className="h-9 px-3 text-xs">Score</ToggleGroupItem>
+              <ToggleGroupItem value="both" className="h-9 px-3 text-xs">Both</ToggleGroupItem>
+            </ToggleGroup>
+
+            {/* Hide empty */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5"
+              onClick={() => setHideEmpty(v => !v)}
+              aria-pressed={hideEmpty}
+              title={hideEmpty ? 'Show all rows' : 'Hide unscored rows'}
+            >
+              {hideEmpty ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+            </Button>
+
+            {/* Stage (separate from scope filters) */}
+            <Select value={viewerStage} onValueChange={setViewerStage}>
+              <SelectTrigger className="h-9 w-[140px] text-xs"><SelectValue placeholder="Stage" /></SelectTrigger>
+              <SelectContent>
+                {VIEWER_STAGES.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Filters popover */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9 gap-1.5">
+                  <SlidersHorizontal className="h-4 w-4" />
+                  Filters
+                  {activeFilterCount > 0 && (
+                    <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">{activeFilterCount}</Badge>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-[480px] p-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Month</Label>
+                    <Select value={period} onValueChange={(v) => { setPeriod(v); invalidateScope(); }}>
+                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {PERIOD_OPTIONS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Year</Label>
+                    <Input
+                      type="number"
+                      value={year}
+                      onChange={(e) => { setYear(Number(e.target.value) || defaultYear); invalidateScope(); }}
+                      className="h-8 text-xs mt-1"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Company</Label>
+                    <div className="mt-1">
+                      <CompanyFilter
+                        companies={companies}
+                        selectedCompanyId={selectedCompanyId}
+                        onCompanyChange={(v) => { setSelectedCompanyId(v); invalidateScope(); }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Division</Label>
+                    <Select
+                      value={divisionId || 'all'}
+                      onValueChange={(v) => {
+                        setDivisionId(v === 'all' ? '' : v);
+                        setBusinessUnitId(''); setDepartmentId('');
+                        invalidateScope();
+                      }}
+                    >
+                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Division" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Divisions</SelectItem>
+                        {(divisions ?? []).map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Business Unit</Label>
+                    <Select
+                      value={businessUnitId || 'all'}
+                      onValueChange={(v) => {
+                        setBusinessUnitId(v === 'all' ? '' : v);
+                        setDepartmentId('');
+                        invalidateScope();
+                      }}
+                    >
+                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Business Unit" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Business Units</SelectItem>
+                        {filteredBusinessUnits.map((b: any) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Department</Label>
+                    <Select
+                      value={departmentId || 'all'}
+                      onValueChange={(v) => { setDepartmentId(v === 'all' ? '' : v); invalidateScope(); }}
+                    >
+                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Department" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Departments</SelectItem>
+                        {filteredDepartments.map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Category</Label>
+                    <Select
+                      value={categoryId || 'all'}
+                      onValueChange={(v) => { setCategoryId(v === 'all' ? '' : v); invalidateScope(); }}
+                    >
+                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Category" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Categories</SelectItem>
+                        {(categories ?? []).map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <Button
+              size="sm"
+              className="h-9"
+              disabled={!canLoad}
+              onClick={() => { setPage(1); setScopeLoaded(true); }}
+            >
+              Load Scope
+            </Button>
           </div>
 
           {/* Preview counters */}
-          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+          <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
             {preview.isLoading ? (
               <Skeleton className="h-4 w-48" />
             ) : preview.data ? (
               <>
-                <span><strong className="text-foreground">{preview.data.emp_count}</strong> employees</span>
-                <span><strong className="text-foreground">{preview.data.kpi_count}</strong> KPIs</span>
+                <span><strong className="text-foreground tabular-nums">{preview.data.emp_count}</strong> employees</span>
+                <span><strong className="text-foreground tabular-nums">{preview.data.kpi_count}</strong> KPIs</span>
                 <span>~{preview.data.est_payload_kb} KB payload</span>
                 {capExceeded && (
                   <Badge variant="destructive">
@@ -317,6 +507,7 @@ export default function BulkReviewDashboard() {
                   onToggleSubmission={toggleOne}
                   onToggleAll={toggleAllFromMatrix}
                   onCellClick={setActiveRow}
+                  displayMode={displayMode}
                 />
               )}
 
