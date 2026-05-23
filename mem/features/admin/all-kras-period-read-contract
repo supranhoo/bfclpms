@@ -1,0 +1,12 @@
+---
+name: All KRAs Period Read Contract
+description: Admin All KRAs must read month KPIs via get_reviewer_kpis_for_period RPC and chunk profile hydration to avoid silent empty results
+type: constraint
+---
+Admin → All KRAs (`src/pages/admin/AllKpis.tsx` via `useKpisByPeriod`) MUST fetch month-scoped KPI rows through the `get_reviewer_kpis_for_period` SECURITY DEFINER RPC, paged with `fetchAllRpcPaged`. Direct `from('kpis').select(...).eq('review_period', X).eq('review_year', Y)` for a full month is forbidden — per-row RLS on `kpis` (≥18 policies, including `get_skip_level_manager` and `has_report_access_override` subqueries) intermittently times out and returns empty, leaving the dashboard blank even for admins.
+
+`hydrateKpiRelations` MUST chunk `profiles` and `kra_categories` `.in('id', ids)` lookups at ≤500 IDs/page. Single `.in()` over large arrays silently truncates at the PostgREST 1000-row cap and drops `kpi.profiles`, which causes employee grouping in All KRAs to skip valid rows.
+
+Year-wide ("All Periods") and non-monthly frequency paths (Quarterly, Half-Yearly, Yearly, Bi-Monthly, Custom) may keep direct year-scoped `kpis` reads.
+
+Codified in POLICY §134-A. RCA 2026-05-23: April 2026 had 2,267 KPI rows / 149 employees, May 2026 had 2,168 / 142; admin saw 0 until rerouted through the RPC.

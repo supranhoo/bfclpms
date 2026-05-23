@@ -177,23 +177,40 @@ async function hydrateKpiRelations(kpis: any[]): Promise<any[]> {
   const categoryIds = Array.from(new Set(kpis.map(k => k.category_id).filter(Boolean)));
   const employeeIds = Array.from(new Set(kpis.map(k => k.employee_id).filter(Boolean)));
 
-  const [catsRes, profsRes] = await Promise.all([
+  // v2.66.12.2 — Chunk .in() lookups so neither request can exceed the
+  // PostgREST 1000-row cap or a proxy URL/body limit. Previously a single
+  // .in() over 1000+ employee IDs silently truncated, dropping `kpi.profiles`
+  // hydration and causing All KRAs rows to be skipped during grouping.
+  const CHUNK = 500;
+  const chunked = async <T,>(ids: string[], fetcher: (slice: string[]) => PromiseLike<{ data: T[] | null; error: any }>) => {
+    const out: T[] = [];
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const slice = ids.slice(i, i + CHUNK);
+      const { data, error } = await fetcher(slice);
+      if (error) throw error;
+      if (data) out.push(...data);
+    }
+    return out;
+  };
+
+  const [cats, profs] = await Promise.all<any[]>([
     categoryIds.length
-      ? supabase.from('kra_categories').select('id, name, color, weightage').in('id', categoryIds)
-      : Promise.resolve({ data: [], error: null } as any),
+      ? chunked<any>(categoryIds, (slice) =>
+          supabase.from('kra_categories').select('id, name, color, weightage').in('id', slice),
+        )
+      : Promise.resolve<any[]>([]),
     employeeIds.length
-      ? supabase
-          .from('profiles')
-          .select('id, full_name, email, employee_code, department_id, reporting_manager_id')
-          .in('id', employeeIds)
-      : Promise.resolve({ data: [], error: null } as any),
+      ? chunked<any>(employeeIds, (slice) =>
+          supabase
+            .from('profiles')
+            .select('id, full_name, email, employee_code, department_id, reporting_manager_id')
+            .in('id', slice),
+        )
+      : Promise.resolve<any[]>([]),
   ]);
 
-  if (catsRes.error) throw catsRes.error;
-  if (profsRes.error) throw profsRes.error;
-
-  const catMap = new Map((catsRes.data || []).map((c: any) => [c.id, c]));
-  const profMap = new Map((profsRes.data || []).map((p: any) => [p.id, p]));
+  const catMap = new Map(cats.map((c: any) => [c.id, c]));
+  const profMap = new Map(profs.map((p: any) => [p.id, p]));
 
   return kpis.map(k => ({
     ...k,
@@ -271,17 +288,22 @@ export function useKpisByPeriod(selectedPeriod: string | undefined, selectedYear
 
       let rows: any[];
       if (isMonthPeriod) {
-        // Split fetch: server-side month match + non-monthly frequencies that
-        // need client-side coverage resolution. Avoids the year-wide scan that
-        // was hitting statement_timeout.
+        // v2.66.12.2 — Route month-period reads through the SECURITY DEFINER
+        // RPC `get_reviewer_kpis_for_period`, which bypasses per-row RLS
+        // evaluation cost and lifts statement_timeout to 30s. Direct
+        // PostgREST scans on `kpis` for a full month (2k+ rows) were
+        // intermittently returning empty under heavy RLS load, leaving the
+        // Admin All KRAs dashboard showing 0 KPIs (POLICY §134-A). The RPC
+        // path is already proven by `useKpisByPeriodRanges`.
         const NON_MONTHLY = ['Quarterly', 'Half-Yearly', 'Yearly', 'Bi-Monthly', 'Custom'];
         const [monthRows, nonMonthlyRows] = await Promise.all([
-          paginate(() =>
-            supabase
-              .from('kpis')
-              .select(SLIM_KPI_SELECT)
-              .eq('review_year', selectedYear as number)
-              .eq('review_period', selectedPeriod as string),
+          fetchAllRpcPaged<any>((from, to) =>
+            (supabase as any)
+              .rpc('get_reviewer_kpis_for_period', {
+                p_period: selectedPeriod as string,
+                p_year: selectedYear as number,
+              })
+              .range(from, to),
           ),
           paginate(() =>
             supabase
