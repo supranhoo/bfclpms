@@ -1,82 +1,48 @@
-## Problem (RCA)
+# Fix: Workflow Progress bar missing Skip-Level & HR PMS stages
 
-The screenshot shows HR PMS bulk sign-off reported "Signed off 2 / 4 · 2 skipped" but the cells in the grid still read **PENDING** and the KPI detail still shows **HR PMS Review · Current** with an N/A chip — i.e. the workflow never advanced.
+## Root cause
 
-Two real bugs in `public.bulk_write_stage_scores` (migration `20260522172805_…`):
+In `src/components/dashboard/KpiTimeline.tsx` (lines 199–209), `allWorkflowStages` is hardcoded to only 6 stages:
 
-1. **Score is not inherited.** The client (`BulkReviewDashboard.tsx` line 390) omits `score` for sign-off and the comment claims "server keeps previous-stage value", but the RPC actually does:
-   ```sql
-   UPDATE review_submissions SET hr_pms_score = v_score …
-   ```
-   where `v_score := NULLIF(v_cell->>'score','')::numeric` → **NULL**. So sign-off writes `hr_pms_score = NULL`. That's why the HR PMS card in screenshot 2 renders as "N/A · No remarks".
+```text
+kra_set → self_review → manager_check → audit → management_review → approved
+```
 
-2. **Workflow status is never advanced.** The RPC touches only `review_submissions`. It never updates `kpis.status` from `hr_pms_review` → `auditor_review` (or `approved`/next stage per the resolved workflow). The mgmt approval path (`bulk_management_approve`) does this; the stage-sign-off path does not. → cells stay PENDING in the grid.
+It is missing `skip_level_check` and `hr_pms_review`. The component then filters this hardcoded list by `propStages`, so even when the resolved workflow for the KPI contains those stages, they cannot appear — the filter drops them. That is why the bar in screenshot 3 jumps `Manager → Audit → Management` even though the journey card and DB both confirm the KPI actually traveled `Manager → Skip-Level → HR PMS → Approved`.
 
-The "2 skipped" is a secondary issue: skip reasons (`self_not_submitted`, `final_locked`, etc.) are bundled into the toast as a count only. Users have no idea which cells or why without opening the audit log.
+The canonical stage keys already exist in `src/lib/reviewConstants.ts → statusLabels` (`skip_level_check`, `hr_pms_review`), so this is purely a presentation fix.
 
 ## Risk & Impact
 
-- **Data**: Sign-off currently writes NULLs into `hr_pms_score` / `skip_level_score` / `manager_score` / `auditor_score`. A one-time forward-only repair RPC will backfill those NULLs (only rows where `group_write_batch_id` was set by stage sign-off and the corresponding stage column is NULL) using the inheritance chain, then advance affected `kpis.status`. Final-locked rows are untouched.
-- **Workflow**: After the fix, HR PMS / Manager / Skip-Level / Auditor bulk sign-off will actually advance `kpis.status` using the per-employee resolved workflow chain (already used by single-cell stage saves).
-- **UI/UX**: Toast now lists skipped reasons (grouped counts) so reviewers know *why*. No layout change.
-- **Regression**: Single-cell sign-off paths are untouched. Mgmt bulk approve is untouched. Re-open and management approve already advance status correctly.
-- **Scalability**: RPC loop is unchanged in shape; status advancement is one extra UPDATE per cell, bounded by selection size.
-- **Rollback**: New migration is additive (replaces function body, keeps signature). Previous function body kept in migration history for rollback.
+- **Data**: None. UI-only change.
+- **Workflow**: None. No business logic touched.
+- **UI/UX**: Workflow Progress bar now renders the true chain — adds two stage circles for templates that include them; unchanged for templates that don't (filtered out by `propStages`).
+- **Regression**: Low. `currentStageIndex` uses `kpi.status` against the same canonical keys; adding entries cannot break existing 6-stage templates.
+- **Scalability**: None.
 
-## Plan
+## Change
 
-### 1. New migration: replace `bulk_write_stage_scores`
+`src/components/dashboard/KpiTimeline.tsx` — extend `allWorkflowStages`:
 
-- Resolve `v_score` with **inheritance cascade** when input score is NULL:
-  - `manager` → fall back to `self_score`
-  - `skip_level` → `manager_score` → `self_score`
-  - `hr_pms` → `skip_level_score` → `manager_score` → `self_score`
-  - `auditor` → `hr_pms_score` → `skip_level_score` → `manager_score` → `self_score`
-  - If the cascade still yields NULL, skip with reason `no_prior_score`.
-- After the per-cell UPDATE, **advance `kpis.status`** by calling existing helper `public.advance_kpi_workflow_status(p_kpi_id, p_completed_stage)` (or, if that helper doesn't exist, inline the same logic the single-cell `save_stage_score` path uses — resolve next stage via `get_resolved_workflow_for_employee`, update `kpis.status`, write `kpi_audit_logs`).
-- Keep existing skip reasons; add `no_prior_score`.
-- Insert a `kpi_audit_logs` row per applied cell with action `BULK_STAGE_SIGNOFF_<STAGE>` and `batch_id`, `inherited_from` metadata.
-
-### 2. One-time repair RPC: `repair_bulk_signoff_nulls(p_dry_run boolean)`
-
-- Find `review_submissions` rows where `group_write_batch_id` is in a `bulk_review_batches` row with `stage IN ('manager','skip_level','hr_pms','auditor')` AND the corresponding stage column is NULL AND `final_score` IS NULL.
-- For each, run the same inheritance cascade and write the score, then reconcile `kpis.status` via the existing reconciliation helper.
-- Returns `{ scanned, repaired, status_advanced, still_null }`. Admin-only via existing edge function pattern (no UI in this change).
-
-### 3. Client surface skip reasons
-
-`BulkReviewDashboard.tsx` `handleBulkApprove` — group `res.skipped` by reason and render in toast description:
+```text
+kra_set → self_review → manager_check → skip_level_check → hr_pms_review → audit → management_review → approved
 ```
-Signed off 2 / 4
-2 skipped: self_not_submitted (2)
-```
-For ≥3 reason buckets, fall back to "see audit log".
 
-### 4. Tests
+Icons: reuse `UserCog` (Skip-Level) and `ClipboardCheck` (HR PMS) from `lucide-react` to stay consistent with KpiJourneySection.
 
-- `src/test/bulkStageSignoffInheritance.test.ts` — table-driven: each stage × each "missing score, has prior" case → expected inherited value; missing all priors → `no_prior_score`.
-- `src/test/bulkSignoffSkipReasonToast.test.ts` — `summariseSkipReasons(skipped)` helper → label string.
-- DB-side: add an explicit `select` in migration's `DO $$` block confirming `kpis.status` advances after a `bulk_write_stage_scores('hr_pms', …)` call on a seeded row (guard: only runs if no rows touched on prod).
+That's it. No other files change.
 
-### 5. Docs & Policy
+## Tests
 
-- `DOCUMENTATION.md` v2.66.13.4 — describe inheritance cascade, status advancement, skip-reason toast, repair RPC.
-- `POLICY.md` §111.7 — add Inheritance Cascade table; codify that stage sign-off MUST advance `kpis.status` and MUST inherit prior-stage value when score omitted.
-- `mem/features/review/bulk-review-dashboard` — bump to v2.66.13.4 with the cascade rules.
+- `src/test/kpiTimelineStages.test.ts` — unit-test that the exported stage list contains all 8 canonical keys in order, and that filtering by a `propStages` subset preserves order + drops unconfigured stages.
 
-## Out of scope
+## Docs
 
-- Re-implementing N/A as a bulk action (separate request).
-- Changing the management terminal approval flow.
-- Per-row override UI in the dashboard (already deferred).
+- `DOCUMENTATION.md` — v2.66.13.5 entry noting Review Timeline now renders Skip-Level and HR PMS.
+- `POLICY.md` — no change (no policy shift).
+- `mem/features/review/bulk-review-dashboard` — append a one-liner that Workflow Progress bar uses the 8-stage canonical list filtered by resolved workflow.
 
-## Files
+## Out of scope (per your answer)
 
-- **new** `supabase/migrations/2026052511xxxx_bulk_stage_signoff_inherit_and_advance.sql`
-- **new** `supabase/migrations/2026052511xxxx_repair_bulk_signoff_nulls.sql`
-- **edit** `src/pages/review/BulkReviewDashboard.tsx` (toast description only)
-- **new** `src/lib/summariseSkipReasons.ts` + test
-- **new** `src/test/bulkStageSignoffInheritance.test.ts` (uses mocked supabase rpc; happy + skip paths)
-- **edit** `DOCUMENTATION.md`, `POLICY.md`, `mem/features/review/bulk-review-dashboard`
-
-Approve and I'll implement.
+- Adding/relabelling `BULK_STAGE_SIGNOFF_*` rows in the audit timeline.
+- Any change to `bulk_write_stage_scores` or score cascade.
