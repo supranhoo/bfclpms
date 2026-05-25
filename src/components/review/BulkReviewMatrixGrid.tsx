@@ -1,5 +1,8 @@
 import { Fragment, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, Building } from 'lucide-react';
+import {
+  ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, Building,
+  Crosshair, X,
+} from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -11,6 +14,9 @@ import {
 import { cn } from '@/lib/utils';
 import type { BulkReviewRow } from '@/hooks/useBulkReview';
 import { classifyOrgKpiRow } from '@/lib/orgKpiGap';
+import {
+  kpiRowKey as makeKpiRowKey, submissionIdsForKpiRow, toggleKpiRowSelection,
+} from '@/lib/bulkRowSelection';
 
 type ViewerStage =
   | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management';
@@ -114,6 +120,19 @@ export interface BulkReviewMatrixGridProps {
   displayMode?: 'score' | 'wt' | 'both';
   /** Optional map: kpi_id → is_org_level. When absent, ORG badge is hidden. */
   isOrgByKpiId?: ReadonlyMap<string, boolean>;
+  /**
+   * When set, the matrix renders ONLY the KPI row matching this key
+   * (`<kra_name>|<kpi_name>`). All employee columns and selection still
+   * function. Pair with `onFocusKpi` to toggle the focus from the row UI.
+   */
+  kpiFocusKey?: string | null;
+  /** Sets/clears the focus key. When omitted, the focus affordance hides. */
+  onFocusKpi?: (rowKey: string | null) => void;
+  /**
+   * Replace the entire selection set. Used by the row-level horizontal
+   * select handle so it can preserve selections in other rows.
+   */
+  onReplaceSelection?: (next: Set<string>) => void;
 }
 
 export function BulkReviewMatrixGrid({
@@ -121,6 +140,9 @@ export function BulkReviewMatrixGrid({
   onToggleSubmission, onToggleAll, onCellClick,
   displayMode = 'score',
   isOrgByKpiId,
+  kpiFocusKey,
+  onFocusKpi,
+  onReplaceSelection,
 }: BulkReviewMatrixGridProps) {
   const [showMeta, setShowMeta] = useState(false);
   const [collapsedKras, setCollapsedKras] = useState<Set<string>>(new Set());
@@ -132,7 +154,13 @@ export function BulkReviewMatrixGrid({
     const empMap = new Map<string, EmployeeCol>();
     const cell = new Map<string, BulkReviewRow>(); // `${kpiKey}::${empId}` → row
 
-    for (const r of rows) {
+    // When a KPI focus is active, narrow rows to that KPI only. Employees,
+    // selection, scoring all keep working — the matrix simply collapses to
+    // a single horizontal band of cells for that KPI.
+    const sourceRows = kpiFocusKey
+      ? rows.filter(r => makeKpiRowKey(r) === kpiFocusKey)
+      : rows;
+    for (const r of sourceRows) {
       const kpiKey = `${r.kra_name}|${r.kpi_name}`;
       if (!kpiMap.has(kpiKey)) {
         kpiMap.set(kpiKey, {
@@ -190,7 +218,7 @@ export function BulkReviewMatrixGrid({
       kpiRows: kpiRowsArr, employees: employeesArr, cellMap: cell,
       kraGroups: groups, orgStatusByKpiKey: orgMap,
     };
-  }, [rows, isOrgByKpiId]);
+  }, [rows, isOrgByKpiId, kpiFocusKey]);
 
   const allSubmissionIds = useMemo(
     () => rows.filter(r => r.submission_id).map(r => r.submission_id!),
@@ -330,6 +358,12 @@ export function BulkReviewMatrixGrid({
                     {!collapsed && group.map((kpi, idx) => {
                       const zebra = idx % 2 === 1;
                       const rowBg = zebra ? 'bg-muted/30' : 'bg-card';
+                      const rowSubIds = submissionIdsForKpiRow(rows, kpi.key);
+                      const rowAllSelected = rowSubIds.length > 0
+                        && rowSubIds.every(id => selectedSubmissionIds.has(id));
+                      const rowSomeSelected = !rowAllSelected
+                        && rowSubIds.some(id => selectedSubmissionIds.has(id));
+                      const isFocused = kpiFocusKey === kpi.key;
                       return (
                       <tr key={kpi.key} className="group">
                         {/* Sticky KPI cell */}
@@ -341,10 +375,76 @@ export function BulkReviewMatrixGrid({
                           style={{ minWidth: KPI_COL_W, width: KPI_COL_W }}
                         >
                           <div className="flex items-start gap-1.5">
+                            {/* Horizontal select: toggle every scored cell of this KPI row */}
+                            {rowSubIds.length > 0 && onReplaceSelection && (
+                              <TooltipProvider delayDuration={200}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span
+                                      className="mt-0.5"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <Checkbox
+                                        checked={rowAllSelected ? true : rowSomeSelected ? 'indeterminate' : false}
+                                        onCheckedChange={() =>
+                                          onReplaceSelection(
+                                            toggleKpiRowSelection(selectedSubmissionIds, rowSubIds),
+                                          )
+                                        }
+                                        className="h-3.5 w-3.5"
+                                        aria-label={rowAllSelected
+                                          ? `Deselect all ${rowSubIds.length} cells in ${kpi.kpiName}`
+                                          : `Select all ${rowSubIds.length} cells in ${kpi.kpiName}`}
+                                      />
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="right" className="text-xs">
+                                    {rowAllSelected
+                                      ? `Deselect row (${rowSubIds.length})`
+                                      : `Select row (${rowSubIds.length})`}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
                             <div className="text-xs font-semibold leading-snug text-foreground line-clamp-2 flex-1 min-w-0">
                               {kpi.kpiName}
                             </div>
                             <OrgKpiBadge status={orgStatusByKpiKey?.get(kpi.key)} />
+                            {onFocusKpi && (
+                              <TooltipProvider delayDuration={200}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      size="icon"
+                                      variant="ghost"
+                                      className={cn(
+                                        'h-5 w-5 shrink-0 transition-opacity',
+                                        isFocused
+                                          ? 'opacity-100 text-primary'
+                                          : 'opacity-0 group-hover:opacity-100 text-muted-foreground',
+                                      )}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onFocusKpi(isFocused ? null : kpi.key);
+                                      }}
+                                      aria-label={isFocused
+                                        ? `Clear focus on ${kpi.kpiName}`
+                                        : `Show only ${kpi.kpiName}`}
+                                    >
+                                      {isFocused
+                                        ? <X className="h-3 w-3" />
+                                        : <Crosshair className="h-3 w-3" />}
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="right" className="text-xs">
+                                    {isFocused
+                                      ? 'Show all KPIs'
+                                      : 'Show employees for this KPI only'}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
                           </div>
                           {showMeta && (
                             <div className="text-[10px] text-muted-foreground mt-1">

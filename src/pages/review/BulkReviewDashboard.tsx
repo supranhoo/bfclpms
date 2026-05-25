@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle, Layers, RefreshCw, Search, EyeOff, Eye,
   Calendar, CalendarDays, Building2, Network, Factory, Users, Tag, UserCog, Target,
-  IdCard, Award,
+  IdCard, Award, Crosshair, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -51,6 +51,8 @@ import {
 } from '@/lib/bulkEmployeeFilter';
 import { bulkActionForStage } from '@/lib/bulkActionForStage';
 import { summariseSkipReasons } from '@/lib/summariseSkipReasons';
+import { kpiRowKey as makeKpiRowKey } from '@/lib/bulkRowSelection';
+import { useUrlFilterStateNullable } from '@/hooks/useUrlFilterState';
 
 // Full month names — must match kpis.review_period exactly (DB stores 'April', 'May', ...).
 // Ordered by fiscal year (Apr → Mar) for display.
@@ -125,6 +127,9 @@ export default function BulkReviewDashboard() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeRow, setActiveRow] = useState<BulkReviewRow | null>(null);
   const [confirmApprove, setConfirmApprove] = useState(false);
+  // URL-bound focus on a single KPI row (`<kra>|<kpi>`). Persists across
+  // reloads and shareable via the URL — same convention as the other filters.
+  const [kpiFocusKey, setKpiFocusKey] = useUrlFilterStateNullable('kpi');
   const approve = useBulkManagementApprove();
   const stageWrite = useBulkWriteStageScores();
   // Stable batch id generated when the dialog opens; reused for storage scoping + RPC.
@@ -223,6 +228,15 @@ export default function BulkReviewDashboard() {
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [rawRows]);
+
+  // Resolve a friendly label for the active KPI focus chip. Falls back to the
+  // KPI portion of the key when the row isn't (yet) in the loaded snapshot.
+  const focusedKpiLabel = useMemo(() => {
+    if (!kpiFocusKey) return null;
+    const hit = rawRows.find(r => makeKpiRowKey(r) === kpiFocusKey);
+    if (hit) return `${hit.kra_name} · ${hit.kpi_name}`;
+    return kpiFocusKey.replace('|', ' · ');
+  }, [kpiFocusKey, rawRows]);
 
   // Employee attribute index (designation / grade / reporting manager) for
   // the currently loaded snapshot — backs the 3 employee-axis filters.
@@ -737,6 +751,27 @@ export default function BulkReviewDashboard() {
       {/* Loaded grid */}
       {scopeLoaded && (
         <div className="px-2 md:px-3 pt-2 pb-3 space-y-2">
+          {/* Active KPI focus chip — set via the focus icon in the matrix
+              KPI cell. Clearing returns the matrix to all KPIs in scope. */}
+          {kpiFocusKey && (
+            <div className="flex items-center gap-2 text-xs">
+              <Badge variant="secondary" className="gap-1.5 pl-2 pr-1 h-6">
+                <Crosshair className="h-3 w-3 text-primary" />
+                <span className="font-medium">KPI focus:</span>
+                <span className="max-w-[360px] truncate">{focusedKpiLabel}</span>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-4 w-4 ml-0.5"
+                  onClick={() => setKpiFocusKey(null)}
+                  aria-label="Clear KPI focus"
+                  title="Clear KPI focus"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </Badge>
+            </div>
+          )}
           {snapshot.isLoading ? (
                 <div className="space-y-2">
                   {Array.from({ length: 6 }).map((_, i) => (
@@ -763,6 +798,9 @@ export default function BulkReviewDashboard() {
                     onCellClick={setActiveRow}
                     displayMode={displayMode}
                     isOrgByKpiId={isOrgByKpiId}
+                    kpiFocusKey={kpiFocusKey}
+                    onFocusKpi={setKpiFocusKey}
+                    onReplaceSelection={setSelectedIds}
                   />
               )}
 

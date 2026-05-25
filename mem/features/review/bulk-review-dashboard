@@ -88,3 +88,7 @@ type: feature
 
 **Review Timeline workflow bar (v2.66.13.5):**
 - `src/components/dashboard/KpiTimeline.tsx` exports `ALL_WORKFLOW_STAGES` covering all 8 canonical keys (kra_set → self_review → manager_check → skip_level_check → hr_pms_review → audit → management_review → approved), filtered by `propStages` to render only the resolved chain. Any future stage must be added here AND in `statusLabels` together — missing keys silently drop from the visual. Regression: `src/test/kpiTimelineStages.test.ts`.
+
+**Horizontal row select + KPI focus (v2.66.13.7):**
+- Per-KPI row checkbox in the sticky KPI cell of `BulkReviewMatrixGrid` toggles every scored cell in that KPI row via `toggleKpiRowSelection` (`src/lib/bulkRowSelection.ts`). Indeterminate when partial, clears to empty when fully on. Selections in other KPI rows are preserved (dashboard exposes `setSelectedIds` to the grid as `onReplaceSelection`).
+- Hover-revealed crosshair on the KPI cell sets a URL-bound `?kpi=<kra>|<kpi>` focus via `useUrlFilterStateNullable('kpi')`. When focused, the matrix renders only that KPI band; a chip above the grid shows the active KPI label and clears focus on click. Bulk sign-off contract unchanged — single batch reason + optional evidence (§111.7.a / .a.1). Display-only; no RPC/RLS/schema/backup change. Regression: `src/lib/bulkRowSelection.test.ts`.
