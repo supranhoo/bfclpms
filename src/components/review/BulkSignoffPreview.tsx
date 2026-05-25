@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import {
   ChevronDown, ChevronRight, Calculator, AlertTriangle, ArrowUp, ArrowDown,
-  Pencil, ShieldAlert,
+  ShieldAlert,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -66,7 +66,6 @@ function SourceBadge({ source }: { source: CarriedSource }) {
       source === 'override' && 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30',
     )}>
       {source === 'computed' && <Calculator className="h-3 w-3" aria-hidden />}
-      {source === 'manual' && <Pencil className="h-3 w-3" aria-hidden />}
       {source === 'override' && <ShieldAlert className="h-3 w-3" aria-hidden />}
       {SOURCE_LABEL[source]}
     </Badge>
@@ -129,7 +128,7 @@ export function BulkSignoffPreview({
         {totals.overrideCount > 0 && (
           <Badge variant="default" className="h-7 px-2 tabular-nums gap-1 bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30">
             <ShieldAlert className="h-3 w-3" aria-hidden />
-            {totals.overrideCount} manual/override
+            {totals.overrideCount} override
           </Badge>
         )}
         <Badge
@@ -174,8 +173,8 @@ export function BulkSignoffPreview({
 
       {/* ── Legend ──────────────────────────────────────────────────── */}
       <p className="text-[10px] text-muted-foreground leading-relaxed">
-        <strong>Badges:</strong> self · manager · skip-lvl · hr_pms · computed (rating from Achieved) · manual · override · no data.
-        Type an <strong>Achieved</strong> value to auto-compute rating, or a <strong>Manual</strong> 0-5 score to bypass the formula.
+        <strong>Badges:</strong> self · manager · skip-lvl · hr_pms · computed (rating from Achieved) · override · no data.
+        Type an <strong>Achieved</strong> value to auto-compute the rating.
       </p>
 
       {/* ── Per-employee rollup ──────────────────────────────────────── */}
