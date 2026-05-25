@@ -85,3 +85,6 @@ type: feature
 - Fix in `bulk_write_stage_scores`: (a) inheritance cascade — Manager ← Self; Skip-Level ← Manager ← Self; HR PMS ← Skip-Level ← Manager ← Self; Auditor ← HR PMS ← Skip-Level ← Manager ← Self. Cell skipped with `no_prior_score` if cascade yields NULL. (b) after the write loop, RPC calls `reconcile_workflow_statuses(p_kpi_ids := <affected>)` to advance `kpis.status` via the canonical resolver (same engine as single-cell saves). (c) per-cell `kpi_audit_logs` row tagged `BULK_STAGE_SIGNOFF_<STAGE>` with `inherited_from`.
 - Toast: `summariseSkipReasons` (`src/lib/summariseSkipReasons.ts`) groups ≤2 reason buckets inline (e.g. "2 skipped: self not submitted (2)"); falls back to "see audit log" for 3+.
 - Signature unchanged; additive only. POLICY §111.7.a, regression `src/lib/summariseSkipReasons.test.ts`.
+
+**Review Timeline workflow bar (v2.66.13.5):**
+- `src/components/dashboard/KpiTimeline.tsx` exports `ALL_WORKFLOW_STAGES` covering all 8 canonical keys (kra_set → self_review → manager_check → skip_level_check → hr_pms_review → audit → management_review → approved), filtered by `propStages` to render only the resolved chain. Any future stage must be added here AND in `statusLabels` together — missing keys silently drop from the visual. Regression: `src/test/kpiTimelineStages.test.ts`.
