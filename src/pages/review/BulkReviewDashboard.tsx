@@ -55,6 +55,7 @@ import { kpiRowKey as makeKpiRowKey } from '@/lib/bulkRowSelection';
 import { useUrlFilterStateNullable } from '@/hooks/useUrlFilterState';
 import { buildBulkSignoffImpact, type ImpactSummary } from '@/lib/bulkSignoffImpact';
 import { useBulkSignoffPreviewData } from '@/hooks/useBulkSignoffPreviewData';
+import type { CellInputs } from '@/lib/carriedScoreResolver';
 
 // Full month names — must match kpis.review_period exactly (DB stores 'April', 'May', ...).
 // Ordered by fiscal year (Apr → Mar) for display.
@@ -129,6 +130,10 @@ export default function BulkReviewDashboard() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeRow, setActiveRow] = useState<BulkReviewRow | null>(null);
   const [confirmApprove, setConfirmApprove] = useState(false);
+  // Reviewer-entered inputs flow back from the dialog so we can recompute the
+  // preview math live and forward them to the RPC at confirm time.
+  const [dialogInputs, setDialogInputs] = useState<Map<string, CellInputs>>(new Map());
+  const [dialogIsOverride, setDialogIsOverride] = useState(false);
   // URL-bound focus on a single KPI row (`<kra>|<kpi>`). Persists across
   // reloads and shareable via the URL — same convention as the other filters.
   const [kpiFocusKey, setKpiFocusKey] = useUrlFilterStateNullable('kpi');
@@ -394,8 +399,20 @@ export default function BulkReviewDashboard() {
       selectedSubmissionIds: new Set(selectedSubmissionIds),
       ruleByKpiId: previewDataQ.data.ruleByKpiId,
       achievedBySubmissionId: previewDataQ.data.achievedBySubmissionId,
+      inputsBySubmissionId: dialogInputs,
+      isOverride: dialogIsOverride,
     });
-  }, [confirmApprove, isSignoffMode, previewDataQ.data, bulkAction, loadedRows, selectedSubmissionIds]);
+  }, [confirmApprove, isSignoffMode, previewDataQ.data, bulkAction, loadedRows, selectedSubmissionIds, dialogInputs, dialogIsOverride]);
+
+  // submission_id → kpi_id (preview cells only carry kpi_name; we need id for
+  // the UoM-aware Achieved input).
+  const kpiIdBySubmissionId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of selectedRows) {
+      if (r.submission_id && r.kpi_id) m.set(r.submission_id, r.kpi_id);
+    }
+    return m;
+  }, [selectedRows]);
 
   const toggleOne = (id: string) => {
     setSelectedIds((prev) => {
@@ -419,7 +436,15 @@ export default function BulkReviewDashboard() {
     setConfirmApprove(true);
   };
 
-  const handleBulkApprove = async (reason: string, attachmentUrls: string[]) => {
+  const handleBulkApprove = async (
+    reason: string,
+    attachmentUrls: string[],
+    extras?: {
+      achievedValues?: Record<string, number | string | null>;
+      manualScores?: Record<string, number>;
+      isOverride?: boolean;
+    },
+  ) => {
     const cells = loadedRows
       .filter(r => r.submission_id && selectedIds.has(r.submission_id))
       .map(r => ({ submission_id: r.submission_id!, expected_row_version: r.row_version ?? null }));
@@ -450,6 +475,9 @@ export default function BulkReviewDashboard() {
           })),
           reason,
           attachment_urls: attachmentUrls,
+          manual_scores: extras?.manualScores,
+          achieved_values: extras?.achievedValues,
+          is_override: extras?.isOverride,
         });
         const advanced = (res as any).advanced ?? null;
         toast({
