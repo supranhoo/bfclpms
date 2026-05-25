@@ -1,81 +1,71 @@
-## Problem
 
-Screenshot shows:
-> **Signed off 2 / 4** — *0 KPI(s) advanced · 2 skipped: already final (2)*
+## What you're seeing
 
-This is contradictory and misleading:
-- Title implies 2 successful sign-offs.
-- Body says 0 advanced (workflow status didn't move) and 2 skipped (final-locked).
-- The user can't tell what actually happened to the remaining 2 cells.
+After bulk-signing the HR PMS stage, the `hr_pms_score` is written to `review_submissions`, but the KPI's `kpis.status` row doesn't move — the cell stays at the same status and the toast reports `0 advanced`. The single-cell Admin Data Entry dialog has an explicit "Advance workflow status" toggle (`AdminDataEntryDialog.tsx` L850-866) that performs this jump; the **Bulk** path has no equivalent and relies entirely on `reconcile_workflow_statuses`.
 
-## Root cause
+## Root cause (RCA)
 
-The RPC `bulk_write_stage_scores` returns three independent counters:
+`bulk_write_stage_scores` writes the stage column, then calls `reconcile_workflow_statuses(p_kpi_ids := ...)`. That reconciler advances **one stage at a time** and only via narrow branches:
 
-| Field | Meaning |
-|---|---|
-| `applied` | rows where the stage column was written (raw write count) |
-| `advanced` | rows whose `kpis.status` actually moved forward via reconcile |
-| `skipped[]` | rows skipped with a reason (`final_locked`, `self_not_submitted`, `override_requires_input`, etc.) |
+1. The employees in your screenshot are still at `kra_set` (or `self_review`) because Override bypassed the prior-stage gates. When HR PMS writes `hr_pms_score` with the row still at `kra_set`:
+   - **Branch 2a** (terminal → approved) requires `current_status = terminal_stage`. Not matched.
+   - **Branch 2b** (scored-and-forward) explicitly excludes `kra_set` from its `IN (...)` list. Not matched.
+   - **Branch 3** (review-stage mismatch) finds `hr_pms_score IS NOT NULL` and sets `next_status = hr_pms_review` — a **one-step hop**, not "approved".
+2. Even when Branch 3 fires, the KPI lands on `hr_pms_review` (not `approved`) because reconcile only does one transition per call. If the workflow template's terminal is `hr_pms_review`, approval needs a second reconcile pass.
+3. If the employee's workflow template actually has `audit` / `management_review` after `hr_pms_review`, HR PMS is **not** terminal for them — no amount of reconciling will approve from HR PMS, which is correct policy. We must surface this clearly instead of silently failing.
 
-The current toast (`BulkReviewDashboard.tsx` lines 480–489) puts `applied` in the title and `advanced` in the body — two numbers that don't add up against `cells.length` and don't explain the 2 unaccounted rows.
-
-In the screenshot case the real story is:
-- 2 cells: `final_locked` (skipped, correct per POLICY §88)
-- 2 cells: stage column written but reconcile didn't advance status (likely already past the acted stage, or cascade resolved to the same value already on the row)
-
-The toast hides this entirely.
-
-## Fix scope
-
-Frontend-only. No RPC, schema, or policy change. Toast wording in `BulkReviewDashboard.tsx` + a small helper in `src/lib/summariseSkipReasons.ts`.
+So the "stuck" symptom is the union of (a) reconcile not chaining multiple hops, and (b) no UI signal when HR PMS isn't actually the terminal stage for that employee's template.
 
 ## Risk & Impact Report
 
-- **Data**: none — pure presentation.
-- **Workflow**: none — RPC behaviour unchanged.
-- **UI/UX**: toast becomes multi-line, clearer; no layout breakage (existing `ToastDescription` already wraps).
-- **Regression**: low — single call-site change.
-- **Scalability**: none.
-- **Mitigation**: unit test on the toast-summary helper covering all 4 outcome shapes.
+- **Data**: No schema change. `final_score` immutability (POLICY §88) is preserved — we still only finalise via the existing `final_score = <terminal>_score` write inside reconcile.
+- **Workflow**: Bulk sign-off becomes equivalent to the single-cell "Advance workflow status" toggle (which already exists and is trusted). No new permission surface.
+- **UI/UX**: New per-row reason `not_terminal_for_template` in the toast so admins know *why* a row didn't approve (template has stages after HR PMS).
+- **Regression risk**: Medium. Reconciler changes affect all callers (Org KPI propagation, single-cell admin, query workflow). Mitigation: only add a bounded "chain until no progress, max N=workflow length" loop scoped to `p_kpi_ids` — behaviour for callers passing no `p_kpi_ids` is unchanged.
+- **Scalability**: Bounded by `array_length(v_stage_keys)` per KPI (≤7). No new fan-out.
+- **Rollback**: Single migration replacing two functions; revert by re-applying the previous definitions stored in `20260525134020_*.sql` and `20260520054855_*.sql`.
 
 ## Plan
 
-1. **Extract a pure helper** `summariseStageWriteOutcome({ total, applied, advanced, skipped })` in `src/lib/summariseSkipReasons.ts` returning `{ title, lines: string[] }`:
-   - `total = cells.length`
-   - `noop = total - applied - skipped.length` (rows the RPC didn't touch and didn't report — should normally be 0; surface if non-zero for debugging)
-   - **Title rules**:
-     - `advanced === total` → `Signed off — {total} advanced`
-     - `advanced > 0 && advanced < total` → `Partially signed off — {advanced}/{total} advanced`
-     - `advanced === 0 && applied > 0 && skipped.length === 0` → `No status change — {applied} written, workflow already past this stage`
-     - `advanced === 0 && skipped.length === total` → `Nothing signed off — all {total} skipped`
-     - `advanced === 0 && applied > 0 && skipped.length > 0` → `No status change — {applied} written, {skipped.length} skipped`
-   - **Body lines** (only include when non-zero):
-     - `{advanced} advanced to next stage` (omit when 0)
-     - `{applied - advanced} written but stage unchanged` with hint *(already past this stage or value unchanged)*
-     - `{skipped.length} skipped — {per-reason breakdown}` using existing `summariseSkipReasons`
-     - `{noop} unaccounted` only when `noop > 0` (defensive)
-2. **Wire helper into `BulkReviewDashboard.tsx`** at the `bulkAction.kind !== 'mgmt'` branch (lines 480–489). Render `title` and join `lines` with ` · ` in description. Keep `mgmt` branch as-is for now (separate concern).
-3. **Reason-label polish** in `summariseSkipReasons.ts`:
-   - Ensure `final_locked` reads `already finalised (POLICY §88 — immutable)` so users stop reading it as a bug.
-   - Confirm `override_requires_input`, `self_not_submitted`, `auditor_takes_precedence`, `row_version_conflict`, `not_found` all have clear labels.
-4. **Unit tests** in `src/lib/summariseSkipReasons.test.ts` (new cases):
-   - All advanced
-   - All skipped (final_locked) — matches reported screenshot
-   - Mixed: 2 advanced, 2 skipped
-   - applied > 0, advanced = 0, no skips
-   - Unaccounted rows present
-5. **Docs**: append `DOCUMENTATION.md` v2.66.13.15 entry; `POLICY.md` §111.7.c clarifying that the sign-off toast must distinguish *written*, *advanced*, and *skipped*.
+### A. Backend — chain reconcile until stable (one migration)
 
-## Expected new toast for the screenshot case
+**`reconcile_workflow_statuses`** — when `p_kpi_ids IS NOT NULL`, wrap the existing per-KPI block in a loop that re-evaluates the same KPI up to `array_length(v_stage_keys, 1)` times until `v_next_status IS NULL`. This lets a single bulk write at HR PMS walk `kra_set → … → hr_pms_review → approved` in one call when HR PMS is terminal, instead of stopping after one hop.
 
-> **No status change — 2 written, 2 skipped**
-> 2 written but stage unchanged (already past this stage or value unchanged) · 2 skipped: already finalised (POLICY §88 — immutable) (2)
+Also include `kra_set` in Branch 2b's `IN (...)` list so a scored stage immediately after `kra_set` (the Override case) advances cleanly instead of relying on Branch 3.
 
-## Out of scope
+Affected rows are accumulated as separate entries per hop (preserves the existing audit shape).
 
-- Changing the RPC return shape.
-- Touching the `mgmt` approve branch (different counters, separate ticket if needed).
-- Any change to override semantics (already landed in v2.66.13.14).
+### B. Backend — bulk RPC surfaces "not terminal" explicitly
 
-Approve to implement.
+**`bulk_write_stage_scores`** — after the reconcile call, for any row in `p_rows` whose KPI ended on a status `!= 'approved'` AND whose workflow template's terminal stage is **not** the acted stage (`p_stage_key`), append a `skipped` entry with reason `not_terminal_for_template` (no error — the write itself is valid). Rows that did advance to `approved` count toward `advanced` as today.
+
+### C. Frontend — label + copy only
+
+- **`src/lib/summariseSkipReasons.ts`**: add `not_terminal_for_template: 'workflow has stages after this one — sign-off recorded but cannot approve from here'` to `REASON_LABEL`.
+- **`src/components/review/BulkApproveDialog.tsx`**: under the Override checkbox tooltip, add a one-liner: "Sign-off only approves KPIs whose template ends at the stage you're acting on. Others advance one step."
+
+No other UI changes; the toast helper from the last turn already groups skip reasons.
+
+### D. Tests
+
+- **`src/lib/summariseSkipReasons.test.ts`**: add a case with `not_terminal_for_template` in the skipped array — assert the line appears verbatim.
+- **`src/test/bulkWriteStageScoresContract.test.ts`**: add a regex assertion that the migration source contains `not_terminal_for_template` and a `LOOP` token inside the reconcile body.
+- **No DB integration test** (would require seeded multi-stage fixtures) — covered by the contract regex + the existing reconcile dry-run path.
+
+### E. Docs
+
+- `DOCUMENTATION.md` → v2.66.13.16 entry: "Bulk sign-off now chains workflow transitions in one pass; non-terminal templates surfaced as `not_terminal_for_template` skip reason."
+- `POLICY.md` §111.7.d: "Bulk-stage writes MUST advance the KPI to every reachable stage up to and including `approved` in the same call when scoring permits. If the acted stage is not the template terminal, status MUST advance exactly one step and the row MUST be reported under `skipped` with reason `not_terminal_for_template`."
+
+## What stays out of scope
+
+- No change to `final_score` write path (POLICY §88 untouched).
+- No change to override semantics — Override still only writes the selected stage's column.
+- No change to single-cell `AdminDataEntryDialog` (its toggle already chains via its own RPC path).
+- No change to mgmt approve branch.
+
+## Verification after build
+
+1. From your screenshot's filter, run the same bulk sign-off — toast should now read `Signed off — 4 advanced` (assuming HR PMS is terminal for those 4 employees) instead of `0 advanced`.
+2. For an employee whose template has `audit` after `hr_pms_review`, the same action should land them on `hr_pms_review` and report 1 row under `not_terminal_for_template` with the new label.
+3. `bun vitest run src/lib/summariseSkipReasons.test.ts src/test/bulkWriteStageScoresContract.test.ts` passes.

@@ -20,6 +20,8 @@ const REASON_LABEL: Record<string, string> = {
   row_version_conflict: 'changed by another user',
   no_prior_score: 'no prior score to inherit',
   override_requires_input: 'override row left blank',
+  not_terminal_for_template:
+    'workflow has stages after this one — sign-off recorded but cannot approve from here',
 };
 
 function label(reason: string): string {
