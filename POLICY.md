@@ -404,6 +404,12 @@ All SLA thresholds are admin-configurable via System Settings → Workflow Setti
 - Data owners can enter values and propagate for their assigned KPIs
 - Access controlled via RLS policies
 
+### 11.6 Bulk Review Org-GAP Indicator
+
+- Bulk Review may display an `ORG · gap` indicator only when the complete loaded row has a mixed org-level mapping state.
+- Org-flag lookups for large scopes MUST be batched; missing lookup rows caused by client/API limits must not be treated as a real mapping gap.
+- Manual Refresh must invalidate both the matrix snapshot and the org-flag lookup so corrected mappings are visible without realtime.
+
 ---
 
 ## 12. Rollback Policy
@@ -2492,6 +2498,7 @@ without measuring the produced URL length.
    separately.
 
 ## Version History
+- **v2.66.13.1 (2026-05-25):** §11.6 added — Bulk Review Org-GAP indicator must be based on complete batched org-flag lookups, and manual Refresh invalidates both snapshot and org flags.
 - **v2.66.7.16 (2026-05-01):** §88B added — Phase 2a canonical resolver read path. Adds `resolve_canonical_kpi_batch` RPC, `useCanonicalResolver` hook, `canonicalGrouping` utilities, and KraSummaryTab merge with "Also known as" tooltip.
 - **v2.66.7.17 (2026-05-01):** §88C added — Phase 2b soft enforcement via DB trigger `trg_kpi_canonical_autolink`, feature flag `enable_kpi_canonical_autolink` (default ON), `promote_signature_to_definition` admin RPC, and Governance tab on /admin/kpi-standardization.
 - **v2.66.7.18 (2026-05-01):** §88D added — Phase 2c Registry Health & Coverage dashboard. Adds admin-only RPCs `get_registry_coverage_stats`, `get_unlinked_signatures`, `detect_alias_drift`, `useRegistryHealth` hook, and `HealthCoverageTab` on /admin/kpi-standardization.

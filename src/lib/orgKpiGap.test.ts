@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyOrgKpiRow } from './orgKpiGap';
+import { batchOrgKpiIds, classifyOrgKpiRow } from './orgKpiGap';
 
 describe('classifyOrgKpiRow', () => {
   const names = new Map([
@@ -47,5 +47,12 @@ describe('classifyOrgKpiRow', () => {
       kpiIds: [], employeeIds: [], isOrgByKpiId: new Map(),
     });
     expect(r).toEqual({ status: 'none', mappedCount: 0, totalCount: 0, missingEmployeeNames: [] });
+  });
+
+  it('batches org flag ids to avoid RPC payload/query limits', () => {
+    const ids = Array.from({ length: 1201 }, (_, i) => `k${i}`);
+    const batches = batchOrgKpiIds(ids, 500);
+    expect(batches.map(b => b.length)).toEqual([500, 500, 201]);
+    expect(batches.flat()).toEqual(ids);
   });
 });

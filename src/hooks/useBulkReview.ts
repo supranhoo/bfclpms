@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { batchOrgKpiIds } from '@/lib/orgKpiGap';
 
 /**
  * Profile attributes (designation / pms_grade / reporting manager) for the
@@ -61,12 +62,16 @@ export function useBulkOrgKpiFlags(kpiIds: string[], enabled: boolean) {
     enabled: enabled && sorted.length > 0,
     staleTime: 5 * 60 * 1000,
     queryFn: async (): Promise<KpiOrgFlag[]> => {
-      const { data, error } = await supabase.rpc(
-        'rpc_kpi_org_flags' as any,
-        { p_kpi_ids: sorted },
-      );
-      if (error) throw error;
-      return (data as unknown as KpiOrgFlag[]) ?? [];
+      const chunks = batchOrgKpiIds(sorted);
+      const results = await Promise.all(chunks.map(async (chunk) => {
+        const { data, error } = await supabase.rpc(
+          'rpc_kpi_org_flags' as any,
+          { p_kpi_ids: chunk },
+        );
+        if (error) throw error;
+        return (data as unknown as KpiOrgFlag[]) ?? [];
+      }));
+      return results.flat();
     },
   });
 }
