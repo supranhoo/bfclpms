@@ -50,7 +50,7 @@ import {
   allowedEmployeeIds, distinctAttrOptions, BLANK_SENTINEL, type EmpAttrs,
 } from '@/lib/bulkEmployeeFilter';
 import { bulkActionForStage } from '@/lib/bulkActionForStage';
-import { summariseSkipReasons } from '@/lib/summariseSkipReasons';
+import { summariseSkipReasons, summariseStageWriteOutcome } from '@/lib/summariseSkipReasons';
 import { kpiRowKey as makeKpiRowKey } from '@/lib/bulkRowSelection';
 import { useUrlFilterStateNullable } from '@/hooks/useUrlFilterState';
 import { buildBulkSignoffImpact, type ImpactSummary } from '@/lib/bulkSignoffImpact';
