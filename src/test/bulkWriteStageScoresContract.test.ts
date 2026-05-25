@@ -97,7 +97,7 @@ describe('bulk_write_stage_scores SQL contract', () => {
   });
 
   it('approved rows (relocks) are excluded from reconcile', () => {
-    expect(SQL).toMatch(/if\s+not\s+v_is_relock\s+then/);
+    expect(SQL).toMatch(/not\s+v_is_relock\s+and\s+not\s+v_is_force_approve/);
     expect(SQL).toMatch(/v_reconcile_ids/);
   });
 });
