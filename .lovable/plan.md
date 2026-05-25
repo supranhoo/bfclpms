@@ -1,63 +1,67 @@
-## Issue
-
-Screenshot shows "KPI focus: Cost Centre Verification" with **1 KPI · 4 employees · 269 cells** visible, but ticking the KPI row checkbox selects **267 cells** — every row in the full loaded snapshot that matches the focused KPI, including employees not currently visible in the focused/filtered view.
+# Fix Bulk Sign-off Failure (`jsonb_object_length` does not exist)
 
 ## Root Cause
+The migration `20260525123736_*.sql` introduces `public.bulk_write_stage_scores(...)` and uses `jsonb_object_length(p_manual_scores)` / `jsonb_object_length(p_achieved_values)` to record counts in the audit batch row. Postgres does **not** ship a `jsonb_object_length(jsonb)` function (only `jsonb_array_length` exists for arrays, and `json_object_keys` / `jsonb_object_keys` for objects). The RPC therefore aborts with `function jsonb_object_length(jsonb) does not exist`, surfaced in the UI as **"Sign-off failed"**.
 
-In `src/components/review/BulkReviewMatrixGrid.tsx` (line 361):
+This blocks every bulk sign-off — including the admin Override path the user just configured.
 
-```tsx
-const rowSubIds = submissionIdsForKpiRow(rows, kpi.key);
+## Risk & Impact
+- **Data**: None. No row was written (RPC aborted before INSERT). No schema change required beyond replacing the function body.
+- **Workflow**: Restores sign-off; no behavior change to scoring/override logic.
+- **Regression**: Low — change is isolated to two expressions inside the batch-metadata `jsonb_build_object`.
+- **Mitigation**: Add a unit-style SQL assertion + ensure the helper expression is safe when the JSONB param is `NULL` or not an object.
+
+## Fix
+Replace both call sites with a NULL-safe object-key count:
+
+```sql
+COALESCE(
+  (SELECT count(*)::int FROM jsonb_object_keys(p_manual_scores)),
+  0
+)
+```
+(and the same for `p_achieved_values`).
+
+`jsonb_object_keys` raises if given a non-object; current callers always pass `'{}'::jsonb` or an object, but we'll also guard with `jsonb_typeof(...) = 'object'` to be defensive:
+
+```sql
+CASE WHEN jsonb_typeof(p_manual_scores) = 'object'
+     THEN (SELECT count(*)::int FROM jsonb_object_keys(p_manual_scores))
+     ELSE 0 END
 ```
 
-`rows` is the **unfiltered** snapshot passed into the grid. The component already builds a focus-narrowed `sourceRows` (line 160–162) used to derive the visible `kpiRows`, `employees`, and `cellMap`, but the row-toggle helper still walks the original `rows` prop. Result: the checkbox toggles every employee in the loaded scope that has that KPI, not just the 4 employees actually rendered.
+## Steps
 
-This violates the principle of least surprise — the row checkbox visually sits next to a band of 4 cells, so it must operate on those 4 cells only.
+1. **New migration** `supabase/migrations/<ts>_fix_bulk_write_stage_scores_jsonb_count.sql`
+   - `CREATE OR REPLACE FUNCTION public.bulk_write_stage_scores(...)` with the **identical signature** as the previous migration, body unchanged except the two `jsonb_object_length(...)` expressions replaced by the `CASE / jsonb_object_keys` form above.
+   - No RLS, no grants change (function already owned + granted in prior migration).
 
-## Risk & Impact Report
+2. **SSOT updates**
+   - `POLICY.md` — append §111.7.a.5 (v2.66.13.12): RCA note that Postgres lacks `jsonb_object_length`; canonical pattern for counting JSONB object keys in our RPCs is `jsonb_object_keys` + `count(*)`. Forbid future use of `jsonb_object_length`.
+   - `DOCUMENTATION.md` — add v2.66.13.12 entry: "Hotfix: bulk sign-off RPC failed with `jsonb_object_length does not exist`. Replaced with object-key count."
 
-| Area | Impact |
-|------|--------|
-| Data | None — selection state only; no DB writes. |
-| Workflow | Reviewers no longer accidentally sign off cells that are not on screen. |
-| UI/UX | Checkbox indeterminate/checked states will reconcile with what the user sees. |
-| Regression risk | Low — change is confined to `rowSubIds` derivation. Existing `bulkRowSelection.test.ts` still passes (helper unchanged). |
-| Scalability | None. |
-
-## Plan
-
-1. **`src/components/review/BulkReviewMatrixGrid.tsx`** — derive `rowSubIds` from the **visible** rows the grid actually renders, not the full `rows` prop. Two options; I'll use option B because it already exists:
-   - (A) lift `sourceRows` out of the `useMemo`, or
-   - (B) walk `employees` + `cellMap` (both already focus- and employee-filter-aware) to collect the submission ids for `kpi.key`.
-
-   ```tsx
-   const rowSubIds = useMemo(() => {
-     const out: string[] = [];
-     for (const emp of employees) {
-       const r = cellMap.get(`${kpi.key}::${emp.id}`);
-       if (r?.submission_id) out.push(r.submission_id);
-     }
-     return out;
-   }, [employees, cellMap, kpi.key]);
-   ```
-
-   Wrap inside the per-row render (or pre-compute a `Map<kpiKey, string[]>` once per render for O(K·E) total — negligible for our scope sizes).
-
-2. **Unit test** — add a case to `src/lib/bulkRowSelection.test.ts` (or a new sibling test on the grid behavior) pinning: given a 1-KPI focus with N visible employees out of M total in snapshot, `rowSubIds.length === N`, not M.
-
-3. **Aria/tooltip copy** — already reads from `rowSubIds.length`, so it self-corrects to "Select row (4)" once the fix lands.
-
-4. **SSOT updates**:
-   - `POLICY.md` §111.7.a — add note: "Row-level (horizontal) selection MUST scope to currently visible rows (after focus + employee filters), never the full loaded snapshot."
-   - `DOCUMENTATION.md` — append a v2.66.13.11 entry summarizing the RCA + fix + regression test.
+3. **Regression test** (`src/lib/bulkSignoffImpact.test.ts` is JS-side; the failing surface is SQL).
+   - Add a lightweight assertion in the migration itself:
+     ```sql
+     DO $$ BEGIN
+       PERFORM public.bulk_write_stage_scores(
+         p_submission_ids := ARRAY[]::uuid[],
+         p_stage := 'auditor',
+         p_remark := 'noop probe (min 10 chars).',
+         p_attachments := '[]'::jsonb,
+         p_manual_scores := '{}'::jsonb,
+         p_achieved_values := '{}'::jsonb,
+         p_is_override := false,
+         p_batch_reason := 'self_test',
+         p_dry_run := true
+       );
+     END $$;
+     ```
+     This runs at migration time and fails loudly if the signature/body regresses.
 
 ## Out of Scope
+- Override semantics, Achieved/Manual recompute, row-checkbox scope fix — all untouched.
+- No frontend code changes.
 
-- No change to the bulk sign-off RPC, achieved/manual override logic, or cascade resolver.
-- No change to the column-header (employee) horizontal select.
-- No visual restyle of the row checkbox.
-
-## Verification
-
-- Manual: with KPI focus active and 4 employees visible, ticking the row checkbox shows "4 selected", not 267.
-- Automated: new test fails on current `main`, passes after the fix.
+## Rollback
+Re-apply the prior `CREATE OR REPLACE` body. Function is replace-in-place; no destructive DDL.
