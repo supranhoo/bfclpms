@@ -1,65 +1,82 @@
-## Goal
+## Problem (RCA)
 
-On the Bulk Review dashboard, the only bulk action today is **Bulk Approve (Mgmt)** — terminal approval gated to `effectiveRole = management | admin`. An HR PMS user has no bulk action even though the backend RPC already supports it. Make the bulk-action button **role-driven**: each reviewer sees a bulk action for *their own* stage; admins (acting via the viewer-stage dropdown) can act on any stage.
+The screenshot shows HR PMS bulk sign-off reported "Signed off 2 / 4 · 2 skipped" but the cells in the grid still read **PENDING** and the KPI detail still shows **HR PMS Review · Current** with an N/A chip — i.e. the workflow never advanced.
 
-## Assumptions
+Two real bugs in `public.bulk_write_stage_scores` (migration `20260522172805_…`):
 
-- `bulk_write_stage_scores(p_stage, p_cells, p_batch_reason)` already accepts `'manager' | 'skip_level' | 'hr_pms' | 'auditor'` and enforces stage precedence server-side (verified in migration `20260522172805…`). No DB change needed.
-- `bulk_management_approve` remains the only path that writes `final_score` (terminal). HR PMS / Auditor / Manager / Skip-Level "bulk approve" means **bulk sign-off**: copy previous-stage score into the reviewer's stage column and let the workflow advance — same semantics as the single-cell write today.
-- "Approve as HR PMS" without overriding values = accept previous-stage score for every selected cell. Per-cell score overrides stay in the existing cell drawer (out of scope here).
+1. **Score is not inherited.** The client (`BulkReviewDashboard.tsx` line 390) omits `score` for sign-off and the comment claims "server keeps previous-stage value", but the RPC actually does:
+   ```sql
+   UPDATE review_submissions SET hr_pms_score = v_score …
+   ```
+   where `v_score := NULLIF(v_cell->>'score','')::numeric` → **NULL**. So sign-off writes `hr_pms_score = NULL`. That's why the HR PMS card in screenshot 2 renders as "N/A · No remarks".
 
-## Risk & Impact Report
+2. **Workflow status is never advanced.** The RPC touches only `review_submissions`. It never updates `kpis.status` from `hr_pms_review` → `auditor_review` (or `approved`/next stage per the resolved workflow). The mgmt approval path (`bulk_management_approve`) does this; the stage-sign-off path does not. → cells stay PENDING in the grid.
 
-- **Data Impact:** None new. Uses existing RPC with the same RLS/validation. No schema changes.
-- **Workflow Impact:** HR PMS / Auditor / Manager / Skip-Level gain a bulk path that already exists per-cell. Server-side guards (`self_not_submitted`, `auditor_takes_precedence`, `final_locked`, `row_version_conflict`) are unchanged — skipped reasons surfaced in the toast.
-- **UI/UX:** Single sticky button label changes based on effective role / viewer-stage. No layout change.
-- **Regression Risk:** Low. Existing Management approval path untouched; only its visibility condition is refactored into a shared `bulkActionForStage()` helper.
-- **Scalability:** Same RPC and page-size limits as today (ADR-064 lean-load).
-- **Mitigation:** Unit tests for the role→action resolver; manual QA across the 5 viewer stages.
+The "2 skipped" is a secondary issue: skip reasons (`self_not_submitted`, `final_locked`, etc.) are bundled into the toast as a count only. Users have no idea which cells or why without opening the audit log.
+
+## Risk & Impact
+
+- **Data**: Sign-off currently writes NULLs into `hr_pms_score` / `skip_level_score` / `manager_score` / `auditor_score`. A one-time forward-only repair RPC will backfill those NULLs (only rows where `group_write_batch_id` was set by stage sign-off and the corresponding stage column is NULL) using the inheritance chain, then advance affected `kpis.status`. Final-locked rows are untouched.
+- **Workflow**: After the fix, HR PMS / Manager / Skip-Level / Auditor bulk sign-off will actually advance `kpis.status` using the per-employee resolved workflow chain (already used by single-cell stage saves).
+- **UI/UX**: Toast now lists skipped reasons (grouped counts) so reviewers know *why*. No layout change.
+- **Regression**: Single-cell sign-off paths are untouched. Mgmt bulk approve is untouched. Re-open and management approve already advance status correctly.
+- **Scalability**: RPC loop is unchanged in shape; status advancement is one extra UPDATE per cell, bounded by selection size.
+- **Rollback**: New migration is additive (replaces function body, keeps signature). Previous function body kept in migration history for rollback.
 
 ## Plan
 
-1. **Resolver helper** — `src/lib/bulkActionForStage.ts`
-   - Input: `effectiveRole`, `viewerStage`.
-   - Output: `{ kind: 'mgmt' | 'stage' | null, stage?: 'manager'|'skip_level'|'hr_pms'|'auditor', label: string }`.
-   - Rules:
-     - `effectiveRole === 'management'` → `mgmt` (terminal). Label: `Bulk Approve (Mgmt)`.
-     - `effectiveRole === 'admin'` → action follows `viewerStage`: `management` → mgmt; otherwise `stage` for that stage.
-     - `effectiveRole ∈ {manager, skip_level, hr_pms, auditor}` → `stage` with their own role (viewer dropdown ignored for the action — they can only bulk-approve as themselves).
-     - Anything else → `null` (no button).
-   - Labels: `Bulk Sign-off (HR PMS)`, `Bulk Sign-off (Auditor)`, `Bulk Sign-off (Manager)`, `Bulk Sign-off (Skip-Level)`.
+### 1. New migration: replace `bulk_write_stage_scores`
 
-2. **Wire into `BulkReviewDashboard.tsx`**
-   - Replace the hardcoded `canApprove` + button block (~lines 342, 745–753) with the resolver output.
-   - Add a `useBulkWriteStageScores()` mutation alongside the existing `useBulkManagementApprove()`.
-   - `openApproveDialog` and `BulkApproveDialog` reused as-is — confirmation + remark + optional attachments stay required.
-   - On confirm:
-     - `kind === 'mgmt'` → existing `handleBulkApprove` path (unchanged).
-     - `kind === 'stage'` → call `bulk_write_stage_scores` with `p_stage = stage`, cells = `{submission_id, expected_row_version}` (no `score` → server keeps previous-stage value). Toast: `Signed off N / M · K skipped`.
-   - Reuse `batchId`, attachments, and the skipped-reasons toast formatting.
+- Resolve `v_score` with **inheritance cascade** when input score is NULL:
+  - `manager` → fall back to `self_score`
+  - `skip_level` → `manager_score` → `self_score`
+  - `hr_pms` → `skip_level_score` → `manager_score` → `self_score`
+  - `auditor` → `hr_pms_score` → `skip_level_score` → `manager_score` → `self_score`
+  - If the cascade still yields NULL, skip with reason `no_prior_score`.
+- After the per-cell UPDATE, **advance `kpis.status`** by calling existing helper `public.advance_kpi_workflow_status(p_kpi_id, p_completed_stage)` (or, if that helper doesn't exist, inline the same logic the single-cell `save_stage_score` path uses — resolve next stage via `get_resolved_workflow_for_employee`, update `kpis.status`, write `kpi_audit_logs`).
+- Keep existing skip reasons; add `no_prior_score`.
+- Insert a `kpi_audit_logs` row per applied cell with action `BULK_STAGE_SIGNOFF_<STAGE>` and `batch_id`, `inherited_from` metadata.
 
-3. **Tests** — `src/lib/bulkActionForStage.test.ts`
-   - Matrix: 7 roles × {viewerStage = same/other/management} → asserts kind, stage, and label.
-   - Edge: `employee`, `null` role → `null` action.
+### 2. One-time repair RPC: `repair_bulk_signoff_nulls(p_dry_run boolean)`
 
-4. **Docs & Policy**
-   - `DOCUMENTATION.md` v2.66.13.3: "Bulk Review sign-off is now role-aware; intermediate reviewers (Manager / Skip-Level / HR PMS / Auditor) can bulk-sign their own stage. Admins act according to the viewer-stage dropdown. Management retains exclusive bulk **terminal** approval."
-   - `POLICY.md` §111.7: explicit role→action matrix + reminder that overrides remain per-cell.
-   - Memory: extend `mem://features/review/bulk-review-dashboard` with the new resolver rule.
+- Find `review_submissions` rows where `group_write_batch_id` is in a `bulk_review_batches` row with `stage IN ('manager','skip_level','hr_pms','auditor')` AND the corresponding stage column is NULL AND `final_score` IS NULL.
+- For each, run the same inheritance cascade and write the score, then reconcile `kpis.status` via the existing reconciliation helper.
+- Returns `{ scanned, repaired, status_advanced, still_null }`. Admin-only via existing edge function pattern (no UI in this change).
 
-## Technical Details
+### 3. Client surface skip reasons
 
-- Files added: `src/lib/bulkActionForStage.ts`, `src/lib/bulkActionForStage.test.ts`.
-- Files edited: `src/pages/review/BulkReviewDashboard.tsx`, `DOCUMENTATION.md`, `POLICY.md`, `mem://features/review/bulk-review-dashboard`.
-- No migrations, no edge-function changes, no new dependencies.
-- `BulkApproveDialog` button copy stays generic ("Approve N cell(s)") so it works for both mgmt and stage flows.
+`BulkReviewDashboard.tsx` `handleBulkApprove` — group `res.skipped` by reason and render in toast description:
+```
+Signed off 2 / 4
+2 skipped: self_not_submitted (2)
+```
+For ≥3 reason buckets, fall back to "see audit log".
 
-## Out of Scope
+### 4. Tests
 
-- Per-cell score overrides in bulk (already possible via the cell drawer).
-- New audit-log columns (existing `bulk_write_stage_scores` audit trail is sufficient).
-- Skip-Level bulk approval policy — covered by the same resolver; if the org doesn't want it, we can disable that branch in a follow-up flag.
+- `src/test/bulkStageSignoffInheritance.test.ts` — table-driven: each stage × each "missing score, has prior" case → expected inherited value; missing all priors → `no_prior_score`.
+- `src/test/bulkSignoffSkipReasonToast.test.ts` — `summariseSkipReasons(skipped)` helper → label string.
+- DB-side: add an explicit `select` in migration's `DO $$` block confirming `kpis.status` advances after a `bulk_write_stage_scores('hr_pms', …)` call on a seeded row (guard: only runs if no rows touched on prod).
 
-## Rollback
+### 5. Docs & Policy
 
-Pure UI/logic change. Revert the dashboard edit + delete the helper file. No data migration.
+- `DOCUMENTATION.md` v2.66.13.4 — describe inheritance cascade, status advancement, skip-reason toast, repair RPC.
+- `POLICY.md` §111.7 — add Inheritance Cascade table; codify that stage sign-off MUST advance `kpis.status` and MUST inherit prior-stage value when score omitted.
+- `mem/features/review/bulk-review-dashboard` — bump to v2.66.13.4 with the cascade rules.
+
+## Out of scope
+
+- Re-implementing N/A as a bulk action (separate request).
+- Changing the management terminal approval flow.
+- Per-row override UI in the dashboard (already deferred).
+
+## Files
+
+- **new** `supabase/migrations/2026052511xxxx_bulk_stage_signoff_inherit_and_advance.sql`
+- **new** `supabase/migrations/2026052511xxxx_repair_bulk_signoff_nulls.sql`
+- **edit** `src/pages/review/BulkReviewDashboard.tsx` (toast description only)
+- **new** `src/lib/summariseSkipReasons.ts` + test
+- **new** `src/test/bulkStageSignoffInheritance.test.ts` (uses mocked supabase rpc; happy + skip paths)
+- **edit** `DOCUMENTATION.md`, `POLICY.md`, `mem/features/review/bulk-review-dashboard`
+
+Approve and I'll implement.

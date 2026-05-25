@@ -79,3 +79,9 @@ type: feature
 
 **Role-aware bulk sign-off (v2.66.13.3):**
 - Bulk action button is now resolved by `src/lib/bulkActionForStage.ts`, not by direct role checks. Manager / Skip-Level / **HR PMS** / Auditor each see `Bulk Sign-off (<stage>)` for **their own** stage and call `bulk_write_stage_scores(p_stage, p_cells)` with no `score` field (server keeps the previous-stage value and advances). Management keeps `Bulk Approve (Mgmt)` → `bulk_management_approve` (only terminal path). Admin follows the viewer-stage dropdown. The viewer-stage dropdown does NOT let non-admin reviewers act as another stage. Per-cell score overrides remain in the cell drawer. Regression: `src/lib/bulkActionForStage.test.ts`. Policy: POLICY.md §111.7.
+
+**Bulk Stage Sign-off completion fix (v2.66.13.4):**
+- RCA: stage sign-off was writing `hr_pms_score = NULL` (the omitted `score` was never inherited server-side) AND never advanced `kpis.status`, so cells stayed "PENDING" in the grid and the KPI detail still rendered "HR PMS Review · Current · N/A" after a successful toast.
+- Fix in `bulk_write_stage_scores`: (a) inheritance cascade — Manager ← Self; Skip-Level ← Manager ← Self; HR PMS ← Skip-Level ← Manager ← Self; Auditor ← HR PMS ← Skip-Level ← Manager ← Self. Cell skipped with `no_prior_score` if cascade yields NULL. (b) after the write loop, RPC calls `reconcile_workflow_statuses(p_kpi_ids := <affected>)` to advance `kpis.status` via the canonical resolver (same engine as single-cell saves). (c) per-cell `kpi_audit_logs` row tagged `BULK_STAGE_SIGNOFF_<STAGE>` with `inherited_from`.
+- Toast: `summariseSkipReasons` (`src/lib/summariseSkipReasons.ts`) groups ≤2 reason buckets inline (e.g. "2 skipped: self not submitted (2)"); falls back to "see audit log" for 3+.
+- Signature unchanged; additive only. POLICY §111.7.a, regression `src/lib/summariseSkipReasons.test.ts`.

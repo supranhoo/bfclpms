@@ -1,4 +1,4 @@
-## §111.7 Bulk Review Action Resolver (codified 2026-05-25)
+## §111.7 Bulk Review Action Resolver (codified 2026-05-25; cascade addendum 2026-05-25)
 
 The Bulk Review dashboard MUST resolve its bulk-action button via
 `src/lib/bulkActionForStage.ts`. Direct role checks (e.g. `effectiveRole === 'management'`)
@@ -20,6 +20,39 @@ act on behalf of another stage via that dropdown. Bulk sign-off does NOT
 accept per-cell score overrides; the server keeps the previous-stage score
 and advances the workflow. Score overrides remain a per-cell action in the
 detail drawer. Regression: `src/lib/bulkActionForStage.test.ts`.
+
+### §111.7.a Inheritance cascade & workflow advancement (RCA 2026-05-25)
+
+`public.bulk_write_stage_scores(p_stage, p_cells)` MUST guarantee both:
+
+1. **Inheritance** — when `p_cells[i].score` is NULL/omitted, the RPC writes
+   the highest-priority **prior-stage** value into the stage column. Writing
+   NULL into `manager_score` / `skip_level_score` / `hr_pms_score` /
+   `auditor_score` from a sign-off path is forbidden.
+
+   | Stage acted on | Cascade (first non-null wins) |
+   |---|---|
+   | `manager`     | `self_score` |
+   | `skip_level`  | `manager_score` → `self_score` |
+   | `hr_pms`      | `skip_level_score` → `manager_score` → `self_score` |
+   | `auditor`     | `hr_pms_score` → `skip_level_score` → `manager_score` → `self_score` |
+
+   When the cascade yields NULL, the cell MUST be skipped with reason
+   `no_prior_score` and surfaced in the toast.
+
+2. **Workflow advancement** — after the score loop the RPC MUST call
+   `public.reconcile_workflow_statuses(p_kpi_ids := <affected>)` so the
+   parent `kpis.status` moves from the just-completed stage to the next
+   pending stage in the resolved per-employee workflow. A bulk sign-off that
+   stamps a stage score but leaves `kpis.status` unchanged is a defect.
+
+3. Each applied cell MUST insert a `kpi_audit_logs` row with action
+   `BULK_STAGE_SIGNOFF_<STAGE>` and `details.inherited_from` recording the
+   source stage of the value written.
+
+Toast contract: `summariseSkipReasons` (`src/lib/summariseSkipReasons.ts`)
+groups skip reasons (≤2 buckets) inline; falls back to "see audit log" for
+3+ distinct reasons.
 
 ## §111.6 Bulk Scoring KPI Detail RPC Source Contract (RCA 2026-05-25)
 
