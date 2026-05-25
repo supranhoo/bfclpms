@@ -30,7 +30,6 @@ import {
   useBulkReviewFlag,
   useBulkScopePreview,
   useBulkReviewSnapshotAll,
-  useBulkReviewKraOptions,
   useBulkManagementApprove,
   type BulkScopeFilters,
   type BulkReviewRow,
@@ -152,10 +151,6 @@ export default function BulkReviewDashboard() {
   );
   const snapshot = snapshotAll;
 
-  const kraOptions = useBulkReviewKraOptions(
-    period, year, categoryId || null, flagOn,
-  );
-
   // Reset KRA selection whenever Category / Period / Year changes so a stale
   // KRA value never silently filters out everything.
   useEffect(() => {
@@ -166,6 +161,18 @@ export default function BulkReviewDashboard() {
   const canLoad = flagOn && !!preview.data && !capExceeded && (preview.data?.cell_count ?? 0) > 0;
 
   const rawRows = snapshot.data?.rows ?? [];
+  // v2.66.12.10: Derive KRA filter options from the loaded snapshot (RPC-sourced),
+  // not from a direct kpis SELECT — RLS on `kpis` returned zero rows for non-Admin
+  // viewers and left the dropdown empty. Snapshot is already category-filtered, so
+  // the list naturally cascades from Company → … → Category → KRA.
+  const kraOptionList = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of rawRows) {
+      const name = (r.kra_name ?? '').trim();
+      if (name) set.add(name);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [rawRows]);
   const loadedRows = useMemo(() => {
     const term = search.trim().toLowerCase();
     let rows = rawRows;
