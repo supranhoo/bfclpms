@@ -1,71 +1,201 @@
+## Goal
 
-## What you're seeing
+Make **Bulk Sign-off (with Override)** a true "**Process all 4**" action so it:
 
-After bulk-signing the HR PMS stage, the `hr_pms_score` is written to `review_submissions`, but the KPI's `kpis.status` row doesn't move — the cell stays at the same status and the toast reports `0 advanced`. The single-cell Admin Data Entry dialog has an explicit "Advance workflow status" toggle (`AdminDataEntryDialog.tsx` L850-866) that performs this jump; the **Bulk** path has no equivalent and relies entirely on `reconcile_workflow_statuses`.
+1. Writes the selected stage on **every** selected cell — including cells already at `approved` (locked `final_score`).
+2. For approved cells, **re-stamps `final_score`** if the acted stage is that employee's **terminal** stage, leaving status at `approved` (immutability is preserved as "explicit admin override with full audit", not "silent drift").
+3. For non-approved cells, advances the KPI to the next stage / `approved` exactly as today (already working in the latest migration).
+4. Returns a single coherent toast: **"Process complete — N approved, M re-stamped, K unchanged"** — never "failed".
+5. Every override decision is captured in `kpi_audit_logs` with action `ADMIN_BULK_OVERRIDE_FINAL_UNLOCK` (for re-stamps) or `BULK_STAGE_SIGNOFF_<STAGE>` with `is_override:true` (for normal cells).
+6. **POLICY §88 is amended** to formally permit Admin-Override re-stamp; rollback path stays the canonical "self-service" mechanism.
 
-## Root cause (RCA)
-
-`bulk_write_stage_scores` writes the stage column, then calls `reconcile_workflow_statuses(p_kpi_ids := ...)`. That reconciler advances **one stage at a time** and only via narrow branches:
-
-1. The employees in your screenshot are still at `kra_set` (or `self_review`) because Override bypassed the prior-stage gates. When HR PMS writes `hr_pms_score` with the row still at `kra_set`:
-   - **Branch 2a** (terminal → approved) requires `current_status = terminal_stage`. Not matched.
-   - **Branch 2b** (scored-and-forward) explicitly excludes `kra_set` from its `IN (...)` list. Not matched.
-   - **Branch 3** (review-stage mismatch) finds `hr_pms_score IS NOT NULL` and sets `next_status = hr_pms_review` — a **one-step hop**, not "approved".
-2. Even when Branch 3 fires, the KPI lands on `hr_pms_review` (not `approved`) because reconcile only does one transition per call. If the workflow template's terminal is `hr_pms_review`, approval needs a second reconcile pass.
-3. If the employee's workflow template actually has `audit` / `management_review` after `hr_pms_review`, HR PMS is **not** terminal for them — no amount of reconciling will approve from HR PMS, which is correct policy. We must surface this clearly instead of silently failing.
-
-So the "stuck" symptom is the union of (a) reconcile not chaining multiple hops, and (b) no UI signal when HR PMS isn't actually the terminal stage for that employee's template.
+---
 
 ## Risk & Impact Report
 
-- **Data**: No schema change. `final_score` immutability (POLICY §88) is preserved — we still only finalise via the existing `final_score = <terminal>_score` write inside reconcile.
-- **Workflow**: Bulk sign-off becomes equivalent to the single-cell "Advance workflow status" toggle (which already exists and is trusted). No new permission surface.
-- **UI/UX**: New per-row reason `not_terminal_for_template` in the toast so admins know *why* a row didn't approve (template has stages after HR PMS).
-- **Regression risk**: Medium. Reconciler changes affect all callers (Org KPI propagation, single-cell admin, query workflow). Mitigation: only add a bounded "chain until no progress, max N=workflow length" loop scoped to `p_kpi_ids` — behaviour for callers passing no `p_kpi_ids` is unchanged.
-- **Scalability**: Bounded by `array_length(v_stage_keys)` per KPI (≤7). No new fan-out.
-- **Rollback**: Single migration replacing two functions; revert by re-applying the previous definitions stored in `20260525134020_*.sql` and `20260520054855_*.sql`.
+| Area | Impact | Mitigation |
+|---|---|---|
+| Data | `final_score` of *approved* rows may be rewritten. | Only when `is_admin=true` AND `is_override=true` AND acted stage matches employee's resolved terminal stage. Old value captured in audit `old_value`. |
+| Workflow | Status of approved rows does NOT change (stays `approved`). Non-approved rows behave as today. | Explicit `IF kpi.status='approved' THEN do not reconcile` guard. |
+| Policy | §88 (Submission Snapshot Immutability) — needs a formal Admin-Override carve-out. | New §88.1 added; CHANGELOG entry; ADR-066. |
+| RLS | `bulk_write_stage_scores` is `SECURITY DEFINER`; admin gate already enforced (`p_is_override` is silently cleared if user is not admin). | No change needed. |
+| Regression | Existing non-override bulk path must remain byte-identical. | New code paths gated entirely on `p_is_override=true`; existing tests must still pass. |
+| Scalability | Same batch loop as today — no extra round-trips. | None. |
+| Rollback | Pure SQL function — `CREATE OR REPLACE` can be re-deployed to revert. | Keep prior migration intact; new migration is additive. |
 
-## Plan
+---
 
-### A. Backend — chain reconcile until stable (one migration)
+## What changes (code + policy)
 
-**`reconcile_workflow_statuses`** — when `p_kpi_ids IS NOT NULL`, wrap the existing per-KPI block in a loop that re-evaluates the same KPI up to `array_length(v_stage_keys, 1)` times until `v_next_status IS NULL`. This lets a single bulk write at HR PMS walk `kra_set → … → hr_pms_review → approved` in one call when HR PMS is terminal, instead of stopping after one hop.
+### 1. Migration — `bulk_write_stage_scores` Override carve-out
 
-Also include `kra_set` in Branch 2b's `IN (...)` list so a scored stage immediately after `kra_set` (the Override case) advances cleanly instead of relying on Branch 3.
+Replace the function body so the per-cell skip ladder respects `p_is_override`:
 
-Affected rows are accumulated as separate entries per hop (preserves the existing audit shape).
+```text
+SKIP RULES (final, exhaustive)
+─────────────────────────────────────────
+not_found                ALWAYS skip
+final_locked             skip UNLESS (is_admin AND is_override)
+self_not_submitted       skip UNLESS is_override
+auditor_takes_precedence skip UNLESS is_override
+row_version_conflict     skip UNLESS is_override
+no_prior_score           skip UNLESS (manual OR achieved supplied)
+override_requires_input  raised when is_override AND no manual AND no achieved
+```
 
-### B. Backend — bulk RPC surfaces "not terminal" explicitly
+Override write logic for **locked (already approved)** rows:
 
-**`bulk_write_stage_scores`** — after the reconcile call, for any row in `p_rows` whose KPI ended on a status `!= 'approved'` AND whose workflow template's terminal stage is **not** the acted stage (`p_stage_key`), append a `skipped` entry with reason `not_terminal_for_template` (no error — the write itself is valid). Rows that did advance to `approved` count toward `advanced` as today.
+1. Compute `v_score` (manual / achieved / inherited — same rules).
+2. Resolve employee's terminal stage via `get_employee_workflow_info`.
+3. Write the role-specific column (`hr_pms_score`, etc.) — same as non-locked.
+4. **If `kpi.status = 'approved'` AND acted stage = terminal stage:**
+   - `UPDATE review_submissions SET final_score = v_score, final_rating = …`
+   - Insert audit row `ADMIN_BULK_OVERRIDE_FINAL_UNLOCK` with `old_value={final_score:OLD}`, `new_value={final_score:NEW, acted_stage, batch_id}`.
+   - Do **not** touch `kpis.status` (stays `approved`).
+   - Increment new counter `v_relocked_count`.
+5. **If `kpi.status = 'approved'` AND acted stage ≠ terminal stage:**
+   - Write the column only; do NOT touch `final_score`. Push skip reason `final_locked_non_terminal` (informational, not error) so the toast can explain it.
+6. **If `kpi.status ≠ 'approved'`:** existing chained reconcile runs, as today.
 
-### C. Frontend — label + copy only
+New counters returned in the `bulk_review_batches.scope_filters` JSON + RPC result:
+- `v_applied` (rows written — unchanged semantics)
+- `v_advanced_count` (reconciled to approved — unchanged)
+- `v_relocked_count` (NEW — approved rows whose `final_score` was admin-overridden)
+- `v_non_terminal_count` (unchanged)
 
-- **`src/lib/summariseSkipReasons.ts`**: add `not_terminal_for_template: 'workflow has stages after this one — sign-off recorded but cannot approve from here'` to `REASON_LABEL`.
-- **`src/components/review/BulkApproveDialog.tsx`**: under the Override checkbox tooltip, add a one-liner: "Sign-off only approves KPIs whose template ends at the stage you're acting on. Others advance one step."
+### 2. Frontend — `summariseSkipReasons.ts`
 
-No other UI changes; the toast helper from the last turn already groups skip reasons.
+Add labels:
+- `final_locked_non_terminal` → "already finalised — stage isn't the terminal one for this employee, column updated but final score untouched"
+- `override_requires_input` → "override needs an Achieved or manual score (none supplied)"
 
-### D. Tests
+### 3. Frontend — `summariseStageWriteOutcome`
 
-- **`src/lib/summariseSkipReasons.test.ts`**: add a case with `not_terminal_for_template` in the skipped array — assert the line appears verbatim.
-- **`src/test/bulkWriteStageScoresContract.test.ts`**: add a regex assertion that the migration source contains `not_terminal_for_template` and a `LOOP` token inside the reconcile body.
-- **No DB integration test** (would require seeded multi-stage fixtures) — covered by the contract regex + the existing reconcile dry-run path.
+Extend `StageWriteOutcome` interface with `relocked: number`.
+New title rule:
+- `advanced + relocked === total` → **"Process complete — N approved, M re-stamped"**
+- `advanced > 0 AND relocked > 0` → same title, line breakdown
+- `relocked === total AND advanced === 0` → **"Final scores re-stamped — N rows"**
+- All other branches remain.
 
-### E. Docs
+### 4. Frontend — `BulkApproveDialog.tsx`
 
-- `DOCUMENTATION.md` → v2.66.13.16 entry: "Bulk sign-off now chains workflow transitions in one pass; non-terminal templates surfaced as `not_terminal_for_template` skip reason."
-- `POLICY.md` §111.7.d: "Bulk-stage writes MUST advance the KPI to every reachable stage up to and including `approved` in the same call when scoring permits. If the acted stage is not the template terminal, status MUST advance exactly one step and the row MUST be reported under `skipped` with reason `not_terminal_for_template`."
+The amber Override panel gets a third bullet:
 
-## What stays out of scope
+> Includes **already-approved** rows. Their `final_score` will be re-stamped from this stage's value if this stage is the employee's terminal review stage. Every re-stamp is audit-logged as `ADMIN_BULK_OVERRIDE_FINAL_UNLOCK` (POLICY §88.1).
 
-- No change to `final_score` write path (POLICY §88 untouched).
-- No change to override semantics — Override still only writes the selected stage's column.
-- No change to single-cell `AdminDataEntryDialog` (its toggle already chains via its own RPC path).
-- No change to mgmt approve branch.
+The CTA label changes when `isOverride=true && cellCount includes approved rows` (we already preview this) → **"Override sign-off (N approved · M draft)"**.
 
-## Verification after build
+### 5. Frontend — `BulkSignoffPreview.tsx`
 
-1. From your screenshot's filter, run the same bulk sign-off — toast should now read `Signed off — 4 advanced` (assuming HR PMS is terminal for those 4 employees) instead of `0 advanced`.
-2. For an employee whose template has `audit` after `hr_pms_review`, the same action should land them on `hr_pms_review` and report 1 row under `not_terminal_for_template` with the new label.
-3. `bun vitest run src/lib/summariseSkipReasons.test.ts src/test/bulkWriteStageScoresContract.test.ts` passes.
+Surface a per-row chip when row is `final_score IS NOT NULL`:
+- Pre-override: red chip *"Locked — will skip"*
+- Override on: amber chip *"Will re-stamp final score"* (if terminal) or grey *"Column-only update"* (if non-terminal).
+
+### 6. POLICY.md — new §88.1 + CHANGELOG
+
+```
+§88.1 Admin-Override Re-Stamp Exception
+---------------------------------------
+The §88 immutability rule MAY be deliberately bypassed by an Admin only via
+the Bulk Sign-off "Override" toggle (RPC: bulk_write_stage_scores with
+p_is_override = true). When triggered:
+
+  a. The bypass is per-row, per-stage; no global "unfreeze" exists.
+  b. Final score is re-stamped only if the acted stage is the resolved
+     terminal stage of that employee's workflow template for the period.
+  c. KPI status remains 'approved'; no stage hop occurs.
+  d. Both the old and the new final_score MUST appear in
+     kpi_audit_logs.action = 'ADMIN_BULK_OVERRIDE_FINAL_UNLOCK' with
+     batch_id and a mandatory ≥10-char remark.
+  e. Notification 'admin_override_of_final_score' is sent to the employee,
+     their reporting manager, and HR PMS group (reuses existing dispatch).
+
+Out of scope: self-service rollback (POLICY §12.1) remains the canonical
+path for non-admin corrections.
+```
+
+CHANGELOG row:
+`| 2.66.13.17 | 2026-05-25 | Admin Override may re-stamp final_score on approved rows (POLICY §88.1) with full audit trail and notification. |`
+
+ADR-066 cross-link to §88 and §88.1.
+
+### 7. DOCUMENTATION.md
+
+Update §111.7.d (Bulk Sign-off table) with three new rows: `final_locked` (admins: re-stamps), `final_locked_non_terminal`, `override_requires_input`.
+
+### 8. Notification — new type
+
+Insert one row into `public.notifications` per re-stamped KPI:
+```
+type     = 'admin_override_of_final_score'
+title    = 'Final score updated by admin override'
+message  = 'Your <KPI> score for <Period Year> was re-stamped from X.X to Y.Y by an admin override. See audit trail.'
+metadata = {kpi_id, old_final, new_final, batch_id, performed_by}
+```
+Recipients: `kpi.employee_id`, `profiles.reporting_manager_id`, every user with role `hr_pms`.
+
+### 9. Tests
+
+New unit tests:
+- `summariseSkipReasons.test.ts` — both new labels.
+- `summariseStageWriteOutcome` — 4 new branches (relocked-only; mixed advanced+relocked; relocked + non_terminal skip; override_requires_input).
+- `bulkWriteStageScoresContract.test.ts` — 3 new contracts:
+  - Override on approved + terminal stage → relocked counter +1, `final_score` updated, status stays `approved`, audit `ADMIN_BULK_OVERRIDE_FINAL_UNLOCK` present.
+  - Override on approved + non-terminal stage → column updated, `final_score` UNCHANGED, skip `final_locked_non_terminal` present.
+  - Override with no manual/achieved AND no prior score → skip `override_requires_input`.
+
+### 10. Mock data update
+
+Seed fixture for the regression suite: 4 employees mirroring the live April-2026 case (2 approved + 2 self_review on the same KPI) so this exact bug never returns.
+
+---
+
+## Files touched
+
+| Path | Kind |
+|---|---|
+| `supabase/migrations/202605251xxxxx_admin_override_relock.sql` | NEW migration (replaces `bulk_write_stage_scores`) |
+| `src/lib/summariseSkipReasons.ts` | edit |
+| `src/lib/summariseSkipReasons.test.ts` | edit |
+| `src/lib/bulkSignoffImpact.ts` | edit (preview surfaces locked rows differently when override on) |
+| `src/components/review/BulkApproveDialog.tsx` | edit |
+| `src/components/review/BulkSignoffPreview.tsx` | edit |
+| `src/pages/review/BulkReviewDashboard.tsx` | edit (toast title rule) |
+| `src/test/bulkWriteStageScoresContract.test.ts` | edit |
+| `POLICY.md` | edit (§88.1 + CHANGELOG) |
+| `DOCUMENTATION.md` | edit (§111.7.d table) |
+| `docs/adr/ADR-066.md` | NEW |
+| `mem/features/review/final-score-governance-and-immutability` | edit (note the §88.1 carve-out) |
+
+---
+
+## Step-by-step build order (after approval)
+
+1. **Migration** — write & request approval (single file, additive, replaces RPC only).
+2. **Frontend libs** — `summariseSkipReasons.ts` + `summariseStageWriteOutcome` + tests.
+3. **Preview + Dialog UI** — chips, CTA wording, helper text.
+4. **Toast wiring** — `BulkReviewDashboard.tsx`.
+5. **Notification type** — wired in the migration body (single INSERT loop at end).
+6. **Tests** — unit + contract green.
+7. **Docs** — POLICY §88.1, CHANGELOG, ADR-066, DOCUMENTATION §111.7.d, memory note.
+8. **Smoke** — re-run the exact 4-employee April-2026 scenario in dev with `is_override=true`; expect toast **"Process complete — 2 approved, 2 re-stamped"**.
+
+---
+
+## Verification (must hold before sign-off)
+
+- [ ] Live scenario (Ankit, Deepak, Rahul, Sourav, April 2026, Cost Centre Verification) → 4/4 processed, 0 skipped.
+- [ ] `kpi_audit_logs` shows 2 × `BULK_STAGE_SIGNOFF_HR_PMS` + 2 × `ADMIN_BULK_OVERRIDE_FINAL_UNLOCK` with old/new final_score diff.
+- [ ] Status of Deepak/Sourav remains `approved` (no regression of stage).
+- [ ] Status of Ankit/Rahul moves to `approved` via existing chained reconcile.
+- [ ] Without override toggle, behaviour is byte-identical to today (existing contract test passes).
+- [ ] Non-admin cannot trigger the new path (admin gate already enforced server-side).
+
+---
+
+## Open questions for confirmation (block build until answered)
+
+1. **Notification recipients** — OK to notify employee + reporting manager + HR PMS group on every re-stamp? Or admin-only audit trail (no employee notification)?
+2. **Re-stamp on non-terminal stage** — should we *also* re-stamp `final_score` when override hits a *non-terminal* stage of an approved row (i.e. force-overwrite from any stage)? My recommendation is **no** (column-only), per §88.1 (c). Confirm.
+3. **Old-value preservation** — store the previous `final_score` in `review_submissions.previous_final_score` column for forensic reads, or rely solely on `kpi_audit_logs`? Recommendation: audit-log only (no schema bloat).
