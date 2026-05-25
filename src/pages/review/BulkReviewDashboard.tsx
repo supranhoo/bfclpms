@@ -353,12 +353,12 @@ export default function BulkReviewDashboard() {
           </div>
         </div>
 
-        {/* Row 2 — strict 8-column filter grid + view-mode pill */}
-        <div className="flex items-center gap-2 px-4 h-11 bg-muted/30">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-2 flex-1 min-w-0">
+        {/* Row 2 — single-row filter bar; horizontal scroll when overflow */}
+        <div className="flex items-stretch gap-2 px-2 sm:px-4 h-11 bg-muted/30">
+          <div className="matrix-scroll flex flex-nowrap items-center gap-2 flex-1 min-w-0 overflow-x-auto">
             {/* Month */}
             <Select value={period} onValueChange={(v) => { setPeriod(v); invalidateScope(); }}>
-              <SelectTrigger className="h-8 w-full text-xs" aria-label="Month">
+              <SelectTrigger className="h-8 w-[120px] shrink-0 text-xs" aria-label="Month">
                 <div className="flex items-center gap-1.5 min-w-0 truncate">
                   <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   <SelectValue placeholder="Month" />
@@ -370,7 +370,7 @@ export default function BulkReviewDashboard() {
             </Select>
 
             {/* Year */}
-            <div className="relative">
+            <div className="relative shrink-0 w-[100px]">
               <CalendarDays className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
               <Input
                 type="number"
@@ -387,7 +387,7 @@ export default function BulkReviewDashboard() {
                 value={selectedCompanyId}
                 onValueChange={(v) => { setSelectedCompanyId(v); invalidateScope(); }}
               >
-                <SelectTrigger className="h-8 w-full text-xs" aria-label="Company">
+                <SelectTrigger className="h-8 w-[150px] shrink-0 text-xs" aria-label="Company">
                   <div className="flex items-center gap-1.5 min-w-0 truncate">
                     <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <SelectValue placeholder="Company" />
@@ -409,7 +409,7 @@ export default function BulkReviewDashboard() {
                 invalidateScope();
               }}
             >
-              <SelectTrigger className="h-8 w-full text-xs" aria-label="Division">
+              <SelectTrigger className="h-8 w-[150px] shrink-0 text-xs" aria-label="Division">
                 <div className="flex items-center gap-1.5 min-w-0 truncate">
                   <Network className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   <SelectValue placeholder="Division" />
@@ -430,7 +430,7 @@ export default function BulkReviewDashboard() {
                 invalidateScope();
               }}
             >
-              <SelectTrigger className="h-8 w-full text-xs" aria-label="Business Unit">
+              <SelectTrigger className="h-8 w-[150px] shrink-0 text-xs" aria-label="Business Unit">
                 <div className="flex items-center gap-1.5 min-w-0 truncate">
                   <Factory className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   <SelectValue placeholder="BU" />
@@ -447,7 +447,7 @@ export default function BulkReviewDashboard() {
               value={departmentId || 'all'}
               onValueChange={(v) => { setDepartmentId(v === 'all' ? '' : v); invalidateScope(); }}
             >
-              <SelectTrigger className="h-8 w-full text-xs" aria-label="Department">
+              <SelectTrigger className="h-8 w-[160px] shrink-0 text-xs" aria-label="Department">
                 <div className="flex items-center gap-1.5 min-w-0 truncate">
                   <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   <SelectValue placeholder="Department" />
@@ -464,7 +464,7 @@ export default function BulkReviewDashboard() {
               value={categoryId || 'all'}
               onValueChange={(v) => { setCategoryId(v === 'all' ? '' : v); invalidateScope(); }}
             >
-              <SelectTrigger className="h-8 w-full text-xs" aria-label="Category">
+              <SelectTrigger className="h-8 w-[150px] shrink-0 text-xs" aria-label="Category">
                 <div className="flex items-center gap-1.5 min-w-0 truncate">
                   <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   <SelectValue placeholder="Category" />
@@ -481,7 +481,7 @@ export default function BulkReviewDashboard() {
               value={kraName || 'all'}
               onValueChange={(v) => setKraName(v === 'all' ? '' : v)}
             >
-              <SelectTrigger className="h-8 w-full text-xs" aria-label="KRA">
+              <SelectTrigger className="h-8 w-[170px] shrink-0 text-xs" aria-label="KRA">
                 <div className="flex items-center gap-1.5 min-w-0 truncate">
                   <Target className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   <SelectValue placeholder="KRA" />
@@ -499,7 +499,7 @@ export default function BulkReviewDashboard() {
           </div>
 
           {/* View-mode pill — outside grid, anchored right */}
-          <div className="flex items-center gap-1 rounded-md border bg-background p-0.5 shrink-0 ml-2 pl-2 border-l border-border/50">
+          <div className="flex items-center gap-1 rounded-md border bg-background p-0.5 shrink-0 self-center ml-2 pl-2 border-l border-border/50">
             <ToggleGroup
               type="single"
               value={displayMode}
