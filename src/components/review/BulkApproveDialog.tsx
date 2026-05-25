@@ -8,6 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, ShieldCheck } from 'lucide-react';
 import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
+import { BulkSignoffPreview } from '@/components/review/BulkSignoffPreview';
+import type { ImpactSummary } from '@/lib/bulkSignoffImpact';
 
 const MIN_REMARK = 10;
 const MAX_REMARK = 500;
@@ -34,6 +36,10 @@ interface Props {
   mode?: 'approve' | 'signoff';
   /** Stage label shown in the sign-off title, e.g. "HR PMS". */
   stageLabel?: string;
+  /** Sign-off only: per-cell + per-employee impact preview. */
+  preview?: ImpactSummary | null;
+  previewLoading?: boolean;
+  previewError?: string | null;
 }
 
 /**
@@ -47,6 +53,9 @@ export function BulkApproveDialog({
   isLoading, onCancel, onConfirm,
   mode = 'approve',
   stageLabel,
+  preview = null,
+  previewLoading = false,
+  previewError = null,
 }: Props) {
   const [reason, setReason] = useState('');
   const [urls, setUrls] = useState<string[]>([]);
@@ -61,7 +70,9 @@ export function BulkApproveDialog({
 
   const trimmedLen = reason.trim().length;
   const remarkValid = trimmedLen >= MIN_REMARK;
-  const canSubmit = remarkValid && !isLoading && cellCount > 0;
+  const skippedCount = preview?.totals.skippedCount ?? 0;
+  const actionableCount = Math.max(0, cellCount - skippedCount);
+  const canSubmit = remarkValid && !isLoading && actionableCount > 0;
 
   const isSignoff = mode === 'signoff';
   const verb = isSignoff ? 'Sign off' : 'Approve';
@@ -75,7 +86,7 @@ export function BulkApproveDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o && !isLoading) onCancel(); }}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-primary" />
@@ -101,6 +112,13 @@ export function BulkApproveDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {isSignoff && (
+            <BulkSignoffPreview
+              preview={preview}
+              isLoading={previewLoading}
+              error={previewError}
+            />
+          )}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label htmlFor="bulk-approve-remark" className="text-sm">
@@ -165,10 +183,21 @@ export function BulkApproveDialog({
           <Button variant="outline" onClick={onCancel} disabled={isLoading}>
             Cancel
           </Button>
-          <Button onClick={handleConfirm} disabled={!canSubmit}>
-            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isLoading ? `${verbing}…` : `${verb} ${cellCount} cell${cellCount === 1 ? '' : 's'}`}
-          </Button>
+          <div className="flex flex-col items-end gap-1">
+            <Button onClick={handleConfirm} disabled={!canSubmit}>
+              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isLoading
+                ? `${verbing}…`
+                : skippedCount > 0 && actionableCount > 0
+                  ? `${verb} ${actionableCount} of ${cellCount}`
+                  : `${verb} ${actionableCount} cell${actionableCount === 1 ? '' : 's'}`}
+            </Button>
+            {actionableCount === 0 && cellCount > 0 && (
+              <p className="text-[11px] text-destructive">
+                All cells lack prior scores and achievement values.
+              </p>
+            )}
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
