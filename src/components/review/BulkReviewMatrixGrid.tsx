@@ -235,7 +235,7 @@ export function BulkReviewMatrixGrid({
                       <tr
                         key={kpi.key}
                         className="group"
-                        style={{ contentVisibility: 'auto', containIntrinsicSize: '56px' } as React.CSSProperties}
+                        style={{ contentVisibility: 'auto', containIntrinsicSize: '56px' } as unknown as React.CSSProperties}
                       >
                         {/* Sticky KPI cell */}
                         <td
