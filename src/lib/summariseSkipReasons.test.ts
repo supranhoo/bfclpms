@@ -46,6 +46,17 @@ describe('summariseSkipReasons', () => {
       summariseSkipReasons([{ submission_id: 'x', reason: 'mystery_reason' }]),
     ).toBe('1 skipped: mystery_reason (1)');
   });
+
+  it('labels not_terminal_for_template with the v2.66.13.16 copy', () => {
+    expect(
+      summariseSkipReasons([
+        { submission_id: 'x', reason: 'not_terminal_for_template' },
+        { submission_id: 'y', reason: 'not_terminal_for_template' },
+      ]),
+    ).toBe(
+      '2 skipped: workflow has stages after this one — sign-off recorded but cannot approve from here (2)',
+    );
+  });
 });
 
 describe('summariseStageWriteOutcome (POLICY §111.7.c)', () => {
