@@ -342,7 +342,9 @@ export default function BulkReviewDashboard() {
     return count;
   }, [loadedRows]);
 
-  const canApprove = effectiveRole === 'management' || effectiveRole === 'admin';
+  const bulkAction = bulkActionForStage(effectiveRole, viewerStage);
+  const canApprove = !!bulkAction;
+  const isActionPending = bulkAction?.kind === 'mgmt' ? approve.isPending : stageWrite.isPending;
   const canReopen = effectiveRole === 'admin' || effectiveRole === 'management';
 
   const toggleOne = (id: string) => {
