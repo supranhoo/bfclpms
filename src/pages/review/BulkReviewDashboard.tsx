@@ -229,6 +229,15 @@ export default function BulkReviewDashboard() {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [rawRows]);
 
+  // Resolve a friendly label for the active KPI focus chip. Falls back to the
+  // KPI portion of the key when the row isn't (yet) in the loaded snapshot.
+  const focusedKpiLabel = useMemo(() => {
+    if (!kpiFocusKey) return null;
+    const hit = rawRows.find(r => makeKpiRowKey(r) === kpiFocusKey);
+    if (hit) return `${hit.kra_name} · ${hit.kpi_name}`;
+    return kpiFocusKey.replace('|', ' · ');
+  }, [kpiFocusKey, rawRows]);
+
   // Employee attribute index (designation / grade / reporting manager) for
   // the currently loaded snapshot — backs the 3 employee-axis filters.
   const distinctEmpIds = useMemo(() => {
