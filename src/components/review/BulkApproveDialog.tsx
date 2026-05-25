@@ -191,11 +191,12 @@ export function BulkApproveDialog({
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-1.5 text-xs font-medium">
                       <ShieldAlert className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                      Override carried scores (admin only)
+                      Override {stageLabel ?? 'this stage'} score only (admin)
                     </div>
                     <p className="text-[11px] text-muted-foreground">
-                      Unlocks Achieved entry on every row. Every override is audit-logged
-                      with the previous carried value.
+                      Writes <strong>only</strong> the {stageLabel ?? 'selected'} column and bypasses
+                      prior-stage gates (self not submitted, auditor already scored, row-version conflict).
+                      Final scores remain immutable (POLICY §88). Enter an Achieved or manual value on every row.
                     </p>
                   </div>
                 </label>
