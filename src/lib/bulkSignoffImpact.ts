@@ -10,7 +10,11 @@
  * and rows with no score are excluded from current totals.
  */
 
-import { resolveCarriedScore, type KpiRule, type SignoffStage, type CarriedSource, type SubmissionScores } from './carriedScoreResolver';
+import {
+  resolveCarriedScore, resolveWithInputs,
+  type KpiRule, type SignoffStage, type CarriedSource, type SubmissionScores,
+  type CellInputs,
+} from './carriedScoreResolver';
 
 export interface SnapshotCell {
   submission_id: string | null;
@@ -61,6 +65,8 @@ export interface ImpactSummary {
     employeeCount: number;
     computedCount: number;
     skippedCount: number;
+    overrideCount: number;
+    requiredUnfilled: number;
     weightedDelta: number;
   };
 }
@@ -94,10 +100,17 @@ export interface BuildImpactInput {
   ruleByKpiId: Map<string, KpiRule>;
   /** submission_id → live achieved_value (already batch-fetched). */
   achievedBySubmissionId: Map<string, number | string | null>;
+  /** submission_id → reviewer-entered overrides (Achieved + Manual). */
+  inputsBySubmissionId?: Map<string, CellInputs>;
+  /** Admin override toggle — unlocks editing on every row + flips source. */
+  isOverride?: boolean;
 }
 
 export function buildBulkSignoffImpact(input: BuildImpactInput): ImpactSummary {
-  const { stage, loadedRows, selectedSubmissionIds, ruleByKpiId, achievedBySubmissionId } = input;
+  const {
+    stage, loadedRows, selectedSubmissionIds, ruleByKpiId, achievedBySubmissionId,
+    inputsBySubmissionId, isOverride = false,
+  } = input;
 
   // ── 1. Resolve every selected cell ────────────────────────────────────
   const cellById = new Map<string, CellPreview>();
@@ -113,7 +126,10 @@ export function buildBulkSignoffImpact(input: BuildImpactInput): ImpactSummary {
       achieved_value: achievedBySubmissionId.get(r.submission_id) ?? null,
       is_na: r.is_na,
     };
-    const { score, source } = resolveCarriedScore({ stage, submission: sub, kpi: rule });
+    const inputs = inputsBySubmissionId?.get(r.submission_id);
+    const { score, source } = (inputs || isOverride)
+      ? resolveWithInputs({ stage, submission: sub, kpi: rule }, inputs, isOverride)
+      : resolveCarriedScore({ stage, submission: sub, kpi: rule });
     const weightage = Number(r.weightage ?? rule.weightage ?? 0) || 0;
     cellById.set(r.submission_id, {
       submission_id: r.submission_id,
@@ -212,6 +228,8 @@ export function buildBulkSignoffImpact(input: BuildImpactInput): ImpactSummary {
 
   const computedCount = cells.filter(c => c.source === 'computed').length;
   const skippedCount = cells.filter(c => c.source === 'none').length;
+  const overrideCount = cells.filter(c => c.source === 'override' || c.source === 'manual').length;
+  const requiredUnfilled = cells.filter(c => c.source === 'none' || (c.source === 'override' && c.score == null)).length;
   const weightedDelta = perEmployee.reduce((s, e) => s + e.delta, 0);
 
   return {
@@ -222,6 +240,8 @@ export function buildBulkSignoffImpact(input: BuildImpactInput): ImpactSummary {
       employeeCount: perEmployee.length,
       computedCount,
       skippedCount,
+      overrideCount,
+      requiredUnfilled,
       weightedDelta: Math.round(weightedDelta * 100) / 100,
     },
   };

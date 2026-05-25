@@ -9,40 +9,65 @@
 import { useState } from 'react';
 import {
   ChevronDown, ChevronRight, Calculator, AlertTriangle, ArrowUp, ArrowDown,
+  Pencil, ShieldAlert,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import type { ImpactSummary, CellPreview, EmployeeRollup } from '@/lib/bulkSignoffImpact';
-import type { CarriedSource } from '@/lib/carriedScoreResolver';
+import type { CarriedSource, KpiRule, CellInputs } from '@/lib/carriedScoreResolver';
+import type { QualitativeOption } from '@/lib/qualitativeUom';
 
 interface Props {
   preview: ImpactSummary | null;
   isLoading: boolean;
   error?: string | null;
+  /** kpi_id → rule (for UoM + qualitative options on the input). */
+  ruleByKpiId?: Map<string, KpiRule>;
+  /** kpi_id lookup helper — preview cells store kpi_name; we need kpi_id. */
+  kpiIdBySubmissionId?: Map<string, string>;
+  /** Current input map (controlled). */
+  inputs?: Map<string, CellInputs>;
+  /** Per-cell change handler. */
+  onCellInputChange?: (submissionId: string, next: CellInputs) => void;
+  /** Admin override toggle state — unlocks editing on every row. */
+  isOverride?: boolean;
 }
 
 const SOURCE_LABEL: Record<CarriedSource, string> = {
   self: 'self',
   manager: 'manager',
-  skip_level: 'skip',
+  skip_level: 'skip-lvl',
   hr_pms: 'hr_pms',
   computed: 'computed',
+  manual: 'manual',
+  override: 'override',
   none: 'no data',
 };
 
 function sourceTone(s: CarriedSource): 'default' | 'secondary' | 'outline' | 'destructive' {
   if (s === 'none') return 'destructive';
   if (s === 'computed') return 'outline';
+  if (s === 'manual') return 'default';
+  if (s === 'override') return 'default';
   return 'secondary';
 }
 
 function SourceBadge({ source }: { source: CarriedSource }) {
   return (
-    <Badge variant={sourceTone(source)} className="text-[10px] font-medium gap-1 h-5 px-1.5">
+    <Badge variant={sourceTone(source)} className={cn(
+      'text-[10px] font-medium gap-1 h-5 px-1.5',
+      source === 'override' && 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30',
+    )}>
       {source === 'computed' && <Calculator className="h-3 w-3" aria-hidden />}
+      {source === 'manual' && <Pencil className="h-3 w-3" aria-hidden />}
+      {source === 'override' && <ShieldAlert className="h-3 w-3" aria-hidden />}
       {SOURCE_LABEL[source]}
     </Badge>
   );
@@ -54,7 +79,11 @@ function fmt(n: number | null, signed = false) {
   return signed && v > 0 ? `+${v.toFixed(2)}` : v.toFixed(2);
 }
 
-export function BulkSignoffPreview({ preview, isLoading, error }: Props) {
+export function BulkSignoffPreview({
+  preview, isLoading, error,
+  ruleByKpiId, kpiIdBySubmissionId,
+  inputs, onCellInputChange, isOverride = false,
+}: Props) {
   const [expanded, setExpanded] = useState(true);
 
   if (isLoading) {
@@ -97,6 +126,12 @@ export function BulkSignoffPreview({ preview, isLoading, error }: Props) {
             {totals.computedCount} computed
           </Badge>
         )}
+        {totals.overrideCount > 0 && (
+          <Badge variant="default" className="h-7 px-2 tabular-nums gap-1 bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30">
+            <ShieldAlert className="h-3 w-3" aria-hidden />
+            {totals.overrideCount} manual/override
+          </Badge>
+        )}
         <Badge
           variant={totals.skippedCount > 0 ? 'destructive' : 'secondary'}
           className="h-7 px-2 tabular-nums gap-1"
@@ -104,6 +139,12 @@ export function BulkSignoffPreview({ preview, isLoading, error }: Props) {
           {totals.skippedCount > 0 && <AlertTriangle className="h-3 w-3" aria-hidden />}
           {totals.skippedCount} skipped
         </Badge>
+        {totals.requiredUnfilled > 0 && (
+          <Badge variant="destructive" className="h-7 px-2 tabular-nums gap-1">
+            <AlertTriangle className="h-3 w-3" aria-hidden />
+            {totals.requiredUnfilled} need score
+          </Badge>
+        )}
       </div>
 
       {/* ── Per-cell collapsible table ───────────────────────────────── */}
@@ -119,8 +160,23 @@ export function BulkSignoffPreview({ preview, isLoading, error }: Props) {
             : <ChevronRight className="h-3.5 w-3.5" aria-hidden />}
           Per-cell preview ({cells.length})
         </button>
-        {expanded && <CellTable cells={cells} />}
+        {expanded && (
+          <CellTable
+            cells={cells}
+            ruleByKpiId={ruleByKpiId}
+            kpiIdBySubmissionId={kpiIdBySubmissionId}
+            inputs={inputs}
+            onCellInputChange={onCellInputChange}
+            isOverride={isOverride}
+          />
+        )}
       </div>
+
+      {/* ── Legend ──────────────────────────────────────────────────── */}
+      <p className="text-[10px] text-muted-foreground leading-relaxed">
+        <strong>Badges:</strong> self · manager · skip-lvl · hr_pms · computed (rating from Achieved) · manual · override · no data.
+        Type an <strong>Achieved</strong> value to auto-compute rating, or a <strong>Manual</strong> 0-5 score to bypass the formula.
+      </p>
 
       {/* ── Per-employee rollup ──────────────────────────────────────── */}
       {perEmployee.length > 0 && (
@@ -135,7 +191,111 @@ export function BulkSignoffPreview({ preview, isLoading, error }: Props) {
   );
 }
 
-function CellTable({ cells }: { cells: CellPreview[] }) {
+interface CellTableProps {
+  cells: CellPreview[];
+  ruleByKpiId?: Map<string, KpiRule>;
+  kpiIdBySubmissionId?: Map<string, string>;
+  inputs?: Map<string, CellInputs>;
+  onCellInputChange?: (submissionId: string, next: CellInputs) => void;
+  isOverride?: boolean;
+}
+
+function CellTable({
+  cells, ruleByKpiId, kpiIdBySubmissionId, inputs, onCellInputChange, isOverride = false,
+}: CellTableProps) {
+  const editable = !!onCellInputChange;
+
+  const ruleFor = (c: CellPreview): KpiRule | undefined => {
+    const id = kpiIdBySubmissionId?.get(c.submission_id);
+    if (!id) return undefined;
+    return ruleByKpiId?.get(id);
+  };
+
+  const isRowEditable = (c: CellPreview): boolean => {
+    if (!editable) return false;
+    // Rows with no resolvable score always need input; admin override unlocks all.
+    return c.source === 'none' || isOverride;
+  };
+
+  const onAch = (sid: string, raw: string) => {
+    const trimmed = raw.trim();
+    const next: CellInputs = {
+      ...(inputs?.get(sid) ?? {}),
+      achievedOverride: trimmed === '' ? null : (Number.isFinite(Number(trimmed)) ? Number(trimmed) : trimmed),
+    };
+    onCellInputChange?.(sid, next);
+  };
+  const onManual = (sid: string, raw: string) => {
+    const trimmed = raw.trim();
+    const num = trimmed === '' ? null : Number(trimmed);
+    const clamped = num == null || !Number.isFinite(num) ? null : Math.max(0, Math.min(5, num));
+    onCellInputChange?.(sid, {
+      ...(inputs?.get(sid) ?? {}),
+      manualScore: clamped,
+    });
+  };
+
+  const renderAchievedInput = (c: CellPreview) => {
+    const rule = ruleFor(c);
+    const v = inputs?.get(c.submission_id)?.achievedOverride ?? '';
+    const qual = Array.isArray(rule?.qualitative_options)
+      ? (rule!.qualitative_options as QualitativeOption[])
+      : null;
+    if (rule && (rule.uom_type === 'binary' || rule.uom_type === 'tiered') && qual && qual.length > 0) {
+      return (
+        <Select
+          value={v === '' || v == null ? '' : String(v)}
+          onValueChange={(val) => onAch(c.submission_id, val)}
+        >
+          <SelectTrigger className="h-7 w-[110px] text-xs" aria-label="Achieved option">
+            <SelectValue placeholder="—" />
+          </SelectTrigger>
+          <SelectContent>
+            {qual.map((q) => (
+              <SelectItem key={String(q.rating) + q.label} value={String(q.rating)} className="text-xs">
+                {q.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      );
+    }
+    return (
+      <div className="inline-flex items-center gap-1">
+        <Input
+          type="number"
+          inputMode="decimal"
+          value={v === '' || v == null ? '' : String(v)}
+          onChange={(e) => onAch(c.submission_id, e.target.value)}
+          className="h-7 w-[80px] text-xs px-1.5 text-right"
+          aria-label="Achieved value"
+          placeholder="—"
+        />
+        {rule?.uom && (
+          <span className="text-[10px] text-muted-foreground">{rule.uom}</span>
+        )}
+      </div>
+    );
+  };
+
+  const renderManualInput = (c: CellPreview) => {
+    const v = inputs?.get(c.submission_id)?.manualScore;
+    return (
+      <Input
+        type="number"
+        inputMode="decimal"
+        step="0.5"
+        min={0}
+        max={5}
+        value={v == null ? '' : String(v)}
+        onChange={(e) => onManual(c.submission_id, e.target.value)}
+        className="h-7 w-[60px] text-xs px-1.5 text-right"
+        aria-label="Manual score 0-5"
+        placeholder="—"
+      />
+    );
+  };
+
   return (
     <div className="max-h-64 overflow-auto">
       {/* Desktop ≥ md */}
@@ -145,6 +305,8 @@ function CellTable({ cells }: { cells: CellPreview[] }) {
             <th className="text-left p-2 font-medium text-muted-foreground">Employee</th>
             <th className="text-left p-2 font-medium text-muted-foreground">KPI</th>
             <th className="text-right p-2 font-medium text-muted-foreground">Wt%</th>
+            {editable && <th className="text-right p-2 font-medium text-muted-foreground">Achieved</th>}
+            {editable && <th className="text-right p-2 font-medium text-muted-foreground">Manual</th>}
             <th className="text-right p-2 font-medium text-muted-foreground">Score</th>
             <th className="text-left p-2 font-medium text-muted-foreground">Source</th>
             <th className="text-right p-2 font-medium text-muted-foreground">Impact</th>
@@ -156,14 +318,27 @@ function CellTable({ cells }: { cells: CellPreview[] }) {
               key={c.submission_id}
               className={cn(
                 'border-b border-border/50 hover:bg-muted/50',
-                c.source === 'none' && 'opacity-60',
+                c.source === 'none' && 'bg-destructive/5',
+                c.source === 'override' && 'bg-amber-500/5',
               )}
             >
               <td className="p-2 truncate max-w-[140px]">{c.employee_name}</td>
               <td className="p-2 truncate max-w-[200px]">{c.kpi_name}</td>
               <td className="p-2 text-right tabular-nums">{c.weightage}%</td>
+              {editable && (
+                <td className="p-2 text-right">
+                  {isRowEditable(c) ? renderAchievedInput(c) : <span className="text-muted-foreground">—</span>}
+                </td>
+              )}
+              {editable && (
+                <td className="p-2 text-right">
+                  {isRowEditable(c) ? renderManualInput(c) : <span className="text-muted-foreground">—</span>}
+                </td>
+              )}
               <td className="p-2 text-right tabular-nums font-medium">
-                {c.score == null ? '—' : c.score.toFixed(1)}
+                {c.score == null
+                  ? <span className="inline-flex items-center gap-1 text-destructive">● —</span>
+                  : c.score.toFixed(1)}
               </td>
               <td className="p-2"><SourceBadge source={c.source} /></td>
               <td className={cn(
@@ -182,7 +357,8 @@ function CellTable({ cells }: { cells: CellPreview[] }) {
         {cells.map(c => (
           <Card key={c.submission_id} className={cn(
             'rounded-none border-0 shadow-none',
-            c.source === 'none' && 'opacity-60',
+            c.source === 'none' && 'bg-destructive/5',
+            c.source === 'override' && 'bg-amber-500/5',
           )}>
             <CardContent className="p-3 space-y-1">
               <div className="flex items-center justify-between gap-2">
@@ -190,9 +366,23 @@ function CellTable({ cells }: { cells: CellPreview[] }) {
                 <SourceBadge source={c.source} />
               </div>
               <p className="text-xs text-muted-foreground truncate">{c.kpi_name}</p>
+              {editable && isRowEditable(c) && (
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-[10px] text-muted-foreground w-14">Achieved</span>
+                  {renderAchievedInput(c)}
+                </div>
+              )}
+              {editable && isRowEditable(c) && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground w-14">Manual</span>
+                  {renderManualInput(c)}
+                </div>
+              )}
               <div className="flex items-center justify-between text-xs">
                 <span>Wt {c.weightage}%</span>
-                <span className="tabular-nums">Score {c.score == null ? '—' : c.score.toFixed(1)}</span>
+                <span className="tabular-nums">
+                  Score {c.score == null ? <span className="text-destructive">● —</span> : c.score.toFixed(1)}
+                </span>
                 <span className={cn(
                   'tabular-nums',
                   c.weightedImpact != null && c.weightedImpact > 0 && 'text-emerald-600 dark:text-emerald-400',

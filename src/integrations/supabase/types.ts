@@ -8171,15 +8171,28 @@ export type Database = {
         Args: { p_filters?: Json; p_period: string; p_year: number }
         Returns: Json
       }
-      bulk_write_stage_scores: {
-        Args: {
-          p_attachment_urls?: Json
-          p_batch_reason?: string
-          p_cells: Json
-          p_stage: string
-        }
-        Returns: Json
-      }
+      bulk_write_stage_scores:
+        | {
+            Args: {
+              p_attachment_urls?: Json
+              p_batch_reason?: string
+              p_cells: Json
+              p_stage: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_achieved_values?: Json
+              p_attachment_urls?: Json
+              p_batch_reason?: string
+              p_cells: Json
+              p_is_override?: boolean
+              p_manual_scores?: Json
+              p_stage: string
+            }
+            Returns: Json
+          }
       can_view_safety_incident: {
         Args: { _incident_id: string }
         Returns: boolean

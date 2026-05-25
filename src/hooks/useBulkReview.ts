@@ -320,12 +320,21 @@ export function useBulkWriteStageScores() {
       cells: BulkWriteCell[];
       reason?: string;
       attachment_urls?: string[];
+      /** submission_id → reviewer-entered achievement (writes review_submissions.achieved_value too). */
+      achieved_values?: Record<string, number | string | null>;
+      /** submission_id → reviewer-entered manual rating 0-5. */
+      manual_scores?: Record<string, number>;
+      /** Admin Override toggle — stamps `inherited_from = 'admin_override'`. */
+      is_override?: boolean;
     }): Promise<BulkWriteResult> => {
       const { data, error } = await supabase.rpc('bulk_write_stage_scores' as any, {
         p_stage: args.stage,
         p_cells: args.cells as any,
         p_batch_reason: args.reason ?? null,
         p_attachment_urls: (args.attachment_urls ?? []) as any,
+        p_manual_scores: (args.manual_scores ?? null) as any,
+        p_achieved_values: (args.achieved_values ?? null) as any,
+        p_is_override: args.is_override ?? false,
       });
       if (error) throw error;
       return data as unknown as BulkWriteResult;
