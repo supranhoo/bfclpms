@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { statusLabels } from '@/lib/reviewConstants';
 import { format } from 'date-fns';
@@ -19,10 +19,13 @@ import {
   Briefcase,
   Undo2,
   UserCog,
-  ClipboardCheck
+  ClipboardCheck,
+  ChevronRight,
+  ChevronDown
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import type { KPI } from '@/hooks/useKpis';
+import { groupTimelineEvents, type TimelineLog } from '@/lib/timelineGrouping';
 
 interface KpiTimelineProps {
   isOpen: boolean;
