@@ -434,124 +434,74 @@ export default function BulkReviewDashboard() {
 
             {/* Company */}
             {companies.length > 1 && (
-              <Select
-                value={selectedCompanyId}
-                onValueChange={(v) => { setSelectedCompanyId(v); invalidateScope(); }}
-              >
-                <SelectTrigger className="h-8 w-[150px] shrink-0 text-xs" aria-label="Company">
-                  <div className="flex items-center gap-1.5 min-w-0 truncate">
-                    <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <SelectValue placeholder="Company" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Companies</SelectItem>
-                  {companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <MultiSelectFilter
+                icon={<Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                label="Companies"
+                width={160}
+                values={companyIds}
+                onChange={(v) => { setCompanyIds(v); invalidateScope(); }}
+                options={companies.map(c => ({ value: c.id, label: c.name }))}
+              />
             )}
 
             {/* Division */}
-            <Select
-              value={divisionId || 'all'}
-              onValueChange={(v) => {
-                setDivisionId(v === 'all' ? '' : v);
-                setBusinessUnitId(''); setDepartmentId('');
+            <MultiSelectFilter
+              icon={<Network className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+              label="Divisions"
+              width={160}
+              values={divisionIds}
+              onChange={(v) => {
+                setDivisionIds(v);
+                setBusinessUnitIds([]); setDepartmentIds([]);
                 invalidateScope();
               }}
-            >
-              <SelectTrigger className="h-8 w-[150px] shrink-0 text-xs" aria-label="Division">
-                <div className="flex items-center gap-1.5 min-w-0 truncate">
-                  <Network className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <SelectValue placeholder="Division" />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Divisions</SelectItem>
-                {(divisions ?? []).map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+              options={(divisions ?? []).map((d: any) => ({ value: d.id, label: d.name }))}
+            />
 
             {/* Business Unit */}
-            <Select
-              value={businessUnitId || 'all'}
-              onValueChange={(v) => {
-                setBusinessUnitId(v === 'all' ? '' : v);
-                setDepartmentId('');
-                invalidateScope();
+            <MultiSelectFilter
+              icon={<Factory className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+              label="BU"
+              width={160}
+              values={businessUnitIds}
+              onChange={(v) => {
+                setBusinessUnitIds(v); setDepartmentIds([]); invalidateScope();
               }}
-            >
-              <SelectTrigger className="h-8 w-[150px] shrink-0 text-xs" aria-label="Business Unit">
-                <div className="flex items-center gap-1.5 min-w-0 truncate">
-                  <Factory className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <SelectValue placeholder="BU" />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Business Units</SelectItem>
-                {filteredBusinessUnits.map((b: any) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+              options={filteredBusinessUnits.map((b: any) => ({ value: b.id, label: b.name }))}
+            />
 
             {/* Department */}
-            <Select
-              value={departmentId || 'all'}
-              onValueChange={(v) => { setDepartmentId(v === 'all' ? '' : v); invalidateScope(); }}
-            >
-              <SelectTrigger className="h-8 w-[160px] shrink-0 text-xs" aria-label="Department">
-                <div className="flex items-center gap-1.5 min-w-0 truncate">
-                  <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <SelectValue placeholder="Department" />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Departments</SelectItem>
-                {filteredDepartments.map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <MultiSelectFilter
+              icon={<Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+              label="Departments"
+              width={180}
+              values={departmentIds}
+              onChange={(v) => { setDepartmentIds(v); invalidateScope(); }}
+              options={filteredDepartments.map((d: any) => ({ value: d.id, label: d.name }))}
+            />
 
             {/* Category */}
-            <Select
-              value={categoryId || 'all'}
-              onValueChange={(v) => { setCategoryId(v === 'all' ? '' : v); invalidateScope(); }}
-            >
-              <SelectTrigger className="h-8 w-[150px] shrink-0 text-xs" aria-label="Category">
-                <div className="flex items-center gap-1.5 min-w-0 truncate">
-                  <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <SelectValue placeholder="Category" />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
-                {(categories ?? []).map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <MultiSelectFilter
+              icon={<Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+              label="Categories"
+              width={170}
+              values={categoryIds}
+              onChange={(v) => { setCategoryIds(v); invalidateScope(); }}
+              options={(categories ?? []).map((c: any) => ({ value: c.id, label: c.name }))}
+            />
 
             {/* KRA — cascades from Category; client-side filter on accumulated snapshot */}
-            <Select
-              value={kraName || 'all'}
-              onValueChange={(v) => setKraName(v === 'all' ? '' : v)}
+            <MultiSelectFilter
+              icon={<Target className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+              label="KRAs"
+              width={180}
+              values={kraNames}
+              onChange={setKraNames}
+              options={kraOptionList.map((name) => ({ value: name, label: name }))}
               disabled={!scopeLoaded}
-            >
-              <SelectTrigger
-                className="h-8 w-[170px] shrink-0 text-xs"
-                aria-label="KRA"
-                title={scopeLoaded ? undefined : 'Load scope to see KRAs'}
-              >
-                <div className="flex items-center gap-1.5 min-w-0 truncate">
-                  <Target className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <SelectValue placeholder="KRA" />
-                </div>
-              </SelectTrigger>
-              <SelectContent className="max-h-72">
-                <SelectItem value="all">All KRAs</SelectItem>
-                {kraOptionList.map((name) => (
-                  <SelectItem key={name} value={name}>
-                    <span className="truncate inline-block max-w-[260px] align-middle">{name}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              title={scopeLoaded ? undefined : 'Load scope to see KRAs'}
+              emptyText="No KRAs in loaded scope"
+            />
           </div>
 
           {/* View-mode pill — outside grid, anchored right */}
