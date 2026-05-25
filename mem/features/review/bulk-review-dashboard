@@ -60,3 +60,8 @@ type: feature
 
 **E16 auto-revert (M5):**
 - Edge function `bulk-review-auto-revert` scans `final_score_revisions` rows with `new_final_score IS NULL` and reverts them to `prev_final_score` once the underlying `(review_period, review_year)` is globally locked or `current_stage='closed'`. Stamps the revision with `auto_reverted=true` and `new_final_score=prev_final_score` so the audit row is closed immutably. Daily cron, x-cron-secret guarded, 2000-row chunk.
+
+**Matrix mode reachability (v2.66.12.5):**
+- `useBulkReviewSnapshotAll` loops `bulk_review_snapshot` pages (`p_page_size=500`) until exhausted on Load Scope; hard guard at 60 pages (30k cells). Pre-`bulk_scope_preview` 25k-cell cap (POLICY §0) still gates the Load button so the loop never runs away.
+- Matrix view renders only an employee window (`EMP_WINDOW_SIZE = 20`) at a time via `EmployeeWindowPager` — sticky-column table stays smooth on 100+ employee tenants while every employee remains reachable via Prev / Next / Jump.
+- KRA filter (`useBulkReviewKraOptions`) cascades from Category and is applied **client-side** on the accumulated rows — RPC signature unchanged. Selection resets when Category / Period / Year changes.
