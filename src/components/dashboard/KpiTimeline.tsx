@@ -18,7 +18,8 @@ import {
   Send,
   Briefcase,
   Undo2,
-  UserCog
+  UserCog,
+  ClipboardCheck
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import type { KPI } from '@/hooks/useKpis';
@@ -48,6 +49,22 @@ interface Profile {
   full_name: string | null;
   email: string;
 }
+
+/**
+ * Canonical workflow stages in order. Must mirror the keys in
+ * src/lib/reviewConstants.ts → statusLabels. Exported so unit tests can
+ * assert completeness; missing keys silently drop stages from the visual.
+ */
+export const ALL_WORKFLOW_STAGES: Array<{ key: string; label: string; icon: React.ElementType }> = [
+  { key: 'kra_set',            label: 'KRA Set',     icon: FileText },
+  { key: 'self_review',        label: 'Self Review', icon: Send },
+  { key: 'manager_check',      label: 'Manager',     icon: User },
+  { key: 'skip_level_check',   label: 'Skip-Level',  icon: UserCog },
+  { key: 'hr_pms_review',      label: 'HR PMS',      icon: ClipboardCheck },
+  { key: 'audit',              label: 'Audit',       icon: Shield },
+  { key: 'management_review',  label: 'Management',  icon: Briefcase },
+  { key: 'approved',           label: 'Approved',    icon: CheckCircle },
+];
 
 const actionConfig: Record<string, { icon: React.ElementType; color: string; label: string }> = {
   'SELF_REVIEW_SUBMITTED': { icon: Send, color: 'bg-blue-500', label: 'Self Review Submitted' },
@@ -195,18 +212,11 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
     return details;
   };
 
-  // Workflow stages - filter based on employee's workflow config
-  const allWorkflowStages = [
-    { key: 'kra_set', label: 'KRA Set', icon: FileText },
-    { key: 'self_review', label: 'Self Review', icon: Send },
-    { key: 'manager_check', label: 'Manager', icon: User },
-    { key: 'audit', label: 'Audit', icon: Shield },
-    { key: 'management_review', label: 'Management', icon: Briefcase },
-    { key: 'approved', label: 'Approved', icon: CheckCircle },
-  ];
+  // Filter the canonical stage list down to the resolved workflow chain
+  // for this employee/period; fall back to the full list when not provided.
   const workflowStages = propStages
-    ? allWorkflowStages.filter(s => propStages.includes(s.key))
-    : allWorkflowStages;
+    ? ALL_WORKFLOW_STAGES.filter(s => propStages.includes(s.key))
+    : ALL_WORKFLOW_STAGES;
 
   const currentStageIndex = workflowStages.findIndex(s => s.key === kpi?.status);
 
