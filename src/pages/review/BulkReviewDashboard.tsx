@@ -130,13 +130,6 @@ export default function BulkReviewDashboard() {
   // URL-bound focus on a single KPI row (`<kra>|<kpi>`). Persists across
   // reloads and shareable via the URL — same convention as the other filters.
   const [kpiFocusKey, setKpiFocusKey] = useUrlFilterStateNullable('kpi');
-  const focusedKpiLabel = useMemo(() => {
-    if (!kpiFocusKey) return null;
-    const hit = rawRowsForFocus(kpiFocusKey);
-    return hit ?? kpiFocusKey.split('|').slice(1).join('|');
-    // rawRowsForFocus declared below; safe because closure captures.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kpiFocusKey]);
   const approve = useBulkManagementApprove();
   const stageWrite = useBulkWriteStageScores();
   // Stable batch id generated when the dialog opens; reused for storage scoping + RPC.
