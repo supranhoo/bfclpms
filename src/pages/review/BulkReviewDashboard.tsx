@@ -910,8 +910,8 @@ export default function BulkReviewDashboard() {
         uploaderUserId={user?.id ?? 'anonymous'}
         isLoading={isActionPending}
         onCancel={() => setConfirmApprove(false)}
-        onConfirm={({ reason, attachmentUrls, achievedValues, manualScores, isOverride }) =>
-          handleBulkApprove(reason, attachmentUrls, { achievedValues, manualScores, isOverride })
+        onConfirm={({ reason, attachmentUrls, achievedValues, isOverride }) =>
+          handleBulkApprove(reason, attachmentUrls, { achievedValues, isOverride })
         }
         mode={bulkAction?.kind === 'stage' ? 'signoff' : 'approve'}
         stageLabel={
