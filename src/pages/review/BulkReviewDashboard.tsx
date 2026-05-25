@@ -751,6 +751,27 @@ export default function BulkReviewDashboard() {
       {/* Loaded grid */}
       {scopeLoaded && (
         <div className="px-2 md:px-3 pt-2 pb-3 space-y-2">
+          {/* Active KPI focus chip — set via the focus icon in the matrix
+              KPI cell. Clearing returns the matrix to all KPIs in scope. */}
+          {kpiFocusKey && (
+            <div className="flex items-center gap-2 text-xs">
+              <Badge variant="secondary" className="gap-1.5 pl-2 pr-1 h-6">
+                <Crosshair className="h-3 w-3 text-primary" />
+                <span className="font-medium">KPI focus:</span>
+                <span className="max-w-[360px] truncate">{focusedKpiLabel}</span>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-4 w-4 ml-0.5"
+                  onClick={() => setKpiFocusKey(null)}
+                  aria-label="Clear KPI focus"
+                  title="Clear KPI focus"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </Badge>
+            </div>
+          )}
           {snapshot.isLoading ? (
                 <div className="space-y-2">
                   {Array.from({ length: 6 }).map((_, i) => (
