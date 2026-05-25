@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useMemo, useState, type CSSProperties } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
@@ -235,7 +235,7 @@ export function BulkReviewMatrixGrid({
                       <tr
                         key={kpi.key}
                         className="group"
-                        style={{ contentVisibility: 'auto', containIntrinsicSize: '56px' } as Record<string, string>}
+                        style={{ contentVisibility: 'auto', containIntrinsicSize: '56px' } as CSSProperties}
                       >
                         {/* Sticky KPI cell */}
                         <td
