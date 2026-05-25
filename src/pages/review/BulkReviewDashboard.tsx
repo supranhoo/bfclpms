@@ -97,7 +97,6 @@ export default function BulkReviewDashboard() {
   const [displayMode, setDisplayMode] = useState<'score' | 'wt' | 'both'>('score');
   const [hideEmpty, setHideEmpty] = useState(false);
   const [scopeLoaded, setScopeLoaded] = useState(false);
-  const [empWindowStart, setEmpWindowStart] = useState(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeRow, setActiveRow] = useState<BulkReviewRow | null>(null);
   const [confirmApprove, setConfirmApprove] = useState(false);
@@ -163,11 +162,6 @@ export default function BulkReviewDashboard() {
     setKraName('');
   }, [categoryId, period, year]);
 
-  // Reset employee window when filters change or a new snapshot lands.
-  useEffect(() => {
-    setEmpWindowStart(0);
-  }, [period, year, viewerStage, filters, kraName]);
-
   const capExceeded = preview.data?.cap_exceeded ?? false;
   const canLoad = flagOn && !!preview.data && !capExceeded && (preview.data?.cell_count ?? 0) > 0;
 
@@ -210,18 +204,6 @@ export default function BulkReviewDashboard() {
     }
     return Array.from(seen.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [loadedRows]);
-
-  const visibleEmpIds = useMemo(() => {
-    const end = Math.min(employeeList.length, empWindowStart + EMP_WINDOW_SIZE);
-    return new Set(employeeList.slice(empWindowStart, end).map(e => e.id));
-  }, [employeeList, empWindowStart]);
-
-  const windowedRows = useMemo(
-    () => (employeeList.length <= EMP_WINDOW_SIZE
-      ? loadedRows
-      : loadedRows.filter(r => visibleEmpIds.has(r.employee_id))),
-    [loadedRows, visibleEmpIds, employeeList.length],
-  );
 
   const variance = useMemo(() => {
     let count = 0;
