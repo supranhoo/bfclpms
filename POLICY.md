@@ -148,6 +148,17 @@ empty row, clamp, N/A short-circuit, cascade fallback),
 `src/lib/bulkSignoffImpact.test.ts` (manual override count,
 requiredUnfilled flagging, per-employee achieved recompute).
 
+### §111.7.a.4 Row-level selection visibility scope (v2.66.13.11)
+
+The horizontal KPI-row checkbox in the Bulk Review matrix MUST select only
+the cells currently rendered on screen — i.e. cells whose employee is in
+the post-focus, post-filter `employees` list. It MUST NOT walk the full
+loaded snapshot. Selecting hidden cells violates least-surprise (the
+reviewer would sign off rows they cannot see). The helper
+`submissionIdsForVisibleKpiRow(employees, cellMap, kpiKey)` in
+`src/lib/bulkRowSelection.ts` is the canonical derivation. Regression:
+`src/lib/bulkRowSelection.test.ts` ("scopes to visible employees only").
+
 ## §111.6 Bulk Scoring KPI Detail RPC Source Contract (RCA 2026-05-25)
 
 The Bulk Scoring detail/write-as-Manager drawer RPC (`kpi_cell_detail`) MUST source organization KPI detail metadata from `public.org_kpi_values`. The obsolete `public.org_kpis` relation MUST NOT be referenced or recreated as a compatibility shim. Category display in this drawer MUST come from the mapped employee KPI (`kpis.category_id`) joined to `kra_categories`, so category visibility remains tied to the KPI row actually being reviewed. Workflow metadata MUST use the supported `get_employee_workflow(employee, period, year)` helper and degrade gracefully if workflow resolution fails. Regression: `src/test/kpiCellDetailContract.test.ts`.

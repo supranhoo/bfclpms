@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import type { BulkReviewRow } from '@/hooks/useBulkReview';
 import { classifyOrgKpiRow } from '@/lib/orgKpiGap';
 import {
-  kpiRowKey as makeKpiRowKey, submissionIdsForKpiRow, toggleKpiRowSelection,
+  kpiRowKey as makeKpiRowKey, submissionIdsForVisibleKpiRow, toggleKpiRowSelection,
 } from '@/lib/bulkRowSelection';
 
 type ViewerStage =
@@ -358,7 +358,10 @@ export function BulkReviewMatrixGrid({
                     {!collapsed && group.map((kpi, idx) => {
                       const zebra = idx % 2 === 1;
                       const rowBg = zebra ? 'bg-muted/30' : 'bg-card';
-                      const rowSubIds = submissionIdsForKpiRow(rows, kpi.key);
+                      // Scope to currently VISIBLE employees (post focus + filters),
+                      // not the full snapshot — otherwise the row checkbox would
+                      // silently select cells the reviewer can't see.
+                      const rowSubIds = submissionIdsForVisibleKpiRow(employees, cellMap, kpi.key);
                       const rowAllSelected = rowSubIds.length > 0
                         && rowSubIds.every(id => selectedSubmissionIds.has(id));
                       const rowSomeSelected = !rowAllSelected

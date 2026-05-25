@@ -31,6 +31,24 @@ export function submissionIdsForKpiRow(
 }
 
 /**
+ * Visible-row variant. Walks the post-focus/post-filter `employees` list and
+ * the rendered `cellMap` so the count matches exactly what the reviewer sees
+ * on screen. Use this for row-level checkbox derivation in the matrix grid.
+ */
+export function submissionIdsForVisibleKpiRow(
+  employees: readonly { id: string }[],
+  cellMap: ReadonlyMap<string, { submission_id: string | null }>,
+  kpiKey: string,
+): string[] {
+  const out: string[] = [];
+  for (const emp of employees) {
+    const r = cellMap.get(`${kpiKey}::${emp.id}`);
+    if (r?.submission_id) out.push(r.submission_id);
+  }
+  return out;
+}
+
+/**
  * Toggle a horizontal row: if every selectable cell in that KPI row is already
  * selected, deselect them all; otherwise select all of them. Other selections
  * are preserved.
