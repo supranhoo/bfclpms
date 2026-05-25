@@ -487,8 +487,13 @@ export default function BulkReviewDashboard() {
             <Select
               value={kraName || 'all'}
               onValueChange={(v) => setKraName(v === 'all' ? '' : v)}
+              disabled={!scopeLoaded}
             >
-              <SelectTrigger className="h-8 w-[170px] shrink-0 text-xs" aria-label="KRA">
+              <SelectTrigger
+                className="h-8 w-[170px] shrink-0 text-xs"
+                aria-label="KRA"
+                title={scopeLoaded ? undefined : 'Load scope to see KRAs'}
+              >
                 <div className="flex items-center gap-1.5 min-w-0 truncate">
                   <Target className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   <SelectValue placeholder="KRA" />
@@ -496,7 +501,7 @@ export default function BulkReviewDashboard() {
               </SelectTrigger>
               <SelectContent className="max-h-72">
                 <SelectItem value="all">All KRAs</SelectItem>
-                {(kraOptions.data ?? []).map((name) => (
+                {kraOptionList.map((name) => (
                   <SelectItem key={name} value={name}>
                     <span className="truncate inline-block max-w-[260px] align-middle">{name}</span>
                   </SelectItem>
