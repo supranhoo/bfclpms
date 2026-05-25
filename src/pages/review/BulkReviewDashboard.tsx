@@ -910,7 +910,9 @@ export default function BulkReviewDashboard() {
         uploaderUserId={user?.id ?? 'anonymous'}
         isLoading={isActionPending}
         onCancel={() => setConfirmApprove(false)}
-        onConfirm={({ reason, attachmentUrls }) => handleBulkApprove(reason, attachmentUrls)}
+        onConfirm={({ reason, attachmentUrls, achievedValues, manualScores, isOverride }) =>
+          handleBulkApprove(reason, attachmentUrls, { achievedValues, manualScores, isOverride })
+        }
         mode={bulkAction?.kind === 'stage' ? 'signoff' : 'approve'}
         stageLabel={
           bulkAction?.kind === 'stage'
@@ -920,6 +922,13 @@ export default function BulkReviewDashboard() {
         preview={impactPreview}
         previewLoading={previewDataQ.isLoading}
         previewError={previewDataQ.error ? (previewDataQ.error as Error).message : null}
+        ruleByKpiId={previewDataQ.data?.ruleByKpiId}
+        kpiIdBySubmissionId={kpiIdBySubmissionId}
+        isAdmin={effectiveRole === 'admin'}
+        onInputsChange={(inputs, isOverride) => {
+          setDialogInputs(inputs);
+          setDialogIsOverride(isOverride);
+        }}
       />
     </div>
   );
