@@ -1,10 +1,16 @@
 import { Fragment, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, Building } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { BulkReviewRow } from '@/hooks/useBulkReview';
+import { classifyOrgKpiRow, type OrgKpiRowStatus } from '@/lib/orgKpiGap';
 
 type ViewerStage =
   | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management';
@@ -59,19 +65,22 @@ export interface BulkReviewMatrixGridProps {
   onToggleAll: (allIds: string[]) => void;
   onCellClick: (row: BulkReviewRow) => void;
   displayMode?: 'score' | 'wt' | 'both';
+  /** Optional map: kpi_id → is_org_level. When absent, ORG badge is hidden. */
+  isOrgByKpiId?: ReadonlyMap<string, boolean>;
 }
 
 export function BulkReviewMatrixGrid({
   rows, viewerStage, selectedSubmissionIds,
   onToggleSubmission, onToggleAll, onCellClick,
   displayMode = 'score',
+  isOrgByKpiId,
 }: BulkReviewMatrixGridProps) {
   const [showMeta, setShowMeta] = useState(false);
   const [collapsedKras, setCollapsedKras] = useState<Set<string>>(new Set());
 
   const stageKey = STAGE_SCORE_KEY[(viewerStage as ViewerStage)] ?? 'manager_score';
 
-  const { kpiRows, employees, cellMap, kraGroups } = useMemo(() => {
+  const { kpiRows, employees, cellMap, kraGroups, orgStatusByKpiKey } = useMemo(() => {
     const kpiMap = new Map<string, KpiRowKey>();
     const empMap = new Map<string, EmployeeCol>();
     const cell = new Map<string, BulkReviewRow>(); // `${kpiKey}::${empId}` → row
@@ -113,8 +122,28 @@ export function BulkReviewMatrixGrid({
       groups.get(k.kraName)!.push(k);
     }
 
-    return { kpiRows: kpiRowsArr, employees: employeesArr, cellMap: cell, kraGroups: groups };
-  }, [rows]);
+    // Org-KPI per row (kpi grouping across employees).
+    const orgMap = new Map<string, ReturnType<typeof classifyOrgKpiRow>>();
+    if (isOrgByKpiId) {
+      const nameById = new Map(employeesArr.map(e => [e.id, e.name]));
+      for (const k of kpiRowsArr) {
+        const kpiIds: string[] = [];
+        const empIds: string[] = [];
+        for (const e of employeesArr) {
+          const c = cell.get(`${k.key}::${e.id}`);
+          if (c) { kpiIds.push(c.kpi_id); empIds.push(e.id); }
+        }
+        orgMap.set(k.key, classifyOrgKpiRow({
+          kpiIds, employeeIds: empIds, isOrgByKpiId, employeeNameById: nameById,
+        }));
+      }
+    }
+
+    return {
+      kpiRows: kpiRowsArr, employees: employeesArr, cellMap: cell,
+      kraGroups: groups, orgStatusByKpiKey: orgMap,
+    };
+  }, [rows, isOrgByKpiId]);
 
   const allSubmissionIds = useMemo(
     () => rows.filter(r => r.submission_id).map(r => r.submission_id!),
@@ -130,6 +159,9 @@ export function BulkReviewMatrixGrid({
       return next;
     });
   };
+  const collapseAll = () => setCollapsedKras(new Set(kraGroups.keys()));
+  const expandAll = () => setCollapsedKras(new Set());
+  const allCollapsed = kraGroups.size > 0 && kraGroups.size === collapsedKras.size;
 
   const KPI_COL_W = 260;
   const EMP_COL_W = 112;
@@ -144,6 +176,26 @@ export function BulkReviewMatrixGrid({
           <Label htmlFor="show-meta" className="text-xs font-medium cursor-pointer">
             Show KRA · Wt%
           </Label>
+          <div className="ml-2 flex items-center gap-1 pl-2 border-l border-border/50">
+            <Button
+              type="button" size="sm" variant="ghost"
+              className="h-7 px-2 text-[11px] gap-1"
+              onClick={expandAll}
+              disabled={collapsedKras.size === 0}
+              title="Expand all KRAs"
+            >
+              <ChevronsDown className="h-3 w-3" /> Expand all
+            </Button>
+            <Button
+              type="button" size="sm" variant="ghost"
+              className="h-7 px-2 text-[11px] gap-1"
+              onClick={collapseAll}
+              disabled={allCollapsed}
+              title="Collapse all KRAs"
+            >
+              <ChevronsUp className="h-3 w-3" /> Collapse all
+            </Button>
+          </div>
         </div>
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <span><strong className="text-foreground tabular-nums">{kpiRows.length}</strong> KPIs</span>
