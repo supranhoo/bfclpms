@@ -810,6 +810,12 @@ export default function BulkReviewDashboard() {
         isLoading={isActionPending}
         onCancel={() => setConfirmApprove(false)}
         onConfirm={({ reason, attachmentUrls }) => handleBulkApprove(reason, attachmentUrls)}
+        mode={bulkAction?.kind === 'stage' ? 'signoff' : 'approve'}
+        stageLabel={
+          bulkAction?.kind === 'stage'
+            ? ({ manager: 'Manager', skip_level: 'Skip-Level', hr_pms: 'HR PMS', auditor: 'Auditor' } as const)[bulkAction.stage!]
+            : undefined
+        }
       />
     </div>
   );
