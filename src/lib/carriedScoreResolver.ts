@@ -22,6 +22,8 @@ export type CarriedSource =
   | 'skip_level'
   | 'hr_pms'
   | 'computed'
+  | 'manual'
+  | 'override'
   | 'none';
 
 export interface KpiRule {
@@ -60,6 +62,53 @@ export interface ResolveInput {
 export interface ResolveResult {
   score: number | null;
   source: CarriedSource;
+}
+
+/** Inline reviewer entries from the bulk sign-off dialog (per cell). */
+export interface CellInputs {
+  /** Reviewer-entered achievement; recomputes rating via kpis rule. */
+  achievedOverride?: number | string | null;
+  /** Reviewer-entered manual rating (0–5). Wins over achievedOverride. */
+  manualScore?: number | null;
+}
+
+/**
+ * Like `resolveCarriedScore` but also honours inline reviewer inputs and an
+ * admin Override flag. Used by the Bulk Sign-off impact preview.
+ *
+ * Precedence (highest first):
+ *   1. manualScore           → source 'manual'  (or 'override' if isOverride)
+ *   2. achievedOverride      → source 'computed' (or 'override' if isOverride)
+ *   3. isOverride && no input → { null, 'override' } (forces required-dot)
+ *   4. existing cascade      → unchanged
+ */
+export function resolveWithInputs(
+  { stage, submission, kpi }: ResolveInput,
+  inputs: CellInputs | undefined,
+  isOverride: boolean,
+): ResolveResult {
+  if (submission.is_na === true) return { score: null, source: 'none' };
+
+  const manual = inputs?.manualScore;
+  if (manual != null && Number.isFinite(manual)) {
+    return { score: Math.max(0, Math.min(5, manual)), source: isOverride ? 'override' : 'manual' };
+  }
+
+  const ach = inputs?.achievedOverride;
+  if (ach != null && ach !== '') {
+    const computed = computeFromAchievement(ach, kpi);
+    if (computed.source === 'computed') {
+      return { score: computed.score, source: isOverride ? 'override' : 'computed' };
+    }
+    // Couldn't compute (no thresholds, NaN); fall through.
+  }
+
+  if (isOverride) {
+    // Admin enabled override but left this row blank → require input.
+    return { score: null, source: 'override' };
+  }
+
+  return resolveCarriedScore({ stage, submission, kpi });
 }
 
 /**
