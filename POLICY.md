@@ -54,6 +54,29 @@ Toast contract: `summariseSkipReasons` (`src/lib/summariseSkipReasons.ts`)
 groups skip reasons (≤2 buckets) inline; falls back to "see audit log" for
 3+ distinct reasons.
 
+### §111.7.a.1 Shared remark & evidence persistence (RCA 2026-05-25 v2.66.13.6)
+
+`public.bulk_write_stage_scores(p_stage, p_cells, p_batch_reason, p_attachment_urls)`
+MUST persist the shared dialog remark AND any shared supporting evidence onto
+the **acted stage's** own columns, not only into batch metadata:
+
+| Stage acted on | Remarks column | Evidence column |
+|---|---|---|
+| `manager`    | `manager_remarks`    | `manager_evidence_urls` |
+| `skip_level` | `skip_level_remarks` | `skip_level_evidence_urls` |
+| `hr_pms`     | `hr_pms_remarks`     | `hr_pms_evidence_urls` |
+| `auditor`    | `auditor_remarks`    | `auditor_evidence_urls` |
+
+Rules:
+
+- `p_batch_reason` is **mandatory** for stage sign-off (≥ 10 chars after trim) — same UX contract as `bulk_management_approve`.
+- When a per-cell `remarks` value is supplied it wins; otherwise the shared `p_batch_reason` is written to the stage remark column.
+- `p_attachment_urls` is optional (max 5). When present, each URL is appended to the existing acted-stage evidence array (no overwrite).
+- The frontend MUST forward the dialog's `attachmentUrls` to the RPC; discarding them is a defect.
+- Cache invalidation MUST also include `bulk_review_snapshot_all` and `bulk_scope_preview` so the matrix and detail drawer never show a stale "current stage" badge after a successful sign-off.
+
+Regression: `src/test/bulkWriteStageScoresContract.test.ts`, `src/test/bulkApproveDialogSignoffMode.test.tsx`.
+
 ## §111.6 Bulk Scoring KPI Detail RPC Source Contract (RCA 2026-05-25)
 
 The Bulk Scoring detail/write-as-Manager drawer RPC (`kpi_cell_detail`) MUST source organization KPI detail metadata from `public.org_kpi_values`. The obsolete `public.org_kpis` relation MUST NOT be referenced or recreated as a compatibility shim. Category display in this drawer MUST come from the mapped employee KPI (`kpis.category_id`) joined to `kra_categories`, so category visibility remains tied to the KPI row actually being reviewed. Workflow metadata MUST use the supported `get_employee_workflow(employee, period, year)` helper and degrade gracefully if workflow resolution fails. Regression: `src/test/kpiCellDetailContract.test.ts`.
