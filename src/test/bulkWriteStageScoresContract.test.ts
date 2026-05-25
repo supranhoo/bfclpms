@@ -54,4 +54,9 @@ describe('bulk_write_stage_scores SQL contract', () => {
   it('still calls the workflow reconciler after writes', () => {
     expect(SQL).toMatch(/reconcile_workflow_statuses/);
   });
+
+  it('surfaces not_terminal_for_template skip rows (v2.66.13.16)', () => {
+    expect(SQL).toMatch(/not_terminal_for_template/);
+    expect(SQL).toMatch(/v_acted_stage_key/);
+  });
 });
