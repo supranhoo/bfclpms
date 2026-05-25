@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   AlertCircle, Layers, RefreshCw, Search, EyeOff, Eye,
   Calendar, CalendarDays, Building2, Network, Factory, Users, Tag, UserCog, Target,
+  IdCard, Award,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -32,6 +33,7 @@ import {
   useBulkReviewSnapshotAll,
   useBulkManagementApprove,
   useBulkOrgKpiFlags,
+  useBulkEmployeeAttrs,
   type BulkScopeFilters,
   type BulkReviewRow,
 } from '@/hooks/useBulkReview';
@@ -41,6 +43,9 @@ import { useToast } from '@/hooks/use-toast';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { MultiSelectFilter } from '@/components/review/MultiSelectFilter';
 import { readUrlArrays, writeUrlArrays } from '@/lib/bulkUrlState';
+import {
+  allowedEmployeeIds, distinctAttrOptions, BLANK_SENTINEL, type EmpAttrs,
+} from '@/lib/bulkEmployeeFilter';
 
 // Full month names — must match kpis.review_period exactly (DB stores 'April', 'May', ...).
 // Ordered by fiscal year (Apr → Mar) for display.
@@ -94,7 +99,7 @@ export default function BulkReviewDashboard() {
   const initialUrl = useMemo(
     () => readUrlArrays(
       typeof window !== 'undefined' ? window.location.search : '',
-      ['companies', 'divisions', 'bus', 'depts', 'cats', 'kras'],
+      ['companies', 'divisions', 'bus', 'depts', 'cats', 'kras', 'desigs', 'grades', 'mgrs'],
     ),
     [],
   );
@@ -104,6 +109,9 @@ export default function BulkReviewDashboard() {
   const [departmentIds, setDepartmentIds] = useState<string[]>(initialUrl.depts);
   const [categoryIds, setCategoryIds] = useState<string[]>(initialUrl.cats);
   const [kraNames, setKraNames] = useState<string[]>(initialUrl.kras);
+  const [designations, setDesignations] = useState<string[]>(initialUrl.desigs);
+  const [grades, setGrades] = useState<string[]>(initialUrl.grades);
+  const [managerIds, setManagerIds] = useState<string[]>(initialUrl.mgrs);
   const [search, setSearch] = useState('');
   const [displayMode, setDisplayMode] = useState<'score' | 'wt' | 'both'>('score');
   const [hideEmpty, setHideEmpty] = useState(false);
@@ -126,10 +134,12 @@ export default function BulkReviewDashboard() {
     const nextSearch = writeUrlArrays(window.location.search, {
       companies: companyIds, divisions: divisionIds, bus: businessUnitIds,
       depts: departmentIds, cats: categoryIds, kras: kraNames,
+      desigs: designations, grades, mgrs: managerIds,
     });
     const newUrl = `${window.location.pathname}${nextSearch}${window.location.hash}`;
     window.history.replaceState(null, '', newUrl);
-  }, [companyIds, divisionIds, businessUnitIds, departmentIds, categoryIds, kraNames]);
+  }, [companyIds, divisionIds, businessUnitIds, departmentIds, categoryIds, kraNames,
+      designations, grades, managerIds]);
 
   const filteredBusinessUnits = useMemo(() => {
     if (divisionIds.length === 0) return businessUnits ?? [];
@@ -168,7 +178,10 @@ export default function BulkReviewDashboard() {
     (businessUnitIds.length > 0 ? 1 : 0) +
     (departmentIds.length > 0 ? 1 : 0) +
     (categoryIds.length > 0 ? 1 : 0) +
-    (kraNames.length > 0 ? 1 : 0);
+    (kraNames.length > 0 ? 1 : 0) +
+    (designations.length > 0 ? 1 : 0) +
+    (grades.length > 0 ? 1 : 0) +
+    (managerIds.length > 0 ? 1 : 0);
 
   const invalidateScope = () => setScopeLoaded(false);
 
