@@ -125,6 +125,7 @@ export default function BulkReviewDashboard() {
   const [activeRow, setActiveRow] = useState<BulkReviewRow | null>(null);
   const [confirmApprove, setConfirmApprove] = useState(false);
   const approve = useBulkManagementApprove();
+  const stageWrite = useBulkWriteStageScores();
   // Stable batch id generated when the dialog opens; reused for storage scoping + RPC.
   const [batchId, setBatchId] = useState<string>('');
 
