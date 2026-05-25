@@ -777,6 +777,9 @@ export default function BulkReviewDashboard() {
                     onCellClick={setActiveRow}
                     displayMode={displayMode}
                     isOrgByKpiId={isOrgByKpiId}
+                    kpiFocusKey={kpiFocusKey}
+                    onFocusKpi={setKpiFocusKey}
+                    onReplaceSelection={setSelectedIds}
                   />
               )}
 
