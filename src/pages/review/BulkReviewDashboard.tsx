@@ -215,47 +215,6 @@ export default function BulkReviewDashboard() {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [rawRows]);
 
-  // Multi-axis client-side filter over the snapshot.
-  const loadedRows = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    const kraSet = new Set(kraNames);
-    let rows = rawRows;
-    if (kraSet.size > 0) {
-      rows = rows.filter(r => kraSet.has(r.kra_name ?? ''));
-    }
-    if (term) {
-      rows = rows.filter(r =>
-        (r.kpi_name ?? '').toLowerCase().includes(term)
-        || (r.kra_name ?? '').toLowerCase().includes(term)
-        || (r.employee_name ?? '').toLowerCase().includes(term)
-        || (r.employee_code ?? '').toLowerCase().includes(term),
-      );
-    }
-    if (hideEmpty) {
-      rows = rows.filter(r => {
-        const scores = [r.self_score, r.manager_score, r.skip_level_score, r.hr_pms_score, r.auditor_score, r.management_score, r.final_score];
-        return scores.some(s => s !== null && s !== undefined);
-      });
-    }
-    if (designations.length || grades.length || managerIds.length) {
-      rows = rows.filter(r => allowedEmpSet.has(r.employee_id));
-    }
-    return rows;
-  }, [rawRows, search, hideEmpty, kraNames, designations, grades, managerIds, allowedEmpSet]);
-
-  // Org-KPI flags for the currently loaded snapshot.
-  const distinctKpiIds = useMemo(() => {
-    const s = new Set<string>();
-    for (const r of rawRows) if (r.kpi_id) s.add(r.kpi_id);
-    return Array.from(s);
-  }, [rawRows]);
-  const orgFlagsQ = useBulkOrgKpiFlags(distinctKpiIds, scopeLoaded);
-  const isOrgByKpiId = useMemo(() => {
-    const m = new Map<string, boolean>();
-    for (const f of orgFlagsQ.data ?? []) m.set(f.kpi_id, f.is_org_level);
-    return m;
-  }, [orgFlagsQ.data]);
-
   // Employee attribute index (designation / grade / reporting manager) for
   // the currently loaded snapshot — backs the 3 employee-axis filters.
   const distinctEmpIds = useMemo(() => {
@@ -303,6 +262,47 @@ export default function BulkReviewDashboard() {
     () => allowedEmployeeIds(attrsByEmp, designations, grades, managerIds),
     [attrsByEmp, designations, grades, managerIds],
   );
+
+  // Multi-axis client-side filter over the snapshot.
+  const loadedRows = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    const kraSet = new Set(kraNames);
+    let rows = rawRows;
+    if (kraSet.size > 0) {
+      rows = rows.filter(r => kraSet.has(r.kra_name ?? ''));
+    }
+    if (term) {
+      rows = rows.filter(r =>
+        (r.kpi_name ?? '').toLowerCase().includes(term)
+        || (r.kra_name ?? '').toLowerCase().includes(term)
+        || (r.employee_name ?? '').toLowerCase().includes(term)
+        || (r.employee_code ?? '').toLowerCase().includes(term),
+      );
+    }
+    if (hideEmpty) {
+      rows = rows.filter(r => {
+        const scores = [r.self_score, r.manager_score, r.skip_level_score, r.hr_pms_score, r.auditor_score, r.management_score, r.final_score];
+        return scores.some(s => s !== null && s !== undefined);
+      });
+    }
+    if (designations.length || grades.length || managerIds.length) {
+      rows = rows.filter(r => allowedEmpSet.has(r.employee_id));
+    }
+    return rows;
+  }, [rawRows, search, hideEmpty, kraNames, designations, grades, managerIds, allowedEmpSet]);
+
+  // Org-KPI flags for the currently loaded snapshot.
+  const distinctKpiIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of rawRows) if (r.kpi_id) s.add(r.kpi_id);
+    return Array.from(s);
+  }, [rawRows]);
+  const orgFlagsQ = useBulkOrgKpiFlags(distinctKpiIds, scopeLoaded);
+  const isOrgByKpiId = useMemo(() => {
+    const m = new Map<string, boolean>();
+    for (const f of orgFlagsQ.data ?? []) m.set(f.kpi_id, f.is_org_level);
+    return m;
+  }, [orgFlagsQ.data]);
 
   // Prune stale selections when the scope changes so they don't silently hide
   // every row. We prune per-value (not full clear) so URL deep-links survive.
