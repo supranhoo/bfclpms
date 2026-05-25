@@ -179,4 +179,39 @@ describe('summariseStageWriteOutcome (POLICY §111.7.c)', () => {
     expect(r.title).toBe('Nothing signed off — all 1 skipped');
     expect(r.lines).toContain('1 skipped: override row left blank (1)');
   });
+
+  // POLICY §88.1.d — Force-approve at terminal stage path.
+  it('overrideApproved only — all non-approved rows force-approved at terminal stage', () => {
+    const r = summariseStageWriteOutcome({
+      total: 2,
+      applied: 2,
+      advanced: 0,
+      skipped: [],
+      overrideApproved: 2,
+    });
+    expect(r.title).toBe('Process complete — 2/2 (2 approved by override)');
+    expect(r.lines).toContain(
+      '2 approved by admin override at terminal stage (POLICY §88.1.d)',
+    );
+  });
+
+  it('reported April-2026 case — 2 force-approved + 2 re-stamped', () => {
+    const r = summariseStageWriteOutcome({
+      total: 4,
+      applied: 4,
+      advanced: 0,
+      skipped: [],
+      relocked: 2,
+      overrideApproved: 2,
+    });
+    expect(r.title).toBe(
+      'Process complete — 4/4 (2 approved by override, 2 re-stamped)',
+    );
+    expect(r.lines).toContain(
+      '2 approved by admin override at terminal stage (POLICY §88.1.d)',
+    );
+    expect(r.lines).toContain(
+      '2 final scores re-stamped (admin override, POLICY §88.1)',
+    );
+  });
 });

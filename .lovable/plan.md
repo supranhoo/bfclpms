@@ -1,201 +1,246 @@
-## Goal
+## 1. Assumptions
 
-Make **Bulk Sign-off (with Override)** a true "**Process all 4**" action so it:
+- You want **HR PMS bulk sign-off with Admin Override** to treat the selected April 2026 cells as a corrective terminal action.
+- For employees whose workflow terminal stage is **HR PMS**, the operation must end in **Approved** even if their current status is still earlier, such as `self_review`.
+- Already-approved rows must remain approved, but their locked `final_score` may be re-stamped with a full audit log.
 
-1. Writes the selected stage on **every** selected cell — including cells already at `approved` (locked `final_score`).
-2. For approved cells, **re-stamps `final_score`** if the acted stage is that employee's **terminal** stage, leaving status at `approved` (immutability is preserved as "explicit admin override with full audit", not "silent drift").
-3. For non-approved cells, advances the KPI to the next stage / `approved` exactly as today (already working in the latest migration).
-4. Returns a single coherent toast: **"Process complete — N approved, M re-stamped, K unchanged"** — never "failed".
-5. Every override decision is captured in `kpi_audit_logs` with action `ADMIN_BULK_OVERRIDE_FINAL_UNLOCK` (for re-stamps) or `BULK_STAGE_SIGNOFF_<STAGE>` with `is_override:true` (for normal cells).
-6. **POLICY §88 is amended** to formally permit Admin-Override re-stamp; rollback path stays the canonical "self-service" mechanism.
+## 2. Clarifications
 
----
+Not Applicable — the reported case is specific enough and the live data confirms the failure mode.
 
-## Risk & Impact Report
+## 3. Actual RCA / Why-Why Analysis
 
-| Area | Impact | Mitigation |
-|---|---|---|
-| Data | `final_score` of *approved* rows may be rewritten. | Only when `is_admin=true` AND `is_override=true` AND acted stage matches employee's resolved terminal stage. Old value captured in audit `old_value`. |
-| Workflow | Status of approved rows does NOT change (stays `approved`). Non-approved rows behave as today. | Explicit `IF kpi.status='approved' THEN do not reconcile` guard. |
-| Policy | §88 (Submission Snapshot Immutability) — needs a formal Admin-Override carve-out. | New §88.1 added; CHANGELOG entry; ADR-066. |
-| RLS | `bulk_write_stage_scores` is `SECURITY DEFINER`; admin gate already enforced (`p_is_override` is silently cleared if user is not admin). | No change needed. |
-| Regression | Existing non-override bulk path must remain byte-identical. | New code paths gated entirely on `p_is_override=true`; existing tests must still pass. |
-| Scalability | Same batch loop as today — no extra round-trips. | None. |
-| Rollback | Pure SQL function — `CREATE OR REPLACE` can be re-deployed to revert. | Keep prior migration intact; new migration is additive. |
+### Current live result for the reported April 2026 batch
 
----
+Latest HR PMS override batch checked:
 
-## What changes (code + policy)
+- Batch processed: **4 cells**
+- Skipped: **0**
+- Override: **true**
+- Re-stamped approved rows: **2**
+- Workflow advanced count: **0**
 
-### 1. Migration — `bulk_write_stage_scores` Override carve-out
+Current database state for the selected Cost Control KPI after processing:
 
-Replace the function body so the per-cell skip ladder respects `p_is_override`:
+| Employee | Before expectation | Actual now | HR PMS score | Final score |
+|---|---:|---:|---:|---:|
+| Deepak Ranjan | Already approved | `approved` | 0 | 0 |
+| Sourav Kumar Jaiswal | Already approved | `approved` | 0 | 0 |
+| Ankit Kumar | `self_review` should become approved | still `self_review` | 0 | NULL |
+| Rahul Kumar Prasad | `self_review` should become approved | still `self_review` | 0 | NULL |
+
+### Why 1 — Why did the toast say “No status change”?
+
+Because the backend returned:
+
+- `applied = 4`
+- `advanced = 0`
+- `relocked = 2`
+- `skipped = 0`
+
+So the frontend truthfully reported that values were written, but workflow status did not advance for the two self-review rows.
+
+### Why 2 — Why were values written but status not advanced?
+
+`bulk_write_stage_scores` successfully wrote `hr_pms_score = 0` for all 4 selected rows, including Ankit and Rahul.
+
+But status advancement is delegated to `reconcile_workflow_statuses`, and that reconciler currently refuses to fast-forward a KPI from `self_review` when the workflow still contains intermediate reviewer stages like Manager and Skip-Level.
+
+### Why 3 — Why did the reconciler refuse to fast-forward?
+
+The reconciler has a sequential-workflow guard:
+
+- If the KPI is at `self_review`
+- And future reviewer stages still exist
+- It exits early before checking the newly written terminal HR PMS score
+
+This protects normal review order, but it conflicts with the new Admin Override requirement.
+
+### Why 4 — Why did the already-approved rows work?
+
+Already-approved rows use a separate Admin Override re-stamp path. That path bypasses final-score immutability, updates `final_score`, and logs `ADMIN_BULK_OVERRIDE_FINAL_UNLOCK`.
+
+That part is working.
+
+### Why 5 — Why did Ankit and Rahul not become approved?
+
+Because the override implementation only handled the **locked approved row** case. It did not add a matching **terminal-stage force-approve** path for rows that are not yet approved but are being corrected by Admin Override at their terminal stage.
+
+## 4. Risk & Impact Report
+
+### Data Impact
+
+- Requires a backend function migration only.
+- No new table is required.
+- No destructive schema change.
+- Existing scores remain intact unless Admin Override is explicitly used.
+- For override terminal rows, the change will set:
+  - `kpis.status = 'approved'`
+  - `review_submissions.final_score = <acted terminal stage score>`
+  - `review_submissions.final_rating = <acted terminal stage rating>`
+
+### Workflow Impact
+
+- Normal non-override workflow remains sequential.
+- Admin Override gains a controlled exception:
+  - If acted stage equals the employee’s terminal workflow stage, approve directly.
+  - If acted stage is non-terminal, only write the stage column and do not approve.
+
+### UI/UX Impact
+
+- No major layout change.
+- Toast wording should distinguish:
+  - rows newly force-approved by terminal override
+  - already-approved rows re-stamped
+  - non-terminal column-only writes
+- The screenshot case should become: **Process complete — 4/4**.
+
+### Regression Risk
+
+Medium, because workflow status and final-score immutability are sensitive.
+
+Primary risk is accidentally allowing non-admin users or non-terminal stages to bypass workflow sequence.
+
+### Scalability Impact
+
+Low.
+
+The operation already processes selected cells only. The added logic is per selected row and uses existing workflow lookup. No full-table scan should be introduced.
+
+### Mitigation Plan
+
+- Gate direct approval behind **Admin + Override + acted stage equals terminal stage**.
+- Keep non-admin and normal reviewer paths unchanged.
+- Add SQL contract tests and frontend summary tests.
+- Add documentation and policy alignment in the same change.
+
+## 5. Step-by-step Plan
+
+### Phase 1 — Backend correction: terminal override approval
+
+Update `public.bulk_write_stage_scores` so that after writing the acted stage score:
+
+1. Resolve the employee workflow for that KPI.
+2. Determine terminal stage excluding `approved`.
+3. If all conditions are true:
+   - user is Admin
+   - `p_is_override = true`
+   - acted stage equals terminal stage
+   - KPI is not already approved
+4. Then directly approve the KPI:
+   - set `kpis.status = 'approved'`
+   - set `final_score = v_score`
+   - set `final_rating = v_new_rating`
+   - insert audit log, e.g. `ADMIN_BULK_OVERRIDE_FORCE_APPROVE`
+   - increment a new counter such as `override_approved`
+5. Keep already-approved re-stamp path as-is.
+6. Keep non-terminal override path as column-only.
+
+Expected result for the reported case:
 
 ```text
-SKIP RULES (final, exhaustive)
-─────────────────────────────────────────
-not_found                ALWAYS skip
-final_locked             skip UNLESS (is_admin AND is_override)
-self_not_submitted       skip UNLESS is_override
-auditor_takes_precedence skip UNLESS is_override
-row_version_conflict     skip UNLESS is_override
-no_prior_score           skip UNLESS (manual OR achieved supplied)
-override_requires_input  raised when is_override AND no manual AND no achieved
+Deepak   approved -> approved, final re-stamped
+Sourav   approved -> approved, final re-stamped
+Ankit    self_review -> approved, final stamped
+Rahul    self_review -> approved, final stamped
 ```
 
-Override write logic for **locked (already approved)** rows:
+### Phase 2 — Reconcile safety alignment
 
-1. Compute `v_score` (manual / achieved / inherited — same rules).
-2. Resolve employee's terminal stage via `get_employee_workflow_info`.
-3. Write the role-specific column (`hr_pms_score`, etc.) — same as non-locked.
-4. **If `kpi.status = 'approved'` AND acted stage = terminal stage:**
-   - `UPDATE review_submissions SET final_score = v_score, final_rating = …`
-   - Insert audit row `ADMIN_BULK_OVERRIDE_FINAL_UNLOCK` with `old_value={final_score:OLD}`, `new_value={final_score:NEW, acted_stage, batch_id}`.
-   - Do **not** touch `kpis.status` (stays `approved`).
-   - Increment new counter `v_relocked_count`.
-5. **If `kpi.status = 'approved'` AND acted stage ≠ terminal stage:**
-   - Write the column only; do NOT touch `final_score`. Push skip reason `final_locked_non_terminal` (informational, not error) so the toast can explain it.
-6. **If `kpi.status ≠ 'approved'`:** existing chained reconcile runs, as today.
+Do not globally weaken `reconcile_workflow_statuses` yet.
 
-New counters returned in the `bulk_review_batches.scope_filters` JSON + RPC result:
-- `v_applied` (rows written — unchanged semantics)
-- `v_advanced_count` (reconciled to approved — unchanged)
-- `v_relocked_count` (NEW — approved rows whose `final_score` was admin-overridden)
-- `v_non_terminal_count` (unchanged)
+Reason: changing the reconciler broadly could unintentionally fast-forward normal workflows. The safer fix is to keep the exception inside `bulk_write_stage_scores`, where we know the action is Admin Override and where we have the acted stage.
 
-### 2. Frontend — `summariseSkipReasons.ts`
+### Phase 3 — Frontend result reporting
 
-Add labels:
-- `final_locked_non_terminal` → "already finalised — stage isn't the terminal one for this employee, column updated but final score untouched"
-- `override_requires_input` → "override needs an Achieved or manual score (none supplied)"
+Update `summariseStageWriteOutcome` to support the new `overrideApproved` counter.
 
-### 3. Frontend — `summariseStageWriteOutcome`
+Target toast for this case:
 
-Extend `StageWriteOutcome` interface with `relocked: number`.
-New title rule:
-- `advanced + relocked === total` → **"Process complete — N approved, M re-stamped"**
-- `advanced > 0 AND relocked > 0` → same title, line breakdown
-- `relocked === total AND advanced === 0` → **"Final scores re-stamped — N rows"**
-- All other branches remain.
-
-### 4. Frontend — `BulkApproveDialog.tsx`
-
-The amber Override panel gets a third bullet:
-
-> Includes **already-approved** rows. Their `final_score` will be re-stamped from this stage's value if this stage is the employee's terminal review stage. Every re-stamp is audit-logged as `ADMIN_BULK_OVERRIDE_FINAL_UNLOCK` (POLICY §88.1).
-
-The CTA label changes when `isOverride=true && cellCount includes approved rows` (we already preview this) → **"Override sign-off (N approved · M draft)"**.
-
-### 5. Frontend — `BulkSignoffPreview.tsx`
-
-Surface a per-row chip when row is `final_score IS NOT NULL`:
-- Pre-override: red chip *"Locked — will skip"*
-- Override on: amber chip *"Will re-stamp final score"* (if terminal) or grey *"Column-only update"* (if non-terminal).
-
-### 6. POLICY.md — new §88.1 + CHANGELOG
-
-```
-§88.1 Admin-Override Re-Stamp Exception
----------------------------------------
-The §88 immutability rule MAY be deliberately bypassed by an Admin only via
-the Bulk Sign-off "Override" toggle (RPC: bulk_write_stage_scores with
-p_is_override = true). When triggered:
-
-  a. The bypass is per-row, per-stage; no global "unfreeze" exists.
-  b. Final score is re-stamped only if the acted stage is the resolved
-     terminal stage of that employee's workflow template for the period.
-  c. KPI status remains 'approved'; no stage hop occurs.
-  d. Both the old and the new final_score MUST appear in
-     kpi_audit_logs.action = 'ADMIN_BULK_OVERRIDE_FINAL_UNLOCK' with
-     batch_id and a mandatory ≥10-char remark.
-  e. Notification 'admin_override_of_final_score' is sent to the employee,
-     their reporting manager, and HR PMS group (reuses existing dispatch).
-
-Out of scope: self-service rollback (POLICY §12.1) remains the canonical
-path for non-admin corrections.
+```text
+Process complete — 4/4 (2 approved by override, 2 re-stamped)
 ```
 
-CHANGELOG row:
-`| 2.66.13.17 | 2026-05-25 | Admin Override may re-stamp final_score on approved rows (POLICY §88.1) with full audit trail and notification. |`
+If any non-terminal approved rows are selected, keep them clearly reported as column-only.
 
-ADR-066 cross-link to §88 and §88.1.
+### Phase 4 — Policy alignment
 
-### 7. DOCUMENTATION.md
+Update `POLICY.md` under the Admin Override / Bulk Sign-off sections:
 
-Update §111.7.d (Bulk Sign-off table) with three new rows: `final_locked` (admins: re-stamps), `final_locked_non_terminal`, `override_requires_input`.
+- Admin Override may bypass workflow sequence only when the acted stage is the employee’s terminal configured stage.
+- The bypass is per-row, per-batch, audit-logged, and admin-only.
+- Non-terminal override cannot approve or alter `final_score`.
+- Already-approved rows may be re-stamped only through the final-score override audit path.
 
-### 8. Notification — new type
+This aligns with current §88 final-score governance and §111.7 bulk sign-off rules.
 
-Insert one row into `public.notifications` per re-stamped KPI:
-```
-type     = 'admin_override_of_final_score'
-title    = 'Final score updated by admin override'
-message  = 'Your <KPI> score for <Period Year> was re-stamped from X.X to Y.Y by an admin override. See audit trail.'
-metadata = {kpi_id, old_final, new_final, batch_id, performed_by}
-```
-Recipients: `kpi.employee_id`, `profiles.reporting_manager_id`, every user with role `hr_pms`.
+### Phase 5 — Documentation alignment
 
-### 9. Tests
+Update `DOCUMENTATION.md` version history with the RCA:
 
-New unit tests:
-- `summariseSkipReasons.test.ts` — both new labels.
-- `summariseStageWriteOutcome` — 4 new branches (relocked-only; mixed advanced+relocked; relocked + non_terminal skip; override_requires_input).
-- `bulkWriteStageScoresContract.test.ts` — 3 new contracts:
-  - Override on approved + terminal stage → relocked counter +1, `final_score` updated, status stays `approved`, audit `ADMIN_BULK_OVERRIDE_FINAL_UNLOCK` present.
-  - Override on approved + non-terminal stage → column updated, `final_score` UNCHANGED, skip `final_locked_non_terminal` present.
-  - Override with no manual/achieved AND no prior score → skip `override_requires_input`.
+- Symptom: 4 written, 0 skipped, but 2 remained `self_review`.
+- Root cause: sequential reconciler guard exited before checking terminal HR PMS override score.
+- Fix: terminal-stage Admin Override direct approval path.
+- Impact: no schema/RLS/backup change; audit trail extended.
 
-### 10. Mock data update
+## 6. UI Changes
 
-Seed fixture for the regression suite: 4 employees mirroring the live April-2026 case (2 approved + 2 self_review on the same KPI) so this exact bug never returns.
+Minimal.
 
----
+- Location: Bulk Review toast after sign-off.
+- Visual change: success message becomes explicit when override fully processes rows.
+- Interaction impact: no new click path; same Admin Override toggle and Sign-off button.
+- Responsiveness: Not Applicable — no layout restructuring.
 
-## Files touched
+## 7. Implementation
 
-| Path | Kind |
-|---|---|
-| `supabase/migrations/202605251xxxxx_admin_override_relock.sql` | NEW migration (replaces `bulk_write_stage_scores`) |
-| `src/lib/summariseSkipReasons.ts` | edit |
-| `src/lib/summariseSkipReasons.test.ts` | edit |
-| `src/lib/bulkSignoffImpact.ts` | edit (preview surfaces locked rows differently when override on) |
-| `src/components/review/BulkApproveDialog.tsx` | edit |
-| `src/components/review/BulkSignoffPreview.tsx` | edit |
-| `src/pages/review/BulkReviewDashboard.tsx` | edit (toast title rule) |
-| `src/test/bulkWriteStageScoresContract.test.ts` | edit |
-| `POLICY.md` | edit (§88.1 + CHANGELOG) |
-| `DOCUMENTATION.md` | edit (§111.7.d table) |
-| `docs/adr/ADR-066.md` | NEW |
-| `mem/features/review/final-score-governance-and-immutability` | edit (note the §88.1 carve-out) |
+Planned files:
 
----
+- New database migration replacing `bulk_write_stage_scores`
+- `src/lib/summariseSkipReasons.ts`
+- `src/lib/summariseSkipReasons.test.ts`
+- `src/test/bulkWriteStageScoresContract.test.ts`
+- `POLICY.md`
+- `DOCUMENTATION.md`
 
-## Step-by-step build order (after approval)
+No direct data patch is planned unless needed after the function is corrected. The same bulk action can be re-run safely, or we can plan a controlled one-time repair only if you explicitly want that.
 
-1. **Migration** — write & request approval (single file, additive, replaces RPC only).
-2. **Frontend libs** — `summariseSkipReasons.ts` + `summariseStageWriteOutcome` + tests.
-3. **Preview + Dialog UI** — chips, CTA wording, helper text.
-4. **Toast wiring** — `BulkReviewDashboard.tsx`.
-5. **Notification type** — wired in the migration body (single INSERT loop at end).
-6. **Tests** — unit + contract green.
-7. **Docs** — POLICY §88.1, CHANGELOG, ADR-066, DOCUMENTATION §111.7.d, memory note.
-8. **Smoke** — re-run the exact 4-employee April-2026 scenario in dev with `is_override=true`; expect toast **"Process complete — 2 approved, 2 re-stamped"**.
+## 8. Tests
 
----
+Add/update tests for:
 
-## Verification (must hold before sign-off)
+1. Admin terminal override on non-approved row returns `override_approved`.
+2. Admin terminal override writes `final_score` and sets status approved.
+3. Admin override on already-approved row returns `relocked` and logs final re-stamp.
+4. Admin override on non-terminal stage does not approve.
+5. Non-admin cannot trigger override approval.
+6. Toast summary shows full completion when `advanced + overrideApproved + relocked = total`.
 
-- [ ] Live scenario (Ankit, Deepak, Rahul, Sourav, April 2026, Cost Centre Verification) → 4/4 processed, 0 skipped.
-- [ ] `kpi_audit_logs` shows 2 × `BULK_STAGE_SIGNOFF_HR_PMS` + 2 × `ADMIN_BULK_OVERRIDE_FINAL_UNLOCK` with old/new final_score diff.
-- [ ] Status of Deepak/Sourav remains `approved` (no regression of stage).
-- [ ] Status of Ankit/Rahul moves to `approved` via existing chained reconcile.
-- [ ] Without override toggle, behaviour is byte-identical to today (existing contract test passes).
-- [ ] Non-admin cannot trigger the new path (admin gate already enforced server-side).
+## 9. DOCUMENTATION.md updates
 
----
+Required.
 
-## Open questions for confirmation (block build until answered)
+Add a new version-history RCA entry describing this exact failure and the corrected terminal override behavior.
 
-1. **Notification recipients** — OK to notify employee + reporting manager + HR PMS group on every re-stamp? Or admin-only audit trail (no employee notification)?
-2. **Re-stamp on non-terminal stage** — should we *also* re-stamp `final_score` when override hits a *non-terminal* stage of an approved row (i.e. force-overwrite from any stage)? My recommendation is **no** (column-only), per §88.1 (c). Confirm.
-3. **Old-value preservation** — store the previous `final_score` in `review_submissions.previous_final_score` column for forensic reads, or rely solely on `kpi_audit_logs`? Recommendation: audit-log only (no schema bloat).
+## 10. POLICY.md updates
+
+Required.
+
+Add or amend the Admin Override policy so the implementation is formally allowed and bounded:
+
+- Admin-only
+- Explicit override only
+- Terminal stage only for approval
+- Full immutable audit trail
+- Non-terminal remains column-only
+
+## 11. Post-implementation notes
+
+After implementation, I will verify with read-only database checks that the same April 2026 scenario would produce:
+
+- Deepak: approved + final re-stamped
+- Sourav: approved + final re-stamped
+- Ankit: approved + final stamped
+- Rahul: approved + final stamped
+
+Rollback strategy: revert the migration via project history if needed; the change is additive in behavior and does not drop data.

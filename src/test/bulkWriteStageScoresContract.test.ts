@@ -81,12 +81,23 @@ describe('bulk_write_stage_scores SQL contract', () => {
     expect(SQL).toMatch(/'relocked_non_terminal'/);
   });
 
+  // POLICY §88.1.d — Force-approve at terminal stage for non-approved rows.
+  it('admin override force-approves at terminal stage (v2.66.13.18)', () => {
+    expect(SQL).toMatch(/admin_bulk_override_force_approve/);
+    expect(SQL).toMatch(/override_approved/);
+    expect(SQL).toMatch(/§88\.1\.d/);
+  });
+
+  it('force-approved rows skip the workflow reconcile path', () => {
+    expect(SQL).toMatch(/not\s+v_is_relock\s+and\s+not\s+v_is_force_approve/);
+  });
+
   it('dispatches admin_override_of_final_score notifications', () => {
     expect(SQL).toMatch(/admin_override_of_final_score/);
   });
 
   it('approved rows (relocks) are excluded from reconcile', () => {
-    expect(SQL).toMatch(/if\s+not\s+v_is_relock\s+then/);
+    expect(SQL).toMatch(/not\s+v_is_relock\s+and\s+not\s+v_is_force_approve/);
     expect(SQL).toMatch(/v_reconcile_ids/);
   });
 });

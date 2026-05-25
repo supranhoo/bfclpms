@@ -488,6 +488,7 @@ export default function BulkReviewDashboard() {
           skipped: res.skipped ?? [],
           relocked: (res as any).relocked ?? 0,
           relockedNonTerminal: (res as any).relocked_non_terminal ?? 0,
+          overrideApproved: (res as any).override_approved ?? 0,
         });
         toast({
           title: summary.title,

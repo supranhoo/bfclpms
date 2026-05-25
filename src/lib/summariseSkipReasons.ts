@@ -63,6 +63,8 @@ export interface StageWriteOutcome {
   relocked?: number;
   /** POLICY §88.1.c — admin overrides on approved rows where stage is non-terminal (column-only update). */
   relockedNonTerminal?: number;
+  /** POLICY §88.1.d — admin overrides that force-approved a NOT-yet-approved row at its terminal stage. */
+  overrideApproved?: number;
 }
 
 export interface StageWriteSummary {
@@ -80,16 +82,18 @@ export function summariseStageWriteOutcome(o: StageWriteOutcome): StageWriteSumm
   const advancedN = advancedKnown ? (advanced as number) : 0;
   const relocked = Math.max(0, (o.relocked ?? 0) | 0);
   const relockedNT = Math.max(0, (o.relockedNonTerminal ?? 0) | 0);
-  const processedTotal = advancedN + relocked + relockedNT;
-  const writtenNotAdvanced = Math.max(0, applied - advancedN - relocked - relockedNT);
+  const overrideApproved = Math.max(0, (o.overrideApproved ?? 0) | 0);
+  const processedTotal = advancedN + relocked + relockedNT + overrideApproved;
+  const writtenNotAdvanced = Math.max(0, applied - advancedN - relocked - relockedNT - overrideApproved);
   const noop = Math.max(0, total - applied - skippedN);
 
   // Title
   let title: string;
-  if (processedTotal === total && total > 0 && (relocked > 0 || relockedNT > 0)) {
+  if (processedTotal === total && total > 0 && (relocked > 0 || relockedNT > 0 || overrideApproved > 0)) {
     // POLICY §88.1 — admin-override re-stamp path.
     const parts: string[] = [];
     if (advancedN > 0) parts.push(`${advancedN} approved`);
+    if (overrideApproved > 0) parts.push(`${overrideApproved} approved by override`);
     if (relocked > 0) parts.push(`${relocked} re-stamped`);
     if (relockedNT > 0) parts.push(`${relockedNT} column-only`);
     title = `Process complete — ${total}/${total} (${parts.join(', ')})`;
@@ -110,6 +114,9 @@ export function summariseStageWriteOutcome(o: StageWriteOutcome): StageWriteSumm
   // Body lines
   const lines: string[] = [];
   if (advancedN > 0) lines.push(`${advancedN} advanced to next stage`);
+  if (overrideApproved > 0) {
+    lines.push(`${overrideApproved} approved by admin override at terminal stage (POLICY §88.1.d)`);
+  }
   if (relocked > 0) {
     lines.push(`${relocked} final score${relocked === 1 ? '' : 's'} re-stamped (admin override, POLICY §88.1)`);
   }
