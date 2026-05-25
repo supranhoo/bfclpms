@@ -8172,7 +8172,12 @@ export type Database = {
         Returns: Json
       }
       bulk_write_stage_scores: {
-        Args: { p_batch_reason?: string; p_cells: Json; p_stage: string }
+        Args: {
+          p_attachment_urls?: Json
+          p_batch_reason?: string
+          p_cells: Json
+          p_stage: string
+        }
         Returns: Json
       }
       can_view_safety_incident: {
