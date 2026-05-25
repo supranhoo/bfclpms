@@ -198,6 +198,12 @@ export function BulkApproveDialog({
                       prior-stage gates (self not submitted, auditor already scored, row-version conflict).
                       Final scores remain immutable (POLICY §88). Enter an Achieved or manual value on every row.
                     </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Sign-off only marks a KPI <strong>Approved</strong> when this stage is the
+                      last step in that employee's workflow template. Rows whose template has
+                      stages after this one will advance one step and appear under
+                      <em> workflow has stages after this one</em>.
+                    </p>
                   </div>
                 </label>
               )}
