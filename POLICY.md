@@ -108,6 +108,46 @@ disable when no cell is actionable.
 
 Regression: `src/lib/carriedScoreResolver.test.ts`, `src/lib/bulkSignoffImpact.test.ts`.
 
+### §111.7.a.3 Reviewer-entered Achieved/Manual Scores & Admin Override (v2.66.13.10)
+
+The Bulk Sign-off impact preview MUST allow reviewers to fill missing data
+and admins to override carried scores directly from the dialog, without
+leaving the bulk workflow.
+
+- **Achieved Value (per cell).** A numeric input (or qualitative dropdown
+  for binary/tiered KPIs) honouring the row's UoM suffix. When filled, the
+  row's rating is recomputed via `resolveWithInputs()` using the row's OWN
+  `kpis` thresholds and `criteria` (per-employee — never a shared rule).
+- **Manual Score (per cell).** Numeric 0–5, step 0.5. When filled, it wins
+  over the Achieved-computed rating and the cascade. Source badge becomes
+  `manual`.
+- **Admin Override toggle.** Visible only to users with the Admin role.
+  When ON, every row becomes editable regardless of carried source. Each
+  override write MUST stamp `kpi_audit_logs.new_value.inherited_from =
+  'admin_override'` with the prior carried value captured in
+  `reason_payload.prev` for traceability. Non-admins MUST never see the
+  toggle or its effects.
+- **Precedence (highest first):** `manualScore` → `achievedOverride` →
+  admin override sentinel (forces required-dot) → 4-rung cascade →
+  5th-rung computed-from-achievement.
+- **Required-unfilled gating.** The "Sign off" CTA MUST be disabled while
+  any row resolves to `{ score: null, source: 'override' }` (admin enabled
+  override but left the row blank). Rows resolving to `source: 'none'`
+  continue to be skipped (`no_prior_score`) and do not block the CTA.
+- **RPC contract.** `public.bulk_write_stage_scores` accepts three new,
+  backward-compatible parameters: `p_manual_scores jsonb DEFAULT NULL`,
+  `p_achieved_values jsonb DEFAULT NULL`, `p_is_override boolean DEFAULT
+  false`. When `p_achieved_values` is present the RPC updates
+  `review_submissions.achieved_value` first, then re-runs
+  `fn_compute_rating_from_achievement`. `p_manual_scores` bypasses the
+  cascade entirely. `p_is_override` switches the audit `inherited_from`
+  stamp to `'admin_override'`.
+
+Regression: `src/lib/carriedScoreResolver.test.ts` (manual wins, override
+empty row, clamp, N/A short-circuit, cascade fallback),
+`src/lib/bulkSignoffImpact.test.ts` (manual override count,
+requiredUnfilled flagging, per-employee achieved recompute).
+
 ## §111.6 Bulk Scoring KPI Detail RPC Source Contract (RCA 2026-05-25)
 
 The Bulk Scoring detail/write-as-Manager drawer RPC (`kpi_cell_detail`) MUST source organization KPI detail metadata from `public.org_kpi_values`. The obsolete `public.org_kpis` relation MUST NOT be referenced or recreated as a compatibility shim. Category display in this drawer MUST come from the mapped employee KPI (`kpis.category_id`) joined to `kra_categories`, so category visibility remains tied to the KPI row actually being reviewed. Workflow metadata MUST use the supported `get_employee_workflow(employee, period, year)` helper and degrade gracefully if workflow resolution fails. Regression: `src/test/kpiCellDetailContract.test.ts`.

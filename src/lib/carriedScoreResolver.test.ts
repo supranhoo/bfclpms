@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveCarriedScore, type KpiRule, type SubmissionScores } from './carriedScoreResolver';
+import { resolveCarriedScore, resolveWithInputs, type KpiRule, type SubmissionScores } from './carriedScoreResolver';
 
 const baseSub: SubmissionScores = {
   self_score: null, manager_score: null, skip_level_score: null,
@@ -111,5 +111,72 @@ describe('resolveCarriedScore', () => {
     const b = resolveCarriedScore({ stage: 'manager', kpi: ruleB, submission: sub });
     expect(a.score).toBe(4); // 90 ≥ R4=90 (lenient rule)
     expect(b.score).toBe(2); // 90 only ≥ R2=60 (strict rule keeps R4=98)
+  });
+});
+
+describe('resolveWithInputs', () => {
+  it('manualScore beats cascade and computed', () => {
+    const out = resolveWithInputs(
+      { stage: 'manager', kpi: numericHigher,
+        submission: { ...baseSub, self_score: 4, achieved_value: 100 } },
+      { manualScore: 2 },
+      false,
+    );
+    expect(out).toEqual({ score: 2, source: 'manual' });
+  });
+
+  it('achievedOverride recomputes rating with kpi rule', () => {
+    const out = resolveWithInputs(
+      { stage: 'manager', kpi: numericHigher, submission: baseSub },
+      { achievedOverride: 85 },
+      false,
+    );
+    expect(out).toEqual({ score: 3, source: 'computed' });
+  });
+
+  it('isOverride flips manual source to override', () => {
+    const out = resolveWithInputs(
+      { stage: 'manager', kpi: numericHigher, submission: { ...baseSub, self_score: 4 } },
+      { manualScore: 1.5 },
+      true,
+    );
+    expect(out).toEqual({ score: 1.5, source: 'override' });
+  });
+
+  it('isOverride with no input returns null source=override (required dot)', () => {
+    const out = resolveWithInputs(
+      { stage: 'manager', kpi: numericHigher, submission: { ...baseSub, self_score: 4 } },
+      undefined,
+      true,
+    );
+    expect(out).toEqual({ score: null, source: 'override' });
+  });
+
+  it('manualScore clamps to [0,5]', () => {
+    expect(resolveWithInputs(
+      { stage: 'manager', kpi: numericHigher, submission: baseSub },
+      { manualScore: 9 }, false,
+    ).score).toBe(5);
+    expect(resolveWithInputs(
+      { stage: 'manager', kpi: numericHigher, submission: baseSub },
+      { manualScore: -3 }, false,
+    ).score).toBe(0);
+  });
+
+  it('N/A short-circuits inputs entirely', () => {
+    expect(resolveWithInputs(
+      { stage: 'manager', kpi: numericHigher,
+        submission: { ...baseSub, is_na: true } },
+      { manualScore: 5 }, true,
+    )).toEqual({ score: null, source: 'none' });
+  });
+
+  it('falls back to cascade when no inputs and no override', () => {
+    const out = resolveWithInputs(
+      { stage: 'manager', kpi: numericHigher,
+        submission: { ...baseSub, self_score: 3 } },
+      undefined, false,
+    );
+    expect(out).toEqual({ score: 3, source: 'self' });
   });
 });

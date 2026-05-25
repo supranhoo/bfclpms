@@ -135,4 +135,56 @@ describe('buildBulkSignoffImpact', () => {
     expect(emp.projectedOverall).toBe(3.5);
     expect(emp.delta).toBe(0.5);
   });
+
+  it('manual input wins over carried score and counts as override', () => {
+    const rows: SnapshotCell[] = [
+      { ...baseCell, submission_id: 's1', kpi_id: 'kpi-a',
+        employee_id: 'e1', employee_name: 'Aakash', weightage: 10,
+        self_score: 4 },
+    ];
+    const out = buildBulkSignoffImpact({
+      stage: 'manager',
+      loadedRows: rows,
+      selectedSubmissionIds: new Set(['s1']),
+      ruleByKpiId: new Map([['kpi-a', ruleA]]),
+      achievedBySubmissionId: new Map(),
+      inputsBySubmissionId: new Map([['s1', { manualScore: 2 }]]),
+    });
+    expect(out.cells[0]).toMatchObject({ score: 2, source: 'manual', weightedImpact: 0.2 });
+    expect(out.totals.overrideCount).toBe(1);
+  });
+
+  it('admin override on empty row flags requiredUnfilled', () => {
+    const rows: SnapshotCell[] = [
+      { ...baseCell, submission_id: 's1', kpi_id: 'kpi-a',
+        employee_id: 'e1', employee_name: 'Aakash', weightage: 10 },
+    ];
+    const out = buildBulkSignoffImpact({
+      stage: 'manager',
+      loadedRows: rows,
+      selectedSubmissionIds: new Set(['s1']),
+      ruleByKpiId: new Map([['kpi-a', ruleA]]),
+      achievedBySubmissionId: new Map(),
+      isOverride: true,
+    });
+    expect(out.cells[0]).toMatchObject({ score: null, source: 'override' });
+    expect(out.totals.requiredUnfilled).toBe(1);
+  });
+
+  it('achievedOverride recomputes per-employee rule', () => {
+    const rows: SnapshotCell[] = [
+      { ...baseCell, submission_id: 's1', kpi_id: 'kpi-b',
+        employee_id: 'e1', employee_name: 'Aakash', weightage: 20 },
+    ];
+    const out = buildBulkSignoffImpact({
+      stage: 'manager',
+      loadedRows: rows,
+      selectedSubmissionIds: new Set(['s1']),
+      ruleByKpiId: new Map([['kpi-b', ruleB]]),
+      achievedBySubmissionId: new Map(),
+      inputsBySubmissionId: new Map([['s1', { achievedOverride: 99 }]]),
+    });
+    // ruleB: 99 ≥ R4=98 → rating 4
+    expect(out.cells[0]).toMatchObject({ score: 4, source: 'computed', weightedImpact: 0.8 });
+  });
 });
