@@ -1,64 +1,76 @@
-# Problem
+# Test Result
 
-In `/review/bulk-scoring`, the **All KRAs** filter dropdown is empty (shows only "All KRAs") even though the scope preview reports 2,238 KPIs across 146 employees for April 2026. The dropdown should list every distinct `kra_name` available in the current scope.
+Verified at `/review/bulk-scoring` (1366×768, Admin view, May 2026, 140 emp / 2150 KPI). After clicking Load Scope the matrix renders, **but the KPI/KRA frozen column is missing from the visible area** — it has been pushed off-screen to the left **behind the sidebar**. There is a **document-level horizontal scrollbar at the bottom of `<main>`** (not inside the matrix card). When the user scrolls horizontally the whole page moves, taking the "sticky" KPI column with it. Sticky behavior is therefore not working.
 
-# Root Cause
+# True Root Cause (different from the previous fix)
 
-`useBulkReviewKraOptions` (in `src/hooks/useBulkReview.ts`, lines 190–219) queries the `kpis` table **directly via the Supabase client**:
+The previous patch (remove `content-visibility`, raise z-index, isolate stacking) was correct but insufficient — sticky positioning *itself* was already working. The real problem is **the wrong element is doing the scrolling**:
 
-```ts
-supabase.from('kpis').select('kra_name').eq('review_period', period)…
+```
+SidebarProvider (flex-row)
+└── SidebarInset (<main>, flex-1, NO min-w-0)        ← grows to fit wide table
+    └── DashboardLayout <main> (flex-1 overflow-auto) ← ends up scrolling horizontally
+        └── BulkReviewDashboard <div w-full>
+            └── card <div>
+                └── .matrix-scroll (overflow-auto)    ← never gets a chance to scroll
+                    └── <table style="width: 16000px">
 ```
 
-The matrix grid itself loads through the SECURITY DEFINER RPC `bulk_review_snapshot`, which bypasses RLS and returns every cell in scope. The direct `kpis` SELECT does **not** — RLS on `kpis` restricts a Manager (the role shown in the screenshot) to only their own / direct-report rows, and even that is gated on the per-employee workflow resolution. For a broad cross-org scope (146 employees, mostly outside the manager's direct chain), the SELECT returns zero rows, so the distinct `kra_name` set is empty.
+`SidebarInset` is a flex-row child with `flex-1` but **no `min-w-0`**. CSS default `min-width: auto` on flex items lets the inset expand to its widest child (the 16k-px table). That makes the inner `<main>` the scrolling layer instead of `.matrix-scroll`. Since `position: sticky` is relative to the nearest scrolling ancestor, the KPI column sticks to `.matrix-scroll` — which never scrolls — and slides off with the outer main scroll.
 
-This is also a layering violation of the Bulk Review contract — every read on this screen is supposed to go through the gated RPC; this hook is the only direct table read left.
+This is the classic flexbox-overflow gotcha and affects every wide grid in the app, but Bulk Review is the only place it hurts visibly today.
 
-# Fix (minimal, surgical)
+# Fix (one-line, surgical, global benefit)
 
-Derive the KRA option list from the **already-loaded snapshot rows** instead of a separate RLS-bound query. The snapshot is the same data the grid renders, so the dropdown will always exactly match what's visible after Load Scope.
+### `src/components/layout/DashboardLayout.tsx`
+Pass `min-w-0` to `<SidebarInset>` so the flex item can shrink below its content width. The inner `<main>`'s existing `overflow-auto` continues to clip overflow vertically; `.matrix-scroll`'s `overflow-auto` will now own horizontal scrolling, which is exactly where the sticky left column is anchored.
 
-### `src/hooks/useBulkReview.ts`
-- **Delete** `useBulkReviewKraOptions` (no longer needed).
+```diff
+- <SidebarInset>
++ <SidebarInset className="min-w-0">
+    <main className="flex-1 overflow-auto p-3 sm:p-6 bg-muted/30">
+```
 
-### `src/pages/review/BulkReviewDashboard.tsx`
-- Remove the `useBulkReviewKraOptions` import + call.
-- Replace `kraOptions.data` with a `useMemo` that computes distinct, sorted `kra_name` values from `rawRows`, optionally narrowed by the active `categoryId` if rows carry it.
-- When `scopeLoaded === false`, the dropdown shows only **All KRAs** with a small helper hint ("Load scope to see KRAs") and is disabled — same UX pattern already used for the Load button.
-- Keep the existing reset effect (`setKraName('')` when Category / Period / Year change).
+Also add `overflow-x-hidden` to the inner `<main>` so any other future wide page can never push the document horizontally — sticky headers and sidebars depend on it.
+
+```diff
+- <main className="flex-1 overflow-auto p-3 sm:p-6 bg-muted/30">
++ <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-6 bg-muted/30 min-w-0">
+```
 
 ### `mem/features/review/bulk-review-dashboard`
-- Append a v2.66.12.10 entry: KRA filter is now derived from the loaded snapshot (RPC-sourced), eliminating the last direct `kpis` SELECT on this screen and fixing the empty dropdown for non-Admin roles.
+Append v2.66.12.11 note: sticky KPI column issue traced to missing `min-w-0` on the layout `<SidebarInset>` / `<main>` chain (flexbox `min-width: auto` was letting outer scroll containers absorb the wide-table overflow, defeating the inner `.matrix-scroll` sticky).
 
 ### `DOCUMENTATION.md`
-- One-line changelog entry mirroring the memory note.
+One-line entry mirroring the memory note.
 
 # Risk & Impact
 
-- **Data:** None. Read-only derivation from existing in-memory rows.
-- **RLS / RPC:** Removes a direct table read; everything funnels through `bulk_review_snapshot` (matches §0 invariants).
-- **Workflow:** None.
-- **UI/UX:** KRA dropdown is empty until Load Scope is clicked (intentional — matches the funnel). Disabled state + hint communicates this. After Load Scope, the dropdown is populated correctly for every role.
-- **Regression risk:** Very low. One hook removed, one memoized derivation added; filter behavior (`rows.filter(r => r.kra_name === kraName)`) unchanged.
-- **Scalability:** Cheaper — no extra round-trip; derivation is O(n) over rows already in memory (capped at 25k by the scope guard).
+- **Data / Workflow / RLS / RPC:** None.
+- **UI/UX:** Other pages now have an explicitly clipped main `<main>` horizontally. Any page that *intentionally* needed document-level horizontal scroll loses it — but the codebase pattern is always to wrap wide content in its own `overflow-x-auto` container (matrix grids, KPI mapping matrix, reports tables), so the change is net-neutral elsewhere and net-positive for sticky behavior throughout.
+- **Regression risk:** Very low. `min-w-0` is the standard fix for the flexbox overflow gotcha; `overflow-x-hidden` on the page main was already the implicit expectation (sticky headers and the sidebar both assume the page doesn't scroll horizontally).
+- **Scalability:** Pure CSS change; no runtime cost.
 
 # Verification
 
-- April / 2026, Manager role at 100% zoom → click Load Scope → open **All KRAs** dropdown → list shows every distinct KRA from the loaded matrix, sorted alphabetically.
-- Pick a Category → KRA list narrows to KRAs whose rows match that category.
-- Change Period or Year → KRA selection resets to All KRAs (existing behavior preserved).
-- Same check as Admin and Auditor — list populates identically (RLS no longer a factor).
-- Before Load Scope: dropdown shows "All KRAs" only and is disabled with hint.
+- 1366×768 and 1920×1080 at 100% zoom on `/review/bulk-scoring` → click Load Scope.
+  - KPI/KRA column visible at the left edge of the matrix card on initial render.
+  - Horizontal scrollbar appears **inside** the matrix card (not at the bottom of the page).
+  - Drag the matrix horizontal scrollbar right → employee columns scroll, KPI/KRA column stays anchored, top-left corner stays pinned.
+  - Vertical scroll → employee header row stays pinned, KPI cells scroll with the matrix.
+- Spot-check 2–3 other heavy pages (KPI Mapping Matrix, Performance Report, Reports Hub) → no layout regression, sticky elements still behave.
 
 # Out of Scope
 
-- Sticky-column / horizontal-scroll fixes already shipped in v2.66.12.9.
-- Filter bar layout, scope cap logic, RPC signatures, schema, migrations, tests for unrelated areas.
+- Filter bar layout (already shipped v2.66.12.8).
+- Sticky cell z-index / content-visibility (already shipped v2.66.12.9).
+- KRA dropdown derivation (already shipped v2.66.12.10).
+- RPC / schema / migrations / backup.
 
 # Rollback
 
-Revert the two files — no DB or contract changes.
+Revert two className additions in `DashboardLayout.tsx` — no DB or contract changes.
 
 # Not Applicable
 
-Schema / RLS / migrations / backup / new tests (pure client-side derivation change; existing matrix tests cover the snapshot path).
+Schema / RLS / migrations / backup / new tests (pure CSS class change on layout; existing manual verification covers the only affected page).

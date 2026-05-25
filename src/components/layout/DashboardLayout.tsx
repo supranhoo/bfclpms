@@ -65,8 +65,8 @@ function DashboardContent() {
           <SidebarTrigger className="bg-background border shadow-sm rounded-md p-2 hover:bg-accent min-h-[44px] min-w-[44px]" />
         </div>
       )}
-      <SidebarInset>
-        <main className="flex-1 overflow-auto p-3 sm:p-6 bg-muted/30">
+      <SidebarInset className="min-w-0">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-6 bg-muted/30 min-w-0">
           <ErrorBoundary>
             <Suspense fallback={<PageLoadingOverlay open label="Please wait" />}>
               <Outlet />
