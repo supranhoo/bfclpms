@@ -1,17 +1,23 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 
 // Pins the SQL contract added in v2.66.13.6 (POLICY §111.7.a):
 // bulk_write_stage_scores must persist the shared remark AND optional
 // shared evidence onto the acted stage's columns, not just batch metadata.
-const SQL = readFileSync(
-  join(
-    process.cwd(),
-    'supabase/migrations/20260525110633_bulk_write_stage_scores_v2.sql',
-  ),
-  'utf8',
-).toLowerCase();
+const MIGRATIONS_DIR = join(process.cwd(), 'supabase/migrations');
+// Pick the newest migration that defines bulk_write_stage_scores so the test
+// follows the file even if Lovable regenerates the filename.
+const SQL = (() => {
+  const files = readdirSync(MIGRATIONS_DIR).sort().reverse();
+  for (const f of files) {
+    const text = readFileSync(join(MIGRATIONS_DIR, f), 'utf8');
+    if (/bulk_write_stage_scores\s*\(/i.test(text) && /p_attachment_urls/i.test(text)) {
+      return text.toLowerCase();
+    }
+  }
+  throw new Error('v2 bulk_write_stage_scores migration not found');
+})();
 
 describe('bulk_write_stage_scores SQL contract', () => {
   it('declares the v2 signature with p_attachment_urls', () => {
