@@ -3068,3 +3068,23 @@ In addition, `hydrateKpiRelations` (relation backfill for `kpi.profiles` and `kp
 Year-wide ("All Periods") and non-monthly-frequency cycle paths (Quarterly / Half-Yearly / Yearly / Bi-Monthly / Custom) may continue to use direct year-scoped `kpis` reads, as they are gated by `selectedPeriod === 'all'` or `frequency in (...)` and are not in the hot Admin All KRAs default path.
 
 RCA snapshot (2026-05-23): April 2026 had 2,267 KPI rows / 149 employees and May 2026 had 2,168 / 142, yet Admin (Jaspal) saw 0 in the dashboard. Routing through the RPC + chunked hydration restored visibility without any RLS, schema, or scoring change.
+
+## §126 Review Timeline Cascading-Row Grouping (codified 2026-05-25)
+
+The Review Timeline reads from `public.kpi_audit_logs`. A single human action in a write RPC commonly produces multiple audit rows in the same DB transaction because the following side-effects each insert their own row:
+
+- `safety_net_trigger` → `SUBMISSION_SCORE_CHANGED` (fires whenever any `*_score` column on `review_submissions` is written; may fire twice in one TX — once for the stage score and again when `final_score` is stamped).
+- `log_kpi_status_transition` → `STATUS_TRANSITION` (fires whenever `kpis.status` changes).
+- `reconcile_workflow_statuses` → `RECONCILE_STATUS` (the tool itself audits its own correction).
+
+These rows are CORRECT and MUST NOT be removed at the DB layer — they are the immutable trail that lets us answer "exactly what changed in this transaction?". However, the UI MUST collapse them under the originating human action so reviewers do not see "4 separate admin entries" for what was one click.
+
+**Implementation contract:**
+
+1. Any UI consumer of `kpi_audit_logs` that renders a per-row card list MUST first pass the rows through `groupTimelineEvents(...)` from `src/lib/timelineGrouping.ts`.
+2. Bucketing key is `(performed_by, created_at truncated to second)` — same transaction.
+3. Parent priority: explicit human action (`ADMIN_*`, `BULK_*`, `MANAGER_*`, `AUDITOR_*`, `MANAGEMENT_*`, `HR_PMS_*`, `SELF_REVIEW_*`, `STATUS_CHANGED`, etc.) → `RECONCILE_STATUS` (orphan reconcile) → first row in bucket (safe fallback that never hides data).
+4. Cascade rows MUST remain accessible behind a visible "Show system events (N)" expander on the parent card. They are NOT to be hidden outright.
+5. New audit `action` values that are pure trigger side-effects MUST be added to the `isSideEffect()` predicate in `src/lib/timelineGrouping.ts` and covered by a test in `src/lib/timelineGrouping.test.ts`.
+
+RCA anchor (2026-05-25): single Bulk HR PMS sign-off on Aakash Kumar Roy / April 2026 / Billing Communication produced 5 rows at the same timestamp (`BULK_STAGE_SIGNOFF_HR_PMS` + 2× `SUBMISSION_SCORE_CHANGED` from `safety_net_trigger` + `STATUS_TRANSITION` + `RECONCILE_STATUS`), rendered as 5 cards. Grouping reduced it to 1 card with a 4-child cascade — visually one event, audit trail intact.
