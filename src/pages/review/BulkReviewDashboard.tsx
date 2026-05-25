@@ -31,6 +31,7 @@ import {
   useBulkScopePreview,
   useBulkReviewSnapshotAll,
   useBulkManagementApprove,
+  useBulkOrgKpiFlags,
   type BulkScopeFilters,
   type BulkReviewRow,
 } from '@/hooks/useBulkReview';
@@ -38,6 +39,8 @@ import { BulkCellDrawer } from '@/components/review/BulkCellDrawer';
 import { BulkReviewMatrixGrid } from '@/components/review/BulkReviewMatrixGrid';
 import { useToast } from '@/hooks/use-toast';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
+import { MultiSelectFilter } from '@/components/review/MultiSelectFilter';
+import { readUrlArrays, writeUrlArrays } from '@/lib/bulkUrlState';
 
 // Full month names — must match kpis.review_period exactly (DB stores 'April', 'May', ...).
 // Ordered by fiscal year (Apr → Mar) for display.
@@ -87,11 +90,20 @@ export default function BulkReviewDashboard() {
       : effectiveRole === 'skip_level' ? 'skip_level'
       : 'manager'
   );
-  const [divisionId, setDivisionId] = useState<string>('');
-  const [businessUnitId, setBusinessUnitId] = useState<string>('');
-  const [departmentId, setDepartmentId] = useState<string>('');
-  const [categoryId, setCategoryId] = useState<string>('');
-  const [kraName, setKraName] = useState<string>(''); // '' = All KRAs
+  // Multi-select state — empty array = "All". Persisted to URL query params.
+  const initialUrl = useMemo(
+    () => readUrlArrays(
+      typeof window !== 'undefined' ? window.location.search : '',
+      ['companies', 'divisions', 'bus', 'depts', 'cats', 'kras'],
+    ),
+    [],
+  );
+  const [companyIds, setCompanyIds] = useState<string[]>(initialUrl.companies);
+  const [divisionIds, setDivisionIds] = useState<string[]>(initialUrl.divisions);
+  const [businessUnitIds, setBusinessUnitIds] = useState<string[]>(initialUrl.bus);
+  const [departmentIds, setDepartmentIds] = useState<string[]>(initialUrl.depts);
+  const [categoryIds, setCategoryIds] = useState<string[]>(initialUrl.cats);
+  const [kraNames, setKraNames] = useState<string[]>(initialUrl.kras);
   const [search, setSearch] = useState('');
   const [displayMode, setDisplayMode] = useState<'score' | 'wt' | 'both'>('score');
   const [hideEmpty, setHideEmpty] = useState(false);
@@ -101,42 +113,62 @@ export default function BulkReviewDashboard() {
   const [confirmApprove, setConfirmApprove] = useState(false);
   const approve = useBulkManagementApprove();
 
-  const { companies, selectedCompanyId, setSelectedCompanyId } = useCompanyFilter();
+  const { companies } = useCompanyFilter();
   const { data: departments } = useDepartments();
   const { data: businessUnits } = useBusinessUnits();
   const { data: divisions } = useDivisions();
   const { data: categories } = useKraCategories();
 
+  // URL persistence — push current arrays back into the query string. Empty
+  // arrays are stripped (`writeUrlArrays`) so the URL stays clean on reset.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const nextSearch = writeUrlArrays(window.location.search, {
+      companies: companyIds, divisions: divisionIds, bus: businessUnitIds,
+      depts: departmentIds, cats: categoryIds, kras: kraNames,
+    });
+    const newUrl = `${window.location.pathname}${nextSearch}${window.location.hash}`;
+    window.history.replaceState(null, '', newUrl);
+  }, [companyIds, divisionIds, businessUnitIds, departmentIds, categoryIds, kraNames]);
+
   const filteredBusinessUnits = useMemo(() => {
-    if (!divisionId) return businessUnits ?? [];
-    return (businessUnits ?? []).filter((bu: any) => bu.division_id === divisionId);
-  }, [businessUnits, divisionId]);
+    if (divisionIds.length === 0) return businessUnits ?? [];
+    const set = new Set(divisionIds);
+    return (businessUnits ?? []).filter((bu: any) => set.has(bu.division_id));
+  }, [businessUnits, divisionIds]);
   const filteredDepartments = useMemo(() => {
     let list = departments ?? [];
-    if (businessUnitId) list = list.filter((d: any) => d.business_unit_id === businessUnitId);
-    else if (divisionId) {
+    if (businessUnitIds.length > 0) {
+      const set = new Set(businessUnitIds);
+      list = list.filter((d: any) => set.has(d.business_unit_id));
+    } else if (divisionIds.length > 0) {
       const buIds = new Set(filteredBusinessUnits.map((b: any) => b.id));
       list = list.filter((d: any) => buIds.has(d.business_unit_id));
     }
     return list;
-  }, [departments, businessUnitId, divisionId, filteredBusinessUnits]);
+  }, [departments, businessUnitIds, divisionIds, filteredBusinessUnits]);
 
+  // Server-side `bulk_scope_preview` / `bulk_review_snapshot` accept a single
+  // value per axis. When the user picks ONE option we forward it (so the cap
+  // check is tight); when they pick multiple, we send `null` (broadest scope)
+  // and apply the multi-filter client-side over `rawRows` below — same
+  // pattern as the KRA filter shipped in v2.66.12.5.
+  const oneOrNull = (arr: string[]): string | null => arr.length === 1 ? arr[0] : null;
   const filters: BulkScopeFilters = useMemo(() => ({
-    department_id: departmentId || null,
-    company_id: selectedCompanyId && selectedCompanyId !== 'all' ? selectedCompanyId : null,
-    division_id: divisionId || null,
-    business_unit_id: businessUnitId || null,
-    category_id: categoryId || null,
-  }), [departmentId, selectedCompanyId, divisionId, businessUnitId, categoryId]);
+    department_id: oneOrNull(departmentIds),
+    company_id: oneOrNull(companyIds),
+    division_id: oneOrNull(divisionIds),
+    business_unit_id: oneOrNull(businessUnitIds),
+    category_id: oneOrNull(categoryIds),
+  }), [departmentIds, companyIds, divisionIds, businessUnitIds, categoryIds]);
 
-  const activeFilterCount = [
-    selectedCompanyId && selectedCompanyId !== 'all' ? 1 : 0,
-    divisionId ? 1 : 0,
-    businessUnitId ? 1 : 0,
-    departmentId ? 1 : 0,
-    categoryId ? 1 : 0,
-    kraName ? 1 : 0,
-  ].reduce((a, b) => a + b, 0);
+  const activeFilterCount =
+    (companyIds.length > 0 ? 1 : 0) +
+    (divisionIds.length > 0 ? 1 : 0) +
+    (businessUnitIds.length > 0 ? 1 : 0) +
+    (departmentIds.length > 0 ? 1 : 0) +
+    (categoryIds.length > 0 ? 1 : 0) +
+    (kraNames.length > 0 ? 1 : 0);
 
   const invalidateScope = () => setScopeLoaded(false);
 
@@ -154,17 +186,13 @@ export default function BulkReviewDashboard() {
   // Reset KRA selection whenever Category / Period / Year changes so a stale
   // KRA value never silently filters out everything.
   useEffect(() => {
-    setKraName('');
-  }, [categoryId, period, year]);
+    setKraNames([]);
+  }, [categoryIds, period, year]);
 
   const capExceeded = preview.data?.cap_exceeded ?? false;
   const canLoad = flagOn && !!preview.data && !capExceeded && (preview.data?.cell_count ?? 0) > 0;
 
   const rawRows = snapshot.data?.rows ?? [];
-  // v2.66.12.10: Derive KRA filter options from the loaded snapshot (RPC-sourced),
-  // not from a direct kpis SELECT — RLS on `kpis` returned zero rows for non-Admin
-  // viewers and left the dropdown empty. Snapshot is already category-filtered, so
-  // the list naturally cascades from Company → … → Category → KRA.
   const kraOptionList = useMemo(() => {
     const set = new Set<string>();
     for (const r of rawRows) {
@@ -173,11 +201,14 @@ export default function BulkReviewDashboard() {
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [rawRows]);
+
+  // Multi-axis client-side filter over the snapshot.
   const loadedRows = useMemo(() => {
     const term = search.trim().toLowerCase();
+    const kraSet = new Set(kraNames);
     let rows = rawRows;
-    if (kraName) {
-      rows = rows.filter(r => (r.kra_name ?? '') === kraName);
+    if (kraSet.size > 0) {
+      rows = rows.filter(r => kraSet.has(r.kra_name ?? ''));
     }
     if (term) {
       rows = rows.filter(r =>
@@ -194,7 +225,20 @@ export default function BulkReviewDashboard() {
       });
     }
     return rows;
-  }, [rawRows, search, hideEmpty, kraName]);
+  }, [rawRows, search, hideEmpty, kraNames]);
+
+  // Org-KPI flags for the currently loaded snapshot.
+  const distinctKpiIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of rawRows) if (r.kpi_id) s.add(r.kpi_id);
+    return Array.from(s);
+  }, [rawRows]);
+  const orgFlagsQ = useBulkOrgKpiFlags(distinctKpiIds, scopeLoaded);
+  const isOrgByKpiId = useMemo(() => {
+    const m = new Map<string, boolean>();
+    for (const f of orgFlagsQ.data ?? []) m.set(f.kpi_id, f.is_org_level);
+    return m;
+  }, [orgFlagsQ.data]);
 
   const variance = useMemo(() => {
     let count = 0;
@@ -390,124 +434,74 @@ export default function BulkReviewDashboard() {
 
             {/* Company */}
             {companies.length > 1 && (
-              <Select
-                value={selectedCompanyId}
-                onValueChange={(v) => { setSelectedCompanyId(v); invalidateScope(); }}
-              >
-                <SelectTrigger className="h-8 w-[150px] shrink-0 text-xs" aria-label="Company">
-                  <div className="flex items-center gap-1.5 min-w-0 truncate">
-                    <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <SelectValue placeholder="Company" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Companies</SelectItem>
-                  {companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <MultiSelectFilter
+                icon={<Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                label="Companies"
+                width={160}
+                values={companyIds}
+                onChange={(v) => { setCompanyIds(v); invalidateScope(); }}
+                options={companies.map(c => ({ value: c.id, label: c.name }))}
+              />
             )}
 
             {/* Division */}
-            <Select
-              value={divisionId || 'all'}
-              onValueChange={(v) => {
-                setDivisionId(v === 'all' ? '' : v);
-                setBusinessUnitId(''); setDepartmentId('');
+            <MultiSelectFilter
+              icon={<Network className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+              label="Divisions"
+              width={160}
+              values={divisionIds}
+              onChange={(v) => {
+                setDivisionIds(v);
+                setBusinessUnitIds([]); setDepartmentIds([]);
                 invalidateScope();
               }}
-            >
-              <SelectTrigger className="h-8 w-[150px] shrink-0 text-xs" aria-label="Division">
-                <div className="flex items-center gap-1.5 min-w-0 truncate">
-                  <Network className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <SelectValue placeholder="Division" />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Divisions</SelectItem>
-                {(divisions ?? []).map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+              options={(divisions ?? []).map((d: any) => ({ value: d.id, label: d.name }))}
+            />
 
             {/* Business Unit */}
-            <Select
-              value={businessUnitId || 'all'}
-              onValueChange={(v) => {
-                setBusinessUnitId(v === 'all' ? '' : v);
-                setDepartmentId('');
-                invalidateScope();
+            <MultiSelectFilter
+              icon={<Factory className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+              label="BU"
+              width={160}
+              values={businessUnitIds}
+              onChange={(v) => {
+                setBusinessUnitIds(v); setDepartmentIds([]); invalidateScope();
               }}
-            >
-              <SelectTrigger className="h-8 w-[150px] shrink-0 text-xs" aria-label="Business Unit">
-                <div className="flex items-center gap-1.5 min-w-0 truncate">
-                  <Factory className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <SelectValue placeholder="BU" />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Business Units</SelectItem>
-                {filteredBusinessUnits.map((b: any) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+              options={filteredBusinessUnits.map((b: any) => ({ value: b.id, label: b.name }))}
+            />
 
             {/* Department */}
-            <Select
-              value={departmentId || 'all'}
-              onValueChange={(v) => { setDepartmentId(v === 'all' ? '' : v); invalidateScope(); }}
-            >
-              <SelectTrigger className="h-8 w-[160px] shrink-0 text-xs" aria-label="Department">
-                <div className="flex items-center gap-1.5 min-w-0 truncate">
-                  <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <SelectValue placeholder="Department" />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Departments</SelectItem>
-                {filteredDepartments.map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <MultiSelectFilter
+              icon={<Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+              label="Departments"
+              width={180}
+              values={departmentIds}
+              onChange={(v) => { setDepartmentIds(v); invalidateScope(); }}
+              options={filteredDepartments.map((d: any) => ({ value: d.id, label: d.name }))}
+            />
 
             {/* Category */}
-            <Select
-              value={categoryId || 'all'}
-              onValueChange={(v) => { setCategoryId(v === 'all' ? '' : v); invalidateScope(); }}
-            >
-              <SelectTrigger className="h-8 w-[150px] shrink-0 text-xs" aria-label="Category">
-                <div className="flex items-center gap-1.5 min-w-0 truncate">
-                  <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <SelectValue placeholder="Category" />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
-                {(categories ?? []).map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <MultiSelectFilter
+              icon={<Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+              label="Categories"
+              width={170}
+              values={categoryIds}
+              onChange={(v) => { setCategoryIds(v); invalidateScope(); }}
+              options={(categories ?? []).map((c: any) => ({ value: c.id, label: c.name }))}
+            />
 
             {/* KRA — cascades from Category; client-side filter on accumulated snapshot */}
-            <Select
-              value={kraName || 'all'}
-              onValueChange={(v) => setKraName(v === 'all' ? '' : v)}
+            <MultiSelectFilter
+              icon={<Target className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+              label="KRAs"
+              width={180}
+              values={kraNames}
+              onChange={setKraNames}
+              options={kraOptionList.map((name) => ({ value: name, label: name }))}
               disabled={!scopeLoaded}
-            >
-              <SelectTrigger
-                className="h-8 w-[170px] shrink-0 text-xs"
-                aria-label="KRA"
-                title={scopeLoaded ? undefined : 'Load scope to see KRAs'}
-              >
-                <div className="flex items-center gap-1.5 min-w-0 truncate">
-                  <Target className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <SelectValue placeholder="KRA" />
-                </div>
-              </SelectTrigger>
-              <SelectContent className="max-h-72">
-                <SelectItem value="all">All KRAs</SelectItem>
-                {kraOptionList.map((name) => (
-                  <SelectItem key={name} value={name}>
-                    <span className="truncate inline-block max-w-[260px] align-middle">{name}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              title={scopeLoaded ? undefined : 'Load scope to see KRAs'}
+              emptyText="No KRAs in loaded scope"
+            />
           </div>
 
           {/* View-mode pill — outside grid, anchored right */}
@@ -580,6 +574,7 @@ export default function BulkReviewDashboard() {
                     onToggleAll={toggleAllFromMatrix}
                     onCellClick={setActiveRow}
                     displayMode={displayMode}
+                    isOrgByKpiId={isOrgByKpiId}
                   />
               )}
 

@@ -1,6 +1,36 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
+/**
+ * Org-KPI flags for a batch of KPI ids loaded into the Bulk Review snapshot.
+ * Uses the read-only SECURITY DEFINER RPC `rpc_kpi_org_flags` so non-admin
+ * viewers (manager/skip/hr_pms/auditor/management) can still tell which
+ * KPIs are Org-level — direct SELECT on `kpis` is RLS-blocked for them
+ * (same root cause as the v2.66.12.10 KRA-dropdown fix).
+ */
+export interface KpiOrgFlag {
+  kpi_id: string;
+  is_org_level: boolean;
+  org_level_scope: string | null;
+}
+
+export function useBulkOrgKpiFlags(kpiIds: string[], enabled: boolean) {
+  const sorted = [...new Set(kpiIds)].sort();
+  return useQuery({
+    queryKey: ['rpc_kpi_org_flags', sorted],
+    enabled: enabled && sorted.length > 0,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<KpiOrgFlag[]> => {
+      const { data, error } = await supabase.rpc(
+        'rpc_kpi_org_flags' as any,
+        { p_kpi_ids: sorted },
+      );
+      if (error) throw error;
+      return (data as unknown as KpiOrgFlag[]) ?? [];
+    },
+  });
+}
+
 /** Master switch read — used by sidebar gate + route gate. */
 export function useBulkReviewFlag() {
   return useQuery({
