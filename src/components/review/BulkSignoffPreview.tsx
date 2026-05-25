@@ -277,7 +277,6 @@ function CellTable({
             <th className="text-left p-2 font-medium text-muted-foreground">KPI</th>
             <th className="text-right p-2 font-medium text-muted-foreground">Wt%</th>
             {editable && <th className="text-right p-2 font-medium text-muted-foreground">Achieved</th>}
-            {editable && <th className="text-right p-2 font-medium text-muted-foreground">Manual</th>}
             <th className="text-right p-2 font-medium text-muted-foreground">Score</th>
             <th className="text-left p-2 font-medium text-muted-foreground">Source</th>
             <th className="text-right p-2 font-medium text-muted-foreground">Impact</th>
@@ -299,11 +298,6 @@ function CellTable({
               {editable && (
                 <td className="p-2 text-right">
                   {isRowEditable(c) ? renderAchievedInput(c) : <span className="text-muted-foreground">—</span>}
-                </td>
-              )}
-              {editable && (
-                <td className="p-2 text-right">
-                  {isRowEditable(c) ? renderManualInput(c) : <span className="text-muted-foreground">—</span>}
                 </td>
               )}
               <td className="p-2 text-right tabular-nums font-medium">
@@ -341,12 +335,6 @@ function CellTable({
                 <div className="flex items-center gap-2 pt-1">
                   <span className="text-[10px] text-muted-foreground w-14">Achieved</span>
                   {renderAchievedInput(c)}
-                </div>
-              )}
-              {editable && isRowEditable(c) && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-muted-foreground w-14">Manual</span>
-                  {renderManualInput(c)}
                 </div>
               )}
               <div className="flex items-center justify-between text-xs">
