@@ -891,6 +891,9 @@ export default function BulkReviewDashboard() {
             ? ({ manager: 'Manager', skip_level: 'Skip-Level', hr_pms: 'HR PMS', auditor: 'Auditor' } as const)[bulkAction.stage!]
             : undefined
         }
+        preview={impactPreview}
+        previewLoading={previewDataQ.isLoading}
+        previewError={previewDataQ.error ? (previewDataQ.error as Error).message : null}
       />
     </div>
   );
