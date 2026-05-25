@@ -366,6 +366,39 @@ export default function BulkReviewDashboard() {
   const isActionPending = bulkAction?.kind === 'mgmt' ? approve.isPending : stageWrite.isPending;
   const canReopen = effectiveRole === 'admin' || effectiveRole === 'management';
 
+  // ── Bulk Sign-off Impact Preview ────────────────────────────────────────
+  // Only the selected rows in scope. Sign-off mode only (Management approve
+  // doesn't use the cascade preview).
+  const isSignoffMode = bulkAction?.kind === 'stage';
+  const selectedRows = useMemo(
+    () => loadedRows.filter(r => r.submission_id && selectedIds.has(r.submission_id)),
+    [loadedRows, selectedIds],
+  );
+  const selectedKpiIds = useMemo(
+    () => selectedRows.map(r => r.kpi_id).filter(Boolean) as string[],
+    [selectedRows],
+  );
+  const selectedSubmissionIds = useMemo(
+    () => selectedRows.map(r => r.submission_id!).filter(Boolean),
+    [selectedRows],
+  );
+  const previewDataQ = useBulkSignoffPreviewData(
+    selectedKpiIds,
+    selectedSubmissionIds,
+    confirmApprove && isSignoffMode,
+  );
+  const impactPreview: ImpactSummary | null = useMemo(() => {
+    if (!confirmApprove || !isSignoffMode || !previewDataQ.data) return null;
+    const stage = bulkAction?.stage as 'manager' | 'skip_level' | 'hr_pms' | 'auditor';
+    return buildBulkSignoffImpact({
+      stage,
+      loadedRows: loadedRows as any,
+      selectedSubmissionIds: new Set(selectedSubmissionIds),
+      ruleByKpiId: previewDataQ.data.ruleByKpiId,
+      achievedBySubmissionId: previewDataQ.data.achievedBySubmissionId,
+    });
+  }, [confirmApprove, isSignoffMode, previewDataQ.data, bulkAction, loadedRows, selectedSubmissionIds]);
+
   const toggleOne = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
