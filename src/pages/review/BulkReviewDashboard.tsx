@@ -440,6 +440,31 @@ export default function BulkReviewDashboard() {
             />
           </div>
 
+          {/* Month + Year — moved next to search for quicker period switching */}
+          <div className="flex items-center gap-2 shrink-0">
+            <Select value={period} onValueChange={(v) => { setPeriod(v); invalidateScope(); }}>
+              <SelectTrigger className="h-9 w-[120px] text-xs" aria-label="Month">
+                <div className="flex items-center gap-1.5 min-w-0 truncate">
+                  <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <SelectValue placeholder="Month" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                {PERIOD_OPTIONS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <div className="relative w-[96px]">
+              <CalendarDays className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                type="number"
+                value={year}
+                onChange={(e) => { setYear(Number(e.target.value) || defaultYear); invalidateScope(); }}
+                className="h-9 w-full pl-7 text-xs"
+                aria-label="Year"
+              />
+            </div>
+          </div>
+
           {/* Right action cluster */}
           <div className="flex items-center gap-2 shrink-0 pl-3 border-l border-border/50">
             <Select value={viewerStage} onValueChange={setViewerStage}>
@@ -485,31 +510,6 @@ export default function BulkReviewDashboard() {
         {/* Row 2 — single-row filter bar; horizontal scroll when overflow */}
         <div className="flex items-stretch gap-2 px-2 sm:px-4 h-11 bg-muted/30">
           <div className="matrix-scroll flex flex-nowrap items-center gap-2 flex-1 min-w-0 overflow-x-auto">
-            {/* Month */}
-            <Select value={period} onValueChange={(v) => { setPeriod(v); invalidateScope(); }}>
-              <SelectTrigger className="h-8 w-[120px] shrink-0 text-xs" aria-label="Month">
-                <div className="flex items-center gap-1.5 min-w-0 truncate">
-                  <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <SelectValue placeholder="Month" />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                {PERIOD_OPTIONS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-              </SelectContent>
-            </Select>
-
-            {/* Year */}
-            <div className="relative shrink-0 w-[100px]">
-              <CalendarDays className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-              <Input
-                type="number"
-                value={year}
-                onChange={(e) => { setYear(Number(e.target.value) || defaultYear); invalidateScope(); }}
-                className="h-8 w-full pl-7 text-xs"
-                aria-label="Year"
-              />
-            </div>
-
             {/* Company */}
             {companies.length > 1 && (
               <MultiSelectFilter
