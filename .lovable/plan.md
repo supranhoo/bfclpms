@@ -1,66 +1,54 @@
 ## Problem
 
-At 100% zoom on the `/review/bulk-scoring` page, the **filter row wraps into multiple rows** (the current grid uses `grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8`), which pushes the matrix down and forces users to zoom out to 50% to see everything. The matrix grid itself already implements sticky KPI column + horizontal scroll correctly (verified in `BulkReviewMatrixGrid.tsx`).
+User reports the KPI/KRA column **scrolls away** with the employee columns at 100% zoom — meaning `position: sticky` is not being honored. The current implementation in `BulkReviewMatrixGrid.tsx` already sets `sticky left-0` on the KPI `<td>` cells, so something is breaking sticky behavior.
 
-So the fix is scoped almost entirely to the **Row 2 filter bar** in `BulkReviewDashboard.tsx`, plus a small width-utilization tweak on the page container.
+Most likely root causes (all in `BulkReviewMatrixGrid.tsx`):
 
-## Risk & Impact Report
+1. **`content-visibility: auto` on each `<tr>`** (line 238) — known to break `position: sticky` paint on table cells in Chromium because the row becomes its own containment context.
+2. **`overflow: hidden` on the outer wrapper** (line 156, `rounded-lg border … overflow-hidden`) — when combined with the inner scroll container, this can clip sticky cells in some layouts.
+3. **z-index too low** — sticky KPI body cells use `z-10`, employee body cells have no explicit z-index but inherit table stacking; under certain ancestor `transform`/`will-change`, the sticky cell gets pushed under siblings, which visually reads as "scrolling away."
+4. **Possible `transform` on an ancestor** (sidebar/layout) creates a new containing block and breaks sticky relative to the intended scroller.
 
-- **Data Impact:** None. Pure presentation.
-- **Workflow Impact:** None. No RPC, RLS, hook, or state-shape change.
-- **UI/UX Impact:** Filter bar becomes a single horizontal row; on narrow viewports it scrolls horizontally instead of wrapping. Matrix gets the freed vertical space back. KPI column stays frozen (already implemented).
-- **Regression Risk:** Low. Only Tailwind classes on filter wrappers and the page outer container change. No behavior change to filters themselves.
-- **Mitigation:** Manual QA at 1309×853 (user's reported breakpoint), 1920×1080, and 768×1024.
+## Risk & Impact
 
-## Plan
+- **Data:** None.
+- **Workflow / RLS / RPC:** None.
+- **UI/UX:** Sticky KPI column starts working; visual identical otherwise. Loses the off-screen paint skip from `content-visibility` (negligible — we already cap at 25k cells).
+- **Regression risk:** Very low. Pure CSS class adjustments on one component.
+- **Scalability:** Removing `content-visibility` may add minor paint cost for very tall matrices; mitigated by existing 25k-cell scope cap and `max-h-[calc(100vh-180px)]` scroll container.
 
-### 1. Filter bar → single-row, no-wrap, horizontal-scroll (`BulkReviewDashboard.tsx`, Row 2)
+## Plan (minimal, surgical)
 
-Replace the wrapping grid with a no-wrap flex row:
+Edit only `src/components/review/BulkReviewMatrixGrid.tsx`:
 
-- Container: `flex flex-nowrap items-center gap-2 overflow-x-auto` + `matrix-scroll` class (reuse the themed scrollbar from `index.css`) and `scrollbar-thin`.
-- Each filter wrapper gets `shrink-0` so they don't squeeze; remove `w-full` from individual `SelectTrigger`s and replace with fixed compact widths (`w-[120px]` for Month/Year, `w-[150px]` for Company/Division/BU/Department/Category/KRA).
-- Keep the existing icon + `SelectValue` layout — only the wrapper classes change.
-- Row height stays `h-11`; keep `bg-muted/30`.
+1. **Remove `content-visibility: auto` + `containIntrinsicSize`** from the KPI `<tr>` (line 238). This is the #1 sticky-killer.
+2. **Raise sticky KPI body cell z-index** from `z-10` → `z-30` (still below the sticky top headers at `z-40`/corner `z-50`). Ensures KPI cells paint above scrolling employee cells.
+3. **Replace outer `overflow-hidden`** on the card wrapper (line 156) with `overflow-clip` is risky — instead drop `overflow-hidden` entirely and let the inner `matrix-scroll` element own clipping. Keep `rounded-lg border` + add `isolation-auto` so the sticky stacking context is the inner scroller only.
+4. **Add `isolate` to the inner `matrix-scroll` div** so sticky stacking context is scoped predictably.
+5. **Verify no ancestor `transform`** — quick check of `src/components/layout/*` and `BulkReviewDashboard.tsx` sticky header rows; if any use `transform`, replace with `top`/positioning equivalents on this route only.
 
-### 2. Page width — use full screen width
+## Verification
 
-- Outer page `<div className="w-full">` is fine, but the matrix `<main>` parent in the layout may apply `max-w-*` / `container` padding. Check `src/components/layout/*` for the wrapper used by `/review/bulk-scoring` and, if it caps width, render this page through a full-bleed wrapper (or override with `max-w-none px-2`).
-- Reduce page-level horizontal padding from `px-4` to `px-2 sm:px-4` on the sticky header rows to claw back ~16px for the matrix.
-
-### 3. Matrix container — already correct, minor verification only
-
-Already in `BulkReviewMatrixGrid.tsx`:
-- `overflow-auto` + `matrix-scroll` on scroller ✓
-- `position: sticky; left: 0; z-index: 10` on KPI cells with opaque zebra bg ✓
-- `border-separate border-spacing-0` table with `width: totalW` ✓
-- Sticky top header ✓
-
-No code change needed here. Just confirm visually after the filter-bar fix.
-
-### 4. Acceptance check
-
-At 100% zoom on 1309×853 viewport:
-- [ ] Filter row renders on **one line**; if it overflows, horizontal scroll appears inside that row only (page does not scroll horizontally).
-- [ ] Matrix occupies the full viewport width below the sticky header.
-- [ ] KPI/KRA column stays frozen while employees scroll horizontally.
-- [ ] No employee columns clipped or hidden — all reachable via scroll.
-- [ ] No browser zoom-out required.
+- Open `/review/bulk-scoring` at 100% zoom on 1095×853 (user's current viewport) and 1920×1080.
+- Scroll horizontally inside the matrix → KPI/KRA column must stay pinned at left.
+- Scroll vertically → employee header row stays pinned at top; top-left corner stays pinned both ways.
+- KRA category bands continue to span full width and align with rows.
+- No console errors; no layout shift.
 
 ## Files to Change
 
-- `src/pages/review/BulkReviewDashboard.tsx` — Row 2 filter container classes + per-filter wrapper widths; minor page-padding tweak.
-- `src/components/layout/*` (only if a `max-w-*` wrapper is found that caps this route) — allow full-bleed for `/review/bulk-scoring`.
-- `DOCUMENTATION.md` + `mem/features/review/bulk-review-dashboard` — record v2.66.12.8 filter-bar polish.
+- `src/components/review/BulkReviewMatrixGrid.tsx` — 4 small class/style edits.
+- `DOCUMENTATION.md` + `mem/features/review/bulk-review-dashboard` — record v2.66.12.9 sticky fix (remove `content-visibility`, z-index bump, isolated stacking context).
 
 ## Not Applicable
 
-- Schema / RLS / RPC / migrations — none.
-- Tests — pure CSS class change, covered by existing matrix tests.
-- Backup — not affected.
+- Schema / RLS / RPC / migrations / backup / tests (pure CSS class change on presentation-only component).
 
-## Out of Scope (will NOT change)
+## Out of Scope
 
-- Hooks (`useBulkReview*`), RPCs, workflow engine, scoring logic, edge functions.
-- Matrix grid component internals (already correct).
-- Filter values, options, or behavior.
+- Split-pane rewrite (rejected by user — minimal path chosen).
+- Filter bar, hooks, scoring logic, RPCs.
+
+## Rollback
+
+Revert the single component file — no DB or contract changes.

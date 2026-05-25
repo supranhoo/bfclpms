@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState, type CSSProperties } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
@@ -153,8 +153,8 @@ export function BulkReviewMatrixGrid({
       </div>
 
       {/* Matrix surface — horizontal scroll for employees, sticky KPI/KRA column */}
-      <div className="rounded-lg border border-border bg-card overflow-hidden">
-        <div className="matrix-scroll overflow-auto max-h-[calc(100vh-180px)] relative">
+      <div className="rounded-lg border border-border bg-card">
+        <div className="matrix-scroll overflow-auto max-h-[calc(100vh-180px)] relative isolate rounded-lg">
           <table
             className="border-separate border-spacing-0"
             style={{ width: totalW, minWidth: '100%' }}
@@ -232,15 +232,11 @@ export function BulkReviewMatrixGrid({
                       const zebra = idx % 2 === 1;
                       const rowBg = zebra ? 'bg-muted/30' : 'bg-card';
                       return (
-                      <tr
-                        key={kpi.key}
-                        className="group"
-                        style={{ contentVisibility: 'auto', containIntrinsicSize: '56px' } as CSSProperties}
-                      >
+                      <tr key={kpi.key} className="group">
                         {/* Sticky KPI cell */}
                         <td
                           className={cn(
-                            'sticky left-0 z-10 border-b border-r border-border p-3 align-top shadow-[4px_0_8px_-4px_hsl(var(--foreground)/0.08)]',
+                            'sticky left-0 z-30 border-b border-r border-border p-3 align-top shadow-[4px_0_8px_-4px_hsl(var(--foreground)/0.08)]',
                             rowBg,
                           )}
                           style={{ minWidth: KPI_COL_W, width: KPI_COL_W }}
