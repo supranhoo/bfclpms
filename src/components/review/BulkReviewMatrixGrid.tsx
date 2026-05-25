@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { BulkReviewRow } from '@/hooks/useBulkReview';
-import { classifyOrgKpiRow, type OrgKpiRowStatus } from '@/lib/orgKpiGap';
+import { classifyOrgKpiRow } from '@/lib/orgKpiGap';
 
 type ViewerStage =
   | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management';
