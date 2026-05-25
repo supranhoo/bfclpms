@@ -1,3 +1,7 @@
+## §111.6 Bulk Scoring KPI Detail RPC Source Contract (RCA 2026-05-25)
+
+The Bulk Scoring detail/write-as-Manager drawer RPC (`kpi_cell_detail`) MUST source organization KPI detail metadata from `public.org_kpi_values`. The obsolete `public.org_kpis` relation MUST NOT be referenced or recreated as a compatibility shim. Category display in this drawer MUST come from the mapped employee KPI (`kpis.category_id`) joined to `kra_categories`, so category visibility remains tied to the KPI row actually being reviewed. Workflow metadata MUST use the supported `get_employee_workflow(employee, period, year)` helper and degrade gracefully if workflow resolution fails. Regression: `src/test/kpiCellDetailContract.test.ts`.
+
 ## §111.5 Org KPI Category Chip Parity (RCA 2026-05-11)
 
 The category-header chip aggregator (`OrgKpiDataEntry.tsx`, "X Pending / X Entered / X Propagated") MUST share the ADR-055 fact-based override with the per-row pill (`deriveScopedRowStatus`) for **every** scope — `organization`, `employee`, and `department`. Specifically: when no `org_kpi_values` row carries a value but every mapped child KPI has advanced past `kra_set`, the chip MUST report `'propagated'`, not `'pending'`. Implemented in `src/lib/orgKpiStatus.ts::deriveOrgKpiTileStatus`. Regression: `src/test/orgKpiTileStatusChipParity.test.ts`.
