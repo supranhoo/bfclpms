@@ -224,16 +224,6 @@ function CellTable({
     };
     onCellInputChange?.(sid, next);
   };
-  const onManual = (sid: string, raw: string) => {
-    const trimmed = raw.trim();
-    const num = trimmed === '' ? null : Number(trimmed);
-    const clamped = num == null || !Number.isFinite(num) ? null : Math.max(0, Math.min(5, num));
-    onCellInputChange?.(sid, {
-      ...(inputs?.get(sid) ?? {}),
-      manualScore: clamped,
-    });
-  };
-
   const renderAchievedInput = (c: CellPreview) => {
     const rule = ruleFor(c);
     const v = inputs?.get(c.submission_id)?.achievedOverride ?? '';
