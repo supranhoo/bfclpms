@@ -798,7 +798,7 @@ export default function BulkReviewDashboard() {
         cellCount={selectedIds.size}
         batchId={batchId || 'pending'}
         uploaderUserId={user?.id ?? 'anonymous'}
-        isLoading={approve.isPending}
+        isLoading={isActionPending}
         onCancel={() => setConfirmApprove(false)}
         onConfirm={({ reason, attachmentUrls }) => handleBulkApprove(reason, attachmentUrls)}
       />
