@@ -1916,6 +1916,19 @@ Re-introducing the unconditional "mismatched KPI names" toast for benign skips i
 
 ---
 
+### §88.3 — Admin-Override Re-Stamp Exception (v2.66.13.17)
+
+The §88 immutability rule MAY be deliberately bypassed by an **Admin only**, via the Bulk Sign-off "Override" toggle (RPC `bulk_write_stage_scores` with `p_is_override = true`).
+
+a. **Per-row, per-stage scope.** No global "unfreeze" mechanism exists. Each override decision is recorded for one cell only.
+b. **Final score is re-stamped only if the acted stage IS the employee's resolved terminal review stage** for that period's workflow template. Otherwise the column is updated but `final_score` and `final_rating` remain untouched.
+c. **KPI status stays `approved`.** No stage hop is performed on already-approved rows; the reconciler is not invoked for them.
+d. **Mandatory audit trail.** Every re-stamp inserts a `kpi_audit_logs` row with action `ADMIN_BULK_OVERRIDE_FINAL_UNLOCK` containing both the old and new `final_score`, the `batch_id`, the acted stage, the resolved terminal stage, and the ≥10-char batch reason. Column-only updates on approved non-terminal stages insert `ADMIN_BULK_OVERRIDE_COLUMN_ONLY` instead.
+e. **Notifications.** Each re-stamp dispatches an `admin_override_of_final_score` notification to the employee, their reporting manager, and every active HR PMS user.
+f. **Non-admin path unchanged.** Self-service Rollback Requests (§12.1) remain the canonical correction mechanism for non-admin users.
+
+---
+
 ## §89 — Per-KPI Audit Granularity for Org KPI Propagation (v2.66.7.3)
 
 Every Org KPI propagation event must produce **one `ORG_KPI_PROPAGATED` row in `kpi_audit_logs` per affected KPI**, individually addressable by `kpi_id`. This granularity is required because:
