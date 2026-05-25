@@ -164,6 +164,22 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
     [profiles]
   );
 
+  // Track which transaction groups have their system-cascade children expanded.
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const toggleGroup = (id: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  // Collapse same-transaction trigger/reconcile rows under their human parent.
+  const groupedEvents = useMemo(
+    () => groupTimelineEvents(auditLogs as unknown as TimelineLog[]),
+    [auditLogs],
+  );
+
   const getActionConfig = (action: string) => {
     return actionConfig[action] || { 
       icon: Clock, 
