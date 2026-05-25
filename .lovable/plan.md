@@ -1,58 +1,65 @@
-## 1. Assumptions
-- The visible error `relation "public.org_kpis" does not exist` is coming from the live `public.kpi_cell_detail(uuid, uuid)` RPC used by the Bulk Scoring drawer.
-- The correct existing source table is `public.org_kpi_values`, not `public.org_kpis`.
-- The previous category fix should remain intact so the drawer can show the real KPI category instead of `Uncategorized`.
+## Goal
 
-## 2. Clarifications
-- Not Applicable — the root cause is clear from the live function definition and schema check.
+On the Bulk Review dashboard, the only bulk action today is **Bulk Approve (Mgmt)** — terminal approval gated to `effectiveRole = management | admin`. An HR PMS user has no bulk action even though the backend RPC already supports it. Make the bulk-action button **role-driven**: each reviewer sees a bulk action for *their own* stage; admins (acting via the viewer-stage dropdown) can act on any stage.
 
-## 3. Risk & Impact Report
-- **Data Impact:** No data changes. Only the RPC definition will be corrected to read the existing `org_kpi_values` table.
-- **Workflow Impact:** Bulk Scoring detail drawer should open again; write-as-Manager should no longer be blocked by the missing relation. No approval/status advancement logic changes.
-- **UI/UX Impact:** The current red error banner in the drawer should disappear. Category visibility remains preserved through the embedded `kra_categories` payload.
-- **Regression Risk:** Moderate, because this RPC is shared by the scoring drawer and detail panel. Mitigation is to preserve the full current function shape and change only the bad table reference.
-- **Scalability Impact:** No new broad dataset loads. Existing history remains capped at 6 rows; org KPI lookup remains a single keyed lookup by KRA/KPI/period/year.
-- **Security/RLS Impact:** No new table or policy. RPC remains guarded by the existing role checks and uses the already-existing org KPI value source.
-- **Backup/Data Integrity:** No table is added or excluded; backup coverage remains unchanged.
+## Assumptions
 
-## 4. Step-by-step Plan
-1. Create a database migration that replaces `public.kpi_cell_detail(uuid, uuid)` with the current safe function body, changing only the org KPI lookup from `public.org_kpis` to `public.org_kpi_values`.
-2. Preserve the previous fixes:
-   - `kra_categories` is embedded in the KPI JSON.
-   - Workflow uses `public.get_employee_workflow(...)`, not the missing `resolve_employee_workflow(...)` call.
-   - Workflow resolution stays wrapped in exception handling so the drawer does not fail if workflow lookup has a separate issue.
-3. Add a regression contract test that checks the latest `kpi_cell_detail` migration:
-   - does not reference `public.org_kpis`,
-   - does reference `public.org_kpi_values`,
-   - uses `get_employee_workflow`,
-   - includes `kra_categories` enrichment.
-4. Update `DOCUMENTATION.md` version history with the RCA and fix.
-5. Update `POLICY.md` to pin the Bulk Scoring detail RPC contract: organization KPI detail data must use `org_kpi_values`, and category display must come from `kpis.category_id -> kra_categories`.
-6. Verify after migration with read-only checks:
-   - `public.org_kpis` is absent and `public.org_kpi_values` exists,
-   - live `kpi_cell_detail` definition no longer contains `public.org_kpis`,
-   - the drawer RPC can execute without the missing relation error.
+- `bulk_write_stage_scores(p_stage, p_cells, p_batch_reason)` already accepts `'manager' | 'skip_level' | 'hr_pms' | 'auditor'` and enforces stage precedence server-side (verified in migration `20260522172805…`). No DB change needed.
+- `bulk_management_approve` remains the only path that writes `final_score` (terminal). HR PMS / Auditor / Manager / Skip-Level "bulk approve" means **bulk sign-off**: copy previous-stage score into the reviewer's stage column and let the workflow advance — same semantics as the single-cell write today.
+- "Approve as HR PMS" without overriding values = accept previous-stage score for every selected cell. Per-cell score overrides stay in the existing cell drawer (out of scope here).
 
-## 5. UI Changes
-- **Visual change:** Remove the red backend error from the Bulk Scoring drawer by fixing its data source.
-- **Location:** `/review/bulk-scoring`, KPI detail/write-as-Manager side drawer.
-- **Interaction impact:** Opening a KPI detail and saving Manager score should no longer be prevented by the missing relation.
-- **Responsiveness:** Not Applicable — no layout or responsive behavior changes.
+## Risk & Impact Report
 
-## 6. Implementation
-- Use one SQL migration to replace only the faulty RPC definition.
-- Do not create a new `org_kpis` table, because that would duplicate the existing master source and risk data drift.
+- **Data Impact:** None new. Uses existing RPC with the same RLS/validation. No schema changes.
+- **Workflow Impact:** HR PMS / Auditor / Manager / Skip-Level gain a bulk path that already exists per-cell. Server-side guards (`self_not_submitted`, `auditor_takes_precedence`, `final_locked`, `row_version_conflict`) are unchanged — skipped reasons surfaced in the toast.
+- **UI/UX:** Single sticky button label changes based on effective role / viewer-stage. No layout change.
+- **Regression Risk:** Low. Existing Management approval path untouched; only its visibility condition is refactored into a shared `bulkActionForStage()` helper.
+- **Scalability:** Same RPC and page-size limits as today (ADR-064 lean-load).
+- **Mitigation:** Unit tests for the role→action resolver; manual QA across the 5 viewer stages.
 
-## 7. Tests
-- Add a focused static regression test for the RPC migration contract.
-- Run the relevant test target after implementation if available.
+## Plan
 
-## 8. DOCUMENTATION.md updates
-- Add a new top version note documenting: root cause, affected drawer, corrected table, preserved category/workflow fixes, and no scoring/workflow-policy change.
+1. **Resolver helper** — `src/lib/bulkActionForStage.ts`
+   - Input: `effectiveRole`, `viewerStage`.
+   - Output: `{ kind: 'mgmt' | 'stage' | null, stage?: 'manager'|'skip_level'|'hr_pms'|'auditor', label: string }`.
+   - Rules:
+     - `effectiveRole === 'management'` → `mgmt` (terminal). Label: `Bulk Approve (Mgmt)`.
+     - `effectiveRole === 'admin'` → action follows `viewerStage`: `management` → mgmt; otherwise `stage` for that stage.
+     - `effectiveRole ∈ {manager, skip_level, hr_pms, auditor}` → `stage` with their own role (viewer dropdown ignored for the action — they can only bulk-approve as themselves).
+     - Anything else → `null` (no button).
+   - Labels: `Bulk Sign-off (HR PMS)`, `Bulk Sign-off (Auditor)`, `Bulk Sign-off (Manager)`, `Bulk Sign-off (Skip-Level)`.
 
-## 9. POLICY.md updates
-- Add/extend the Bulk Scoring/Org KPI policy note so future migrations cannot reintroduce `org_kpis`.
+2. **Wire into `BulkReviewDashboard.tsx`**
+   - Replace the hardcoded `canApprove` + button block (~lines 342, 745–753) with the resolver output.
+   - Add a `useBulkWriteStageScores()` mutation alongside the existing `useBulkManagementApprove()`.
+   - `openApproveDialog` and `BulkApproveDialog` reused as-is — confirmation + remark + optional attachments stay required.
+   - On confirm:
+     - `kind === 'mgmt'` → existing `handleBulkApprove` path (unchanged).
+     - `kind === 'stage'` → call `bulk_write_stage_scores` with `p_stage = stage`, cells = `{submission_id, expected_row_version}` (no `score` → server keeps previous-stage value). Toast: `Signed off N / M · K skipped`.
+   - Reuse `batchId`, attachments, and the skipped-reasons toast formatting.
 
-## 10. Post-implementation notes
-- Rollback strategy: restore the prior `kpi_cell_detail` function definition from migration history if needed, though the prior definition is known to contain the missing-table bug.
-- Troubleshooting reference: https://docs.lovable.dev/tips-tricks/troubleshooting
+3. **Tests** — `src/lib/bulkActionForStage.test.ts`
+   - Matrix: 7 roles × {viewerStage = same/other/management} → asserts kind, stage, and label.
+   - Edge: `employee`, `null` role → `null` action.
+
+4. **Docs & Policy**
+   - `DOCUMENTATION.md` v2.66.13.3: "Bulk Review sign-off is now role-aware; intermediate reviewers (Manager / Skip-Level / HR PMS / Auditor) can bulk-sign their own stage. Admins act according to the viewer-stage dropdown. Management retains exclusive bulk **terminal** approval."
+   - `POLICY.md` §111.7: explicit role→action matrix + reminder that overrides remain per-cell.
+   - Memory: extend `mem://features/review/bulk-review-dashboard` with the new resolver rule.
+
+## Technical Details
+
+- Files added: `src/lib/bulkActionForStage.ts`, `src/lib/bulkActionForStage.test.ts`.
+- Files edited: `src/pages/review/BulkReviewDashboard.tsx`, `DOCUMENTATION.md`, `POLICY.md`, `mem://features/review/bulk-review-dashboard`.
+- No migrations, no edge-function changes, no new dependencies.
+- `BulkApproveDialog` button copy stays generic ("Approve N cell(s)") so it works for both mgmt and stage flows.
+
+## Out of Scope
+
+- Per-cell score overrides in bulk (already possible via the cell drawer).
+- New audit-log columns (existing `bulk_write_stage_scores` audit trail is sufficient).
+- Skip-Level bulk approval policy — covered by the same resolver; if the org doesn't want it, we can disable that branch in a follow-up flag.
+
+## Rollback
+
+Pure UI/logic change. Revert the dashboard edit + delete the helper file. No data migration.

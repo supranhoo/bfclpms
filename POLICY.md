@@ -1,3 +1,26 @@
+## §111.7 Bulk Review Action Resolver (codified 2026-05-25)
+
+The Bulk Review dashboard MUST resolve its bulk-action button via
+`src/lib/bulkActionForStage.ts`. Direct role checks (e.g. `effectiveRole === 'management'`)
+for the bulk action button are prohibited.
+
+Role → action matrix:
+
+| Effective role | Viewer-stage | Action | RPC |
+|---|---|---|---|
+| `management` | any | Bulk Approve (Mgmt) — terminal | `bulk_management_approve` |
+| `admin` | `management` | Bulk Approve (Mgmt) — terminal | `bulk_management_approve` |
+| `admin` | `manager` / `skip_level` / `hr_pms` / `auditor` | Bulk Sign-off (<stage>) | `bulk_write_stage_scores(p_stage)` |
+| `manager` / `skip_level` / `hr_pms` / `auditor` | any | Bulk Sign-off (own stage) | `bulk_write_stage_scores(p_stage = own role)` |
+| `employee` / unknown / null | any | no button | — |
+
+Intermediate reviewers can only bulk-sign **as themselves** — the viewer-stage
+dropdown does NOT let an HR PMS user act as Auditor, etc. Only `admin` may
+act on behalf of another stage via that dropdown. Bulk sign-off does NOT
+accept per-cell score overrides; the server keeps the previous-stage score
+and advances the workflow. Score overrides remain a per-cell action in the
+detail drawer. Regression: `src/lib/bulkActionForStage.test.ts`.
+
 ## §111.6 Bulk Scoring KPI Detail RPC Source Contract (RCA 2026-05-25)
 
 The Bulk Scoring detail/write-as-Manager drawer RPC (`kpi_cell_detail`) MUST source organization KPI detail metadata from `public.org_kpi_values`. The obsolete `public.org_kpis` relation MUST NOT be referenced or recreated as a compatibility shim. Category display in this drawer MUST come from the mapped employee KPI (`kpis.category_id`) joined to `kra_categories`, so category visibility remains tied to the KPI row actually being reviewed. Workflow metadata MUST use the supported `get_employee_workflow(employee, period, year)` helper and degrade gracefully if workflow resolution fails. Regression: `src/test/kpiCellDetailContract.test.ts`.

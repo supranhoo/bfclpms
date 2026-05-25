@@ -33,6 +33,7 @@ import {
   useBulkScopePreview,
   useBulkReviewSnapshotAll,
   useBulkManagementApprove,
+  useBulkWriteStageScores,
   useBulkOrgKpiFlags,
   useBulkEmployeeAttrs,
   type BulkScopeFilters,
@@ -48,6 +49,7 @@ import { readUrlArrays, writeUrlArrays } from '@/lib/bulkUrlState';
 import {
   allowedEmployeeIds, distinctAttrOptions, BLANK_SENTINEL, type EmpAttrs,
 } from '@/lib/bulkEmployeeFilter';
+import { bulkActionForStage } from '@/lib/bulkActionForStage';
 
 // Full month names — must match kpis.review_period exactly (DB stores 'April', 'May', ...).
 // Ordered by fiscal year (Apr → Mar) for display.
@@ -123,6 +125,7 @@ export default function BulkReviewDashboard() {
   const [activeRow, setActiveRow] = useState<BulkReviewRow | null>(null);
   const [confirmApprove, setConfirmApprove] = useState(false);
   const approve = useBulkManagementApprove();
+  const stageWrite = useBulkWriteStageScores();
   // Stable batch id generated when the dialog opens; reused for storage scoping + RPC.
   const [batchId, setBatchId] = useState<string>('');
 
@@ -339,7 +342,9 @@ export default function BulkReviewDashboard() {
     return count;
   }, [loadedRows]);
 
-  const canApprove = effectiveRole === 'management' || effectiveRole === 'admin';
+  const bulkAction = bulkActionForStage(effectiveRole, viewerStage);
+  const canApprove = !!bulkAction;
+  const isActionPending = bulkAction?.kind === 'mgmt' ? approve.isPending : stageWrite.isPending;
   const canReopen = effectiveRole === 'admin' || effectiveRole === 'management';
 
   const toggleOne = (id: string) => {
@@ -369,23 +374,45 @@ export default function BulkReviewDashboard() {
       .filter(r => r.submission_id && selectedIds.has(r.submission_id))
       .map(r => ({ submission_id: r.submission_id!, expected_row_version: r.row_version ?? null }));
     if (cells.length === 0) return;
+    if (!bulkAction) return;
     try {
-      const res = await approve.mutateAsync({ cells, reason, attachment_urls: attachmentUrls });
-      const advanced = (res as any).advanced ?? res.applied;
-      toast({
-        title: `Approved ${res.applied} / ${cells.length}`,
-        description: [
-          `${advanced} advanced to APPROVED`,
-          res.skipped.length ? `${res.skipped.length} skipped — see audit log` : null,
-        ].filter(Boolean).join(' · '),
-      });
+      if (bulkAction.kind === 'mgmt') {
+        const res = await approve.mutateAsync({ cells, reason, attachment_urls: attachmentUrls });
+        const advanced = (res as any).advanced ?? res.applied;
+        toast({
+          title: `Approved ${res.applied} / ${cells.length}`,
+          description: [
+            `${advanced} advanced to APPROVED`,
+            res.skipped.length ? `${res.skipped.length} skipped — see audit log` : null,
+          ].filter(Boolean).join(' · '),
+        });
+      } else {
+        // Stage sign-off: no `score` field → server keeps previous-stage value
+        // and advances workflow. Attachments are not consumed by this RPC.
+        const res = await stageWrite.mutateAsync({
+          stage: bulkAction.stage!,
+          cells: cells.map(c => ({
+            submission_id: c.submission_id,
+            expected_row_version: c.expected_row_version,
+          })),
+          reason,
+        });
+        toast({
+          title: `Signed off ${res.applied} / ${cells.length}`,
+          description: res.skipped.length
+            ? `${res.skipped.length} skipped — see audit log`
+            : 'Stage advanced',
+        });
+      }
       setSelectedIds(new Set());
       setConfirmApprove(false);
     } catch (e: any) {
       const msg = String(e?.message ?? e);
       const isDrift = msg.includes('bulk_advance_drift');
       toast({
-        title: isDrift ? 'Approval stuck — escalate to admin' : 'Approval failed',
+        title: isDrift
+          ? 'Approval stuck — escalate to admin'
+          : bulkAction.kind === 'mgmt' ? 'Approval failed' : 'Sign-off failed',
         description: msg,
         variant: 'destructive',
       });
@@ -742,13 +769,13 @@ export default function BulkReviewDashboard() {
                   <Button size="sm" variant="outline" onClick={() => setSelectedIds(new Set())}>
                     Clear
                   </Button>
-                  {canApprove && (
+                  {canApprove && bulkAction && (
                     <Button
                       size="sm"
                       onClick={openApproveDialog}
-                      disabled={approve.isPending}
+                      disabled={isActionPending}
                     >
-                      {approve.isPending ? 'Approving…' : 'Bulk Approve (Mgmt)'}
+                      {isActionPending ? bulkAction.pendingLabel : bulkAction.label}
                     </Button>
                   )}
                 </CardContent>
@@ -771,7 +798,7 @@ export default function BulkReviewDashboard() {
         cellCount={selectedIds.size}
         batchId={batchId || 'pending'}
         uploaderUserId={user?.id ?? 'anonymous'}
-        isLoading={approve.isPending}
+        isLoading={isActionPending}
         onCancel={() => setConfirmApprove(false)}
         onConfirm={({ reason, attachmentUrls }) => handleBulkApprove(reason, attachmentUrls)}
       />
