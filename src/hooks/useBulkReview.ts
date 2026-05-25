@@ -181,43 +181,6 @@ export function useBulkReviewSnapshotAll(
   });
 }
 
-/**
- * KRA options for the Bulk Review filter — distinct kra_name values present
- * in `kpis` for the selected (period, year), optionally narrowed by category.
- * Cascades from the Category filter to keep the funnel coherent
- * (Company → Division → BU → Dept → Category → KRA → KPI).
- */
-export function useBulkReviewKraOptions(
-  period: string,
-  year: number,
-  categoryId: string | null | undefined,
-  enabled: boolean,
-) {
-  return useQuery({
-    queryKey: ['bulk_review_kra_options', period, year, categoryId ?? null],
-    enabled: enabled && !!period && !!year,
-    staleTime: 5 * 60 * 1000,
-    queryFn: async (): Promise<string[]> => {
-      let q = supabase
-        .from('kpis')
-        .select('kra_name')
-        .eq('review_period', period)
-        .eq('review_year', year)
-        .not('kra_name', 'is', null)
-        .limit(5000);
-      if (categoryId) q = q.eq('category_id', categoryId);
-      const { data, error } = await q;
-      if (error) throw error;
-      const set = new Set<string>();
-      for (const r of (data ?? []) as Array<{ kra_name: string | null }>) {
-        const name = (r.kra_name ?? '').trim();
-        if (name) set.add(name);
-      }
-      return Array.from(set).sort((a, b) => a.localeCompare(b));
-    },
-  });
-}
-
 // ============= M3: Cell detail =============
 /**
  * Rich per-cell detail used by the BulkCellDrawer to render the same
