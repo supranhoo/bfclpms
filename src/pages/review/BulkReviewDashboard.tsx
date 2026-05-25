@@ -384,12 +384,13 @@ export default function BulkReviewDashboard() {
           title: `Approved ${res.applied} / ${cells.length}`,
           description: [
             `${advanced} advanced to APPROVED`,
-            res.skipped.length ? `${res.skipped.length} skipped — see audit log` : null,
+            summariseSkipReasons(res.skipped),
           ].filter(Boolean).join(' · '),
         });
       } else {
-        // Stage sign-off: no `score` field → server keeps previous-stage value
-        // and advances workflow. Attachments are not consumed by this RPC.
+        // Stage sign-off: no `score` field → server inherits prior-stage value
+        // (POLICY §111.7 cascade) and reconciles kpis.status via
+        // reconcile_workflow_statuses. Attachments are not consumed.
         const res = await stageWrite.mutateAsync({
           stage: bulkAction.stage!,
           cells: cells.map(c => ({
@@ -398,11 +399,15 @@ export default function BulkReviewDashboard() {
           })),
           reason,
         });
+        const advanced = (res as any).advanced ?? null;
         toast({
           title: `Signed off ${res.applied} / ${cells.length}`,
-          description: res.skipped.length
-            ? `${res.skipped.length} skipped — see audit log`
-            : 'Stage advanced',
+          description: [
+            advanced != null && advanced >= 0
+              ? `${advanced} KPI(s) advanced`
+              : 'Stage advanced',
+            summariseSkipReasons(res.skipped),
+          ].filter(Boolean).join(' · '),
         });
       }
       setSelectedIds(new Set());
