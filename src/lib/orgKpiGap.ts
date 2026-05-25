@@ -30,6 +30,20 @@ export interface OrgKpiRowResult {
   missingEmployeeNames: string[];
 }
 
+export const ORG_KPI_FLAG_BATCH_SIZE = 500;
+
+export function batchOrgKpiIds(
+  kpiIds: ReadonlyArray<string>,
+  batchSize = ORG_KPI_FLAG_BATCH_SIZE,
+): string[][] {
+  if (batchSize <= 0) return [];
+  const batches: string[][] = [];
+  for (let i = 0; i < kpiIds.length; i += batchSize) {
+    batches.push(kpiIds.slice(i, i + batchSize));
+  }
+  return batches;
+}
+
 export function classifyOrgKpiRow(input: OrgKpiRowInput): OrgKpiRowResult {
   const total = input.kpiIds.length;
   if (total === 0) {
