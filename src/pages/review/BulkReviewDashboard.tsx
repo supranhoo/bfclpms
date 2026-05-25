@@ -29,7 +29,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   useBulkReviewFlag,
   useBulkScopePreview,
-  useBulkReviewSnapshot,
   useBulkReviewSnapshotAll,
   useBulkReviewKraOptions,
   useBulkManagementApprove,
@@ -104,7 +103,6 @@ export default function BulkReviewDashboard() {
   const [displayMode, setDisplayMode] = useState<'score' | 'wt' | 'both'>('score');
   const [hideEmpty, setHideEmpty] = useState(false);
   const [scopeLoaded, setScopeLoaded] = useState(false);
-  const [page, setPage] = useState(1);
   const [empWindowStart, setEmpWindowStart] = useState(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeRow, setActiveRow] = useState<BulkReviewRow | null>(null);
@@ -372,7 +370,7 @@ export default function BulkReviewDashboard() {
               size="sm"
               className="h-9"
               disabled={!canLoad}
-              onClick={() => { setPage(1); setScopeLoaded(true); }}
+              onClick={() => { setEmpWindowStart(0); setScopeLoaded(true); }}
             >
               Load Scope
               {activeFilterCount > 0 && (
