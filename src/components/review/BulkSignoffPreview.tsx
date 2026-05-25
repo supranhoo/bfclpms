@@ -267,24 +267,6 @@ function CellTable({
     );
   };
 
-  const renderManualInput = (c: CellPreview) => {
-    const v = inputs?.get(c.submission_id)?.manualScore;
-    return (
-      <Input
-        type="number"
-        inputMode="decimal"
-        step="0.5"
-        min={0}
-        max={5}
-        value={v == null ? '' : String(v)}
-        onChange={(e) => onManual(c.submission_id, e.target.value)}
-        className="h-7 w-[60px] text-xs px-1.5 text-right"
-        aria-label="Manual score 0-5"
-        placeholder="—"
-      />
-    );
-  };
-
   return (
     <div className="max-h-64 overflow-auto">
       {/* Desktop ≥ md */}
