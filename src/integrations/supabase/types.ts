@@ -8916,6 +8916,14 @@ export type Database = {
           kpi_count: number
         }[]
       }
+      rpc_kpi_org_flags: {
+        Args: { p_kpi_ids: string[] }
+        Returns: {
+          is_org_level: boolean
+          kpi_id: string
+          org_level_scope: string
+        }[]
+      }
       rpc_open_query_counts: {
         Args: { p_kpi_ids: string[] }
         Returns: {
