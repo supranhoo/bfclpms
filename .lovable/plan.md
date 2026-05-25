@@ -1,77 +1,98 @@
 ## 1. Assumptions
-- You want the Bulk Review matrix to work at normal 100% browser zoom.
-- “All KRA” means every KRA/KPI row matching the active filters should remain visible in the matrix, not disappear because only a 20-employee window is selected.
-- You prefer horizontal scrolling across employee columns, while the left `KPI / KRA` column stays frozen.
-- No database/RPC change is required because `useBulkReviewSnapshotAll` already accumulates the loaded scope pages.
+- The existing `BulkReviewMatrixGrid` already implements a sticky first column + sticky header, but you want the behavior **verified and polished** so it works reliably at 1309×853 (your current viewport) with no layout breaks, no shifting, and clean scrollbar styling.
+- "Performance optimized for large datasets" means the matrix must stay smooth at hundreds of employees × dozens of KPIs — without changing scoring logic, RPCs, or workflow.
+- No backend / RLS / policy changes are involved.
 
 ## 2. Clarifications
-Not Applicable — the desired behavior is clear from your screenshots and explanation.
+Not Applicable — requirements are visual/interaction polish on an existing matrix.
 
 ## 3. Risk & Impact Report
-- **Data Impact:** No schema, RLS, historical data, scoring, workflow, or audit data changes.
-- **Workflow Impact:** No reviewer permissions or approval workflow changes.
-- **UI/UX Impact:** Matrix interaction changes from employee-window paging to true horizontal employee scrolling. The left KPI/KRA column remains sticky while employee names/cells scroll right.
-- **Regression Risk:** Medium UI risk because wide matrices can become heavy if all employees render at once.
-- **Scalability Impact:** Existing 25k-cell scope cap remains the safety guard. Column widths will be fixed and compact so 100% zoom remains usable. If later scopes exceed this comfortably, row/column virtualization should be added, but this request can be solved without changing backend logic.
-- **Mitigation Plan:** Keep the existing click-to-load + 25k cap, avoid extra queries, use fixed column widths, preserve sticky headers, and add a source-level regression test around the removed employee windowing behavior.
+- **Data Impact:** None. No schema, RLS, or scoring changes.
+- **Workflow Impact:** None. Reviewer permissions and selection logic unchanged.
+- **UI/UX Impact:** Sticky-column rendering becomes more robust (solid backgrounds, shadow separator, zebra rows, custom scrollbar). Header row stays sticky during vertical scroll.
+- **Regression Risk:** Low–Medium. Sticky `td` styling can break if hover/zebra backgrounds are transparent — addressed in mitigation.
+- **Scalability Impact:** Current implementation renders all rows. Beyond ~3k cells the DOM gets heavy. We'll keep the existing 25k-cell scope cap and add lightweight row virtualization **only if needed** behind a threshold (e.g. > 1500 cells); otherwise plain DOM stays for simplicity.
+- **Mitigation Plan:** Use opaque background tokens on the sticky column (no transparency), keep `border-collapse: separate` (already set), preserve `min-width` + fixed width on all cells, add `scroll-behavior: smooth` and themed scrollbar, and add a focused unit/source test asserting the sticky classes remain.
 
 ## 4. Step-by-step Plan
-1. **Remove employee windowing from Bulk Review dashboard**
-   - Stop slicing employees into 20-column windows.
-   - Remove `EmployeeWindowPager` rendering from `BulkReviewDashboard.tsx`.
-   - Pass the full filtered row set (`loadedRows`) into `BulkReviewMatrixGrid`.
+1. **Audit current sticky behavior in `BulkReviewMatrixGrid.tsx`**
+   - Confirm `position: sticky` works on the KPI `<td>` and header `<th>` inside the `overflow-auto` container at 1309×853.
+   - Ensure top-left corner cell has the highest `z-index` (already `z-50`).
 
-2. **Make the matrix horizontally scrollable at 100% zoom**
-   - In `BulkReviewMatrixGrid.tsx`, keep the matrix inside an `overflow-auto` container.
-   - Give the table an explicit minimum width based on: frozen KPI/KRA column + employee column count × fixed employee column width.
-   - Keep the header row sticky at the top.
-   - Keep the first `KPI / KRA` column sticky on the left with a higher z-index and shadow.
+2. **Strengthen the frozen column visuals**
+   - Force opaque `bg-card` / `bg-muted` on sticky cells (avoid translucent hover that lets columns show through during horizontal scroll).
+   - Keep the right-edge shadow (`shadow-[4px_0_8px_-4px_...]`) so the frozen column is visually separated from scrolling content.
+   - Apply hover state via an inner wrapper, not via translucent `bg-muted/40` on the sticky `<td>`.
 
-3. **Ensure “All KRAs” shows actual filtered data**
-   - Build KRA/KPI rows from the full filtered dataset, not a visible employee slice.
-   - Keep Category/KRA/Search/Department/Company filters exactly as-is.
-   - Preserve client-side KRA filtering after the accumulated snapshot is loaded.
+3. **Add alternating row background for readability**
+   - Apply a subtle zebra stripe using a CSS variable–based background (e.g. `bg-card` vs `bg-muted/30`) consistently on both the sticky KPI cell and each employee cell so striping aligns across the frozen + scrollable sections.
 
-4. **Improve usability for wide employee lists**
-   - Use compact, stable employee column widths.
-   - Keep employee header names readable with controlled wrapping/truncation.
-   - Keep the matrix height bounded so vertical and horizontal scrollbars are available inside the matrix surface.
+4. **Polish horizontal/vertical scrolling**
+   - Add `scroll-behavior: smooth` to the scroll container.
+   - Add a small themed scrollbar (Tailwind utility classes + `index.css` `::-webkit-scrollbar` rules using existing tokens — no new color values).
+   - Keep `max-h-[calc(100vh-180px)]` so vertical scroll happens inside the matrix, not the page.
 
-5. **Update documentation/memory**
-   - Update `DOCUMENTATION.md` Version History with this UI behavior change.
-   - Update `mem/features/review/bulk-review-dashboard` to replace the prior 20-employee windowing note with horizontal-scroll/frozen-column behavior.
-   - If `CHANGELOG_2026.md` exists, append the current-week note per project preference.
+5. **Maintain alignment**
+   - Keep fixed `KPI_COL_W` (260px) and `EMP_COL_W` (112px) with both `minWidth` and `width` already applied — confirm `box-sizing: border-box` (default in Tailwind) so borders don't push cells.
+   - Ensure KRA category band row uses `colSpan = employees.length + 1` (already correct) so striping/alignment isn't broken.
+
+6. **Performance guardrails (no behavior change for small scopes)**
+   - Keep accumulated dataset cap at 25k cells (already enforced upstream).
+   - Add `content-visibility: auto` + `contain-intrinsic-size` on KPI rows so off-screen rows skip paint cost for very large matrices. This is a CSS-only optimization, no virtualization library.
+   - If we later need true virtualization, we already have `BulkReviewVirtualGrid` as a fallback; not introduced in this change.
+
+7. **Responsive verification at current viewport (1309×853)**
+   - Verify the toolbar above the matrix doesn't push the matrix below the fold.
+   - Confirm horizontal scrollbar appears as soon as employee columns overflow.
+   - Confirm KPI column stays pinned while scrolling right; header row stays pinned while scrolling down.
+
+8. **Tests**
+   - Source-level test asserting `BulkReviewMatrixGrid.tsx` still contains the sticky class names on KPI `<td>` and employee `<th>` (guards against accidental removal).
+   - Render test: with N=30 employees and 20 KPIs, the table has exactly `1 + N` columns in the header and the sticky cell carries `sticky left-0`.
+
+9. **Documentation & memory**
+   - `DOCUMENTATION.md` → add v2.66.12.7 entry: "Bulk Review matrix — frozen KPI/KRA column hardened, themed scrollbar, zebra rows, `content-visibility` for large matrices."
+   - `mem/features/review/bulk-review-dashboard` → note the new visual hardening and zebra/scrollbar tokens.
 
 ## 5. UI Changes
-- **Location:** `/review/bulk-scoring`, loaded Bulk Review matrix.
-- **Visual change:** The employee pager row (`Employees 1–20 of N`, Prev/Next/Jump) will be removed.
-- **Interaction change:** Users scroll horizontally to the right to see all mapped employees.
-- **Frozen column:** The left `KPI / KRA` column remains visible while scrolling employee names and score cells.
-- **Responsiveness:** At 100% zoom, the matrix fits the viewport height and provides internal scrollbars instead of requiring browser zoom-out.
+- **Location:** `/review/bulk-scoring`, the matrix grid surface.
+- **Visual changes:**
+  - First column (`KPI / KRA`) stays visually pinned to the left during horizontal scroll with a soft right-edge shadow.
+  - Header row (employee chips) stays pinned to the top during vertical scroll.
+  - Rows have a subtle alternating background that lines up across the frozen and scrollable sections.
+  - Horizontal scrollbar uses theme tokens; scroll animates smoothly.
+- **Interaction:** No change to clicking cells, selecting submissions, KRA collapse/expand, or display mode toggle.
+- **Responsiveness:** At 1309×853, the user sees the frozen KPI column + as many employee columns as fit, with smooth scrolling for the rest. No browser zoom-out required.
 
 ## 6. Implementation
-- Modify only frontend presentation/state code:
-  - `src/pages/review/BulkReviewDashboard.tsx`
-  - `src/components/review/BulkReviewMatrixGrid.tsx`
-- Remove unused import/state/constants related to employee windowing.
-- Keep `src/components/review/EmployeeWindowPager.tsx` only if still referenced elsewhere; otherwise remove it to avoid dead code.
+Frontend-only edits, scoped to:
+- `src/components/review/BulkReviewMatrixGrid.tsx` — sticky cell backgrounds, zebra stripe, smooth scroll, `content-visibility`.
+- `src/index.css` — small themed scrollbar rules using existing CSS variables (no new color tokens).
+- `DOCUMENTATION.md` — version history entry.
+- `mem/features/review/bulk-review-dashboard` — behavior note update.
+
+No changes to: hooks, RPCs, RLS, scoring logic, workflow engine, edge functions, or migrations.
 
 ## 7. Tests
-- Add/update a focused test that verifies Bulk Review no longer windows employees before rendering the matrix.
-- Validate the source no longer renders `EmployeeWindowPager` from `BulkReviewDashboard.tsx`.
-- Existing data/scoring tests remain unaffected because the scoring logic is unchanged.
+- Add a focused source test (or extend an existing one) asserting the sticky class names remain on the KPI `<td>` and header row.
+- Manual QA checklist:
+  - Scroll right → KPI column stays visible, header chips scroll with their column.
+  - Scroll down → header row stays visible, KPI column scrolls vertically with rows.
+  - Resize between 1280, 1366, 1440 widths → no layout break, no horizontal page scroll, only internal matrix scroll.
+  - Toggle "Show KRA · Wt%" → row heights stay aligned across frozen + scrollable sections.
 
 ## 8. DOCUMENTATION.md updates
-- Add a new Version History entry documenting:
-  - All filtered KRA/KPI rows render from the accumulated dataset.
-  - Employee columns are horizontally scrollable.
-  - `KPI / KRA` remains frozen.
-  - No RPC/RLS/scoring changes.
+Add Version History entry **v2.66.12.7** describing:
+- Frozen KPI/KRA column hardened with opaque background + edge shadow.
+- Sticky header row preserved.
+- Themed scrollbar + smooth horizontal scroll.
+- `content-visibility: auto` for large matrices.
+- No RPC / RLS / scoring changes.
 
 ## 9. POLICY.md updates
-Not Applicable — this is a UI rendering/navigation correction only. It does not alter business rules, scoring policy, workflow, permissions, or data governance.
+Not Applicable — visual/interaction polish only; no business rule, scoring, workflow, or governance change.
 
 ## 10. Post-implementation notes
-- Rollback is simple: revert the two frontend edits and documentation/memory updates.
-- Backup coverage is unaffected because no database tables or migrations are added.
-- Used the `ui-ux-pro-max` skill for the 100% zoom, scroll behavior, sticky column, and data-density UX decisions.
+- Rollback: revert the two frontend files and the doc/memory edits.
+- Backup coverage unaffected (no DB tables added).
+- Used the `ui-ux-pro-max` skill for sticky-column, scroll behavior, zebra striping, scrollbar theming, and large-dataset performance decisions.

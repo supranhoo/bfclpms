@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useMemo, useState, type CSSProperties } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
@@ -154,7 +154,7 @@ export function BulkReviewMatrixGrid({
 
       {/* Matrix surface — horizontal scroll for employees, sticky KPI/KRA column */}
       <div className="rounded-lg border border-border bg-card overflow-hidden">
-        <div className="overflow-auto max-h-[calc(100vh-180px)] relative">
+        <div className="matrix-scroll overflow-auto max-h-[calc(100vh-180px)] relative">
           <table
             className="border-separate border-spacing-0"
             style={{ width: totalW, minWidth: '100%' }}
@@ -228,11 +228,21 @@ export function BulkReviewMatrixGrid({
                         </button>
                       </td>
                     </tr>
-                    {!collapsed && group.map((kpi) => (
-                      <tr key={kpi.key} className="group">
+                    {!collapsed && group.map((kpi, idx) => {
+                      const zebra = idx % 2 === 1;
+                      const rowBg = zebra ? 'bg-muted/30' : 'bg-card';
+                      return (
+                      <tr
+                        key={kpi.key}
+                        className="group"
+                        style={{ contentVisibility: 'auto', containIntrinsicSize: '56px' } as CSSProperties}
+                      >
                         {/* Sticky KPI cell */}
                         <td
-                          className="sticky left-0 z-10 bg-card group-hover:bg-muted/40 border-b border-r border-border p-3 align-top shadow-[4px_0_8px_-4px_hsl(var(--foreground)/0.08)]"
+                          className={cn(
+                            'sticky left-0 z-10 border-b border-r border-border p-3 align-top shadow-[4px_0_8px_-4px_hsl(var(--foreground)/0.08)]',
+                            rowBg,
+                          )}
                           style={{ minWidth: KPI_COL_W, width: KPI_COL_W }}
                         >
                           <div className="text-xs font-semibold leading-snug text-foreground line-clamp-2">
@@ -254,7 +264,7 @@ export function BulkReviewMatrixGrid({
                             return (
                               <td
                                 key={emp.id}
-                                className="border-b border-r border-border bg-muted/10"
+                                className={cn('border-b border-r border-border', rowBg)}
                                 style={{ minWidth: EMP_COL_W, width: EMP_COL_W }}
                               >
                                 <div className="h-14 flex items-center justify-center text-[10px] text-muted-foreground/40">
@@ -272,6 +282,7 @@ export function BulkReviewMatrixGrid({
                               key={emp.id}
                               className={cn(
                                 'border-b border-r border-border p-0 relative',
+                                rowBg,
                                 isSelected && 'ring-2 ring-primary ring-inset',
                               )}
                               style={{ minWidth: EMP_COL_W, width: EMP_COL_W }}
@@ -333,7 +344,8 @@ export function BulkReviewMatrixGrid({
                           );
                         })}
                       </tr>
-                    ))}
+                      );
+                    })}
                   </Fragment>
                 );
               })}
