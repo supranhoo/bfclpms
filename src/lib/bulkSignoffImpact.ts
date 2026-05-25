@@ -115,7 +115,6 @@ export function buildBulkSignoffImpact(input: BuildImpactInput): ImpactSummary {
     };
     const { score, source } = resolveCarriedScore({ stage, submission: sub, kpi: rule });
     const weightage = Number(r.weightage ?? rule.weightage ?? 0) || 0;
-    const weightedImpact = score == null ? null : Math.round((score * weightage) * 100) / 10000 * 100;
     cellById.set(r.submission_id, {
       submission_id: r.submission_id,
       employee_id: r.employee_id,
@@ -124,9 +123,9 @@ export function buildBulkSignoffImpact(input: BuildImpactInput): ImpactSummary {
       weightage,
       score,
       source,
-      // Keep as rating-points × wt (matches Dashboard's "weightedScore = rating × wt").
-      // Display layer divides by 100 if it wants a 0-5 contribution.
-      weightedImpact: score == null ? null : score * weightage,
+      // Rating-points × wt / 100 — matches matrix cell formula
+      // (`bestScore * weightage / 100`), so totals reconcile with the grid.
+      weightedImpact: score == null ? null : Math.round((score * weightage) / 100 * 100) / 100,
     });
   }
 
