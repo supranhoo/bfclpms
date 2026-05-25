@@ -8145,7 +8145,11 @@ export type Database = {
         Returns: number
       }
       bulk_management_approve: {
-        Args: { p_batch_reason?: string; p_cells: Json }
+        Args: {
+          p_attachment_urls?: Json
+          p_batch_reason?: string
+          p_cells: Json
+        }
         Returns: Json
       }
       bulk_reopen_cells: {
