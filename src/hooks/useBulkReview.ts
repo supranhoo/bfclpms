@@ -2,6 +2,46 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 /**
+ * Profile attributes (designation / pms_grade / reporting manager) for the
+ * employees currently present in the loaded Bulk Review snapshot. Used by
+ * the dashboard's Designation / Grade / Reporting Manager filters.
+ *
+ * Read-only `profiles` select; RLS-bounded to whatever the viewer can already
+ * see. We dedupe + sort the input id list so the query key is stable across
+ * snapshot re-orderings.
+ */
+export interface BulkEmployeeAttr {
+  id: string;
+  designation: string | null;
+  pms_grade: string | null;
+  reporting_manager_id: string | null;
+  reporting_manager_name: string | null;
+}
+
+export function useBulkEmployeeAttrs(employeeIds: string[], enabled: boolean) {
+  const sorted = [...new Set(employeeIds)].sort();
+  return useQuery({
+    queryKey: ['bulk_employee_attrs', sorted],
+    enabled: enabled && sorted.length > 0,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<BulkEmployeeAttr[]> => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, designation, pms_grade, reporting_manager_id, reporting_manager:profiles!profiles_reporting_manager_id_fkey(full_name)')
+        .in('id', sorted);
+      if (error) throw error;
+      return (data ?? []).map((r: any) => ({
+        id: r.id,
+        designation: r.designation ?? null,
+        pms_grade: r.pms_grade ?? null,
+        reporting_manager_id: r.reporting_manager_id ?? null,
+        reporting_manager_name: r.reporting_manager?.full_name ?? null,
+      }));
+    },
+  });
+}
+
+/**
  * Org-KPI flags for a batch of KPI ids loaded into the Bulk Review snapshot.
  * Uses the read-only SECURITY DEFINER RPC `rpc_kpi_org_flags` so non-admin
  * viewers (manager/skip/hr_pms/auditor/management) can still tell which

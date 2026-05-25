@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   AlertCircle, Layers, RefreshCw, Search, EyeOff, Eye,
   Calendar, CalendarDays, Building2, Network, Factory, Users, Tag, UserCog, Target,
+  IdCard, Award,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -32,6 +33,7 @@ import {
   useBulkReviewSnapshotAll,
   useBulkManagementApprove,
   useBulkOrgKpiFlags,
+  useBulkEmployeeAttrs,
   type BulkScopeFilters,
   type BulkReviewRow,
 } from '@/hooks/useBulkReview';
@@ -41,6 +43,9 @@ import { useToast } from '@/hooks/use-toast';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { MultiSelectFilter } from '@/components/review/MultiSelectFilter';
 import { readUrlArrays, writeUrlArrays } from '@/lib/bulkUrlState';
+import {
+  allowedEmployeeIds, distinctAttrOptions, BLANK_SENTINEL, type EmpAttrs,
+} from '@/lib/bulkEmployeeFilter';
 
 // Full month names — must match kpis.review_period exactly (DB stores 'April', 'May', ...).
 // Ordered by fiscal year (Apr → Mar) for display.
@@ -94,7 +99,7 @@ export default function BulkReviewDashboard() {
   const initialUrl = useMemo(
     () => readUrlArrays(
       typeof window !== 'undefined' ? window.location.search : '',
-      ['companies', 'divisions', 'bus', 'depts', 'cats', 'kras'],
+      ['companies', 'divisions', 'bus', 'depts', 'cats', 'kras', 'desigs', 'grades', 'mgrs'],
     ),
     [],
   );
@@ -104,6 +109,9 @@ export default function BulkReviewDashboard() {
   const [departmentIds, setDepartmentIds] = useState<string[]>(initialUrl.depts);
   const [categoryIds, setCategoryIds] = useState<string[]>(initialUrl.cats);
   const [kraNames, setKraNames] = useState<string[]>(initialUrl.kras);
+  const [designations, setDesignations] = useState<string[]>(initialUrl.desigs);
+  const [grades, setGrades] = useState<string[]>(initialUrl.grades);
+  const [managerIds, setManagerIds] = useState<string[]>(initialUrl.mgrs);
   const [search, setSearch] = useState('');
   const [displayMode, setDisplayMode] = useState<'score' | 'wt' | 'both'>('score');
   const [hideEmpty, setHideEmpty] = useState(false);
@@ -126,10 +134,12 @@ export default function BulkReviewDashboard() {
     const nextSearch = writeUrlArrays(window.location.search, {
       companies: companyIds, divisions: divisionIds, bus: businessUnitIds,
       depts: departmentIds, cats: categoryIds, kras: kraNames,
+      desigs: designations, grades, mgrs: managerIds,
     });
     const newUrl = `${window.location.pathname}${nextSearch}${window.location.hash}`;
     window.history.replaceState(null, '', newUrl);
-  }, [companyIds, divisionIds, businessUnitIds, departmentIds, categoryIds, kraNames]);
+  }, [companyIds, divisionIds, businessUnitIds, departmentIds, categoryIds, kraNames,
+      designations, grades, managerIds]);
 
   const filteredBusinessUnits = useMemo(() => {
     if (divisionIds.length === 0) return businessUnits ?? [];
@@ -168,7 +178,10 @@ export default function BulkReviewDashboard() {
     (businessUnitIds.length > 0 ? 1 : 0) +
     (departmentIds.length > 0 ? 1 : 0) +
     (categoryIds.length > 0 ? 1 : 0) +
-    (kraNames.length > 0 ? 1 : 0);
+    (kraNames.length > 0 ? 1 : 0) +
+    (designations.length > 0 ? 1 : 0) +
+    (grades.length > 0 ? 1 : 0) +
+    (managerIds.length > 0 ? 1 : 0);
 
   const invalidateScope = () => setScopeLoaded(false);
 
@@ -202,6 +215,54 @@ export default function BulkReviewDashboard() {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [rawRows]);
 
+  // Employee attribute index (designation / grade / reporting manager) for
+  // the currently loaded snapshot — backs the 3 employee-axis filters.
+  const distinctEmpIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of rawRows) if (r.employee_id) s.add(r.employee_id);
+    return Array.from(s);
+  }, [rawRows]);
+  const empAttrsQ = useBulkEmployeeAttrs(distinctEmpIds, scopeLoaded);
+  const attrsByEmp = useMemo(() => {
+    const m = new Map<string, EmpAttrs>();
+    for (const a of empAttrsQ.data ?? []) {
+      m.set(a.id, {
+        designation: a.designation,
+        pms_grade: a.pms_grade,
+        reporting_manager_id: a.reporting_manager_id,
+      });
+    }
+    return m;
+  }, [empAttrsQ.data]);
+  const managerNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const a of empAttrsQ.data ?? []) {
+      if (a.reporting_manager_id && a.reporting_manager_name) {
+        m.set(a.reporting_manager_id, a.reporting_manager_name);
+      }
+    }
+    return m;
+  }, [empAttrsQ.data]);
+  const designationOptions = useMemo(
+    () => distinctAttrOptions(attrsByEmp, 'designation'),
+    [attrsByEmp],
+  );
+  const gradeOptions = useMemo(
+    () => distinctAttrOptions(attrsByEmp, 'pms_grade'),
+    [attrsByEmp],
+  );
+  const managerOptions = useMemo(() => {
+    const ids = new Set<string>();
+    attrsByEmp.forEach(a => { if (a.reporting_manager_id) ids.add(a.reporting_manager_id); });
+    return Array.from(ids)
+      .map(id => ({ value: id, label: managerNameById.get(id) ?? id }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [attrsByEmp, managerNameById]);
+  const allowedEmpSet = useMemo(
+    () => allowedEmployeeIds(attrsByEmp, designations, grades, managerIds),
+    [attrsByEmp, designations, grades, managerIds],
+  );
+
   // Multi-axis client-side filter over the snapshot.
   const loadedRows = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -224,8 +285,11 @@ export default function BulkReviewDashboard() {
         return scores.some(s => s !== null && s !== undefined);
       });
     }
+    if (designations.length || grades.length || managerIds.length) {
+      rows = rows.filter(r => allowedEmpSet.has(r.employee_id));
+    }
     return rows;
-  }, [rawRows, search, hideEmpty, kraNames]);
+  }, [rawRows, search, hideEmpty, kraNames, designations, grades, managerIds, allowedEmpSet]);
 
   // Org-KPI flags for the currently loaded snapshot.
   const distinctKpiIds = useMemo(() => {
@@ -239,6 +303,20 @@ export default function BulkReviewDashboard() {
     for (const f of orgFlagsQ.data ?? []) m.set(f.kpi_id, f.is_org_level);
     return m;
   }, [orgFlagsQ.data]);
+
+  // Prune stale selections when the scope changes so they don't silently hide
+  // every row. We prune per-value (not full clear) so URL deep-links survive.
+  useEffect(() => {
+    if (!scopeLoaded || attrsByEmp.size === 0) return;
+    const dSet = new Set(distinctAttrOptions(attrsByEmp, 'designation'));
+    const gSet = new Set(distinctAttrOptions(attrsByEmp, 'pms_grade'));
+    const mSet = new Set<string>();
+    attrsByEmp.forEach(a => { if (a.reporting_manager_id) mSet.add(a.reporting_manager_id); });
+    setDesignations(prev => prev.filter(v => dSet.has(v)));
+    setGrades(prev => prev.filter(v => gSet.has(v)));
+    setManagerIds(prev => prev.filter(v => mSet.has(v)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeLoaded, attrsByEmp]);
 
   const variance = useMemo(() => {
     let count = 0;
@@ -501,6 +579,49 @@ export default function BulkReviewDashboard() {
               disabled={!scopeLoaded}
               title={scopeLoaded ? undefined : 'Load scope to see KRAs'}
               emptyText="No KRAs in loaded scope"
+            />
+
+            {/* Designation — client-side from loaded snapshot's profiles */}
+            <MultiSelectFilter
+              icon={<IdCard className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+              label="Designations"
+              width={180}
+              values={designations}
+              onChange={setDesignations}
+              options={designationOptions.map((v) => ({
+                value: v, label: v === BLANK_SENTINEL ? '(blank)' : v,
+              }))}
+              disabled={!scopeLoaded}
+              title={scopeLoaded ? undefined : 'Load scope to see designations'}
+              emptyText="No designations in loaded scope"
+            />
+
+            {/* Grade */}
+            <MultiSelectFilter
+              icon={<Award className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+              label="Grades"
+              width={150}
+              values={grades}
+              onChange={setGrades}
+              options={gradeOptions.map((v) => ({
+                value: v, label: v === BLANK_SENTINEL ? '(blank)' : v,
+              }))}
+              disabled={!scopeLoaded}
+              title={scopeLoaded ? undefined : 'Load scope to see grades'}
+              emptyText="No grades in loaded scope"
+            />
+
+            {/* Reporting Manager */}
+            <MultiSelectFilter
+              icon={<UserCog className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+              label="Reporting Managers"
+              width={200}
+              values={managerIds}
+              onChange={setManagerIds}
+              options={managerOptions}
+              disabled={!scopeLoaded}
+              title={scopeLoaded ? undefined : 'Load scope to see managers'}
+              emptyText="No reporting managers in loaded scope"
             />
           </div>
 
