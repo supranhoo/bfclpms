@@ -189,22 +189,6 @@ export default function BulkReviewDashboard() {
     return rows;
   }, [rawRows, search, hideEmpty, kraName]);
 
-  // Build distinct employee list from the (filtered) row set, then slice
-  // by the current window before handing rows to the matrix grid.
-  const employeeList = useMemo(() => {
-    const seen = new Map<string, { id: string; name: string; code: string | null }>();
-    for (const r of loadedRows) {
-      if (!seen.has(r.employee_id)) {
-        seen.set(r.employee_id, {
-          id: r.employee_id,
-          name: r.employee_name ?? '',
-          code: r.employee_code ?? null,
-        });
-      }
-    }
-    return Array.from(seen.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [loadedRows]);
-
   const variance = useMemo(() => {
     let count = 0;
     for (const r of loadedRows) {
