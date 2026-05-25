@@ -389,8 +389,10 @@ export default function BulkReviewDashboard() {
         });
       } else {
         // Stage sign-off: no `score` field → server inherits prior-stage value
-        // (POLICY §111.7 cascade) and reconciles kpis.status via
-        // reconcile_workflow_statuses. Attachments are not consumed.
+        // (POLICY §111.7.a cascade) and reconciles kpis.status via
+        // reconcile_workflow_statuses. Shared remark + evidence are persisted
+        // onto the acted stage's *_remarks / *_evidence_urls columns
+        // (POLICY §111.7.a — RCA 2026-05-25 v2.66.13.6).
         const res = await stageWrite.mutateAsync({
           stage: bulkAction.stage!,
           cells: cells.map(c => ({
@@ -398,6 +400,7 @@ export default function BulkReviewDashboard() {
             expected_row_version: c.expected_row_version,
           })),
           reason,
+          attachment_urls: attachmentUrls,
         });
         const advanced = (res as any).advanced ?? null;
         toast({
