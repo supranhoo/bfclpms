@@ -42,6 +42,7 @@ import { BulkCellDrawer } from '@/components/review/BulkCellDrawer';
 import { BulkReviewMatrixGrid } from '@/components/review/BulkReviewMatrixGrid';
 import { useToast } from '@/hooks/use-toast';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
+import { BulkApproveDialog } from '@/components/review/BulkApproveDialog';
 import { MultiSelectFilter } from '@/components/review/MultiSelectFilter';
 import { readUrlArrays, writeUrlArrays } from '@/lib/bulkUrlState';
 import {
@@ -78,7 +79,7 @@ const VIEWER_STAGES = [
  *  - No realtime — manual Refresh pill only.
  */
 export default function BulkReviewDashboard() {
-  const { effectiveRole } = useAuth();
+  const { effectiveRole, user } = useAuth();
   const { toast } = useToast();
   const flagQuery = useBulkReviewFlag();
   const qc = useQueryClient();
@@ -122,6 +123,8 @@ export default function BulkReviewDashboard() {
   const [activeRow, setActiveRow] = useState<BulkReviewRow | null>(null);
   const [confirmApprove, setConfirmApprove] = useState(false);
   const approve = useBulkManagementApprove();
+  // Stable batch id generated when the dialog opens; reused for storage scoping + RPC.
+  const [batchId, setBatchId] = useState<string>('');
 
   const { companies } = useCompanyFilter();
   const { data: departments } = useDepartments();
@@ -353,20 +356,39 @@ export default function BulkReviewDashboard() {
     });
   };
 
-  const handleBulkApprove = async () => {
+  const openApproveDialog = () => {
+    // Fresh batch id per open — guarantees storage isolation + RPC idempotency.
+    setBatchId(typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    setConfirmApprove(true);
+  };
+
+  const handleBulkApprove = async (reason: string, attachmentUrls: string[]) => {
     const cells = loadedRows
       .filter(r => r.submission_id && selectedIds.has(r.submission_id))
       .map(r => ({ submission_id: r.submission_id!, expected_row_version: r.row_version ?? null }));
     if (cells.length === 0) return;
     try {
-      const res = await approve.mutateAsync({ cells, reason: 'Bulk approval from dashboard' });
+      const res = await approve.mutateAsync({ cells, reason, attachment_urls: attachmentUrls });
+      const advanced = (res as any).advanced ?? res.applied;
       toast({
         title: `Approved ${res.applied} / ${cells.length}`,
-        description: res.skipped.length ? `${res.skipped.length} skipped — see audit log` : undefined,
+        description: [
+          `${advanced} advanced to APPROVED`,
+          res.skipped.length ? `${res.skipped.length} skipped — see audit log` : null,
+        ].filter(Boolean).join(' · '),
       });
       setSelectedIds(new Set());
+      setConfirmApprove(false);
     } catch (e: any) {
-      toast({ title: 'Approval failed', description: e.message, variant: 'destructive' });
+      const msg = String(e?.message ?? e);
+      const isDrift = msg.includes('bulk_advance_drift');
+      toast({
+        title: isDrift ? 'Approval stuck — escalate to admin' : 'Approval failed',
+        description: msg,
+        variant: 'destructive',
+      });
     }
   };
 
@@ -723,7 +745,7 @@ export default function BulkReviewDashboard() {
                   {canApprove && (
                     <Button
                       size="sm"
-                      onClick={() => setConfirmApprove(true)}
+                      onClick={openApproveDialog}
                       disabled={approve.isPending}
                     >
                       {approve.isPending ? 'Approving…' : 'Bulk Approve (Mgmt)'}
@@ -744,14 +766,14 @@ export default function BulkReviewDashboard() {
         canReopen={canReopen}
       />
 
-      <ConfirmDestructiveDialog
+      <BulkApproveDialog
         open={confirmApprove}
-        onCancel={() => setConfirmApprove(false)}
-        onConfirm={() => { setConfirmApprove(false); handleBulkApprove(); }}
-        title={`Bulk approve ${selectedIds.size} cells?`}
-        description="Final scores will be stamped from the highest-priority completed stage (Auditor > HR PMS > Skip-Level > Manager). Per Policy §88 this is immutable except via Re-open."
-        confirmLabel="Approve"
+        cellCount={selectedIds.size}
+        batchId={batchId || 'pending'}
+        uploaderUserId={user?.id ?? 'anonymous'}
         isLoading={approve.isPending}
+        onCancel={() => setConfirmApprove(false)}
+        onConfirm={({ reason, attachmentUrls }) => handleBulkApprove(reason, attachmentUrls)}
       />
     </div>
   );

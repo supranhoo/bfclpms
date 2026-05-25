@@ -341,10 +341,12 @@ export function useBulkManagementApprove() {
     mutationFn: async (args: {
       cells: Array<{ submission_id: string; expected_row_version?: number | null }>;
       reason?: string;
+      attachment_urls?: string[];
     }): Promise<BulkWriteResult> => {
       const { data, error } = await supabase.rpc('bulk_management_approve' as any, {
         p_cells: args.cells as any,
         p_batch_reason: args.reason ?? null,
+        p_attachment_urls: (args.attachment_urls ?? []) as any,
       });
       if (error) throw error;
       return data as unknown as BulkWriteResult;
@@ -352,6 +354,7 @@ export function useBulkManagementApprove() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['bulk_review_snapshot'] });
       qc.invalidateQueries({ queryKey: ['kpi_cell_detail'] });
+      qc.invalidateQueries({ queryKey: ['bulk_scope_preview'] });
     },
   });
 }
