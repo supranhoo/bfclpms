@@ -8332,6 +8332,14 @@ export type Database = {
         }
         Returns: string
       }
+      fn_compute_rating_from_achievement: {
+        Args: {
+          p_achieved_text?: string
+          p_achieved_value: number
+          p_kpi: Database["public"]["Tables"]["kpis"]["Row"]
+        }
+        Returns: number
+      }
       generate_bundles_from_kpis: { Args: never; Returns: Json }
       get_active_send_back_markers: {
         Args: { p_kpi_ids: string[] }
