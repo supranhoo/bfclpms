@@ -59,4 +59,34 @@ describe('bulk_write_stage_scores SQL contract', () => {
     expect(SQL).toMatch(/not_terminal_for_template/);
     expect(SQL).toMatch(/v_acted_stage_key/);
   });
+
+  // POLICY §88.1 — Admin Override re-stamp of approved rows.
+  it('admin override bypasses final_locked skip (v2.66.13.17)', () => {
+    expect(SQL).toMatch(
+      /final_score\s+is\s+not\s+null\s+and\s+not\s+\(v_is_admin\s+and\s+p_is_override\)/,
+    );
+  });
+
+  it('logs ADMIN_BULK_OVERRIDE_FINAL_UNLOCK on terminal-stage re-stamp', () => {
+    expect(SQL).toMatch(/admin_bulk_override_final_unlock/);
+    expect(SQL).toMatch(/§88\.1/);
+  });
+
+  it('logs ADMIN_BULK_OVERRIDE_COLUMN_ONLY on non-terminal-stage approved rows', () => {
+    expect(SQL).toMatch(/admin_bulk_override_column_only/);
+  });
+
+  it('returns relocked and relocked_non_terminal counters in the RPC result', () => {
+    expect(SQL).toMatch(/'relocked'/);
+    expect(SQL).toMatch(/'relocked_non_terminal'/);
+  });
+
+  it('dispatches admin_override_of_final_score notifications', () => {
+    expect(SQL).toMatch(/admin_override_of_final_score/);
+  });
+
+  it('approved rows (relocks) are excluded from reconcile', () => {
+    expect(SQL).toMatch(/if\s+not\s+v_is_relock\s+then/);
+    expect(SQL).toMatch(/v_reconcile_ids/);
+  });
 });

@@ -59,6 +59,10 @@ export interface StageWriteOutcome {
   applied: number;
   advanced: number | null; // null when reconcile result unavailable
   skipped: SkipEntry[];
+  /** POLICY §88.1 — admin overrides that re-stamped final_score on an already-approved row. */
+  relocked?: number;
+  /** POLICY §88.1.c — admin overrides on approved rows where stage is non-terminal (column-only update). */
+  relockedNonTerminal?: number;
 }
 
 export interface StageWriteSummary {
@@ -74,12 +78,22 @@ export function summariseStageWriteOutcome(o: StageWriteOutcome): StageWriteSumm
   const advanced = o.advanced; // may be null (reconcile unknown) or -1 (reconcile failed)
   const advancedKnown = typeof advanced === 'number' && advanced >= 0;
   const advancedN = advancedKnown ? (advanced as number) : 0;
-  const writtenNotAdvanced = Math.max(0, applied - advancedN);
+  const relocked = Math.max(0, (o.relocked ?? 0) | 0);
+  const relockedNT = Math.max(0, (o.relockedNonTerminal ?? 0) | 0);
+  const processedTotal = advancedN + relocked + relockedNT;
+  const writtenNotAdvanced = Math.max(0, applied - advancedN - relocked - relockedNT);
   const noop = Math.max(0, total - applied - skippedN);
 
   // Title
   let title: string;
-  if (!advancedKnown && applied > 0 && skippedN === 0) {
+  if (processedTotal === total && total > 0 && (relocked > 0 || relockedNT > 0)) {
+    // POLICY §88.1 — admin-override re-stamp path.
+    const parts: string[] = [];
+    if (advancedN > 0) parts.push(`${advancedN} approved`);
+    if (relocked > 0) parts.push(`${relocked} re-stamped`);
+    if (relockedNT > 0) parts.push(`${relockedNT} column-only`);
+    title = `Process complete — ${total}/${total} (${parts.join(', ')})`;
+  } else if (!advancedKnown && applied > 0 && skippedN === 0) {
     title = `Signed off — ${applied}/${total} written`;
   } else if (advancedN === total && total > 0) {
     title = `Signed off — ${total} advanced`;
@@ -96,6 +110,12 @@ export function summariseStageWriteOutcome(o: StageWriteOutcome): StageWriteSumm
   // Body lines
   const lines: string[] = [];
   if (advancedN > 0) lines.push(`${advancedN} advanced to next stage`);
+  if (relocked > 0) {
+    lines.push(`${relocked} final score${relocked === 1 ? '' : 's'} re-stamped (admin override, POLICY §88.1)`);
+  }
+  if (relockedNT > 0) {
+    lines.push(`${relockedNT} approved row${relockedNT === 1 ? '' : 's'} updated column-only (non-terminal stage)`);
+  }
   if (writtenNotAdvanced > 0) {
     lines.push(
       `${writtenNotAdvanced} written but stage unchanged (already past this stage or value unchanged)`,
