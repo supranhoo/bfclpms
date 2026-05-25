@@ -313,13 +313,15 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
                 <div className="absolute left-[18px] top-0 bottom-0 w-0.5 bg-border" />
                 
                 <div className="space-y-6">
-                {auditLogs.map((log, index) => {
+                {groupedEvents.map(({ parent, children }) => {
+                    const log = parent as unknown as AuditLog;
                     const config = getActionConfig(log.action);
                     const IconComponent = config.icon;
                     const performer = profileMap.get(log.performed_by);
                     const onBehalfProfile = log.on_behalf_of ? profileMap.get(log.on_behalf_of) : null;
                     const details = formatDetails(log);
-                    
+                    const isExpanded = expandedGroups.has(log.id);
+
                     return (
                       <div key={log.id} className="relative pl-11">
                         {/* Timeline dot */}
@@ -353,6 +355,49 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
                                       • {detail}
                                     </p>
                                   ))}
+                                </div>
+                              )}
+
+                              {children.length > 0 && (
+                                <div className="mt-3 border-t pt-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleGroup(log.id)}
+                                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                  >
+                                    {isExpanded ? (
+                                      <ChevronDown className="h-3 w-3" />
+                                    ) : (
+                                      <ChevronRight className="h-3 w-3" />
+                                    )}
+                                    {isExpanded ? 'Hide' : 'Show'} system events ({children.length})
+                                  </button>
+
+                                  {isExpanded && (
+                                    <div className="mt-2 space-y-2 pl-2 border-l-2 border-muted">
+                                      {children.map((childLog) => {
+                                        const c = childLog as unknown as AuditLog;
+                                        const cCfg = getActionConfig(c.action);
+                                        const CIcon = cCfg.icon;
+                                        const cDetails = formatDetails(c);
+                                        return (
+                                          <div key={c.id} className="pl-2">
+                                            <div className="flex items-center gap-2 text-xs">
+                                              <CIcon className="h-3 w-3 text-muted-foreground" />
+                                              <span className="font-medium text-foreground/80">{cCfg.label}</span>
+                                            </div>
+                                            {cDetails.length > 0 && (
+                                              <div className="mt-1 space-y-0.5 pl-5">
+                                                {cDetails.map((d, i) => (
+                                                  <p key={i} className="text-xs text-muted-foreground">• {d}</p>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
