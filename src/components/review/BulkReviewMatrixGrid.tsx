@@ -293,8 +293,11 @@ export function BulkReviewMatrixGrid({
                           )}
                           style={{ minWidth: KPI_COL_W, width: KPI_COL_W }}
                         >
-                          <div className="text-xs font-semibold leading-snug text-foreground line-clamp-2">
-                            {kpi.kpiName}
+                          <div className="flex items-start gap-1.5">
+                            <div className="text-xs font-semibold leading-snug text-foreground line-clamp-2 flex-1 min-w-0">
+                              {kpi.kpiName}
+                            </div>
+                            <OrgKpiBadge status={orgStatusByKpiKey?.get(kpi.key)} />
                           </div>
                           {showMeta && (
                             <div className="text-[10px] text-muted-foreground mt-1">
