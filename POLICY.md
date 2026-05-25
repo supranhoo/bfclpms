@@ -159,6 +159,20 @@ reviewer would sign off rows they cannot see). The helper
 `src/lib/bulkRowSelection.ts` is the canonical derivation. Regression:
 `src/lib/bulkRowSelection.test.ts` ("scopes to visible employees only").
 
+### §111.7.a.6 Bulk Sign-off has no Manual entry (v2.66.13.13)
+
+The Bulk Sign-off preview dialog (`BulkSignoffPreview` / `BulkApproveDialog`)
+MUST expose only the **Achieved** input. The "Manual 0–5 bypass" column is
+removed: every score in this flow comes from (a) the cascade resolver
+(`carriedScoreResolver`), (b) the computed rating derived from the
+reviewer-entered Achieved value, or (c) an Admin Override (which unlocks
+Achieved entry, not raw manual rating). Allowing manual rating in a bulk
+flow lets reviewers stamp arbitrary 0–5 numbers on dozens of cells without
+touching the underlying achievement evidence, which violates Policy §88
+(score traceability) for a bulk action. The RPC `bulk_write_stage_scores`
+keeps `p_manual_scores` for backward-compat callers, but the dashboard MUST
+NOT pass it.
+
 ## §111.6 Bulk Scoring KPI Detail RPC Source Contract (RCA 2026-05-25)
 
 The Bulk Scoring detail/write-as-Manager drawer RPC (`kpi_cell_detail`) MUST source organization KPI detail metadata from `public.org_kpi_values`. The obsolete `public.org_kpis` relation MUST NOT be referenced or recreated as a compatibility shim. Category display in this drawer MUST come from the mapped employee KPI (`kpis.category_id`) joined to `kra_categories`, so category visibility remains tied to the KPI row actually being reviewed. Workflow metadata MUST use the supported `get_employee_workflow(employee, period, year)` helper and degrade gracefully if workflow resolution fails. Regression: `src/test/kpiCellDetailContract.test.ts`.
