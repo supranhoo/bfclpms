@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import {
   ChevronDown, ChevronRight, Calculator, AlertTriangle, ArrowUp, ArrowDown,
-  Pencil, ShieldAlert,
+  ShieldAlert,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -66,7 +66,6 @@ function SourceBadge({ source }: { source: CarriedSource }) {
       source === 'override' && 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30',
     )}>
       {source === 'computed' && <Calculator className="h-3 w-3" aria-hidden />}
-      {source === 'manual' && <Pencil className="h-3 w-3" aria-hidden />}
       {source === 'override' && <ShieldAlert className="h-3 w-3" aria-hidden />}
       {SOURCE_LABEL[source]}
     </Badge>
@@ -129,7 +128,7 @@ export function BulkSignoffPreview({
         {totals.overrideCount > 0 && (
           <Badge variant="default" className="h-7 px-2 tabular-nums gap-1 bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30">
             <ShieldAlert className="h-3 w-3" aria-hidden />
-            {totals.overrideCount} manual/override
+            {totals.overrideCount} override
           </Badge>
         )}
         <Badge
@@ -174,8 +173,8 @@ export function BulkSignoffPreview({
 
       {/* ── Legend ──────────────────────────────────────────────────── */}
       <p className="text-[10px] text-muted-foreground leading-relaxed">
-        <strong>Badges:</strong> self · manager · skip-lvl · hr_pms · computed (rating from Achieved) · manual · override · no data.
-        Type an <strong>Achieved</strong> value to auto-compute rating, or a <strong>Manual</strong> 0-5 score to bypass the formula.
+        <strong>Badges:</strong> self · manager · skip-lvl · hr_pms · computed (rating from Achieved) · override · no data.
+        Type an <strong>Achieved</strong> value to auto-compute the rating.
       </p>
 
       {/* ── Per-employee rollup ──────────────────────────────────────── */}
@@ -225,16 +224,6 @@ function CellTable({
     };
     onCellInputChange?.(sid, next);
   };
-  const onManual = (sid: string, raw: string) => {
-    const trimmed = raw.trim();
-    const num = trimmed === '' ? null : Number(trimmed);
-    const clamped = num == null || !Number.isFinite(num) ? null : Math.max(0, Math.min(5, num));
-    onCellInputChange?.(sid, {
-      ...(inputs?.get(sid) ?? {}),
-      manualScore: clamped,
-    });
-  };
-
   const renderAchievedInput = (c: CellPreview) => {
     const rule = ruleFor(c);
     const v = inputs?.get(c.submission_id)?.achievedOverride ?? '';
@@ -278,24 +267,6 @@ function CellTable({
     );
   };
 
-  const renderManualInput = (c: CellPreview) => {
-    const v = inputs?.get(c.submission_id)?.manualScore;
-    return (
-      <Input
-        type="number"
-        inputMode="decimal"
-        step="0.5"
-        min={0}
-        max={5}
-        value={v == null ? '' : String(v)}
-        onChange={(e) => onManual(c.submission_id, e.target.value)}
-        className="h-7 w-[60px] text-xs px-1.5 text-right"
-        aria-label="Manual score 0-5"
-        placeholder="—"
-      />
-    );
-  };
-
   return (
     <div className="max-h-64 overflow-auto">
       {/* Desktop ≥ md */}
@@ -306,7 +277,6 @@ function CellTable({
             <th className="text-left p-2 font-medium text-muted-foreground">KPI</th>
             <th className="text-right p-2 font-medium text-muted-foreground">Wt%</th>
             {editable && <th className="text-right p-2 font-medium text-muted-foreground">Achieved</th>}
-            {editable && <th className="text-right p-2 font-medium text-muted-foreground">Manual</th>}
             <th className="text-right p-2 font-medium text-muted-foreground">Score</th>
             <th className="text-left p-2 font-medium text-muted-foreground">Source</th>
             <th className="text-right p-2 font-medium text-muted-foreground">Impact</th>
@@ -328,11 +298,6 @@ function CellTable({
               {editable && (
                 <td className="p-2 text-right">
                   {isRowEditable(c) ? renderAchievedInput(c) : <span className="text-muted-foreground">—</span>}
-                </td>
-              )}
-              {editable && (
-                <td className="p-2 text-right">
-                  {isRowEditable(c) ? renderManualInput(c) : <span className="text-muted-foreground">—</span>}
                 </td>
               )}
               <td className="p-2 text-right tabular-nums font-medium">
@@ -370,12 +335,6 @@ function CellTable({
                 <div className="flex items-center gap-2 pt-1">
                   <span className="text-[10px] text-muted-foreground w-14">Achieved</span>
                   {renderAchievedInput(c)}
-                </div>
-              )}
-              {editable && isRowEditable(c) && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-muted-foreground w-14">Manual</span>
-                  {renderManualInput(c)}
                 </div>
               )}
               <div className="flex items-center justify-between text-xs">

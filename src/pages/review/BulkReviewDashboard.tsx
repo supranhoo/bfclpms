@@ -441,7 +441,6 @@ export default function BulkReviewDashboard() {
     attachmentUrls: string[],
     extras?: {
       achievedValues?: Record<string, number | string | null>;
-      manualScores?: Record<string, number>;
       isOverride?: boolean;
     },
   ) => {
@@ -475,7 +474,6 @@ export default function BulkReviewDashboard() {
           })),
           reason,
           attachment_urls: attachmentUrls,
-          manual_scores: extras?.manualScores,
           achieved_values: extras?.achievedValues,
           is_override: extras?.isOverride,
         });
@@ -910,8 +908,8 @@ export default function BulkReviewDashboard() {
         uploaderUserId={user?.id ?? 'anonymous'}
         isLoading={isActionPending}
         onCancel={() => setConfirmApprove(false)}
-        onConfirm={({ reason, attachmentUrls, achievedValues, manualScores, isOverride }) =>
-          handleBulkApprove(reason, attachmentUrls, { achievedValues, manualScores, isOverride })
+        onConfirm={({ reason, attachmentUrls, achievedValues, isOverride }) =>
+          handleBulkApprove(reason, attachmentUrls, { achievedValues, isOverride })
         }
         mode={bulkAction?.kind === 'stage' ? 'signoff' : 'approve'}
         stageLabel={

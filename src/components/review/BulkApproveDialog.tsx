@@ -23,8 +23,6 @@ export interface BulkApproveSubmit {
   batchId: string;
   /** submission_id → reviewer-entered Achieved (raw string/number). */
   achievedValues?: Record<string, number | string | null>;
-  /** submission_id → reviewer-entered Manual rating 0-5. */
-  manualScores?: Record<string, number>;
   /** Admin "Override carried scores" toggle was ON when submitted. */
   isOverride?: boolean;
 }
@@ -104,8 +102,7 @@ export function BulkApproveDialog({
       const m = new Map(prev);
       const merged: CellInputs = { ...prev.get(submissionId), ...next };
       // Strip empties so we don't keep ghost entries.
-      if ((merged.achievedOverride == null || merged.achievedOverride === '')
-        && (merged.manualScore == null)) {
+      if (merged.achievedOverride == null || merged.achievedOverride === '') {
         m.delete(submissionId);
       } else {
         m.set(submissionId, merged);
@@ -129,13 +126,9 @@ export function BulkApproveDialog({
   const handleConfirm = () => {
     if (!canSubmit) return;
     const achievedValues: Record<string, number | string | null> = {};
-    const manualScores: Record<string, number> = {};
     inputs.forEach((v, sid) => {
       if (v.achievedOverride != null && v.achievedOverride !== '') {
         achievedValues[sid] = v.achievedOverride;
-      }
-      if (v.manualScore != null && Number.isFinite(v.manualScore)) {
-        manualScores[sid] = v.manualScore;
       }
     });
     onConfirm({
@@ -143,7 +136,6 @@ export function BulkApproveDialog({
       attachmentUrls: urls,
       batchId,
       achievedValues: Object.keys(achievedValues).length > 0 ? achievedValues : undefined,
-      manualScores: Object.keys(manualScores).length > 0 ? manualScores : undefined,
       isOverride: isOverride || undefined,
     });
   };
@@ -202,7 +194,7 @@ export function BulkApproveDialog({
                       Override carried scores (admin only)
                     </div>
                     <p className="text-[11px] text-muted-foreground">
-                      Unlocks Achieved / Manual entry on every row. Every override is audit-logged
+                      Unlocks Achieved entry on every row. Every override is audit-logged
                       with the previous carried value.
                     </p>
                   </div>
@@ -286,7 +278,7 @@ export function BulkApproveDialog({
             {actionableCount === 0 && cellCount > 0 && (
               <p className="text-[11px] text-destructive">
                 {isSignoff
-                  ? 'Enter Achieved or Manual for each row marked ●.'
+                  ? 'Enter an Achieved value for each row marked ●.'
                   : 'All cells lack prior scores and achievement values.'}
               </p>
             )}

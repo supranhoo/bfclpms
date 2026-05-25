@@ -1,67 +1,47 @@
-# Fix Bulk Sign-off Failure (`jsonb_object_length` does not exist)
+## Goal
 
-## Root Cause
-The migration `20260525123736_*.sql` introduces `public.bulk_write_stage_scores(...)` and uses `jsonb_object_length(p_manual_scores)` / `jsonb_object_length(p_achieved_values)` to record counts in the audit batch row. Postgres does **not** ship a `jsonb_object_length(jsonb)` function (only `jsonb_array_length` exists for arrays, and `json_object_keys` / `jsonb_object_keys` for objects). The RPC therefore aborts with `function jsonb_object_length(jsonb) does not exist`, surfaced in the UI as **"Sign-off failed"**.
+Remove the **Manual** score input from the Bulk Sign-off preview dialog. Reviewers should only ever type an **Achieved** value; the score must be computed from that (or carried forward from the resolver chain / admin override). Manual 0–5 bypass entry has no place in this UI.
 
-This blocks every bulk sign-off — including the admin Override path the user just configured.
+## Risk & Impact Report
 
-## Risk & Impact
-- **Data**: None. No row was written (RPC aborted before INSERT). No schema change required beyond replacing the function body.
-- **Workflow**: Restores sign-off; no behavior change to scoring/override logic.
-- **Regression**: Low — change is isolated to two expressions inside the batch-metadata `jsonb_build_object`.
-- **Mitigation**: Add a unit-style SQL assertion + ensure the helper expression is safe when the JSONB param is `NULL` or not an object.
+- **Data Impact:** None. The DB RPC `bulk_write_stage_scores` still accepts `p_manual_scores` (kept for backward compatibility); we simply stop sending it from this dialog. No schema change.
+- **Workflow Impact:** Reviewers lose the ability to type a 0–5 manual score directly in the bulk dialog. The Achieved → computed-rating path covers every UoM (numeric, binary, tiered, %). Admin Override still works because it unlocks Achieved on every row and the resolver flags those edits as `override`.
+- **UI/UX Impact:** Removes one table column (desktop) and one stacked row (mobile) from `Per-cell preview`. Header badge "4 manual/override" becomes "4 override" (or hidden when 0).
+- **Regression Risk:** Low. `carriedScoreResolver` still honors `manualScore` if ever passed — we just stop feeding it. Tests for the resolver remain green.
+- **Mitigation:** Update existing `BulkApproveDialog` test for the override-rollup count; update preview snapshot expectations.
 
-## Fix
-Replace both call sites with a NULL-safe object-key count:
+## Plan (Frontend only — POLICY §111.7.a.6)
 
-```sql
-COALESCE(
-  (SELECT count(*)::int FROM jsonb_object_keys(p_manual_scores)),
-  0
-)
-```
-(and the same for `p_achieved_values`).
+1. **`src/components/review/BulkSignoffPreview.tsx`**
+   - Remove `renderManualInput`, `onManual`, the `Manual` `<th>`/`<td>` (desktop) and the Manual stacked row (mobile).
+   - Update the legend line to drop the "or a Manual 0-5 score to bypass the formula" clause.
+   - Keep `SourceBadge` rendering of `manual`/`override` (historical rows may still carry that source from the resolver).
 
-`jsonb_object_keys` raises if given a non-object; current callers always pass `'{}'::jsonb` or an object, but we'll also guard with `jsonb_typeof(...) = 'object'` to be defensive:
+2. **`src/components/review/BulkApproveDialog.tsx`**
+   - Stop building/sending `manualScores`. Drop the `manualScores` field from the submit payload and the `onConfirm` arg type.
+   - Adjust the "needs input" guard so a row counts as needing input only when `achievedOverride` is empty (manualScore branch removed).
+   - Update the chip count label from `"… manual/override"` to `"… override"` (admin-override rows only).
 
-```sql
-CASE WHEN jsonb_typeof(p_manual_scores) = 'object'
-     THEN (SELECT count(*)::int FROM jsonb_object_keys(p_manual_scores))
-     ELSE 0 END
-```
+3. **`src/hooks/useBulkReview.ts`**
+   - Remove the `manual_scores` arg from the call site only (RPC param kept on the server). Type stays for back-compat callers.
 
-## Steps
+4. **`src/lib/carriedScoreResolver.ts`**
+   - Leave `manualScore` field intact (no breaking change). Update the doc-comment to note the bulk dialog no longer feeds it.
 
-1. **New migration** `supabase/migrations/<ts>_fix_bulk_write_stage_scores_jsonb_count.sql`
-   - `CREATE OR REPLACE FUNCTION public.bulk_write_stage_scores(...)` with the **identical signature** as the previous migration, body unchanged except the two `jsonb_object_length(...)` expressions replaced by the `CASE / jsonb_object_keys` form above.
-   - No RLS, no grants change (function already owned + granted in prior migration).
+5. **Tests**
+   - `BulkApproveDialog` test: assert payload no longer contains `manualScores` even when achieved values are typed.
+   - `BulkSignoffPreview` test (if present): assert no `Manual` header is rendered.
+   - `carriedScoreResolver` tests: unchanged (still validate manual/override precedence for any future caller).
 
-2. **SSOT updates**
-   - `POLICY.md` — append §111.7.a.5 (v2.66.13.12): RCA note that Postgres lacks `jsonb_object_length`; canonical pattern for counting JSONB object keys in our RPCs is `jsonb_object_keys` + `count(*)`. Forbid future use of `jsonb_object_length`.
-   - `DOCUMENTATION.md` — add v2.66.13.12 entry: "Hotfix: bulk sign-off RPC failed with `jsonb_object_length does not exist`. Replaced with object-key count."
-
-3. **Regression test** (`src/lib/bulkSignoffImpact.test.ts` is JS-side; the failing surface is SQL).
-   - Add a lightweight assertion in the migration itself:
-     ```sql
-     DO $$ BEGIN
-       PERFORM public.bulk_write_stage_scores(
-         p_submission_ids := ARRAY[]::uuid[],
-         p_stage := 'auditor',
-         p_remark := 'noop probe (min 10 chars).',
-         p_attachments := '[]'::jsonb,
-         p_manual_scores := '{}'::jsonb,
-         p_achieved_values := '{}'::jsonb,
-         p_is_override := false,
-         p_batch_reason := 'self_test',
-         p_dry_run := true
-       );
-     END $$;
-     ```
-     This runs at migration time and fails loudly if the signature/body regresses.
+6. **SSOT updates**
+   - `POLICY.md` §111.7.a.6 (v2.66.13.13): "Bulk Sign-off preview exposes only the Achieved column; Manual 0–5 bypass entry is removed. Computed rating is the only auto-fill path; Admin Override remains."
+   - `DOCUMENTATION.md` v2.66.13.13 changelog entry.
 
 ## Out of Scope
-- Override semantics, Achieved/Manual recompute, row-checkbox scope fix — all untouched.
-- No frontend code changes.
+
+- The single-cell scoring dialog and Manager/HR PMS standalone screens (untouched).
+- Any DB function changes — `bulk_write_stage_scores` keeps `p_manual_scores` for compatibility.
 
 ## Rollback
-Re-apply the prior `CREATE OR REPLACE` body. Function is replace-in-place; no destructive DDL.
+
+Revert the component diff; resolver/RPC are unchanged so no migration is needed.
