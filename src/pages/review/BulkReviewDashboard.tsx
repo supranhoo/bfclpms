@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle, Layers, RefreshCw, Search, EyeOff, Eye,
   Calendar, CalendarDays, Building2, Network, Factory, Users, Tag, UserCog, Target,
@@ -80,6 +81,7 @@ export default function BulkReviewDashboard() {
   const { effectiveRole } = useAuth();
   const { toast } = useToast();
   const flagQuery = useBulkReviewFlag();
+  const qc = useQueryClient();
 
   const now = new Date();
   const defaultPeriod = CALENDAR_MONTHS[now.getMonth()] || 'April';
@@ -496,7 +498,14 @@ export default function BulkReviewDashboard() {
                 variant="outline"
                 size="icon"
                 className="h-9 w-9"
-                onClick={() => snapshot.refetch()}
+                onClick={() => {
+                  // Manual refresh — invalidate snapshot + dependent side-queries
+                  // (org-KPI gap flags, employee attributes for filters) so a
+                  // single click reflects external mapping/profile changes.
+                  qc.invalidateQueries({ queryKey: ['bulk_review_snapshot_all'] });
+                  qc.invalidateQueries({ queryKey: ['rpc_kpi_org_flags'] });
+                  qc.invalidateQueries({ queryKey: ['bulk_employee_attrs'] });
+                }}
                 disabled={snapshot.isFetching}
                 title="Refresh"
                 aria-label="Refresh snapshot"
