@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import type { BulkReviewRow } from '@/hooks/useBulkReview';
 import { classifyOrgKpiRow } from '@/lib/orgKpiGap';
 import {
-  kpiRowKey as makeKpiRowKey, submissionIdsForKpiRow, toggleKpiRowSelection,
+  kpiRowKey as makeKpiRowKey, toggleKpiRowSelection,
 } from '@/lib/bulkRowSelection';
 
 type ViewerStage =
