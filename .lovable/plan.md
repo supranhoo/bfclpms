@@ -1,117 +1,77 @@
-# Bulk Review — KRA Filter + Full Employee Scroll
+## 1. Assumptions
+- You want the Bulk Review matrix to work at normal 100% browser zoom.
+- “All KRA” means every KRA/KPI row matching the active filters should remain visible in the matrix, not disappear because only a 20-employee window is selected.
+- You prefer horizontal scrolling across employee columns, while the left `KPI / KRA` column stays frozen.
+- No database/RPC change is required because `useBulkReviewSnapshotAll` already accumulates the loaded scope pages.
 
-Two related toolbar/data improvements to `/review/bulk-scoring`. No schema, no RPC, no scoring changes.
+## 2. Clarifications
+Not Applicable — the desired behavior is clear from your screenshots and explanation.
 
----
+## 3. Risk & Impact Report
+- **Data Impact:** No schema, RLS, historical data, scoring, workflow, or audit data changes.
+- **Workflow Impact:** No reviewer permissions or approval workflow changes.
+- **UI/UX Impact:** Matrix interaction changes from employee-window paging to true horizontal employee scrolling. The left KPI/KRA column remains sticky while employee names/cells scroll right.
+- **Regression Risk:** Medium UI risk because wide matrices can become heavy if all employees render at once.
+- **Scalability Impact:** Existing 25k-cell scope cap remains the safety guard. Column widths will be fixed and compact so 100% zoom remains usable. If later scopes exceed this comfortably, row/column virtualization should be added, but this request can be solved without changing backend logic.
+- **Mitigation Plan:** Keep the existing click-to-load + 25k cap, avoid extra queries, use fixed column widths, preserve sticky headers, and add a source-level regression test around the removed employee windowing behavior.
 
-## Part A — KRA Filter (Row 2, cascading from Category)
+## 4. Step-by-step Plan
+1. **Remove employee windowing from Bulk Review dashboard**
+   - Stop slicing employees into 20-column windows.
+   - Remove `EmployeeWindowPager` rendering from `BulkReviewDashboard.tsx`.
+   - Pass the full filtered row set (`loadedRows`) into `BulkReviewMatrixGrid`.
 
-**Goal:** Add a `🎯 All KRAs` filter between **Categories** and the view-mode pill so users can drill down: Company → Division → BU → Dept → Category → **KRA** → KPI (via search).
+2. **Make the matrix horizontally scrollable at 100% zoom**
+   - In `BulkReviewMatrixGrid.tsx`, keep the matrix inside an `overflow-auto` container.
+   - Give the table an explicit minimum width based on: frozen KPI/KRA column + employee column count × fixed employee column width.
+   - Keep the header row sticky at the top.
+   - Keep the first `KPI / KRA` column sticky on the left with a higher z-index and shadow.
 
-**Behavior:**
-- Cascades from Category: if a Category is selected, KRA list shows only KRAs belonging to that Category for the active Period/Year. If Category = All, shows all KRAs across categories.
-- Loads from existing `kra_categories` + `kpis` master (one cached query, reused query key).
-- Selection added to existing `filters` object, passed to `bulk_scope_preview` and `bulk_review_snapshot` as a `kra_names string[]` filter (RPCs already accept arbitrary JSON filters — adding a key is non-breaking).
-- Resets to "All KRAs" whenever Category or Period changes.
+3. **Ensure “All KRAs” shows actual filtered data**
+   - Build KRA/KPI rows from the full filtered dataset, not a visible employee slice.
+   - Keep Category/KRA/Search/Department/Company filters exactly as-is.
+   - Preserve client-side KRA filtering after the accumulated snapshot is loaded.
 
-**Grid math:**
-- Row 2: `grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8` (was `xl:grid-cols-7`).
-- View-mode pill stays outside the grid, right-anchored with `border-l`.
-- All cells keep `h-8 w-full text-xs`, icon + truncated placeholder. No new row, no wrapping.
+4. **Improve usability for wide employee lists**
+   - Use compact, stable employee column widths.
+   - Keep employee header names readable with controlled wrapping/truncation.
+   - Keep the matrix height bounded so vertical and horizontal scrollbars are available inside the matrix surface.
 
----
+5. **Update documentation/memory**
+   - Update `DOCUMENTATION.md` Version History with this UI behavior change.
+   - Update `mem/features/review/bulk-review-dashboard` to replace the prior 20-employee windowing note with horizontal-scroll/frozen-column behavior.
+   - If `CHANGELOG_2026.md` exists, append the current-week note per project preference.
 
-## Part B — Full Employee Horizontal Scroll in Matrix Mode
+## 5. UI Changes
+- **Location:** `/review/bulk-scoring`, loaded Bulk Review matrix.
+- **Visual change:** The employee pager row (`Employees 1–20 of N`, Prev/Next/Jump) will be removed.
+- **Interaction change:** Users scroll horizontally to the right to see all mapped employees.
+- **Frozen column:** The left `KPI / KRA` column remains visible while scrolling employee names and score cells.
+- **Responsiveness:** At 100% zoom, the matrix fits the viewport height and provides internal scrollbars instead of requiring browser zoom-out.
 
-**Goal:** Make all 146 mapped employees reachable in matrix view (currently capped at ~14 because snapshot returns 200 cells/page).
+## 6. Implementation
+- Modify only frontend presentation/state code:
+  - `src/pages/review/BulkReviewDashboard.tsx`
+  - `src/components/review/BulkReviewMatrixGrid.tsx`
+- Remove unused import/state/constants related to employee windowing.
+- Keep `src/components/review/EmployeeWindowPager.tsx` only if still referenced elsewhere; otherwise remove it to avoid dead code.
 
-**Approach (Option A — no RPC change):**
-1. On **Load Scope**, fetch snapshot pages in a loop at `page_size = 500` (RPC max) until `rows.length >= total` OR safety guard (`preview.cell_count`, already capped at 25k by §0).
-2. Accumulate rows into a single dataset stored in the snapshot hook.
-3. Matrix grid then has **all** employees as columns — existing CSS `overflow-auto` makes horizontal scroll work end-to-end.
-4. Add a small **Employee window pager** above the matrix (matrix mode only): `Employees 1–20 of 146  ◀  ▶  | Jump to…` combobox. Window size 20 (configurable constant).
-5. Flat grid (non-matrix) keeps its existing row-cell pagination unchanged.
+## 7. Tests
+- Add/update a focused test that verifies Bulk Review no longer windows employees before rendering the matrix.
+- Validate the source no longer renders `EmployeeWindowPager` from `BulkReviewDashboard.tsx`.
+- Existing data/scoring tests remain unaffected because the scoring logic is unchanged.
 
-**Why employee-windowing on top of horizontal scroll:**
-Rendering 146 columns × ~15 KPI rows = 2,200 sticky-positioned table cells. Even with virt, scrolling sideways through 146 columns is fatiguing. The window pager gives operators a fast "jump to AKxxx" path while the in-window scroll handles fine-grained movement.
+## 8. DOCUMENTATION.md updates
+- Add a new Version History entry documenting:
+  - All filtered KRA/KPI rows render from the accumulated dataset.
+  - Employee columns are horizontally scrollable.
+  - `KPI / KRA` remains frozen.
+  - No RPC/RLS/scoring changes.
 
----
+## 9. POLICY.md updates
+Not Applicable — this is a UI rendering/navigation correction only. It does not alter business rules, scoring policy, workflow, permissions, or data governance.
 
-## Risk & Impact Report
-
-| Dimension | Impact | Mitigation |
-|---|---|---|
-| **Data** | None. Pure read-side filter + extra paged fetches of existing RPC. | No schema change. |
-| **Workflow** | None. No write paths touched. | — |
-| **UI/UX** | Row 2 reflows from 7→8 cells; matrix view gains pager strip. | Test at 1280 / 1024 / 768 / 571 widths. |
-| **Regression** | Flat grid view, score writes, drawer, bulk approve, re-open — all unchanged. | Snapshot hook signature extended additively; old callers unaffected. |
-| **Scalability** | Worst case: 25k cells / 500 page = 50 RPC calls on Load Scope. Acceptable, gated behind explicit user click + preview cap. | Show loading state + count badge during accumulation. |
-| **Rollback** | Revert single commit; feature flag `feature_bulk_review_dashboard` still master kill-switch. | — |
-
----
-
-## Step-by-step Plan
-
-1. **`useBulkReviewSnapshot` → add `accumulateAll: boolean` mode**  
-   When true, loop `p_page` until `rows.length >= total`. Keep page_size = 500. Cache result under existing key + `:all` suffix.  
-   _Verification:_ Unit test with mocked RPC returning multi-page payloads, assert merged rows + correct total.
-
-2. **`bulk_scope_preview` + `bulk_review_snapshot` filter shape**  
-   Extend `BulkReviewFilters` type with optional `kra_names?: string[]`. RPC `p_filters` JSON passes through — no SQL change needed (RPCs already AND any provided key).  
-   _Verification:_ Hook test asserts the filter key is forwarded.
-
-3. **New hook `useBulkReviewKraOptions(period, year, categoryId?)`**  
-   Lightweight query joining `kra_categories` + distinct `kpis.kra_name` for the period. Cascades from category when provided.  
-   _Verification:_ Unit test for cascade behavior (all KRAs vs category-scoped).
-
-4. **`BulkReviewDashboard.tsx` — toolbar**  
-   - Add KRA Select to Row 2 grid, bump grid to `xl:grid-cols-8`.  
-   - Wire `kra_names` into `filters` state; reset on Category/Period change (via `useEffect`).  
-   _Verification:_ Visual at xl/lg/sm; filter narrows snapshot count.
-
-5. **`BulkReviewDashboard.tsx` — accumulate + employee window**  
-   - When `viewMode === 'matrix'` and `scopeLoaded`, call snapshot with `accumulateAll: true`.  
-   - Slice loaded rows by `employees[empWindow.start : empWindow.end]` before passing to `BulkReviewMatrixGrid`.  
-   - Render `EmployeeWindowPager` strip above matrix (prev/next + jump combobox).  
-   _Verification:_ Manual scroll through all 146 emps; jump-to works; flat-grid mode untouched.
-
-6. **Tests**  
-   - `useBulkReviewSnapshot.accumulate.test.ts` — multi-page merge.  
-   - `useBulkReviewKraOptions.test.ts` — cascade from category.  
-   - `BulkReviewDashboard.filters.test.tsx` — KRA filter resets when Category changes.
-
-7. **Docs**  
-   - `DOCUMENTATION.md` → append `v2.66.12.5` entry: KRA filter + matrix employee-window pager + accumulate-all snapshot mode.  
-   - `mem://features/review/bulk-review-dashboard` → add note: `accumulateAll` only used in matrix mode; capped by §0 preview cap.
-
----
-
-## UI Changes (explicit)
-
-**Row 2 toolbar (sticky, `h-11`)** — 8 cells, icon + truncated label:
-
-```text
-[📅 April] [🗓 2026] [🏢 All Companies] [🌿 All Divisions] [🏭 All BUs] [👥 All Depts] [🏷 All Categories] [🎯 All KRAs]  │  Wt% · Score · Both · 👁
-```
-
-**Above the matrix (matrix mode only):**
-
-```text
-Employees 1–20 of 146    ◀ Prev   Next ▶     |  🔎 Jump to employee…
-```
-
-Flat-mode toolbar/pager: **unchanged**.
-
----
-
-## Files Touched
-
-- `src/hooks/useBulkReview.ts` — add `accumulateAll` mode, extend filter type
-- `src/hooks/useBulkReviewKraOptions.ts` — new
-- `src/pages/review/BulkReviewDashboard.tsx` — add filter, accumulate-all wiring, employee window pager
-- `src/components/review/EmployeeWindowPager.tsx` — new (small)
-- Tests: 3 new files (above)
-- `DOCUMENTATION.md` — v2.66.12.5 entry
-- `mem://features/review/bulk-review-dashboard` — accumulate-all note
-
-No DB migration. No RPC signature change. No POLICY.md change (no new business rule).
+## 10. Post-implementation notes
+- Rollback is simple: revert the two frontend edits and documentation/memory updates.
+- Backup coverage is unaffected because no database tables or migrations are added.
+- Used the `ui-ux-pro-max` skill for the 100% zoom, scroll behavior, sticky column, and data-density UX decisions.

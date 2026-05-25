@@ -37,7 +37,6 @@ import {
 } from '@/hooks/useBulkReview';
 import { BulkCellDrawer } from '@/components/review/BulkCellDrawer';
 import { BulkReviewMatrixGrid } from '@/components/review/BulkReviewMatrixGrid';
-import { EmployeeWindowPager } from '@/components/review/EmployeeWindowPager';
 import { useToast } from '@/hooks/use-toast';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
@@ -59,11 +58,6 @@ const VIEWER_STAGES = [
   { value: 'auditor', label: 'Auditor' },
   { value: 'management', label: 'Management' },
 ];
-
-/** Matrix employee window — keeps sticky-column rendering manageable on
- * tenants with 100+ mapped employees while preserving full reachability via
- * Prev / Next / Jump pager (see EmployeeWindowPager). */
-const EMP_WINDOW_SIZE = 20;
 
 /**
  * Bulk Review Dashboard (PRD v2.0, Phase 1 — M2 shell).
