@@ -12,6 +12,7 @@
  */
 
 import { calculateRating } from '@/lib/ratingCalculation';
+import type { QualitativeOption } from '@/lib/qualitativeUom';
 
 export type SignoffStage = 'manager' | 'skip_level' | 'hr_pms' | 'auditor';
 
@@ -115,7 +116,7 @@ function computeFromAchievement(
     0, // weightage not needed for rating, applied in impact step
     (kpi.uom_type as 'numeric' | 'binary' | 'tiered') || 'numeric',
     Array.isArray(kpi.qualitative_options)
-      ? (kpi.qualitative_options as Array<{ label: string; rating: number }>)
+      ? (kpi.qualitative_options as QualitativeOption[])
       : null,
     kpi.uom,
     (kpi.threshold_mode as 'absolute' | 'ratio') || 'absolute',
