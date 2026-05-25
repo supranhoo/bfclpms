@@ -1,74 +1,68 @@
 ## Goal
 
-Two UX upgrades to the Bulk Review virtual grid, scoped strictly to frontend/presentation. No RPC, schema, or workflow changes.
-
-1. **Horizontal Select / Deselect handles** — per-row toggle that selects every cell of one employee×KPI row (today a row already maps to one selectable `submission_id`, so this becomes a clearer per-employee and per-KPI bulk selector via header chips, plus a fast keyboard-style "select all in this group" affordance).
-2. **"Show employees for this KPI only" filter** — clicking a KPI name (or a focus icon next to it) collapses the grid to that single KPI across all visible employees, with a removable chip to clear.
-
-Both actions share a single batch on sign-off (current contract preserved).
-
----
+In the Review Timeline, a single admin action (e.g. one Bulk HR PMS sign-off) currently renders as 4–5 cards because DB triggers and the reconciler each write their own `kpi_audit_logs` row. We will **group** all rows that belong to the same transaction under one parent card with an expandable "System cascade" section. No DB changes — audit integrity preserved.
 
 ## Risk & Impact Report
 
-- **Data Impact:** None. Pure client state.
-- **Workflow Impact:** None. Uses existing `bulk_write_stage_scores` + `bulk_approve_submissions`.
-- **UI/UX:** Adds (a) a small "select column" header dropdown ("All visible / None / Invert"), (b) a focus icon on the KPI cell, (c) an active-filter chip strip above the grid alongside existing filters.
-- **Regression Risk:** Low. Selection set already keyed by `submission_id`; new toggles call existing setters. KPI filter is an additional predicate before rows reach `BulkReviewVirtualGrid`.
-- **Scalability:** No new queries. Filter narrows the in-memory rows, reducing virtualiser work.
-- **Mitigation:** Unit tests for the new selection helper + KPI filter predicate; URL-state for the KPI focus so deep links + back button work.
-
----
+- **Data Impact:** None. UI-only; `kpi_audit_logs` untouched.
+- **Workflow Impact:** None.
+- **UI/UX Impact:** Timeline becomes ~1 card per human action instead of 4–5. Cascade detail still accessible via "Show system events (N)" expander.
+- **Regression Risk:** Low. The grouping is pure transform on the fetched array; if grouping mis-fires, worst case is rows render exactly as today (fallback = no grouping).
+- **Scalability:** O(n) single pass; n ≤ a few hundred rows per KPI.
+- **Mitigation:** Unit tests on the grouping helper covering (a) the exact 5-row Bulk HR PMS cascade from this RCA, (b) lone human actions, (c) lone system rows (no parent), (d) multiple distinct cascades in same timeline.
 
 ## Plan
 
-### A. Horizontal select handles
-1. Replace the header checkbox in `BulkReviewVirtualGrid` with a small `DropdownMenu` containing:
-   - **Select all visible** (current behaviour of `onToggleAll`)
-   - **Deselect all**
-   - **Invert selection**
-   - **Select all for this KPI** — only enabled when KPI filter is active
-2. Add a row-hover affordance: hovering the KPI cell reveals a "Select all rows of this KPI" mini-button. Clicking selects every visible row sharing the same `kpi_id` (still single batch — answer 3).
-3. Same affordance on the employee cell ("Select all rows of this employee"), gated behind a feature flag prop so we can ship KPI-first if preferred.
+### 1. New helper: `src/lib/timelineGrouping.ts` (+ test)
 
-### B. "Show only this KPI" filter
-1. Add a `focus` icon (`Crosshair` from lucide) next to the KPI name in the grid row; clicking it sets a new `kpiFocusId` filter.
-2. `kpiFocusId` is persisted in the URL via `useUrlFilterStateNullable('kpi')` so it survives reloads and matches the project's deep-link convention.
-3. Filtering is applied alongside existing filters (search, designation, grade, manager, KRA). A removable chip "KPI: <name> ✕" appears in the active-filters row.
-4. When `kpiFocusId` is set, the KRA column collapses to a single label and the grid header shows a small badge with the cell count for that KPI.
+Pure function `groupTimelineEvents(logs: AuditLog[]): GroupedEvent[]` where:
 
-### C. Shared bulk action contract
-- Bulk Approve / Sign-off behaviour is unchanged: one batch reason + optional attachments applied to every selected row (matches v2.66.13.6 RPC).
+```text
+GroupedEvent = { parent: AuditLog; children: AuditLog[] }
+```
 
----
+Grouping rules (applied per transaction bucket — same `performed_by` + `created_at` truncated to the second):
 
-## Files to change
+- **System/trigger actions** (children candidates):
+  - `SUBMISSION_SCORE_CHANGED` when `metadata.source = 'safety_net_trigger'`
+  - `STATUS_TRANSITION` (always — it's a trigger echo of a status write)
+  - `RECONCILE_STATUS` (reconciler tool — informative but a side-effect)
+- **Parent priority** (first match wins within the bucket):
+  1. Any `ADMIN_*` / `BULK_STAGE_SIGNOFF_*` / `BULK_*` / `MANAGEMENT_*` / `MANAGER_*` / `AUDITOR_*` / `SELF_REVIEW_*` / `HR_PMS_*` / `STATUS_CHANGED` (explicit human action)
+  2. Otherwise `RECONCILE_STATUS` becomes the parent (so it's still visible when no human row exists in the bucket)
+  3. Otherwise the first row in the bucket is the parent (safe fallback)
+- Children are sorted in the original DB order; parent keeps its own timestamp.
 
-- `src/pages/review/BulkReviewDashboard.tsx` — add `kpiFocusId` URL-bound state, pass to grid, add chip, pass selection helpers.
-- `src/components/review/BulkReviewVirtualGrid.tsx` — header dropdown, hover focus icon, hover "select all of this KPI" button, accept `onFocusKpi` + `onSelectAllForKpi` props.
-- `src/lib/bulkRowSelection.ts` (new) — pure helpers: `selectAllByKpi`, `invertSelection`, `selectAllByEmployee`. Easier to unit-test than inline grid logic.
-- `src/lib/bulkRowSelection.test.ts` (new) — covers KPI/employee selectors, invert, and "select all visible".
-- `src/test/bulkReviewKpiFilter.test.ts` (new) — asserts `kpiFocusId` narrows rows correctly and clears via chip.
-- `DOCUMENTATION.md` — v2.66.13.7 entry.
-- `POLICY.md` — §111.7.b note that bulk-action contract is unchanged; new affordances are presentation-only.
-- `mem/features/review/bulk-review-dashboard` — append entry.
+### 2. `KpiTimeline.tsx` rendering
 
----
+- Replace `auditLogs.map(...)` with `groupTimelineEvents(auditLogs).map(...)`.
+- Parent card renders unchanged.
+- If `children.length > 0`, append a small expandable footer inside the parent card:
+  - Collapsed: `▸ Show system events (N)` — muted, text-xs.
+  - Expanded: vertical stack of child rows (same `formatDetails` + icon/label as today, but rendered smaller and indented; no separate timeline dot).
+- Expansion state is local component state (`useState<Set<string>>` keyed by parent id).
 
-## UI Change Summary
+### 3. Tests
 
-- **Where:** `/dashboard?view=team` Bulk Review grid.
-- **What changes visually:**
-  - Header checkbox becomes a checkbox + chevron dropdown.
-  - Hovering a row reveals a faint crosshair icon on the KPI cell and a "select group" button on both employee and KPI cells.
-  - A new chip row above the grid shows active KPI focus with an ✕.
-- **Interaction impact:** All existing clicks unchanged. New affordances are additive and keyboard-accessible (`aria-label` on each).
-- **Responsiveness:** Hover affordances degrade to always-visible on touch (`@media (hover: none)`), matching existing grid patterns.
+- `src/lib/timelineGrouping.test.ts`:
+  - Reproduces the exact 5-row cascade from this RCA → expects 1 group with parent `BULK_STAGE_SIGNOFF_HR_PMS` and 4 children.
+  - A lone `SELF_REVIEW_SUBMITTED` → 1 group, 0 children.
+  - Two distinct cascades 5 seconds apart → 2 groups.
+  - Orphan `RECONCILE_STATUS` (no human row in bucket) → becomes its own parent, not hidden.
 
----
+### 4. SSOT updates
 
-## Out of scope (explicitly not doing)
+- `DOCUMENTATION.md`: new entry under Review Timeline — "v2.66.13.8 — Cascading audit rows grouped under parent human action (UI-only)."
+- `POLICY.md`: append note "Audit log preserves every system trigger row for immutability. UI groups same-transaction rows under the originating human action; raw rows remain queryable in DB."
+- `mem/architecture/database/kpi-audit-logs-canonical`: add a sentence that any new UI consumer must group via `groupTimelineEvents`.
 
-- Per-stage cell selection (would require splitting a row into multiple selectable units and a new batching contract).
-- Cross-stage batch grouping.
-- Server-side filtering — focus filter stays client-side because rows are already in memory after the scope query.
+## Files
+
+- **Create:** `src/lib/timelineGrouping.ts`, `src/lib/timelineGrouping.test.ts`
+- **Edit:** `src/components/dashboard/KpiTimeline.tsx`, `DOCUMENTATION.md`, `POLICY.md`, `mem/architecture/database/kpi-audit-logs-canonical`
+
+## Out of scope
+
+- DB-level dedupe of trigger rows.
+- Changing the timeline used elsewhere (`OrgKpiHistoryTimeline`, etc.).
+- Persisting expand/collapse state across dialog reopens.
