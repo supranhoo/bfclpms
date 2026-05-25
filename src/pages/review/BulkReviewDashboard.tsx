@@ -486,6 +486,8 @@ export default function BulkReviewDashboard() {
           applied: res.applied ?? 0,
           advanced: typeof advanced === 'number' ? advanced : null,
           skipped: res.skipped ?? [],
+          relocked: (res as any).relocked ?? 0,
+          relockedNonTerminal: (res as any).relocked_non_terminal ?? 0,
         });
         toast({
           title: summary.title,
