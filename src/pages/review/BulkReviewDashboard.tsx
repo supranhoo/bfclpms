@@ -346,7 +346,7 @@ export default function BulkReviewDashboard() {
               size="sm"
               className="h-9"
               disabled={!canLoad}
-              onClick={() => { setEmpWindowStart(0); setScopeLoaded(true); }}
+              onClick={() => { setScopeLoaded(true); }}
             >
               Load Scope
               {activeFilterCount > 0 && (
@@ -576,17 +576,8 @@ export default function BulkReviewDashboard() {
                   No KPIs match the selected scope.
                 </p>
               ) : (
-                <>
-                  {employeeList.length > EMP_WINDOW_SIZE && (
-                    <EmployeeWindowPager
-                      employees={employeeList}
-                      windowSize={EMP_WINDOW_SIZE}
-                      start={empWindowStart}
-                      onChange={setEmpWindowStart}
-                    />
-                  )}
                   <BulkReviewMatrixGrid
-                    rows={windowedRows}
+                    rows={loadedRows}
                     viewerStage={viewerStage}
                     selectedSubmissionIds={selectedIds}
                     onToggleSubmission={toggleOne}
@@ -594,11 +585,10 @@ export default function BulkReviewDashboard() {
                     onCellClick={setActiveRow}
                     displayMode={displayMode}
                   />
-                </>
               )}
 
-              {/* Cell-based pagination removed: snapshotAll now loads every page
-                  on Load Scope. Employee navigation handled by EmployeeWindowPager. */}
+              {/* Snapshot loads every page on Load Scope; employees scroll
+                  horizontally with the KPI/KRA column frozen on the left. */}
 
           {/* Action toolbar */}
           {selectedIds.size > 0 && (
