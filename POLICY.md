@@ -77,6 +77,37 @@ Rules:
 
 Regression: `src/test/bulkWriteStageScoresContract.test.ts`, `src/test/bulkApproveDialogSignoffMode.test.tsx`.
 
+### §111.7.a.2 Achievement-based 5th-rung fallback & impact preview (v2.66.13.9)
+
+When the 4-rung inheritance cascade (§111.7.a) yields NULL because no prior
+stage scored a cell, `public.bulk_write_stage_scores` MUST attempt a 5th
+rung: compute a rating from the row's own `kpis` thresholds (R0–R5) and
+`review_submissions.achieved_value` via
+`public.fn_compute_rating_from_achievement(p_kpi, p_achieved_value)`.
+
+Rules:
+
+- **Per-employee, never shared.** Every cell uses its OWN `kpis` row's Wt%,
+  formula (`criteria`, `threshold_mode`, `uom_type`, `uom`) and R0–R5
+  thresholds. Two employees with different formulas MUST produce different
+  ratings for the same achievement.
+- Returns NULL when achievement is missing or no threshold is parseable.
+  The cell is then skipped with the existing `no_prior_score` reason.
+- Successful compute stamps `kpi_audit_logs.new_value.inherited_from =
+  'computed_from_achievement'` for transparency.
+- `final_score` immutability (§88) is unaffected — this rung only fires for
+  intermediate stage cells whose `final_score IS NULL`.
+
+**Dialog impact preview** — `BulkApproveDialog` in `signoff` mode MUST render
+a per-cell + per-employee impact summary (`BulkSignoffPreview.tsx`) built by
+`src/lib/bulkSignoffImpact.ts`. The per-employee rollup MUST use
+Dashboard-parity weighted-score math (`Σ rating × wt / Σ wt`, `is_na` and
+unscored rows excluded — Core memory). The "Sign off" CTA MUST display
+`Sign off N of M` when any cell is skipped by the 5-rung cascade, and MUST
+disable when no cell is actionable.
+
+Regression: `src/lib/carriedScoreResolver.test.ts`, `src/lib/bulkSignoffImpact.test.ts`.
+
 ## §111.6 Bulk Scoring KPI Detail RPC Source Contract (RCA 2026-05-25)
 
 The Bulk Scoring detail/write-as-Manager drawer RPC (`kpi_cell_detail`) MUST source organization KPI detail metadata from `public.org_kpi_values`. The obsolete `public.org_kpis` relation MUST NOT be referenced or recreated as a compatibility shim. Category display in this drawer MUST come from the mapped employee KPI (`kpis.category_id`) joined to `kra_categories`, so category visibility remains tied to the KPI row actually being reviewed. Workflow metadata MUST use the supported `get_employee_workflow(employee, period, year)` helper and degrade gracefully if workflow resolution fails. Regression: `src/test/kpiCellDetailContract.test.ts`.
