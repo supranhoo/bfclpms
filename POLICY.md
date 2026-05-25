@@ -404,6 +404,12 @@ All SLA thresholds are admin-configurable via System Settings → Workflow Setti
 - Data owners can enter values and propagate for their assigned KPIs
 - Access controlled via RLS policies
 
+### 11.6 Bulk Review Org-GAP Indicator
+
+- Bulk Review may display an `ORG · gap` indicator only when the complete loaded row has a mixed org-level mapping state.
+- Org-flag lookups for large scopes MUST be batched; missing lookup rows caused by client/API limits must not be treated as a real mapping gap.
+- Manual Refresh must invalidate both the matrix snapshot and the org-flag lookup so corrected mappings are visible without realtime.
+
 ---
 
 ## 12. Rollback Policy
