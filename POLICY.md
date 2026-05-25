@@ -1929,6 +1929,22 @@ f. **Non-admin path unchanged.** Self-service Rollback Requests (§12.1) remain 
 
 ---
 
+### §88.4 — Admin-Override Force-Approve at Terminal Stage (v2.66.13.18)
+
+The §88 immutability rule and the sequential workflow guard in `reconcile_workflow_statuses` MAY be deliberately bypassed by an **Admin only**, via the Bulk Sign-off "Override" toggle, to approve a KPI directly when the acted stage is the employee's resolved terminal review stage.
+
+a. **Eligibility (all must hold).** (1) Caller has the `admin` role; (2) `p_is_override = true`; (3) acted stage key equals the employee's terminal stage for that period's workflow template; (4) the KPI is not already approved (the already-approved path is governed by §88.3).
+b. **Effect.** `kpis.status` is set to `'approved'`; `review_submissions.final_score` and `final_rating` are stamped from the acted-stage score; the workflow reconciler is **not** invoked for this row (the function already wrote the terminal state).
+c. **Non-terminal admin overrides cannot approve.** When the acted stage is not the terminal stage, only the role-specific score column is written. Status, `final_score`, and `final_rating` remain unchanged. This is the symmetric guarantee to §88.3(c) for non-approved rows.
+d. **Mandatory audit trail.** Each force-approval inserts a `kpi_audit_logs` row with action `ADMIN_BULK_OVERRIDE_FORCE_APPROVE`, carrying `previous_status`, the new `final_score` / `final_rating`, the `batch_id`, the acted stage, the resolved terminal stage, and the ≥10-char batch reason.
+e. **Notifications.** Each force-approval dispatches an `admin_override_force_approve` notification to the employee, their reporting manager, and every active HR PMS user.
+f. **RPC contract.** `bulk_write_stage_scores` returns a new `override_approved` counter alongside `relocked` and `relocked_non_terminal`. The frontend toast (`summariseStageWriteOutcome`) reports the count distinctly so reviewers can see "X approved by override" separately from regular advancements and re-stamps.
+g. **Non-admin path unchanged.** Non-admin reviewers continue to be blocked by `self_not_submitted`, `final_locked`, and the workflow sequence — they cannot force-approve under any circumstance.
+
+Regression: `src/test/bulkWriteStageScoresContract.test.ts` (force-approve action and reconcile exclusion), `src/lib/summariseSkipReasons.test.ts` (override-approved counter title + line).
+
+---
+
 ## §89 — Per-KPI Audit Granularity for Org KPI Propagation (v2.66.7.3)
 
 Every Org KPI propagation event must produce **one `ORG_KPI_PROPAGATED` row in `kpi_audit_logs` per affected KPI**, individually addressable by `kpi_id`. This granularity is required because:
