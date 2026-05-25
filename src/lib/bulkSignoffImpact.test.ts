@@ -188,4 +188,3 @@ describe('buildBulkSignoffImpact', () => {
     expect(out.cells[0]).toMatchObject({ score: 4, source: 'computed', weightedImpact: 0.8 });
   });
 });
-});
