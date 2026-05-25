@@ -31,6 +31,7 @@ import {
   useBulkScopePreview,
   useBulkReviewSnapshotAll,
   useBulkManagementApprove,
+  useBulkOrgKpiFlags,
   type BulkScopeFilters,
   type BulkReviewRow,
 } from '@/hooks/useBulkReview';
@@ -38,6 +39,8 @@ import { BulkCellDrawer } from '@/components/review/BulkCellDrawer';
 import { BulkReviewMatrixGrid } from '@/components/review/BulkReviewMatrixGrid';
 import { useToast } from '@/hooks/use-toast';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
+import { MultiSelectFilter } from '@/components/review/MultiSelectFilter';
+import { readUrlArrays, writeUrlArrays } from '@/lib/bulkUrlState';
 
 // Full month names — must match kpis.review_period exactly (DB stores 'April', 'May', ...).
 // Ordered by fiscal year (Apr → Mar) for display.
@@ -87,11 +90,20 @@ export default function BulkReviewDashboard() {
       : effectiveRole === 'skip_level' ? 'skip_level'
       : 'manager'
   );
-  const [divisionId, setDivisionId] = useState<string>('');
-  const [businessUnitId, setBusinessUnitId] = useState<string>('');
-  const [departmentId, setDepartmentId] = useState<string>('');
-  const [categoryId, setCategoryId] = useState<string>('');
-  const [kraName, setKraName] = useState<string>(''); // '' = All KRAs
+  // Multi-select state — empty array = "All". Persisted to URL query params.
+  const initialUrl = useMemo(
+    () => readUrlArrays(
+      typeof window !== 'undefined' ? window.location.search : '',
+      ['companies', 'divisions', 'bus', 'depts', 'cats', 'kras'],
+    ),
+    [],
+  );
+  const [companyIds, setCompanyIds] = useState<string[]>(initialUrl.companies);
+  const [divisionIds, setDivisionIds] = useState<string[]>(initialUrl.divisions);
+  const [businessUnitIds, setBusinessUnitIds] = useState<string[]>(initialUrl.bus);
+  const [departmentIds, setDepartmentIds] = useState<string[]>(initialUrl.depts);
+  const [categoryIds, setCategoryIds] = useState<string[]>(initialUrl.cats);
+  const [kraNames, setKraNames] = useState<string[]>(initialUrl.kras);
   const [search, setSearch] = useState('');
   const [displayMode, setDisplayMode] = useState<'score' | 'wt' | 'both'>('score');
   const [hideEmpty, setHideEmpty] = useState(false);
@@ -101,42 +113,62 @@ export default function BulkReviewDashboard() {
   const [confirmApprove, setConfirmApprove] = useState(false);
   const approve = useBulkManagementApprove();
 
-  const { companies, selectedCompanyId, setSelectedCompanyId } = useCompanyFilter();
+  const { companies } = useCompanyFilter();
   const { data: departments } = useDepartments();
   const { data: businessUnits } = useBusinessUnits();
   const { data: divisions } = useDivisions();
   const { data: categories } = useKraCategories();
 
+  // URL persistence — push current arrays back into the query string. Empty
+  // arrays are stripped (`writeUrlArrays`) so the URL stays clean on reset.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const nextSearch = writeUrlArrays(window.location.search, {
+      companies: companyIds, divisions: divisionIds, bus: businessUnitIds,
+      depts: departmentIds, cats: categoryIds, kras: kraNames,
+    });
+    const newUrl = `${window.location.pathname}${nextSearch}${window.location.hash}`;
+    window.history.replaceState(null, '', newUrl);
+  }, [companyIds, divisionIds, businessUnitIds, departmentIds, categoryIds, kraNames]);
+
   const filteredBusinessUnits = useMemo(() => {
-    if (!divisionId) return businessUnits ?? [];
-    return (businessUnits ?? []).filter((bu: any) => bu.division_id === divisionId);
-  }, [businessUnits, divisionId]);
+    if (divisionIds.length === 0) return businessUnits ?? [];
+    const set = new Set(divisionIds);
+    return (businessUnits ?? []).filter((bu: any) => set.has(bu.division_id));
+  }, [businessUnits, divisionIds]);
   const filteredDepartments = useMemo(() => {
     let list = departments ?? [];
-    if (businessUnitId) list = list.filter((d: any) => d.business_unit_id === businessUnitId);
-    else if (divisionId) {
+    if (businessUnitIds.length > 0) {
+      const set = new Set(businessUnitIds);
+      list = list.filter((d: any) => set.has(d.business_unit_id));
+    } else if (divisionIds.length > 0) {
       const buIds = new Set(filteredBusinessUnits.map((b: any) => b.id));
       list = list.filter((d: any) => buIds.has(d.business_unit_id));
     }
     return list;
-  }, [departments, businessUnitId, divisionId, filteredBusinessUnits]);
+  }, [departments, businessUnitIds, divisionIds, filteredBusinessUnits]);
 
+  // Server-side `bulk_scope_preview` / `bulk_review_snapshot` accept a single
+  // value per axis. When the user picks ONE option we forward it (so the cap
+  // check is tight); when they pick multiple, we send `null` (broadest scope)
+  // and apply the multi-filter client-side over `rawRows` below — same
+  // pattern as the KRA filter shipped in v2.66.12.5.
+  const oneOrNull = (arr: string[]): string | null => arr.length === 1 ? arr[0] : null;
   const filters: BulkScopeFilters = useMemo(() => ({
-    department_id: departmentId || null,
-    company_id: selectedCompanyId && selectedCompanyId !== 'all' ? selectedCompanyId : null,
-    division_id: divisionId || null,
-    business_unit_id: businessUnitId || null,
-    category_id: categoryId || null,
-  }), [departmentId, selectedCompanyId, divisionId, businessUnitId, categoryId]);
+    department_id: oneOrNull(departmentIds),
+    company_id: oneOrNull(companyIds),
+    division_id: oneOrNull(divisionIds),
+    business_unit_id: oneOrNull(businessUnitIds),
+    category_id: oneOrNull(categoryIds),
+  }), [departmentIds, companyIds, divisionIds, businessUnitIds, categoryIds]);
 
-  const activeFilterCount = [
-    selectedCompanyId && selectedCompanyId !== 'all' ? 1 : 0,
-    divisionId ? 1 : 0,
-    businessUnitId ? 1 : 0,
-    departmentId ? 1 : 0,
-    categoryId ? 1 : 0,
-    kraName ? 1 : 0,
-  ].reduce((a, b) => a + b, 0);
+  const activeFilterCount =
+    (companyIds.length > 0 ? 1 : 0) +
+    (divisionIds.length > 0 ? 1 : 0) +
+    (businessUnitIds.length > 0 ? 1 : 0) +
+    (departmentIds.length > 0 ? 1 : 0) +
+    (categoryIds.length > 0 ? 1 : 0) +
+    (kraNames.length > 0 ? 1 : 0);
 
   const invalidateScope = () => setScopeLoaded(false);
 
@@ -154,17 +186,13 @@ export default function BulkReviewDashboard() {
   // Reset KRA selection whenever Category / Period / Year changes so a stale
   // KRA value never silently filters out everything.
   useEffect(() => {
-    setKraName('');
-  }, [categoryId, period, year]);
+    setKraNames([]);
+  }, [categoryIds, period, year]);
 
   const capExceeded = preview.data?.cap_exceeded ?? false;
   const canLoad = flagOn && !!preview.data && !capExceeded && (preview.data?.cell_count ?? 0) > 0;
 
   const rawRows = snapshot.data?.rows ?? [];
-  // v2.66.12.10: Derive KRA filter options from the loaded snapshot (RPC-sourced),
-  // not from a direct kpis SELECT — RLS on `kpis` returned zero rows for non-Admin
-  // viewers and left the dropdown empty. Snapshot is already category-filtered, so
-  // the list naturally cascades from Company → … → Category → KRA.
   const kraOptionList = useMemo(() => {
     const set = new Set<string>();
     for (const r of rawRows) {
@@ -173,11 +201,14 @@ export default function BulkReviewDashboard() {
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [rawRows]);
+
+  // Multi-axis client-side filter over the snapshot.
   const loadedRows = useMemo(() => {
     const term = search.trim().toLowerCase();
+    const kraSet = new Set(kraNames);
     let rows = rawRows;
-    if (kraName) {
-      rows = rows.filter(r => (r.kra_name ?? '') === kraName);
+    if (kraSet.size > 0) {
+      rows = rows.filter(r => kraSet.has(r.kra_name ?? ''));
     }
     if (term) {
       rows = rows.filter(r =>
@@ -194,7 +225,20 @@ export default function BulkReviewDashboard() {
       });
     }
     return rows;
-  }, [rawRows, search, hideEmpty, kraName]);
+  }, [rawRows, search, hideEmpty, kraNames]);
+
+  // Org-KPI flags for the currently loaded snapshot.
+  const distinctKpiIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of rawRows) if (r.kpi_id) s.add(r.kpi_id);
+    return Array.from(s);
+  }, [rawRows]);
+  const orgFlagsQ = useBulkOrgKpiFlags(distinctKpiIds, scopeLoaded);
+  const isOrgByKpiId = useMemo(() => {
+    const m = new Map<string, boolean>();
+    for (const f of orgFlagsQ.data ?? []) m.set(f.kpi_id, f.is_org_level);
+    return m;
+  }, [orgFlagsQ.data]);
 
   const variance = useMemo(() => {
     let count = 0;
