@@ -1,47 +1,72 @@
 ## Goal
 
-Remove the **Manual** score input from the Bulk Sign-off preview dialog. Reviewers should only ever type an **Achieved** value; the score must be computed from that (or carried forward from the resolver chain / admin override). Manual 0–5 bypass entry has no place in this UI.
+Make the admin "Override carried scores" toggle behave as a **single-stage override that always completes**, with a clear breakdown in the result toast/dialog of what was processed vs. what was skipped (and why).
+
+Two distinct user complaints to fix:
+
+1. **Override scope is too wide.** Today, even with Override ON, the RPC still blocks cells on prior-stage gates (`final_locked`, `self_not_submitted`, `auditor_takes_precedence`). The toggle should override **only the selected stage's column** (e.g. `hr_pms_score`), independent of self/manager/skip/auditor state. Final-stage immutability remains protected by POLICY §88 — we never overwrite `final_score`.
+2. **Process keeps "failing".** Today the toast says "0 of 4 signed off, 4 skipped" and the batch feels broken. With Override ON, every selected cell should be written (subject only to `final_locked` & `not_found`), so the run completes successfully. The dialog/toast must always show a per-reason summary, never an all-or-nothing failure.
 
 ## Risk & Impact Report
 
-- **Data Impact:** None. The DB RPC `bulk_write_stage_scores` still accepts `p_manual_scores` (kept for backward compatibility); we simply stop sending it from this dialog. No schema change.
-- **Workflow Impact:** Reviewers lose the ability to type a 0–5 manual score directly in the bulk dialog. The Achieved → computed-rating path covers every UoM (numeric, binary, tiered, %). Admin Override still works because it unlocks Achieved on every row and the resolver flags those edits as `override`.
-- **UI/UX Impact:** Removes one table column (desktop) and one stacked row (mobile) from `Per-cell preview`. Header badge "4 manual/override" becomes "4 override" (or hidden when 0).
-- **Regression Risk:** Low. `carriedScoreResolver` still honors `manualScore` if ever passed — we just stop feeding it. Tests for the resolver remain green.
-- **Mitigation:** Update existing `BulkApproveDialog` test for the override-rollup count; update preview snapshot expectations.
+- **Data Impact**: Override path can now write `<stage>_score` even when `self_score IS NULL` or an earlier stage is missing. We will NOT touch `final_score` (POLICY §88) and we will NOT overwrite an already-set higher-priority stage column unless that's the column being signed off.
+- **Workflow Impact**: Workflow advancement after Override remains unchanged — same reconcile call as today; status simply reflects the new highest completed stage.
+- **UI/UX Impact**: Override checkbox label is reworded to clarify single-stage scope. Result toast becomes a structured summary (`processed: N, skipped: M`) with a breakdown by reason.
+- **Regression Risk**: Non-admin path and non-override path are unchanged (early `p_is_override := false` for non-admins is preserved). Manual + achieved precedence is unchanged. Reconciler is untouched.
+- **Scalability**: No new queries per cell; same single `FOR UPDATE` lookup and single `UPDATE`. No N+1 introduced.
+- **Mitigation**: Add unit tests for the override path covering `final_locked` (still blocked), `self_not_submitted` (now allowed under override), and `auditor_takes_precedence` (now allowed under override, only when stage is `hr_pms`).
 
-## Plan (Frontend only — POLICY §111.7.a.6)
+## Step-by-step Plan
 
-1. **`src/components/review/BulkSignoffPreview.tsx`**
-   - Remove `renderManualInput`, `onManual`, the `Manual` `<th>`/`<td>` (desktop) and the Manual stacked row (mobile).
-   - Update the legend line to drop the "or a Manual 0-5 score to bypass the formula" clause.
-   - Keep `SourceBadge` rendering of `manual`/`override` (historical rows may still carry that source from the resolver).
+1. **New migration** (forward-only — never edit `20260525125538_*.sql`) replacing `public.bulk_write_stage_scores` with identical signature. Inside the gate block, when `p_is_override = true`:
+   - Keep blocking on `not_found` and `final_locked` (POLICY §88 — immutable).
+   - Skip the `self_not_submitted`, `auditor_takes_precedence`, and `row_version_conflict` gates.
+   - When Override is on AND neither `manual_score` nor `achieved_value` is provided for a cell, raise `override_requires_input` (already exists) so the UI can mark that row.
+   - When written, force `v_inherited_from := 'admin_override'` and write **only** the target stage column (already the case via `dynamic SQL` UPDATE — verify).
+2. **Skip-reason audit metadata** — include each skip reason in the existing return payload (already returned as `v_skipped jsonb`); no schema change needed.
+3. **Frontend (`BulkApproveDialog.tsx`)**:
+   - Reword the override checkbox copy to: *"Override **HR PMS** score only — bypasses prior-stage requirements. Final scores remain immutable."* (stage label is dynamic.)
+   - Replace the current "Sign off N of M" wording with two-line copy: primary count + helper "M cells will be skipped (X final-locked, Y not found)".
+4. **Result toast (`BulkReviewDashboard.tsx`)** — render structured summary from RPC response: `Signed off N · Skipped M (breakdown by reason)`. Never throw when M > 0.
+5. **Tests**:
+   - `src/lib/carriedScoreResolver.test.ts` — already covers override; add a case asserting override input still required for self-null rows.
+   - New `src/test/bulkWriteStageScoresOverride.test.ts` SQL-contract test asserting the migration text bypasses `self_not_submitted` / `auditor_takes_precedence` when `p_is_override = true` and still blocks `final_locked`.
+6. **Docs & policy**:
+   - `DOCUMENTATION.md` — describe single-stage override semantics + structured summary toast.
+   - `POLICY.md` — add §111.7.b: "Admin Override is single-stage; final scores remain immutable; admin must supply manual/achieved value per row."
+   - `.lovable/plan.md` — append change log entry.
 
-2. **`src/components/review/BulkApproveDialog.tsx`**
-   - Stop building/sending `manualScores`. Drop the `manualScores` field from the submit payload and the `onConfirm` arg type.
-   - Adjust the "needs input" guard so a row counts as needing input only when `achievedOverride` is empty (manualScore branch removed).
-   - Update the chip count label from `"… manual/override"` to `"… override"` (admin-override rows only).
+## UI Changes
 
-3. **`src/hooks/useBulkReview.ts`**
-   - Remove the `manual_scores` arg from the call site only (RPC param kept on the server). Type stays for back-compat callers.
+- **Bulk sign-off dialog**: override checkbox label reworded; skip count helper shows reasons.
+- **Bulk sign-off result toast**: switches from short text to a multi-line summary card (title = "Sign-off complete", body = "Processed N · Skipped M" with reason chips).
+- **No new pages / no nav changes.**
 
-4. **`src/lib/carriedScoreResolver.ts`**
-   - Leave `manualScore` field intact (no breaking change). Update the doc-comment to note the bulk dialog no longer feeds it.
+## Technical Details
 
-5. **Tests**
-   - `BulkApproveDialog` test: assert payload no longer contains `manualScores` even when achieved values are typed.
-   - `BulkSignoffPreview` test (if present): assert no `Manual` header is rendered.
-   - `carriedScoreResolver` tests: unchanged (still validate manual/override precedence for any future caller).
+```text
+RPC gate matrix (after change)
+                       p_is_override=false   p_is_override=true (admin)
+final_score not null   skipped(final_locked) skipped(final_locked)   ← POLICY §88
+not_found              skipped(not_found)    skipped(not_found)
+self_score IS NULL     skipped(self_not_…)   ALLOWED
+auditor pre-empts hr   skipped(auditor_…)    ALLOWED
+row_version conflict   skipped(row_version)  ALLOWED
+manual / achieved      use as score          REQUIRED (else override_requires_input)
+```
 
-6. **SSOT updates**
-   - `POLICY.md` §111.7.a.6 (v2.66.13.13): "Bulk Sign-off preview exposes only the Achieved column; Manual 0–5 bypass entry is removed. Computed rating is the only auto-fill path; Admin Override remains."
-   - `DOCUMENTATION.md` v2.66.13.13 changelog entry.
-
-## Out of Scope
-
-- The single-cell scoring dialog and Manager/HR PMS standalone screens (untouched).
-- Any DB function changes — `bulk_write_stage_scores` keeps `p_manual_scores` for compatibility.
+Files to touch:
+- `supabase/migrations/<new>.sql` — new `bulk_write_stage_scores`.
+- `src/components/review/BulkApproveDialog.tsx` — copy only.
+- `src/pages/review/BulkReviewDashboard.tsx` — toast rendering of structured summary.
+- `src/lib/bulkSignoffImpact.ts` / `carriedScoreResolver.ts` — preview already mirrors override; verify gate-skip parity so the preview's `requiredUnfilled` count matches what the RPC will actually skip.
+- `src/test/bulkWriteStageScoresOverride.test.ts` — new.
+- `DOCUMENTATION.md`, `POLICY.md`, `.lovable/plan.md`.
 
 ## Rollback
 
-Revert the component diff; resolver/RPC are unchanged so no migration is needed.
+The migration is a `CREATE OR REPLACE FUNCTION` with unchanged signature — rollback = re-apply previous migration body. No schema or RLS change. UI copy changes are trivially revertible.
+
+## Open question (1)
+
+Should Override on stage **auditor** also be allowed to bypass `self_not_submitted`? It's the same logical rule, but auditors rarely act before self-review. Default plan: **yes, allow** (consistent matrix). Tell me if you want auditor stage excluded.

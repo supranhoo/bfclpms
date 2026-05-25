@@ -19,6 +19,7 @@ const REASON_LABEL: Record<string, string> = {
   auditor_takes_precedence: 'auditor already scored',
   row_version_conflict: 'changed by another user',
   no_prior_score: 'no prior score to inherit',
+  override_requires_input: 'override row left blank',
 };
 
 function label(reason: string): string {
