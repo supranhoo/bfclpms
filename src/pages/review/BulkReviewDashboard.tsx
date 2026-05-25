@@ -54,8 +54,6 @@ import { summariseSkipReasons } from '@/lib/summariseSkipReasons';
 import { kpiRowKey as makeKpiRowKey } from '@/lib/bulkRowSelection';
 import { useUrlFilterStateNullable } from '@/hooks/useUrlFilterState';
 import { buildBulkSignoffImpact, type ImpactSummary } from '@/lib/bulkSignoffImpact';
-import type { KpiRule } from '@/lib/carriedScoreResolver';
-import { supabase } from '@/integrations/supabase/client';
 import { useBulkSignoffPreviewData } from '@/hooks/useBulkSignoffPreviewData';
 
 // Full month names — must match kpis.review_period exactly (DB stores 'April', 'May', ...).
