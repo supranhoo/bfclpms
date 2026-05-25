@@ -1,72 +1,81 @@
-## Goal
+## Problem
 
-Make the admin "Override carried scores" toggle behave as a **single-stage override that always completes**, with a clear breakdown in the result toast/dialog of what was processed vs. what was skipped (and why).
+Screenshot shows:
+> **Signed off 2 / 4** — *0 KPI(s) advanced · 2 skipped: already final (2)*
 
-Two distinct user complaints to fix:
+This is contradictory and misleading:
+- Title implies 2 successful sign-offs.
+- Body says 0 advanced (workflow status didn't move) and 2 skipped (final-locked).
+- The user can't tell what actually happened to the remaining 2 cells.
 
-1. **Override scope is too wide.** Today, even with Override ON, the RPC still blocks cells on prior-stage gates (`final_locked`, `self_not_submitted`, `auditor_takes_precedence`). The toggle should override **only the selected stage's column** (e.g. `hr_pms_score`), independent of self/manager/skip/auditor state. Final-stage immutability remains protected by POLICY §88 — we never overwrite `final_score`.
-2. **Process keeps "failing".** Today the toast says "0 of 4 signed off, 4 skipped" and the batch feels broken. With Override ON, every selected cell should be written (subject only to `final_locked` & `not_found`), so the run completes successfully. The dialog/toast must always show a per-reason summary, never an all-or-nothing failure.
+## Root cause
+
+The RPC `bulk_write_stage_scores` returns three independent counters:
+
+| Field | Meaning |
+|---|---|
+| `applied` | rows where the stage column was written (raw write count) |
+| `advanced` | rows whose `kpis.status` actually moved forward via reconcile |
+| `skipped[]` | rows skipped with a reason (`final_locked`, `self_not_submitted`, `override_requires_input`, etc.) |
+
+The current toast (`BulkReviewDashboard.tsx` lines 480–489) puts `applied` in the title and `advanced` in the body — two numbers that don't add up against `cells.length` and don't explain the 2 unaccounted rows.
+
+In the screenshot case the real story is:
+- 2 cells: `final_locked` (skipped, correct per POLICY §88)
+- 2 cells: stage column written but reconcile didn't advance status (likely already past the acted stage, or cascade resolved to the same value already on the row)
+
+The toast hides this entirely.
+
+## Fix scope
+
+Frontend-only. No RPC, schema, or policy change. Toast wording in `BulkReviewDashboard.tsx` + a small helper in `src/lib/summariseSkipReasons.ts`.
 
 ## Risk & Impact Report
 
-- **Data Impact**: Override path can now write `<stage>_score` even when `self_score IS NULL` or an earlier stage is missing. We will NOT touch `final_score` (POLICY §88) and we will NOT overwrite an already-set higher-priority stage column unless that's the column being signed off.
-- **Workflow Impact**: Workflow advancement after Override remains unchanged — same reconcile call as today; status simply reflects the new highest completed stage.
-- **UI/UX Impact**: Override checkbox label is reworded to clarify single-stage scope. Result toast becomes a structured summary (`processed: N, skipped: M`) with a breakdown by reason.
-- **Regression Risk**: Non-admin path and non-override path are unchanged (early `p_is_override := false` for non-admins is preserved). Manual + achieved precedence is unchanged. Reconciler is untouched.
-- **Scalability**: No new queries per cell; same single `FOR UPDATE` lookup and single `UPDATE`. No N+1 introduced.
-- **Mitigation**: Add unit tests for the override path covering `final_locked` (still blocked), `self_not_submitted` (now allowed under override), and `auditor_takes_precedence` (now allowed under override, only when stage is `hr_pms`).
+- **Data**: none — pure presentation.
+- **Workflow**: none — RPC behaviour unchanged.
+- **UI/UX**: toast becomes multi-line, clearer; no layout breakage (existing `ToastDescription` already wraps).
+- **Regression**: low — single call-site change.
+- **Scalability**: none.
+- **Mitigation**: unit test on the toast-summary helper covering all 4 outcome shapes.
 
-## Step-by-step Plan
+## Plan
 
-1. **New migration** (forward-only — never edit `20260525125538_*.sql`) replacing `public.bulk_write_stage_scores` with identical signature. Inside the gate block, when `p_is_override = true`:
-   - Keep blocking on `not_found` and `final_locked` (POLICY §88 — immutable).
-   - Skip the `self_not_submitted`, `auditor_takes_precedence`, and `row_version_conflict` gates.
-   - When Override is on AND neither `manual_score` nor `achieved_value` is provided for a cell, raise `override_requires_input` (already exists) so the UI can mark that row.
-   - When written, force `v_inherited_from := 'admin_override'` and write **only** the target stage column (already the case via `dynamic SQL` UPDATE — verify).
-2. **Skip-reason audit metadata** — include each skip reason in the existing return payload (already returned as `v_skipped jsonb`); no schema change needed.
-3. **Frontend (`BulkApproveDialog.tsx`)**:
-   - Reword the override checkbox copy to: *"Override **HR PMS** score only — bypasses prior-stage requirements. Final scores remain immutable."* (stage label is dynamic.)
-   - Replace the current "Sign off N of M" wording with two-line copy: primary count + helper "M cells will be skipped (X final-locked, Y not found)".
-4. **Result toast (`BulkReviewDashboard.tsx`)** — render structured summary from RPC response: `Signed off N · Skipped M (breakdown by reason)`. Never throw when M > 0.
-5. **Tests**:
-   - `src/lib/carriedScoreResolver.test.ts` — already covers override; add a case asserting override input still required for self-null rows.
-   - New `src/test/bulkWriteStageScoresOverride.test.ts` SQL-contract test asserting the migration text bypasses `self_not_submitted` / `auditor_takes_precedence` when `p_is_override = true` and still blocks `final_locked`.
-6. **Docs & policy**:
-   - `DOCUMENTATION.md` — describe single-stage override semantics + structured summary toast.
-   - `POLICY.md` — add §111.7.b: "Admin Override is single-stage; final scores remain immutable; admin must supply manual/achieved value per row."
-   - `.lovable/plan.md` — append change log entry.
+1. **Extract a pure helper** `summariseStageWriteOutcome({ total, applied, advanced, skipped })` in `src/lib/summariseSkipReasons.ts` returning `{ title, lines: string[] }`:
+   - `total = cells.length`
+   - `noop = total - applied - skipped.length` (rows the RPC didn't touch and didn't report — should normally be 0; surface if non-zero for debugging)
+   - **Title rules**:
+     - `advanced === total` → `Signed off — {total} advanced`
+     - `advanced > 0 && advanced < total` → `Partially signed off — {advanced}/{total} advanced`
+     - `advanced === 0 && applied > 0 && skipped.length === 0` → `No status change — {applied} written, workflow already past this stage`
+     - `advanced === 0 && skipped.length === total` → `Nothing signed off — all {total} skipped`
+     - `advanced === 0 && applied > 0 && skipped.length > 0` → `No status change — {applied} written, {skipped.length} skipped`
+   - **Body lines** (only include when non-zero):
+     - `{advanced} advanced to next stage` (omit when 0)
+     - `{applied - advanced} written but stage unchanged` with hint *(already past this stage or value unchanged)*
+     - `{skipped.length} skipped — {per-reason breakdown}` using existing `summariseSkipReasons`
+     - `{noop} unaccounted` only when `noop > 0` (defensive)
+2. **Wire helper into `BulkReviewDashboard.tsx`** at the `bulkAction.kind !== 'mgmt'` branch (lines 480–489). Render `title` and join `lines` with ` · ` in description. Keep `mgmt` branch as-is for now (separate concern).
+3. **Reason-label polish** in `summariseSkipReasons.ts`:
+   - Ensure `final_locked` reads `already finalised (POLICY §88 — immutable)` so users stop reading it as a bug.
+   - Confirm `override_requires_input`, `self_not_submitted`, `auditor_takes_precedence`, `row_version_conflict`, `not_found` all have clear labels.
+4. **Unit tests** in `src/lib/summariseSkipReasons.test.ts` (new cases):
+   - All advanced
+   - All skipped (final_locked) — matches reported screenshot
+   - Mixed: 2 advanced, 2 skipped
+   - applied > 0, advanced = 0, no skips
+   - Unaccounted rows present
+5. **Docs**: append `DOCUMENTATION.md` v2.66.13.15 entry; `POLICY.md` §111.7.c clarifying that the sign-off toast must distinguish *written*, *advanced*, and *skipped*.
 
-## UI Changes
+## Expected new toast for the screenshot case
 
-- **Bulk sign-off dialog**: override checkbox label reworded; skip count helper shows reasons.
-- **Bulk sign-off result toast**: switches from short text to a multi-line summary card (title = "Sign-off complete", body = "Processed N · Skipped M" with reason chips).
-- **No new pages / no nav changes.**
+> **No status change — 2 written, 2 skipped**
+> 2 written but stage unchanged (already past this stage or value unchanged) · 2 skipped: already finalised (POLICY §88 — immutable) (2)
 
-## Technical Details
+## Out of scope
 
-```text
-RPC gate matrix (after change)
-                       p_is_override=false   p_is_override=true (admin)
-final_score not null   skipped(final_locked) skipped(final_locked)   ← POLICY §88
-not_found              skipped(not_found)    skipped(not_found)
-self_score IS NULL     skipped(self_not_…)   ALLOWED
-auditor pre-empts hr   skipped(auditor_…)    ALLOWED
-row_version conflict   skipped(row_version)  ALLOWED
-manual / achieved      use as score          REQUIRED (else override_requires_input)
-```
+- Changing the RPC return shape.
+- Touching the `mgmt` approve branch (different counters, separate ticket if needed).
+- Any change to override semantics (already landed in v2.66.13.14).
 
-Files to touch:
-- `supabase/migrations/<new>.sql` — new `bulk_write_stage_scores`.
-- `src/components/review/BulkApproveDialog.tsx` — copy only.
-- `src/pages/review/BulkReviewDashboard.tsx` — toast rendering of structured summary.
-- `src/lib/bulkSignoffImpact.ts` / `carriedScoreResolver.ts` — preview already mirrors override; verify gate-skip parity so the preview's `requiredUnfilled` count matches what the RPC will actually skip.
-- `src/test/bulkWriteStageScoresOverride.test.ts` — new.
-- `DOCUMENTATION.md`, `POLICY.md`, `.lovable/plan.md`.
-
-## Rollback
-
-The migration is a `CREATE OR REPLACE FUNCTION` with unchanged signature — rollback = re-apply previous migration body. No schema or RLS change. UI copy changes are trivially revertible.
-
-## Open question (1)
-
-Should Override on stage **auditor** also be allowed to bypass `self_not_submitted`? It's the same logical rule, but auditors rarely act before self-review. Default plan: **yes, allow** (consistent matrix). Tell me if you want auditor stage excluded.
+Approve to implement.
