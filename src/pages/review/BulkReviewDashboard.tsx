@@ -580,6 +580,49 @@ export default function BulkReviewDashboard() {
               title={scopeLoaded ? undefined : 'Load scope to see KRAs'}
               emptyText="No KRAs in loaded scope"
             />
+
+            {/* Designation — client-side from loaded snapshot's profiles */}
+            <MultiSelectFilter
+              icon={<IdCard className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+              label="Designations"
+              width={180}
+              values={designations}
+              onChange={setDesignations}
+              options={designationOptions.map((v) => ({
+                value: v, label: v === BLANK_SENTINEL ? '(blank)' : v,
+              }))}
+              disabled={!scopeLoaded}
+              title={scopeLoaded ? undefined : 'Load scope to see designations'}
+              emptyText="No designations in loaded scope"
+            />
+
+            {/* Grade */}
+            <MultiSelectFilter
+              icon={<Award className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+              label="Grades"
+              width={150}
+              values={grades}
+              onChange={setGrades}
+              options={gradeOptions.map((v) => ({
+                value: v, label: v === BLANK_SENTINEL ? '(blank)' : v,
+              }))}
+              disabled={!scopeLoaded}
+              title={scopeLoaded ? undefined : 'Load scope to see grades'}
+              emptyText="No grades in loaded scope"
+            />
+
+            {/* Reporting Manager */}
+            <MultiSelectFilter
+              icon={<UserCog className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+              label="Reporting Managers"
+              width={200}
+              values={managerIds}
+              onChange={setManagerIds}
+              options={managerOptions}
+              disabled={!scopeLoaded}
+              title={scopeLoaded ? undefined : 'Load scope to see managers'}
+              emptyText="No reporting managers in loaded scope"
+            />
           </div>
 
           {/* View-mode pill — outside grid, anchored right */}
