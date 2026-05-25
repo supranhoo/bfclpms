@@ -237,8 +237,11 @@ export default function BulkReviewDashboard() {
         return scores.some(s => s !== null && s !== undefined);
       });
     }
+    if (designations.length || grades.length || managerIds.length) {
+      rows = rows.filter(r => allowedEmpSet.has(r.employee_id));
+    }
     return rows;
-  }, [rawRows, search, hideEmpty, kraNames]);
+  }, [rawRows, search, hideEmpty, kraNames, designations, grades, managerIds, allowedEmpSet]);
 
   // Org-KPI flags for the currently loaded snapshot.
   const distinctKpiIds = useMemo(() => {
@@ -252,6 +255,68 @@ export default function BulkReviewDashboard() {
     for (const f of orgFlagsQ.data ?? []) m.set(f.kpi_id, f.is_org_level);
     return m;
   }, [orgFlagsQ.data]);
+
+  // Employee attribute index (designation / grade / reporting manager) for
+  // the currently loaded snapshot — backs the 3 employee-axis filters.
+  const distinctEmpIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of rawRows) if (r.employee_id) s.add(r.employee_id);
+    return Array.from(s);
+  }, [rawRows]);
+  const empAttrsQ = useBulkEmployeeAttrs(distinctEmpIds, scopeLoaded);
+  const attrsByEmp = useMemo(() => {
+    const m = new Map<string, EmpAttrs>();
+    for (const a of empAttrsQ.data ?? []) {
+      m.set(a.id, {
+        designation: a.designation,
+        pms_grade: a.pms_grade,
+        reporting_manager_id: a.reporting_manager_id,
+      });
+    }
+    return m;
+  }, [empAttrsQ.data]);
+  const managerNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const a of empAttrsQ.data ?? []) {
+      if (a.reporting_manager_id && a.reporting_manager_name) {
+        m.set(a.reporting_manager_id, a.reporting_manager_name);
+      }
+    }
+    return m;
+  }, [empAttrsQ.data]);
+  const designationOptions = useMemo(
+    () => distinctAttrOptions(attrsByEmp, 'designation'),
+    [attrsByEmp],
+  );
+  const gradeOptions = useMemo(
+    () => distinctAttrOptions(attrsByEmp, 'pms_grade'),
+    [attrsByEmp],
+  );
+  const managerOptions = useMemo(() => {
+    const ids = new Set<string>();
+    attrsByEmp.forEach(a => { if (a.reporting_manager_id) ids.add(a.reporting_manager_id); });
+    return Array.from(ids)
+      .map(id => ({ value: id, label: managerNameById.get(id) ?? id }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [attrsByEmp, managerNameById]);
+  const allowedEmpSet = useMemo(
+    () => allowedEmployeeIds(attrsByEmp, designations, grades, managerIds),
+    [attrsByEmp, designations, grades, managerIds],
+  );
+
+  // Prune stale selections when the scope changes so they don't silently hide
+  // every row. We prune per-value (not full clear) so URL deep-links survive.
+  useEffect(() => {
+    if (!scopeLoaded || attrsByEmp.size === 0) return;
+    const dSet = new Set(distinctAttrOptions(attrsByEmp, 'designation'));
+    const gSet = new Set(distinctAttrOptions(attrsByEmp, 'pms_grade'));
+    const mSet = new Set<string>();
+    attrsByEmp.forEach(a => { if (a.reporting_manager_id) mSet.add(a.reporting_manager_id); });
+    setDesignations(prev => prev.filter(v => dSet.has(v)));
+    setGrades(prev => prev.filter(v => gSet.has(v)));
+    setManagerIds(prev => prev.filter(v => mSet.has(v)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeLoaded, attrsByEmp]);
 
   const variance = useMemo(() => {
     let count = 0;
