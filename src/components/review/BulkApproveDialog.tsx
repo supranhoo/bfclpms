@@ -27,6 +27,13 @@ interface Props {
   isLoading: boolean;
   onCancel: () => void;
   onConfirm: (payload: BulkApproveSubmit) => void;
+  /**
+   * 'approve' = terminal Management approval (default; keeps existing copy).
+   * 'signoff' = intermediate stage sign-off (Manager/Skip-Level/HR PMS/Auditor).
+   */
+  mode?: 'approve' | 'signoff';
+  /** Stage label shown in the sign-off title, e.g. "HR PMS". */
+  stageLabel?: string;
 }
 
 /**
@@ -38,6 +45,8 @@ interface Props {
 export function BulkApproveDialog({
   open, cellCount, batchId, uploaderUserId,
   isLoading, onCancel, onConfirm,
+  mode = 'approve',
+  stageLabel,
 }: Props) {
   const [reason, setReason] = useState('');
   const [urls, setUrls] = useState<string[]>([]);
@@ -54,6 +63,11 @@ export function BulkApproveDialog({
   const remarkValid = trimmedLen >= MIN_REMARK;
   const canSubmit = remarkValid && !isLoading && cellCount > 0;
 
+  const isSignoff = mode === 'signoff';
+  const verb = isSignoff ? 'Sign off' : 'Approve';
+  const verbing = isSignoff ? 'Signing off' : 'Approving';
+  const titleSuffix = isSignoff && stageLabel ? ` as ${stageLabel}` : '';
+
   const handleConfirm = () => {
     if (!canSubmit) return;
     onConfirm({ reason: reason.trim(), attachmentUrls: urls, batchId });
@@ -65,13 +79,24 @@ export function BulkApproveDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-primary" />
-            Bulk approve {cellCount} cell{cellCount === 1 ? '' : 's'}?
+            Bulk {verb.toLowerCase()} {cellCount} cell{cellCount === 1 ? '' : 's'}{titleSuffix}?
           </DialogTitle>
           <DialogDescription>
-            Final scores will be stamped from the highest-priority completed stage
-            (Auditor &gt; HR PMS &gt; Skip-Level &gt; Manager). Per Policy §88 this is
-            immutable except via Re-open. Approved cells move to{' '}
-            <strong>APPROVED</strong> immediately.
+            {isSignoff ? (
+              <>
+                The previous stage's score is carried forward to{' '}
+                <strong>{stageLabel ?? 'this stage'}</strong>. Your remark and
+                any supporting evidence are saved on every signed-off cell and
+                the workflow advances to the next pending stage.
+              </>
+            ) : (
+              <>
+                Final scores will be stamped from the highest-priority completed stage
+                (Auditor &gt; HR PMS &gt; Skip-Level &gt; Manager). Per Policy §88 this is
+                immutable except via Re-open. Approved cells move to{' '}
+                <strong>APPROVED</strong> immediately.
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -142,7 +167,7 @@ export function BulkApproveDialog({
           </Button>
           <Button onClick={handleConfirm} disabled={!canSubmit}>
             {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isLoading ? 'Approving…' : `Approve ${cellCount} cell${cellCount === 1 ? '' : 's'}`}
+            {isLoading ? `${verbing}…` : `${verb} ${cellCount} cell${cellCount === 1 ? '' : 's'}`}
           </Button>
         </DialogFooter>
       </DialogContent>
