@@ -14,7 +14,7 @@ export interface SkipEntry {
 
 const REASON_LABEL: Record<string, string> = {
   not_found: 'submission missing',
-  final_locked: 'already final',
+  final_locked: 'already finalised (immutable)',
   self_not_submitted: 'self not submitted',
   auditor_takes_precedence: 'auditor already scored',
   row_version_conflict: 'changed by another user',
@@ -39,4 +39,72 @@ export function summariseSkipReasons(skipped: SkipEntry[]): string | null {
     .sort((a, b) => b[1] - a[1])
     .map(([reason, n]) => `${label(reason)} (${n})`);
   return `${skipped.length} skipped: ${parts.join(', ')}`;
+}
+
+/**
+ * POLICY §111.7.c — Bulk Stage Sign-off toast must distinguish three
+ * independent RPC counters so reviewers see what actually happened:
+ *
+ *   • applied  — rows where the stage column was WRITTEN
+ *   • advanced — rows whose kpis.status moved forward via reconcile
+ *   • skipped  — rows the RPC refused, with a reason
+ *
+ * Returns a structured {title, lines[]} the toast layer renders. Pure
+ * function — no React, no toast lib coupling, fully unit-tested.
+ */
+export interface StageWriteOutcome {
+  total: number;
+  applied: number;
+  advanced: number | null; // null when reconcile result unavailable
+  skipped: SkipEntry[];
+}
+
+export interface StageWriteSummary {
+  title: string;
+  lines: string[];
+}
+
+export function summariseStageWriteOutcome(o: StageWriteOutcome): StageWriteSummary {
+  const total = Math.max(0, o.total | 0);
+  const applied = Math.max(0, o.applied | 0);
+  const skipped = o.skipped ?? [];
+  const skippedN = skipped.length;
+  const advanced = o.advanced; // may be null (reconcile unknown) or -1 (reconcile failed)
+  const advancedKnown = typeof advanced === 'number' && advanced >= 0;
+  const advancedN = advancedKnown ? (advanced as number) : 0;
+  const writtenNotAdvanced = Math.max(0, applied - advancedN);
+  const noop = Math.max(0, total - applied - skippedN);
+
+  // Title
+  let title: string;
+  if (!advancedKnown && applied > 0 && skippedN === 0) {
+    title = `Signed off — ${applied}/${total} written`;
+  } else if (advancedN === total && total > 0) {
+    title = `Signed off — ${total} advanced`;
+  } else if (advancedN > 0 && advancedN < total) {
+    title = `Partially signed off — ${advancedN}/${total} advanced`;
+  } else if (advancedN === 0 && skippedN === total && total > 0) {
+    title = `Nothing signed off — all ${total} skipped`;
+  } else if (advancedN === 0 && applied > 0) {
+    title = `No status change — ${applied} written, ${skippedN} skipped`;
+  } else {
+    title = `Nothing changed — 0/${total}`;
+  }
+
+  // Body lines
+  const lines: string[] = [];
+  if (advancedN > 0) lines.push(`${advancedN} advanced to next stage`);
+  if (writtenNotAdvanced > 0) {
+    lines.push(
+      `${writtenNotAdvanced} written but stage unchanged (already past this stage or value unchanged)`,
+    );
+  }
+  const skipLine = summariseSkipReasons(skipped);
+  if (skipLine) lines.push(skipLine);
+  if (noop > 0) lines.push(`${noop} unaccounted (no server response)`);
+  if (!advancedKnown && applied > 0) {
+    lines.push('Stage write recorded — workflow reconcile result unavailable');
+  }
+
+  return { title, lines };
 }
