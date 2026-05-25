@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle, Layers, RefreshCw, Search, EyeOff, Eye,
   Calendar, CalendarDays, Building2, Network, Factory, Users, Tag, UserCog, Target,
-  IdCard, Award,
+  IdCard, Award, Crosshair, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -51,6 +51,8 @@ import {
 } from '@/lib/bulkEmployeeFilter';
 import { bulkActionForStage } from '@/lib/bulkActionForStage';
 import { summariseSkipReasons } from '@/lib/summariseSkipReasons';
+import { kpiRowKey as makeKpiRowKey } from '@/lib/bulkRowSelection';
+import { useUrlFilterStateNullable } from '@/hooks/useUrlFilterState';
 
 // Full month names — must match kpis.review_period exactly (DB stores 'April', 'May', ...).
 // Ordered by fiscal year (Apr → Mar) for display.
@@ -125,6 +127,16 @@ export default function BulkReviewDashboard() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeRow, setActiveRow] = useState<BulkReviewRow | null>(null);
   const [confirmApprove, setConfirmApprove] = useState(false);
+  // URL-bound focus on a single KPI row (`<kra>|<kpi>`). Persists across
+  // reloads and shareable via the URL — same convention as the other filters.
+  const [kpiFocusKey, setKpiFocusKey] = useUrlFilterStateNullable('kpi');
+  const focusedKpiLabel = useMemo(() => {
+    if (!kpiFocusKey) return null;
+    const hit = rawRowsForFocus(kpiFocusKey);
+    return hit ?? kpiFocusKey.split('|').slice(1).join('|');
+    // rawRowsForFocus declared below; safe because closure captures.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kpiFocusKey]);
   const approve = useBulkManagementApprove();
   const stageWrite = useBulkWriteStageScores();
   // Stable batch id generated when the dialog opens; reused for storage scoping + RPC.
