@@ -769,13 +769,13 @@ export default function BulkReviewDashboard() {
                   <Button size="sm" variant="outline" onClick={() => setSelectedIds(new Set())}>
                     Clear
                   </Button>
-                  {canApprove && (
+                  {canApprove && bulkAction && (
                     <Button
                       size="sm"
                       onClick={openApproveDialog}
-                      disabled={approve.isPending}
+                      disabled={isActionPending}
                     >
-                      {approve.isPending ? 'Approving…' : 'Bulk Approve (Mgmt)'}
+                      {isActionPending ? bulkAction.pendingLabel : bulkAction.label}
                     </Button>
                   )}
                 </CardContent>
