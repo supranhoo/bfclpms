@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertCircle, Layers, RefreshCw, Search, EyeOff, Eye,
-  Calendar, CalendarDays, Building2, Network, Factory, Users, Tag, UserCog,
+  Calendar, CalendarDays, Building2, Network, Factory, Users, Tag, UserCog, Target,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -29,13 +29,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   useBulkReviewFlag,
   useBulkScopePreview,
-  useBulkReviewSnapshot,
+  useBulkReviewSnapshotAll,
+  useBulkReviewKraOptions,
   useBulkManagementApprove,
   type BulkScopeFilters,
   type BulkReviewRow,
 } from '@/hooks/useBulkReview';
 import { BulkCellDrawer } from '@/components/review/BulkCellDrawer';
 import { BulkReviewMatrixGrid } from '@/components/review/BulkReviewMatrixGrid';
+import { EmployeeWindowPager } from '@/components/review/EmployeeWindowPager';
 import { useToast } from '@/hooks/use-toast';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
@@ -57,6 +59,11 @@ const VIEWER_STAGES = [
   { value: 'auditor', label: 'Auditor' },
   { value: 'management', label: 'Management' },
 ];
+
+/** Matrix employee window — keeps sticky-column rendering manageable on
+ * tenants with 100+ mapped employees while preserving full reachability via
+ * Prev / Next / Jump pager (see EmployeeWindowPager). */
+const EMP_WINDOW_SIZE = 20;
 
 /**
  * Bulk Review Dashboard (PRD v2.0, Phase 1 — M2 shell).
@@ -91,11 +98,12 @@ export default function BulkReviewDashboard() {
   const [businessUnitId, setBusinessUnitId] = useState<string>('');
   const [departmentId, setDepartmentId] = useState<string>('');
   const [categoryId, setCategoryId] = useState<string>('');
+  const [kraName, setKraName] = useState<string>(''); // '' = All KRAs
   const [search, setSearch] = useState('');
   const [displayMode, setDisplayMode] = useState<'score' | 'wt' | 'both'>('score');
   const [hideEmpty, setHideEmpty] = useState(false);
   const [scopeLoaded, setScopeLoaded] = useState(false);
-  const [page, setPage] = useState(1);
+  const [empWindowStart, setEmpWindowStart] = useState(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeRow, setActiveRow] = useState<BulkReviewRow | null>(null);
   const [confirmApprove, setConfirmApprove] = useState(false);
@@ -135,6 +143,7 @@ export default function BulkReviewDashboard() {
     businessUnitId ? 1 : 0,
     departmentId ? 1 : 0,
     categoryId ? 1 : 0,
+    kraName ? 1 : 0,
   ].reduce((a, b) => a + b, 0);
 
   const invalidateScope = () => setScopeLoaded(false);
@@ -142,10 +151,28 @@ export default function BulkReviewDashboard() {
   const flagOn = flagQuery.data === true;
 
   const preview = useBulkScopePreview(period, year, filters, flagOn);
-  const snapshot = useBulkReviewSnapshot(
-    period, year, viewerStage, filters, page, 200,
+  // Matrix mode → accumulate every page so all mapped employees are reachable.
+  // Flat / non-matrix usage (legacy) keeps the paged snapshot intact.
+  const snapshotAll = useBulkReviewSnapshotAll(
+    period, year, viewerStage, filters,
     flagOn && scopeLoaded,
   );
+  const snapshot = snapshotAll;
+
+  const kraOptions = useBulkReviewKraOptions(
+    period, year, categoryId || null, flagOn,
+  );
+
+  // Reset KRA selection whenever Category / Period / Year changes so a stale
+  // KRA value never silently filters out everything.
+  useEffect(() => {
+    setKraName('');
+  }, [categoryId, period, year]);
+
+  // Reset employee window when filters change or a new snapshot lands.
+  useEffect(() => {
+    setEmpWindowStart(0);
+  }, [period, year, viewerStage, filters, kraName]);
 
   const capExceeded = preview.data?.cap_exceeded ?? false;
   const canLoad = flagOn && !!preview.data && !capExceeded && (preview.data?.cell_count ?? 0) > 0;
@@ -154,6 +181,9 @@ export default function BulkReviewDashboard() {
   const loadedRows = useMemo(() => {
     const term = search.trim().toLowerCase();
     let rows = rawRows;
+    if (kraName) {
+      rows = rows.filter(r => (r.kra_name ?? '') === kraName);
+    }
     if (term) {
       rows = rows.filter(r =>
         (r.kpi_name ?? '').toLowerCase().includes(term)
@@ -169,7 +199,35 @@ export default function BulkReviewDashboard() {
       });
     }
     return rows;
-  }, [rawRows, search, hideEmpty]);
+  }, [rawRows, search, hideEmpty, kraName]);
+
+  // Build distinct employee list from the (filtered) row set, then slice
+  // by the current window before handing rows to the matrix grid.
+  const employeeList = useMemo(() => {
+    const seen = new Map<string, { id: string; name: string; code: string | null }>();
+    for (const r of loadedRows) {
+      if (!seen.has(r.employee_id)) {
+        seen.set(r.employee_id, {
+          id: r.employee_id,
+          name: r.employee_name ?? '',
+          code: r.employee_code ?? null,
+        });
+      }
+    }
+    return Array.from(seen.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [loadedRows]);
+
+  const visibleEmpIds = useMemo(() => {
+    const end = Math.min(employeeList.length, empWindowStart + EMP_WINDOW_SIZE);
+    return new Set(employeeList.slice(empWindowStart, end).map(e => e.id));
+  }, [employeeList, empWindowStart]);
+
+  const windowedRows = useMemo(
+    () => (employeeList.length <= EMP_WINDOW_SIZE
+      ? loadedRows
+      : loadedRows.filter(r => visibleEmpIds.has(r.employee_id))),
+    [loadedRows, visibleEmpIds, employeeList.length],
+  );
 
   const variance = useMemo(() => {
     let count = 0;
@@ -312,7 +370,7 @@ export default function BulkReviewDashboard() {
               size="sm"
               className="h-9"
               disabled={!canLoad}
-              onClick={() => { setPage(1); setScopeLoaded(true); }}
+              onClick={() => { setEmpWindowStart(0); setScopeLoaded(true); }}
             >
               Load Scope
               {activeFilterCount > 0 && (
@@ -335,9 +393,9 @@ export default function BulkReviewDashboard() {
           </div>
         </div>
 
-        {/* Row 2 — strict 7-column filter grid + view-mode pill */}
+        {/* Row 2 — strict 8-column filter grid + view-mode pill */}
         <div className="flex items-center gap-2 px-4 h-11 bg-muted/30">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2 flex-1 min-w-0">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-2 flex-1 min-w-0">
             {/* Month */}
             <Select value={period} onValueChange={(v) => { setPeriod(v); invalidateScope(); }}>
               <SelectTrigger className="h-8 w-full text-xs" aria-label="Month">
@@ -457,6 +515,27 @@ export default function BulkReviewDashboard() {
                 {(categories ?? []).map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
+
+            {/* KRA — cascades from Category; client-side filter on accumulated snapshot */}
+            <Select
+              value={kraName || 'all'}
+              onValueChange={(v) => setKraName(v === 'all' ? '' : v)}
+            >
+              <SelectTrigger className="h-8 w-full text-xs" aria-label="KRA">
+                <div className="flex items-center gap-1.5 min-w-0 truncate">
+                  <Target className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <SelectValue placeholder="KRA" />
+                </div>
+              </SelectTrigger>
+              <SelectContent className="max-h-72">
+                <SelectItem value="all">All KRAs</SelectItem>
+                {(kraOptions.data ?? []).map((name) => (
+                  <SelectItem key={name} value={name}>
+                    <span className="truncate inline-block max-w-[260px] align-middle">{name}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* View-mode pill — outside grid, anchored right */}
@@ -521,37 +600,29 @@ export default function BulkReviewDashboard() {
                   No KPIs match the selected scope.
                 </p>
               ) : (
-                <BulkReviewMatrixGrid
-                  rows={loadedRows}
-                  viewerStage={viewerStage}
-                  selectedSubmissionIds={selectedIds}
-                  onToggleSubmission={toggleOne}
-                  onToggleAll={toggleAllFromMatrix}
-                  onCellClick={setActiveRow}
-                  displayMode={displayMode}
-                />
+                <>
+                  {employeeList.length > EMP_WINDOW_SIZE && (
+                    <EmployeeWindowPager
+                      employees={employeeList}
+                      windowSize={EMP_WINDOW_SIZE}
+                      start={empWindowStart}
+                      onChange={setEmpWindowStart}
+                    />
+                  )}
+                  <BulkReviewMatrixGrid
+                    rows={windowedRows}
+                    viewerStage={viewerStage}
+                    selectedSubmissionIds={selectedIds}
+                    onToggleSubmission={toggleOne}
+                    onToggleAll={toggleAllFromMatrix}
+                    onCellClick={setActiveRow}
+                    displayMode={displayMode}
+                  />
+                </>
               )}
 
-              {/* Pagination */}
-              {snapshot.data && snapshot.data.total > 200 && (
-                <div className="flex items-center justify-between mt-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page <= 1}
-                    onClick={() => setPage((p) => p - 1)}
-                  >Previous</Button>
-                  <span className="text-xs text-muted-foreground">
-                    Page {page} of {Math.max(1, Math.ceil(snapshot.data.total / 200))}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page >= Math.ceil(snapshot.data.total / 200)}
-                    onClick={() => setPage((p) => p + 1)}
-                  >Next</Button>
-                </div>
-              )}
+              {/* Cell-based pagination removed: snapshotAll now loads every page
+                  on Load Scope. Employee navigation handled by EmployeeWindowPager. */}
 
           {/* Action toolbar */}
           {selectedIds.size > 0 && (
