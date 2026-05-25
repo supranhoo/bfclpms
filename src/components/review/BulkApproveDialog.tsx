@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
@@ -6,10 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, ShieldCheck } from 'lucide-react';
+import { Loader2, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
 import { BulkSignoffPreview } from '@/components/review/BulkSignoffPreview';
 import type { ImpactSummary } from '@/lib/bulkSignoffImpact';
+import type { KpiRule, CellInputs } from '@/lib/carriedScoreResolver';
 
 const MIN_REMARK = 10;
 const MAX_REMARK = 500;
@@ -19,6 +21,12 @@ export interface BulkApproveSubmit {
   reason: string;
   attachmentUrls: string[];
   batchId: string;
+  /** submission_id → reviewer-entered Achieved (raw string/number). */
+  achievedValues?: Record<string, number | string | null>;
+  /** submission_id → reviewer-entered Manual rating 0-5. */
+  manualScores?: Record<string, number>;
+  /** Admin "Override carried scores" toggle was ON when submitted. */
+  isOverride?: boolean;
 }
 
 interface Props {
@@ -40,6 +48,17 @@ interface Props {
   preview?: ImpactSummary | null;
   previewLoading?: boolean;
   previewError?: string | null;
+  /** kpi_id → rule (drives UoM-aware Achieved inputs). */
+  ruleByKpiId?: Map<string, KpiRule>;
+  /** submission_id → kpi_id mapping (preview cells only carry kpi_name). */
+  kpiIdBySubmissionId?: Map<string, string>;
+  /** Reviewer is an admin — unlocks the Override toggle. */
+  isAdmin?: boolean;
+  /** Notifies parent of the live input map (for telemetry/debug; optional). */
+  onInputsChange?: (
+    inputs: Map<string, CellInputs>,
+    isOverride: boolean,
+  ) => void;
 }
 
 /**
@@ -56,22 +75,50 @@ export function BulkApproveDialog({
   preview = null,
   previewLoading = false,
   previewError = null,
+  ruleByKpiId,
+  kpiIdBySubmissionId,
+  isAdmin = false,
+  onInputsChange,
 }: Props) {
   const [reason, setReason] = useState('');
   const [urls, setUrls] = useState<string[]>([]);
+  const [inputs, setInputs] = useState<Map<string, CellInputs>>(new Map());
+  const [isOverride, setIsOverride] = useState(false);
 
   // Reset local state every time the dialog opens with a new batch.
   useEffect(() => {
     if (open) {
       setReason('');
       setUrls([]);
+      setInputs(new Map());
+      setIsOverride(false);
     }
   }, [open, batchId]);
+
+  useEffect(() => {
+    onInputsChange?.(inputs, isOverride);
+  }, [inputs, isOverride, onInputsChange]);
+
+  const handleCellInput = (submissionId: string, next: CellInputs) => {
+    setInputs(prev => {
+      const m = new Map(prev);
+      const merged: CellInputs = { ...prev.get(submissionId), ...next };
+      // Strip empties so we don't keep ghost entries.
+      if ((merged.achievedOverride == null || merged.achievedOverride === '')
+        && (merged.manualScore == null)) {
+        m.delete(submissionId);
+      } else {
+        m.set(submissionId, merged);
+      }
+      return m;
+    });
+  };
 
   const trimmedLen = reason.trim().length;
   const remarkValid = trimmedLen >= MIN_REMARK;
   const skippedCount = preview?.totals.skippedCount ?? 0;
-  const actionableCount = Math.max(0, cellCount - skippedCount);
+  const requiredUnfilled = preview?.totals.requiredUnfilled ?? skippedCount;
+  const actionableCount = Math.max(0, cellCount - requiredUnfilled);
   const canSubmit = remarkValid && !isLoading && actionableCount > 0;
 
   const isSignoff = mode === 'signoff';
@@ -81,7 +128,24 @@ export function BulkApproveDialog({
 
   const handleConfirm = () => {
     if (!canSubmit) return;
-    onConfirm({ reason: reason.trim(), attachmentUrls: urls, batchId });
+    const achievedValues: Record<string, number | string | null> = {};
+    const manualScores: Record<string, number> = {};
+    inputs.forEach((v, sid) => {
+      if (v.achievedOverride != null && v.achievedOverride !== '') {
+        achievedValues[sid] = v.achievedOverride;
+      }
+      if (v.manualScore != null && Number.isFinite(v.manualScore)) {
+        manualScores[sid] = v.manualScore;
+      }
+    });
+    onConfirm({
+      reason: reason.trim(),
+      attachmentUrls: urls,
+      batchId,
+      achievedValues: Object.keys(achievedValues).length > 0 ? achievedValues : undefined,
+      manualScores: Object.keys(manualScores).length > 0 ? manualScores : undefined,
+      isOverride: isOverride || undefined,
+    });
   };
 
   return (
@@ -113,11 +177,38 @@ export function BulkApproveDialog({
 
         <div className="space-y-4 py-2">
           {isSignoff && (
-            <BulkSignoffPreview
-              preview={preview}
-              isLoading={previewLoading}
-              error={previewError}
-            />
+            <>
+              <BulkSignoffPreview
+                preview={preview}
+                isLoading={previewLoading}
+                error={previewError}
+                ruleByKpiId={ruleByKpiId}
+                kpiIdBySubmissionId={kpiIdBySubmissionId}
+                inputs={inputs}
+                onCellInputChange={handleCellInput}
+                isOverride={isOverride}
+              />
+              {isAdmin && (
+                <label className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-2 cursor-pointer">
+                  <Checkbox
+                    checked={isOverride}
+                    onCheckedChange={(v) => setIsOverride(v === true)}
+                    disabled={isLoading}
+                    className="mt-0.5"
+                  />
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1.5 text-xs font-medium">
+                      <ShieldAlert className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                      Override carried scores (admin only)
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Unlocks Achieved / Manual entry on every row. Every override is audit-logged
+                      with the previous carried value.
+                    </p>
+                  </div>
+                </label>
+              )}
+            </>
           )}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
@@ -188,13 +279,20 @@ export function BulkApproveDialog({
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isLoading
                 ? `${verbing}…`
-                : skippedCount > 0 && actionableCount > 0
+                : requiredUnfilled > 0 && actionableCount > 0
                   ? `${verb} ${actionableCount} of ${cellCount}`
                   : `${verb} ${actionableCount} cell${actionableCount === 1 ? '' : 's'}`}
             </Button>
             {actionableCount === 0 && cellCount > 0 && (
               <p className="text-[11px] text-destructive">
-                All cells lack prior scores and achievement values.
+                {isSignoff
+                  ? 'Enter Achieved or Manual for each row marked ●.'
+                  : 'All cells lack prior scores and achievement values.'}
+              </p>
+            )}
+            {requiredUnfilled > 0 && actionableCount > 0 && (
+              <p className="text-[11px] text-muted-foreground">
+                {requiredUnfilled} row{requiredUnfilled === 1 ? '' : 's'} marked ● will be skipped.
               </p>
             )}
           </div>
