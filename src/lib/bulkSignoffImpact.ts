@@ -65,6 +65,8 @@ export interface ImpactSummary {
     employeeCount: number;
     computedCount: number;
     skippedCount: number;
+    overrideCount: number;
+    requiredUnfilled: number;
     weightedDelta: number;
   };
 }
