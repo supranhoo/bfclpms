@@ -109,7 +109,7 @@ describe('resolveCarriedScore', () => {
     const sub = { ...baseSub, achieved_value: 90 };
     const a = resolveCarriedScore({ stage: 'manager', kpi: ruleA, submission: sub });
     const b = resolveCarriedScore({ stage: 'manager', kpi: ruleB, submission: sub });
-    expect(a.score).toBe(4); // 90 ≥ R4=90
-    expect(b.score).toBe(1); // 90 only ≥ R1
+    expect(a.score).toBe(4); // 90 ≥ R4=90 (lenient rule)
+    expect(b.score).toBe(2); // 90 only ≥ R2=60 (strict rule keeps R4=98)
   });
 });
