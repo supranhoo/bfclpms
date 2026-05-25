@@ -1,54 +1,64 @@
-## Problem
+# Problem
 
-User reports the KPI/KRA column **scrolls away** with the employee columns at 100% zoom — meaning `position: sticky` is not being honored. The current implementation in `BulkReviewMatrixGrid.tsx` already sets `sticky left-0` on the KPI `<td>` cells, so something is breaking sticky behavior.
+In `/review/bulk-scoring`, the **All KRAs** filter dropdown is empty (shows only "All KRAs") even though the scope preview reports 2,238 KPIs across 146 employees for April 2026. The dropdown should list every distinct `kra_name` available in the current scope.
 
-Most likely root causes (all in `BulkReviewMatrixGrid.tsx`):
+# Root Cause
 
-1. **`content-visibility: auto` on each `<tr>`** (line 238) — known to break `position: sticky` paint on table cells in Chromium because the row becomes its own containment context.
-2. **`overflow: hidden` on the outer wrapper** (line 156, `rounded-lg border … overflow-hidden`) — when combined with the inner scroll container, this can clip sticky cells in some layouts.
-3. **z-index too low** — sticky KPI body cells use `z-10`, employee body cells have no explicit z-index but inherit table stacking; under certain ancestor `transform`/`will-change`, the sticky cell gets pushed under siblings, which visually reads as "scrolling away."
-4. **Possible `transform` on an ancestor** (sidebar/layout) creates a new containing block and breaks sticky relative to the intended scroller.
+`useBulkReviewKraOptions` (in `src/hooks/useBulkReview.ts`, lines 190–219) queries the `kpis` table **directly via the Supabase client**:
 
-## Risk & Impact
+```ts
+supabase.from('kpis').select('kra_name').eq('review_period', period)…
+```
 
-- **Data:** None.
-- **Workflow / RLS / RPC:** None.
-- **UI/UX:** Sticky KPI column starts working; visual identical otherwise. Loses the off-screen paint skip from `content-visibility` (negligible — we already cap at 25k cells).
-- **Regression risk:** Very low. Pure CSS class adjustments on one component.
-- **Scalability:** Removing `content-visibility` may add minor paint cost for very tall matrices; mitigated by existing 25k-cell scope cap and `max-h-[calc(100vh-180px)]` scroll container.
+The matrix grid itself loads through the SECURITY DEFINER RPC `bulk_review_snapshot`, which bypasses RLS and returns every cell in scope. The direct `kpis` SELECT does **not** — RLS on `kpis` restricts a Manager (the role shown in the screenshot) to only their own / direct-report rows, and even that is gated on the per-employee workflow resolution. For a broad cross-org scope (146 employees, mostly outside the manager's direct chain), the SELECT returns zero rows, so the distinct `kra_name` set is empty.
 
-## Plan (minimal, surgical)
+This is also a layering violation of the Bulk Review contract — every read on this screen is supposed to go through the gated RPC; this hook is the only direct table read left.
 
-Edit only `src/components/review/BulkReviewMatrixGrid.tsx`:
+# Fix (minimal, surgical)
 
-1. **Remove `content-visibility: auto` + `containIntrinsicSize`** from the KPI `<tr>` (line 238). This is the #1 sticky-killer.
-2. **Raise sticky KPI body cell z-index** from `z-10` → `z-30` (still below the sticky top headers at `z-40`/corner `z-50`). Ensures KPI cells paint above scrolling employee cells.
-3. **Replace outer `overflow-hidden`** on the card wrapper (line 156) with `overflow-clip` is risky — instead drop `overflow-hidden` entirely and let the inner `matrix-scroll` element own clipping. Keep `rounded-lg border` + add `isolation-auto` so the sticky stacking context is the inner scroller only.
-4. **Add `isolate` to the inner `matrix-scroll` div** so sticky stacking context is scoped predictably.
-5. **Verify no ancestor `transform`** — quick check of `src/components/layout/*` and `BulkReviewDashboard.tsx` sticky header rows; if any use `transform`, replace with `top`/positioning equivalents on this route only.
+Derive the KRA option list from the **already-loaded snapshot rows** instead of a separate RLS-bound query. The snapshot is the same data the grid renders, so the dropdown will always exactly match what's visible after Load Scope.
 
-## Verification
+### `src/hooks/useBulkReview.ts`
+- **Delete** `useBulkReviewKraOptions` (no longer needed).
 
-- Open `/review/bulk-scoring` at 100% zoom on 1095×853 (user's current viewport) and 1920×1080.
-- Scroll horizontally inside the matrix → KPI/KRA column must stay pinned at left.
-- Scroll vertically → employee header row stays pinned at top; top-left corner stays pinned both ways.
-- KRA category bands continue to span full width and align with rows.
-- No console errors; no layout shift.
+### `src/pages/review/BulkReviewDashboard.tsx`
+- Remove the `useBulkReviewKraOptions` import + call.
+- Replace `kraOptions.data` with a `useMemo` that computes distinct, sorted `kra_name` values from `rawRows`, optionally narrowed by the active `categoryId` if rows carry it.
+- When `scopeLoaded === false`, the dropdown shows only **All KRAs** with a small helper hint ("Load scope to see KRAs") and is disabled — same UX pattern already used for the Load button.
+- Keep the existing reset effect (`setKraName('')` when Category / Period / Year change).
 
-## Files to Change
+### `mem/features/review/bulk-review-dashboard`
+- Append a v2.66.12.10 entry: KRA filter is now derived from the loaded snapshot (RPC-sourced), eliminating the last direct `kpis` SELECT on this screen and fixing the empty dropdown for non-Admin roles.
 
-- `src/components/review/BulkReviewMatrixGrid.tsx` — 4 small class/style edits.
-- `DOCUMENTATION.md` + `mem/features/review/bulk-review-dashboard` — record v2.66.12.9 sticky fix (remove `content-visibility`, z-index bump, isolated stacking context).
+### `DOCUMENTATION.md`
+- One-line changelog entry mirroring the memory note.
 
-## Not Applicable
+# Risk & Impact
 
-- Schema / RLS / RPC / migrations / backup / tests (pure CSS class change on presentation-only component).
+- **Data:** None. Read-only derivation from existing in-memory rows.
+- **RLS / RPC:** Removes a direct table read; everything funnels through `bulk_review_snapshot` (matches §0 invariants).
+- **Workflow:** None.
+- **UI/UX:** KRA dropdown is empty until Load Scope is clicked (intentional — matches the funnel). Disabled state + hint communicates this. After Load Scope, the dropdown is populated correctly for every role.
+- **Regression risk:** Very low. One hook removed, one memoized derivation added; filter behavior (`rows.filter(r => r.kra_name === kraName)`) unchanged.
+- **Scalability:** Cheaper — no extra round-trip; derivation is O(n) over rows already in memory (capped at 25k by the scope guard).
 
-## Out of Scope
+# Verification
 
-- Split-pane rewrite (rejected by user — minimal path chosen).
-- Filter bar, hooks, scoring logic, RPCs.
+- April / 2026, Manager role at 100% zoom → click Load Scope → open **All KRAs** dropdown → list shows every distinct KRA from the loaded matrix, sorted alphabetically.
+- Pick a Category → KRA list narrows to KRAs whose rows match that category.
+- Change Period or Year → KRA selection resets to All KRAs (existing behavior preserved).
+- Same check as Admin and Auditor — list populates identically (RLS no longer a factor).
+- Before Load Scope: dropdown shows "All KRAs" only and is disabled with hint.
 
-## Rollback
+# Out of Scope
 
-Revert the single component file — no DB or contract changes.
+- Sticky-column / horizontal-scroll fixes already shipped in v2.66.12.9.
+- Filter bar layout, scope cap logic, RPC signatures, schema, migrations, tests for unrelated areas.
+
+# Rollback
+
+Revert the two files — no DB or contract changes.
+
+# Not Applicable
+
+Schema / RLS / migrations / backup / new tests (pure client-side derivation change; existing matrix tests cover the snapshot path).
