@@ -477,15 +477,19 @@ export default function BulkReviewDashboard() {
           achieved_values: extras?.achievedValues,
           is_override: extras?.isOverride,
         });
-        const advanced = (res as any).advanced ?? null;
+        // POLICY §111.7.c — toast must distinguish applied vs advanced vs
+        // skipped instead of conflating them into a misleading "Signed off
+        // N/M" headline. See summariseStageWriteOutcome unit tests.
+        const advanced = (res as any).advanced;
+        const summary = summariseStageWriteOutcome({
+          total: cells.length,
+          applied: res.applied ?? 0,
+          advanced: typeof advanced === 'number' ? advanced : null,
+          skipped: res.skipped ?? [],
+        });
         toast({
-          title: `Signed off ${res.applied} / ${cells.length}`,
-          description: [
-            advanced != null && advanced >= 0
-              ? `${advanced} KPI(s) advanced`
-              : 'Stage advanced',
-            summariseSkipReasons(res.skipped),
-          ].filter(Boolean).join(' · '),
+          title: summary.title,
+          description: summary.lines.join(' · '),
         });
       }
       setSelectedIds(new Set());
