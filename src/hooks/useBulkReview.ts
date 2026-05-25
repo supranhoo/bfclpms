@@ -319,17 +319,21 @@ export function useBulkWriteStageScores() {
       stage: 'manager' | 'skip_level' | 'hr_pms' | 'auditor';
       cells: BulkWriteCell[];
       reason?: string;
+      attachment_urls?: string[];
     }): Promise<BulkWriteResult> => {
       const { data, error } = await supabase.rpc('bulk_write_stage_scores' as any, {
         p_stage: args.stage,
         p_cells: args.cells as any,
         p_batch_reason: args.reason ?? null,
+        p_attachment_urls: (args.attachment_urls ?? []) as any,
       });
       if (error) throw error;
       return data as unknown as BulkWriteResult;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['bulk_review_snapshot'] });
+      qc.invalidateQueries({ queryKey: ['bulk_review_snapshot_all'] });
+      qc.invalidateQueries({ queryKey: ['bulk_scope_preview'] });
       qc.invalidateQueries({ queryKey: ['kpi_cell_detail'] });
     },
   });
