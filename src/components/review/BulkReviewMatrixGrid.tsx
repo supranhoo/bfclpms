@@ -15,6 +15,53 @@ import { classifyOrgKpiRow, type OrgKpiRowStatus } from '@/lib/orgKpiGap';
 type ViewerStage =
   | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management';
 
+function OrgKpiBadge({ status }: { status?: ReturnType<typeof classifyOrgKpiRow> }) {
+  if (!status || status.status === 'none') return null;
+  const isGap = status.status === 'gap';
+  const sample = status.missingEmployeeNames.slice(0, 5);
+  const extra = status.missingEmployeeNames.length - sample.length;
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge
+            variant="outline"
+            className={cn(
+              'shrink-0 h-4 px-1 text-[9px] font-bold gap-0.5 uppercase tracking-wide cursor-help',
+              isGap
+                ? 'border-amber-500/60 text-amber-700 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300'
+                : 'border-emerald-500/60 text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-300',
+            )}
+          >
+            <Building className="h-2.5 w-2.5" />
+            ORG{isGap && <span>·gap</span>}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent side="right" className="max-w-[280px] text-xs">
+          {isGap ? (
+            <div className="space-y-1">
+              <div className="font-semibold">Org-KPI mapping gap</div>
+              <div>
+                Mapped for <strong>{status.mappedCount}</strong> of{' '}
+                <strong>{status.totalCount}</strong> employees.
+              </div>
+              <div className="text-muted-foreground">
+                Missing for: {sample.join(', ')}
+                {extra > 0 && ` and ${extra} more`}
+              </div>
+            </div>
+          ) : (
+            <div>
+              Org-level KPI for all <strong>{status.totalCount}</strong>{' '}
+              employees in this row.
+            </div>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 const STAGE_SCORE_KEY: Record<ViewerStage, keyof BulkReviewRow> = {
   manager: 'manager_score',
   skip_level: 'skip_level_score',
