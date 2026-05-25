@@ -131,8 +131,9 @@ export function BulkReviewMatrixGrid({
     });
   };
 
-  const KPI_COL_W = 280;
-  const EMP_COL_W = 120;
+  const KPI_COL_W = 260;
+  const EMP_COL_W = 112;
+  const totalW = KPI_COL_W + employees.length * EMP_COL_W;
 
   return (
     <div className="space-y-3">
@@ -151,10 +152,13 @@ export function BulkReviewMatrixGrid({
         </div>
       </div>
 
-      {/* Matrix surface */}
+      {/* Matrix surface — horizontal scroll for employees, sticky KPI/KRA column */}
       <div className="rounded-lg border border-border bg-card overflow-hidden">
-        <div className="overflow-auto max-h-[calc(100vh-110px)] relative">
-          <table className="border-separate border-spacing-0 w-full">
+        <div className="overflow-auto max-h-[calc(100vh-180px)] relative">
+          <table
+            className="border-separate border-spacing-0"
+            style={{ width: totalW, minWidth: '100%' }}
+          >
             <thead>
               <tr>
                 {/* Top-left frozen corner */}
