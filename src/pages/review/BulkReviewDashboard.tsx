@@ -33,6 +33,7 @@ import {
   useBulkScopePreview,
   useBulkReviewSnapshotAll,
   useBulkManagementApprove,
+  useBulkWriteStageScores,
   useBulkOrgKpiFlags,
   useBulkEmployeeAttrs,
   type BulkScopeFilters,
@@ -48,6 +49,7 @@ import { readUrlArrays, writeUrlArrays } from '@/lib/bulkUrlState';
 import {
   allowedEmployeeIds, distinctAttrOptions, BLANK_SENTINEL, type EmpAttrs,
 } from '@/lib/bulkEmployeeFilter';
+import { bulkActionForStage } from '@/lib/bulkActionForStage';
 
 // Full month names — must match kpis.review_period exactly (DB stores 'April', 'May', ...).
 // Ordered by fiscal year (Apr → Mar) for display.
