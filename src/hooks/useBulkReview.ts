@@ -124,6 +124,100 @@ export function useBulkReviewSnapshot(
   });
 }
 
+/**
+ * Accumulated snapshot — loops `bulk_review_snapshot` pages until all rows
+ * for the scope are loaded. Used by matrix mode so every mapped employee is
+ * reachable via horizontal scroll / employee-window pager. Capped by
+ * `bulk_scope_preview.cell_count` (already ≤ 25k by §0 governance) so this
+ * cannot run away. Page size pinned to RPC max (500).
+ */
+const ACCUMULATE_PAGE_SIZE = 500;
+const ACCUMULATE_MAX_PAGES = 60; // hard safety: 60 × 500 = 30k cells
+
+export function useBulkReviewSnapshotAll(
+  period: string,
+  year: number,
+  viewerStage: string,
+  filters: BulkScopeFilters,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['bulk_review_snapshot_all', period, year, viewerStage, filters],
+    enabled: enabled && !!period && !!year && !!viewerStage,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    queryFn: async (): Promise<BulkReviewSnapshot> => {
+      const merged: BulkReviewRow[] = [];
+      let total = 0;
+      let pageIdx = 1;
+      let lastViewerStage = viewerStage;
+      while (pageIdx <= ACCUMULATE_MAX_PAGES) {
+        const { data, error } = await supabase.rpc('bulk_review_snapshot' as any, {
+          p_period: period,
+          p_year: year,
+          p_viewer_stage: viewerStage,
+          p_filters: filters as any,
+          p_page: pageIdx,
+          p_page_size: ACCUMULATE_PAGE_SIZE,
+        });
+        if (error) throw error;
+        const snap = data as unknown as BulkReviewSnapshot;
+        const rows = snap?.rows ?? [];
+        total = snap?.total ?? merged.length + rows.length;
+        lastViewerStage = snap?.viewer_stage ?? viewerStage;
+        merged.push(...rows);
+        if (rows.length < ACCUMULATE_PAGE_SIZE) break;
+        if (merged.length >= total) break;
+        pageIdx += 1;
+      }
+      return {
+        rows: merged,
+        total,
+        page: 1,
+        page_size: merged.length,
+        viewer_stage: lastViewerStage,
+      };
+    },
+  });
+}
+
+/**
+ * KRA options for the Bulk Review filter — distinct kra_name values present
+ * in `kpis` for the selected (period, year), optionally narrowed by category.
+ * Cascades from the Category filter to keep the funnel coherent
+ * (Company → Division → BU → Dept → Category → KRA → KPI).
+ */
+export function useBulkReviewKraOptions(
+  period: string,
+  year: number,
+  categoryId: string | null | undefined,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['bulk_review_kra_options', period, year, categoryId ?? null],
+    enabled: enabled && !!period && !!year,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<string[]> => {
+      let q = supabase
+        .from('kpis')
+        .select('kra_name')
+        .eq('review_period', period)
+        .eq('review_year', year)
+        .not('kra_name', 'is', null)
+        .limit(5000);
+      if (categoryId) q = q.eq('category_id', categoryId);
+      const { data, error } = await q;
+      if (error) throw error;
+      const set = new Set<string>();
+      for (const r of (data ?? []) as Array<{ kra_name: string | null }>) {
+        const name = (r.kra_name ?? '').trim();
+        if (name) set.add(name);
+      }
+      return Array.from(set).sort((a, b) => a.localeCompare(b));
+    },
+  });
+}
+
 // ============= M3: Cell detail =============
 /**
  * Rich per-cell detail used by the BulkCellDrawer to render the same
