@@ -1,5 +1,8 @@
 import { Fragment, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, Building } from 'lucide-react';
+import {
+  ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, Building,
+  Crosshair, X,
+} from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -11,6 +14,9 @@ import {
 import { cn } from '@/lib/utils';
 import type { BulkReviewRow } from '@/hooks/useBulkReview';
 import { classifyOrgKpiRow } from '@/lib/orgKpiGap';
+import {
+  kpiRowKey as makeKpiRowKey, submissionIdsForKpiRow, toggleKpiRowSelection,
+} from '@/lib/bulkRowSelection';
 
 type ViewerStage =
   | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management';
@@ -114,6 +120,19 @@ export interface BulkReviewMatrixGridProps {
   displayMode?: 'score' | 'wt' | 'both';
   /** Optional map: kpi_id → is_org_level. When absent, ORG badge is hidden. */
   isOrgByKpiId?: ReadonlyMap<string, boolean>;
+  /**
+   * When set, the matrix renders ONLY the KPI row matching this key
+   * (`<kra_name>|<kpi_name>`). All employee columns and selection still
+   * function. Pair with `onFocusKpi` to toggle the focus from the row UI.
+   */
+  kpiFocusKey?: string | null;
+  /** Sets/clears the focus key. When omitted, the focus affordance hides. */
+  onFocusKpi?: (rowKey: string | null) => void;
+  /**
+   * Replace the entire selection set. Used by the row-level horizontal
+   * select handle so it can preserve selections in other rows.
+   */
+  onReplaceSelection?: (next: Set<string>) => void;
 }
 
 export function BulkReviewMatrixGrid({
@@ -121,6 +140,9 @@ export function BulkReviewMatrixGrid({
   onToggleSubmission, onToggleAll, onCellClick,
   displayMode = 'score',
   isOrgByKpiId,
+  kpiFocusKey,
+  onFocusKpi,
+  onReplaceSelection,
 }: BulkReviewMatrixGridProps) {
   const [showMeta, setShowMeta] = useState(false);
   const [collapsedKras, setCollapsedKras] = useState<Set<string>>(new Set());
@@ -132,7 +154,13 @@ export function BulkReviewMatrixGrid({
     const empMap = new Map<string, EmployeeCol>();
     const cell = new Map<string, BulkReviewRow>(); // `${kpiKey}::${empId}` → row
 
-    for (const r of rows) {
+    // When a KPI focus is active, narrow rows to that KPI only. Employees,
+    // selection, scoring all keep working — the matrix simply collapses to
+    // a single horizontal band of cells for that KPI.
+    const sourceRows = kpiFocusKey
+      ? rows.filter(r => makeKpiRowKey(r) === kpiFocusKey)
+      : rows;
+    for (const r of sourceRows) {
       const kpiKey = `${r.kra_name}|${r.kpi_name}`;
       if (!kpiMap.has(kpiKey)) {
         kpiMap.set(kpiKey, {
@@ -190,7 +218,7 @@ export function BulkReviewMatrixGrid({
       kpiRows: kpiRowsArr, employees: employeesArr, cellMap: cell,
       kraGroups: groups, orgStatusByKpiKey: orgMap,
     };
-  }, [rows, isOrgByKpiId]);
+  }, [rows, isOrgByKpiId, kpiFocusKey]);
 
   const allSubmissionIds = useMemo(
     () => rows.filter(r => r.submission_id).map(r => r.submission_id!),
