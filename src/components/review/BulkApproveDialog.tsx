@@ -196,13 +196,20 @@ export function BulkApproveDialog({
                     <p className="text-[11px] text-muted-foreground">
                       Writes <strong>only</strong> the {stageLabel ?? 'selected'} column and bypasses
                       prior-stage gates (self not submitted, auditor already scored, row-version conflict).
-                      Final scores remain immutable (POLICY §88). Enter an Achieved or manual value on every row.
+                      Enter an Achieved or manual value on every row.
                     </p>
                     <p className="text-[11px] text-muted-foreground">
                       Sign-off only marks a KPI <strong>Approved</strong> when this stage is the
                       last step in that employee's workflow template. Rows whose template has
                       stages after this one will advance one step and appear under
                       <em> workflow has stages after this one</em>.
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      <strong>Includes already-approved rows.</strong> Their final score is{' '}
+                      <em>re-stamped</em> when this stage is the employee's terminal review level,
+                      and column-only updated otherwise. Every re-stamp is audit-logged as
+                      <code className="mx-1">ADMIN_BULK_OVERRIDE_FINAL_UNLOCK</code>
+                      and notifies the employee, their manager, and HR PMS (POLICY §88.1).
                     </p>
                   </div>
                 </label>
