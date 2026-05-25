@@ -37,7 +37,6 @@ import {
 } from '@/hooks/useBulkReview';
 import { BulkCellDrawer } from '@/components/review/BulkCellDrawer';
 import { BulkReviewMatrixGrid } from '@/components/review/BulkReviewMatrixGrid';
-import { EmployeeWindowPager } from '@/components/review/EmployeeWindowPager';
 import { useToast } from '@/hooks/use-toast';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
@@ -59,11 +58,6 @@ const VIEWER_STAGES = [
   { value: 'auditor', label: 'Auditor' },
   { value: 'management', label: 'Management' },
 ];
-
-/** Matrix employee window — keeps sticky-column rendering manageable on
- * tenants with 100+ mapped employees while preserving full reachability via
- * Prev / Next / Jump pager (see EmployeeWindowPager). */
-const EMP_WINDOW_SIZE = 20;
 
 /**
  * Bulk Review Dashboard (PRD v2.0, Phase 1 — M2 shell).
@@ -103,7 +97,6 @@ export default function BulkReviewDashboard() {
   const [displayMode, setDisplayMode] = useState<'score' | 'wt' | 'both'>('score');
   const [hideEmpty, setHideEmpty] = useState(false);
   const [scopeLoaded, setScopeLoaded] = useState(false);
-  const [empWindowStart, setEmpWindowStart] = useState(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeRow, setActiveRow] = useState<BulkReviewRow | null>(null);
   const [confirmApprove, setConfirmApprove] = useState(false);
@@ -169,11 +162,6 @@ export default function BulkReviewDashboard() {
     setKraName('');
   }, [categoryId, period, year]);
 
-  // Reset employee window when filters change or a new snapshot lands.
-  useEffect(() => {
-    setEmpWindowStart(0);
-  }, [period, year, viewerStage, filters, kraName]);
-
   const capExceeded = preview.data?.cap_exceeded ?? false;
   const canLoad = flagOn && !!preview.data && !capExceeded && (preview.data?.cell_count ?? 0) > 0;
 
@@ -200,34 +188,6 @@ export default function BulkReviewDashboard() {
     }
     return rows;
   }, [rawRows, search, hideEmpty, kraName]);
-
-  // Build distinct employee list from the (filtered) row set, then slice
-  // by the current window before handing rows to the matrix grid.
-  const employeeList = useMemo(() => {
-    const seen = new Map<string, { id: string; name: string; code: string | null }>();
-    for (const r of loadedRows) {
-      if (!seen.has(r.employee_id)) {
-        seen.set(r.employee_id, {
-          id: r.employee_id,
-          name: r.employee_name ?? '',
-          code: r.employee_code ?? null,
-        });
-      }
-    }
-    return Array.from(seen.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [loadedRows]);
-
-  const visibleEmpIds = useMemo(() => {
-    const end = Math.min(employeeList.length, empWindowStart + EMP_WINDOW_SIZE);
-    return new Set(employeeList.slice(empWindowStart, end).map(e => e.id));
-  }, [employeeList, empWindowStart]);
-
-  const windowedRows = useMemo(
-    () => (employeeList.length <= EMP_WINDOW_SIZE
-      ? loadedRows
-      : loadedRows.filter(r => visibleEmpIds.has(r.employee_id))),
-    [loadedRows, visibleEmpIds, employeeList.length],
-  );
 
   const variance = useMemo(() => {
     let count = 0;
@@ -370,7 +330,7 @@ export default function BulkReviewDashboard() {
               size="sm"
               className="h-9"
               disabled={!canLoad}
-              onClick={() => { setEmpWindowStart(0); setScopeLoaded(true); }}
+              onClick={() => { setScopeLoaded(true); }}
             >
               Load Scope
               {activeFilterCount > 0 && (
@@ -600,17 +560,8 @@ export default function BulkReviewDashboard() {
                   No KPIs match the selected scope.
                 </p>
               ) : (
-                <>
-                  {employeeList.length > EMP_WINDOW_SIZE && (
-                    <EmployeeWindowPager
-                      employees={employeeList}
-                      windowSize={EMP_WINDOW_SIZE}
-                      start={empWindowStart}
-                      onChange={setEmpWindowStart}
-                    />
-                  )}
                   <BulkReviewMatrixGrid
-                    rows={windowedRows}
+                    rows={loadedRows}
                     viewerStage={viewerStage}
                     selectedSubmissionIds={selectedIds}
                     onToggleSubmission={toggleOne}
@@ -618,11 +569,10 @@ export default function BulkReviewDashboard() {
                     onCellClick={setActiveRow}
                     displayMode={displayMode}
                   />
-                </>
               )}
 
-              {/* Cell-based pagination removed: snapshotAll now loads every page
-                  on Load Scope. Employee navigation handled by EmployeeWindowPager. */}
+              {/* Snapshot loads every page on Load Scope; employees scroll
+                  horizontally with the KPI/KRA column frozen on the left. */}
 
           {/* Action toolbar */}
           {selectedIds.size > 0 && (

@@ -63,5 +63,5 @@ type: feature
 
 **Matrix mode reachability (v2.66.12.5):**
 - `useBulkReviewSnapshotAll` loops `bulk_review_snapshot` pages (`p_page_size=500`) until exhausted on Load Scope; hard guard at 60 pages (30k cells). Pre-`bulk_scope_preview` 25k-cell cap (POLICY §0) still gates the Load button so the loop never runs away.
-- Matrix view renders only an employee window (`EMP_WINDOW_SIZE = 20`) at a time via `EmployeeWindowPager` — sticky-column table stays smooth on 100+ employee tenants while every employee remains reachable via Prev / Next / Jump.
+- Matrix renders **every mapped employee as a column** with horizontal scroll inside the matrix surface; the `KPI / KRA` column is frozen (sticky-left) and the employee header row is sticky-top. No employee windowing/pager — `EmployeeWindowPager` removed in v2.66.12.6. Fixed column widths (KPI 260px, Employee 112px) keep the layout usable at 100% browser zoom; the 25k-cell scope cap still bounds total render cost.
 - KRA filter (`useBulkReviewKraOptions`) cascades from Category and is applied **client-side** on the accumulated rows — RPC signature unchanged. Selection resets when Category / Period / Year changes.
