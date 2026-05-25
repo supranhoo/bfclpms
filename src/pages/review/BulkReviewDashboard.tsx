@@ -574,6 +574,7 @@ export default function BulkReviewDashboard() {
                     onToggleAll={toggleAllFromMatrix}
                     onCellClick={setActiveRow}
                     displayMode={displayMode}
+                    isOrgByKpiId={isOrgByKpiId}
                   />
               )}
 
