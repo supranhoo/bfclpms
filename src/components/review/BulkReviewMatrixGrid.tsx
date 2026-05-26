@@ -260,7 +260,7 @@ export function BulkReviewMatrixGrid({
   const expandAll = () => setCollapsedKras(new Set());
   const allCollapsed = kraGroups.size > 0 && kraGroups.size === collapsedKras.size;
 
-  const KPI_COL_W = 260;
+  const KPI_COL_W = 360;
   const EMP_COL_W = 112;
   const totalW = KPI_COL_W + employees.length * EMP_COL_W;
 
