@@ -38,6 +38,8 @@ interface Props {
   onCellInputChange?: (submissionId: string, next: CellInputs) => void;
   /** Admin override toggle state — unlocks editing on every row. */
   isOverride?: boolean;
+  /** Stage being stamped — highlighted in the all-levels matrix. */
+  stageLabel?: string;
 }
 
 const SOURCE_LABEL: Record<CarriedSource, string> = {
