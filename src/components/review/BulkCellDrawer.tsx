@@ -19,6 +19,7 @@ import {
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { KpiReviewPanel, type ViewLevel } from './KpiReviewPanel';
 import { AchievedValueScoreInput } from './AchievedValueScoreInput';
+import { validateBulkRemark, BULK_REMARK_MIN_LENGTH } from '@/lib/bulkCellDrawerRemarks';
 
 type Stage = 'manager' | 'skip_level' | 'hr_pms' | 'auditor';
 
@@ -117,15 +118,25 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
       toast({ title: 'Score required', description: 'Enter an achievement or a manual rating.', variant: 'destructive' });
       return;
     }
+    const remarkCheck = validateBulkRemark(remarks);
+    if (!remarkCheck.ok) {
+      toast({
+        title: 'Remarks required',
+        description: `Please enter at least ${BULK_REMARK_MIN_LENGTH} characters explaining the score.`,
+        variant: 'destructive',
+      });
+      return;
+    }
     try {
       const res = await write.mutateAsync({
         stage: writeStage,
         cells: [{
           submission_id: row.submission_id,
           score: effectiveScore,
-          remarks: remarks || null,
+          remarks: remarkCheck.trimmed,
           expected_row_version: row.row_version ?? null,
         }],
+        reason: remarkCheck.trimmed,
         achieved_values: manualMode ? undefined : { [row.submission_id]: achieved },
       });
       if (res.applied === 0) {
@@ -281,19 +292,24 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
               )}
 
               <div>
-                <Label className="text-xs">Remarks</Label>
+                <Label className="text-xs">Remarks (required, min {BULK_REMARK_MIN_LENGTH} characters)</Label>
                 <Textarea
                   rows={2}
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
-                  placeholder="Optional — visible in review trail"
+                  placeholder={`Required — visible in review trail (min ${BULK_REMARK_MIN_LENGTH} characters)`}
                 />
+                {remarks.trim().length > 0 && remarks.trim().length < BULK_REMARK_MIN_LENGTH && (
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    {BULK_REMARK_MIN_LENGTH - remarks.trim().length} more character{BULK_REMARK_MIN_LENGTH - remarks.trim().length === 1 ? '' : 's'} required
+                  </p>
+                )}
               </div>
 
               <Button
                 size="sm"
                 onClick={handleWrite}
-                disabled={write.isPending || effectiveScore === null}
+                disabled={write.isPending || effectiveScore === null || remarks.trim().length < BULK_REMARK_MIN_LENGTH}
               >
                 {write.isPending ? 'Saving…' : `Save ${STAGE_LABEL[writeStage]} score`}
               </Button>
