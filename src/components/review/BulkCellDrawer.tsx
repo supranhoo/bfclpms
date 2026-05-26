@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -18,6 +18,7 @@ import {
 } from '@/hooks/useBulkReview';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { KpiReviewPanel, type ViewLevel } from './KpiReviewPanel';
+import { AchievedValueScoreInput } from './AchievedValueScoreInput';
 
 type Stage = 'manager' | 'skip_level' | 'hr_pms' | 'auditor';
 
@@ -52,11 +53,39 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
   const write = useBulkWriteStageScores();
   const reopen = useBulkReopenCells();
 
-  const [score, setScore] = useState<string>('');
+  const [manualScore, setManualScore] = useState<string>('');
+  const [achieved, setAchieved] = useState<number | string | null>(null);
+  const [computedScore, setComputedScore] = useState<number | null>(null);
+  const [manualMode, setManualMode] = useState<boolean>(false);
   const [remarks, setRemarks] = useState<string>('');
   const [reopenReason, setReopenReason] = useState<string>('');
   const [reopenStages, setReopenStages] = useState<Stage[]>([]);
   const [confirmReopen, setConfirmReopen] = useState(false);
+
+  const kpiDetail = detail.data?.kpi as any;
+  const submission = detail.data?.submission as any;
+
+  // KPI has thresholds defined → achievement-driven scoring is available.
+  const hasThresholds = useMemo(() => {
+    if (!kpiDetail) return false;
+    return [kpiDetail.r0, kpiDetail.r1, kpiDetail.r2, kpiDetail.r3, kpiDetail.r4, kpiDetail.r5]
+      .some((v) => v !== null && v !== undefined && v !== '');
+  }, [kpiDetail]);
+
+  // Seed reviewer inputs when the drawer is opened for a (new) row.
+  useEffect(() => {
+    if (!open) return;
+    setAchieved(submission?.achieved_value ?? null);
+    setComputedScore(null);
+    setManualScore('');
+    setRemarks('');
+    setManualMode(false);
+  }, [open, row?.submission_id, submission?.achieved_value]);
+
+  // Auto-enable manual mode when KPI has no rating thresholds.
+  useEffect(() => {
+    if (kpiDetail && !hasThresholds) setManualMode(true);
+  }, [kpiDetail, hasThresholds]);
 
   if (!row) return null;
 
@@ -78,11 +107,14 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
   const completed = scores.filter((s) => s.value !== null && s.value !== undefined).map((s) => s.value as number);
   const variance = completed.length >= 2 ? Math.max(...completed) - Math.min(...completed) : 0;
 
+  const effectiveScore: number | null = manualMode
+    ? (manualScore === '' || Number.isNaN(Number(manualScore)) ? null : Number(manualScore))
+    : computedScore;
+
   const handleWrite = async () => {
     if (!writeStage || !row.submission_id) return;
-    const n = Number(score);
-    if (Number.isNaN(n)) {
-      toast({ title: 'Invalid score', variant: 'destructive' });
+    if (effectiveScore === null) {
+      toast({ title: 'Score required', description: 'Enter an achievement or a manual rating.', variant: 'destructive' });
       return;
     }
     try {
@@ -90,10 +122,11 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
         stage: writeStage,
         cells: [{
           submission_id: row.submission_id,
-          score: n,
+          score: effectiveScore,
           remarks: remarks || null,
           expected_row_version: row.row_version ?? null,
         }],
+        achieved_values: manualMode ? undefined : { [row.submission_id]: achieved },
       });
       if (res.applied === 0) {
         toast({
@@ -103,7 +136,7 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
         });
       } else {
         toast({ title: 'Score saved', description: `${STAGE_LABEL[writeStage]} score updated.` });
-        setScore(''); setRemarks('');
+        setManualScore(''); setRemarks(''); setComputedScore(null);
       }
     } catch (e: any) {
       toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
@@ -209,24 +242,58 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
                   </AlertDescription>
                 </Alert>
               )}
-              <div className="grid grid-cols-3 gap-2">
+              {/* Achievement-driven scoring — parity with stage page. */}
+              {kpiDetail && !manualMode && hasThresholds && (
+                <AchievedValueScoreInput
+                  kpi={kpiDetail}
+                  achievedValue={achieved}
+                  score={computedScore}
+                  onAchievedValueChange={(v) => setAchieved(v)}
+                  onScoreChange={(s) => setComputedScore(s)}
+                  label={`${STAGE_LABEL[writeStage]} Score`}
+                  reviewMonth={kpiDetail?.review_period as string | undefined}
+                  reviewYear={kpiDetail?.review_year as number | undefined}
+                />
+              )}
+
+              {/* Manual 0–5 fallback (auto-on when thresholds missing). */}
+              {(manualMode || !hasThresholds) && (
                 <div>
-                  <Label className="text-xs">Score</Label>
+                  <Label className="text-xs">Manual rating (0–5)</Label>
                   <Input
                     type="number" step="0.1" min="0" max="5"
-                    value={score} onChange={(e) => setScore(e.target.value)}
+                    value={manualScore} onChange={(e) => setManualScore(e.target.value)}
                     placeholder="0–5"
                   />
                 </div>
-                <div className="col-span-2">
-                  <Label className="text-xs">Remarks</Label>
-                  <Input value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Optional" />
-                </div>
+              )}
+
+              {hasThresholds && (
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-xs"
+                  onClick={() => setManualMode((m) => !m)}
+                >
+                  {manualMode ? 'Use achievement-based scoring' : 'Use manual 0–5 rating instead'}
+                </Button>
+              )}
+
+              <div>
+                <Label className="text-xs">Remarks</Label>
+                <Textarea
+                  rows={2}
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  placeholder="Optional — visible in review trail"
+                />
               </div>
+
               <Button
                 size="sm"
                 onClick={handleWrite}
-                disabled={write.isPending || !score}
+                disabled={write.isPending || effectiveScore === null}
               >
                 {write.isPending ? 'Saving…' : `Save ${STAGE_LABEL[writeStage]} score`}
               </Button>
