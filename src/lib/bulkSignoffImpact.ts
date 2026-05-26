@@ -189,6 +189,10 @@ export function buildBulkSignoffImpact(input: BuildImpactInput): ImpactSummary {
     currentWeightSum: number;
     projectedWeightedSum: number;
     projectedWeightSum: number;
+    selfWeightedSum: number;
+    selfWeightSum: number;
+    managerWeightedSum: number;
+    managerWeightSum: number;
   }>();
 
   for (const r of loadedRows) {
@@ -199,6 +203,8 @@ export function buildBulkSignoffImpact(input: BuildImpactInput): ImpactSummary {
         cellsInBatch: 0, batchWeightSum: 0, skippedInBatch: 0,
         currentWeightedSum: 0, currentWeightSum: 0,
         projectedWeightedSum: 0, projectedWeightSum: 0,
+        selfWeightedSum: 0, selfWeightSum: 0,
+        managerWeightedSum: 0, managerWeightSum: 0,
       });
     }
     const agg = empMap.get(eid)!;
@@ -211,6 +217,14 @@ export function buildBulkSignoffImpact(input: BuildImpactInput): ImpactSummary {
     if (cur != null) {
       agg.currentWeightedSum += cur * wt;
       agg.currentWeightSum += wt;
+    }
+    if (r.self_score != null) {
+      agg.selfWeightedSum += r.self_score * wt;
+      agg.selfWeightSum += wt;
+    }
+    if (r.manager_score != null) {
+      agg.managerWeightedSum += r.manager_score * wt;
+      agg.managerWeightSum += wt;
     }
 
     // Projected: if this row is in the batch, replace stage score with resolved.
@@ -251,6 +265,12 @@ export function buildBulkSignoffImpact(input: BuildImpactInput): ImpactSummary {
         projectedOverall: Math.round(proj * 100) / 100,
         delta: Math.round((proj - cur) * 100) / 100,
         skippedInBatch: e.skippedInBatch,
+        selfAvg: e.selfWeightSum > 0
+          ? Math.round((e.selfWeightedSum / e.selfWeightSum) * 100) / 100
+          : null,
+        managerAvg: e.managerWeightSum > 0
+          ? Math.round((e.managerWeightedSum / e.managerWeightSum) * 100) / 100
+          : null,
       };
     })
     .sort((a, b) => a.employee_name.localeCompare(b.employee_name));
