@@ -187,4 +187,52 @@ describe('buildBulkSignoffImpact', () => {
     // ruleB: 99 ≥ R4=98 → rating 4
     expect(out.cells[0]).toMatchObject({ score: 4, source: 'computed', weightedImpact: 0.8 });
   });
+
+  it('surfaces all six stage scores + KPI metadata on each preview cell', () => {
+    const rows: SnapshotCell[] = [
+      { ...baseCell, submission_id: 's1', kpi_id: 'kpi-a',
+        employee_id: 'e1', employee_name: 'Aakash', weightage: 15,
+        self_score: 3, manager_score: 4, skip_level_score: 5,
+        hr_pms_score: null, auditor_score: 2, management_score: null },
+    ];
+    const out = buildBulkSignoffImpact({
+      stage: 'hr_pms',
+      loadedRows: rows,
+      selectedSubmissionIds: new Set(['s1']),
+      ruleByKpiId: new Map([['kpi-a', ruleA]]),
+      achievedBySubmissionId: new Map([['s1', 88]]),
+    });
+    const c = out.cells[0];
+    expect(c.kra_name).toBe('Cost Control');
+    expect(c.uom).toBe('Number');
+    expect(c.target_value).toBe(100);
+    expect(c.achieved_current).toBe(88);
+    expect(c.stageScores).toEqual({
+      self: 3, manager: 4, skip_level: 5,
+      hr_pms: null, auditor: 2, management: null, final: null,
+    });
+  });
+
+  it('computes weighted selfAvg and managerAvg per employee', () => {
+    const rows: SnapshotCell[] = [
+      { ...baseCell, submission_id: 'a', kpi_id: 'kpi-a',
+        employee_id: 'e1', employee_name: 'Aakash', weightage: 60,
+        self_score: 3, manager_score: 4 },
+      { ...baseCell, submission_id: 'b', kpi_id: 'kpi-b',
+        employee_id: 'e1', employee_name: 'Aakash', weightage: 40,
+        self_score: 5, manager_score: null },
+    ];
+    const out = buildBulkSignoffImpact({
+      stage: 'manager',
+      loadedRows: rows,
+      selectedSubmissionIds: new Set(['a', 'b']),
+      ruleByKpiId: new Map([['kpi-a', ruleA], ['kpi-b', ruleB]]),
+      achievedBySubmissionId: new Map(),
+    });
+    const emp = out.perEmployee[0];
+    // selfAvg = (3*60 + 5*40)/100 = 3.8
+    expect(emp.selfAvg).toBe(3.8);
+    // managerAvg = only row a contributes → 4
+    expect(emp.managerAvg).toBe(4);
+  });
 });
