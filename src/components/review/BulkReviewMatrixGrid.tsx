@@ -472,9 +472,18 @@ export function BulkReviewMatrixGrid({
                                 </Tooltip>
                               </TooltipProvider>
                             )}
-                            <div className="text-xs font-semibold leading-snug text-foreground line-clamp-2 flex-1 min-w-0">
-                              {kpi.kpiName}
-                            </div>
+                            <TooltipProvider delayDuration={200}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="text-xs font-semibold leading-snug text-foreground flex-1 min-w-0 break-words whitespace-normal cursor-help">
+                                    {kpi.kpiName}
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="max-w-md text-xs whitespace-pre-wrap break-words">
+                                  {kpi.kpiName}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                             <OrgKpiBadge status={orgStatusByKpiKey?.get(kpi.key)} />
                             {onFocusKpi && (
                               <TooltipProvider delayDuration={200}>
