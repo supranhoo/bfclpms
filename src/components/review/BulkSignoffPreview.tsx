@@ -317,91 +317,161 @@ function CellTable({
     );
   };
 
-  return (
-    <div className="max-h-64 overflow-auto">
-      {/* Desktop ≥ md */}
-      <table className="w-full text-xs hidden md:table" role="table">
-        <thead className="sticky top-0 bg-background z-10">
-          <tr className="border-b border-border">
-            <th className="text-left p-2 font-medium text-muted-foreground">Employee</th>
-            <th className="text-left p-2 font-medium text-muted-foreground">KPI</th>
-            <th className="text-right p-2 font-medium text-muted-foreground">Wt%</th>
-            {editable && <th className="text-right p-2 font-medium text-muted-foreground">Achieved</th>}
-            <th className="text-right p-2 font-medium text-muted-foreground">Score</th>
-            <th className="text-left p-2 font-medium text-muted-foreground">Source</th>
-            <th className="text-right p-2 font-medium text-muted-foreground">Impact</th>
-          </tr>
-        </thead>
-        <tbody>
-          {cells.map(c => (
-            <tr
-              key={c.submission_id}
-              className={cn(
-                'border-b border-border/50 hover:bg-muted/50',
-                c.source === 'none' && 'bg-destructive/5',
-                c.source === 'override' && 'bg-amber-500/5',
-              )}
-            >
-              <td className="p-2 truncate max-w-[140px]">{c.employee_name}</td>
-              <td className="p-2 truncate max-w-[200px]">{c.kpi_name}</td>
-              <td className="p-2 text-right tabular-nums">{c.weightage}%</td>
-              {editable && (
-                <td className="p-2 text-right">
-                  {isRowEditable(c) ? renderAchievedInput(c) : <span className="text-muted-foreground">—</span>}
-                </td>
-              )}
-              <td className="p-2 text-right tabular-nums font-medium">
-                {c.score == null
-                  ? <span className="inline-flex items-center gap-1 text-destructive">● —</span>
-                  : c.score.toFixed(1)}
-              </td>
-              <td className="p-2"><SourceBadge source={c.source} /></td>
-              <td className={cn(
-                'p-2 text-right tabular-nums',
-                c.weightedImpact != null && c.weightedImpact > 0 && 'text-emerald-600 dark:text-emerald-400',
-              )}>
-                {c.weightedImpact == null ? '—' : fmt(c.weightedImpact, true)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+  const targetKey = stageKeyFromLabel(targetStageLabel);
 
-      {/* Mobile < md: stacked cards */}
+  return (
+    <div className="max-h-[60vh] overflow-auto">
+      {/* Desktop ≥ md — wide multi-stage matrix */}
+      <div className="hidden md:block overflow-x-auto">
+        <table
+          className="w-full text-xs min-w-[1280px]"
+          role="table"
+          aria-label="Per-cell scoring across all review levels"
+        >
+          <thead className="sticky top-0 bg-background z-10">
+            <tr className="border-b border-border">
+              <th className="text-left p-2 font-medium text-muted-foreground">Employee</th>
+              <th className="text-left p-2 font-medium text-muted-foreground">KRA · KPI</th>
+              <th className="text-left p-2 font-medium text-muted-foreground">UoM</th>
+              <th className="text-right p-2 font-medium text-muted-foreground">Target</th>
+              <th className="text-right p-2 font-medium text-muted-foreground">Wt%</th>
+              <th className="text-right p-2 font-medium text-muted-foreground">Achvd</th>
+              {editable && <th className="text-right p-2 font-medium text-muted-foreground">Override</th>}
+              {STAGE_COLS.map(s => (
+                <th
+                  key={s.key}
+                  className={cn(
+                    'text-right p-2 font-medium text-muted-foreground',
+                    targetKey === s.key && 'bg-primary/10 text-primary border-l border-r border-primary/40',
+                  )}
+                >
+                  {s.label}
+                </th>
+              ))}
+              <th className="text-right p-2 font-medium text-muted-foreground">Resolved</th>
+              <th className="text-left p-2 font-medium text-muted-foreground">Source</th>
+              <th className="text-right p-2 font-medium text-muted-foreground">Impact</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cells.map(c => {
+              const stages = c.stageScores;
+              return (
+                <tr
+                  key={c.submission_id}
+                  className={cn(
+                    'border-b border-border/50 hover:bg-muted/50',
+                    c.source === 'none' && 'bg-destructive/5',
+                    c.source === 'override' && 'bg-amber-500/5',
+                  )}
+                >
+                  <td className="p-2 truncate max-w-[140px]">{c.employee_name}</td>
+                  <td className="p-2 max-w-[220px]">
+                    {c.kra_name && (
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">
+                        {c.kra_name}
+                      </div>
+                    )}
+                    <div className="truncate">{c.kpi_name}</div>
+                  </td>
+                  <td className="p-2 text-muted-foreground truncate max-w-[80px]">{c.uom ?? '—'}</td>
+                  <td className="p-2 text-right tabular-nums text-muted-foreground">
+                    {c.target_value == null ? '—' : c.target_value}
+                  </td>
+                  <td className="p-2 text-right tabular-nums">{c.weightage}%</td>
+                  <td className="p-2 text-right tabular-nums text-muted-foreground">
+                    {c.achieved_current == null || c.achieved_current === '' ? '—' : String(c.achieved_current)}
+                  </td>
+                  {editable && (
+                    <td className="p-2 text-right">
+                      {isRowEditable(c) ? renderAchievedInput(c) : <span className="text-muted-foreground">—</span>}
+                    </td>
+                  )}
+                  {STAGE_COLS.map(s => (
+                    <StageCell
+                      key={s.key}
+                      value={stages?.[s.key] ?? null}
+                      highlighted={targetKey === s.key}
+                    />
+                  ))}
+                  <td className="p-2 text-right tabular-nums font-semibold">
+                    {c.score == null
+                      ? <span className="inline-flex items-center gap-1 text-destructive">● —</span>
+                      : c.score.toFixed(1)}
+                  </td>
+                  <td className="p-2"><SourceBadge source={c.source} /></td>
+                  <td className={cn(
+                    'p-2 text-right tabular-nums',
+                    c.weightedImpact != null && c.weightedImpact > 0 && 'text-emerald-600 dark:text-emerald-400',
+                  )}>
+                    {c.weightedImpact == null ? '—' : fmt(c.weightedImpact, true)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile < md: stacked cards with 3×2 stage mini-grid */}
       <div className="md:hidden divide-y divide-border">
-        {cells.map(c => (
-          <Card key={c.submission_id} className={cn(
-            'rounded-none border-0 shadow-none',
-            c.source === 'none' && 'bg-destructive/5',
-            c.source === 'override' && 'bg-amber-500/5',
-          )}>
-            <CardContent className="p-3 space-y-1">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-medium text-sm truncate">{c.employee_name}</span>
-                <SourceBadge source={c.source} />
-              </div>
-              <p className="text-xs text-muted-foreground truncate">{c.kpi_name}</p>
-              {editable && isRowEditable(c) && (
-                <div className="flex items-center gap-2 pt-1">
-                  <span className="text-[10px] text-muted-foreground w-14">Achieved</span>
-                  {renderAchievedInput(c)}
+        {cells.map(c => {
+          const stages = c.stageScores;
+          return (
+            <Card key={c.submission_id} className={cn(
+              'rounded-none border-0 shadow-none',
+              c.source === 'none' && 'bg-destructive/5',
+              c.source === 'override' && 'bg-amber-500/5',
+            )}>
+              <CardContent className="p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-sm truncate">{c.employee_name}</span>
+                  <SourceBadge source={c.source} />
                 </div>
-              )}
-              <div className="flex items-center justify-between text-xs">
-                <span>Wt {c.weightage}%</span>
-                <span className="tabular-nums">
-                  Score {c.score == null ? <span className="text-destructive">● —</span> : c.score.toFixed(1)}
-                </span>
-                <span className={cn(
-                  'tabular-nums',
-                  c.weightedImpact != null && c.weightedImpact > 0 && 'text-emerald-600 dark:text-emerald-400',
-                )}>
-                  Impact {c.weightedImpact == null ? '—' : fmt(c.weightedImpact, true)}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                {c.kra_name && (
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">{c.kra_name}</p>
+                )}
+                <p className="text-xs text-muted-foreground truncate">{c.kpi_name}</p>
+                {stages && (
+                  <div className="grid grid-cols-3 gap-1 pt-1">
+                    {STAGE_COLS.map(s => (
+                      <div
+                        key={s.key}
+                        className={cn(
+                          'flex items-center justify-between rounded border border-border/60 px-1.5 py-1 text-[10px]',
+                          targetKey === s.key && 'border-primary/60 bg-primary/5',
+                        )}
+                      >
+                        <span className="text-muted-foreground">{s.label}</span>
+                        <span className={cn('tabular-nums font-medium', scoreTone(stages[s.key]))}>
+                          {stages[s.key] == null ? '—' : stages[s.key]!.toFixed(1)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {editable && isRowEditable(c) && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <span className="text-[10px] text-muted-foreground w-14">Achieved</span>
+                    {renderAchievedInput(c)}
+                  </div>
+                )}
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <span>Wt {c.weightage}%</span>
+                  <span className="tabular-nums">
+                    Resolved {c.score == null ? <span className="text-destructive">● —</span> : c.score.toFixed(1)}
+                  </span>
+                  <span className={cn(
+                    'tabular-nums',
+                    c.weightedImpact != null && c.weightedImpact > 0 && 'text-emerald-600 dark:text-emerald-400',
+                  )}>
+                    Impact {c.weightedImpact == null ? '—' : fmt(c.weightedImpact, true)}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );
