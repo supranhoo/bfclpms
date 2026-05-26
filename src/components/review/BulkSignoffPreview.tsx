@@ -38,6 +38,8 @@ interface Props {
   onCellInputChange?: (submissionId: string, next: CellInputs) => void;
   /** Admin override toggle state — unlocks editing on every row. */
   isOverride?: boolean;
+  /** Stage being stamped — highlighted in the all-levels matrix. */
+  stageLabel?: string;
 }
 
 const SOURCE_LABEL: Record<CarriedSource, string> = {
@@ -82,6 +84,7 @@ export function BulkSignoffPreview({
   preview, isLoading, error,
   ruleByKpiId, kpiIdBySubmissionId,
   inputs, onCellInputChange, isOverride = false,
+  stageLabel,
 }: Props) {
   const [expanded, setExpanded] = useState(true);
 
@@ -167,14 +170,19 @@ export function BulkSignoffPreview({
             inputs={inputs}
             onCellInputChange={onCellInputChange}
             isOverride={isOverride}
+            targetStageLabel={stageLabel}
           />
         )}
       </div>
 
       {/* ── Legend ──────────────────────────────────────────────────── */}
       <p className="text-[10px] text-muted-foreground leading-relaxed">
-        <strong>Badges:</strong> self · manager · skip-lvl · hr_pms · computed (rating from Achieved) · override · no data.
-        Type an <strong>Achieved</strong> value to auto-compute the rating.
+        <strong>Stage columns</strong> show every reviewer score on file. The
+        <strong> {stageLabel ?? 'target stage'}</strong> column is highlighted
+        — that is the column this bulk action will stamp. <strong>Resolved</strong> is
+        the value that will be written (carried from the highest prior stage
+        or computed from <strong>Achieved</strong>). Type an Achieved value to
+        auto-compute the rating on rows marked ●.
       </p>
 
       {/* ── Per-employee rollup ──────────────────────────────────────── */}
@@ -197,10 +205,53 @@ interface CellTableProps {
   inputs?: Map<string, CellInputs>;
   onCellInputChange?: (submissionId: string, next: CellInputs) => void;
   isOverride?: boolean;
+  targetStageLabel?: string;
+}
+
+type StageKey = 'self' | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management' | 'final';
+
+const STAGE_COLS: Array<{ key: StageKey; label: string; match: string[] }> = [
+  { key: 'self',        label: 'Self',     match: ['self'] },
+  { key: 'manager',     label: 'Manager',  match: ['manager'] },
+  { key: 'skip_level',  label: 'Skip-Lvl', match: ['skip', 'skip_level', 'skip-level', 'skip-lvl'] },
+  { key: 'hr_pms',      label: 'HR PMS',   match: ['hr_pms', 'hr pms', 'hrpms'] },
+  { key: 'auditor',     label: 'Auditor',  match: ['auditor'] },
+  { key: 'management',  label: 'Mgmt',     match: ['management', 'mgmt'] },
+  { key: 'final',       label: 'Final',    match: ['final'] },
+];
+
+function stageKeyFromLabel(label?: string): StageKey | null {
+  if (!label) return null;
+  const norm = label.trim().toLowerCase();
+  return STAGE_COLS.find(s => s.match.includes(norm))?.key ?? null;
+}
+
+function scoreTone(v: number | null | undefined): string {
+  if (v == null) return 'text-muted-foreground/60';
+  if (v >= 4) return 'text-emerald-600 dark:text-emerald-400';
+  if (v >= 3) return 'text-foreground';
+  return 'text-destructive';
+}
+
+function StageCell({
+  value, highlighted,
+}: { value: number | null | undefined; highlighted: boolean }) {
+  return (
+    <td
+      className={cn(
+        'p-2 text-right tabular-nums',
+        scoreTone(value),
+        highlighted && 'bg-primary/5 border-l border-r border-primary/40',
+      )}
+    >
+      {value == null ? '—' : value.toFixed(1)}
+    </td>
+  );
 }
 
 function CellTable({
   cells, ruleByKpiId, kpiIdBySubmissionId, inputs, onCellInputChange, isOverride = false,
+  targetStageLabel,
 }: CellTableProps) {
   const editable = !!onCellInputChange;
 
@@ -267,91 +318,161 @@ function CellTable({
     );
   };
 
-  return (
-    <div className="max-h-64 overflow-auto">
-      {/* Desktop ≥ md */}
-      <table className="w-full text-xs hidden md:table" role="table">
-        <thead className="sticky top-0 bg-background z-10">
-          <tr className="border-b border-border">
-            <th className="text-left p-2 font-medium text-muted-foreground">Employee</th>
-            <th className="text-left p-2 font-medium text-muted-foreground">KPI</th>
-            <th className="text-right p-2 font-medium text-muted-foreground">Wt%</th>
-            {editable && <th className="text-right p-2 font-medium text-muted-foreground">Achieved</th>}
-            <th className="text-right p-2 font-medium text-muted-foreground">Score</th>
-            <th className="text-left p-2 font-medium text-muted-foreground">Source</th>
-            <th className="text-right p-2 font-medium text-muted-foreground">Impact</th>
-          </tr>
-        </thead>
-        <tbody>
-          {cells.map(c => (
-            <tr
-              key={c.submission_id}
-              className={cn(
-                'border-b border-border/50 hover:bg-muted/50',
-                c.source === 'none' && 'bg-destructive/5',
-                c.source === 'override' && 'bg-amber-500/5',
-              )}
-            >
-              <td className="p-2 truncate max-w-[140px]">{c.employee_name}</td>
-              <td className="p-2 truncate max-w-[200px]">{c.kpi_name}</td>
-              <td className="p-2 text-right tabular-nums">{c.weightage}%</td>
-              {editable && (
-                <td className="p-2 text-right">
-                  {isRowEditable(c) ? renderAchievedInput(c) : <span className="text-muted-foreground">—</span>}
-                </td>
-              )}
-              <td className="p-2 text-right tabular-nums font-medium">
-                {c.score == null
-                  ? <span className="inline-flex items-center gap-1 text-destructive">● —</span>
-                  : c.score.toFixed(1)}
-              </td>
-              <td className="p-2"><SourceBadge source={c.source} /></td>
-              <td className={cn(
-                'p-2 text-right tabular-nums',
-                c.weightedImpact != null && c.weightedImpact > 0 && 'text-emerald-600 dark:text-emerald-400',
-              )}>
-                {c.weightedImpact == null ? '—' : fmt(c.weightedImpact, true)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+  const targetKey = stageKeyFromLabel(targetStageLabel);
 
-      {/* Mobile < md: stacked cards */}
+  return (
+    <div className="max-h-[60vh] overflow-auto">
+      {/* Desktop ≥ md — wide multi-stage matrix */}
+      <div className="hidden md:block overflow-x-auto">
+        <table
+          className="w-full text-xs min-w-[1280px]"
+          role="table"
+          aria-label="Per-cell scoring across all review levels"
+        >
+          <thead className="sticky top-0 bg-background z-10">
+            <tr className="border-b border-border">
+              <th className="text-left p-2 font-medium text-muted-foreground">Employee</th>
+              <th className="text-left p-2 font-medium text-muted-foreground">KRA · KPI</th>
+              <th className="text-left p-2 font-medium text-muted-foreground">UoM</th>
+              <th className="text-right p-2 font-medium text-muted-foreground">Target</th>
+              <th className="text-right p-2 font-medium text-muted-foreground">Wt%</th>
+              <th className="text-right p-2 font-medium text-muted-foreground">Achvd</th>
+              {editable && <th className="text-right p-2 font-medium text-muted-foreground">Override</th>}
+              {STAGE_COLS.map(s => (
+                <th
+                  key={s.key}
+                  className={cn(
+                    'text-right p-2 font-medium text-muted-foreground',
+                    targetKey === s.key && 'bg-primary/10 text-primary border-l border-r border-primary/40',
+                  )}
+                >
+                  {s.label}
+                </th>
+              ))}
+              <th className="text-right p-2 font-medium text-muted-foreground">Resolved</th>
+              <th className="text-left p-2 font-medium text-muted-foreground">Source</th>
+              <th className="text-right p-2 font-medium text-muted-foreground">Impact</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cells.map(c => {
+              const stages = c.stageScores;
+              return (
+                <tr
+                  key={c.submission_id}
+                  className={cn(
+                    'border-b border-border/50 hover:bg-muted/50',
+                    c.source === 'none' && 'bg-destructive/5',
+                    c.source === 'override' && 'bg-amber-500/5',
+                  )}
+                >
+                  <td className="p-2 truncate max-w-[140px]">{c.employee_name}</td>
+                  <td className="p-2 max-w-[220px]">
+                    {c.kra_name && (
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">
+                        {c.kra_name}
+                      </div>
+                    )}
+                    <div className="truncate">{c.kpi_name}</div>
+                  </td>
+                  <td className="p-2 text-muted-foreground truncate max-w-[80px]">{c.uom ?? '—'}</td>
+                  <td className="p-2 text-right tabular-nums text-muted-foreground">
+                    {c.target_value == null ? '—' : c.target_value}
+                  </td>
+                  <td className="p-2 text-right tabular-nums">{c.weightage}%</td>
+                  <td className="p-2 text-right tabular-nums text-muted-foreground">
+                    {c.achieved_current == null || c.achieved_current === '' ? '—' : String(c.achieved_current)}
+                  </td>
+                  {editable && (
+                    <td className="p-2 text-right">
+                      {isRowEditable(c) ? renderAchievedInput(c) : <span className="text-muted-foreground">—</span>}
+                    </td>
+                  )}
+                  {STAGE_COLS.map(s => (
+                    <StageCell
+                      key={s.key}
+                      value={stages?.[s.key] ?? null}
+                      highlighted={targetKey === s.key}
+                    />
+                  ))}
+                  <td className="p-2 text-right tabular-nums font-semibold">
+                    {c.score == null
+                      ? <span className="inline-flex items-center gap-1 text-destructive">● —</span>
+                      : c.score.toFixed(1)}
+                  </td>
+                  <td className="p-2"><SourceBadge source={c.source} /></td>
+                  <td className={cn(
+                    'p-2 text-right tabular-nums',
+                    c.weightedImpact != null && c.weightedImpact > 0 && 'text-emerald-600 dark:text-emerald-400',
+                  )}>
+                    {c.weightedImpact == null ? '—' : fmt(c.weightedImpact, true)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile < md: stacked cards with 3×2 stage mini-grid */}
       <div className="md:hidden divide-y divide-border">
-        {cells.map(c => (
-          <Card key={c.submission_id} className={cn(
-            'rounded-none border-0 shadow-none',
-            c.source === 'none' && 'bg-destructive/5',
-            c.source === 'override' && 'bg-amber-500/5',
-          )}>
-            <CardContent className="p-3 space-y-1">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-medium text-sm truncate">{c.employee_name}</span>
-                <SourceBadge source={c.source} />
-              </div>
-              <p className="text-xs text-muted-foreground truncate">{c.kpi_name}</p>
-              {editable && isRowEditable(c) && (
-                <div className="flex items-center gap-2 pt-1">
-                  <span className="text-[10px] text-muted-foreground w-14">Achieved</span>
-                  {renderAchievedInput(c)}
+        {cells.map(c => {
+          const stages = c.stageScores;
+          return (
+            <Card key={c.submission_id} className={cn(
+              'rounded-none border-0 shadow-none',
+              c.source === 'none' && 'bg-destructive/5',
+              c.source === 'override' && 'bg-amber-500/5',
+            )}>
+              <CardContent className="p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-sm truncate">{c.employee_name}</span>
+                  <SourceBadge source={c.source} />
                 </div>
-              )}
-              <div className="flex items-center justify-between text-xs">
-                <span>Wt {c.weightage}%</span>
-                <span className="tabular-nums">
-                  Score {c.score == null ? <span className="text-destructive">● —</span> : c.score.toFixed(1)}
-                </span>
-                <span className={cn(
-                  'tabular-nums',
-                  c.weightedImpact != null && c.weightedImpact > 0 && 'text-emerald-600 dark:text-emerald-400',
-                )}>
-                  Impact {c.weightedImpact == null ? '—' : fmt(c.weightedImpact, true)}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                {c.kra_name && (
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">{c.kra_name}</p>
+                )}
+                <p className="text-xs text-muted-foreground truncate">{c.kpi_name}</p>
+                {stages && (
+                  <div className="grid grid-cols-3 gap-1 pt-1">
+                    {STAGE_COLS.map(s => (
+                      <div
+                        key={s.key}
+                        className={cn(
+                          'flex items-center justify-between rounded border border-border/60 px-1.5 py-1 text-[10px]',
+                          targetKey === s.key && 'border-primary/60 bg-primary/5',
+                        )}
+                      >
+                        <span className="text-muted-foreground">{s.label}</span>
+                        <span className={cn('tabular-nums font-medium', scoreTone(stages[s.key]))}>
+                          {stages[s.key] == null ? '—' : stages[s.key]!.toFixed(1)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {editable && isRowEditable(c) && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <span className="text-[10px] text-muted-foreground w-14">Achieved</span>
+                    {renderAchievedInput(c)}
+                  </div>
+                )}
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <span>Wt {c.weightage}%</span>
+                  <span className="tabular-nums">
+                    Resolved {c.score == null ? <span className="text-destructive">● —</span> : c.score.toFixed(1)}
+                  </span>
+                  <span className={cn(
+                    'tabular-nums',
+                    c.weightedImpact != null && c.weightedImpact > 0 && 'text-emerald-600 dark:text-emerald-400',
+                  )}>
+                    Impact {c.weightedImpact == null ? '—' : fmt(c.weightedImpact, true)}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );
@@ -366,6 +487,8 @@ function EmployeeRollupTable({ rollups }: { rollups: EmployeeRollup[] }) {
             <th className="text-left p-2 font-medium text-muted-foreground">Employee</th>
             <th className="text-right p-2 font-medium text-muted-foreground">Cells</th>
             <th className="text-right p-2 font-medium text-muted-foreground">Σ Wt%</th>
+            <th className="text-right p-2 font-medium text-muted-foreground">Self avg</th>
+            <th className="text-right p-2 font-medium text-muted-foreground">Mgr avg</th>
             <th className="text-right p-2 font-medium text-muted-foreground">Current</th>
             <th className="text-right p-2 font-medium text-muted-foreground">Projected</th>
           </tr>
@@ -376,6 +499,12 @@ function EmployeeRollupTable({ rollups }: { rollups: EmployeeRollup[] }) {
               <td className="p-2 truncate max-w-[160px]">{e.employee_name}</td>
               <td className="p-2 text-right tabular-nums">{e.cellsInBatch}</td>
               <td className="p-2 text-right tabular-nums">{e.batchWeightSum}%</td>
+              <td className={cn('p-2 text-right tabular-nums', scoreTone(e.selfAvg ?? null))}>
+                {e.selfAvg == null ? '—' : e.selfAvg.toFixed(2)}
+              </td>
+              <td className={cn('p-2 text-right tabular-nums', scoreTone(e.managerAvg ?? null))}>
+                {e.managerAvg == null ? '—' : e.managerAvg.toFixed(2)}
+              </td>
               <td className="p-2 text-right tabular-nums">{e.currentOverall.toFixed(2)}</td>
               <td className="p-2 text-right tabular-nums font-medium">
                 <span className="inline-flex items-center gap-1 justify-end">

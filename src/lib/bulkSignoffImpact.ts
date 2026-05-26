@@ -44,6 +44,22 @@ export interface CellPreview {
   source: CarriedSource;
   /** weightage × score / 100 — scoring impact on overall weighted total. */
   weightedImpact: number | null;
+  /** Additive context (POLICY §111.7.a presentation, v2.66.13.10): allow the
+   *  Bulk Sign-off dialog to surface every stage score + KPI metadata
+   *  without changing the write contract. */
+  kra_name?: string;
+  uom?: string | null;
+  target_value?: number | null;
+  achieved_current?: number | string | null;
+  stageScores?: {
+    self: number | null;
+    manager: number | null;
+    skip_level: number | null;
+    hr_pms: number | null;
+    auditor: number | null;
+    management: number | null;
+    final: number | null;
+  };
 }
 
 export interface EmployeeRollup {
@@ -55,6 +71,10 @@ export interface EmployeeRollup {
   projectedOverall: number; // after this sign-off
   delta: number;
   skippedInBatch: number;
+  /** Weighted averages by source stage across the loaded snapshot — purely
+   *  informational, exposed alongside the existing current/projected pair. */
+  selfAvg?: number | null;
+  managerAvg?: number | null;
 }
 
 export interface ImpactSummary {
@@ -142,6 +162,19 @@ export function buildBulkSignoffImpact(input: BuildImpactInput): ImpactSummary {
       // Rating-points × wt / 100 — matches matrix cell formula
       // (`bestScore * weightage / 100`), so totals reconcile with the grid.
       weightedImpact: score == null ? null : Math.round((score * weightage) / 100 * 100) / 100,
+      kra_name: r.kra_name,
+      uom: rule.uom ?? null,
+      target_value: rule.target_value ?? null,
+      achieved_current: achievedBySubmissionId.get(r.submission_id) ?? null,
+      stageScores: {
+        self: r.self_score,
+        manager: r.manager_score,
+        skip_level: r.skip_level_score,
+        hr_pms: r.hr_pms_score,
+        auditor: r.auditor_score,
+        management: r.management_score,
+        final: r.final_score,
+      },
     });
   }
 
@@ -156,6 +189,10 @@ export function buildBulkSignoffImpact(input: BuildImpactInput): ImpactSummary {
     currentWeightSum: number;
     projectedWeightedSum: number;
     projectedWeightSum: number;
+    selfWeightedSum: number;
+    selfWeightSum: number;
+    managerWeightedSum: number;
+    managerWeightSum: number;
   }>();
 
   for (const r of loadedRows) {
@@ -166,6 +203,8 @@ export function buildBulkSignoffImpact(input: BuildImpactInput): ImpactSummary {
         cellsInBatch: 0, batchWeightSum: 0, skippedInBatch: 0,
         currentWeightedSum: 0, currentWeightSum: 0,
         projectedWeightedSum: 0, projectedWeightSum: 0,
+        selfWeightedSum: 0, selfWeightSum: 0,
+        managerWeightedSum: 0, managerWeightSum: 0,
       });
     }
     const agg = empMap.get(eid)!;
@@ -178,6 +217,14 @@ export function buildBulkSignoffImpact(input: BuildImpactInput): ImpactSummary {
     if (cur != null) {
       agg.currentWeightedSum += cur * wt;
       agg.currentWeightSum += wt;
+    }
+    if (r.self_score != null) {
+      agg.selfWeightedSum += r.self_score * wt;
+      agg.selfWeightSum += wt;
+    }
+    if (r.manager_score != null) {
+      agg.managerWeightedSum += r.manager_score * wt;
+      agg.managerWeightSum += wt;
     }
 
     // Projected: if this row is in the batch, replace stage score with resolved.
@@ -218,6 +265,12 @@ export function buildBulkSignoffImpact(input: BuildImpactInput): ImpactSummary {
         projectedOverall: Math.round(proj * 100) / 100,
         delta: Math.round((proj - cur) * 100) / 100,
         skippedInBatch: e.skippedInBatch,
+        selfAvg: e.selfWeightSum > 0
+          ? Math.round((e.selfWeightedSum / e.selfWeightSum) * 100) / 100
+          : null,
+        managerAvg: e.managerWeightSum > 0
+          ? Math.round((e.managerWeightedSum / e.managerWeightSum) * 100) / 100
+          : null,
       };
     })
     .sort((a, b) => a.employee_name.localeCompare(b.employee_name));
