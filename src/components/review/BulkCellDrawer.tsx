@@ -19,6 +19,7 @@ import {
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { KpiReviewPanel, type ViewLevel } from './KpiReviewPanel';
 import { AchievedValueScoreInput } from './AchievedValueScoreInput';
+import { validateBulkRemark, BULK_REMARK_MIN_LENGTH } from '@/lib/bulkCellDrawerRemarks';
 
 type Stage = 'manager' | 'skip_level' | 'hr_pms' | 'auditor';
 
@@ -117,15 +118,25 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
       toast({ title: 'Score required', description: 'Enter an achievement or a manual rating.', variant: 'destructive' });
       return;
     }
+    const remarkCheck = validateBulkRemark(remarks);
+    if (!remarkCheck.ok) {
+      toast({
+        title: 'Remarks required',
+        description: `Please enter at least ${BULK_REMARK_MIN_LENGTH} characters explaining the score.`,
+        variant: 'destructive',
+      });
+      return;
+    }
     try {
       const res = await write.mutateAsync({
         stage: writeStage,
         cells: [{
           submission_id: row.submission_id,
           score: effectiveScore,
-          remarks: remarks || null,
+          remarks: remarkCheck.trimmed,
           expected_row_version: row.row_version ?? null,
         }],
+        reason: remarkCheck.trimmed,
         achieved_values: manualMode ? undefined : { [row.submission_id]: achieved },
       });
       if (res.applied === 0) {
