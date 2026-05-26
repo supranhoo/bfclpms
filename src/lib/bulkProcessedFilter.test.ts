@@ -33,9 +33,18 @@ describe('isKpiRowFullyProcessed', () => {
     expect(isKpiRowFullyProcessed(KEY, ['a', 'b'], m, 'manager_score')).toBe(false);
   });
 
-  it('keeps visible when one employee has no cell at all', () => {
+  it('ignores employees with no cell (unassigned) and hides when all assignees are done', () => {
     const m = cell([['a', { manager_score: 4 }]]);
+    expect(isKpiRowFullyProcessed(KEY, ['a', 'b'], m, 'manager_score')).toBe(true);
+  });
+
+  it('keeps visible when an assignee is pending even if others are unassigned', () => {
+    const m = cell([['a', { manager_score: null }]]);
     expect(isKpiRowFullyProcessed(KEY, ['a', 'b'], m, 'manager_score')).toBe(false);
+  });
+
+  it('keeps visible when no employee in the list has a cell (no assignees)', () => {
+    expect(isKpiRowFullyProcessed(KEY, ['a', 'b'], new Map(), 'manager_score')).toBe(false);
   });
 
   it('treats N/A cells as processed', () => {

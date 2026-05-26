@@ -1,86 +1,57 @@
+## Root Cause
 
-## Goal
+`isKpiRowFullyProcessed` currently iterates over **all visible employees** in the matrix. For most KPIs, only a handful of employees actually have a `kpis` row — the rest render as `—` (no cell in `cellMap`). The current rule treats "no cell" as **pending**, so almost every row stays visible even when all assignees are done. That is why the toggle appears to do nothing in the screenshot.
 
-In the Bulk Review matrix toolbar (the red-highlighted strip between "Collapse all" and the `KPIs / employees / cells` counters), add a toggle that **hides KPI rows where the current viewer stage is already filled in for every filtered employee**. If even one filtered employee on that KPI is still pending at the viewer's stage, the row stays visible.
+## Correct Semantics (aligned with Bulk Review policy)
 
-This is a pure presentation filter — it does not change selection logic, RPC payloads, scoring, or RLS.
+A KPI row is "fully processed at the viewer stage" when, **for every employee who is actually assigned this KPI** (i.e. has a cell in the row):
+- the viewer-stage score is non-null, OR
+- the cell is marked `is_na = true`.
 
-## Risk & Impact Report
+Employees with no cell at all are **not assignees of this KPI** and must not block hiding. If at least one assignee is still pending, the row stays visible (existing guarantee).
 
-- **Data Impact:** None. No schema, RLS, RPC, or audit log changes.
-- **Workflow Impact:** None. Hidden rows are still in `rows`; only the rendered `kpiRows` list shrinks. Selection state is preserved (rows still in scope via submission IDs; hiding doesn't auto-deselect).
-- **UI/UX Impact:** One new `Switch + Label` in the existing toolbar, mirroring "Show KRA · Wt%". Counter strip on the right gets a small "(N hidden)" suffix when the filter is active so users know rows are being suppressed. Empty-state message shown if all rows get hidden.
-- **Regression Risk:** Low. Scope limited to `BulkReviewMatrixGrid.tsx`. Toggle defaults to OFF → existing behavior is byte-identical when off.
-- **Scalability Impact:** O(rows) per re-render, same as the existing memo; no extra fetches.
-- **Mitigation:** Pure-function helper in `src/lib/bulkRowSelection.ts` (or new `src/lib/bulkProcessedFilter.ts`) with unit tests covering the "all done", "one pending", "no submission", and "N/A" cases.
+Edge case: if the row has **zero assignees** (cellMap empty for the row), keep it visible — that's a data anomaly, not a processed row.
 
 ## Plan
 
-### 1. Pure helper (logic isolated from UI)
+### 1. `src/lib/bulkProcessedFilter.ts`
+Change the loop to skip missing cells instead of returning `false`. Track how many cells were actually examined; if zero, return `false` (keep visible). Update the JSDoc to make the "assignees only" semantics explicit.
 
-New file `src/lib/bulkProcessedFilter.ts`:
-
-```ts
-// Returns true if every employee column for this KPI key is already
-// processed at the viewer stage. "Processed" means:
-//   - the cell exists AND
-//   - the stage score column is non-null OR the cell is_na is true.
-// Rows with no cell for an employee are treated as PENDING (visible).
-export function isKpiRowFullyProcessed(
-  kpiKey: string,
-  employeeIds: string[],
-  cellMap: Map<string, BulkReviewRow>,
-  stageKey: keyof BulkReviewRow,
-): boolean
+```text
+for each empId in employeeIds:
+   cell = cellMap.get(key)
+   if !cell        -> continue           // not assigned, ignore
+   if cell.is_na   -> seen++; continue   // processed
+   if score == null -> return false      // pending assignee
+   seen++
+return seen > 0
 ```
 
-Tests in `src/lib/bulkProcessedFilter.test.ts`:
-- all employees have stage score → hidden
-- one employee pending → visible
-- one employee missing cell → visible
-- mixed N/A + score → hidden
-- empty employee list → visible (defensive)
+### 2. `src/lib/bulkProcessedFilter.test.ts`
+- Update "no cell" case → row should now be **hidden** when the only present cell is done.
+- Add new case: assignee with score + another employee with no cell → hidden.
+- Add new case: assignee pending + another employee with no cell → visible.
+- Keep existing N/A and "all done" cases.
+- Keep empty-employee-list defensive case.
 
-### 2. Wire toggle into `BulkReviewMatrixGrid.tsx`
+### 3. No changes needed
+- `BulkReviewMatrixGrid.tsx` — already calls the helper with the full employee list; behaviour now matches user expectation automatically.
+- No DB, RLS, RPC, audit, selection, or workflow logic touched. UI-only presentation filter.
 
-- Add `const [hideProcessed, setHideProcessed] = useState(false);`
-- In the existing `useMemo`, after building `kpiRowsArr`, apply the filter when `hideProcessed` is true, using `stageKey` and `employeesArr` ids.
-- Add `hiddenCount` to the memo return so the toolbar can show "(N hidden)".
-- Add toggle UI inside the existing toolbar `div` (left cluster), after the Collapse/Expand buttons, separated by the same `border-l` divider:
-  ```tsx
-  <Switch id="hide-processed" checked={hideProcessed} onCheckedChange={setHideProcessed} />
-  <Label htmlFor="hide-processed" className="text-xs font-medium cursor-pointer">
-    Hide fully processed
-  </Label>
-  ```
-  Includes a `Tooltip`: *"Hide KPI rows where every filtered employee already has a {stageLabel} score. Rows reappear if any employee is still pending."*
-- Right counter cluster: when `hideProcessed && hiddenCount > 0`, append `<span className="text-amber-600">({hiddenCount} hidden)</span>`.
-- Empty state: if `kpiRows.length === 0 && hideProcessed`, render a small inline notice above the table with a "Show all" link that flips the toggle off.
+### 4. Docs / Policy / Memory
+- `DOCUMENTATION.md` — bump bulk-review entry (v2.66.13.20): clarify "fully processed" = all **assigned** employees done.
+- `POLICY.md` §111 — one-line clarification that unassigned employees do not block the hide toggle.
+- `mem://features/review/bulk-review-dashboard` — add the assignee-only rule.
 
-### 3. Stage label
+## Risk & Impact
 
-Reuse the existing `STAGE_SCORE_KEY` map; add a sibling `STAGE_LABEL` constant for the tooltip text (Manager / Skip Level / HR PMS / Auditor / Management).
+- **Data**: none — pure client-side filter.
+- **Workflow**: none — selection, RPCs, audit unchanged.
+- **UI/UX**: rows where every assignee is done will now correctly disappear; pending assignees still keep their row visible (no missed work).
+- **Regression**: low. The previous behaviour was a no-op in practice (toggle never hid anything in real data), so flipping the rule has minimal blast radius. All 5 existing test cases re-asserted/updated.
+- **Mitigation**: targeted unit tests cover assigned-only, mixed-N/A, pending-assignee, no-assignee, and empty-list scenarios.
 
-### 4. Tests
-
-- `bulkProcessedFilter.test.ts` (new) — 5 cases above.
-- No changes needed to existing bulk-review contract tests (filter is UI-only).
-
-### 5. Docs & Policy
-
-- `DOCUMENTATION.md` — add v2.66.13.19 entry under Bulk Review: "Hide fully-processed KPIs toggle".
-- `POLICY.md` §111 (Bulk Review UX) — add bullet: *"Reviewers may hide KPI rows where every filtered employee already has the viewer-stage score recorded. The toggle is presentation-only; selection, audit, and override paths are unaffected. Rows with any pending employee remain visible to preserve completion visibility."*
-- `mem://features/review/bulk-review-dashboard` — append toggle behavior note.
-
-## What changes visually
-
-- **Location:** Bulk Review → `/review/bulk` matrix toolbar, immediately right of the "Collapse all" button, separated by the same vertical divider style used today.
-- **Default:** Off — no visible change until user opts in.
-- **When on:** KPI rows whose viewer-stage column is filled for every employee column disappear; right-side counter shows `(N hidden)` in amber; if all rows get hidden, an inline "All KPIs processed at this stage — Show all" notice replaces the matrix.
-- **Responsiveness:** Toggle wraps to the next line on narrow viewports thanks to existing `flex-wrap` on the toolbar.
-
-## Out of scope
-
-- Persisting the toggle in URL/localStorage (can be added later via `bulkUrlState` if requested).
-- Hiding employee columns whose every KPI is done (different UX, separate request).
-- Changing the definition of "processed" beyond the viewer stage (e.g. terminal-stage approval) — current spec matches what the reviewer cares about at their own stage.
+## Out of Scope
+- Persisting toggle state in URL/localStorage.
+- Hiding employee columns.
+- Changing what "processed" means at stages other than the current viewer stage.
