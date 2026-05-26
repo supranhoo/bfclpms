@@ -487,6 +487,8 @@ function EmployeeRollupTable({ rollups }: { rollups: EmployeeRollup[] }) {
             <th className="text-left p-2 font-medium text-muted-foreground">Employee</th>
             <th className="text-right p-2 font-medium text-muted-foreground">Cells</th>
             <th className="text-right p-2 font-medium text-muted-foreground">Σ Wt%</th>
+            <th className="text-right p-2 font-medium text-muted-foreground">Self avg</th>
+            <th className="text-right p-2 font-medium text-muted-foreground">Mgr avg</th>
             <th className="text-right p-2 font-medium text-muted-foreground">Current</th>
             <th className="text-right p-2 font-medium text-muted-foreground">Projected</th>
           </tr>
@@ -497,6 +499,12 @@ function EmployeeRollupTable({ rollups }: { rollups: EmployeeRollup[] }) {
               <td className="p-2 truncate max-w-[160px]">{e.employee_name}</td>
               <td className="p-2 text-right tabular-nums">{e.cellsInBatch}</td>
               <td className="p-2 text-right tabular-nums">{e.batchWeightSum}%</td>
+              <td className={cn('p-2 text-right tabular-nums', scoreTone(e.selfAvg ?? null))}>
+                {e.selfAvg == null ? '—' : e.selfAvg.toFixed(2)}
+              </td>
+              <td className={cn('p-2 text-right tabular-nums', scoreTone(e.managerAvg ?? null))}>
+                {e.managerAvg == null ? '—' : e.managerAvg.toFixed(2)}
+              </td>
               <td className="p-2 text-right tabular-nums">{e.currentOverall.toFixed(2)}</td>
               <td className="p-2 text-right tabular-nums font-medium">
                 <span className="inline-flex items-center gap-1 justify-end">
