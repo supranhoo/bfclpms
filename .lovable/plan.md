@@ -1,246 +1,86 @@
-## 1. Assumptions
 
-- You want **HR PMS bulk sign-off with Admin Override** to treat the selected April 2026 cells as a corrective terminal action.
-- For employees whose workflow terminal stage is **HR PMS**, the operation must end in **Approved** even if their current status is still earlier, such as `self_review`.
-- Already-approved rows must remain approved, but their locked `final_score` may be re-stamped with a full audit log.
+## Goal
 
-## 2. Clarifications
+In the Bulk Review matrix toolbar (the red-highlighted strip between "Collapse all" and the `KPIs / employees / cells` counters), add a toggle that **hides KPI rows where the current viewer stage is already filled in for every filtered employee**. If even one filtered employee on that KPI is still pending at the viewer's stage, the row stays visible.
 
-Not Applicable — the reported case is specific enough and the live data confirms the failure mode.
+This is a pure presentation filter — it does not change selection logic, RPC payloads, scoring, or RLS.
 
-## 3. Actual RCA / Why-Why Analysis
+## Risk & Impact Report
 
-### Current live result for the reported April 2026 batch
+- **Data Impact:** None. No schema, RLS, RPC, or audit log changes.
+- **Workflow Impact:** None. Hidden rows are still in `rows`; only the rendered `kpiRows` list shrinks. Selection state is preserved (rows still in scope via submission IDs; hiding doesn't auto-deselect).
+- **UI/UX Impact:** One new `Switch + Label` in the existing toolbar, mirroring "Show KRA · Wt%". Counter strip on the right gets a small "(N hidden)" suffix when the filter is active so users know rows are being suppressed. Empty-state message shown if all rows get hidden.
+- **Regression Risk:** Low. Scope limited to `BulkReviewMatrixGrid.tsx`. Toggle defaults to OFF → existing behavior is byte-identical when off.
+- **Scalability Impact:** O(rows) per re-render, same as the existing memo; no extra fetches.
+- **Mitigation:** Pure-function helper in `src/lib/bulkRowSelection.ts` (or new `src/lib/bulkProcessedFilter.ts`) with unit tests covering the "all done", "one pending", "no submission", and "N/A" cases.
 
-Latest HR PMS override batch checked:
+## Plan
 
-- Batch processed: **4 cells**
-- Skipped: **0**
-- Override: **true**
-- Re-stamped approved rows: **2**
-- Workflow advanced count: **0**
+### 1. Pure helper (logic isolated from UI)
 
-Current database state for the selected Cost Control KPI after processing:
+New file `src/lib/bulkProcessedFilter.ts`:
 
-| Employee | Before expectation | Actual now | HR PMS score | Final score |
-|---|---:|---:|---:|---:|
-| Deepak Ranjan | Already approved | `approved` | 0 | 0 |
-| Sourav Kumar Jaiswal | Already approved | `approved` | 0 | 0 |
-| Ankit Kumar | `self_review` should become approved | still `self_review` | 0 | NULL |
-| Rahul Kumar Prasad | `self_review` should become approved | still `self_review` | 0 | NULL |
-
-### Why 1 — Why did the toast say “No status change”?
-
-Because the backend returned:
-
-- `applied = 4`
-- `advanced = 0`
-- `relocked = 2`
-- `skipped = 0`
-
-So the frontend truthfully reported that values were written, but workflow status did not advance for the two self-review rows.
-
-### Why 2 — Why were values written but status not advanced?
-
-`bulk_write_stage_scores` successfully wrote `hr_pms_score = 0` for all 4 selected rows, including Ankit and Rahul.
-
-But status advancement is delegated to `reconcile_workflow_statuses`, and that reconciler currently refuses to fast-forward a KPI from `self_review` when the workflow still contains intermediate reviewer stages like Manager and Skip-Level.
-
-### Why 3 — Why did the reconciler refuse to fast-forward?
-
-The reconciler has a sequential-workflow guard:
-
-- If the KPI is at `self_review`
-- And future reviewer stages still exist
-- It exits early before checking the newly written terminal HR PMS score
-
-This protects normal review order, but it conflicts with the new Admin Override requirement.
-
-### Why 4 — Why did the already-approved rows work?
-
-Already-approved rows use a separate Admin Override re-stamp path. That path bypasses final-score immutability, updates `final_score`, and logs `ADMIN_BULK_OVERRIDE_FINAL_UNLOCK`.
-
-That part is working.
-
-### Why 5 — Why did Ankit and Rahul not become approved?
-
-Because the override implementation only handled the **locked approved row** case. It did not add a matching **terminal-stage force-approve** path for rows that are not yet approved but are being corrected by Admin Override at their terminal stage.
-
-## 4. Risk & Impact Report
-
-### Data Impact
-
-- Requires a backend function migration only.
-- No new table is required.
-- No destructive schema change.
-- Existing scores remain intact unless Admin Override is explicitly used.
-- For override terminal rows, the change will set:
-  - `kpis.status = 'approved'`
-  - `review_submissions.final_score = <acted terminal stage score>`
-  - `review_submissions.final_rating = <acted terminal stage rating>`
-
-### Workflow Impact
-
-- Normal non-override workflow remains sequential.
-- Admin Override gains a controlled exception:
-  - If acted stage equals the employee’s terminal workflow stage, approve directly.
-  - If acted stage is non-terminal, only write the stage column and do not approve.
-
-### UI/UX Impact
-
-- No major layout change.
-- Toast wording should distinguish:
-  - rows newly force-approved by terminal override
-  - already-approved rows re-stamped
-  - non-terminal column-only writes
-- The screenshot case should become: **Process complete — 4/4**.
-
-### Regression Risk
-
-Medium, because workflow status and final-score immutability are sensitive.
-
-Primary risk is accidentally allowing non-admin users or non-terminal stages to bypass workflow sequence.
-
-### Scalability Impact
-
-Low.
-
-The operation already processes selected cells only. The added logic is per selected row and uses existing workflow lookup. No full-table scan should be introduced.
-
-### Mitigation Plan
-
-- Gate direct approval behind **Admin + Override + acted stage equals terminal stage**.
-- Keep non-admin and normal reviewer paths unchanged.
-- Add SQL contract tests and frontend summary tests.
-- Add documentation and policy alignment in the same change.
-
-## 5. Step-by-step Plan
-
-### Phase 1 — Backend correction: terminal override approval
-
-Update `public.bulk_write_stage_scores` so that after writing the acted stage score:
-
-1. Resolve the employee workflow for that KPI.
-2. Determine terminal stage excluding `approved`.
-3. If all conditions are true:
-   - user is Admin
-   - `p_is_override = true`
-   - acted stage equals terminal stage
-   - KPI is not already approved
-4. Then directly approve the KPI:
-   - set `kpis.status = 'approved'`
-   - set `final_score = v_score`
-   - set `final_rating = v_new_rating`
-   - insert audit log, e.g. `ADMIN_BULK_OVERRIDE_FORCE_APPROVE`
-   - increment a new counter such as `override_approved`
-5. Keep already-approved re-stamp path as-is.
-6. Keep non-terminal override path as column-only.
-
-Expected result for the reported case:
-
-```text
-Deepak   approved -> approved, final re-stamped
-Sourav   approved -> approved, final re-stamped
-Ankit    self_review -> approved, final stamped
-Rahul    self_review -> approved, final stamped
+```ts
+// Returns true if every employee column for this KPI key is already
+// processed at the viewer stage. "Processed" means:
+//   - the cell exists AND
+//   - the stage score column is non-null OR the cell is_na is true.
+// Rows with no cell for an employee are treated as PENDING (visible).
+export function isKpiRowFullyProcessed(
+  kpiKey: string,
+  employeeIds: string[],
+  cellMap: Map<string, BulkReviewRow>,
+  stageKey: keyof BulkReviewRow,
+): boolean
 ```
 
-### Phase 2 — Reconcile safety alignment
+Tests in `src/lib/bulkProcessedFilter.test.ts`:
+- all employees have stage score → hidden
+- one employee pending → visible
+- one employee missing cell → visible
+- mixed N/A + score → hidden
+- empty employee list → visible (defensive)
 
-Do not globally weaken `reconcile_workflow_statuses` yet.
+### 2. Wire toggle into `BulkReviewMatrixGrid.tsx`
 
-Reason: changing the reconciler broadly could unintentionally fast-forward normal workflows. The safer fix is to keep the exception inside `bulk_write_stage_scores`, where we know the action is Admin Override and where we have the acted stage.
+- Add `const [hideProcessed, setHideProcessed] = useState(false);`
+- In the existing `useMemo`, after building `kpiRowsArr`, apply the filter when `hideProcessed` is true, using `stageKey` and `employeesArr` ids.
+- Add `hiddenCount` to the memo return so the toolbar can show "(N hidden)".
+- Add toggle UI inside the existing toolbar `div` (left cluster), after the Collapse/Expand buttons, separated by the same `border-l` divider:
+  ```tsx
+  <Switch id="hide-processed" checked={hideProcessed} onCheckedChange={setHideProcessed} />
+  <Label htmlFor="hide-processed" className="text-xs font-medium cursor-pointer">
+    Hide fully processed
+  </Label>
+  ```
+  Includes a `Tooltip`: *"Hide KPI rows where every filtered employee already has a {stageLabel} score. Rows reappear if any employee is still pending."*
+- Right counter cluster: when `hideProcessed && hiddenCount > 0`, append `<span className="text-amber-600">({hiddenCount} hidden)</span>`.
+- Empty state: if `kpiRows.length === 0 && hideProcessed`, render a small inline notice above the table with a "Show all" link that flips the toggle off.
 
-### Phase 3 — Frontend result reporting
+### 3. Stage label
 
-Update `summariseStageWriteOutcome` to support the new `overrideApproved` counter.
+Reuse the existing `STAGE_SCORE_KEY` map; add a sibling `STAGE_LABEL` constant for the tooltip text (Manager / Skip Level / HR PMS / Auditor / Management).
 
-Target toast for this case:
+### 4. Tests
 
-```text
-Process complete — 4/4 (2 approved by override, 2 re-stamped)
-```
+- `bulkProcessedFilter.test.ts` (new) — 5 cases above.
+- No changes needed to existing bulk-review contract tests (filter is UI-only).
 
-If any non-terminal approved rows are selected, keep them clearly reported as column-only.
+### 5. Docs & Policy
 
-### Phase 4 — Policy alignment
+- `DOCUMENTATION.md` — add v2.66.13.19 entry under Bulk Review: "Hide fully-processed KPIs toggle".
+- `POLICY.md` §111 (Bulk Review UX) — add bullet: *"Reviewers may hide KPI rows where every filtered employee already has the viewer-stage score recorded. The toggle is presentation-only; selection, audit, and override paths are unaffected. Rows with any pending employee remain visible to preserve completion visibility."*
+- `mem://features/review/bulk-review-dashboard` — append toggle behavior note.
 
-Update `POLICY.md` under the Admin Override / Bulk Sign-off sections:
+## What changes visually
 
-- Admin Override may bypass workflow sequence only when the acted stage is the employee’s terminal configured stage.
-- The bypass is per-row, per-batch, audit-logged, and admin-only.
-- Non-terminal override cannot approve or alter `final_score`.
-- Already-approved rows may be re-stamped only through the final-score override audit path.
+- **Location:** Bulk Review → `/review/bulk` matrix toolbar, immediately right of the "Collapse all" button, separated by the same vertical divider style used today.
+- **Default:** Off — no visible change until user opts in.
+- **When on:** KPI rows whose viewer-stage column is filled for every employee column disappear; right-side counter shows `(N hidden)` in amber; if all rows get hidden, an inline "All KPIs processed at this stage — Show all" notice replaces the matrix.
+- **Responsiveness:** Toggle wraps to the next line on narrow viewports thanks to existing `flex-wrap` on the toolbar.
 
-This aligns with current §88 final-score governance and §111.7 bulk sign-off rules.
+## Out of scope
 
-### Phase 5 — Documentation alignment
-
-Update `DOCUMENTATION.md` version history with the RCA:
-
-- Symptom: 4 written, 0 skipped, but 2 remained `self_review`.
-- Root cause: sequential reconciler guard exited before checking terminal HR PMS override score.
-- Fix: terminal-stage Admin Override direct approval path.
-- Impact: no schema/RLS/backup change; audit trail extended.
-
-## 6. UI Changes
-
-Minimal.
-
-- Location: Bulk Review toast after sign-off.
-- Visual change: success message becomes explicit when override fully processes rows.
-- Interaction impact: no new click path; same Admin Override toggle and Sign-off button.
-- Responsiveness: Not Applicable — no layout restructuring.
-
-## 7. Implementation
-
-Planned files:
-
-- New database migration replacing `bulk_write_stage_scores`
-- `src/lib/summariseSkipReasons.ts`
-- `src/lib/summariseSkipReasons.test.ts`
-- `src/test/bulkWriteStageScoresContract.test.ts`
-- `POLICY.md`
-- `DOCUMENTATION.md`
-
-No direct data patch is planned unless needed after the function is corrected. The same bulk action can be re-run safely, or we can plan a controlled one-time repair only if you explicitly want that.
-
-## 8. Tests
-
-Add/update tests for:
-
-1. Admin terminal override on non-approved row returns `override_approved`.
-2. Admin terminal override writes `final_score` and sets status approved.
-3. Admin override on already-approved row returns `relocked` and logs final re-stamp.
-4. Admin override on non-terminal stage does not approve.
-5. Non-admin cannot trigger override approval.
-6. Toast summary shows full completion when `advanced + overrideApproved + relocked = total`.
-
-## 9. DOCUMENTATION.md updates
-
-Required.
-
-Add a new version-history RCA entry describing this exact failure and the corrected terminal override behavior.
-
-## 10. POLICY.md updates
-
-Required.
-
-Add or amend the Admin Override policy so the implementation is formally allowed and bounded:
-
-- Admin-only
-- Explicit override only
-- Terminal stage only for approval
-- Full immutable audit trail
-- Non-terminal remains column-only
-
-## 11. Post-implementation notes
-
-After implementation, I will verify with read-only database checks that the same April 2026 scenario would produce:
-
-- Deepak: approved + final re-stamped
-- Sourav: approved + final re-stamped
-- Ankit: approved + final stamped
-- Rahul: approved + final stamped
-
-Rollback strategy: revert the migration via project history if needed; the change is additive in behavior and does not drop data.
+- Persisting the toggle in URL/localStorage (can be added later via `bulkUrlState` if requested).
+- Hiding employee columns whose every KPI is done (different UX, separate request).
+- Changing the definition of "processed" beyond the viewer stage (e.g. terminal-stage approval) — current spec matches what the reviewer cares about at their own stage.
