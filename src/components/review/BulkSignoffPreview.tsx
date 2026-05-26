@@ -84,6 +84,7 @@ export function BulkSignoffPreview({
   preview, isLoading, error,
   ruleByKpiId, kpiIdBySubmissionId,
   inputs, onCellInputChange, isOverride = false,
+  stageLabel,
 }: Props) {
   const [expanded, setExpanded] = useState(true);
 
@@ -169,14 +170,19 @@ export function BulkSignoffPreview({
             inputs={inputs}
             onCellInputChange={onCellInputChange}
             isOverride={isOverride}
+            targetStageLabel={stageLabel}
           />
         )}
       </div>
 
       {/* ── Legend ──────────────────────────────────────────────────── */}
       <p className="text-[10px] text-muted-foreground leading-relaxed">
-        <strong>Badges:</strong> self · manager · skip-lvl · hr_pms · computed (rating from Achieved) · override · no data.
-        Type an <strong>Achieved</strong> value to auto-compute the rating.
+        <strong>Stage columns</strong> show every reviewer score on file. The
+        <strong> {stageLabel ?? 'target stage'}</strong> column is highlighted
+        — that is the column this bulk action will stamp. <strong>Resolved</strong> is
+        the value that will be written (carried from the highest prior stage
+        or computed from <strong>Achieved</strong>). Type an Achieved value to
+        auto-compute the rating on rows marked ●.
       </p>
 
       {/* ── Per-employee rollup ──────────────────────────────────────── */}
