@@ -205,6 +205,48 @@ interface CellTableProps {
   inputs?: Map<string, CellInputs>;
   onCellInputChange?: (submissionId: string, next: CellInputs) => void;
   isOverride?: boolean;
+  targetStageLabel?: string;
+}
+
+type StageKey = 'self' | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management' | 'final';
+
+const STAGE_COLS: Array<{ key: StageKey; label: string; match: string[] }> = [
+  { key: 'self',        label: 'Self',     match: ['self'] },
+  { key: 'manager',     label: 'Manager',  match: ['manager'] },
+  { key: 'skip_level',  label: 'Skip-Lvl', match: ['skip', 'skip_level', 'skip-level', 'skip-lvl'] },
+  { key: 'hr_pms',      label: 'HR PMS',   match: ['hr_pms', 'hr pms', 'hrpms'] },
+  { key: 'auditor',     label: 'Auditor',  match: ['auditor'] },
+  { key: 'management',  label: 'Mgmt',     match: ['management', 'mgmt'] },
+  { key: 'final',       label: 'Final',    match: ['final'] },
+];
+
+function stageKeyFromLabel(label?: string): StageKey | null {
+  if (!label) return null;
+  const norm = label.trim().toLowerCase();
+  return STAGE_COLS.find(s => s.match.includes(norm))?.key ?? null;
+}
+
+function scoreTone(v: number | null | undefined): string {
+  if (v == null) return 'text-muted-foreground/60';
+  if (v >= 4) return 'text-emerald-600 dark:text-emerald-400';
+  if (v >= 3) return 'text-foreground';
+  return 'text-destructive';
+}
+
+function StageCell({
+  value, highlighted,
+}: { value: number | null | undefined; highlighted: boolean }) {
+  return (
+    <td
+      className={cn(
+        'p-2 text-right tabular-nums',
+        scoreTone(value),
+        highlighted && 'bg-primary/5 border-l border-r border-primary/40',
+      )}
+    >
+      {value == null ? '—' : value.toFixed(1)}
+    </td>
+  );
 }
 
 function CellTable({
