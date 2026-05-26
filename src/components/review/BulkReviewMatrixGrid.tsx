@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState } from 'react';
 import {
   ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, Building,
-  Crosshair, X,
+  Crosshair, X, EyeOff,
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
@@ -17,6 +17,7 @@ import { classifyOrgKpiRow } from '@/lib/orgKpiGap';
 import {
   kpiRowKey as makeKpiRowKey, submissionIdsForVisibleKpiRow, toggleKpiRowSelection,
 } from '@/lib/bulkRowSelection';
+import { isKpiRowFullyProcessed } from '@/lib/bulkProcessedFilter';
 
 type ViewerStage =
   | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management';
@@ -74,6 +75,14 @@ const STAGE_SCORE_KEY: Record<ViewerStage, keyof BulkReviewRow> = {
   hr_pms: 'hr_pms_score',
   auditor: 'auditor_score',
   management: 'management_score',
+};
+
+const STAGE_LABEL: Record<ViewerStage, string> = {
+  manager: 'Manager',
+  skip_level: 'Skip Level',
+  hr_pms: 'HR PMS',
+  auditor: 'Auditor',
+  management: 'Management',
 };
 
 interface KpiRowKey {
@@ -146,10 +155,12 @@ export function BulkReviewMatrixGrid({
 }: BulkReviewMatrixGridProps) {
   const [showMeta, setShowMeta] = useState(false);
   const [collapsedKras, setCollapsedKras] = useState<Set<string>>(new Set());
+  const [hideProcessed, setHideProcessed] = useState(false);
 
   const stageKey = STAGE_SCORE_KEY[(viewerStage as ViewerStage)] ?? 'manager_score';
+  const stageLabel = STAGE_LABEL[(viewerStage as ViewerStage)] ?? 'reviewer';
 
-  const { kpiRows, employees, cellMap, kraGroups, orgStatusByKpiKey } = useMemo(() => {
+  const { kpiRows, employees, cellMap, kraGroups, orgStatusByKpiKey, hiddenCount } = useMemo(() => {
     const kpiMap = new Map<string, KpiRowKey>();
     const empMap = new Map<string, EmployeeCol>();
     const cell = new Map<string, BulkReviewRow>(); // `${kpiKey}::${empId}` → row
@@ -182,13 +193,24 @@ export function BulkReviewMatrixGrid({
       cell.set(`${kpiKey}::${r.employee_id}`, r);
     }
 
-    const kpiRowsArr = Array.from(kpiMap.values()).sort((a, b) => {
+    const kpiRowsArrAll = Array.from(kpiMap.values()).sort((a, b) => {
       const k = a.kraName.localeCompare(b.kraName);
       return k !== 0 ? k : a.kpiName.localeCompare(b.kpiName);
     });
     const employeesArr = Array.from(empMap.values()).sort((a, b) =>
       a.name.localeCompare(b.name),
     );
+
+    // Presentation filter — hide KPI rows whose viewer-stage column is
+    // filled for every visible employee. If even one employee is pending,
+    // keep the row so reviewers never miss outstanding work.
+    const empIdList = employeesArr.map(e => e.id);
+    const kpiRowsArr = hideProcessed
+      ? kpiRowsArrAll.filter(
+          k => !isKpiRowFullyProcessed(k.key, empIdList, cell, stageKey),
+        )
+      : kpiRowsArrAll;
+    const hidden = kpiRowsArrAll.length - kpiRowsArr.length;
 
     // Group by KRA for collapsible bands
     const groups = new Map<string, KpiRowKey[]>();
@@ -216,9 +238,9 @@ export function BulkReviewMatrixGrid({
 
     return {
       kpiRows: kpiRowsArr, employees: employeesArr, cellMap: cell,
-      kraGroups: groups, orgStatusByKpiKey: orgMap,
+      kraGroups: groups, orgStatusByKpiKey: orgMap, hiddenCount: hidden,
     };
-  }, [rows, isOrgByKpiId, kpiFocusKey]);
+  }, [rows, isOrgByKpiId, kpiFocusKey, hideProcessed, stageKey]);
 
   const allSubmissionIds = useMemo(
     () => rows.filter(r => r.submission_id).map(r => r.submission_id!),
@@ -271,13 +293,54 @@ export function BulkReviewMatrixGrid({
               <ChevronsUp className="h-3 w-3" /> Collapse all
             </Button>
           </div>
+          <div className="ml-2 flex items-center gap-2 pl-2 border-l border-border/50">
+            <TooltipProvider delayDuration={150}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="hide-processed"
+                      checked={hideProcessed}
+                      onCheckedChange={setHideProcessed}
+                    />
+                    <Label htmlFor="hide-processed" className="text-xs font-medium cursor-pointer flex items-center gap-1">
+                      <EyeOff className="h-3 w-3" /> Hide fully processed
+                    </Label>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[260px] text-xs">
+                  Hide KPI rows where every filtered employee already has a{' '}
+                  <strong>{stageLabel}</strong> score (or N/A). Rows stay visible if any employee is still pending.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </div>
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <span><strong className="text-foreground tabular-nums">{kpiRows.length}</strong> KPIs</span>
           <span><strong className="text-foreground tabular-nums">{employees.length}</strong> employees</span>
           <span><strong className="text-foreground tabular-nums">{rows.length}</strong> cells</span>
+          {hideProcessed && hiddenCount > 0 && (
+            <span className="text-amber-600 dark:text-amber-400">
+              ({hiddenCount} hidden)
+            </span>
+          )}
         </div>
       </div>
+
+      {hideProcessed && kpiRows.length === 0 && (
+        <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
+          All KPIs are fully processed at the <strong>{stageLabel}</strong> stage
+          for the current filters.{' '}
+          <button
+            type="button"
+            className="text-primary underline underline-offset-2 hover:opacity-80"
+            onClick={() => setHideProcessed(false)}
+          >
+            Show all
+          </button>
+        </div>
+      )}
 
       {/* Matrix surface — horizontal scroll for employees, sticky KPI/KRA column */}
       <div className="rounded-lg border border-border bg-card">
