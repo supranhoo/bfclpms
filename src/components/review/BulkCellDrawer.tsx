@@ -292,19 +292,24 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
               )}
 
               <div>
-                <Label className="text-xs">Remarks</Label>
+                <Label className="text-xs">Remarks (required, min {BULK_REMARK_MIN_LENGTH} characters)</Label>
                 <Textarea
                   rows={2}
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
-                  placeholder="Optional — visible in review trail"
+                  placeholder={`Required — visible in review trail (min ${BULK_REMARK_MIN_LENGTH} characters)`}
                 />
+                {remarks.trim().length > 0 && remarks.trim().length < BULK_REMARK_MIN_LENGTH && (
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    {BULK_REMARK_MIN_LENGTH - remarks.trim().length} more character{BULK_REMARK_MIN_LENGTH - remarks.trim().length === 1 ? '' : 's'} required
+                  </p>
+                )}
               </div>
 
               <Button
                 size="sm"
                 onClick={handleWrite}
-                disabled={write.isPending || effectiveScore === null}
+                disabled={write.isPending || effectiveScore === null || remarks.trim().length < BULK_REMARK_MIN_LENGTH}
               >
                 {write.isPending ? 'Saving…' : `Save ${STAGE_LABEL[writeStage]} score`}
               </Button>
