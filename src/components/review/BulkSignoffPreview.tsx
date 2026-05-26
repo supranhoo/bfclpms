@@ -251,6 +251,7 @@ function StageCell({
 
 function CellTable({
   cells, ruleByKpiId, kpiIdBySubmissionId, inputs, onCellInputChange, isOverride = false,
+  targetStageLabel,
 }: CellTableProps) {
   const editable = !!onCellInputChange;
 
