@@ -162,6 +162,19 @@ export function buildBulkSignoffImpact(input: BuildImpactInput): ImpactSummary {
       // Rating-points × wt / 100 — matches matrix cell formula
       // (`bestScore * weightage / 100`), so totals reconcile with the grid.
       weightedImpact: score == null ? null : Math.round((score * weightage) / 100 * 100) / 100,
+      kra_name: r.kra_name,
+      uom: rule.uom ?? null,
+      target_value: rule.target_value ?? null,
+      achieved_current: achievedBySubmissionId.get(r.submission_id) ?? null,
+      stageScores: {
+        self: r.self_score,
+        manager: r.manager_score,
+        skip_level: r.skip_level_score,
+        hr_pms: r.hr_pms_score,
+        auditor: r.auditor_score,
+        management: r.management_score,
+        final: r.final_score,
+      },
     });
   }
 
