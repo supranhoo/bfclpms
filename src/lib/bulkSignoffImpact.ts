@@ -44,6 +44,22 @@ export interface CellPreview {
   source: CarriedSource;
   /** weightage × score / 100 — scoring impact on overall weighted total. */
   weightedImpact: number | null;
+  /** Additive context (POLICY §111.7.a presentation, v2.66.13.10): allow the
+   *  Bulk Sign-off dialog to surface every stage score + KPI metadata
+   *  without changing the write contract. */
+  kra_name?: string;
+  uom?: string | null;
+  target_value?: number | null;
+  achieved_current?: number | string | null;
+  stageScores?: {
+    self: number | null;
+    manager: number | null;
+    skip_level: number | null;
+    hr_pms: number | null;
+    auditor: number | null;
+    management: number | null;
+    final: number | null;
+  };
 }
 
 export interface EmployeeRollup {
@@ -55,6 +71,10 @@ export interface EmployeeRollup {
   projectedOverall: number; // after this sign-off
   delta: number;
   skippedInBatch: number;
+  /** Weighted averages by source stage across the loaded snapshot — purely
+   *  informational, exposed alongside the existing current/projected pair. */
+  selfAvg?: number | null;
+  managerAvg?: number | null;
 }
 
 export interface ImpactSummary {
