@@ -1,96 +1,100 @@
-# Plan: Management Bulk Approve — Admin Override
-
 ## Goal
-Give admins the same override control in Management "Bulk Approve" that already exists in stage sign-off: manually stamp `final_score` (derived from a per-row Achieved value) on selected cells, bypassing the §88 cascade, the `already_final` guard, and the `no_completed_stage` guard. Re-stamp APPROVED rows when override is ON.
 
-## UI Changes
+Add a new collapsible action **"Copy KPI to Other Employees"** in the Admin KPI Editor (`AdminKpiEditorForm.tsx`), placed directly below the existing **"Copy KPI to Other Months"** collapsible. Reuse existing primitives (`EmployeeCombobox`, `fetchAllPaged`, duplicate-detection map) so behavior matches `CopyKrasDialog`.
 
-**`src/components/review/BulkApproveDialog.tsx`**
-- Remove the `isSignoff` half of the `isSignoff && isAdmin` gate around the Override card. New gate: `isAdmin` only.
-- Card copy adapts to mode:
-  - Signoff: existing copy (unchanged).
-  - Approve: title "Override Final score (admin)". Body explains: writes `final_score` + `management_score` from each row's Achieved input, bypasses §88 cascade, re-stamps already-APPROVED rows, audit-logged as `ADMIN_BULK_OVERRIDE_FINAL_STAMP`, notifies employee + manager + HR PMS.
-- Pass `isOverride` through to `BulkSignoffPreview` (already wired) so the existing per-row Achieved inputs render in approve mode too when toggle is ON.
+## Scope
 
-**`src/components/review/BulkSignoffPreview.tsx`**
-- When `mode === 'approve' && isOverride === true`:
-  - Show per-row Achieved override input (same control already rendered in signoff mode).
-  - Final column highlight stays; "Resolved" column shows the override-derived score with source badge `override`.
-  - Legend gains one line: "Override ON — Final is stamped from your Achieved input, bypassing the §88 cascade."
+- Single new UI section in `src/components/admin/AdminKpiEditorForm.tsx`. No new files, no schema changes, no RPC changes.
+- Uses the **current edited form values** as the source payload (matches the existing months-copy semantics — copy reflects unsaved edits).
+- Target period = same `review_period` + `review_year` as the source KPI (employees-only copy; cross-period copy stays in the global `CopyKrasDialog`).
 
-**`src/lib/carriedScoreResolver.ts`** (logic, not UI, but small)
-- Extend `resolveCarriedScore` so when `stage === 'management' && isOverride && achievedOverride != null`, it computes score via the existing KPI rule and returns `{ score, source: 'override' }`. Same pathway sign-off already uses.
+## UI changes (exact location)
 
-**`src/lib/bulkSignoffImpact.ts`**
-- No structural change. `resolveWithInputs` already routes through `resolveCarriedScore` when `isOverride` is on.
+Inside `AdminKpiEditorForm`, after the `Copy KPI to Other Months` Collapsible (~line 952), add a sibling Collapsible:
 
-## Backend Changes
-
-**New migration: `bulk_management_approve(p_cells, p_batch_reason, p_attachment_urls, p_achieved_values jsonb, p_is_override bool)`**
-- Drop old 3-arg signature, recreate with two additional optional params (defaults preserve existing callers).
-- Server-side admin check: `IF p_is_override AND NOT public.has_role(auth.uid(), 'admin') THEN RAISE EXCEPTION 'override_requires_admin'`.
-- When `p_is_override = true`:
-  - Skip the `already_final` guard (re-stamp allowed).
-  - Skip the `no_completed_stage` guard (override supplies the value).
-  - For each cell, read `achieved` from `p_achieved_values->>submission_id`; if missing, skip row with reason `override_value_required`.
-  - Compute `v_final` from achieved using the same SQL helper sign-off override uses (`public.score_from_achieved(kpi_id, achieved)` — confirm exact name in current migrations; reuse, do not duplicate).
-  - Set `v_source := 'override'`.
-  - Capture `old_final := v_cur.final_score` for the audit row.
-- When `p_is_override = false`: existing cascade and guards unchanged (full back-compat).
-- Stamp block already writes `final_score`, `management_score`, `management_remarks`, `management_evidence_urls`, `kpi_status='approved'`, advances `kpis.status`. With override, also force-overwrite `final_score` (drop the `COALESCE` on `management_score` so admin re-stamp lands).
-- Insert into `audit_log` (or whichever immutable audit table the existing `ADMIN_BULK_OVERRIDE_FINAL_UNLOCK` uses — match exact pattern) one row per overridden cell: `action='ADMIN_BULK_OVERRIDE_FINAL_STAMP'`, payload `{old_final, new_final, achieved, source: prior_source, batch_id, reason}`.
-- Notification: enqueue per overridden cell to employee + manager + HR PMS, mirroring §88.1 sign-off override notification.
-
-**`src/hooks/useBulkReview.ts`** — `useBulkApprove` mutation passes new args:
-```ts
-supabase.rpc('bulk_management_approve', {
-  p_cells, p_batch_reason, p_attachment_urls,
-  p_achieved_values: achievedValues ?? null,
-  p_is_override: isOverride ?? false,
-})
+```text
+[ Copy KPI to Other Months  v ]
+[ Copy KPI to Other Employees v ]   ← NEW
+   ├─ EmployeeCombobox (multi, excludes current employee, shows duplicate badge per target)
+   ├─ "X employee(s) selected · Y duplicate(s) will be skipped" line
+   └─ [ Copy to N employee(s) ] button
 ```
 
-**`src/pages/review/BulkReviewDashboard.tsx`** — `handleBulkApprove` mgmt branch threads `extras.achievedValues` and `extras.isOverride` into the mutation call (currently dropped on the floor for mgmt — only signoff uses them).
+Visual parity: same `Button variant="outline"` trigger, same `Copy` lucide icon, same chevron, same muted info panel inside.
 
-## Policy / Docs
+## Reuse (no duplication)
 
-**`POLICY.md` §88.1 addendum** — "Admin Override (Management terminal)": parallels the existing sign-off override clause. States it is a §88 immutability exception, gated on `admin` role server-side, audit-logged as `ADMIN_BULK_OVERRIDE_FINAL_STAMP`, and notifies employee/manager/HR PMS on every re-stamp.
+- `EmployeeCombobox` from `src/components/admin/EmployeeCombobox.tsx` (already supports `multiple`, `excludeIds`, `duplicateCounts`).
+- `fetchAllPaged` from `src/lib/fetchAll.ts` for full active-roster paging (POLICY §94 / `mem://architecture/profiles-query-policy`).
+- Same duplicate-detection algorithm as `CopyKrasDialog` (composite key `kra_name|||kpi_name` scoped to employee + period + year).
+- Same `formatKpiInsertError` for error toasts.
+- Same `kpi_audit_logs` insert pattern as `handleCopyToMonths`, with new `action = 'admin_copy_to_employee'`.
 
-**`DOCUMENTATION.md`** — Update Bulk Approve section: dialog now exposes Override card to admins in both signoff and approve modes; document new RPC signature and skip reasons (`override_requires_admin`, `override_value_required`).
+## Validation rules
+
+1. **Source KPI must be saved** (i.e. `kpi?.id` exists) — disable trigger otherwise.
+2. **At least one target employee** selected → otherwise Copy button disabled.
+3. **Duplicate guard** — for each target employee, query `kpis` where `employee_id IN targets AND kra_name = … AND kpi_name = … AND review_period = … AND review_year = …`. Skip those rows; show amber warning when count > 0 (mirrors `CopyKrasDialog` lines 394–401).
+4. **Current employee excluded** from picker via `excludeIds={[kpi.employee_id]}`.
+5. **Org-KPI scope safety** — if `is_org_level && org_level_scope === 'employee'`, also upsert `org_kpi_values` placeholder rows (same logic as `CopyKrasDialog` lines 224–255). Org-level `organization`/`department` scoped KPIs copy `is_org_level=true` with the existing scope (no new okv rows needed — value is shared).
+6. **Form dirty-state** — if user has unsaved structural edits and clicks Copy, show a `toast.warning` requiring Save first OR explicitly use the in-form values. Decision: **use current form values** (same as months-copy already does at lines 311–340) for consistency; document with a small helper text "Uses current form values".
+7. **kpis table unique constraint** (`mem://infrastructure/database/duplicate-kpi-prevention-constraint`) acts as final server-side safety net — any race-condition duplicate surfaces via `formatKpiInsertError`.
+
+## Implementation outline
+
+State (alongside existing copy-to-months state, ~line 80):
+```ts
+const [copyToEmployeesOpen, setCopyToEmployeesOpen] = useState(false);
+const [copyTargetEmployeeIds, setCopyTargetEmployeeIds] = useState<string[]>([]);
+const [copyTargetExisting, setCopyTargetExisting] = useState<Map<string, Set<string>>>(new Map());
+const [copyingToEmployees, setCopyingToEmployees] = useState(false);
+const [employeesForCopy, setEmployeesForCopy] = useState<EmployeeOption[]>([]);
+```
+
+Two new effects:
+- Fetch active employees via `fetchAllPaged` when `copyToEmployeesOpen` first becomes true (cached for dialog lifetime).
+- Fetch existing target KPIs (same period+year, same kra_name+kpi_name) whenever `copyTargetEmployeeIds` changes; build duplicate map.
+
+Handler `handleCopyToEmployees`:
+- Build insert payload from current `formData` (same shape as `handleCopyToMonths` lines 311–340) replacing `employee_id` per target and using the **current** `review_period`/`review_year`.
+- Filter out duplicates per target using the map.
+- Batch `supabase.from('kpis').insert(rows)`.
+- For employee-scoped org KPIs, upsert into `org_kpi_values` (reuse logic from `CopyKrasDialog`).
+- Per-row `kpi_audit_logs` insert with `action: 'admin_copy_to_employee'`, `metadata: { source: 'admin_copy_to_employee', target_employee_id, source_kpi_id }`.
+- Invalidate the same query keys as `CopyKrasDialog` `onSuccess` (lines 260–272).
+- Toast success/skip counts; collapse on success.
+
+## Risk & Impact
+
+| Area | Impact | Mitigation |
+|---|---|---|
+| Data | New `kpis` inserts only; no schema change | Server-side uniqueness constraint already enforces no duplicates |
+| Workflow | None — copies create `status='kra_set'` rows | Matches months-copy behavior |
+| UI/UX | Adds one collapsible; no existing layout shifts | Mirrors styling of months-copy collapsible |
+| Regression | Low — isolated to AdminKpiEditorForm | Existing months-copy untouched |
+| Performance | Picker uses paged fetch | Same pattern as CopyKrasDialog |
+
+## Out of scope
+
+- Cross-period copy (already covered by `CopyKrasDialog` "Copy KRAs" admin tool).
+- Bulk copy of multiple source KPIs (this dialog is single-KPI by definition).
+- Notifications/emails on copy (deferred — matches months-copy, which is also silent).
 
 ## Tests
 
-**Frontend (`src/test/bulkApproveDialogApproveMode.test.tsx`)**
-- New cases:
-  - Override card hidden for non-admin in approve mode (regression guard).
-  - Override card visible for admin in approve mode; toggling it reveals per-row Achieved inputs.
-  - Submit payload includes `isOverride: true` + `achievedValues` map when toggled and inputs filled.
-  - Submit blocked when override ON but at least one row missing Achieved.
+New test file `src/test/adminKpiEditorCopyToEmployees.test.tsx`:
+- Renders the new collapsible only when `kpi.id` exists.
+- Excludes the source employee from the picker.
+- Disables Copy button when no targets selected.
+- Shows duplicate warning when target already has the KPI.
+- Calls `supabase.from('kpis').insert` with N target rows minus duplicates.
 
-**Backend (SQL test or RPC integration test)**
-- Non-admin calling with `p_is_override=true` → `override_requires_admin`.
-- Admin override on APPROVED row → re-stamps `final_score`, bumps `row_version`, writes audit row.
-- Admin override on `no_completed_stage` row → stamps using achieved-derived score.
-- Default call (no override args) → byte-identical behaviour to current production (cascade + guards).
+## Docs
 
-## Risk & Mitigation
-
-| Risk | Mitigation |
-|---|---|
-| Override drops §88 immutability | Server-side `has_role(admin)` check; immutable audit row per stamp; notification fan-out. |
-| Non-admin client tampers with `is_override` flag | Server ignores the flag for non-admins (raises). UI gate is defence-in-depth, not the security boundary. |
-| Re-stamping APPROVED rows could surprise downstream consumers | `row_version` bump + audit event + notification fires existing realtime invalidation; same path sign-off override already uses. |
-| RPC signature change breaks callers mid-deploy | New params are optional with safe defaults; old 3-arg shape behaviour preserved. |
-| Achieved → score derivation differs between signoff and approve | Both call the same `score_from_achieved` helper; covered by the new test cases. |
+- `DOCUMENTATION.md` → Admin → KPI Editor: add "Copy to Other Employees" subsection.
+- `POLICY.md` §94 (paged roster) — no change; reuse compliant.
+- `mem://features/admin/copy-kras-org-kpi-integrity` → append note that the editor-level employee copy follows the same Org KPI integrity rules.
 
 ## Rollback
 
-1. Frontend revert: restore the `isSignoff && isAdmin` gate in `BulkApproveDialog.tsx` and drop the mgmt-branch `achieved_values` / `is_override` wiring in `BulkReviewDashboard.tsx`.
-2. Backend revert migration: drop 5-arg `bulk_management_approve`, recreate the prior 3-arg signature from `20260525094723_*.sql` verbatim.
-No data migration required — override is additive and audit-logged.
-
-## Out of Scope
-
-- Changing sign-off override behaviour.
-- Adding override to non-bulk single-cell management approval.
-- Re-opening already-APPROVED rows via a separate workflow (Re-open path remains untouched).
+Pure additive change — remove the new state block, the new Collapsible JSX, the new effect, and the new handler. No migrations to revert.
