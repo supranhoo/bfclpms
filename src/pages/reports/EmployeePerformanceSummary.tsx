@@ -195,12 +195,19 @@ export default function EmployeePerformanceSummary() {
         // Skip N/A KPIs entirely
         if (submission?.is_na) return;
 
-        // Check if frequency-locked for the selected period.
-        // POLICY §128 — must pass per-KPI frequency_cycle_start so non-default
-        // cycles (e.g. Bi-Monthly Feb-Mar) are not mis-classified as locked.
-        const isLocked =
-          selectedPeriod !== 'all' &&
-          isKpiLockedForPeriod(kpi.frequency, selectedPeriod, year, kpi.frequency_cycle_start);
+        // Report Aggregation Parity (POLICY): lock is evaluated against the
+        // KPI's OWN review_period, never the active UI filter. Otherwise the
+        // same Feb-26 row produces different totals between "All Months" and
+        // a specific-month filter (RCA: Jitendra / Sajid Raza Feb-26 — All
+        // Months 69.04% vs February 54.37%). POLICY §128 still applies for
+        // per-KPI frequency_cycle_start so non-default cycles (e.g. Bi-Monthly
+        // Feb-Mar) are classified correctly.
+        const isLocked = isKpiLockedForPeriod(
+          kpi.frequency,
+          kpi.review_period,
+          kpi.review_year || year,
+          kpi.frequency_cycle_start,
+        );
 
         const manager = profile.reporting_manager_id 
           ? profileMap.get(profile.reporting_manager_id) 
@@ -355,6 +362,16 @@ export default function EmployeePerformanceSummary() {
         const submission = kpi.review_submissions;
         // Skip N/A KPIs
         if (submission?.is_na) return;
+
+        // Report Aggregation Parity: same per-row lock as the main table so
+        // Period Comparison numbers cannot drift from the Summary View.
+        const isLocked = isKpiLockedForPeriod(
+          kpi.frequency,
+          kpi.review_period,
+          kpi.review_year || year,
+          kpi.frequency_cycle_start,
+        );
+        if (isLocked) return;
 
         if (!employeeTrends.has(kpi.employee_id)) {
           employeeTrends.set(kpi.employee_id, new Map());
