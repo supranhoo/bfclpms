@@ -352,15 +352,9 @@ export default function EmployeePerformanceSummary() {
         // Skip N/A KPIs
         if (submission?.is_na) return;
 
-        // Report Aggregation Parity: same per-row lock as the main table so
-        // Period Comparison numbers cannot drift from the Summary View.
-        const isLocked = isKpiLockedForPeriod(
-          kpi.frequency,
-          kpi.review_period,
-          kpi.review_year || year,
-          kpi.frequency_cycle_start,
-        );
-        if (isLocked) return;
+        // Report Aggregation Parity: do NOT apply frequency lock here.
+        // Approved submissions stored at the cycle-start month must count in
+        // their own review_period row (mirrors main aggregation above).
 
         if (!employeeTrends.has(kpi.employee_id)) {
           employeeTrends.set(kpi.employee_id, new Map());
