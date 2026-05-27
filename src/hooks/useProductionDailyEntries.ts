@@ -155,61 +155,12 @@ export function useBulkUpsertDailyEntries() {
 }
 
 // ── Rate Resolution Helper ──
-// Priority: employee > department > bu > company > common
-// Date-aware: picks the latest rate row with effective_from <= targetDate
-
-export interface ResolvedRate {
-  employeeId: string;
-  rate: number;
-  source: 'employee' | 'department' | 'bu' | 'company' | 'common' | 'none';
-}
-
-function pickLatestEffective(rows: any[], targetDate: string): any | null {
-  const eligible = rows.filter((r: any) => !r.effective_from || r.effective_from <= targetDate);
-  if (eligible.length === 0) return null;
-  return eligible.reduce((best, cur) =>
-    (cur.effective_from || '') > (best.effective_from || '') ? cur : best
-  );
-}
-
-export function resolveEmployeeRate(
-  employeeId: string,
-  departmentId: string | null,
-  buId: string | null,
-  rates: any[],
-  companyId: string | null = null,
-  targetDate: string = new Date().toISOString().slice(0, 10)
-): ResolvedRate {
-  // 1. Employee-specific
-  const empRows = rates.filter((r: any) => r.rate_type === 'employee' && r.employee_id === employeeId);
-  const emp = pickLatestEffective(empRows, targetDate);
-  if (emp) return { employeeId, rate: Number(emp.rate_per_ton), source: 'employee' };
-
-  // 2. Department-wise
-  if (departmentId) {
-    const deptRows = rates.filter((r: any) => r.rate_type === 'department' && r.entity_id === departmentId);
-    const dept = pickLatestEffective(deptRows, targetDate);
-    if (dept) return { employeeId, rate: Number(dept.rate_per_ton), source: 'department' };
-  }
-
-  // 3. BU-wise
-  if (buId) {
-    const buRows = rates.filter((r: any) => r.rate_type === 'bu' && r.entity_id === buId);
-    const bu = pickLatestEffective(buRows, targetDate);
-    if (bu) return { employeeId, rate: Number(bu.rate_per_ton), source: 'bu' };
-  }
-
-  // 4. Company-wise
-  if (companyId) {
-    const compRows = rates.filter((r: any) => r.rate_type === 'company' && r.entity_id === companyId);
-    const comp = pickLatestEffective(compRows, targetDate);
-    if (comp) return { employeeId, rate: Number(comp.rate_per_ton), source: 'company' };
-  }
-
-  // 5. Common
-  const commonRows = rates.filter((r: any) => r.rate_type === 'common');
-  const common = pickLatestEffective(commonRows, targetDate);
-  if (common) return { employeeId, rate: Number(common.rate_per_ton), source: 'common' };
-
-  return { employeeId, rate: 0, source: 'none' };
-}
+// Canonical implementation lives in src/lib/incentiveRateResolver.ts and is shared
+// with the compute edge function via supabase/functions/_shared/incentiveRateResolver.ts.
+// Re-exported here for backwards compatibility with existing call sites.
+export {
+  resolveEmployeeRate,
+  resolveEmployeeCompanyId,
+  pickLatestEffective,
+} from '@/lib/incentiveRateResolver';
+export type { ResolvedRate, RateRow, RateSource } from '@/lib/incentiveRateResolver';
