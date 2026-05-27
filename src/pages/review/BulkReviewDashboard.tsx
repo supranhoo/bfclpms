@@ -388,11 +388,13 @@ export default function BulkReviewDashboard() {
   const previewDataQ = useBulkSignoffPreviewData(
     selectedKpiIds,
     selectedSubmissionIds,
-    confirmApprove && isSignoffMode,
+    confirmApprove && !!bulkAction,
   );
   const impactPreview: ImpactSummary | null = useMemo(() => {
-    if (!confirmApprove || !isSignoffMode || !previewDataQ.data) return null;
-    const stage = bulkAction?.stage as 'manager' | 'skip_level' | 'hr_pms' | 'auditor';
+    if (!confirmApprove || !bulkAction || !previewDataQ.data) return null;
+    const stage = bulkAction.kind === 'stage'
+      ? (bulkAction.stage as 'manager' | 'skip_level' | 'hr_pms' | 'auditor')
+      : 'management';
     return buildBulkSignoffImpact({
       stage,
       loadedRows: loadedRows as any,
@@ -402,7 +404,7 @@ export default function BulkReviewDashboard() {
       inputsBySubmissionId: dialogInputs,
       isOverride: dialogIsOverride,
     });
-  }, [confirmApprove, isSignoffMode, previewDataQ.data, bulkAction, loadedRows, selectedSubmissionIds, dialogInputs, dialogIsOverride]);
+  }, [confirmApprove, previewDataQ.data, bulkAction, loadedRows, selectedSubmissionIds, dialogInputs, dialogIsOverride]);
 
   // submission_id → kpi_id (preview cells only carry kpi_name; we need id for
   // the UoM-aware Achieved input).

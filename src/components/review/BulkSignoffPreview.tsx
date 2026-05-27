@@ -40,6 +40,8 @@ interface Props {
   isOverride?: boolean;
   /** Stage being stamped — highlighted in the all-levels matrix. */
   stageLabel?: string;
+  /** Dialog mode — drives column highlight + helper copy + input visibility. */
+  mode?: 'signoff' | 'approve';
 }
 
 const SOURCE_LABEL: Record<CarriedSource, string> = {
@@ -47,6 +49,7 @@ const SOURCE_LABEL: Record<CarriedSource, string> = {
   manager: 'manager',
   skip_level: 'skip-lvl',
   hr_pms: 'hr_pms',
+  auditor: 'auditor',
   computed: 'computed',
   manual: 'manual',
   override: 'override',
@@ -85,6 +88,7 @@ export function BulkSignoffPreview({
   ruleByKpiId, kpiIdBySubmissionId,
   inputs, onCellInputChange, isOverride = false,
   stageLabel,
+  mode = 'signoff',
 }: Props) {
   const [expanded, setExpanded] = useState(true);
 
@@ -168,22 +172,33 @@ export function BulkSignoffPreview({
             ruleByKpiId={ruleByKpiId}
             kpiIdBySubmissionId={kpiIdBySubmissionId}
             inputs={inputs}
-            onCellInputChange={onCellInputChange}
+            onCellInputChange={mode === 'approve' ? undefined : onCellInputChange}
             isOverride={isOverride}
-            targetStageLabel={stageLabel}
+            targetStageLabel={mode === 'approve' ? 'Final' : stageLabel}
           />
         )}
       </div>
 
       {/* ── Legend ──────────────────────────────────────────────────── */}
-      <p className="text-[10px] text-muted-foreground leading-relaxed">
-        <strong>Stage columns</strong> show every reviewer score on file. The
-        <strong> {stageLabel ?? 'target stage'}</strong> column is highlighted
-        — that is the column this bulk action will stamp. <strong>Resolved</strong> is
-        the value that will be written (carried from the highest prior stage
-        or computed from <strong>Achieved</strong>). Type an Achieved value to
-        auto-compute the rating on rows marked ●.
-      </p>
+      {mode === 'approve' ? (
+        <p className="text-[10px] text-muted-foreground leading-relaxed">
+          <strong>Stage columns</strong> show every reviewer score on file. The
+          <strong> Final</strong> column is highlighted — that is the immutable
+          score Management will stamp, derived from the highest-priority
+          completed stage (<em>Auditor &gt; HR PMS &gt; Skip-Level &gt; Manager &gt;
+          Self</em>) per POLICY §88. <strong>Resolved</strong> reflects that same
+          cascade for each row.
+        </p>
+      ) : (
+        <p className="text-[10px] text-muted-foreground leading-relaxed">
+          <strong>Stage columns</strong> show every reviewer score on file. The
+          <strong> {stageLabel ?? 'target stage'}</strong> column is highlighted
+          — that is the column this bulk action will stamp. <strong>Resolved</strong> is
+          the value that will be written (carried from the highest prior stage
+          or computed from <strong>Achieved</strong>). Type an Achieved value to
+          auto-compute the rating on rows marked ●.
+        </p>
+      )}
 
       {/* ── Per-employee rollup ──────────────────────────────────────── */}
       {perEmployee.length > 0 && (

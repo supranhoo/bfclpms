@@ -14,13 +14,14 @@
 import { calculateRating } from '@/lib/ratingCalculation';
 import type { QualitativeOption } from '@/lib/qualitativeUom';
 
-export type SignoffStage = 'manager' | 'skip_level' | 'hr_pms' | 'auditor';
+export type SignoffStage = 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management';
 
 export type CarriedSource =
   | 'self'
   | 'manager'
   | 'skip_level'
   | 'hr_pms'
+  | 'auditor'
   | 'computed'
   | 'manual'
   | 'override'
@@ -49,6 +50,7 @@ export interface SubmissionScores {
   manager_score: number | null;
   skip_level_score: number | null;
   hr_pms_score: number | null;
+  auditor_score?: number | null;
   achieved_value: number | string | null;
   is_na: boolean | null;
 }
@@ -130,6 +132,15 @@ export function resolveCarriedScore({ stage, submission, kpi }: ResolveInput): R
     if (submission.manager_score != null) return { score: submission.manager_score, source: 'manager' };
     if (submission.self_score != null) return { score: submission.self_score, source: 'self' };
   } else if (stage === 'auditor') {
+    if (submission.hr_pms_score != null) return { score: submission.hr_pms_score, source: 'hr_pms' };
+    if (submission.skip_level_score != null) return { score: submission.skip_level_score, source: 'skip_level' };
+    if (submission.manager_score != null) return { score: submission.manager_score, source: 'manager' };
+    if (submission.self_score != null) return { score: submission.self_score, source: 'self' };
+  } else if (stage === 'management') {
+    // Mgmt terminal approval — the highest priority completed stage becomes
+    // the final_score per POLICY §88. Display-only cascade used by the Bulk
+    // Approve preview; the RPC still derives final_score server-side.
+    if (submission.auditor_score != null) return { score: submission.auditor_score, source: 'auditor' };
     if (submission.hr_pms_score != null) return { score: submission.hr_pms_score, source: 'hr_pms' };
     if (submission.skip_level_score != null) return { score: submission.skip_level_score, source: 'skip_level' };
     if (submission.manager_score != null) return { score: submission.manager_score, source: 'manager' };
