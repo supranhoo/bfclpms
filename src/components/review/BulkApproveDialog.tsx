@@ -143,13 +143,9 @@ export function BulkApproveDialog({
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o && !isLoading) onCancel(); }}>
       <DialogContent
-        className={
-          isSignoff
-            ? 'w-[98vw] sm:max-w-[1400px] max-h-[92vh] p-0 gap-0 flex flex-col'
-            : 'sm:max-w-3xl max-h-[90vh] overflow-y-auto'
-        }
+        className="w-[98vw] sm:max-w-[1400px] max-h-[92vh] p-0 gap-0 flex flex-col"
       >
-        <DialogHeader className={isSignoff ? 'px-6 pt-6 pb-3 border-b border-border' : ''}>
+        <DialogHeader className="px-6 pt-6 pb-3 border-b border-border">
           <DialogTitle className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-primary" />
             Bulk {verb.toLowerCase()} {cellCount} cell{cellCount === 1 ? '' : 's'}{titleSuffix}?
@@ -173,27 +169,20 @@ export function BulkApproveDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div
-          className={
-            isSignoff
-              ? 'flex-1 overflow-y-auto px-6 py-4 space-y-4'
-              : 'space-y-4 py-2'
-          }
-        >
-          {isSignoff && (
-            <>
-              <BulkSignoffPreview
-                preview={preview}
-                isLoading={previewLoading}
-                error={previewError}
-                ruleByKpiId={ruleByKpiId}
-                kpiIdBySubmissionId={kpiIdBySubmissionId}
-                inputs={inputs}
-                onCellInputChange={handleCellInput}
-                isOverride={isOverride}
-                stageLabel={stageLabel}
-              />
-              {isAdmin && (
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          <BulkSignoffPreview
+            preview={preview}
+            isLoading={previewLoading}
+            error={previewError}
+            ruleByKpiId={ruleByKpiId}
+            kpiIdBySubmissionId={kpiIdBySubmissionId}
+            inputs={inputs}
+            onCellInputChange={handleCellInput}
+            isOverride={isOverride}
+            stageLabel={isSignoff ? stageLabel : 'Final'}
+            mode={mode}
+          />
+          {isSignoff && isAdmin && (
                 <label className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-2 cursor-pointer">
                   <Checkbox
                     checked={isOverride}
@@ -227,8 +216,6 @@ export function BulkApproveDialog({
                   </div>
                 </label>
               )}
-            </>
-          )}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label htmlFor="bulk-approve-remark" className="text-sm">
@@ -289,13 +276,7 @@ export function BulkApproveDialog({
           )}
         </div>
 
-        <DialogFooter
-          className={
-            isSignoff
-              ? 'gap-2 border-t border-border bg-background/95 backdrop-blur px-6 py-3'
-              : 'gap-2'
-          }
-        >
+        <DialogFooter className="gap-2 border-t border-border bg-background/95 backdrop-blur px-6 py-3">
           <Button variant="outline" onClick={onCancel} disabled={isLoading}>
             Cancel
           </Button>
