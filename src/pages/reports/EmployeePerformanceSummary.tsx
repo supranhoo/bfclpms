@@ -363,6 +363,16 @@ export default function EmployeePerformanceSummary() {
         // Skip N/A KPIs
         if (submission?.is_na) return;
 
+        // Report Aggregation Parity: same per-row lock as the main table so
+        // Period Comparison numbers cannot drift from the Summary View.
+        const isLocked = isKpiLockedForPeriod(
+          kpi.frequency,
+          kpi.review_period,
+          kpi.review_year || year,
+          kpi.frequency_cycle_start,
+        );
+        if (isLocked) return;
+
         if (!employeeTrends.has(kpi.employee_id)) {
           employeeTrends.set(kpi.employee_id, new Map());
         }
