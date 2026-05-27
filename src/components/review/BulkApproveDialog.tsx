@@ -182,7 +182,7 @@ export function BulkApproveDialog({
             stageLabel={isSignoff ? stageLabel : 'Final'}
             mode={mode}
           />
-          {isSignoff && isAdmin && (
+          {isAdmin && (
                 <label className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-2 cursor-pointer">
                   <Checkbox
                     checked={isOverride}
@@ -193,8 +193,12 @@ export function BulkApproveDialog({
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-1.5 text-xs font-medium">
                       <ShieldAlert className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                      Override {stageLabel ?? 'this stage'} score only (admin)
+                      {isSignoff
+                        ? <>Override {stageLabel ?? 'this stage'} score only (admin)</>
+                        : <>Override Final score (admin)</>}
                     </div>
+                    {isSignoff ? (
+                      <>
                     <p className="text-[11px] text-muted-foreground">
                       Writes <strong>only</strong> the {stageLabel ?? 'selected'} column and bypasses
                       prior-stage gates (self not submitted, auditor already scored, row-version conflict).
@@ -213,6 +217,24 @@ export function BulkApproveDialog({
                       <code className="mx-1">ADMIN_BULK_OVERRIDE_FINAL_UNLOCK</code>
                       and notifies the employee, their manager, and HR PMS (POLICY §88.1).
                     </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-[11px] text-muted-foreground">
+                          Stamps <strong>Final score</strong> directly from each row's
+                          Achieved input, bypassing the §88 cascade
+                          (<em>Auditor &gt; HR PMS &gt; Skip-Level &gt; Manager</em>) and the
+                          <em> already-approved</em> guard. Enter an Achieved value on every row.
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          <strong>Re-stamps already-APPROVED rows</strong>; each write is
+                          audit-logged as
+                          <code className="mx-1">ADMIN_BULK_OVERRIDE_FINAL_STAMP</code>
+                          (or <code>…_RESTAMP</code> on re-stamp) and notifies the employee,
+                          their manager, and HR PMS (POLICY §88.1).
+                        </p>
+                      </>
+                    )}
                   </div>
                 </label>
               )}
