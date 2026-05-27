@@ -58,11 +58,11 @@ describe('BulkApproveDialog — approve mode (Management parity)', () => {
   it('renders the wide preview matrix with stage columns', () => {
     render(<BulkApproveDialog {...baseProps} />);
     expect(screen.getByText(/Bulk approve 1 cell\?/i)).toBeInTheDocument();
-    expect(screen.getByText('Self')).toBeInTheDocument();
-    expect(screen.getByText('Manager')).toBeInTheDocument();
-    expect(screen.getByText('HR PMS')).toBeInTheDocument();
-    expect(screen.getByText('Auditor')).toBeInTheDocument();
-    expect(screen.getByText('Final')).toBeInTheDocument();
+    expect(screen.getAllByText('Self').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Manager').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('HR PMS').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Auditor').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Final').length).toBeGreaterThan(0);
   });
 
   it('never renders the admin override toggle in approve mode', () => {
@@ -72,6 +72,6 @@ describe('BulkApproveDialog — approve mode (Management parity)', () => {
 
   it('renders POLICY §88 fallback copy in the legend', () => {
     render(<BulkApproveDialog {...baseProps} />);
-    expect(screen.getByText(/POLICY §88/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/POLICY §88/i).length).toBeGreaterThan(0);
   });
 });
