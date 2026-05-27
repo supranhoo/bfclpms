@@ -13,7 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { formatKpiInsertError } from '@/lib/kpiErrorUtils';
 import { EmployeeCombobox } from './EmployeeCombobox';
-import { fetchAllPaged } from '@/lib/fetchAll';
+import { useActiveEmployeesForCopy } from '@/hooks/useActiveEmployeesForCopy';
 
 
 const MONTHS = [
@@ -83,29 +83,8 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
 
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i);
 
-  // Fetch employees
-  const { data: employees = [] } = useQuery<Employee[]>({
-    queryKey: ['copy-kras-employees'],
-    queryFn: async () => {
-      // Paged fetch to bypass PostgREST's 1000-row default cap so employees
-      // beyond row 1000 (e.g. emp 101784 around row ~2512) are searchable.
-      const data = await fetchAllPaged<any>((from, to) =>
-        supabase
-          .from('profiles')
-          .select('id, full_name, employee_code, departments:department_id(name)')
-          .eq('is_active', true)
-          .order('full_name')
-          .range(from, to)
-      );
-      return (data || []).map((e: any) => ({
-        id: e.id,
-        name: e.full_name || e.id,
-        code: e.employee_code || '',
-        department: e.departments?.name || '',
-      }));
-    },
-    enabled: isOpen,
-  });
+  // Shared, cached roster fetch (POLICY §94 paged read, 5-min staleTime).
+  const { data: employees = [] } = useActiveEmployeesForCopy({ enabled: isOpen });
 
   // Fetch source employee's KPIs
   const { data: sourceKpis = [], isLoading: sourceKpisLoading } = useQuery<SourceKpi[]>({
