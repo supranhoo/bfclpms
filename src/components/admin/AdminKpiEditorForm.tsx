@@ -10,7 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useKraCategories, useProfiles } from '@/hooks/useOrganization';
 import { useAdminUpdateKpi, ReviewStatus, KPI } from '@/hooks/useKpis';
-import { Loader2, Building2, Info, Copy, ChevronDown } from 'lucide-react';
+import { Loader2, Building2, Info, Copy, ChevronDown, AlertTriangle, Users } from 'lucide-react';
 import { UomTypeSelector } from '@/components/admin/UomTypeSelector';
 import { TieredOptionsBuilder } from '@/components/admin/TieredOptionsBuilder';
 import { RegistryBadge } from '@/components/admin/kpi-standardization/RegistryBadge';
@@ -18,7 +18,6 @@ import { EmployeeCombobox, EmployeeOption } from '@/components/admin/EmployeeCom
 import { fetchAllPaged } from '@/lib/fetchAll';
 import { formatKpiInsertError } from '@/lib/kpiErrorUtils';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertTriangle, Users } from 'lucide-react';
 import { UomType, QualitativeOption, validateQualitativeOptions, BINARY_OPTIONS, BINARY_OPTIONS_INVERTED, isBinaryInverted } from '@/lib/qualitativeUom';
 import { UOM_OPTIONS } from '@/lib/uomConstants';
 import { getCycleOptionsForFrequency, MULTI_MONTH_FREQUENCIES } from '@/lib/frequencyCycleOptions';
