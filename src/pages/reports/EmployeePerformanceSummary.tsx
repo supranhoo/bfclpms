@@ -17,7 +17,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Download, Search, Users, TrendingUp, TrendingDown, Minus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FrequencyLockToggle } from '@/components/ui/FrequencyLockToggle';
-import { isKpiLockedForPeriod } from '@/lib/frequencyUtils';
 import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
 import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
 import { applyEmployeeStatusFilter, employeeStatusLabel, type EmployeeStatusMode } from '@/lib/reportEmployeeFilter';
@@ -195,19 +194,13 @@ export default function EmployeePerformanceSummary() {
         // Skip N/A KPIs entirely
         if (submission?.is_na) return;
 
-        // Report Aggregation Parity (POLICY): lock is evaluated against the
-        // KPI's OWN review_period, never the active UI filter. Otherwise the
-        // same Feb-26 row produces different totals between "All Months" and
-        // a specific-month filter (RCA: Jitendra / Sajid Raza Feb-26 — All
-        // Months 69.04% vs February 54.37%). POLICY §128 still applies for
-        // per-KPI frequency_cycle_start so non-default cycles (e.g. Bi-Monthly
-        // Feb-Mar) are classified correctly.
-        const isLocked = isKpiLockedForPeriod(
-          kpi.frequency,
-          kpi.review_period,
-          kpi.review_year || year,
-          kpi.frequency_cycle_start,
-        );
+        // Report Aggregation Parity (POLICY §88 + §128 revision, RCA Sajid
+        // Raza Feb-26): the KPI's own `review_period` is the source of truth
+        // for which row it belongs to. `isKpiLockedForPeriod` is an entry-side
+        // guard for empty sibling months; it must NOT exclude approved
+        // submissions stored at the cycle-start month (e.g. Bi-Monthly Feb-Mar
+        // KPIs approved on review_period='February'). Counting is decided by
+        // `is_na` and the 8-stage score fallback only.
 
         const manager = profile.reporting_manager_id 
           ? profileMap.get(profile.reporting_manager_id) 
@@ -224,21 +217,17 @@ export default function EmployeePerformanceSummary() {
                       submission?.manager_score ?? 
                       submission?.self_score ?? 0;
         const weight = kpi.weightage || 0;
-        const weightedScore = isLocked ? 0 : score * weight;
-        const maxScore = isLocked ? 0 : weight * 5;
+        const weightedScore = score * weight;
+        const maxScore = weight * 5;
 
         const kpiStatus = kpi.status || 'kra_set';
 
         if (existing) {
-          if (!isLocked) {
-            existing.totalScore += weightedScore;
-            existing.outOfScore += maxScore;
-            existing.totalWeight += weight;
-            existing.kpiCount += 1;
-            existing.statusCounts[kpiStatus] = (existing.statusCounts[kpiStatus] || 0) + 1;
-          } else {
-            existing.lockedKpiCount += 1;
-          }
+          existing.totalScore += weightedScore;
+          existing.outOfScore += maxScore;
+          existing.totalWeight += weight;
+          existing.kpiCount += 1;
+          existing.statusCounts[kpiStatus] = (existing.statusCounts[kpiStatus] || 0) + 1;
         } else {
           employeePeriodMap.set(key, {
             employeeId: kpi.employee_id,
@@ -250,12 +239,12 @@ export default function EmployeePerformanceSummary() {
             reportingManager: manager?.full_name || '-',
             reviewPeriod: kpi.review_period || '-',
             reviewYear: kpi.review_year || year,
-            statusCounts: isLocked ? {} : { [kpiStatus]: 1 },
+            statusCounts: { [kpiStatus]: 1 },
             totalScore: weightedScore,
             outOfScore: maxScore,
-            totalWeight: isLocked ? 0 : weight,
-            kpiCount: isLocked ? 0 : 1,
-            lockedKpiCount: isLocked ? 1 : 0,
+            totalWeight: weight,
+            kpiCount: 1,
+            lockedKpiCount: 0,
             orphanedKpiCount: 0,
             orphanedStatuses: new Set<string>(),
             isActive: (profile as any).is_active !== false,
