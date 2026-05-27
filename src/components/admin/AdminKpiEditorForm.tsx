@@ -1159,6 +1159,71 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
         </Collapsible>
       )}
 
+      {/* Copy to Other Employees — collapsible */}
+      {kpi?.id && formData.review_period && formData.review_year && (
+        <Collapsible open={copyToEmployeesOpen} onOpenChange={setCopyToEmployeesOpen}>
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" size="sm" className="w-full justify-between h-9" type="button">
+              <span className="flex items-center gap-2 text-xs">
+                <Users className="h-3.5 w-3.5" />
+                Copy KPI to Other Employees
+              </span>
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${copyToEmployeesOpen ? 'rotate-180' : ''}`} />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2">
+            <div className="p-3 border rounded-md bg-muted/30 space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Copies this KPI (using current form values) to selected employees for the same period
+                ({formData.review_period} {formData.review_year}). New rows are created with status "KRA Set".
+                Duplicates are automatically skipped.
+              </p>
+              {loadingEmployees ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading employees...
+                </div>
+              ) : (
+                <>
+                  <EmployeeCombobox
+                    multiple
+                    employees={employeesForCopy}
+                    value={copyTargetEmployeeIds}
+                    onChange={setCopyTargetEmployeeIds}
+                    excludeIds={kpi?.employee_id ? [kpi.employee_id] : []}
+                    duplicateCounts={copyTargetDuplicateCounts}
+                    placeholder="Click to select target employees…"
+                  />
+                  {copyTargetEmployeeIds.length > 0 && (
+                    <p className="text-[11px] text-muted-foreground">
+                      {copyTargetEmployeeIds.length} selected · {totalCopyTargets} new · {totalCopyDuplicates} duplicate
+                    </p>
+                  )}
+                  {totalCopyDuplicates > 0 && (
+                    <Alert variant="default" className="border-amber-500/50 bg-amber-500/5 py-2">
+                      <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                      <AlertDescription className="text-xs">
+                        {totalCopyDuplicates} employee(s) already have this KPI for {formData.review_period} {formData.review_year} — they will be skipped.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  {copyTargetEmployeeIds.length > 0 && (
+                    <Button
+                      size="sm"
+                      onClick={handleCopyToEmployees}
+                      disabled={copyingToEmployees || totalCopyTargets <= 0}
+                      className="h-8 text-xs"
+                    >
+                      {copyingToEmployees && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+                      Copy to {totalCopyTargets} employee(s)
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+
       {/* Reason */}
       <div className="space-y-1.5">
         <Label className="text-xs">
