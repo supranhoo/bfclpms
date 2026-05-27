@@ -164,6 +164,9 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
       setCopyToMonthsOpen(false);
       setSelectedCopyMonths(new Set());
       setExistingSiblingKeys(new Set());
+      setCopyToEmployeesOpen(false);
+      setCopyTargetEmployeeIds([]);
+      setCopyTargetExistingKeys(new Map());
     }
   }, [kpi]);
 
@@ -187,6 +190,61 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
     };
     fetchSiblings();
   }, [copyToMonthsOpen, kpi]);
+
+  // Lazy-load full active employee roster the first time the section opens
+  useEffect(() => {
+    if (!copyToEmployeesOpen || employeesForCopy.length > 0) return;
+    const loadEmployees = async () => {
+      setLoadingEmployees(true);
+      try {
+        const data = await fetchAllPaged<any>((from, to) =>
+          supabase
+            .from('profiles')
+            .select('id, full_name, employee_code, departments:department_id(name)')
+            .eq('is_active', true)
+            .order('full_name')
+            .range(from, to)
+        );
+        setEmployeesForCopy(
+          (data || []).map((e: any) => ({
+            id: e.id,
+            name: e.full_name || e.id,
+            code: e.employee_code || '',
+            department: e.departments?.name || '',
+          }))
+        );
+      } finally {
+        setLoadingEmployees(false);
+      }
+    };
+    loadEmployees();
+  }, [copyToEmployeesOpen, employeesForCopy.length]);
+
+  // Fetch existing same-KPI rows for target employees in the same period/year
+  useEffect(() => {
+    if (copyTargetEmployeeIds.length === 0 || !kpi) {
+      setCopyTargetExistingKeys(new Map());
+      return;
+    }
+    const fetchTargets = async () => {
+      const { data } = await supabase
+        .from('kpis')
+        .select('employee_id, kra_name, kpi_name')
+        .in('employee_id', copyTargetEmployeeIds)
+        .eq('review_period', formData.review_period)
+        .eq('review_year', formData.review_year ? parseInt(formData.review_year) : -1)
+        .eq('kra_name', formData.kra_name)
+        .eq('kpi_name', formData.kpi_name);
+      const map = new Map<string, Set<string>>();
+      (data || []).forEach((r) => {
+        const key = `${r.kra_name}|||${r.kpi_name}`;
+        if (!map.has(r.employee_id)) map.set(r.employee_id, new Set());
+        map.get(r.employee_id)!.add(key);
+      });
+      setCopyTargetExistingKeys(map);
+    };
+    fetchTargets();
+  }, [copyTargetEmployeeIds, kpi, formData.review_period, formData.review_year, formData.kra_name, formData.kpi_name]);
 
   // Validation for tiered options
   const tieredValidationError = formData.uom_type === 'tiered' 
