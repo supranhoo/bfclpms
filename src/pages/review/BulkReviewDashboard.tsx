@@ -453,12 +453,20 @@ export default function BulkReviewDashboard() {
     if (!bulkAction) return;
     try {
       if (bulkAction.kind === 'mgmt') {
-        const res = await approve.mutateAsync({ cells, reason, attachment_urls: attachmentUrls });
+        const res = await approve.mutateAsync({
+          cells,
+          reason,
+          attachment_urls: attachmentUrls,
+          achieved_values: extras?.achievedValues ?? null,
+          is_override: extras?.isOverride ?? false,
+        });
         const advanced = (res as any).advanced ?? res.applied;
+        const overrideCount = (res as any).override_count ?? 0;
         toast({
           title: `Approved ${res.applied} / ${cells.length}`,
           description: [
             `${advanced} advanced to APPROVED`,
+            overrideCount > 0 ? `${overrideCount} via admin override` : null,
             summariseSkipReasons(res.skipped),
           ].filter(Boolean).join(' · '),
         });
