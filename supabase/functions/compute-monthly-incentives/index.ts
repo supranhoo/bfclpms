@@ -436,10 +436,14 @@ serve(async (req) => {
         // Resolve employee scope chain (reuse maps built above)
         const empBuId = emp.department_id ? (deptToBu.get(emp.department_id) ?? null) : null;
         const empDivisionId = empBuId ? (buToDivision.get(empBuId) ?? null) : null;
-        const empCompanyId = empToCompanyDirect.get(emp.id)
-          ?? (empDivisionId
-            ? (divToCompany.get(empDivisionId) ?? null)
-            : (empBuId ? (buToCompany.get(empBuId) ?? null) : null));
+        const empCompanyId = resolveEmployeeCompanyId({
+          profileCompanyId: empToCompanyDirect.get(emp.id) ?? null,
+          departmentId: emp.department_id,
+          deptToBu,
+          buToDivision,
+          divToCompany,
+          buToCompany,
+        });
 
         const wantCategory = program.program_type === 'support' ? 'pms_score' : 'production';
         const candidates: { slab: any; specificity: number }[] = [];
