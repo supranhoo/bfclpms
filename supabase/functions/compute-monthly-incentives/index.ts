@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { checkIncentiveAccess } from '../_shared/incentive-auth.ts';
+import { resolveEmployeeRate, resolveEmployeeCompanyId } from '../_shared/incentiveRateResolver.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -398,34 +399,25 @@ serve(async (req) => {
       if (program.program_type === 'production') {
         productionTotalTons = prodEntryMap.get(emp.id) ?? null;
 
-        // Resolve BU and company for this employee — UNIFIED resolver:
-        // prefer profiles.company_id (parity with UI Company filter & slab matching),
-        // fallback to dept → BU → division → company chain.
+        // Shared cascade resolver — parity with data-entry grid.
         const empBuId = emp.department_id ? (deptToBu.get(emp.department_id) ?? null) : null;
-        const empDivisionIdForRate = empBuId ? (buToDivision.get(empBuId) ?? null) : null;
-        const empCompanyId = empToCompanyDirect.get(emp.id)
-          ?? (empDivisionIdForRate
-            ? (divToCompany.get(empDivisionIdForRate) ?? null)
-            : (empBuId ? (buToCompany.get(empBuId) ?? null) : null));
-
-        // Pick latest-effective rate (effective_from <= periodEnd) per scope
-        const pickLatest = (filterFn: (r: any) => boolean) => {
-          const candidates = prodRates
-            .filter(filterFn)
-            .filter((r: any) => !r.effective_from || r.effective_from <= periodEndStr)
-            .sort((a: any, b: any) => String(b.effective_from || '').localeCompare(String(a.effective_from || '')));
-          return candidates[0] || null;
-        };
-
-        // Priority cascade: employee > department > BU > company > common
-        const empRate = pickLatest((r: any) => r.rate_type === 'employee' && r.employee_id === emp.id);
-        const deptRate = emp.department_id ? pickLatest((r: any) => r.rate_type === 'department' && r.entity_id === emp.department_id) : null;
-        const buRate = empBuId ? pickLatest((r: any) => r.rate_type === 'bu' && r.entity_id === empBuId) : null;
-        const companyRate = empCompanyId ? pickLatest((r: any) => r.rate_type === 'company' && r.entity_id === empCompanyId) : null;
-        const commonRate = pickLatest((r: any) => r.rate_type === 'common');
-
-        const rateRecord = empRate || deptRate || buRate || companyRate || commonRate;
-        resolvedRate = rateRecord?.rate_per_ton ?? null;
+        const empCompanyId = resolveEmployeeCompanyId({
+          profileCompanyId: empToCompanyDirect.get(emp.id) ?? null,
+          departmentId: emp.department_id,
+          deptToBu,
+          buToDivision,
+          divToCompany,
+          buToCompany,
+        });
+        const resolved = resolveEmployeeRate(
+          emp.id,
+          emp.department_id ?? null,
+          empBuId,
+          prodRates as any[],
+          empCompanyId,
+          periodEndStr,
+        );
+        resolvedRate = resolved.source !== 'none' ? resolved.rate : null;
 
         // Track rate resolution for diagnostics (only when employee actually has daily data)
         if (prodDailyMap.has(emp.id)) {
