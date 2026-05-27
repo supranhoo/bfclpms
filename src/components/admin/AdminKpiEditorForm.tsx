@@ -10,10 +10,14 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useKraCategories, useProfiles } from '@/hooks/useOrganization';
 import { useAdminUpdateKpi, ReviewStatus, KPI } from '@/hooks/useKpis';
-import { Loader2, Building2, Info, Copy, ChevronDown } from 'lucide-react';
+import { Loader2, Building2, Info, Copy, ChevronDown, AlertTriangle, Users } from 'lucide-react';
 import { UomTypeSelector } from '@/components/admin/UomTypeSelector';
 import { TieredOptionsBuilder } from '@/components/admin/TieredOptionsBuilder';
 import { RegistryBadge } from '@/components/admin/kpi-standardization/RegistryBadge';
+import { EmployeeCombobox, EmployeeOption } from '@/components/admin/EmployeeCombobox';
+import { fetchAllPaged } from '@/lib/fetchAll';
+import { formatKpiInsertError } from '@/lib/kpiErrorUtils';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { UomType, QualitativeOption, validateQualitativeOptions, BINARY_OPTIONS, BINARY_OPTIONS_INVERTED, isBinaryInverted } from '@/lib/qualitativeUom';
 import { UOM_OPTIONS } from '@/lib/uomConstants';
 import { getCycleOptionsForFrequency, MULTI_MONTH_FREQUENCIES } from '@/lib/frequencyCycleOptions';
@@ -82,6 +86,14 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
   const [existingSiblingKeys, setExistingSiblingKeys] = useState<Set<string>>(new Set());
   const [loadingSiblings, setLoadingSiblings] = useState(false);
   const [copying, setCopying] = useState(false);
+
+  // Copy to other employees state
+  const [copyToEmployeesOpen, setCopyToEmployeesOpen] = useState(false);
+  const [employeesForCopy, setEmployeesForCopy] = useState<EmployeeOption[]>([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
+  const [copyTargetEmployeeIds, setCopyTargetEmployeeIds] = useState<string[]>([]);
+  const [copyTargetExistingKeys, setCopyTargetExistingKeys] = useState<Map<string, Set<string>>>(new Map());
+  const [copyingToEmployees, setCopyingToEmployees] = useState(false);
 
   const [formData, setFormData] = useState({
     employee_id: '',
@@ -152,6 +164,9 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
       setCopyToMonthsOpen(false);
       setSelectedCopyMonths(new Set());
       setExistingSiblingKeys(new Set());
+      setCopyToEmployeesOpen(false);
+      setCopyTargetEmployeeIds([]);
+      setCopyTargetExistingKeys(new Map());
     }
   }, [kpi]);
 
@@ -175,6 +190,61 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
     };
     fetchSiblings();
   }, [copyToMonthsOpen, kpi]);
+
+  // Lazy-load full active employee roster the first time the section opens
+  useEffect(() => {
+    if (!copyToEmployeesOpen || employeesForCopy.length > 0) return;
+    const loadEmployees = async () => {
+      setLoadingEmployees(true);
+      try {
+        const data = await fetchAllPaged<any>((from, to) =>
+          supabase
+            .from('profiles')
+            .select('id, full_name, employee_code, departments:department_id(name)')
+            .eq('is_active', true)
+            .order('full_name')
+            .range(from, to)
+        );
+        setEmployeesForCopy(
+          (data || []).map((e: any) => ({
+            id: e.id,
+            name: e.full_name || e.id,
+            code: e.employee_code || '',
+            department: e.departments?.name || '',
+          }))
+        );
+      } finally {
+        setLoadingEmployees(false);
+      }
+    };
+    loadEmployees();
+  }, [copyToEmployeesOpen, employeesForCopy.length]);
+
+  // Fetch existing same-KPI rows for target employees in the same period/year
+  useEffect(() => {
+    if (copyTargetEmployeeIds.length === 0 || !kpi) {
+      setCopyTargetExistingKeys(new Map());
+      return;
+    }
+    const fetchTargets = async () => {
+      const { data } = await supabase
+        .from('kpis')
+        .select('employee_id, kra_name, kpi_name')
+        .in('employee_id', copyTargetEmployeeIds)
+        .eq('review_period', formData.review_period)
+        .eq('review_year', formData.review_year ? parseInt(formData.review_year) : -1)
+        .eq('kra_name', formData.kra_name)
+        .eq('kpi_name', formData.kpi_name);
+      const map = new Map<string, Set<string>>();
+      (data || []).forEach((r) => {
+        const key = `${r.kra_name}|||${r.kpi_name}`;
+        if (!map.has(r.employee_id)) map.set(r.employee_id, new Set());
+        map.get(r.employee_id)!.add(key);
+      });
+      setCopyTargetExistingKeys(map);
+    };
+    fetchTargets();
+  }, [copyTargetEmployeeIds, kpi, formData.review_period, formData.review_year, formData.kra_name, formData.kpi_name]);
 
   // Validation for tiered options
   const tieredValidationError = formData.uom_type === 'tiered' 
@@ -380,6 +450,144 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
       toast.error('Failed to copy KPI');
     } finally {
       setCopying(false);
+    }
+  };
+
+  const buildKpiPayload = (overrides: { employee_id: string; review_period: string; review_year: number }) => ({
+    employee_id: overrides.employee_id,
+    category_id: formData.category_id,
+    kra_name: formData.kra_name,
+    kpi_name: formData.kpi_name,
+    target_value: formData.uom_type === 'numeric' ? (formData.target_value ? parseFloat(formData.target_value) : null) : null,
+    uom: formData.uom || null,
+    weightage: formData.weightage ? parseFloat(formData.weightage) : null,
+    frequency: formData.frequency || null,
+    frequency_cycle_start: (formData.frequency_cycle_start && formData.frequency_cycle_start !== 'system_default') ? formData.frequency_cycle_start : null,
+    criteria: formData.uom_type === 'numeric' ? (formData.criteria || null) : null,
+    source_of_data: formData.source_of_data || null,
+    r5: formData.uom_type === 'numeric' ? (formData.r5 || null) : null,
+    r4: formData.uom_type === 'numeric' ? (formData.r4 || null) : null,
+    r3: formData.uom_type === 'numeric' ? (formData.r3 || null) : null,
+    r2: formData.uom_type === 'numeric' ? (formData.r2 || null) : null,
+    r1: formData.uom_type === 'numeric' ? (formData.r1 || null) : null,
+    r0: formData.uom_type === 'numeric' ? (formData.r0 || null) : null,
+    is_org_level: formData.is_org_level,
+    org_level_scope: formData.is_org_level ? formData.org_level_scope : 'organization',
+    uom_type: formData.uom_type,
+    qualitative_options: formData.uom_type === 'tiered' ? formData.qualitative_options
+      : formData.uom_type === 'binary' ? formData.qualitative_options : null,
+    require_resubmit_reason: formData.require_resubmit_reason,
+    day_count_type: formData.frequency === 'Daily' ? formData.day_count_type : null,
+    threshold_mode: formData.uom_type === 'numeric' ? formData.threshold_mode : null,
+    review_period: overrides.review_period,
+    review_year: overrides.review_year,
+    status: 'kra_set' as const,
+  });
+
+  const copyTargetDuplicateCounts: Record<string, number> = (() => {
+    const counts: Record<string, number> = {};
+    const compositeKey = `${formData.kra_name}|||${formData.kpi_name}`;
+    copyTargetEmployeeIds.forEach((empId) => {
+      counts[empId] = copyTargetExistingKeys.get(empId)?.has(compositeKey) ? 1 : 0;
+    });
+    return counts;
+  })();
+
+  const totalCopyDuplicates = Object.values(copyTargetDuplicateCounts).reduce((a, b) => a + b, 0);
+  const totalCopyTargets = copyTargetEmployeeIds.length - totalCopyDuplicates;
+
+  const handleCopyToEmployees = async () => {
+    if (!kpi || copyTargetEmployeeIds.length === 0) return;
+    if (!formData.review_period || !formData.review_year) {
+      toast.error('Source KPI must have a review period and year.');
+      return;
+    }
+    setCopyingToEmployees(true);
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      const targetYear = parseInt(formData.review_year);
+      const compositeKey = `${formData.kra_name}|||${formData.kpi_name}`;
+
+      const rowsToInsert: any[] = [];
+      copyTargetEmployeeIds.forEach((empId) => {
+        if (copyTargetExistingKeys.get(empId)?.has(compositeKey)) return; // skip duplicate
+        rowsToInsert.push(buildKpiPayload({
+          employee_id: empId,
+          review_period: formData.review_period,
+          review_year: targetYear,
+        }));
+      });
+
+      if (rowsToInsert.length === 0) {
+        toast.error('All selected employees already have this KPI for the period.');
+        return;
+      }
+
+      const { data: inserted, error } = await supabase
+        .from('kpis')
+        .insert(rowsToInsert)
+        .select('id, employee_id');
+      if (error) throw error;
+
+      // Org KPI value placeholders for employee-scoped org KPIs (parity with CopyKrasDialog)
+      if (formData.is_org_level && formData.org_level_scope === 'employee') {
+        const orgRows = rowsToInsert.map((r) => ({
+          category_id: r.category_id,
+          kra_name: r.kra_name,
+          kpi_name: r.kpi_name,
+          review_period: r.review_period,
+          review_year: r.review_year,
+          employee_id: r.employee_id,
+          target_value: r.target_value,
+          uom_type: r.uom_type,
+          criteria: r.criteria,
+          qualitative_options: r.qualitative_options,
+          r0: r.r0, r1: r.r1, r2: r.r2, r3: r.r3, r4: r.r4, r5: r.r5,
+          status: 'entered',
+        }));
+        const { error: okvErr } = await supabase
+          .from('org_kpi_values')
+          .upsert(orgRows, { onConflict: 'category_id,kra_name,kpi_name,review_period,review_year,employee_id', ignoreDuplicates: true });
+        if (okvErr) console.warn('Failed to create org_kpi_values placeholders:', okvErr.message);
+      }
+
+      // Audit logs
+      if (authUser && inserted) {
+        const auditRows = inserted.map((row) => ({
+          kpi_id: row.id,
+          performed_by: authUser.id,
+          action: 'admin_copy_to_employee',
+          new_value: { employee_id: row.employee_id, review_period: formData.review_period, review_year: targetYear } as any,
+          metadata: {
+            source: 'admin_copy_to_employee',
+            source_kpi_id: kpi.id,
+            target_employee_id: row.employee_id,
+          },
+        }));
+        if (auditRows.length > 0) await supabase.from('kpi_audit_logs').insert(auditRows);
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['admin-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['org-level-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['org-level-kpis-with-employees'] });
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-full-mapping'] });
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis-by-period-ranges'] });
+
+      const skipped = copyTargetEmployeeIds.length - rowsToInsert.length;
+      toast.success(
+        `KPI copied to ${rowsToInsert.length} employee(s)${skipped > 0 ? ` · ${skipped} skipped (duplicate)` : ''}`
+      );
+      setCopyToEmployeesOpen(false);
+      setCopyTargetEmployeeIds([]);
+      setCopyTargetExistingKeys(new Map());
+    } catch (err: any) {
+      console.error('Copy to employees failed:', err);
+      toast.error(formatKpiInsertError(err) || 'Failed to copy KPI to employees');
+    } finally {
+      setCopyingToEmployees(false);
     }
   };
 
@@ -942,6 +1150,71 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
                     >
                       {copying && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
                       Copy to {selectedCopyMonths.size} month(s)
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+
+      {/* Copy to Other Employees — collapsible */}
+      {kpi?.id && formData.review_period && formData.review_year && (
+        <Collapsible open={copyToEmployeesOpen} onOpenChange={setCopyToEmployeesOpen}>
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" size="sm" className="w-full justify-between h-9" type="button">
+              <span className="flex items-center gap-2 text-xs">
+                <Users className="h-3.5 w-3.5" />
+                Copy KPI to Other Employees
+              </span>
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${copyToEmployeesOpen ? 'rotate-180' : ''}`} />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2">
+            <div className="p-3 border rounded-md bg-muted/30 space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Copies this KPI (using current form values) to selected employees for the same period
+                ({formData.review_period} {formData.review_year}). New rows are created with status "KRA Set".
+                Duplicates are automatically skipped.
+              </p>
+              {loadingEmployees ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading employees...
+                </div>
+              ) : (
+                <>
+                  <EmployeeCombobox
+                    multiple
+                    employees={employeesForCopy}
+                    value={copyTargetEmployeeIds}
+                    onChange={setCopyTargetEmployeeIds}
+                    excludeIds={kpi?.employee_id ? [kpi.employee_id] : []}
+                    duplicateCounts={copyTargetDuplicateCounts}
+                    placeholder="Click to select target employees…"
+                  />
+                  {copyTargetEmployeeIds.length > 0 && (
+                    <p className="text-[11px] text-muted-foreground">
+                      {copyTargetEmployeeIds.length} selected · {totalCopyTargets} new · {totalCopyDuplicates} duplicate
+                    </p>
+                  )}
+                  {totalCopyDuplicates > 0 && (
+                    <Alert variant="default" className="border-amber-500/50 bg-amber-500/5 py-2">
+                      <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                      <AlertDescription className="text-xs">
+                        {totalCopyDuplicates} employee(s) already have this KPI for {formData.review_period} {formData.review_year} — they will be skipped.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  {copyTargetEmployeeIds.length > 0 && (
+                    <Button
+                      size="sm"
+                      onClick={handleCopyToEmployees}
+                      disabled={copyingToEmployees || totalCopyTargets <= 0}
+                      className="h-8 text-xs"
+                    >
+                      {copyingToEmployees && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+                      Copy to {totalCopyTargets} employee(s)
                     </Button>
                   )}
                 </>
