@@ -355,11 +355,15 @@ export function useBulkManagementApprove() {
       cells: Array<{ submission_id: string; expected_row_version?: number | null }>;
       reason?: string;
       attachment_urls?: string[];
+      achieved_values?: Record<string, number | string | null> | null;
+      is_override?: boolean;
     }): Promise<BulkWriteResult> => {
       const { data, error } = await supabase.rpc('bulk_management_approve' as any, {
         p_cells: args.cells as any,
         p_batch_reason: args.reason ?? null,
         p_attachment_urls: (args.attachment_urls ?? []) as any,
+        p_achieved_values: (args.achieved_values ?? null) as any,
+        p_is_override: args.is_override ?? false,
       });
       if (error) throw error;
       return data as unknown as BulkWriteResult;
