@@ -172,7 +172,9 @@ export function BulkSignoffPreview({
             ruleByKpiId={ruleByKpiId}
             kpiIdBySubmissionId={kpiIdBySubmissionId}
             inputs={inputs}
-            onCellInputChange={mode === 'approve' ? undefined : onCellInputChange}
+            onCellInputChange={
+              mode === 'approve' && !isOverride ? undefined : onCellInputChange
+            }
             isOverride={isOverride}
             targetStageLabel={mode === 'approve' ? 'Final' : stageLabel}
           />
@@ -188,6 +190,11 @@ export function BulkSignoffPreview({
           completed stage (<em>Auditor &gt; HR PMS &gt; Skip-Level &gt; Manager &gt;
           Self</em>) per POLICY §88. <strong>Resolved</strong> reflects that same
           cascade for each row.
+          {isOverride && (
+            <> <strong className="text-amber-700 dark:text-amber-300">Override ON</strong> —
+            Final is stamped from your Achieved input per row, bypassing the
+            §88 cascade. Re-stamps already-APPROVED rows.</>
+          )}
         </p>
       ) : (
         <p className="text-[10px] text-muted-foreground leading-relaxed">
