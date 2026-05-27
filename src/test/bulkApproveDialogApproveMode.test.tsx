@@ -40,7 +40,8 @@ const preview: ImpactSummary = {
 
 // Guards parity contract: Management's Bulk Approve dialog mirrors the
 // Sign-off shell — wide layout, all stage scores visible, Final column
-// highlighted — but never renders the admin override toggle.
+// highlighted — and exposes the admin override toggle to admins
+// (POLICY §88.1).
 describe('BulkApproveDialog — approve mode (Management parity)', () => {
   const baseProps = {
     open: true,
@@ -65,9 +66,14 @@ describe('BulkApproveDialog — approve mode (Management parity)', () => {
     expect(screen.getAllByText('Final').length).toBeGreaterThan(0);
   });
 
-  it('never renders the admin override toggle in approve mode', () => {
+  it('exposes the admin override toggle to admins in approve mode', () => {
     render(<BulkApproveDialog {...baseProps} />);
-    expect(screen.queryByText(/Override .* score only \(admin\)/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Override Final score \(admin\)/i)).toBeInTheDocument();
+  });
+
+  it('hides the admin override toggle for non-admins in approve mode', () => {
+    render(<BulkApproveDialog {...baseProps} isAdmin={false} />);
+    expect(screen.queryByText(/Override Final score \(admin\)/i)).not.toBeInTheDocument();
   });
 
   it('renders POLICY §88 fallback copy in the legend', () => {
