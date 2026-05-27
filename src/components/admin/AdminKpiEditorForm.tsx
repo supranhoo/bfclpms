@@ -453,6 +453,144 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
     }
   };
 
+  const buildKpiPayload = (overrides: { employee_id: string; review_period: string; review_year: number }) => ({
+    employee_id: overrides.employee_id,
+    category_id: formData.category_id,
+    kra_name: formData.kra_name,
+    kpi_name: formData.kpi_name,
+    target_value: formData.uom_type === 'numeric' ? (formData.target_value ? parseFloat(formData.target_value) : null) : null,
+    uom: formData.uom || null,
+    weightage: formData.weightage ? parseFloat(formData.weightage) : null,
+    frequency: formData.frequency || null,
+    frequency_cycle_start: (formData.frequency_cycle_start && formData.frequency_cycle_start !== 'system_default') ? formData.frequency_cycle_start : null,
+    criteria: formData.uom_type === 'numeric' ? (formData.criteria || null) : null,
+    source_of_data: formData.source_of_data || null,
+    r5: formData.uom_type === 'numeric' ? (formData.r5 || null) : null,
+    r4: formData.uom_type === 'numeric' ? (formData.r4 || null) : null,
+    r3: formData.uom_type === 'numeric' ? (formData.r3 || null) : null,
+    r2: formData.uom_type === 'numeric' ? (formData.r2 || null) : null,
+    r1: formData.uom_type === 'numeric' ? (formData.r1 || null) : null,
+    r0: formData.uom_type === 'numeric' ? (formData.r0 || null) : null,
+    is_org_level: formData.is_org_level,
+    org_level_scope: formData.is_org_level ? formData.org_level_scope : 'organization',
+    uom_type: formData.uom_type,
+    qualitative_options: formData.uom_type === 'tiered' ? formData.qualitative_options
+      : formData.uom_type === 'binary' ? formData.qualitative_options : null,
+    require_resubmit_reason: formData.require_resubmit_reason,
+    day_count_type: formData.frequency === 'Daily' ? formData.day_count_type : null,
+    threshold_mode: formData.uom_type === 'numeric' ? formData.threshold_mode : null,
+    review_period: overrides.review_period,
+    review_year: overrides.review_year,
+    status: 'kra_set' as const,
+  });
+
+  const copyTargetDuplicateCounts: Record<string, number> = (() => {
+    const counts: Record<string, number> = {};
+    const compositeKey = `${formData.kra_name}|||${formData.kpi_name}`;
+    copyTargetEmployeeIds.forEach((empId) => {
+      counts[empId] = copyTargetExistingKeys.get(empId)?.has(compositeKey) ? 1 : 0;
+    });
+    return counts;
+  })();
+
+  const totalCopyDuplicates = Object.values(copyTargetDuplicateCounts).reduce((a, b) => a + b, 0);
+  const totalCopyTargets = copyTargetEmployeeIds.length - totalCopyDuplicates;
+
+  const handleCopyToEmployees = async () => {
+    if (!kpi || copyTargetEmployeeIds.length === 0) return;
+    if (!formData.review_period || !formData.review_year) {
+      toast.error('Source KPI must have a review period and year.');
+      return;
+    }
+    setCopyingToEmployees(true);
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      const targetYear = parseInt(formData.review_year);
+      const compositeKey = `${formData.kra_name}|||${formData.kpi_name}`;
+
+      const rowsToInsert: any[] = [];
+      copyTargetEmployeeIds.forEach((empId) => {
+        if (copyTargetExistingKeys.get(empId)?.has(compositeKey)) return; // skip duplicate
+        rowsToInsert.push(buildKpiPayload({
+          employee_id: empId,
+          review_period: formData.review_period,
+          review_year: targetYear,
+        }));
+      });
+
+      if (rowsToInsert.length === 0) {
+        toast.error('All selected employees already have this KPI for the period.');
+        return;
+      }
+
+      const { data: inserted, error } = await supabase
+        .from('kpis')
+        .insert(rowsToInsert)
+        .select('id, employee_id');
+      if (error) throw error;
+
+      // Org KPI value placeholders for employee-scoped org KPIs (parity with CopyKrasDialog)
+      if (formData.is_org_level && formData.org_level_scope === 'employee') {
+        const orgRows = rowsToInsert.map((r) => ({
+          category_id: r.category_id,
+          kra_name: r.kra_name,
+          kpi_name: r.kpi_name,
+          review_period: r.review_period,
+          review_year: r.review_year,
+          employee_id: r.employee_id,
+          target_value: r.target_value,
+          uom_type: r.uom_type,
+          criteria: r.criteria,
+          qualitative_options: r.qualitative_options,
+          r0: r.r0, r1: r.r1, r2: r.r2, r3: r.r3, r4: r.r4, r5: r.r5,
+          status: 'entered',
+        }));
+        const { error: okvErr } = await supabase
+          .from('org_kpi_values')
+          .upsert(orgRows, { onConflict: 'category_id,kra_name,kpi_name,review_period,review_year,employee_id', ignoreDuplicates: true });
+        if (okvErr) console.warn('Failed to create org_kpi_values placeholders:', okvErr.message);
+      }
+
+      // Audit logs
+      if (authUser && inserted) {
+        const auditRows = inserted.map((row) => ({
+          kpi_id: row.id,
+          performed_by: authUser.id,
+          action: 'admin_copy_to_employee',
+          new_value: { employee_id: row.employee_id, review_period: formData.review_period, review_year: targetYear } as any,
+          metadata: {
+            source: 'admin_copy_to_employee',
+            source_kpi_id: kpi.id,
+            target_employee_id: row.employee_id,
+          },
+        }));
+        if (auditRows.length > 0) await supabase.from('kpi_audit_logs').insert(auditRows);
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['admin-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['org-level-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['org-level-kpis-with-employees'] });
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-full-mapping'] });
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis-by-period-ranges'] });
+
+      const skipped = copyTargetEmployeeIds.length - rowsToInsert.length;
+      toast.success(
+        `KPI copied to ${rowsToInsert.length} employee(s)${skipped > 0 ? ` · ${skipped} skipped (duplicate)` : ''}`
+      );
+      setCopyToEmployeesOpen(false);
+      setCopyTargetEmployeeIds([]);
+      setCopyTargetExistingKeys(new Map());
+    } catch (err: any) {
+      console.error('Copy to employees failed:', err);
+      toast.error(formatKpiInsertError(err) || 'Failed to copy KPI to employees');
+    } finally {
+      setCopyingToEmployees(false);
+    }
+  };
+
   if (!kpi) return null;
 
   return (
