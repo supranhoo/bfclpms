@@ -107,7 +107,8 @@ function stageScoreOf(stage: SignoffStage, r: SnapshotCell): number | null {
   if (stage === 'manager') return r.manager_score;
   if (stage === 'skip_level') return r.skip_level_score;
   if (stage === 'hr_pms') return r.hr_pms_score;
-  return r.auditor_score;
+  if (stage === 'auditor') return r.auditor_score;
+  return r.management_score;
 }
 
 export interface BuildImpactInput {
@@ -143,6 +144,7 @@ export function buildBulkSignoffImpact(input: BuildImpactInput): ImpactSummary {
       manager_score: r.manager_score,
       skip_level_score: r.skip_level_score,
       hr_pms_score: r.hr_pms_score,
+      auditor_score: r.auditor_score,
       achieved_value: achievedBySubmissionId.get(r.submission_id) ?? null,
       is_na: r.is_na,
     };
