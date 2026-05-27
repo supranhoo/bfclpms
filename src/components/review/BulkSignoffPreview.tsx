@@ -47,6 +47,7 @@ const SOURCE_LABEL: Record<CarriedSource, string> = {
   manager: 'manager',
   skip_level: 'skip-lvl',
   hr_pms: 'hr_pms',
+  auditor: 'auditor',
   computed: 'computed',
   manual: 'manual',
   override: 'override',
