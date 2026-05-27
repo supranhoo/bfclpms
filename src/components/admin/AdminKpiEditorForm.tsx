@@ -87,6 +87,14 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
   const [loadingSiblings, setLoadingSiblings] = useState(false);
   const [copying, setCopying] = useState(false);
 
+  // Copy to other employees state
+  const [copyToEmployeesOpen, setCopyToEmployeesOpen] = useState(false);
+  const [employeesForCopy, setEmployeesForCopy] = useState<EmployeeOption[]>([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
+  const [copyTargetEmployeeIds, setCopyTargetEmployeeIds] = useState<string[]>([]);
+  const [copyTargetExistingKeys, setCopyTargetExistingKeys] = useState<Map<string, Set<string>>>(new Map());
+  const [copyingToEmployees, setCopyingToEmployees] = useState(false);
+
   const [formData, setFormData] = useState({
     employee_id: '',
     category_id: '',
