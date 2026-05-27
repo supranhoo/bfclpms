@@ -16,6 +16,7 @@ import { TieredOptionsBuilder } from '@/components/admin/TieredOptionsBuilder';
 import { RegistryBadge } from '@/components/admin/kpi-standardization/RegistryBadge';
 import { EmployeeCombobox, EmployeeOption } from '@/components/admin/EmployeeCombobox';
 import { fetchAllPaged } from '@/lib/fetchAll';
+import { useActiveEmployeesForCopy } from '@/hooks/useActiveEmployeesForCopy';
 import { formatKpiInsertError } from '@/lib/kpiErrorUtils';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { UomType, QualitativeOption, validateQualitativeOptions, BINARY_OPTIONS, BINARY_OPTIONS_INVERTED, isBinaryInverted } from '@/lib/qualitativeUom';
@@ -189,34 +190,10 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
     fetchSiblings();
   }, [copyToMonthsOpen, kpi]);
 
-  // Lazy-load full active employee roster the first time the section opens
-  useEffect(() => {
-    if (!copyToEmployeesOpen || employeesForCopy.length > 0) return;
-    const loadEmployees = async () => {
-      setLoadingEmployees(true);
-      try {
-        const data = await fetchAllPaged<any>((from, to) =>
-          supabase
-            .from('profiles')
-            .select('id, full_name, employee_code, departments:department_id(name)')
-            .eq('is_active', true)
-            .order('full_name')
-            .range(from, to)
-        );
-        setEmployeesForCopy(
-          (data || []).map((e: any) => ({
-            id: e.id,
-            name: e.full_name || e.id,
-            code: e.employee_code || '',
-            department: e.departments?.name || '',
-          }))
-        );
-      } finally {
-        setLoadingEmployees(false);
-      }
-    };
-    loadEmployees();
-  }, [copyToEmployeesOpen, employeesForCopy.length]);
+  // Shared, cached roster fetch (POLICY §94 paged read, 5-min staleTime).
+  // Same query is reused by CopyKrasDialog, so opening either pre-warms the other.
+  const { data: employeesForCopy = [], isLoading: loadingEmployees } =
+    useActiveEmployeesForCopy({ enabled: copyToEmployeesOpen });
 
   // Fetch existing same-KPI rows for target employees in the same period/year
   useEffect(() => {
