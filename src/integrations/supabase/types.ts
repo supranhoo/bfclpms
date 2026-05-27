@@ -8146,9 +8146,11 @@ export type Database = {
       }
       bulk_management_approve: {
         Args: {
+          p_achieved_values?: Json
           p_attachment_urls?: Json
           p_batch_reason?: string
           p_cells: Json
+          p_is_override?: boolean
         }
         Returns: Json
       }
