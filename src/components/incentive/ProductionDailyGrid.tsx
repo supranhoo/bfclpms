@@ -7,7 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Badge } from '@/components/ui/badge';
 import { Save } from 'lucide-react';
-import { useProductionRates, useProductionDailyEntries, useBulkUpsertDailyEntries, resolveEmployeeRate } from '@/hooks/useProductionDailyEntries';
+import { useProductionRates, useProductionDailyEntries, useBulkUpsertDailyEntries } from '@/hooks/useProductionDailyEntries';
+import { resolveEmployeeRate, resolveEmployeeCompanyId } from '@/lib/incentiveRateResolver';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
@@ -124,9 +125,21 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
       const deptId = emp.department_id;
       const dept = (emp as any).departments;
       const buId = dept?.business_unit_id || null;
-      const companyId = (emp as any).company_id
-        || dept?.business_units?.divisions?.company_id
-        || null;
+      // Use shared resolver — single source of truth, parity with compute edge function.
+      const companyId = resolveEmployeeCompanyId({
+        profileCompanyId: (emp as any).company_id ?? null,
+        departmentId: deptId,
+        deptToBu: new Map([[deptId, buId]]),
+        buToDivision: buId
+          ? new Map([[buId, dept?.business_units?.division_id ?? null]])
+          : null,
+        divToCompany: dept?.business_units?.division_id
+          ? new Map([[dept.business_units.division_id, dept?.business_units?.divisions?.company_id ?? null]])
+          : null,
+        buToCompany: buId
+          ? new Map([[buId, dept?.business_units?.divisions?.company_id ?? null]])
+          : null,
+      });
       const resolved = resolveEmployeeRate(emp.id, deptId, buId, rates as any[], companyId, targetDate);
       if (resolved.source !== 'none') {
         map.set(emp.id, { rate: resolved.rate, source: resolved.source });
