@@ -8195,8 +8195,11 @@ export type Database = {
               p_attachment_urls?: Json
               p_batch_reason?: string
               p_cells: Json
+              p_evidence_urls?: Json
+              p_is_na?: Json
               p_is_override?: boolean
               p_manual_scores?: Json
+              p_na_reasons?: Json
               p_stage: string
             }
             Returns: Json

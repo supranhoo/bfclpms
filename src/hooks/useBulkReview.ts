@@ -326,6 +326,12 @@ export function useBulkWriteStageScores() {
       manual_scores?: Record<string, number>;
       /** Admin Override toggle — stamps `inherited_from = 'admin_override'`. */
       is_override?: boolean;
+      /** submission_id → reviewer-uploaded evidence URLs (overrides batch attachments for that cell). */
+      evidence_urls?: Record<string, string[]>;
+      /** submission_id → true to mark the cell as N/A for this stage. */
+      is_na?: Record<string, boolean>;
+      /** submission_id → mandatory N/A reason text (min 10 chars). */
+      na_reasons?: Record<string, string>;
     }): Promise<BulkWriteResult> => {
       const { data, error } = await supabase.rpc('bulk_write_stage_scores' as any, {
         p_stage: args.stage,
@@ -335,6 +341,9 @@ export function useBulkWriteStageScores() {
         p_manual_scores: (args.manual_scores ?? null) as any,
         p_achieved_values: (args.achieved_values ?? null) as any,
         p_is_override: args.is_override ?? false,
+        p_evidence_urls: (args.evidence_urls ?? null) as any,
+        p_is_na: (args.is_na ?? null) as any,
+        p_na_reasons: (args.na_reasons ?? null) as any,
       });
       if (error) throw error;
       return data as unknown as BulkWriteResult;

@@ -20,6 +20,10 @@ import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDial
 import { KpiReviewPanel, type ViewLevel } from './KpiReviewPanel';
 import { AchievedValueScoreInput } from './AchievedValueScoreInput';
 import { validateBulkRemark, BULK_REMARK_MIN_LENGTH } from '@/lib/bulkCellDrawerRemarks';
+import { Switch } from '@/components/ui/switch';
+import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
+import { useAuth } from '@/contexts/AuthContext';
+import { Ban } from 'lucide-react';
 
 type Stage = 'manager' | 'skip_level' | 'hr_pms' | 'auditor';
 
@@ -50,6 +54,7 @@ const VIEWER_TO_VIEWLEVEL: Record<string, ViewLevel> = {
 
 export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen }: Props) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const detail = useKpiCellDetail(row?.kpi_id ?? null, row?.employee_id ?? null, open && !!row);
   const write = useBulkWriteStageScores();
   const reopen = useBulkReopenCells();
@@ -62,6 +67,8 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
   const [reopenReason, setReopenReason] = useState<string>('');
   const [reopenStages, setReopenStages] = useState<Stage[]>([]);
   const [confirmReopen, setConfirmReopen] = useState(false);
+  const [isNa, setIsNa] = useState<boolean>(false);
+  const [reviewerEvidenceUrls, setReviewerEvidenceUrls] = useState<string[]>([]);
 
   const kpiDetail = detail.data?.kpi as any;
   const submission = detail.data?.submission as any;
@@ -81,7 +88,12 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
     setManualScore('');
     setRemarks('');
     setManualMode(false);
-  }, [open, row?.submission_id, submission?.achieved_value]);
+    setIsNa(false);
+    // Seed existing reviewer evidence for this stage.
+    const stageKey = ['manager', 'skip_level', 'hr_pms', 'auditor'].includes(viewerStage) ? viewerStage : null;
+    const existing = stageKey ? (submission?.[`${stageKey}_evidence_urls`] as string[] | undefined) : undefined;
+    setReviewerEvidenceUrls(Array.isArray(existing) ? existing : []);
+  }, [open, row?.submission_id, submission?.achieved_value, viewerStage, submission]);
 
   // Auto-enable manual mode when KPI has no rating thresholds.
   useEffect(() => {
@@ -114,17 +126,17 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
 
   const handleWrite = async () => {
     if (!writeStage || !row.submission_id) return;
-    if (effectiveScore === null) {
-      toast({ title: 'Score required', description: 'Enter an achievement or a manual rating.', variant: 'destructive' });
-      return;
-    }
     const remarkCheck = validateBulkRemark(remarks);
     if (!remarkCheck.ok) {
       toast({
-        title: 'Remarks required',
-        description: `Please enter at least ${BULK_REMARK_MIN_LENGTH} characters explaining the score.`,
+        title: isNa ? 'N/A reason required' : 'Remarks required',
+        description: `Please enter at least ${BULK_REMARK_MIN_LENGTH} characters.`,
         variant: 'destructive',
       });
+      return;
+    }
+    if (!isNa && effectiveScore === null) {
+      toast({ title: 'Score required', description: 'Enter an achievement or a manual rating.', variant: 'destructive' });
       return;
     }
     try {
@@ -132,12 +144,15 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
         stage: writeStage,
         cells: [{
           submission_id: row.submission_id,
-          score: effectiveScore,
+          score: isNa ? null : effectiveScore,
           remarks: remarkCheck.trimmed,
           expected_row_version: row.row_version ?? null,
         }],
         reason: remarkCheck.trimmed,
-        achieved_values: manualMode ? undefined : { [row.submission_id]: achieved },
+        achieved_values: !isNa && !manualMode ? { [row.submission_id]: achieved } : undefined,
+        evidence_urls: reviewerEvidenceUrls.length > 0 ? { [row.submission_id]: reviewerEvidenceUrls } : undefined,
+        is_na: isNa ? { [row.submission_id]: true } : undefined,
+        na_reasons: isNa ? { [row.submission_id]: remarkCheck.trimmed } : undefined,
       });
       if (res.applied === 0) {
         toast({
@@ -146,7 +161,10 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
           variant: 'destructive',
         });
       } else {
-        toast({ title: 'Score saved', description: `${STAGE_LABEL[writeStage]} score updated.` });
+        toast({
+          title: isNa ? 'Marked N/A' : 'Score saved',
+          description: `${STAGE_LABEL[writeStage]} ${isNa ? 'cell marked Not Applicable' : 'score updated'}.`,
+        });
         setManualScore(''); setRemarks(''); setComputedScore(null);
       }
     } catch (e: any) {
@@ -253,8 +271,25 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
                   </AlertDescription>
                 </Alert>
               )}
-              {/* Achievement-driven scoring — parity with stage page. */}
-              {kpiDetail && !manualMode && hasThresholds && (
+
+              {/* N/A toggle — parity with single-cell scorecard */}
+              <div className="flex items-center justify-between rounded-md border border-amber-500/50 bg-amber-50/40 dark:bg-amber-950/20 px-3 py-2">
+                <div className="flex items-start gap-2">
+                  <Ban className="h-4 w-4 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
+                  <div>
+                    <Label htmlFor="bulk-na-toggle" className="text-xs font-medium cursor-pointer">
+                      Mark this cell as Not Applicable
+                    </Label>
+                    <p className="text-[11px] text-muted-foreground">
+                      Clears the {STAGE_LABEL[writeStage]} score; reason becomes mandatory.
+                    </p>
+                  </div>
+                </div>
+                <Switch id="bulk-na-toggle" checked={isNa} onCheckedChange={setIsNa} />
+              </div>
+
+              {/* Achievement-driven scoring — parity with stage page. Hidden when N/A. */}
+              {!isNa && kpiDetail && !manualMode && hasThresholds && (
                 <AchievedValueScoreInput
                   kpi={kpiDetail}
                   achievedValue={achieved}
@@ -268,7 +303,7 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
               )}
 
               {/* Manual 0–5 fallback (auto-on when thresholds missing). */}
-              {(manualMode || !hasThresholds) && (
+              {!isNa && (manualMode || !hasThresholds) && (
                 <div>
                   <Label className="text-xs">Manual rating (0–5)</Label>
                   <Input
@@ -279,7 +314,7 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
                 </div>
               )}
 
-              {hasThresholds && (
+              {!isNa && hasThresholds && (
                 <Button
                   type="button"
                   variant="link"
@@ -291,13 +326,30 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
                 </Button>
               )}
 
+              {/* Reviewer evidence / attachments — parity with single-cell review */}
+              {user?.id && row.kpi_id && (
+                <MultiFileUpload
+                  userId={user.id}
+                  contextId={row.kpi_id}
+                  folder="reviewer-evidence"
+                  existingUrls={reviewerEvidenceUrls}
+                  onUploadComplete={(urls) => setReviewerEvidenceUrls(urls)}
+                  maxFiles={5}
+                  label="Attachments (optional)"
+                />
+              )}
+
               <div>
-                <Label className="text-xs">Remarks (required, min {BULK_REMARK_MIN_LENGTH} characters)</Label>
+                <Label className="text-xs">
+                  {isNa ? 'N/A reason' : 'Remarks'} (required, min {BULK_REMARK_MIN_LENGTH} characters)
+                </Label>
                 <Textarea
                   rows={2}
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
-                  placeholder={`Required — visible in review trail (min ${BULK_REMARK_MIN_LENGTH} characters)`}
+                  placeholder={isNa
+                    ? `Why is this cell Not Applicable? (min ${BULK_REMARK_MIN_LENGTH} chars)`
+                    : `Required — visible in review trail (min ${BULK_REMARK_MIN_LENGTH} characters)`}
                 />
                 {remarks.trim().length > 0 && remarks.trim().length < BULK_REMARK_MIN_LENGTH && (
                   <p className="text-[11px] text-muted-foreground mt-1">
@@ -309,9 +361,18 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
               <Button
                 size="sm"
                 onClick={handleWrite}
-                disabled={write.isPending || effectiveScore === null || remarks.trim().length < BULK_REMARK_MIN_LENGTH}
+                disabled={
+                  write.isPending ||
+                  remarks.trim().length < BULK_REMARK_MIN_LENGTH ||
+                  (!isNa && effectiveScore === null)
+                }
+                variant={isNa ? 'destructive' : 'default'}
               >
-                {write.isPending ? 'Saving…' : `Save ${STAGE_LABEL[writeStage]} score`}
+                {write.isPending
+                  ? 'Saving…'
+                  : isNa
+                    ? `Mark N/A as ${STAGE_LABEL[writeStage]}`
+                    : `Save ${STAGE_LABEL[writeStage]} score`}
               </Button>
             </div>
           )}
