@@ -637,7 +637,17 @@ export function AssignmentTab({ profiles, assignments, assignUser, removeAssignm
           />
         </div>
         <div className="flex-1 space-y-1.5">
-          <label className="text-sm font-medium">Employee</label>
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium">Employee</label>
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+              <Checkbox
+                checked={includeInactive}
+                onCheckedChange={(v) => setIncludeInactive(v === true)}
+                className="h-3.5 w-3.5"
+              />
+              Include inactive
+            </label>
+          </div>
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
@@ -660,6 +670,11 @@ export function AssignmentTab({ profiles, assignments, assignUser, removeAssignm
                 >
                   {p.full_name || p.email}
                   {p.employee_code && <span className="text-muted-foreground ml-1">({p.employee_code})</span>}
+                  {p.is_active === false && (
+                    <Badge variant="outline" className="ml-2 text-[10px] py-0 px-1 border-amber-500/50 text-amber-700 dark:text-amber-400">
+                      Inactive
+                    </Badge>
+                  )}
                 </button>
               ))}
               {filteredUsers.length === 0 && (
