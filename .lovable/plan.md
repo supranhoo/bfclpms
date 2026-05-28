@@ -1,55 +1,84 @@
+# RCA — Why Avinash sees only himself in User Management
 
-## Goal
+## Confirmed facts (DB-verified)
+- Avinash (101732) is assigned the **Onboarding** access profile (`access_profile_assignments` ✓).
+- Onboarding profile has **`admin-users`** menu rights: `can_view=true, can_add=true, can_update=true` (`access_profile_menu_rights` ✓).
+- Onboarding profile has **399 Org-Level Scope rows** (`access_profile_org_scope` ✓).
+- The new RPC `public.get_visible_employee_ids(avinash.id)` correctly returns **2,538 employee IDs** — the scope math works.
 
-Any non-admin user whose access profile grants **User Management** (`admin-users`) with View / Add / Update should be able to open the User Management page and see ONLY the employees that fall inside the **Org Level Scope** mapped on their access profile(s). Admins continue to see every employee.
+## Root cause
+The fix shipped last turn filters the client roster against `get_visible_employee_ids`, but the **client roster itself is fetched via `supabase.from('profiles').select(...)`**, which is constrained by Row-Level Security on `public.profiles`.
 
-## Current state
+Current `profiles` SELECT policies only allow:
+- `admin / auditor / hr_pms / management` roles → all rows
+- `manager` role → direct + skip-level reports
+- `incentive data entry override` → all active (legacy `menu_access_user_overrides` table only)
+- self (`auth.uid() = id`)
+- a few org-KPI-data-owner narrow paths
 
-- Route `/admin/users` is already protected by `ProtectedRoute allowedRoles={['admin']} menuKey="admin-users"`. `ProtectedRoute` already lets a user through when `canAccess('admin-users')` is true via an access profile, so the *route* gating already works.
-- `UserManagement.tsx` loads the full roster through `useProfiles()` → RPC `get_reviewer_roster_slim`. No filtering by the caller's access-profile org scope is applied — so a non-admin who is granted the menu would see every employee, which contradicts the Org Level Scope mapping.
-- `access_profile_org_scope` rows can mix any of: `company_id`, `division_id`, `business_unit_id`, `department_id`, `location`, `designation`, `pms_grade`, `level`. Multiple rows per profile = OR. Within a single row, the populated fields = AND. Empty profile-scope (no rows) means "no employees" for that profile (admin gets all via the role bypass).
+Avinash's `app_role` is `employee`, and his "admin-users" permission comes through the **new access-profile system** (`access_profile_menu_rights`), which **no RLS policy on `profiles` recognises**. Result: RLS returns exactly **1 row (himself)**, then our visibility intersection of `{self} ∩ {2538 scoped ids}` collapses to 1. UI faithfully renders "Showing 1 of 1 users".
 
-## Risk & Impact
+The legacy `has_menu_access_override(uid, key)` SQL function only checks `menu_access_user_overrides` (per-user overrides), not `access_profile_menu_rights` (profile-granted), so reusing it would not help.
 
-- **Data Impact**: Read-only filter on the in-memory roster + a server-side filter helper. No schema change beyond adding one SECURITY DEFINER function.
-- **Workflow Impact**: Admin behaviour unchanged. Non-admin profile-granted users now see a correctly scoped list (today they would either be blocked at the route or see everyone — both wrong).
-- **Regression Risk**: Low. We only narrow the roster for non-admins; admin short-circuit preserved. Create/Update edge-function authorization is **out of scope** and continues to require admin (UI Add/Update buttons will still appear for profile-granted users, but the existing server check governs whether the action succeeds — flagged as follow-up).
-- **Mitigation**: Unit tests on the scope-matching predicate; admin path explicitly tested.
+## Risk & Impact Report
+- **Data**: Read-only RLS addition. No schema/data mutation. New SECURITY DEFINER function is SELECT-only.
+- **Workflow**: Non-admin users with the `admin-users` profile grant gain visibility of profiles inside their Org-Level Scope only — exactly the documented intent. Admin/manager/HR/etc. paths unchanged.
+- **UI/UX**: User Management now shows the scoped roster instead of just self for profile-granted users. No layout change.
+- **Regression**: Other screens that read `profiles` are not narrowed — we only **add** a permissive policy; existing policies still apply (OR semantics).
+- **Scalability**: New policy uses an `EXISTS` against `get_visible_employee_ids` (already indexed via `profiles.is_active`, FK joins). Cost is comparable to existing manager-skip-level policy. RPC results are cached on the client for 5 min.
+- **Mitigation**: Guard with `is_active = true` and an explicit `has_profile_menu_access(uid,'admin-users','view')` check so the policy only activates for users who truly have the grant.
 
 ## Plan
 
-1. **DB — scope resolver RPC** (`supabase--migration`):
-   - `public.get_user_org_scope_filters(p_user_id uuid)` → `SETOF access_profile_org_scope`-shaped rows, SECURITY DEFINER, returning every scope row from every active access profile assigned to the user.
-   - `public.user_can_see_employee(p_user_id uuid, p_employee_id uuid)` → boolean, SECURITY DEFINER. Returns true if (a) caller is admin, or (b) at least one of the user's profile scope rows matches the target employee on every populated field. Used for future server-side enforcement and tests.
-   - GRANT EXECUTE to `authenticated`.
+### 1. DB migration (`supabase--migration`)
 
-2. **Client helper** — `src/lib/orgScopeFilter.ts`:
-   - Pure function `matchesOrgScope(employee, scopeRows)` mirroring the SQL predicate (per-row AND across populated fields, OR across rows; empty rows → no match).
-   - Pure function `filterRosterByScope(roster, scopeRows)`.
-   - Full unit-test coverage in `src/test/orgScopeFilter.test.ts` (admin bypass, single-field row, multi-field AND, multi-row OR, empty scope, null fields on employee).
+a. New SECURITY DEFINER helper:
+```sql
+public.has_profile_menu_access(_user_id uuid, _menu_key text, _action text)
+-- _action ∈ ('view','add','update','delete')
+-- EXISTS over access_profile_assignments → access_profiles (is_active)
+--        → access_profile_menu_rights where menu_key=_menu_key and the
+--        matching can_<action> column is true.
+GRANT EXECUTE ... TO authenticated;
+```
 
-3. **Hook** — `src/hooks/useMyOrgScope.ts`:
-   - Reads `access_profile_assignments` + `access_profile_org_scope` for `auth.uid()`, returns `{ scopeRows, isAdmin, isLoading }`. Auth-gated, 5-min staleTime, query key `['my-org-scope', userId]`.
+b. New permissive SELECT policy on `public.profiles`:
+```sql
+CREATE POLICY "Profile-granted users can view scoped active profiles"
+ON public.profiles FOR SELECT TO authenticated
+USING (
+  is_active = true
+  AND public.has_profile_menu_access(auth.uid(), 'admin-users', 'view')
+  AND public.user_can_see_employee(auth.uid(), id)
+);
+```
 
-4. **UI** — `src/pages/admin/UserManagement.tsx`:
-   - Replace the raw `profiles` source with a memoised `scopedProfiles` computed from `useProfiles()` + `useMyOrgScope()` + `useAuth().effectiveRole`. Admin path returns the original list untouched.
-   - Apply *before* the existing search / role / department / status filters and pagination so all counts and pages reflect the scoped roster.
-   - Reuse the existing empty-state to show "No employees match the access profile scope assigned to you" when scope is non-empty but yields zero rows.
+c. No changes to existing policies; no GRANT changes (table already granted).
 
-5. **Tests** — `src/test/orgScopeFilter.test.ts` covers the predicate; no UI test required (UI just composes the helper).
+### 2. Client — no logic change required
+The existing `useMyVisibleEmployeeIds` + `UserManagement.tsx` intersection logic continues to work; it simply receives a non-trivial roster from `useProfiles()` once RLS lets the rows through. Verify by reading current `useProfiles()` — keep as is.
 
-6. **Docs** — append section to `DOCUMENTATION.md` and `POLICY.md`:
-   - POLICY §NEW: "Access-profile Org Level Scope governs which employees a non-admin User Management user can see. Admin role always sees the full roster."
-   - DOCUMENTATION: describe the new RPC + helper + hook.
+### 3. Server-side write enforcement (out of scope, noted)
+Add/Update/Delete still flow through the `admin-users` edge function which checks `has_role(admin)`. Granting non-admins write access through profile rights is a **separate ticket** and not included here — current behaviour (read-only for profile-granted users) is the documented Phase-1 outcome. UI already hides the Add/Edit/Delete buttons for non-admins via `effectiveRole` checks; double-check and add a small banner "View-only access" for profile-granted non-admins.
 
-## Out of scope (called out explicitly)
+### 4. Tests
+- `src/test/profileMenuAccessRls.test.ts` — pure predicate test mirroring `has_profile_menu_access` truth table (4 actions × granted/not granted).
+- Extend `src/test/orgScopeVisibility.test.ts` — assert intersection behaviour: visibility set ∩ RLS-permitted roster.
+- Manual QA SQL (documented in migration description): run `select count(*) from profiles` as Avinash via `set role`/JWT helper — expect 2,538.
 
-- Server-side enforcement of Add / Update / Delete through the `admin-users` edge function for non-admin profile-granted callers. Today it requires admin; loosening it is a separate change with its own RLS/audit considerations. The new SQL helper (`user_can_see_employee`) is the building block for that future change.
-- Filtering of the Manager picker, Department picker, etc. inside the Edit dialog.
+### 5. Docs
+- `DOCUMENTATION.md` → add §"Access-Profile RLS Bridge for User Management" describing the new function + policy.
+- `POLICY.md` → new policy entry "Profile-Granted Read Visibility": *"A user with `access_profile_menu_rights.can_view = true` for `admin-users` may read any active profile inside their Org-Level Scope; writes still require `admin` role."*
+- Append `mem/architecture/security/identity-access-console` (or sibling) with the bridge note.
 
-## Verification
+## Technical notes (for engineers)
+- Policies on `public.profiles` are evaluated with **OR** semantics across permissive policies; adding this one cannot reduce visibility for existing roles.
+- `user_can_see_employee` already exists (created last migration) and short-circuits to `true` for admins, so the new policy is also safe if an admin happens to be reached through it.
+- The `has_profile_menu_access` helper is generic — future RLS bridges for `kra-library`, `report-builder`, etc. can reuse it with a different `_menu_key`.
 
-- Admin user: roster identical to today, all filters, counts, pagination unchanged.
-- Non-admin user with profile granting `admin-users` View + a scope row `company_id = X`: only employees in company X appear; total count and pagination reflect the reduced list.
-- Non-admin user with profile granting `admin-users` View but no scope rows: empty list with the new empty-state message.
-- Unit tests for `matchesOrgScope` pass for all combinations listed in step 2.
+## Rollback
+Single migration, fully reversible:
+```sql
+DROP POLICY "Profile-granted users can view scoped active profiles" ON public.profiles;
+DROP FUNCTION public.has_profile_menu_access(uuid, text, text);
+```
