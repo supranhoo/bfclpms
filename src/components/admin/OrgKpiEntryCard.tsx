@@ -881,6 +881,9 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
+                  <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Available scopes
+                  </DropdownMenuLabel>
                   {(['organization', 'department', 'employee'] as const).map(s => (
                     <DropdownMenuItem
                       key={s}
@@ -892,6 +895,28 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                       {s === 'department' && <Users className="h-3.5 w-3.5 mr-2" />}
                       {s === 'employee' && <User className="h-3.5 w-3.5 mr-2" />}
                       {s}{data.scope === s ? ' (current)' : ''}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    New scopes (coming soon)
+                  </DropdownMenuLabel>
+                  {([
+                    { id: 'division',      label: 'Division',      Icon: Network },
+                    { id: 'business_unit', label: 'Business Unit', Icon: Briefcase },
+                    { id: 'location',      label: 'Location',      Icon: MapPin },
+                    { id: 'pms_grade',     label: 'PMS Grade',     Icon: Award },
+                    { id: 'level',         label: 'Level',         Icon: Layers },
+                  ] as const).map(({ id, label, Icon }) => (
+                    <DropdownMenuItem
+                      key={id}
+                      disabled
+                      className="opacity-60"
+                      title="Target picker + cascade RPC ship in Step 5c/5d"
+                    >
+                      <Icon className="h-3.5 w-3.5 mr-2" />
+                      {label}
+                      <span className="ml-auto text-[10px] text-muted-foreground">Soon</span>
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
