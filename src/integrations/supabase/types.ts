@@ -4603,9 +4603,11 @@ export type Database = {
           id: string
           is_active: boolean
           level: string | null
+          level_id: string | null
           location_id: string | null
           mobile_number: string | null
           pms_grade: string | null
+          pms_grade_id: string | null
           portal_access: boolean
           reporting_manager_id: string | null
           updated_at: string
@@ -4624,9 +4626,11 @@ export type Database = {
           id: string
           is_active?: boolean
           level?: string | null
+          level_id?: string | null
           location_id?: string | null
           mobile_number?: string | null
           pms_grade?: string | null
+          pms_grade_id?: string | null
           portal_access?: boolean
           reporting_manager_id?: string | null
           updated_at?: string
@@ -4645,9 +4649,11 @@ export type Database = {
           id?: string
           is_active?: boolean
           level?: string | null
+          level_id?: string | null
           location_id?: string | null
           mobile_number?: string | null
           pms_grade?: string | null
+          pms_grade_id?: string | null
           portal_access?: boolean
           reporting_manager_id?: string | null
           updated_at?: string
@@ -4668,10 +4674,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "profiles_level_id_fkey"
+            columns: ["level_id"]
+            isOneToOne: false
+            referencedRelation: "levels"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "profiles_location_id_fkey"
             columns: ["location_id"]
             isOneToOne: false
             referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_pms_grade_id_fkey"
+            columns: ["pms_grade_id"]
+            isOneToOne: false
+            referencedRelation: "pms_grades"
             referencedColumns: ["id"]
           },
           {
@@ -8689,6 +8709,15 @@ export type Database = {
       kpi_cell_detail: {
         Args: { p_emp_id: string; p_kpi_id: string }
         Returns: Json
+      }
+      list_profile_grade_level_orphans: {
+        Args: never
+        Returns: {
+          full_name: string
+          orphan_kind: string
+          orphan_value: string
+          profile_id: string
+        }[]
       }
       log_standardization_action: {
         Args: {
