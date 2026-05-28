@@ -8916,6 +8916,16 @@ export type Database = {
       }
       mark_overdue_assets: { Args: never; Returns: Json }
       mark_overdue_training_assignments: { Args: never; Returns: Json }
+      materialize_kpis_for_org_kpi: {
+        Args: {
+          p_category_id: string
+          p_kpi_name: string
+          p_kra_name: string
+          p_review_period: string
+          p_review_year: number
+        }
+        Returns: Json
+      }
       merge_definitions: {
         Args: { p_drop_id: string; p_keep_id: string; p_reason?: string }
         Returns: Json
