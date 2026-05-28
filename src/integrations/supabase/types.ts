@@ -8823,6 +8823,10 @@ export type Database = {
         Args: { _menu_key: string; _user_id: string }
         Returns: boolean
       }
+      has_profile_menu_access: {
+        Args: { _action: string; _menu_key: string; _user_id: string }
+        Returns: boolean
+      }
       has_report_access_override: {
         Args: { _user_id: string }
         Returns: boolean
