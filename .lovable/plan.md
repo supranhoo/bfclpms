@@ -1,68 +1,62 @@
-## Assumptions
-- The issue is on **System Settings → Menu Access → Assignment**.
-- Employee assignment should use existing `profiles` data only; no new employee/master-data table is required.
-- Inactive employees should remain hidden from assignment search unless **Include inactive** is checked, but existing assignments must still display the employee name.
+## Problem
 
-## Clarifications
-Not Applicable.
+KRA Rollover for Sindhu Raj Singh fails with:
+`Insert failed: invalid input syntax for type numeric: ">1"`
 
-## Risk & Impact Report
-- **Data Impact:** No schema change planned. I checked the backend data: `access_profile_assignments` has 5 rows, all 5 match existing `profiles`; `profiles` has 2,548 rows, 2,538 active, and no missing `full_name`. Search text `upen` matches 9 active employees. So the table/data is not missing.
-- **Workflow Impact:** No change to permissions or assignment rules. This only fixes employee lookup/display reliability.
-- **UI/UX Impact:** Existing UI remains the same. Search results should appear correctly, and assignment rows should show employee name/code instead of `Unknown`.
-- **Regression Risk:** Low-to-medium because this touches profile fetch timing in an admin settings tab.
-- **Scalability Impact:** Keep paged profile fetching via `fetchAllPaged()` to avoid the 1000-row backend cap for the 2,548-row employee roster.
-- **Mitigation Plan:** Add auth-readiness query gating, keep paging, add regression tests for empty-cache/auth-ready behavior and `Unknown` prevention.
+(from `auto-rollover-kpis` edge function logs, May→June 2026 rollover).
 
 ## Root Cause
-The database rows exist. The likely logic issue is that `AssignmentTab` runs the employee profile queries immediately, before the authenticated session is ready. With row-level access rules, that can return an empty profile list, which is cached for 5 minutes. Result:
-- assignment table still loads assignment rows,
-- employee lookup map is empty,
-- UI shows `Unknown`,
-- search dropdown shows `No results`.
 
-## Step-by-step Plan
-1. **Gate employee profile queries by auth readiness**
-   - In `AccessProfilesManager.tsx`, update `AssignmentTab` to use the existing auth readiness pattern.
-   - Only run active/all profile queries when auth is ready and a user exists.
-   - Include `user.id` and profile version in the query keys so stale empty results do not persist after login/profile imports.
+The DB function `public.batch_insert_kpis_with_rollover_flag(kpis_json jsonb)` casts the rating threshold fields `r5, r4, r3, r2, r1, r0` to `numeric`:
 
-2. **Keep large-roster paging intact**
-   - Continue using `fetchAllPaged()` for both active profiles and assignment-display profiles.
-   - Keep `eq('is_active', true)` for default assignment picker search.
+```sql
+(kpi->>'r5')::numeric, ... (kpi->>'r0')::numeric,
+```
 
-3. **Improve assignment display fallback safely**
-   - Keep display priority as employee full name, then email, then employee code, then `Unknown` only if the profile truly cannot be found.
-   - Existing assigned inactive users should still resolve from the all-profiles enrichment query.
+But in `public.kpis` these columns are actually **`text`** — they legitimately hold qualitative threshold strings like `">1"`, `"Yes"`, `"<=2"`, etc. As soon as any source KPI carries a non-numeric threshold (Sindhu's KRA set has one with `">1"`), the rollover insert blows up and the whole batch is rolled back, producing the toast "Edge Function returned a non-2xx status code".
 
-4. **Add tests**
-   - Add/update regression coverage for profile assignment lookup:
-     - active employee beyond 1000 rows appears in search,
-     - assigned employee display resolves name/code when present,
-     - empty pre-auth fetch should not be treated as final data,
-     - inactive assigned employee can still display in assignment table.
+This is a regression in the RPC contract — the table is text, the RPC pretends it's numeric.
 
-5. **Documentation updates**
-   - Update `DOCUMENTATION.md` to note Menu Access assignment uses authenticated, paged `profiles` queries.
-   - Update `POLICY.md` to reinforce that profile assignment employee pickers must use auth-ready, paged profile fetches and must not cache unauthenticated empty results.
+## Fix
 
-## UI Changes
-- **Visual location:** System Settings → Menu Access → Assignment.
-- **Visual change:** No redesign. Existing dropdown/table should populate correctly.
-- **Interaction impact:** Searching `upen` should show matching employees; assigned rows should show employee names instead of `Unknown`.
-- **Responsiveness:** Not affected.
+Single migration that replaces `batch_insert_kpis_with_rollover_flag` so the r-threshold columns are inserted as **text** (matching the table), while keeping `target_value`, `weightage`, `review_year` numeric/int casts unchanged. No app/edge-function code change needed — same signature, same behavior, just correct types.
 
-## Implementation
-Pending approval. No files changed in plan mode.
+```sql
+CREATE OR REPLACE FUNCTION public.batch_insert_kpis_with_rollover_flag(kpis_json jsonb)
+RETURNS integer ... AS $$
+  ...
+  SELECT
+    ...
+    (kpi->>'target_value')::numeric,
+    ...
+    (kpi->>'weightage')::numeric,
+    ...
+    kpi->>'r5',
+    kpi->>'r4',
+    kpi->>'r3',
+    kpi->>'r2',
+    kpi->>'r1',
+    kpi->>'r0',
+    ...
+$$;
+```
 
-## Tests
-Will add targeted unit/regression tests as above.
+Also harden `target_value`: source rows can theoretically be NULL — keep current `(... )::numeric` since column allows NULL and `NULL::numeric` is fine; no change needed.
 
-## DOCUMENTATION.md updates
-Will update in the implementation step.
+## Risk & Impact
 
-## POLICY.md updates
-Will update in the implementation step.
+- **Data**: None — only fixes a cast bug; existing rows untouched.
+- **Workflow**: Rollover succeeds for KRAs containing qualitative/operator thresholds (`">1"`, `"Yes"`, etc.). No other caller of this RPC exists outside `auto-rollover-kpis`.
+- **Regression**: Low — r-columns are already text everywhere else in the codebase. The buggy cast only worked accidentally when all thresholds happened to be pure numbers.
+- **Rollback**: Replace function with previous body if needed (additive change).
 
-## Post-implementation notes
-After implementation, I will verify the relevant code path and confirm the data check: backend data exists, and the fix is in the profile query timing/cache behavior rather than missing tables.
+## Verification
+
+1. Re-run Sindhu Raj Singh rollover from May→June 2026 → should succeed and report 22 KPIs copied.
+2. Spot-check a target KPI: `r` columns preserve `">1"` exactly as on source.
+3. Dry-run for another employee with purely numeric thresholds still works.
+
+## Docs
+
+- Update `DOCUMENTATION.md` rollover section: note r-thresholds are text passthrough.
+- Add entry to `mem://features/admin/enhanced-kra-rollover-system` about text-typed thresholds.
