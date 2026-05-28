@@ -706,6 +706,11 @@ export function AssignmentTab({ profiles, assignments, assignUser, removeAssignm
                   <TableCell className="font-medium">
                     {a.userName}
                     {a.employeeCode && <span className="text-muted-foreground ml-1 text-xs">({a.employeeCode})</span>}
+                    {a.userIsActive === false && (
+                      <Badge variant="outline" className="ml-2 text-[10px] py-0 px-1 border-amber-500/50 text-amber-700 dark:text-amber-400">
+                        Inactive
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{new Date(a.created_at).toLocaleDateString()}</TableCell>
                   <TableCell className="text-center">
