@@ -1,120 +1,70 @@
-## Goal
+## Fix — KPI Weightage Dashboard "0 Employees" (and other admin views timing out)
 
-Bring the Bulk Scoring cell drawer (`/review/bulk-scoring` → Edit cell) to full parity with single-cell Team / HR PMS Review:
+### Root cause (confirmed, not guessed)
+- Logged in as Jaspal (101125 / admin) and reproduced the exact symptom.
+- Browser console shows `GET /rest/v1/kpis?review_year=eq.2026&employee_id=in.(...25 ids)` and `POST /rpc/rpc_weightage_variance_summary` returning **HTTP 500**.
+- Postgres logs at the same timestamp: `ERROR: canceling statement due to statement timeout`.
+- `EXPLAIN ANALYZE` of the same kpis query bypassing RLS runs in **1.3 ms** using `idx_kpis_employee_id`.
+- Therefore the bottleneck is **RLS evaluation on `public.kpis`**, not the query, not the data, not the May-04 fix.
 
-- N/A toggle (with reason)
-- Achieved value (already present)
-- Manual rating 0–5 (already present)
-- Remarks (already present)
-- **Attachments / Evidence upload** (currently missing)
+`public.kpis` has 9 PERMISSIVE `SELECT` policies. Each calls `auth.uid()` and/or `has_role(auth.uid(), …)` or an `EXISTS` subquery per row. Postgres re-evaluates these per row instead of once per query, because `auth.uid()` and `has_role(…)` are marked `STABLE` but the planner won't promote them to initplans unless they're wrapped in a scalar sub-select. With ~2,000 rows × 7 per-row function calls, the query crosses the 8 s gateway cutoff. PostgREST surfaces this as HTTP 500.
 
-Today the drawer already shows Achieved value + Manual rating + Remarks, but there is no way to mark a cell N/A or attach reviewer evidence — both of which exist on the standard scorecard.
+Same problem hits the `rpc_weightage_variance_summary` RPC, which internally scans `kpis`.
 
-## Risk & Impact Report
+### Scope of impact
+- KPI Weightage Dashboard (matrix + summary) — broken now.
+- Any admin/auditor/management view that fans out a `kpis` query across more than ~20 employees at once — at risk (KPI Mapping Matrix, Pending Reviews, KPI Employee Matrix Report, Bulk Zero-Scoring sweep, etc.). The same RLS evaluation pattern applies on every read.
+- Read-only impact on regular employees / managers (their policies match a single row pattern, no fan-out).
 
-- **Data**: Additive only. No schema changes — we reuse the existing per-stage `*_evidence_urls` and `is_na` / `na_marked_by_role` / `na_reason` columns on `review_submissions`. RPC signature is extended with optional params (defaults preserve old behavior). POLICY §88 immutability untouched — frozen final scores still skip writes.
-- **Workflow**: Same stage permissions as before. N/A propagates through the workflow exactly as it does from the single-cell scorecard.
-- **UI**: Drawer only. Bulk grid, snapshot RPC, virtualization, performance budgets unchanged.
-- **Regression**: Existing single-cell save flow and current bulk-batch flow keep working — new params are nullable.
-- **Mitigation**: Extend RPC with NULL defaults; add unit tests for the new fields; keep batch-level `p_attachment_urls` untouched for bulk callers that already use it.
+### Risk & impact
 
-## UI Changes
+| Area | Impact |
+|---|---|
+| Data | None. No row, schema, or column change. |
+| Workflow | None. Same access rules — just evaluated more efficiently. |
+| Security | Neutral. The new policy bodies are logically identical; only the evaluation form changes. |
+| UI/UX | Dashboard returns to listing 149 employees in <2 s. |
+| Regression risk | Low. Pattern is the documented Supabase recommendation. We will keep the existing logic verbatim, only changing `auth.uid()` → `(select auth.uid())` and `has_role(auth.uid(), x)` → `(select has_role(auth.uid(), x))`. |
+| Rollback | Single migration; can be reverted by restoring the prior policy bodies. |
 
-Location: `src/components/review/BulkCellDrawer.tsx` — within the existing "Write as &lt;Stage&gt;" section, between the score inputs and the Remarks textarea.
+### Plan
 
-1. **N/A toggle row** (top of the writer block)
-   - Reuse `<NaConfirmationCard>` exactly like `UnifiedScorecard.tsx` does.
-   - When toggled on:
-     - Hide `AchievedValueScoreInput` and the manual 0–5 input.
-     - Force-disable "Use manual rating" link.
-     - Remarks textarea relabels to "N/A reason (required, min 10 chars)".
-     - Save button text becomes "Mark N/A as &lt;Stage&gt;".
-   - When toggled off → existing scoring UI re-appears.
+#### Step 1 — Migration: rewrite `public.kpis` SELECT policies for initplan promotion
+For each of the 9 SELECT policies, recreate with the auth calls wrapped in scalar sub-selects:
+- `auth.uid()` → `(select auth.uid())`
+- `has_role(auth.uid(), 'admin')` → `(select public.has_role((select auth.uid()), 'admin'))`
+- `has_report_access_override(auth.uid())` → `(select public.has_report_access_override((select auth.uid())))`
+- `get_skip_level_manager(p.id) = auth.uid()` → `get_skip_level_manager(p.id) = (select auth.uid())`
 
-2. **Evidence / Attachments**
-   - Add `<EvidenceUpload>` component (same one used in UnifiedScorecard) directly above the Remarks textarea.
-   - Seeds from `submission?.[<stage>_evidence_urls]` so previously uploaded files show.
-   - Multi-file, same storage bucket and naming as single-cell review (already governed by Multi-File Evidence Storage memory).
+Apply identically to UPDATE / DELETE / INSERT policies on `kpis` if they exhibit the same per-row call pattern (will audit in the same migration).
 
-3. **Save button enable rules**
-   - Non-NA: score present AND remarks ≥ min length (unchanged) — evidence optional.
-   - NA: NA reason ≥ 10 chars; score not required; evidence optional.
+#### Step 2 — Verify with EXPLAIN inside the same migration
+Run `EXPLAIN (ANALYZE, BUFFERS)` as part of a `DO` block on a representative query and `RAISE NOTICE` the plan summary. Acceptance: planning time < 5 ms and per-row InitPlan instead of SubPlan.
 
-4. Re-open block and final-score revisions panel: unchanged.
+#### Step 3 — Sanity-pass the same pattern on tables we know are admin-fan-outed
+Audit + rewrite (if affected) SELECT policies on: `kpi_scores`, `org_kpi_data_owners`, `kpi_audit_logs`, `kpi_observations`. **Only** if their policies call `auth.uid()` / `has_role()` un-wrapped. No change to logic — purely the wrapping idiom.
 
-No new colors, fonts, or layout primitives — uses existing semantic tokens (`text-muted-foreground`, `border-border`, shadcn components) per BFCL UI standards.
+#### Step 4 — Defensive UI: surface errors instead of silent empty state
+`src/pages/admin/KpiWeightageDashboard.tsx` — destructure `isError` / `error` from both hooks and render a red error card with a Retry button, so any future RLS / timeout failure is visible immediately instead of looking like a data regression.
 
-## Implementation
+`src/hooks/useKpiWeightageMatrix.ts` — re-throw the original PostgREST error inside both `queryFn`s (today the catch path swallows them, returning empty data).
 
-### 1. DB migration — extend `bulk_write_stage_scores` (additive, backward-compatible)
+#### Step 5 — Tests + SSOT
+- `src/test/kpiWeightageDashboardErrorState.test.tsx` — RPC throws → red error card + Retry button visible.
+- `supabase/tests/kpis_rls_perf.sql` (or a vitest using a SQL fixture) — assert plan for an admin query uses InitPlan, not per-row SubPlan.
+- `DOCUMENTATION.md` — add an entry to the "Performance" section noting the RLS-wrapping convention.
+- `POLICY.md` §RLS — new rule: "All `public.kpis` and admin-scoped read policies MUST wrap `auth.uid()` and `has_role(…)` in scalar sub-selects to enable initplan promotion."
+- `mem/architecture/security/rls-recursion-management` — append the wrapping convention.
 
-Add three optional JSONB args, defaulted to NULL:
+### Out of scope (won't touch in this fix)
+- Restructuring the data-owners policy to drop the `normalize_kpi_text()` calls. (Already gated by `is_org_level = true`, short-circuits for employee KPIs.)
+- The `rpc_weightage_variance_summary` body itself — once RLS planning is fixed, it executes against `kpis` at the same speed as bulk admin queries elsewhere.
+- Other duplicate-account hygiene (separate item).
 
-```text
-p_evidence_urls jsonb   -- { submission_id: ["url1","url2"] }
-p_is_na          jsonb   -- { submission_id: true }
-p_na_reasons     jsonb   -- { submission_id: "reason text" }
-```
+### Verification after deploy
+1. Reload the dashboard logged in as Jaspal → expect "149 Employees" badge and KPI rows.
+2. Watch `postgres_logs` for 5 minutes after deploy → expect zero `statement timeout` entries on `kpis`.
+3. Re-run the EXPLAIN from Step 2 against production via `read_query`.
 
-Inside the RPC loop per cell:
-
-- If `p_is_na->>submission_id = 'true'`:
-  - Set `is_na=true`, `na_marked_by_role=<stage>`, `na_reason=<from json>`, clear `<stage>_score`, `<stage>_rating`, `<stage>_remarks`.
-  - Still write `<stage>_evidence_urls` if provided.
-  - Skip score / variance / propagation checks; stamp `inherited_from='na'`.
-  - Audit row tagged `bulk_na_mark`.
-- Else (existing behaviour):
-  - Write score + remarks (unchanged).
-  - Additionally write `<stage>_evidence_urls` when JSON entry exists.
-- POLICY §88 frozen-final guard still runs first and skips NA writes too.
-
-GRANT EXECUTE re-asserted to `authenticated`. No new tables → no GRANT block needed beyond the function permissions.
-
-### 2. `src/hooks/useBulkReview.ts`
-
-Extend `useBulkWriteStageScores` args:
-
-```ts
-evidence_urls?: Record<string, string[]>;
-is_na?: Record<string, boolean>;
-na_reasons?: Record<string, string>;
-```
-
-Pass them straight through as `p_evidence_urls`, `p_is_na`, `p_na_reasons`. Existing callers (full bulk save) keep working — args are optional.
-
-### 3. `src/components/review/BulkCellDrawer.tsx`
-
-- Add local state: `isNa`, `naReason`, `reviewerEvidenceUrls`.
-- Seed on open from `submission` (same pattern as `achieved`).
-- Render `NaConfirmationCard` + `EvidenceUpload` (existing components — no UI invention).
-- Adjust `handleWrite` to build the single-cell payload:
-  - `cells: [{ submission_id, score: isNa ? null : effectiveScore, remarks: trimmed, expected_row_version }]`
-  - `evidence_urls: { [submission_id]: reviewerEvidenceUrls }`
-  - `is_na`/`na_reasons` only when NA toggled.
-- Update enable/disable logic and button label as described above.
-
-### 4. Tests (`src/test/`)
-
-- `bulkCellDrawerRemarks.test.ts` — extend with NA-reason min-length case.
-- New `bulkWriteStageScores.na.test.ts` — pure unit test for the args→RPC mapping (hook layer mocked).
-- Update existing `BulkCellDrawer` interaction expectations (NA toggle hides score input; Save button enabled only when NA reason valid).
-
-### 5. Documentation
-
-- `DOCUMENTATION.md` → "Bulk Scoring" section: list the four parity controls.
-- `POLICY.md` → §111 (Bulk write semantics): add NA and per-cell evidence to the allowed payload; reiterate §88 immutability still wins.
-- Memory: append a one-liner to `mem://features/review/group-based-scoring.md` noting NA + per-cell evidence are first-class drawer fields (no auto-propagation policy change).
-
-## Out of Scope
-
-- Bulk NA marking across the grid (drawer only for now).
-- Per-stage attachment requirements (still optional, matching single-cell behaviour).
-- Self-review parity (drawer is reviewer-only).
-
-## Verification
-
-1. Open `/review/bulk-scoring`, click any non-final cell → drawer shows NA toggle + Evidence upload.
-2. Mark NA + enter ≥10-char reason → Save → cell shows `N/A` badge in grid; row in `review_submissions` has `is_na=true`, score columns cleared, `na_marked_by_role` = stage.
-3. Without NA, upload 2 files + score + remarks → Save → `<stage>_evidence_urls` contains the URLs; score saved as before.
-4. Frozen-final cell still blocks both flows with the existing POLICY §88 alert.
-5. Existing full-grid bulk save (no NA/evidence params) regression-tested via existing unit tests.
+### What I need from you
+Just approval. The migration is additive (DROP POLICY + CREATE POLICY with identical logic, only wrapping changed), no downtime, no data movement. I'll roll it out, verify with the three checks above, and report back.
