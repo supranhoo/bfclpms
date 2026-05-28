@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useKraCategories, useDepartments, useProfiles } from '@/hooks/useOrganization';
 import { useOrgKpiValues, useBulkUpsertOrgKpiValues, useClearOrgKpiEntry, OrgKpiValue } from '@/hooks/useOrgKpiValues';
 import { useOrgKpiSubmissionFallback } from '@/hooks/useOrgKpiSubmissionFallback';
-import { useOrgLevelKpisWithEmployees, useOrgLevelKpis } from '@/hooks/useOrgLevelKpis';
+import { useOrgLevelKpisWithEmployees } from '@/hooks/useOrgLevelKpis';
 import { useOrgKpiOwnershipMap } from '@/hooks/useOrgKpiDataOwner';
 import { useIsAnyOrgKpiDataOwner } from '@/hooks/useOrgKpiDataOwner';
 import { useUnmarkAsOrgLevel } from '@/hooks/useMarkAsOrgLevel';
