@@ -18,6 +18,7 @@ import { format } from 'date-fns';
 import { KpiObservation, ObservationType, ObserverRole, ObservationVisibility } from '@/hooks/useKpiObservations';
 import { ObservationReplyThread } from './ObservationReplyThread';
 import { cn } from '@/lib/utils';
+import { isWithinEditWindow } from '@/lib/editWindow';
 
 export type ObservationStatus = 'open' | 'acknowledged' | 'resolved';
 
@@ -80,13 +81,16 @@ export function ObservationCard({
   const config = typeConfig[observation.observation_type];
   const TypeIcon = config.icon;
   const isCreator = observation.created_by === currentUserId;
+  const withinEditWindow = isWithinEditWindow(observation.created_at);
   const canEditDelete = isCreator && !isReadOnly;
+  const canEdit = canEditDelete && withinEditWindow;
   const hasDescription = observation.description && observation.description.length > 0;
   const status = ((observation as any).status as ObservationStatus) || 'open';
   const statusCfg = statusConfig[status];
   
   const observerName = observation.created_by_profile?.full_name || observation.created_by_profile?.email || 'Unknown';
   const formattedDate = format(new Date(observation.created_at), 'dd MMM yyyy');
+  const editedAt = (observation as any).edited_at as string | null | undefined;
 
   // Evidence files (multi-file)
   const evidenceUrls: string[] = (observation as any).evidence_urls || [];
@@ -121,9 +125,17 @@ export function ObservationCard({
 
           {canEditDelete && (
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onEdit?.(observation)}>
-                <Pencil className="h-3 w-3" />
-              </Button>
+              {canEdit && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={() => onEdit?.(observation)}
+                  title="Edit (within 24h of posting)"
+                >
+                  <Pencil className="h-3 w-3" />
+                </Button>
+              )}
               <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive hover:text-destructive" onClick={() => onDelete?.(observation.id)}>
                 <Trash2 className="h-3 w-3" />
               </Button>
@@ -139,6 +151,11 @@ export function ObservationCard({
           <span>{observerName}</span>
           <span>•</span>
           <span>{formattedDate}</span>
+          {editedAt && (
+            <span className="italic" title={`Edited ${format(new Date(editedAt), 'dd MMM yyyy, HH:mm')}`}>
+              (edited)
+            </span>
+          )}
         </div>
 
         {/* Title */}

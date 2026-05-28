@@ -1,131 +1,163 @@
-## Bug (corrected RCA)
+## Goal
 
-Sajid Raza (Emp 100264), Feb-26:
-- **Correct value (business logic):** 339.5 / 492.5 ≈ **69.04%** (rating 3.45 / 5)
-- Original "All Months" view: 69.04% ✓
-- Original "February" filter view: 54.37% ✗
-- My previous fix made BOTH views 54.37% ✗ — wrong direction.
+Let a user edit **their own** observation comments — both the top-level **Observation** body and each **Reply** — within **24 hours** of posting, exactly like Facebook / LinkedIn:
 
-### Why 69.04% is correct (verified from DB)
+- Inline edit (textarea replaces the bubble in place)
+- "Save" / "Cancel" buttons
+- After save, an "(edited)" marker appears next to the timestamp
+- After 24h, the Edit action disappears
+- Author-only; other users never see Edit
 
-Sajid has 6 Bi-Monthly KPIs at `review_period='February'`, `frequency_cycle_start='Feb-Mar'`, all `status='approved'` with `final_score` set (weights 3,3,3,1,25,12 = 47, weighted 200, max 235). `isKpiLockedForPeriod('Bi-Monthly','February',2026,'Feb-Mar')` returns **true** because Feb is the cycle's *start*, not its *active/review* month (Mar is). The lock helper is correct for *empty sibling months* but wrong for **approved submissions that exist on the start month** (data-entry placement is a separate concern; reporting must reflect what is actually approved).
+## Assumptions
 
-Per POLICY §88 (Submission Snapshot Immutability) — once `status='approved'` with a `final_score`, the score must surface in the period its row carries. The report aggregator must not silently zero approved scores based on cycle-position heuristics.
+1. Scope = the author's **own** observation reply text and observation description (the two free-text comment fields visible in the screenshot). Attachments and mentions are **not** re-editable in v1 (keeps surface small; can extend later).
+2. 24h window is measured from `created_at` and enforced both in UI and in DB (RLS / trigger). Hardcoding 24h is acceptable per spec; we keep the constant in one place (`OBSERVATION_EDIT_WINDOW_HOURS = 24`) for future config.
+3. Admin override is **out of scope** — admins also follow the 24h rule (matches FB/LinkedIn parity, simplest correct).
+4. No edit history table in v1 — only `edited_at` timestamp. (We can add `kpi_observation_reply_edits` later if audit needs it.)
 
-## Fix
+## Risk & Impact
 
-Roll back the lock-based exclusion in `src/pages/reports/EmployeePerformanceSummary.tsx`. The KPI's own `review_period` is the source of truth for which row it belongs to; whether to count it is determined by `is_na` and the 8-stage score fallback, not by `isKpiLockedForPeriod`.
+| Area | Impact |
+|------|--------|
+| Data | Additive: 2 nullable `edited_at` columns. Existing rows unaffected. No backfill. |
+| Workflow | None — edits don't change status, scores, notifications, or @mentions. |
+| UI | Pencil icon appears on the user's own bubble while within 24h; inline editor replaces bubble during edit. |
+| Regression | Low — confined to ObservationReplyThread + ObservationCard. Read paths unchanged. |
+| Security | RLS UPDATE policy restricts to `auth.uid() = author AND created_at > now() - interval '24 hours'`. Trigger forbids mutating any column other than `reply_text` / `description` / `edited_at`. |
+| Scalability | Same query patterns; one extra column read. |
+| Rollback | Drop the 2 columns + RLS UPDATE policies. Fully additive. |
 
-### Change 1 — Main aggregation (lines ~198-264)
+## UI Plan (FB/LinkedIn-style)
 
-Remove the `isLocked` branch entirely:
+### Reply bubble (per row in `ObservationReplyThread`)
+
+Default state:
+```
+[avatar]  Shekhar Sharad  28 May 2026, 06:43  (edited)        [✏️] [🗑️]
+          @Jaspal as per my understanding ...
+          📎 Attachment 1
+```
+- `✏️` pencil shown only if `auth.uid() === reply.reply_by` AND `now - created_at < 24h`.
+- `(edited)` shown only if `edited_at IS NOT NULL`, in muted 10px text right after the timestamp.
+
+Edit state (in-place, replaces the text line):
+```
+[avatar]  Shekhar Sharad  28 May 2026, 06:43
+          ┌────────────────────────────────────────┐
+          │ @Jaspal as per my understanding ...    │  ← MentionTextarea (rows=3)
+          └────────────────────────────────────────┘
+          [Save]  [Cancel]    ⏱ 23h 12m left
+```
+- Reuses `MentionTextarea` so existing @ rendering keeps working (mentions remain visible, but **no new notifications** are sent on edit — pure text revision).
+- `Save` disabled if empty or unchanged. Shows spinner while saving.
+- Live countdown chip ("23h 12m left") updates every minute; when it hits 0, editor auto-closes with toast "Edit window expired."
+
+### Observation top bubble (CONCERN block in screenshot)
+
+Same pattern applied to the observation's **description** text (`"PF does not apply to retention allowance."`):
+- Pencil already exists in the header (top-right ✏️). Today it likely opens a full edit dialog — we keep that for owner edits within 24h, and add the same `(edited)` marker after the timestamp.
+- Outside the 24h window, hide the pencil for the author (admins also hidden, per assumption #3).
+
+### Responsive
+
+- Pencil & trash icons collapse into a `⋯` overflow menu below `sm` breakpoint to avoid crowding the timestamp row (matches existing trash button placement).
+
+### Visual tokens
+
+All colors via existing semantic tokens (`text-muted-foreground`, `text-primary`, `border-border`). No new colors.
+
+## Implementation
+
+### 1. DB migration (additive)
+
+```sql
+ALTER TABLE public.kpi_observation_replies
+  ADD COLUMN IF NOT EXISTS edited_at timestamptz;
+
+ALTER TABLE public.kpi_observations
+  ADD COLUMN IF NOT EXISTS edited_at timestamptz;
+
+-- Reply: author may UPDATE within 24h
+CREATE POLICY "Authors can edit own reply within 24h"
+  ON public.kpi_observation_replies
+  FOR UPDATE TO authenticated
+  USING (auth.uid() = reply_by AND created_at > now() - interval '24 hours')
+  WITH CHECK (auth.uid() = reply_by AND created_at > now() - interval '24 hours');
+
+-- Observation: author may UPDATE description within 24h
+CREATE POLICY "Authors can edit own observation within 24h"
+  ON public.kpi_observations
+  FOR UPDATE TO authenticated
+  USING (auth.uid() = created_by AND created_at > now() - interval '24 hours')
+  WITH CHECK (auth.uid() = created_by AND created_at > now() - interval '24 hours');
+
+-- Guard trigger: only reply_text/description + edited_at may change via this policy
+CREATE OR REPLACE FUNCTION public.guard_observation_reply_edit()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NEW.observation_id <> OLD.observation_id
+     OR NEW.reply_by <> OLD.reply_by
+     OR NEW.created_at <> OLD.created_at
+     OR COALESCE(NEW.evidence_urls::text,'') <> COALESCE(OLD.evidence_urls::text,'') THEN
+    RAISE EXCEPTION 'Only reply_text may be edited';
+  END IF;
+  NEW.edited_at := now();
+  RETURN NEW;
+END $$;
+
+CREATE TRIGGER trg_guard_observation_reply_edit
+  BEFORE UPDATE ON public.kpi_observation_replies
+  FOR EACH ROW EXECUTE FUNCTION public.guard_observation_reply_edit();
+```
+(Mirror trigger for `kpi_observations` restricting writable cols to `description`, `evidence_urls` excluded.)
+
+### 2. Hook — `src/hooks/useObservationReplies.ts`
+
+Add `useUpdateObservationReply({ id, replyText })` mutation: UPDATE row, invalidate `['observation-replies', observationId]`.
+
+Add `useUpdateObservation` similar for observation description.
+
+### 3. Component — `src/components/review/ObservationReplyThread.tsx`
+
+- Add `editingReplyId` local state and `editingText`.
+- Render pencil button only when `user?.id === reply.reply_by && isWithinEditWindow(reply.created_at)`.
+- When editing, swap `<p>` for `<MentionTextarea>` + Save/Cancel + countdown chip.
+- Append `<span className="text-[10px] text-muted-foreground italic">(edited)</span>` when `reply.edited_at` set.
+
+### 4. Component — Observation card (locate during build, e.g. `ObservationCard.tsx` / wherever the top bubble is rendered)
+
+Same pattern applied to `description`.
+
+### 5. Util — `src/lib/editWindow.ts`
 
 ```ts
-allKpis.forEach(kpi => {
-  const profile = profileMap.get(kpi.employee_id);
-  if (!profile) return;
-  const submission = kpi.review_submissions;
-  if (submission?.is_na) return;
-
-  const manager = profile.reporting_manager_id ? profileMap.get(profile.reporting_manager_id) : null;
-  const key = `${kpi.employee_id}-${kpi.review_period}`;
-  const existing = employeePeriodMap.get(key);
-
-  const score = (kpi.status === 'approved' ? submission?.final_score : null)
-    ?? submission?.management_score
-    ?? submission?.auditor_score
-    ?? submission?.hr_pms_score
-    ?? submission?.skip_level_score
-    ?? submission?.manager_score
-    ?? submission?.self_score
-    ?? 0;
-  const weight = kpi.weightage || 0;
-  const weightedScore = score * weight;
-  const maxScore = weight * 5;
-  const kpiStatus = kpi.status || 'kra_set';
-
-  if (existing) {
-    existing.totalScore += weightedScore;
-    existing.outOfScore += maxScore;
-    existing.totalWeight += weight;
-    existing.kpiCount += 1;
-    existing.statusCounts[kpiStatus] = (existing.statusCounts[kpiStatus] || 0) + 1;
-  } else {
-    employeePeriodMap.set(key, {
-      …,
-      statusCounts: { [kpiStatus]: 1 },
-      totalScore: weightedScore,
-      outOfScore: maxScore,
-      totalWeight: weight,
-      kpiCount: 1,
-      lockedKpiCount: 0,
-      …,
-    });
-  }
-});
+export const OBSERVATION_EDIT_WINDOW_HOURS = 24;
+export function isWithinEditWindow(createdAt: string): boolean { … }
+export function remainingEditMinutes(createdAt: string): number { … }
 ```
-
-`lockedKpiCount` field is kept on the row type (value always 0) so downstream UI that reads it doesn't break; the "Show frequency-locked KPIs" toggle becomes a no-op for now (call it out in the closing notes — separate decision whether to remove the toggle UI in a follow-up).
-
-### Change 2 — Trend query (lines ~366-374)
-
-Remove the matching `if (isLocked) return;` guard so Period Comparison stays consistent with the main table at 69.04%.
-
-### Change 3 — Drop the unused import
-
-Remove `isKpiLockedForPeriod` from the imports if no longer referenced.
-
-## Out of scope
-
-- Lock logic itself (`src/lib/frequencyUtils.ts`) — unchanged; still correct for sibling-month *data-entry* gating.
-- Other call sites of `isKpiLockedForPeriod` (Self-Review, KPI Journey, Org KPI entry, etc.) — those are entry-side guards, not reporting; leave alone.
-- DB/RLS/edge-functions — untouched.
-- 8-stage fallback chain and POLICY §88 immutability — preserved.
-- The "Show frequency-locked KPIs" toggle UI — leave in place (no-op) for this patch; removal is a follow-up if desired.
-
-## Risk & Impact Report
-
-- **Data Impact:** None — read-only aggregation change.
-- **Workflow Impact:** None.
-- **UI/UX:** Feb-26 row for Sajid Raza changes from 54.37% → 69.04%. Any other employee whose row contained approved Bi-Monthly/Quarterly/Half-Yearly submissions at the cycle-start month will increase to match what's already in their KPI Journey / Scorecard.
-- **Regression Risk:** Low. Excel export and Period Comparison read the same aggregation → automatically aligned. The only behavioral loss is the "filter out unscored sibling-month phantom rows" effect — but if such phantoms exist, they have `score=0` and inflate `outOfScore` only when a real submission is present; empty rows are already filtered earlier in the pipeline.
-- **Scalability:** Identical query cost (same data, simpler loop body).
-- **Mitigation:** Verification steps below + targeted tests.
-
-## Verification
-
-1. `/reports/employee-performance` → search 100264 → Feb-26 row in **both** All-Months and February views shows **69.04% / 3.45 rating**.
-2. Spot-check Mar-26, Jan-26, Apr-26 against KPI Journey/Scorecard for Sajid.
-3. Period Comparison tab shows 69.04% for the Feb data point.
-4. Excel export Feb-26 row total matches the UI.
-5. Pick one other employee with Bi-Monthly/Quarterly KPIs and confirm their numbers match the per-employee Scorecard.
-6. `npm test` — existing `frequencyUtils.test.ts`, `frequencyLockCallSitesAudit.test.ts` still pass (lock helper itself unchanged).
 
 ## Tests
 
-Add `src/test/employeePerformanceApprovedSubmissions.test.ts` (small pure-function extract):
-
-1. Bi-Monthly KPI cycle Feb-Mar, `review_period='February'`, `status='approved'`, `final_score=5`, weight=25 → contributes 125 to Feb totalScore, 125 to outOfScore.
-2. Same KPI with `is_na=true` → excluded.
-3. Monthly KPI normal flow → 8-stage fallback unchanged.
-4. Approved `final_score=0` still contributes 0 / (weight*5) (penalty preserved, POLICY §88).
-
-To make this testable, extract the per-KPI accumulation into `src/lib/employeePerformanceAgg.ts` (`reduceKpiIntoRow`). Pure function, ~30 lines. Component imports it; both the main aggregation and trend query call it for parity.
+- `src/test/editWindow.test.ts` — pure unit tests: in-window, exactly at boundary, expired, invalid date.
+- Component test (vitest) for `ObservationReplyThread`: pencil visible only for author within 24h; hidden after; `(edited)` rendered when `edited_at` set; Save calls mutation with trimmed text.
 
 ## Docs
 
-- `DOCUMENTATION.md` → Reports section: "Approved submissions count in the `review_period` they were stored against. Frequency lock (`isKpiLockedForPeriod`) is a *data-entry* guard, not a *reporting* filter — it must never zero approved historical scores."
-- `POLICY.md` → revise the §128 entry added previously; explicitly state: **Reports must respect approved-submission immutability; lock heuristics are entry-side only.**
-- `mem://features/reports/aggregation-parity-rule` → rewrite: "Per-period aggregation reflects every non-N/A submission at the row's `review_period`. Do not apply frequency-lock exclusion in report aggregation."
+- `DOCUMENTATION.md` → new section "Comment editing — observations & replies" with 24h rule, RLS, `edited_at` semantics.
+- `POLICY.md` → policy entry: "Authors may edit their own observation/reply text within 24 hours of posting. After 24h the text is immutable. Edits do not re-trigger notifications. An `(edited)` marker is shown publicly."
+- Memory file `mem://features/review/observation-comment-edit-window` and add to `mem/index.md`.
 
-## Files touched
+## Out of scope (explicit)
 
-- `src/pages/reports/EmployeePerformanceSummary.tsx` (revert the 2 prior blocks, drop import)
-- `src/lib/employeePerformanceAgg.ts` (new, ~30 lines)
-- `src/test/employeePerformanceApprovedSubmissions.test.ts` (new)
-- `DOCUMENTATION.md`, `POLICY.md` (sync)
-- Memory file rewrite
+- Editing attachments / mentions
+- Edit history / diff viewer
+- Admin override
+- Editing acknowledgement, status, resolution notes, or workflow fields
 
-## Rollback
+## Verification
 
-Single-file revert of `EmployeePerformanceSummary.tsx` + delete the new helper + test. No data to undo.
+1. As author, within 24h: pencil visible → edit → "(edited)" appears, content updated.
+2. As author, after 24h (simulate via SQL backdate): pencil hidden, RLS blocks direct UPDATE.
+3. As another user: pencil never visible, direct UPDATE blocked by RLS.
+4. Trigger blocks attempts to change `evidence_urls` / `reply_by`.
+5. Notifications table unchanged after an edit (no new rows).

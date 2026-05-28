@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { MessageCircle, Send, ChevronDown, ChevronUp, CheckCircle2, Loader2 } from 'lucide-react';
+import { MessageCircle, Send, ChevronDown, ChevronUp, CheckCircle2, Loader2, Pencil } from 'lucide-react';
 import { format } from 'date-fns';
 import { openStorageFile, buildEvidenceFileName } from '@/lib/storageDownload';
 import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
@@ -13,8 +13,10 @@ import {
   useObservationReplies,
   useCreateObservationReply,
   useResolveObservation,
+  useUpdateObservationReply,
 } from '@/hooks/useObservationReplies';
 import { useAuth } from '@/contexts/AuthContext';
+import { isWithinEditWindow, formatRemainingEditWindow } from '@/lib/editWindow';
 
 interface ObservationReplyThreadProps {
   observationId: string;
@@ -39,6 +41,10 @@ export function ObservationReplyThread({
   const { data: replies = [], isLoading } = useObservationReplies(observationId);
   const createReplyMutation = useCreateObservationReply();
   const resolveMutation = useResolveObservation();
+  const updateReplyMutation = useUpdateObservationReply();
+
+  const [editingReplyId, setEditingReplyId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
 
   const isRaiser = user?.id === observationCreatedBy;
   const replyCount = replies.length;
@@ -65,6 +71,30 @@ export function ObservationReplyThread({
 
   const handleResolve = () => {
     resolveMutation.mutate({ observationId, kpiId });
+  };
+
+  const handleStartEdit = (replyId: string, currentText: string) => {
+    setEditingReplyId(replyId);
+    setEditingText(currentText);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingReplyId(null);
+    setEditingText('');
+  };
+
+  const handleSaveEdit = (replyId: string) => {
+    const text = editingText.trim();
+    if (!text) return;
+    updateReplyMutation.mutate(
+      { id: replyId, observationId, replyText: text },
+      {
+        onSuccess: () => {
+          setEditingReplyId(null);
+          setEditingText('');
+        },
+      }
+    );
   };
 
   const getInitials = (name: string | null | undefined) => {
@@ -126,8 +156,12 @@ export function ObservationReplyThread({
           <p className="text-xs text-muted-foreground py-2">No replies yet.</p>
         ) : (
           <div className="space-y-2 border-l-2 border-border pl-3">
-            {replies.map((reply) => (
-              <div key={reply.id} className="flex gap-2">
+            {replies.map((reply) => {
+              const isAuthor = user?.id === reply.reply_by;
+              const canEdit = isAuthor && !isReadOnly && isWithinEditWindow(reply.created_at);
+              const isEditing = editingReplyId === reply.id;
+              return (
+              <div key={reply.id} className="flex gap-2 group">
                 <Avatar className="h-6 w-6 flex-shrink-0">
                   <AvatarFallback className="text-[10px]">
                     {getInitials(reply.reply_by_profile?.full_name)}
@@ -141,10 +175,64 @@ export function ObservationReplyThread({
                     <span className="text-[10px] text-muted-foreground">
                       {format(new Date(reply.created_at), 'dd MMM yyyy, HH:mm')}
                     </span>
+                    {reply.edited_at && (
+                      <span className="text-[10px] text-muted-foreground italic" title={`Edited ${format(new Date(reply.edited_at), 'dd MMM yyyy, HH:mm')}`}>
+                        (edited)
+                      </span>
+                    )}
+                    {canEdit && !isEditing && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-5 px-1 text-[10px] opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                        onClick={() => handleStartEdit(reply.id, reply.reply_text)}
+                        title="Edit reply (24h window)"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                    )}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {renderMentionText(reply.reply_text)}
-                  </p>
+                  {isEditing ? (
+                    <div className="mt-1 space-y-1.5">
+                      <MentionTextarea
+                        value={editingText}
+                        onChange={setEditingText}
+                        placeholder="Edit your reply..."
+                        rows={2}
+                        className="text-sm"
+                        kpiId={kpiId}
+                      />
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => handleSaveEdit(reply.id)}
+                          disabled={
+                            !editingText.trim() ||
+                            editingText.trim() === reply.reply_text.trim() ||
+                            updateReplyMutation.isPending
+                          }
+                        >
+                          {updateReplyMutation.isPending ? 'Saving...' : 'Save'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-xs"
+                          onClick={handleCancelEdit}
+                        >
+                          Cancel
+                        </Button>
+                        <span className="text-[10px] text-muted-foreground ml-auto">
+                          {formatRemainingEditWindow(reply.created_at)}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {renderMentionText(reply.reply_text)}
+                    </p>
+                  )}
                   {reply.evidence_urls && reply.evidence_urls.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1">
                       {reply.evidence_urls.map((url, i) => (
@@ -161,7 +249,8 @@ export function ObservationReplyThread({
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
