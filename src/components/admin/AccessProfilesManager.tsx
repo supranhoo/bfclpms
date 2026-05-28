@@ -22,6 +22,8 @@ import { useToast } from '@/hooks/use-toast';
 import { OrgFilterCombobox, type ComboboxOption } from './OrgFilterCombobox';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { fetchAllPaged } from '@/lib/fetchAll';
+import { useAuth } from '@/contexts/AuthContext';
+import { useProfilesVersion } from '@/hooks/useProfilesVersion';
 
 const SECTION_LABELS: Record<string, string> = {
   main: 'Main', manager: 'Manager', hr_pms: 'HR PMS', management: 'Management',
