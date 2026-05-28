@@ -328,17 +328,15 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
 
               {/* Reviewer evidence / attachments — parity with single-cell review */}
               {user?.id && row.kpi_id && (
-                <div>
-                  <Label className="text-xs">Attachments (optional, up to 5)</Label>
-                  <MultiFileUpload
-                    userId={user.id}
-                    contextId={row.kpi_id}
-                    folder="reviewer-evidence"
-                    existingUrls={reviewerEvidenceUrls}
-                    onUploadComplete={(urls) => setReviewerEvidenceUrls(urls)}
-                    maxFiles={5}
-                  />
-                </div>
+                <MultiFileUpload
+                  userId={user.id}
+                  contextId={row.kpi_id}
+                  folder="reviewer-evidence"
+                  existingUrls={reviewerEvidenceUrls}
+                  onUploadComplete={(urls) => setReviewerEvidenceUrls(urls)}
+                  maxFiles={5}
+                  label="Attachments (optional)"
+                />
               )}
 
               <div>
