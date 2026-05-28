@@ -3002,10 +3002,12 @@ export type Database = {
       }
       kpis: {
         Row: {
+          business_unit_id: string | null
           category_id: string
           created_at: string
           criteria: string | null
           day_count_type: string | null
+          division_id: string | null
           employee_id: string
           frequency: string | null
           frequency_cycle_start: string | null
@@ -3017,7 +3019,10 @@ export type Database = {
           kpi_group_type: string
           kpi_name: string
           kra_name: string
+          level_id: string | null
+          location_id: string | null
           org_level_scope: string | null
+          pms_grade_id: string | null
           qualitative_options: Json | null
           r0: string | null
           r1: string | null
@@ -3042,10 +3047,12 @@ export type Database = {
           weightage_variance_acknowledged: boolean
         }
         Insert: {
+          business_unit_id?: string | null
           category_id: string
           created_at?: string
           criteria?: string | null
           day_count_type?: string | null
+          division_id?: string | null
           employee_id: string
           frequency?: string | null
           frequency_cycle_start?: string | null
@@ -3057,7 +3064,10 @@ export type Database = {
           kpi_group_type?: string
           kpi_name: string
           kra_name: string
+          level_id?: string | null
+          location_id?: string | null
           org_level_scope?: string | null
+          pms_grade_id?: string | null
           qualitative_options?: Json | null
           r0?: string | null
           r1?: string | null
@@ -3082,10 +3092,12 @@ export type Database = {
           weightage_variance_acknowledged?: boolean
         }
         Update: {
+          business_unit_id?: string | null
           category_id?: string
           created_at?: string
           criteria?: string | null
           day_count_type?: string | null
+          division_id?: string | null
           employee_id?: string
           frequency?: string | null
           frequency_cycle_start?: string | null
@@ -3097,7 +3109,10 @@ export type Database = {
           kpi_group_type?: string
           kpi_name?: string
           kra_name?: string
+          level_id?: string | null
+          location_id?: string | null
           org_level_scope?: string | null
+          pms_grade_id?: string | null
           qualitative_options?: Json | null
           r0?: string | null
           r1?: string | null
@@ -3123,10 +3138,24 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "kpis_business_unit_id_fkey"
+            columns: ["business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "kpis_category_id_fkey"
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "kra_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpis_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
             referencedColumns: ["id"]
           },
           {
@@ -3148,6 +3177,27 @@ export type Database = {
             columns: ["kpi_definition_id"]
             isOneToOne: false
             referencedRelation: "kpi_definitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpis_level_id_fkey"
+            columns: ["level_id"]
+            isOneToOne: false
+            referencedRelation: "levels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpis_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpis_pms_grade_id_fkey"
+            columns: ["pms_grade_id"]
+            isOneToOne: false
+            referencedRelation: "pms_grades"
             referencedColumns: ["id"]
           },
           {
@@ -3572,30 +3622,51 @@ export type Database = {
       org_kpi_data_owners: {
         Row: {
           assigned_by: string | null
+          business_unit_id: string | null
           category_id: string
           created_at: string | null
+          department_id: string | null
+          division_id: string | null
           id: string
           kpi_name: string
           kra_name: string
+          level_id: string | null
+          location_id: string | null
+          org_level_scope: string
           owner_id: string
+          pms_grade_id: string | null
         }
         Insert: {
           assigned_by?: string | null
+          business_unit_id?: string | null
           category_id: string
           created_at?: string | null
+          department_id?: string | null
+          division_id?: string | null
           id?: string
           kpi_name: string
           kra_name: string
+          level_id?: string | null
+          location_id?: string | null
+          org_level_scope?: string
           owner_id: string
+          pms_grade_id?: string | null
         }
         Update: {
           assigned_by?: string | null
+          business_unit_id?: string | null
           category_id?: string
           created_at?: string | null
+          department_id?: string | null
+          division_id?: string | null
           id?: string
           kpi_name?: string
           kra_name?: string
+          level_id?: string | null
+          location_id?: string | null
+          org_level_scope?: string
           owner_id?: string
+          pms_grade_id?: string | null
         }
         Relationships: [
           {
@@ -3613,10 +3684,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "org_kpi_data_owners_business_unit_id_fkey"
+            columns: ["business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "org_kpi_data_owners_category_id_fkey"
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "kra_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_data_owners_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_data_owners_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_data_owners_level_id_fkey"
+            columns: ["level_id"]
+            isOneToOne: false
+            referencedRelation: "levels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_data_owners_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
             referencedColumns: ["id"]
           },
           {
@@ -3631,6 +3737,13 @@ export type Database = {
             columns: ["owner_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_data_owners_pms_grade_id_fkey"
+            columns: ["pms_grade_id"]
+            isOneToOne: false
+            referencedRelation: "pms_grades"
             referencedColumns: ["id"]
           },
         ]
@@ -3796,11 +3909,13 @@ export type Database = {
       org_kpi_values: {
         Row: {
           achieved_value: number | null
+          business_unit_id: string | null
           category_id: string
           created_at: string
           criteria: string | null
           data_source: string | null
           department_id: string | null
+          division_id: string | null
           employee_id: string | null
           entered_by: string | null
           evidence_files: Json
@@ -3813,6 +3928,9 @@ export type Database = {
           last_revision_reason: string | null
           last_revision_requested_at: string | null
           last_revision_requested_by: string | null
+          level_id: string | null
+          location_id: string | null
+          pms_grade_id: string | null
           qualitative_options: Json | null
           r0: string | null
           r1: string | null
@@ -3836,11 +3954,13 @@ export type Database = {
         }
         Insert: {
           achieved_value?: number | null
+          business_unit_id?: string | null
           category_id: string
           created_at?: string
           criteria?: string | null
           data_source?: string | null
           department_id?: string | null
+          division_id?: string | null
           employee_id?: string | null
           entered_by?: string | null
           evidence_files?: Json
@@ -3853,6 +3973,9 @@ export type Database = {
           last_revision_reason?: string | null
           last_revision_requested_at?: string | null
           last_revision_requested_by?: string | null
+          level_id?: string | null
+          location_id?: string | null
+          pms_grade_id?: string | null
           qualitative_options?: Json | null
           r0?: string | null
           r1?: string | null
@@ -3876,11 +3999,13 @@ export type Database = {
         }
         Update: {
           achieved_value?: number | null
+          business_unit_id?: string | null
           category_id?: string
           created_at?: string
           criteria?: string | null
           data_source?: string | null
           department_id?: string | null
+          division_id?: string | null
           employee_id?: string | null
           entered_by?: string | null
           evidence_files?: Json
@@ -3893,6 +4018,9 @@ export type Database = {
           last_revision_reason?: string | null
           last_revision_requested_at?: string | null
           last_revision_requested_by?: string | null
+          level_id?: string | null
+          location_id?: string | null
+          pms_grade_id?: string | null
           qualitative_options?: Json | null
           r0?: string | null
           r1?: string | null
@@ -3916,6 +4044,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "org_kpi_values_business_unit_id_fkey"
+            columns: ["business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "org_kpi_values_category_id_fkey"
             columns: ["category_id"]
             isOneToOne: false
@@ -3930,6 +4065,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "org_kpi_values_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "org_kpi_values_employee_id_fkey"
             columns: ["employee_id"]
             isOneToOne: false
@@ -3955,6 +4097,27 @@ export type Database = {
             columns: ["entered_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_values_level_id_fkey"
+            columns: ["level_id"]
+            isOneToOne: false
+            referencedRelation: "levels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_values_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_values_pms_grade_id_fkey"
+            columns: ["pms_grade_id"]
+            isOneToOne: false
+            referencedRelation: "pms_grades"
             referencedColumns: ["id"]
           },
           {
