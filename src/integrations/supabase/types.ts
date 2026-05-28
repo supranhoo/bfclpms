@@ -8823,6 +8823,20 @@ export type Database = {
         }
         Returns: boolean
       }
+      has_scope_membership: {
+        Args: {
+          p_business_unit_id?: string
+          p_department_id?: string
+          p_division_id?: string
+          p_employee_id?: string
+          p_level_id?: string
+          p_location_id?: string
+          p_pms_grade_id?: string
+          p_scope: string
+          p_user_id: string
+        }
+        Returns: boolean
+      }
       iac_log: {
         Args: {
           _action: string
@@ -9091,6 +9105,21 @@ export type Database = {
           uom_type: string
           weightage: number
         }[]
+      }
+      resolve_scope_population: {
+        Args: {
+          p_business_unit_id?: string
+          p_department_id?: string
+          p_division_id?: string
+          p_employee_id?: string
+          p_level_id?: string
+          p_location_id?: string
+          p_pms_grade_id?: string
+          p_review_period?: string
+          p_review_year?: number
+          p_scope: string
+        }
+        Returns: string[]
       }
       resolve_terminal_period: {
         Args: {
