@@ -1,163 +1,120 @@
 ## Goal
 
-Let a user edit **their own** observation comments — both the top-level **Observation** body and each **Reply** — within **24 hours** of posting, exactly like Facebook / LinkedIn:
+Bring the Bulk Scoring cell drawer (`/review/bulk-scoring` → Edit cell) to full parity with single-cell Team / HR PMS Review:
 
-- Inline edit (textarea replaces the bubble in place)
-- "Save" / "Cancel" buttons
-- After save, an "(edited)" marker appears next to the timestamp
-- After 24h, the Edit action disappears
-- Author-only; other users never see Edit
+- N/A toggle (with reason)
+- Achieved value (already present)
+- Manual rating 0–5 (already present)
+- Remarks (already present)
+- **Attachments / Evidence upload** (currently missing)
 
-## Assumptions
+Today the drawer already shows Achieved value + Manual rating + Remarks, but there is no way to mark a cell N/A or attach reviewer evidence — both of which exist on the standard scorecard.
 
-1. Scope = the author's **own** observation reply text and observation description (the two free-text comment fields visible in the screenshot). Attachments and mentions are **not** re-editable in v1 (keeps surface small; can extend later).
-2. 24h window is measured from `created_at` and enforced both in UI and in DB (RLS / trigger). Hardcoding 24h is acceptable per spec; we keep the constant in one place (`OBSERVATION_EDIT_WINDOW_HOURS = 24`) for future config.
-3. Admin override is **out of scope** — admins also follow the 24h rule (matches FB/LinkedIn parity, simplest correct).
-4. No edit history table in v1 — only `edited_at` timestamp. (We can add `kpi_observation_reply_edits` later if audit needs it.)
+## Risk & Impact Report
 
-## Risk & Impact
+- **Data**: Additive only. No schema changes — we reuse the existing per-stage `*_evidence_urls` and `is_na` / `na_marked_by_role` / `na_reason` columns on `review_submissions`. RPC signature is extended with optional params (defaults preserve old behavior). POLICY §88 immutability untouched — frozen final scores still skip writes.
+- **Workflow**: Same stage permissions as before. N/A propagates through the workflow exactly as it does from the single-cell scorecard.
+- **UI**: Drawer only. Bulk grid, snapshot RPC, virtualization, performance budgets unchanged.
+- **Regression**: Existing single-cell save flow and current bulk-batch flow keep working — new params are nullable.
+- **Mitigation**: Extend RPC with NULL defaults; add unit tests for the new fields; keep batch-level `p_attachment_urls` untouched for bulk callers that already use it.
 
-| Area | Impact |
-|------|--------|
-| Data | Additive: 2 nullable `edited_at` columns. Existing rows unaffected. No backfill. |
-| Workflow | None — edits don't change status, scores, notifications, or @mentions. |
-| UI | Pencil icon appears on the user's own bubble while within 24h; inline editor replaces bubble during edit. |
-| Regression | Low — confined to ObservationReplyThread + ObservationCard. Read paths unchanged. |
-| Security | RLS UPDATE policy restricts to `auth.uid() = author AND created_at > now() - interval '24 hours'`. Trigger forbids mutating any column other than `reply_text` / `description` / `edited_at`. |
-| Scalability | Same query patterns; one extra column read. |
-| Rollback | Drop the 2 columns + RLS UPDATE policies. Fully additive. |
+## UI Changes
 
-## UI Plan (FB/LinkedIn-style)
+Location: `src/components/review/BulkCellDrawer.tsx` — within the existing "Write as &lt;Stage&gt;" section, between the score inputs and the Remarks textarea.
 
-### Reply bubble (per row in `ObservationReplyThread`)
+1. **N/A toggle row** (top of the writer block)
+   - Reuse `<NaConfirmationCard>` exactly like `UnifiedScorecard.tsx` does.
+   - When toggled on:
+     - Hide `AchievedValueScoreInput` and the manual 0–5 input.
+     - Force-disable "Use manual rating" link.
+     - Remarks textarea relabels to "N/A reason (required, min 10 chars)".
+     - Save button text becomes "Mark N/A as &lt;Stage&gt;".
+   - When toggled off → existing scoring UI re-appears.
 
-Default state:
-```
-[avatar]  Shekhar Sharad  28 May 2026, 06:43  (edited)        [✏️] [🗑️]
-          @Jaspal as per my understanding ...
-          📎 Attachment 1
-```
-- `✏️` pencil shown only if `auth.uid() === reply.reply_by` AND `now - created_at < 24h`.
-- `(edited)` shown only if `edited_at IS NOT NULL`, in muted 10px text right after the timestamp.
+2. **Evidence / Attachments**
+   - Add `<EvidenceUpload>` component (same one used in UnifiedScorecard) directly above the Remarks textarea.
+   - Seeds from `submission?.[<stage>_evidence_urls]` so previously uploaded files show.
+   - Multi-file, same storage bucket and naming as single-cell review (already governed by Multi-File Evidence Storage memory).
 
-Edit state (in-place, replaces the text line):
-```
-[avatar]  Shekhar Sharad  28 May 2026, 06:43
-          ┌────────────────────────────────────────┐
-          │ @Jaspal as per my understanding ...    │  ← MentionTextarea (rows=3)
-          └────────────────────────────────────────┘
-          [Save]  [Cancel]    ⏱ 23h 12m left
-```
-- Reuses `MentionTextarea` so existing @ rendering keeps working (mentions remain visible, but **no new notifications** are sent on edit — pure text revision).
-- `Save` disabled if empty or unchanged. Shows spinner while saving.
-- Live countdown chip ("23h 12m left") updates every minute; when it hits 0, editor auto-closes with toast "Edit window expired."
+3. **Save button enable rules**
+   - Non-NA: score present AND remarks ≥ min length (unchanged) — evidence optional.
+   - NA: NA reason ≥ 10 chars; score not required; evidence optional.
 
-### Observation top bubble (CONCERN block in screenshot)
+4. Re-open block and final-score revisions panel: unchanged.
 
-Same pattern applied to the observation's **description** text (`"PF does not apply to retention allowance."`):
-- Pencil already exists in the header (top-right ✏️). Today it likely opens a full edit dialog — we keep that for owner edits within 24h, and add the same `(edited)` marker after the timestamp.
-- Outside the 24h window, hide the pencil for the author (admins also hidden, per assumption #3).
-
-### Responsive
-
-- Pencil & trash icons collapse into a `⋯` overflow menu below `sm` breakpoint to avoid crowding the timestamp row (matches existing trash button placement).
-
-### Visual tokens
-
-All colors via existing semantic tokens (`text-muted-foreground`, `text-primary`, `border-border`). No new colors.
+No new colors, fonts, or layout primitives — uses existing semantic tokens (`text-muted-foreground`, `border-border`, shadcn components) per BFCL UI standards.
 
 ## Implementation
 
-### 1. DB migration (additive)
+### 1. DB migration — extend `bulk_write_stage_scores` (additive, backward-compatible)
 
-```sql
-ALTER TABLE public.kpi_observation_replies
-  ADD COLUMN IF NOT EXISTS edited_at timestamptz;
+Add three optional JSONB args, defaulted to NULL:
 
-ALTER TABLE public.kpi_observations
-  ADD COLUMN IF NOT EXISTS edited_at timestamptz;
-
--- Reply: author may UPDATE within 24h
-CREATE POLICY "Authors can edit own reply within 24h"
-  ON public.kpi_observation_replies
-  FOR UPDATE TO authenticated
-  USING (auth.uid() = reply_by AND created_at > now() - interval '24 hours')
-  WITH CHECK (auth.uid() = reply_by AND created_at > now() - interval '24 hours');
-
--- Observation: author may UPDATE description within 24h
-CREATE POLICY "Authors can edit own observation within 24h"
-  ON public.kpi_observations
-  FOR UPDATE TO authenticated
-  USING (auth.uid() = created_by AND created_at > now() - interval '24 hours')
-  WITH CHECK (auth.uid() = created_by AND created_at > now() - interval '24 hours');
-
--- Guard trigger: only reply_text/description + edited_at may change via this policy
-CREATE OR REPLACE FUNCTION public.guard_observation_reply_edit()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-BEGIN
-  IF NEW.observation_id <> OLD.observation_id
-     OR NEW.reply_by <> OLD.reply_by
-     OR NEW.created_at <> OLD.created_at
-     OR COALESCE(NEW.evidence_urls::text,'') <> COALESCE(OLD.evidence_urls::text,'') THEN
-    RAISE EXCEPTION 'Only reply_text may be edited';
-  END IF;
-  NEW.edited_at := now();
-  RETURN NEW;
-END $$;
-
-CREATE TRIGGER trg_guard_observation_reply_edit
-  BEFORE UPDATE ON public.kpi_observation_replies
-  FOR EACH ROW EXECUTE FUNCTION public.guard_observation_reply_edit();
+```text
+p_evidence_urls jsonb   -- { submission_id: ["url1","url2"] }
+p_is_na          jsonb   -- { submission_id: true }
+p_na_reasons     jsonb   -- { submission_id: "reason text" }
 ```
-(Mirror trigger for `kpi_observations` restricting writable cols to `description`, `evidence_urls` excluded.)
 
-### 2. Hook — `src/hooks/useObservationReplies.ts`
+Inside the RPC loop per cell:
 
-Add `useUpdateObservationReply({ id, replyText })` mutation: UPDATE row, invalidate `['observation-replies', observationId]`.
+- If `p_is_na->>submission_id = 'true'`:
+  - Set `is_na=true`, `na_marked_by_role=<stage>`, `na_reason=<from json>`, clear `<stage>_score`, `<stage>_rating`, `<stage>_remarks`.
+  - Still write `<stage>_evidence_urls` if provided.
+  - Skip score / variance / propagation checks; stamp `inherited_from='na'`.
+  - Audit row tagged `bulk_na_mark`.
+- Else (existing behaviour):
+  - Write score + remarks (unchanged).
+  - Additionally write `<stage>_evidence_urls` when JSON entry exists.
+- POLICY §88 frozen-final guard still runs first and skips NA writes too.
 
-Add `useUpdateObservation` similar for observation description.
+GRANT EXECUTE re-asserted to `authenticated`. No new tables → no GRANT block needed beyond the function permissions.
 
-### 3. Component — `src/components/review/ObservationReplyThread.tsx`
+### 2. `src/hooks/useBulkReview.ts`
 
-- Add `editingReplyId` local state and `editingText`.
-- Render pencil button only when `user?.id === reply.reply_by && isWithinEditWindow(reply.created_at)`.
-- When editing, swap `<p>` for `<MentionTextarea>` + Save/Cancel + countdown chip.
-- Append `<span className="text-[10px] text-muted-foreground italic">(edited)</span>` when `reply.edited_at` set.
-
-### 4. Component — Observation card (locate during build, e.g. `ObservationCard.tsx` / wherever the top bubble is rendered)
-
-Same pattern applied to `description`.
-
-### 5. Util — `src/lib/editWindow.ts`
+Extend `useBulkWriteStageScores` args:
 
 ```ts
-export const OBSERVATION_EDIT_WINDOW_HOURS = 24;
-export function isWithinEditWindow(createdAt: string): boolean { … }
-export function remainingEditMinutes(createdAt: string): number { … }
+evidence_urls?: Record<string, string[]>;
+is_na?: Record<string, boolean>;
+na_reasons?: Record<string, string>;
 ```
 
-## Tests
+Pass them straight through as `p_evidence_urls`, `p_is_na`, `p_na_reasons`. Existing callers (full bulk save) keep working — args are optional.
 
-- `src/test/editWindow.test.ts` — pure unit tests: in-window, exactly at boundary, expired, invalid date.
-- Component test (vitest) for `ObservationReplyThread`: pencil visible only for author within 24h; hidden after; `(edited)` rendered when `edited_at` set; Save calls mutation with trimmed text.
+### 3. `src/components/review/BulkCellDrawer.tsx`
 
-## Docs
+- Add local state: `isNa`, `naReason`, `reviewerEvidenceUrls`.
+- Seed on open from `submission` (same pattern as `achieved`).
+- Render `NaConfirmationCard` + `EvidenceUpload` (existing components — no UI invention).
+- Adjust `handleWrite` to build the single-cell payload:
+  - `cells: [{ submission_id, score: isNa ? null : effectiveScore, remarks: trimmed, expected_row_version }]`
+  - `evidence_urls: { [submission_id]: reviewerEvidenceUrls }`
+  - `is_na`/`na_reasons` only when NA toggled.
+- Update enable/disable logic and button label as described above.
 
-- `DOCUMENTATION.md` → new section "Comment editing — observations & replies" with 24h rule, RLS, `edited_at` semantics.
-- `POLICY.md` → policy entry: "Authors may edit their own observation/reply text within 24 hours of posting. After 24h the text is immutable. Edits do not re-trigger notifications. An `(edited)` marker is shown publicly."
-- Memory file `mem://features/review/observation-comment-edit-window` and add to `mem/index.md`.
+### 4. Tests (`src/test/`)
 
-## Out of scope (explicit)
+- `bulkCellDrawerRemarks.test.ts` — extend with NA-reason min-length case.
+- New `bulkWriteStageScores.na.test.ts` — pure unit test for the args→RPC mapping (hook layer mocked).
+- Update existing `BulkCellDrawer` interaction expectations (NA toggle hides score input; Save button enabled only when NA reason valid).
 
-- Editing attachments / mentions
-- Edit history / diff viewer
-- Admin override
-- Editing acknowledgement, status, resolution notes, or workflow fields
+### 5. Documentation
+
+- `DOCUMENTATION.md` → "Bulk Scoring" section: list the four parity controls.
+- `POLICY.md` → §111 (Bulk write semantics): add NA and per-cell evidence to the allowed payload; reiterate §88 immutability still wins.
+- Memory: append a one-liner to `mem://features/review/group-based-scoring.md` noting NA + per-cell evidence are first-class drawer fields (no auto-propagation policy change).
+
+## Out of Scope
+
+- Bulk NA marking across the grid (drawer only for now).
+- Per-stage attachment requirements (still optional, matching single-cell behaviour).
+- Self-review parity (drawer is reviewer-only).
 
 ## Verification
 
-1. As author, within 24h: pencil visible → edit → "(edited)" appears, content updated.
-2. As author, after 24h (simulate via SQL backdate): pencil hidden, RLS blocks direct UPDATE.
-3. As another user: pencil never visible, direct UPDATE blocked by RLS.
-4. Trigger blocks attempts to change `evidence_urls` / `reply_by`.
-5. Notifications table unchanged after an edit (no new rows).
+1. Open `/review/bulk-scoring`, click any non-final cell → drawer shows NA toggle + Evidence upload.
+2. Mark NA + enter ≥10-char reason → Save → cell shows `N/A` badge in grid; row in `review_submissions` has `is_na=true`, score columns cleared, `na_marked_by_role` = stage.
+3. Without NA, upload 2 files + score + remarks → Save → `<stage>_evidence_urls` contains the URLs; score saved as before.
+4. Frozen-final cell still blocks both flows with the existing POLICY §88 alert.
+5. Existing full-grid bulk save (no NA/evidence params) regression-tested via existing unit tests.
