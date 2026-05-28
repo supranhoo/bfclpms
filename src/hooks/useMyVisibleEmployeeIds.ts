@@ -22,7 +22,11 @@ export function useMyVisibleEmployeeIds() {
     queryKey: ['my-visible-employee-ids', user?.id, isAdmin],
     queryFn: async (): Promise<string[]> => {
       if (!user?.id) return [];
-      const { data, error } = await supabase.rpc('get_visible_employee_ids', {
+      // User Management requires inactive employees to be counted/filtered too,
+      // so we use the User-Management-specific helper which preserves Org Level
+      // Scope but does NOT drop is_active=false rows. See POLICY note added
+      // alongside migration 20260528_user_mgmt_visible_employee_ids.
+      const { data, error } = await supabase.rpc('get_user_management_visible_employee_ids' as any, {
         p_user_id: user.id,
       });
       if (error) throw error;
