@@ -528,17 +528,18 @@ export function AssignmentTab({ profiles, assignments, assignUser, removeAssignm
   const [selectedProfileId, setSelectedProfileId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUserId, setSelectedUserId] = useState('');
+  const [includeInactive, setIncludeInactive] = useState(false);
 
-  const { data: allProfiles = [] } = useQuery({
-    queryKey: ['profiles-for-access-assignment'],
+  // Active employees — drive the search picker (preserves core rule: never
+  // assign to inactive users by default).
+  const { data: activeProfiles = [] } = useQuery({
+    queryKey: ['profiles-active-for-assignment'],
     queryFn: async () => {
-      // Paged fetch — bypasses PostgREST's 1000-row default cap so all active
-      // employees are searchable in the access-profile assignment picker.
-      return await fetchAllPaged<{ id: string; full_name: string | null; employee_code: string | null; email: string | null }>(
+      return await fetchAllPaged<{ id: string; full_name: string | null; employee_code: string | null; email: string | null; is_active: boolean }>(
         (from, to) =>
           supabase
             .from('profiles')
-            .select('id, full_name, employee_code, email')
+            .select('id, full_name, employee_code, email, is_active')
             .eq('is_active', true)
             .order('full_name')
             .range(from, to)
@@ -547,28 +548,67 @@ export function AssignmentTab({ profiles, assignments, assignUser, removeAssignm
     staleTime: 5 * 60 * 1000,
   });
 
+  // All employees (incl. inactive) — used ONLY for enrichment of historical
+  // assignment rows so "Unknown" stops showing for deactivated users, and
+  // (opt-in) to broaden the picker when admin toggles "Include inactive".
+  const { data: allProfiles = [] } = useQuery({
+    queryKey: ['profiles-all-for-assignment-display'],
+    queryFn: async () => {
+      return await fetchAllPaged<{ id: string; full_name: string | null; employee_code: string | null; email: string | null; is_active: boolean }>(
+        (from, to) =>
+          supabase
+            .from('profiles')
+            .select('id, full_name, employee_code, email, is_active')
+            .order('full_name')
+            .range(from, to)
+      );
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Lookup map across the union for enrichment.
+  const profileById = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const p of allProfiles) map.set(p.id, p);
+    for (const p of activeProfiles) if (!map.has(p.id)) map.set(p.id, p);
+    return map;
+  }, [allProfiles, activeProfiles]);
+
+  const searchSource = includeInactive ? allProfiles : activeProfiles;
+
   const filteredUsers = useMemo(() => {
-    if (!searchQuery) return allProfiles.slice(0, 20);
+    if (!searchQuery) {
+      // Sort active-first when inactives are included.
+      const sorted = includeInactive
+        ? [...searchSource].sort((a: any, b: any) => Number(b.is_active) - Number(a.is_active))
+        : searchSource;
+      return sorted.slice(0, 20);
+    }
     const q = searchQuery.toLowerCase();
-    return allProfiles.filter((p: any) =>
+    const matches = searchSource.filter((p: any) =>
       p.full_name?.toLowerCase().includes(q) ||
       p.employee_code?.toLowerCase().includes(q) ||
       p.email?.toLowerCase().includes(q)
-    ).slice(0, 20);
-  }, [allProfiles, searchQuery]);
+    );
+    const sorted = includeInactive
+      ? matches.sort((a: any, b: any) => Number(b.is_active) - Number(a.is_active))
+      : matches;
+    return sorted.slice(0, 20);
+  }, [searchSource, searchQuery, includeInactive]);
 
   const enrichedAssignments = useMemo(() => {
     return assignments.map((a: any) => {
       const profile = profiles.find((p: any) => p.id === a.profile_id);
-      const user = allProfiles.find((p: any) => p.id === a.user_id);
+      const user = profileById.get(a.user_id);
       return {
         ...a,
         profileName: profile?.name || 'Unknown',
         userName: user?.full_name || user?.email || 'Unknown',
         employeeCode: user?.employee_code || '',
+        userIsActive: user?.is_active ?? null,
       };
     });
-  }, [assignments, profiles, allProfiles]);
+  }, [assignments, profiles, profileById]);
 
   const handleAssign = async () => {
     if (!selectedProfileId || !selectedUserId) return;
