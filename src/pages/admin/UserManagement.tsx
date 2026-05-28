@@ -35,6 +35,7 @@ import { useSearchParams } from 'react-router-dom';
 
 import { ALL_APP_ROLES, type AppRole } from '@/lib/roles';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useMyVisibleEmployeeIds } from '@/hooks/useMyVisibleEmployeeIds';
 import { useWorkflowTemplates, useWorkflowConfigs, useUpsertWorkflowConfig, useDeleteWorkflowConfig, getStageLabel } from '@/hooks/useWorkflowConfig';
 
 // Inline card used inside Edit User → Access & Login to view/change the
@@ -274,9 +275,19 @@ export default function UserManagement() {
   // does not recompute on every keystroke. Other filters (role/dept/status)
   // are categorical and recompute immediately.
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
+
+  // POLICY §NEW (Access-Profile Org-Scope Visibility):
+  // Non-admin viewers who reach this page via an access profile only see
+  // employees that match at least one Org Level Scope row mapped to them.
+  // Admins receive `visibleIds === null` → no narrowing.
+  const { visibleIds, isAdmin: viewerIsAdmin } = useMyVisibleEmployeeIds();
+
   const filteredProfiles = useMemo(() => {
     const q = debouncedSearch.toLowerCase();
-    const filtered = profiles?.filter(p => {
+    const scoped = (!viewerIsAdmin && visibleIds)
+      ? (profiles ?? []).filter(p => visibleIds.has(p.id))
+      : (profiles ?? []);
+    const filtered = scoped.filter(p => {
       const matchesSearch = 
         !q ||
         p.full_name?.toLowerCase().includes(q) ||
@@ -294,7 +305,7 @@ export default function UserManagement() {
         (statusFilter === 'inactive' && !isActive);
       
       return matchesSearch && matchesRole && matchesDepartment && matchesStatus;
-    }) || [];
+    });
     // Sort: active first, then inactive — both alphabetical by full_name
     return [...filtered].sort((a, b) => {
       const aActive = (a as any).is_active !== false ? 0 : 1;
@@ -302,7 +313,7 @@ export default function UserManagement() {
       if (aActive !== bActive) return aActive - bActive;
       return (a.full_name || '').localeCompare(b.full_name || '');
     });
-  }, [profiles, debouncedSearch, roleFilter, departmentFilter, statusFilter]);
+  }, [profiles, debouncedSearch, roleFilter, departmentFilter, statusFilter, viewerIsAdmin, visibleIds]);
 
   // Helper: derive division ID from a department ID
   const deriveDivisionFromDept = (deptId: string | null): string => {
