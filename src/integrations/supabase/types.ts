@@ -8785,6 +8785,12 @@ export type Database = {
           menu_key: string
         }[]
       }
+      get_user_management_visible_employee_ids: {
+        Args: { p_user_id: string }
+        Returns: {
+          employee_id: string
+        }[]
+      }
       get_user_org_scope_filters: {
         Args: { p_user_id: string }
         Returns: {
@@ -9374,6 +9380,10 @@ export type Database = {
         Returns: Json
       }
       user_can_see_employee: {
+        Args: { p_employee_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      user_mgmt_can_see_employee: {
         Args: { p_employee_id: string; p_user_id: string }
         Returns: boolean
       }
