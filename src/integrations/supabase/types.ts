@@ -2452,6 +2452,7 @@ export type Database = {
       kpi_observation_replies: {
         Row: {
           created_at: string
+          edited_at: string | null
           evidence_urls: Json | null
           id: string
           observation_id: string
@@ -2460,6 +2461,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          edited_at?: string | null
           evidence_urls?: Json | null
           id?: string
           observation_id: string
@@ -2468,6 +2470,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          edited_at?: string | null
           evidence_urls?: Json | null
           id?: string
           observation_id?: string
@@ -2503,6 +2506,7 @@ export type Database = {
           created_at: string | null
           created_by: string
           description: string | null
+          edited_at: string | null
           evidence_url: string | null
           evidence_urls: Json | null
           id: string
@@ -2523,6 +2527,7 @@ export type Database = {
           created_at?: string | null
           created_by: string
           description?: string | null
+          edited_at?: string | null
           evidence_url?: string | null
           evidence_urls?: Json | null
           id?: string
@@ -2543,6 +2548,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string
           description?: string | null
+          edited_at?: string | null
           evidence_url?: string | null
           evidence_urls?: Json | null
           id?: string
