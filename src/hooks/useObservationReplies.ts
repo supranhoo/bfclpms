@@ -9,6 +9,7 @@ export interface ObservationReply {
   reply_text: string;
   evidence_urls: string[] | null;
   created_at: string;
+  edited_at?: string | null;
   reply_by_profile?: { full_name: string | null; email: string };
 }
 
