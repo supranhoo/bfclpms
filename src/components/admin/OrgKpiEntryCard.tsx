@@ -19,7 +19,8 @@ import { BINARY_OPTIONS, type QualitativeOption } from '@/lib/qualitativeUom';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle, RotateCcw, Trash2, Ban, Undo2, FileEdit, ShieldCheck, SlidersHorizontal, Eraser } from 'lucide-react';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Network, MapPin, Award, Layers, Briefcase } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useSentBackOrgKpiEmployees, type SentBackInfo } from '@/hooks/useSentBackOrgKpiEmployees';
 import { isComplianceKpi, useBulkEmployeeSubmissionDates } from '@/hooks/useComplianceSubFactors';
 import { scopedRowsSignature } from '@/lib/orgKpiCounts';
@@ -880,6 +881,9 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
+                  <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Available scopes
+                  </DropdownMenuLabel>
                   {(['organization', 'department', 'employee'] as const).map(s => (
                     <DropdownMenuItem
                       key={s}
@@ -891,6 +895,28 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                       {s === 'department' && <Users className="h-3.5 w-3.5 mr-2" />}
                       {s === 'employee' && <User className="h-3.5 w-3.5 mr-2" />}
                       {s}{data.scope === s ? ' (current)' : ''}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    New scopes (coming soon)
+                  </DropdownMenuLabel>
+                  {([
+                    { id: 'division',      label: 'Division',      Icon: Network },
+                    { id: 'business_unit', label: 'Business Unit', Icon: Briefcase },
+                    { id: 'location',      label: 'Location',      Icon: MapPin },
+                    { id: 'pms_grade',     label: 'PMS Grade',     Icon: Award },
+                    { id: 'level',         label: 'Level',         Icon: Layers },
+                  ] as const).map(({ id, label, Icon }) => (
+                    <DropdownMenuItem
+                      key={id}
+                      disabled
+                      className="opacity-60"
+                      title="Target picker + cascade RPC ship in Step 5c/5d"
+                    >
+                      <Icon className="h-3.5 w-3.5 mr-2" />
+                      {label}
+                      <span className="ml-auto text-[10px] text-muted-foreground">Soon</span>
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
