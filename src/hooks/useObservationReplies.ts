@@ -171,3 +171,45 @@ export function useResolveObservation() {
     },
   });
 }
+
+/**
+ * Edit an existing observation reply.
+ * Author-only, within 24h (enforced server-side by RLS + guard trigger).
+ */
+export function useUpdateObservationReply() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      observationId,
+      replyText,
+    }: {
+      id: string;
+      observationId: string;
+      replyText: string;
+    }) => {
+      const { data, error } = await supabase
+        .from('kpi_observation_replies')
+        .update({ reply_text: replyText })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return { ...data, observationId };
+    },
+    onSuccess: ({ observationId }) => {
+      queryClient.invalidateQueries({ queryKey: ['observation-replies', observationId] });
+      toast({ title: 'Reply Updated', description: 'Your reply has been edited.' });
+    },
+    onError: (error: any) => {
+      const msg = error?.message?.includes('Only reply text')
+        ? 'Only the text can be edited.'
+        : error?.message?.includes('row-level security')
+        ? 'Edit window has expired (24 hours).'
+        : error?.message || 'Failed to update reply';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    },
+  });
+}
