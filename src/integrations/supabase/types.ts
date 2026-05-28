@@ -8204,6 +8204,17 @@ export type Database = {
             }
             Returns: Json
           }
+      can_view_kpi_row: {
+        Args: {
+          _category_id: string
+          _employee_id: string
+          _is_org_level: boolean
+          _kpi_id: string
+          _kpi_name: string
+          _kra_name: string
+        }
+        Returns: boolean
+      }
       can_view_safety_incident: {
         Args: { _incident_id: string }
         Returns: boolean
