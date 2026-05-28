@@ -8785,9 +8785,29 @@ export type Database = {
           menu_key: string
         }[]
       }
+      get_user_org_scope_filters: {
+        Args: { p_user_id: string }
+        Returns: {
+          business_unit_id: string
+          company_id: string
+          department_id: string
+          designation: string
+          division_id: string
+          level: string
+          location: string
+          pms_grade: string
+          profile_id: string
+        }[]
+      }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
+      }
+      get_visible_employee_ids: {
+        Args: { p_user_id: string }
+        Returns: {
+          employee_id: string
+        }[]
       }
       has_any_safety_role: { Args: { _user_id: string }; Returns: boolean }
       has_capability: {
@@ -9348,6 +9368,10 @@ export type Database = {
           p_to_status: Database["public"]["Enums"]["safety_incident_status"]
         }
         Returns: Json
+      }
+      user_can_see_employee: {
+        Args: { p_employee_id: string; p_user_id: string }
+        Returns: boolean
       }
     }
     Enums: {
