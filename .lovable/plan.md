@@ -1,96 +1,89 @@
-# RCA #2 — UserManagement uses an RPC that ignores access-profile grants
+## 1. Assumptions
+- Avinash (101732) is mapped to an active access profile with `admin-users` view rights.
+- His Org Level Scope should include both active and inactive employees for User Management counters and the Inactive filter/list.
+- Write actions remain unchanged and should not be opened to non-admin users.
 
-## What I missed last turn
-The previous fix added an RLS policy on `public.profiles` that lets profile-granted users read scoped rows. That works for any code path that goes through `supabase.from('profiles').select(...)`.
+## 2. Clarifications
+- Not Applicable — the reported behavior is reproducible from the current database function definitions.
 
-But `useProfiles()` (the source feeding User Management) does **not** read `profiles` directly — it calls SECURITY DEFINER RPC **`public.get_reviewer_roster_slim()`**. Because SECURITY DEFINER runs as the function owner, it **bypasses RLS** entirely. The RPC has its own role check:
-
-```sql
-v_is_full := has_role(uid,'admin')
-          OR has_role(uid,'auditor')
-          OR has_role(uid,'hr_pms')
-          OR has_role(uid,'management')
-          OR has_report_access_override(uid);
-```
-
-Avinash is `employee` and has no report-access override → falls into the ELSE branch which returns only `directs ∪ indirects ∪ self`. He has no reports, so result = 1 row (himself). The new RLS policy never fires.
-
-## Fix plan — single migration
-
-Extend `get_reviewer_roster_slim()` with a third branch for access-profile grantees:
-
-```text
-IF v_is_full                                         → return full active roster
-ELSIF has_profile_menu_access(uid,'admin-users','view')
-                                                     → return active roster ∩ get_visible_employee_ids(uid)
-ELSE                                                 → existing directs/indirects/self branch (unchanged)
-```
-
-SQL sketch (final code in migration):
+## 3. RCA
+The latest RLS policy change removed the direct `profiles.is_active = true` condition, but the policy still calls:
 
 ```sql
-CREATE OR REPLACE FUNCTION public.get_reviewer_roster_slim()
-RETURNS TABLE (...same columns...)
-LANGUAGE plpgsql STABLE SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_uid uuid := auth.uid();
-  v_is_full boolean;
-  v_has_admin_users boolean;
-BEGIN
-  PERFORM set_config('statement_timeout','30000',true);
-  IF v_uid IS NULL THEN RETURN; END IF;
-
-  v_is_full := has_role(v_uid,'admin') OR has_role(v_uid,'auditor')
-            OR has_role(v_uid,'hr_pms') OR has_role(v_uid,'management')
-            OR has_report_access_override(v_uid);
-
-  IF v_is_full THEN
-    RETURN QUERY SELECT ... FROM profiles p WHERE p.is_active ORDER BY p.full_name;
-    RETURN;
-  END IF;
-
-  v_has_admin_users := has_profile_menu_access(v_uid,'admin-users','view');
-
-  IF v_has_admin_users THEN
-    RETURN QUERY
-      SELECT p.id, p.full_name, p.employee_code, p.email, p.designation,
-             p.pms_grade, p.department_id, p.reporting_manager_id,
-             p.avatar_url, p.level, p.is_active, p.company_id
-      FROM public.profiles p
-      JOIN public.get_visible_employee_ids(v_uid) v ON v.employee_id = p.id
-      WHERE p.is_active = true
-      ORDER BY p.full_name;
-    RETURN;
-  END IF;
-
-  -- existing directs/indirects/self branch (unchanged, copied verbatim)
-  RETURN QUERY WITH directs AS (...) ... ;
-END;
-$$;
+public.user_can_see_employee(auth.uid(), id)
 ```
 
-No GRANT/RLS changes — the function already has EXECUTE granted and is SECURITY DEFINER.
+That helper delegates to:
 
-## Risk & Impact
-- **Data**: Read-only; no schema/data mutation.
-- **Workflow**: Only changes output for users who have `access_profile_menu_rights.can_view=true` on `admin-users`. Admin/auditor/HR/manager-employee paths unchanged (early-return preserves current behaviour).
-- **Regression**: Existing manager/employee branch is copied verbatim into ELSE so nothing else shifts.
-- **Scalability**: New branch joins active `profiles` with `get_visible_employee_ids()` (already used and cached). Same order of magnitude as the existing full-roster branch.
-- **Rollback**: Single `CREATE OR REPLACE FUNCTION` — reversible by re-running the prior definition (already captured in earlier migrations).
-
-## Tests / verification
-After migration, run as Avinash:
 ```sql
-SELECT count(*) FROM get_reviewer_roster_slim();   -- expect ~2538
+public.get_visible_employee_ids(p_user_id)
 ```
-And in the UI, refresh `/admin/users` → "Showing N of N users" with N == scope size. React-Query key `['profiles']` will refetch on next focus / 5-min staleTime; suggest hard refresh once.
 
-## Out of scope (unchanged)
-- Write paths (Add / Update / Delete) still require `admin` role in the `admin-users` edge function. UI hides those buttons for non-admins.
-- Other RPCs that gate visibility by classic roles (`useProfilesWithHierarchy` is direct-table and already covered by the previous RLS fix; other reports were not requested).
+Current `get_visible_employee_ids` still has `WHERE p.is_active = true` in both branches. So inactive employees are still excluded before RLS/count queries can see them.
 
-## Files touched
-- New migration: `supabase/migrations/<ts>_extend_reviewer_roster_slim_access_profile.sql`
-- No client code changes.
+There is a second related issue: `get_reviewer_roster_slim()` also still filters the access-profile branch with `WHERE p.is_active = true`. Therefore even if the counter were fixed, Avinash’s User Management table would still not show inactive rows when selecting the Inactive status filter.
+
+Verified current data shape:
+- Avinash has `admin-users` view access: `true`
+- Current visible helper returns: `2538`
+- Inactive employees inside the same Org Level Scope: `10`
+- Expected scoped totals: `2548 total`, `2538 active`, `10 inactive`
+
+## 4. Risk & Impact Report
+- **Data Impact:** No table data changes. Only database helper/RLS function behavior changes.
+- **Workflow Impact:** Avinash and similarly scoped User Management viewers will be able to see inactive employees within their assigned Org Level Scope. Write permissions remain admin-only.
+- **UI/UX Impact:** The existing Total / Active / Inactive cards and Inactive filter will start reflecting scoped inactive employees; no visual redesign.
+- **Regression Risk:** Medium if we globally remove `is_active = true` from the existing helper, because other features may depend on active-only visibility.
+- **Scalability Impact:** Scoped visibility currently joins profiles, departments, business units, locations, and access profile scope rows. The change should preserve the same join pattern and continue using existing paged fetching for rosters.
+- **Mitigation Plan:** Add a separate User Management scoped helper instead of weakening the existing active-only helper globally.
+- **Rollback Strategy:** Revert the new function/RPC definitions to the prior active-only behavior via one migration.
+
+## 5. Step-by-step Plan
+1. **Add a dedicated scoped helper for User Management**
+   - Create `public.get_user_management_visible_employee_ids(p_user_id uuid)`.
+   - It will use the same Org Level Scope matching logic as `get_visible_employee_ids`, but will not filter out inactive employees.
+   - Admin branch can return all profiles including inactive.
+
+2. **Update scoped profile RLS for User Management readers**
+   - Change the `Profile-granted users can view scoped profiles` policy to use the new User Management helper.
+   - This lets head-count queries on `profiles` correctly count inactive employees in scope.
+   - Other active-only helpers remain unchanged for non-User-Management screens.
+
+3. **Update `get_reviewer_roster_slim()` for the `admin-users` access-profile branch**
+   - Keep full-role and normal manager/employee branches unchanged.
+   - For `has_profile_menu_access(uid, 'admin-users', 'view')`, join against the new helper and remove `p.is_active = true` only in that branch.
+   - This makes the table’s Inactive filter work, not just the stat card.
+
+4. **Update the client-side scope filter hook**
+   - Change `useMyVisibleEmployeeIds()` to call the new User Management helper so the client filter does not re-drop inactive rows.
+
+5. **Add regression coverage**
+   - Update `orgScopeVisibility.test.ts` with an inactive employee case proving scoped User Management visibility includes inactive users while the existing generic helper remains documented as active-only.
+
+6. **Update project policy/docs artifacts**
+   - Add a concise policy note that User Management scoped visibility includes inactive employees for accurate admin-style counters and status filtering, while general employee visibility remains active-only.
+
+## 6. UI Changes
+- **Visual changes:** None.
+- **Location:** `/admin/users` statistic cards and status-filtered table.
+- **Interaction impact:** Selecting `Inactive` should show scoped inactive employees instead of an empty list.
+- **Responsiveness:** Not affected.
+
+## 7. Implementation
+- Pending approval. No files will be changed until this plan is approved.
+
+## 8. Tests
+- Add/update a unit test for scoped visibility including inactive employees in the User Management context.
+- Validate with database reads after migration:
+  - Avinash scoped total should be `2548`.
+  - Avinash scoped inactive should be `10`.
+  - User Management inactive card should show `10` after refresh.
+
+## 9. DOCUMENTATION.md updates
+- Add/update the User Management access note: access-profile viewers see all employees in their Org Level Scope, including inactive, for status governance.
+
+## 10. POLICY.md updates
+- Add/update the policy: general employee visibility remains active-only, but User Management is an exception because it owns employee activation/deactivation visibility.
+
+## 11. Post-implementation notes
+- Avinash should hard refresh `/admin/users` after the migration because React Query caches `profiles` and `user-mgmt-stats` briefly.
