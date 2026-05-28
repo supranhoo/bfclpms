@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useKraCategories, useDepartments, useProfiles } from '@/hooks/useOrganization';
 import { useOrgKpiValues, useBulkUpsertOrgKpiValues, useClearOrgKpiEntry, OrgKpiValue } from '@/hooks/useOrgKpiValues';
 import { useOrgKpiSubmissionFallback } from '@/hooks/useOrgKpiSubmissionFallback';
-import { useOrgLevelKpisWithEmployees, useOrgLevelKpis } from '@/hooks/useOrgLevelKpis';
+import { useOrgLevelKpisWithEmployees } from '@/hooks/useOrgLevelKpis';
 import { useOrgKpiOwnershipMap } from '@/hooks/useOrgKpiDataOwner';
 import { useIsAnyOrgKpiDataOwner } from '@/hooks/useOrgKpiDataOwner';
 import { useUnmarkAsOrgLevel } from '@/hooks/useMarkAsOrgLevel';
@@ -84,9 +84,14 @@ export default function OrgKpiDataEntry() {
     refetch: refetchOrgKpis,
     isFetching: kpisFetching,
   } = useOrgLevelKpisWithEmployees(selectedPeriod, selectedYear);
-  // ALL org-level KPIs (unfiltered) for Data Owners tab
-  const { data: allOrgLevelKpis } = useOrgLevelKpis(selectedPeriod, selectedYear);
+  // ALL org-level KPIs (unfiltered) for Data Owners tab.
+  // BUG-066 — Previously this tab called the legacy `useOrgLevelKpis` paged
+  // fetch of the `kpis` table, which intermittently timed out under RLS and
+  // left the Data Owners tab blank even when the snapshot-driven Data Entry
+  // tab showed all KPIs. The snapshot RPC already returns every org-level
+  // KPI definition for the period, so reuse it as the single source of truth.
   const orgLevelKpis = useMemo(() => orgLevelData?.kpis?.map(k => k.kpi) || [], [orgLevelData]);
+  const allOrgLevelKpis = orgLevelKpis;
   // (kraSetEmpIdsByKey is built below, scope-aware, after mappedEmployeesMap is in scope)
   const employeeCountMap = useMemo(() => {
     const map = new Map<string, number>();
