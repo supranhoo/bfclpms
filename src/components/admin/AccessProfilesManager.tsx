@@ -22,6 +22,8 @@ import { useToast } from '@/hooks/use-toast';
 import { OrgFilterCombobox, type ComboboxOption } from './OrgFilterCombobox';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { fetchAllPaged } from '@/lib/fetchAll';
+import { useAuth } from '@/contexts/AuthContext';
+import { useProfilesVersion } from '@/hooks/useProfilesVersion';
 
 const SECTION_LABELS: Record<string, string> = {
   main: 'Main', manager: 'Manager', hr_pms: 'HR PMS', management: 'Management',
@@ -529,11 +531,13 @@ export function AssignmentTab({ profiles, assignments, assignUser, removeAssignm
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUserId, setSelectedUserId] = useState('');
   const [includeInactive, setIncludeInactive] = useState(false);
+  const { isReady, user } = useAuth();
+  const profilesVersion = useProfilesVersion();
 
   // Active employees — drive the search picker (preserves core rule: never
   // assign to inactive users by default).
   const { data: activeProfiles = [] } = useQuery({
-    queryKey: ['profiles-active-for-assignment'],
+    queryKey: ['profiles-active-for-assignment', profilesVersion, user?.id],
     queryFn: async () => {
       return await fetchAllPaged<{ id: string; full_name: string | null; employee_code: string | null; email: string | null; is_active: boolean }>(
         (from, to) =>
@@ -545,6 +549,7 @@ export function AssignmentTab({ profiles, assignments, assignUser, removeAssignm
             .range(from, to)
       );
     },
+    enabled: isReady && !!user,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -552,7 +557,7 @@ export function AssignmentTab({ profiles, assignments, assignUser, removeAssignm
   // assignment rows so "Unknown" stops showing for deactivated users, and
   // (opt-in) to broaden the picker when admin toggles "Include inactive".
   const { data: allProfiles = [] } = useQuery({
-    queryKey: ['profiles-all-for-assignment-display'],
+    queryKey: ['profiles-all-for-assignment-display', profilesVersion, user?.id],
     queryFn: async () => {
       return await fetchAllPaged<{ id: string; full_name: string | null; employee_code: string | null; email: string | null; is_active: boolean }>(
         (from, to) =>
@@ -563,6 +568,7 @@ export function AssignmentTab({ profiles, assignments, assignUser, removeAssignm
             .range(from, to)
       );
     },
+    enabled: isReady && !!user,
     staleTime: 5 * 60 * 1000,
   });
 
