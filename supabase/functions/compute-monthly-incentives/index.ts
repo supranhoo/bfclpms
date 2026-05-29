@@ -144,7 +144,12 @@ serve(async (req) => {
 
     // Fetch employees (filtered if mappings exist, otherwise all)
     // NOTE: profiles has no `location` column — never add it to this SELECT.
-    const empSelect = 'id, full_name, employee_code, department_id, designation, pms_grade, level';
+    // company_id MUST be selected per-employee here. A prior implementation built
+    // a separate global `profiles.select('id, company_id')` lookup, which hit the
+    // PostgREST 1000-row cap and silently dropped direct-company assignments for
+    // employees past the cap — causing the rate cascade to fall back to the
+    // dept→BU→division company and resolve the wrong rate. (RCA 2026-05-29)
+    const empSelect = 'id, full_name, employee_code, department_id, designation, pms_grade, level, company_id';
 
     if (employeeFilter !== null) {
       if (employeeFilter.length === 0) {
@@ -323,12 +328,13 @@ serve(async (req) => {
         buToCompany.set(b.id, b.division_id ? (divToCompany.get(b.division_id) ?? null) : null);
       });
 
-      // Direct profiles.company_id (parity with UI's useCompanyFilter)
-      const { data: profCompanies } = await supabase
-        .from('profiles').select('id, company_id');
-      profCompanies?.forEach((p: any) => {
-        if (p.company_id) empToCompanyDirect.set(p.id, p.company_id);
-      });
+      // Direct profiles.company_id is now sourced from the per-employee scope
+      // (see `empSelect`) — populated below from the already-fetched employees
+      // list to avoid a global unpaginated profiles query that the PostgREST
+      // 1000-row cap silently truncated. (RCA 2026-05-29)
+      for (const e of (employees as any[])) {
+        if (e?.company_id) empToCompanyDirect.set(e.id, e.company_id);
+      }
     }
 
     // 5. Fetch existing records to check for manual overrides

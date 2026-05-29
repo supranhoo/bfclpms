@@ -1,5 +1,20 @@
 ## §111.7 Bulk Review Action Resolver (codified 2026-05-25; cascade addendum 2026-05-25)
 
+## §44.3 Production Incentive Rate Cascade — Per-Employee Company Source (RCA 2026-05-29)
+
+The `compute-monthly-incentives` edge function MUST source each employee's
+direct `profiles.company_id` from the **per-employee scope query** (the
+`empSelect` projection that already filters by `is_active = true` and the
+resolved programme/scope employee ids). It MUST NOT issue a separate
+global `profiles.select('id, company_id')` lookup — that pattern silently
+truncates at the PostgREST 1000-row cap and causes employees beyond the
+cap to lose their direct company assignment, falling back through
+department → BU → division company and resolving the wrong production
+rate. Reported defect: Saibal Kunar / Metal Sizing / May 2026 / 11-20
+computed ₹1,48,842 instead of ₹1,51,017 because 21 employees were rated
+at ₹490.62 instead of ₹503.39. Regression:
+`src/test/computeIncentivesEmployeeSelect.test.ts`.
+
 The Bulk Review dashboard MUST resolve its bulk-action button via
 `src/lib/bulkActionForStage.ts`. Direct role checks (e.g. `effectiveRole === 'management'`)
 for the bulk action button are prohibited.
