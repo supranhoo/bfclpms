@@ -983,6 +983,47 @@ export type Database = {
         }
         Relationships: []
       }
+      employee_categories: {
+        Row: {
+          code: string | null
+          company_id: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          code?: string | null
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          code?: string | null
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_categories_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employee_incentive_eligibility: {
         Row: {
           absent_days: number
@@ -1278,6 +1319,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      employment_statuses: {
+        Row: {
+          code: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          code?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          code?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       final_score_revisions: {
         Row: {
@@ -4970,7 +5041,9 @@ export type Database = {
           designation: string | null
           doj: string | null
           email: string | null
+          employee_category: string | null
           employee_code: string | null
+          employment_status: string | null
           full_name: string | null
           group_doj: string | null
           has_real_email: boolean
@@ -4995,7 +5068,9 @@ export type Database = {
           designation?: string | null
           doj?: string | null
           email?: string | null
+          employee_category?: string | null
           employee_code?: string | null
+          employment_status?: string | null
           full_name?: string | null
           group_doj?: string | null
           has_real_email?: boolean
@@ -5020,7 +5095,9 @@ export type Database = {
           designation?: string | null
           doj?: string | null
           email?: string | null
+          employee_category?: string | null
           employee_code?: string | null
+          employment_status?: string | null
           full_name?: string | null
           group_doj?: string | null
           has_real_email?: boolean
