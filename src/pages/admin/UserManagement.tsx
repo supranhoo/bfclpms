@@ -388,6 +388,7 @@ export default function UserManagement() {
       employeeCode: string;
       mobileNumber?: string;
       isActive?: boolean;
+      groupDoj?: string | null;
     }) => {
       const updatePayload: Record<string, any> = {
         full_name: fullName || null,
@@ -397,6 +398,7 @@ export default function UserManagement() {
         pms_grade: pmsGrade,
         employee_code: employeeCode || null,
         mobile_number: mobileNumber !== undefined ? (mobileNumber || null) : undefined,
+        group_doj: groupDoj !== undefined ? (groupDoj || null) : undefined,
       };
 
       if (isActive !== undefined) {
