@@ -511,11 +511,7 @@ function CriterionDialog(props: {
               <Input placeholder="days / programs / %" value={form.unit_label} onChange={(e) => setForm((s) => ({ ...s, unit_label: e.target.value }))} className="h-9" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Effective Date</Label>
-              <Input type="date" value={form.effective_date} onChange={(e) => setForm((s) => ({ ...s, effective_date: e.target.value }))} className="h-9" />
-            </div>
+          <div className="grid grid-cols-1 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs">Active</Label>
               <div className="h-9 flex items-center">
