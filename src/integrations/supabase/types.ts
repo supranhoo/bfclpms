@@ -2448,6 +2448,20 @@ export type Database = {
             referencedRelation: "increment_eligibility_configs"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "increment_eligibility_exclusions_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "increment_eligibility_exclusions_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
         ]
       }
       kpi_audit_logs: {
