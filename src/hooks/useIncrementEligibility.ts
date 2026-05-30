@@ -53,6 +53,22 @@ export interface EligibilityAuditRow {
   assessment_year: string | null;
 }
 
+export interface EligibilityExclusionRow {
+  id: string;
+  config_id: string;
+  employee_id: string;
+  assessment_year: string;
+  reason: string | null;
+  added_by: string | null;
+  added_at: string;
+  // joined
+  profiles?: {
+    full_name: string | null;
+    employee_code: string | null;
+    departments?: { name: string | null } | null;
+  } | null;
+}
+
 /** All keys present, treating null as "any". Used as React Query key. */
 function scopeKey(s: EligibilityScope) {
   const sorted = (a: string[]) => [...a].sort().join(',');
