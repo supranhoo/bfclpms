@@ -153,6 +153,7 @@ interface EmployeeImportRow {
   portalAccess?: string;
   employeeStatus?: string;
   groupDoj?: string; // ISO yyyy-MM-dd (normalised)
+  doj?: string; // ISO yyyy-MM-dd (normalised)
 }
 
 // Parse Active/Inactive status cell into a boolean (or undefined if empty/unset).
@@ -748,6 +749,8 @@ export default function ImportData() {
 
     const gdojRaw = getRaw(['gdoj', 'groupDoj', 'group_doj', 'groupDateOfJoining', 'group_date_of_joining']);
     const gdojNorm = normalizeDateCell(gdojRaw);
+    const dojRaw = getRaw(['doj', 'dateOfJoining', 'date_of_joining', 'joiningDate', 'joining_date']);
+    const dojNorm = normalizeDateCell(dojRaw);
 
     return {
       employeeCode: getValue(['employeeCode', 'employeecode', 'employee_code', 'empCode', 'empcode', 'emp_code', 'newCode', 'newcode', 'new_code', 'code', 'id', 'empId', 'empid', 'emp_id']),
@@ -767,6 +770,7 @@ export default function ImportData() {
       portalAccess: getValue(['portalAccess', 'portalaccess', 'portal_access', 'loginAccess', 'loginaccess', 'login_access']),
       employeeStatus: getValue(['employeeStatus', 'employee_status', 'status', 'active', 'isActive', 'is_active']),
       groupDoj: gdojNorm === 'INVALID' ? 'INVALID' : (gdojNorm || undefined),
+      doj: dojNorm === 'INVALID' ? 'INVALID' : (dojNorm || undefined),
     };
   };
 
@@ -850,6 +854,9 @@ export default function ImportData() {
           }
           if (row.groupDoj === 'INVALID') {
             rowErrs.push("Group Date of Joining (GDOJ) is invalid — use yyyy-MM-dd or dd/MM/yyyy");
+          }
+          if (row.doj === 'INVALID') {
+            rowErrs.push("Date of Joining (DOJ) is invalid — use yyyy-MM-dd or dd/MM/yyyy");
           }
           if (rowErrs.length > 0) {
             perRowErrors.set(index, rowErrs);
@@ -1370,6 +1377,7 @@ export default function ImportData() {
             reporting_manager_id: managerId || existingEmployee.reporting_manager_id,
             ...(resolvedCompanyId ? { company_id: resolvedCompanyId } : {}),
             ...(row.groupDoj && row.groupDoj !== 'INVALID' ? { group_doj: row.groupDoj } : {}),
+            ...(row.doj && row.doj !== 'INVALID' ? { doj: row.doj } : {}),
             ...(() => {
               const s = parseEmployeeStatus(row.employeeStatus);
               return s === true || s === false ? { is_active: s } : {};
@@ -1438,6 +1446,7 @@ export default function ImportData() {
             location: sanitizeText(row.location) || undefined,
             portal_access: hasPortalAccess,
             group_doj: row.groupDoj && row.groupDoj !== 'INVALID' ? row.groupDoj : undefined,
+            doj: row.doj && row.doj !== 'INVALID' ? row.doj : undefined,
             ...(() => {
               const s = parseEmployeeStatus(row.employeeStatus);
               return s === true || s === false ? { is_active: s } : {};
@@ -1727,6 +1736,7 @@ export default function ImportData() {
         managerName: 'Jane Smith',
         employeeStatus: 'Active',
         groupDoj: '2020-04-15',
+        doj: '2020-04-15',
       },
     ];
 
@@ -1745,7 +1755,7 @@ export default function ImportData() {
       const allProfiles = await fetchAllPaged<any>((from, to) =>
         supabase
           .from('profiles')
-          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, department_id, reporting_manager_id, is_active, group_doj')
+          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, department_id, reporting_manager_id, is_active, group_doj, doj')
           .order('id')
           .range(from, to)
       );
@@ -1803,6 +1813,7 @@ export default function ImportData() {
           managerEmployeeId: manager?.employee_code || '',
           managerName: manager?.full_name || '',
           groupDoj: (profile as any).group_doj || '',
+          doj: (profile as any).doj || '',
         };
       });
 
@@ -2116,6 +2127,7 @@ export default function ImportData() {
                   <li><code>managerEmployeeId</code> - Manager's Employee Code</li>
                   <li><code>managerName</code> - Manager's Full Name</li>
                   <li><code>gdoj</code> / <code>groupDoj</code> - Group Date of Joining (yyyy-MM-dd or dd/MM/yyyy)</li>
+                  <li><code>doj</code> / <code>dateOfJoining</code> - Date of Joining (yyyy-MM-dd or dd/MM/yyyy)</li>
                 </ul>
                 <Alert className="mt-4">
                   <AlertCircle className="h-4 w-4" />

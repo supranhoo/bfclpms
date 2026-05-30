@@ -187,6 +187,7 @@ export default function UserManagement() {
   const [editIsActive, setEditIsActive] = useState(true);
   const [editDivisionId, setEditDivisionId] = useState('');  // UI-only cascading filter
   const [editGroupDoj, setEditGroupDoj] = useState<string>(''); // yyyy-MM-dd or ''
+  const [editDoj, setEditDoj] = useState<string>(''); // yyyy-MM-dd or ''
   // Create Dialog
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newFullName, setNewFullName] = useState('');
@@ -201,6 +202,7 @@ export default function UserManagement() {
   const [newCompanyId, setNewCompanyId] = useState('');
   const [newPortalAccess, setNewPortalAccess] = useState(true);
   const [newGroupDoj, setNewGroupDoj] = useState<string>(''); // yyyy-MM-dd or ''
+  const [newDoj, setNewDoj] = useState<string>(''); // yyyy-MM-dd or ''
 
   // Bulk Action Dialog
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
@@ -378,6 +380,7 @@ export default function UserManagement() {
       mobileNumber,
       isActive,
       groupDoj,
+      doj,
     }: {
       userId: string;
       role: AppRole;
@@ -390,6 +393,7 @@ export default function UserManagement() {
       mobileNumber?: string;
       isActive?: boolean;
       groupDoj?: string | null;
+      doj?: string | null;
     }) => {
       const updatePayload: Record<string, any> = {
         full_name: fullName || null,
@@ -400,6 +404,7 @@ export default function UserManagement() {
         employee_code: employeeCode || null,
         mobile_number: mobileNumber !== undefined ? (mobileNumber || null) : undefined,
         group_doj: groupDoj !== undefined ? (groupDoj || null) : undefined,
+        doj: doj !== undefined ? (doj || null) : undefined,
       };
 
       if (isActive !== undefined) {
@@ -445,6 +450,7 @@ export default function UserManagement() {
       company_id?: string;
       portal_access?: boolean;
       group_doj?: string;
+      doj?: string;
     }) => {
       const { data: session } = await supabase.auth.getSession();
       
@@ -460,6 +466,7 @@ export default function UserManagement() {
           company_id: data.company_id || undefined,
           portal_access: data.portal_access,
           group_doj: data.group_doj || undefined,
+          doj: data.doj || undefined,
         },
       });
 
@@ -613,6 +620,7 @@ export default function UserManagement() {
     setEditMobile((user as any).mobile_number || '');
     setEditIsActive((user as any).is_active !== false);
     setEditGroupDoj((user as any).group_doj || '');
+    setEditDoj((user as any).doj || '');
     setEditDialogOpen(true);
   };
 
@@ -650,6 +658,7 @@ export default function UserManagement() {
       mobileNumber: editMobile,
       isActive: editIsActive,
       groupDoj: editGroupDoj || null,
+      doj: editDoj || null,
     });
   };
 
@@ -674,6 +683,7 @@ export default function UserManagement() {
       company_id: newCompanyId || undefined,
       portal_access: newPortalAccess,
       group_doj: newGroupDoj || undefined,
+      doj: newDoj || undefined,
     });
   };
 
@@ -690,6 +700,7 @@ export default function UserManagement() {
     setNewCompanyId('');
     setNewPortalAccess(true);
     setNewGroupDoj('');
+    setNewDoj('');
   };
 
   const handleBulkUpdate = () => {
@@ -1260,6 +1271,18 @@ export default function UserManagement() {
                       />
                     </div>
                   </div>
+                  <div className="space-y-2">
+                    <Label>Date of Joining (DOJ)</Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      <Input
+                        type="date"
+                        value={editDoj}
+                        onChange={(e) => setEditDoj(e.target.value)}
+                        className="pl-9"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1473,6 +1496,18 @@ export default function UserManagement() {
                         type="date"
                         value={newGroupDoj}
                         onChange={(e) => setNewGroupDoj(e.target.value)}
+                        className="pl-9"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Date of Joining (DOJ)</Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      <Input
+                        type="date"
+                        value={newDoj}
+                        onChange={(e) => setNewDoj(e.target.value)}
                         className="pl-9"
                       />
                     </div>
