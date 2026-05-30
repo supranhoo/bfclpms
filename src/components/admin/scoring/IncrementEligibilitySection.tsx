@@ -10,6 +10,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { MultiSelectFilter } from '@/components/review/MultiSelectFilter';
+import { Building2, Network, Factory, Layers, Tags, MapPin } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -34,8 +36,6 @@ import {
   type EligibilityConfigRow,
 } from '@/hooks/useIncrementEligibility';
 import type { ComparisonOperator } from '@/lib/incrementEligibility';
-
-const ANY = '__any__';
 
 const OPERATORS: Array<{ value: ComparisonOperator; label: string }> = [
   { value: '>=', label: '≥' },
@@ -72,8 +72,8 @@ export function IncrementEligibilitySection() {
 
   // Filter inputs (draft) vs applied scope
   const [draft, setDraft] = useState<EligibilityScope>({
-    company_id: null, division_id: null, business_unit_id: null,
-    level_id: null, category_id: null, location_id: null,
+    company_id: [], division_id: [], business_unit_id: [],
+    level_id: [], category_id: [], location_id: [],
     assessment_year: years[0] ?? '',
   });
   const [scope, setScope] = useState<EligibilityScope | null>(null);
@@ -104,8 +104,8 @@ export function IncrementEligibilitySection() {
   }
   function handleReset() {
     setDraft({
-      company_id: null, division_id: null, business_unit_id: null,
-      level_id: null, category_id: null, location_id: null,
+      company_id: [], division_id: [], business_unit_id: [],
+      level_id: [], category_id: [], location_id: [],
       assessment_year: years[0] ?? '',
     });
     setScope(null);
@@ -115,28 +115,25 @@ export function IncrementEligibilitySection() {
 
   const isReadOnly = config?.status === 'approved' || config?.status === 'archived';
 
-  function FilterSelect(props: {
+  function MultiFilter(props: {
     label: string;
-    value: string | null;
-    onChange: (v: string | null) => void;
+    icon: React.ReactNode;
+    values: string[];
+    onChange: (next: string[]) => void;
     options: Array<{ id: string; name: string }>;
-    placeholder?: string;
   }) {
     return (
       <div className="space-y-1.5">
         <Label className="text-xs">{props.label}</Label>
-        <Select
-          value={props.value ?? ANY}
-          onValueChange={(v) => props.onChange(v === ANY ? null : v)}
-        >
-          <SelectTrigger className="h-9"><SelectValue placeholder={props.placeholder ?? 'All'} /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ANY}>All</SelectItem>
-            {props.options.map((o) => (
-              <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <MultiSelectFilter
+          icon={props.icon}
+          label={props.label}
+          options={props.options.map((o) => ({ value: o.id, label: o.name }))}
+          values={props.values}
+          onChange={props.onChange}
+          placeholder="All"
+          width={220}
+        />
       </div>
     );
   }
@@ -158,12 +155,12 @@ export function IncrementEligibilitySection() {
         {/* FILTERS */}
         <div className="rounded-lg border p-3 space-y-3 bg-muted/20">
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            <FilterSelect label="Company"       value={draft.company_id}       onChange={(v) => setDraft((s) => ({ ...s, company_id: v }))}       options={masters?.companies ?? []} />
-            <FilterSelect label="Division"      value={draft.division_id}      onChange={(v) => setDraft((s) => ({ ...s, division_id: v }))}      options={masters?.divisions ?? []} />
-            <FilterSelect label="Business Unit" value={draft.business_unit_id} onChange={(v) => setDraft((s) => ({ ...s, business_unit_id: v }))} options={masters?.business_units ?? []} />
-            <FilterSelect label="Level"         value={draft.level_id}         onChange={(v) => setDraft((s) => ({ ...s, level_id: v }))}         options={masters?.levels ?? []} />
-            <FilterSelect label="Category"      value={draft.category_id}      onChange={(v) => setDraft((s) => ({ ...s, category_id: v }))}      options={masters?.categories ?? []} />
-            <FilterSelect label="Location"      value={draft.location_id}      onChange={(v) => setDraft((s) => ({ ...s, location_id: v }))}      options={masters?.locations ?? []} />
+            <MultiFilter label="Company"       icon={<Building2 className="h-3 w-3 text-muted-foreground" />} values={draft.company_id}       onChange={(v) => setDraft((s) => ({ ...s, company_id: v }))}       options={masters?.companies ?? []} />
+            <MultiFilter label="Division"      icon={<Network  className="h-3 w-3 text-muted-foreground" />} values={draft.division_id}      onChange={(v) => setDraft((s) => ({ ...s, division_id: v }))}      options={masters?.divisions ?? []} />
+            <MultiFilter label="Business Unit" icon={<Factory  className="h-3 w-3 text-muted-foreground" />} values={draft.business_unit_id} onChange={(v) => setDraft((s) => ({ ...s, business_unit_id: v }))} options={masters?.business_units ?? []} />
+            <MultiFilter label="Level"         icon={<Layers   className="h-3 w-3 text-muted-foreground" />} values={draft.level_id}         onChange={(v) => setDraft((s) => ({ ...s, level_id: v }))}         options={masters?.levels ?? []} />
+            <MultiFilter label="Category"      icon={<Tags     className="h-3 w-3 text-muted-foreground" />} values={draft.category_id}      onChange={(v) => setDraft((s) => ({ ...s, category_id: v }))}      options={masters?.categories ?? []} />
+            <MultiFilter label="Location"      icon={<MapPin   className="h-3 w-3 text-muted-foreground" />} values={draft.location_id}      onChange={(v) => setDraft((s) => ({ ...s, location_id: v }))}      options={masters?.locations ?? []} />
             <div className="space-y-1.5">
               <Label className="text-xs">Assessment Year <span className="text-destructive">*</span></Label>
               <Select value={draft.assessment_year} onValueChange={(v) => setDraft((s) => ({ ...s, assessment_year: v }))}>
