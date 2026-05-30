@@ -95,6 +95,7 @@ describe('safetyAnalytics SSOT (Phase 7)', () => {
         { business_unit_id: 'a', total_permits: 5, approved_count: 3, active_count: 2, expired_count: 0, rejected_count: 0 },
         { business_unit_id: 'b', total_permits: 4, approved_count: 2, active_count: 1, expired_count: 1, rejected_count: 0 },
       ],
+      monthly_trend: [],
       refreshed_at: new Date().toISOString(),
     };
 

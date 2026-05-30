@@ -45,6 +45,7 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Safety Audit Checklists (Phase 5)](mem://features/safety/audit-checklists) — Templated audits with weighted scoring, critical-fail auto-incidents, RPC-only lifecycle, BU scoreboard (11/11 tests)
 - [Safety Emergency Response (Phase 6)](mem://features/safety/emergency-response) — Drill lifecycle (RPC-only), mustering, findings, emergency contact directory (16/16 tests)
 - [Safety Analytics (Phase 7)](mem://features/safety/analytics) — TRIR materialized views, hours-worked entry, refresh RPC + 30-min cron, dashboard with CSV export (16/16 tests)
+- [Safety Analytics v2 (Phase 10)](mem://features/safety/analytics-v2) — Flag-gated monthly trend chart, BU risk heatmap, KPI tile drill-downs; new mv_safety_incident_monthly_trend
 - [Safety Settings Hub (Phase X)](mem://features/safety/settings-hub) — safety_settings key/value table, get/set RPCs, admin-only writes, JSON editor at /safety/settings, six seeded business-variable keys (8/8 tests)
 - [Multi-month KPI Cycle UX](mem://features/admin/multi-month-kpi-cycle-ux) — Banner contract for showing full cycle months + anchor month in admin KPI dialogs
 - [Monthly Scorecard Trend](mem://features/reports/monthly-scorecard-trend) — Cache-bust + 200-ID submission batch ceiling for the Date-Range trend

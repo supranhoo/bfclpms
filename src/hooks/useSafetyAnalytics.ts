@@ -47,6 +47,7 @@ export function useSafetyAnalytics(businessUnitId?: string | null) {
         fetchView('mv_safety_audit_scoreboard'),
         fetchView('mv_safety_permit_throughput'),
       ]);
+      const trend = await fetchView('mv_safety_incident_monthly_trend');
 
       return {
         trir: trir as SafetyAnalyticsPayload['trir'],
@@ -55,6 +56,7 @@ export function useSafetyAnalytics(businessUnitId?: string | null) {
         training: (trainArr[0] as SafetyAnalyticsPayload['training']) ?? null,
         audit_scoreboard: audit as SafetyAnalyticsPayload['audit_scoreboard'],
         permit_throughput: permit as SafetyAnalyticsPayload['permit_throughput'],
+        monthly_trend: trend as SafetyAnalyticsPayload['monthly_trend'],
         refreshed_at: new Date().toISOString(),
       };
     },

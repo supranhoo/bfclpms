@@ -1,3 +1,33 @@
+# Phase 10 — Safety Analytics v2 (flag-gated)
+
+## Goal
+Layer monthly trend chart, BU risk heatmap, and KPI-tile drill-downs on top of the existing Phase 7 analytics dashboard, without touching the live UI until an admin flips the flag.
+
+## Flag
+`safety_settings.ui_safety_analytics_v2` (boolean JSONB, default `false`).
+
+## Risk & Impact
+- **Data:** One new read-only MV (`mv_safety_incident_monthly_trend`). Derived from `safety_incidents` (already in backup, RLS-protected). MVs themselves are aggregate-only, granted `SELECT` to `authenticated`.
+- **Workflow / writes:** None. Zero new writers, RPCs, uploads, or realtime subscriptions in Phase 10 code paths.
+- **UI/UX:** Additive only. Phase 7 layout untouched. v2 tiles become clickable when flag is on; new chart+heatmap render between KPI tiles and the existing BU table.
+- **Regression risk:** Low. New helpers covered by 8 unit tests; existing analytics test updated for the extended payload type. All 179 safety tests green.
+- **Scalability:** MV stays bounded (12 months × N BUs). Drill-down dialog caps screen at 100 rows from the already-cached incidents query.
+- **Mitigation:** Pure helpers in `safetyAnalytics.ts`. Refresh function extended with one more `REFRESH CONCURRENTLY` call — same RPC, same security check.
+
+## Delivered
+1. Migration: `mv_safety_incident_monthly_trend` + `refresh_safety_analytics()` extension + seed flag row.
+2. SSOT helpers `aggregateMonthlyTrend`, `monthLabel`, `heatmapIntensity` (+ `MonthlyTrendRow` type).
+3. Hook `useSafetyAnalytics` fetches the new MV; payload type extended.
+4. UI: `SafetyTrendChart`, `SafetyHeatmap`, `KpiDrillDownDialog`.
+5. Page: clickable KPI tiles + v2 sections rendered behind the flag.
+6. Tests: 8 new in `safetyAnalyticsV2.test.ts`; payload fixture in `safetyAnalytics.test.ts` extended.
+7. Docs: DOCUMENTATION.md → v2.66.13.25; POLICY §Phase10-Safety; `mem/features/safety/analytics-v2.md`.
+
+## Enabling
+Set `ui_safety_analytics_v2 = true` via the Safety Settings JSON editor, click Refresh on the analytics page.
+
+---
+
 # Phase 8 — Wire Emergency Overlay to the Real Contacts Table (SSOT Reconciliation)
 
 ## Assumptions

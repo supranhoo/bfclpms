@@ -8061,6 +8061,31 @@ export type Database = {
         }
         Relationships: []
       }
+      mv_safety_incident_monthly_trend: {
+        Row: {
+          business_unit_id: string | null
+          closed_count: number | null
+          critical_count: number | null
+          high_count: number | null
+          low_count: number | null
+          medium_count: number | null
+          month_start: string | null
+          period_month: number | null
+          period_year: number | null
+          recordable_count: number | null
+          refreshed_at: string | null
+          total_count: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_incidents_business_unit_id_fkey"
+            columns: ["business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mv_safety_incidents_open_vs_closed: {
         Row: {
           business_unit_id: string | null
