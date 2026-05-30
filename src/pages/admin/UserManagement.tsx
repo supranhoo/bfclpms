@@ -187,6 +187,7 @@ export default function UserManagement() {
   const [editIsActive, setEditIsActive] = useState(true);
   const [editDivisionId, setEditDivisionId] = useState('');  // UI-only cascading filter
   const [editGroupDoj, setEditGroupDoj] = useState<string>(''); // yyyy-MM-dd or ''
+  const [editDoj, setEditDoj] = useState<string>(''); // yyyy-MM-dd or ''
   // Create Dialog
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newFullName, setNewFullName] = useState('');
@@ -201,6 +202,7 @@ export default function UserManagement() {
   const [newCompanyId, setNewCompanyId] = useState('');
   const [newPortalAccess, setNewPortalAccess] = useState(true);
   const [newGroupDoj, setNewGroupDoj] = useState<string>(''); // yyyy-MM-dd or ''
+  const [newDoj, setNewDoj] = useState<string>(''); // yyyy-MM-dd or ''
 
   // Bulk Action Dialog
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
