@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Building2, Briefcase, MapPin, Award, Hash, Calendar } from 'lucide-react';
+import { Building2, Briefcase, MapPin, Award, Hash, Calendar, Users, BadgeCheck } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface OrgInfo {
@@ -9,6 +9,8 @@ interface OrgInfo {
   subBranch: string | null;
   designation: string | null;
   pmsGrade: string | null;
+  employeeCategory?: string | null;
+  employmentStatus?: string | null;
   employeeCode: string | null;
   joiningDate: string | null;
 }
@@ -41,6 +43,8 @@ export default function OrganizationInfoCard({ info }: { info: OrgInfo }) {
         {info.subBranch && <InfoRow icon={MapPin} label="Sub-Branch" value={info.subBranch} />}
         <InfoRow icon={Briefcase} label="Designation" value={info.designation} />
         <InfoRow icon={Award} label="PMS Grade" value={info.pmsGrade} />
+        {info.employeeCategory && <InfoRow icon={Users} label="Employee Category" value={info.employeeCategory} />}
+        {info.employmentStatus && <InfoRow icon={BadgeCheck} label="Employment Status" value={info.employmentStatus} />}
         <InfoRow icon={Hash} label="Employee Code" value={info.employeeCode} />
         <InfoRow icon={Calendar} label="Date of Joining" value={info.joiningDate ? format(new Date(info.joiningDate), 'dd MMM yyyy') : null} />
       </CardContent>
