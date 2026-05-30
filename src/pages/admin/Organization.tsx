@@ -775,6 +775,87 @@ export default function Organization() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="employee-categories">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Employee Categories</CardTitle>
+                <CardDescription>Workforce categorisation (e.g. Worker, Staff, Officer, Executive)</CardDescription>
+              </div>
+              <Button onClick={() => openCreateDialog('employee-category')}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Category
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Code</TableHead>
+                    <TableHead className="w-[80px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {employeeCategories?.map((c: any) => (
+                    <TableRow key={c.id}>
+                      <TableCell className="font-medium">{c.name}</TableCell>
+                      <TableCell>{renderCodeCell('employee-category', c.id, c.code)}</TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="icon" onClick={() => confirmDelete('employee-category', c.id, c.name)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {(!employeeCategories || employeeCategories.length === 0) && (
+                    <TableRow><TableCell colSpan={3} className="text-center text-sm text-muted-foreground py-6">No categories yet — click "Add Category" to create one.</TableCell></TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="employment-statuses">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Employment Statuses</CardTitle>
+                <CardDescription>Lifecycle states such as Probation, Trainee, Confirmed, Superannuated, Retainer. Shared across all companies.</CardDescription>
+              </div>
+              <Button onClick={() => openCreateDialog('employment-status')}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Status
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Code</TableHead>
+                    <TableHead className="w-[80px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {employmentStatuses?.map((s: any) => (
+                    <TableRow key={s.id}>
+                      <TableCell className="font-medium">{s.name}</TableCell>
+                      <TableCell>{renderCodeCell('employment-status', s.id, s.code)}</TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="icon" onClick={() => confirmDelete('employment-status', s.id, s.name)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Create Entity Dialog */}
@@ -782,7 +863,7 @@ export default function Organization() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Add {dialogType === 'bu' ? 'Business Unit' : dialogType === 'sub-branch' ? 'Sub-Branch' : dialogType === 'pms-grade' ? 'PMS Grade' : dialogType === 'level' ? 'Level' : dialogType === 'location' ? 'Location' : dialogType.charAt(0).toUpperCase() + dialogType.slice(1)}
+              Add {dialogType === 'bu' ? 'Business Unit' : dialogType === 'sub-branch' ? 'Sub-Branch' : dialogType === 'pms-grade' ? 'PMS Grade' : dialogType === 'level' ? 'Level' : dialogType === 'location' ? 'Location' : dialogType === 'employee-category' ? 'Employee Category' : dialogType === 'employment-status' ? 'Employment Status' : dialogType.charAt(0).toUpperCase() + dialogType.slice(1)}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
