@@ -390,6 +390,8 @@ export default function UserManagement() {
       departmentId,
       designation,
       pmsGrade,
+      employeeCategory,
+      employmentStatus,
       employeeCode,
       mobileNumber,
       isActive,
@@ -403,6 +405,8 @@ export default function UserManagement() {
       departmentId: string | null;
       designation: string;
       pmsGrade: string;
+      employeeCategory?: string;
+      employmentStatus?: string;
       employeeCode: string;
       mobileNumber?: string;
       isActive?: boolean;
@@ -415,6 +419,8 @@ export default function UserManagement() {
         department_id: departmentId || null,
         designation,
         pms_grade: pmsGrade,
+        employee_category: employeeCategory ?? null,
+        employment_status: employmentStatus ?? null,
         employee_code: employeeCode || null,
         mobile_number: mobileNumber !== undefined ? (mobileNumber || null) : undefined,
         group_doj: groupDoj !== undefined ? (groupDoj || null) : undefined,
@@ -460,6 +466,8 @@ export default function UserManagement() {
       department_id?: string;
       designation?: string;
       pms_grade?: string;
+      employee_category?: string;
+      employment_status?: string;
       reporting_manager_id?: string;
       company_id?: string;
       portal_access?: boolean;
@@ -476,6 +484,8 @@ export default function UserManagement() {
           department_id: data.department_id || undefined,
           designation: data.designation || undefined,
           pms_grade: data.pms_grade || undefined,
+          employee_category: data.employee_category || undefined,
+          employment_status: data.employment_status || undefined,
           reporting_manager_id: data.reporting_manager_id || undefined,
           company_id: data.company_id || undefined,
           portal_access: data.portal_access,
