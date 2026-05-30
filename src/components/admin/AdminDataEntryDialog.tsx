@@ -539,7 +539,11 @@ export function AdminDataEntryDialog({
       remarks: remarks || null,
       evidence_url: evidenceUrls.length > 0 ? evidenceUrls[evidenceUrls.length - 1] : null,
       evidence_urls: evidenceUrls.length > 0 ? evidenceUrls : null,
-      is_na: isNa !== originalIsNa ? isNa : undefined,
+      // POLICY §116 / BUG-047 — always send the explicit is_na flag so the
+      // DB row reflects the UI truth. The hook decides whether side-effects
+      // (score clearing, na_marked_by_role) should run based on whether the
+      // value actually changed.
+      is_na: isNa,
       reason: reason.trim(),
       kpi_name: kpi.kpi_name,
       advance_status: advanceStatus,
@@ -554,10 +558,15 @@ export function AdminDataEntryDialog({
   // would advance past that stage with no audit-grade signature, which
   // breaks "<stage> Reviewed" dashboard counters (BUG-047 root cause).
   const requiresScoreOrNa = roleLevel !== 'self';
+  // POLICY §116 — score signature MUST come from an explicit user action:
+  // either an achieved value, a rating selection, or the N/A toggle.
+  // A stale numeric `score` left over from a prior role-load must not
+  // satisfy the guard (that was the BUG-047 slip-through path).
   const hasScoreSignature =
     isNa ||
-    (calculatedScore !== null && !Number.isNaN(calculatedScore)) ||
-    (score !== '' && !Number.isNaN(parseFloat(score)));
+    (achievedValue !== '' && achievedValue != null) ||
+    (rating !== '' && rating != null) ||
+    (calculatedScore !== null && !Number.isNaN(calculatedScore));
   const onBehalfPayloadValid = !requiresScoreOrNa || hasScoreSignature;
   const isValid =
     reason.trim().length > 0 &&
