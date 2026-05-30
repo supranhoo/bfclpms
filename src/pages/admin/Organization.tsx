@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useDivisions, useBusinessUnits, useDepartments, useSubBranches, useProfiles, useDesignations, usePmsGrades, useLevels, useLocations } from '@/hooks/useOrganization';
+import { useDivisions, useBusinessUnits, useDepartments, useSubBranches, useProfiles, useDesignations, usePmsGrades, useLevels, useLocations, useEmployeeCategories, useEmploymentStatuses } from '@/hooks/useOrganization';
 import { useCompanies, useCreateCompany, useUpdateCompany, useDeleteCompany, useCloneStructure } from '@/hooks/useCompanies';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,12 +33,14 @@ export default function Organization() {
   const { data: pmsGrades, isLoading: pmsGradesLoading } = usePmsGrades(activeCompanyId || undefined);
   const { data: levels, isLoading: levelsLoading } = useLevels(activeCompanyId || undefined);
   const { data: locations, isLoading: locationsLoading } = useLocations(activeCompanyId || undefined);
+  const { data: employeeCategories, isLoading: empCatLoading } = useEmployeeCategories(activeCompanyId || undefined);
+  const { data: employmentStatuses, isLoading: empStatLoading } = useEmploymentStatuses();
   const { data: profiles } = useProfiles();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogType, setDialogType] = useState<'division' | 'bu' | 'department' | 'sub-branch' | 'designation' | 'pms-grade' | 'level' | 'location'>('division');
+  const [dialogType, setDialogType] = useState<'division' | 'bu' | 'department' | 'sub-branch' | 'designation' | 'pms-grade' | 'level' | 'location' | 'employee-category' | 'employment-status'>('division');
   const [formName, setFormName] = useState('');
   const [formCode, setFormCode] = useState('');
   const [formParentId, setFormParentId] = useState('');
@@ -71,6 +73,7 @@ export default function Organization() {
     pmsGrades: true,
     levels: true,
     locations: true,
+    employeeCategories: true,
   });
   const cloneStructure = useCloneStructure();
 
@@ -147,6 +150,14 @@ export default function Organization() {
           table = 'locations';
           data.company_id = activeCompanyId;
           break;
+        case 'employee-category':
+          table = 'employee_categories';
+          data.company_id = activeCompanyId;
+          break;
+        case 'employment-status':
+          table = 'employment_statuses';
+          // global — no company_id
+          break;
       }
 
       const { error } = await supabase.from(table as any).insert(data);
@@ -161,6 +172,8 @@ export default function Organization() {
       queryClient.invalidateQueries({ queryKey: ['pms-grades'] });
       queryClient.invalidateQueries({ queryKey: ['levels'] });
       queryClient.invalidateQueries({ queryKey: ['locations'] });
+      queryClient.invalidateQueries({ queryKey: ['employee-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['employment-statuses'] });
       toast({ title: 'Created successfully' });
       setDialogOpen(false);
       resetForm();
@@ -182,6 +195,8 @@ export default function Organization() {
         case 'pms-grade': table = 'pms_grades'; break;
         case 'level': table = 'levels'; break;
         case 'location': table = 'locations'; break;
+        case 'employee-category': table = 'employee_categories'; break;
+        case 'employment-status': table = 'employment_statuses'; break;
       }
       const { error } = await supabase.from(table as any).delete().eq('id', id);
       if (error) throw error;
@@ -195,6 +210,8 @@ export default function Organization() {
       queryClient.invalidateQueries({ queryKey: ['pms-grades'] });
       queryClient.invalidateQueries({ queryKey: ['levels'] });
       queryClient.invalidateQueries({ queryKey: ['locations'] });
+      queryClient.invalidateQueries({ queryKey: ['employee-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['employment-statuses'] });
       toast({ title: 'Deleted successfully' });
       setDeleteDialogOpen(false);
       setDeleteTarget(null);
@@ -216,6 +233,8 @@ export default function Organization() {
         case 'pms-grade': table = 'pms_grades'; break;
         case 'level': table = 'levels'; break;
         case 'location': table = 'locations'; break;
+        case 'employee-category': table = 'employee_categories'; break;
+        case 'employment-status': table = 'employment_statuses'; break;
       }
       const { error } = await supabase.from(table as any).update({ code }).eq('id', id);
       if (error) throw error;
@@ -229,6 +248,8 @@ export default function Organization() {
       queryClient.invalidateQueries({ queryKey: ['pms-grades'] });
       queryClient.invalidateQueries({ queryKey: ['levels'] });
       queryClient.invalidateQueries({ queryKey: ['locations'] });
+      queryClient.invalidateQueries({ queryKey: ['employee-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['employment-statuses'] });
       toast({ title: 'Code updated successfully' });
       setEditingCode(null);
     },
