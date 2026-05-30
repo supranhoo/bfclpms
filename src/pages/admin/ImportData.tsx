@@ -1457,6 +1457,8 @@ export default function ImportData() {
             department_id: departmentId || undefined,
             pms_grade: sanitizeText(row.pmsGrade) || undefined,
             level: sanitizeText(row.level) || undefined,
+            employee_category: sanitizeText(row.employeeCategory) || undefined,
+            employment_status: sanitizeText(row.employmentStatus) || undefined,
             reporting_manager_id: managerId || undefined,
             company_id: newCompanyId,
             location: sanitizeText(row.location) || undefined,
