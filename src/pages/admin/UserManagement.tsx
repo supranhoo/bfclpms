@@ -1271,6 +1271,18 @@ export default function UserManagement() {
                       />
                     </div>
                   </div>
+                  <div className="space-y-2">
+                    <Label>Date of Joining (DOJ)</Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      <Input
+                        type="date"
+                        value={editDoj}
+                        onChange={(e) => setEditDoj(e.target.value)}
+                        className="pl-9"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1484,6 +1496,18 @@ export default function UserManagement() {
                         type="date"
                         value={newGroupDoj}
                         onChange={(e) => setNewGroupDoj(e.target.value)}
+                        className="pl-9"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Date of Joining (DOJ)</Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      <Input
+                        type="date"
+                        value={newDoj}
+                        onChange={(e) => setNewDoj(e.target.value)}
                         className="pl-9"
                       />
                     </div>
