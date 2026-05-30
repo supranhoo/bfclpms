@@ -354,7 +354,7 @@ export default function Organization() {
   };
 
   const activeCompany = companies?.find(c => c.id === activeCompanyId);
-  const isLoading = companiesLoading || divisionsLoading || busLoading || deptsLoading || subLoading || designationsLoading || pmsGradesLoading || levelsLoading || locationsLoading;
+  const isLoading = companiesLoading || divisionsLoading || busLoading || deptsLoading || subLoading || designationsLoading || pmsGradesLoading || levelsLoading || locationsLoading || empCatLoading || empStatLoading;
 
   if (isLoading && !companies) {
     return (
@@ -410,6 +410,8 @@ export default function Organization() {
           <TabsTrigger value="designations">Designations ({designations?.length || 0})</TabsTrigger>
           <TabsTrigger value="pms-grades">PMS Grades ({pmsGrades?.length || 0})</TabsTrigger>
           <TabsTrigger value="levels">Levels ({levels?.length || 0})</TabsTrigger>
+          <TabsTrigger value="employee-categories">Employee Categories ({employeeCategories?.length || 0})</TabsTrigger>
+          <TabsTrigger value="employment-statuses">Employment Statuses ({employmentStatuses?.length || 0})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="divisions">
