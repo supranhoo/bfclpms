@@ -335,6 +335,14 @@ export function IncrementEligibilitySection() {
               </ScrollArea>
             </div>
 
+            {/* EXCLUDED EMPLOYEES (per-AY) */}
+            <ExclusionsCard
+              configId={config.id}
+              defaultAssessmentYear={config.assessment_year}
+              knownYears={years}
+              readOnly={isReadOnly}
+            />
+
             {/* STATUS ACTIONS */}
             <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t">
               {config.status === 'draft' && (
