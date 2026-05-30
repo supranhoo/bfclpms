@@ -1248,6 +1248,18 @@ export default function UserManagement() {
                       />
                     </div>
                   </div>
+                  <div className="space-y-2">
+                    <Label>Group Date of Joining (GDOJ)</Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      <Input
+                        type="date"
+                        value={editGroupDoj}
+                        onChange={(e) => setEditGroupDoj(e.target.value)}
+                        className="pl-9"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
