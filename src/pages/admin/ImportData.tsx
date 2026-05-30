@@ -1750,6 +1750,8 @@ export default function ImportData() {
         location: 'Mumbai',
         pmsGrade: 'A',
         level: 'Level 1',
+        employeeCategory: 'Staff',
+        employmentStatus: 'Confirmed',
         managerEmployeeId: '100002',
         managerName: 'Jane Smith',
         employeeStatus: 'Active',
