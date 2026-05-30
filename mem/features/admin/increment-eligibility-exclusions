@@ -1,0 +1,31 @@
+---
+name: Increment Eligibility Exclusions
+description: Per-Assessment-Year employee exclusions that bypass Increment Eligibility Criteria for a single AY only
+type: feature
+---
+
+# Increment Eligibility Exclusions
+
+Senior employees / board members can be exempted from Increment Eligibility Criteria via the `increment_eligibility_exclusions` table.
+
+## Per-AY rule (locked)
+- Each exclusion row is keyed by `(config_id, employee_id, assessment_year)` — UNIQUE constraint.
+- An exclusion applies **only** to its stored `assessment_year`. Same employee in 2026-27 is fully evaluated unless a separate row exists.
+- There is no "apply to all years" option. UI explicitly forbids it.
+
+## Evaluator contract
+`evaluateIncrementEligibility(metrics, criteria, validationDate, { employeeId, assessmentYear, exclusions, exclusionReasons })`
+- Short-circuits to `{ eligible: true, excluded: true, exclusion_reason }` only when `exclusions.has(\`${employeeId}|${assessmentYear}\`)`.
+- Use `exclusionKey(empId, ay)` helper from `useIncrementEligibility` to build the Set keys.
+
+## UI
+- `ExclusionsCard` renders inside `IncrementEligibilitySection`, after the Criteria table.
+- Default view: filtered to the loaded AY. Toggle "Show all years" enters a read-only cross-AY view (Add/Remove disabled).
+- Employee picker uses `useActiveEmployeesForCopy` + `EmployeeCombobox multiple`.
+- Add panel requires explicit AY selection (prefilled with loaded AY). Duplicates silently skipped via `upsert({ ignoreDuplicates: true })`; toast reports `inserted` vs `skipped`.
+- Remove → `ConfirmDestructiveDialog`.
+- Add/Remove hidden when config status is `approved` or `archived`.
+
+## RLS / Audit
+- SELECT/INSERT/DELETE restricted to `admin` or `hr_pms`.
+- Trigger `log_increment_eligibility_exclusion_change` writes `exclusion_added` / `exclusion_removed` rows to `increment_eligibility_audit` with employee snapshot in `revised_value` / `previous_value` jsonb.

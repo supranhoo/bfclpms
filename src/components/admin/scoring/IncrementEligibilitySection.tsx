@@ -17,6 +17,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
+import { ExclusionsCard } from '@/components/admin/scoring/ExclusionsCard';
 
 import {
   useEligibilityConfig,
@@ -333,6 +334,14 @@ export function IncrementEligibilitySection() {
                 </div>
               </ScrollArea>
             </div>
+
+            {/* EXCLUDED EMPLOYEES (per-AY) */}
+            <ExclusionsCard
+              configId={config.id}
+              defaultAssessmentYear={config.assessment_year}
+              knownYears={years}
+              readOnly={isReadOnly}
+            />
 
             {/* STATUS ACTIONS */}
             <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t">
