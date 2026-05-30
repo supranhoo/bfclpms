@@ -2149,6 +2149,8 @@ export default function ImportData() {
                   <li><code>department</code> - Department Name (must exist in system)</li>
                   <li><code>pmsGrade</code> - PMS Grade</li>
                   <li><code>level</code> - Employee Level</li>
+                  <li><code>employeeCategory</code> - Employee Category (must exist in master)</li>
+                  <li><code>employmentStatus</code> - Employment Status (e.g. Probation, Trainee, Confirmed, Superannuated, Retainer)</li>
                   <li><code>portalAccess</code> - Portal Login Access: <span className="text-xs ml-1 text-muted-foreground">(Yes/No, default: Yes if email provided)</span></li>
                   <li><code>managerEmployeeId</code> - Manager's Employee Code</li>
                   <li><code>managerName</code> - Manager's Full Name</li>
