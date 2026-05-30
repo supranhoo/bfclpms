@@ -77,3 +77,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Safety SLA Monitor v2](mem://features/safety/sla-v2) — Phase 11 flag-gated at-risk queue card + countdown badge derived from cached incidents
 - [Safety Incident Open INSERT Policy](mem://features/safety/incident-report-open-insert) — Phase 16 RLS: any authenticated user can file an incident; reporter_id = auth.uid() pin preserved; downstream SELECT/UPDATE/DELETE gates unchanged
 - [Incident Submission RPC](mem://features/safety/incident-submission-rpc) — Phase 18 SECURITY DEFINER entrypoint; server-stamps reporter_id; idempotent on (reporter_id, client_submission_id); browser must NOT direct-insert
+- [Increment Eligibility Exclusions](mem://features/admin/increment-eligibility-exclusions) — Per-AY employee exemptions from Increment Eligibility Criteria (never cross-year)
