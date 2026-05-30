@@ -38,6 +38,7 @@ const SETTINGS_SECTIONS = [
   { key: 'branding', label: 'Branding', icon: Building2 },
   { key: 'general', label: 'General', icon: RefreshCw },
   { key: 'scoring', label: 'Scoring', icon: Calculator },
+  { key: 'increment', label: 'Increment', icon: TrendingUp },
   { key: 'cycles', label: 'Cycles', icon: CalendarDays },
   { key: 'controls', label: 'Controls', icon: SlidersHorizontal },
   { key: 'uploads', label: 'Uploads', icon: Upload },
