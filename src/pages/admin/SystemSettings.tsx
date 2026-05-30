@@ -27,6 +27,7 @@ import { ReportBuilderTab } from '@/components/admin/ReportBuilderTab';
 import { UploadSettingsTab } from '@/components/admin/UploadSettingsTab';
 import { OrgKpiGovernanceSettings } from '@/components/admin/OrgKpiGovernanceSettings';
 import { FeatureFlagsTab } from '@/components/admin/FeatureFlagsTab';
+import { IncrementEligibilitySection } from '@/components/admin/scoring/IncrementEligibilitySection';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -615,6 +616,8 @@ export default function SystemSettings() {
                 </div>
               </CardContent>
             </Card>
+
+            <IncrementEligibilitySection />
           </div>
         );
       case 'cycles':
