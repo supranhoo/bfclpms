@@ -1775,7 +1775,7 @@ export default function ImportData() {
       const allProfiles = await fetchAllPaged<any>((from, to) =>
         supabase
           .from('profiles')
-          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, department_id, reporting_manager_id, is_active, group_doj, doj')
+          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, employee_category, employment_status, department_id, reporting_manager_id, is_active, group_doj, doj')
           .order('id')
           .range(from, to)
       );
