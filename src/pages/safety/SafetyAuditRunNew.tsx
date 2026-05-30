@@ -10,6 +10,7 @@ import {
 import { ArrowLeft, Loader2, Play } from 'lucide-react';
 import { useAuditTemplates, useCreateAuditRun } from '@/hooks/useSafetyAudits';
 import { toast } from 'sonner';
+import { SafetyStickyActionBar } from '@/components/safety/SafetyStickyActionBar';
 
 /** Pick a template + location → create draft run → navigate to runner. */
 export default function SafetyAuditRunNew() {
@@ -33,7 +34,7 @@ export default function SafetyAuditRunNew() {
   }
 
   return (
-    <div className="max-w-xl mx-auto space-y-4">
+    <div className="max-w-xl mx-auto space-y-4 pb-24 md:pb-0">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" asChild>
           <Link to="/safety/audits"><ArrowLeft className="h-4 w-4 mr-1" /> Back</Link>
@@ -61,7 +62,7 @@ export default function SafetyAuditRunNew() {
             <Label className="text-xs">Location</Label>
             <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Plant 2 — Bay 3" />
           </div>
-          <div className="flex justify-end">
+          <div className="hidden md:flex justify-end">
             <Button onClick={start} disabled={create.isPending}>
               {create.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />}
               Start Checklist
@@ -69,6 +70,13 @@ export default function SafetyAuditRunNew() {
           </div>
         </CardContent>
       </Card>
+
+      <SafetyStickyActionBar>
+        <Button onClick={start} disabled={create.isPending}>
+          {create.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />}
+          Start Checklist
+        </Button>
+      </SafetyStickyActionBar>
     </div>
   );
 }
