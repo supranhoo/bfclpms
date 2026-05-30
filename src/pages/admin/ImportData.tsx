@@ -2096,6 +2096,8 @@ export default function ImportData() {
                         const divNames = new Set((divisions || []).map(d => d.name.toLowerCase()));
                         const buNames = new Set((businessUnits || []).map(d => d.name.toLowerCase()));
                         const desigNames = new Set((designations || []).map(d => d.name.toLowerCase()));
+                        const empCatNames = new Set((employeeCategories || []).map((c: any) => String(c.name).toLowerCase()));
+                        const empStatusNames = new Set((employmentStatuses || []).map((s: any) => String(s.name).toLowerCase()));
                         const existingCodes = new Set((profiles || []).map(p => p.employee_code?.toLowerCase()).filter(Boolean));
                         const newRowErrors = new Map<number, string[]>();
                         employeeData.forEach((row, index) => {
@@ -2109,6 +2111,8 @@ export default function ImportData() {
                           if (row.division && !divNames.has(row.division.toLowerCase())) rowErrs.push(`Division '${row.division}' does not exist`);
                           if (row.businessUnit && !buNames.has(row.businessUnit.toLowerCase())) rowErrs.push(`Business Unit '${row.businessUnit}' does not exist`);
                           if (row.designation && !desigNames.has(row.designation.toLowerCase())) rowErrs.push(`Designation '${row.designation}' does not exist`);
+                          if (row.employeeCategory && !empCatNames.has(row.employeeCategory.toLowerCase())) rowErrs.push(`Employee Category '${row.employeeCategory}' does not exist`);
+                          if (row.employmentStatus && !empStatusNames.has(row.employmentStatus.toLowerCase())) rowErrs.push(`Employment Status '${row.employmentStatus}' does not exist`);
                           if (rowErrs.length > 0) newRowErrors.set(index, rowErrs);
                         });
                         setEmployeeRowErrors(newRowErrors);
