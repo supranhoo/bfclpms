@@ -5,23 +5,23 @@ import { DEFAULT_ELIGIBILITY_SEEDS, type EligibilityCriterion } from '@/lib/incr
 
 /** Scope keys — null on a key means "Applies to all". */
 export interface EligibilityScope {
-  company_id: string | null;
-  division_id: string | null;
-  business_unit_id: string | null;
-  level_id: string | null;
-  category_id: string | null;
-  location_id: string | null;
+  company_id: string[];
+  division_id: string[];
+  business_unit_id: string[];
+  level_id: string[];
+  category_id: string[];
+  location_id: string[];
   assessment_year: string;
 }
 
 export interface EligibilityConfigRow {
   id: string;
-  company_id: string | null;
-  division_id: string | null;
-  business_unit_id: string | null;
-  level_id: string | null;
-  category_id: string | null;
-  location_id: string | null;
+  company_id: string[];
+  division_id: string[];
+  business_unit_id: string[];
+  level_id: string[];
+  category_id: string[];
+  location_id: string[];
   assessment_year: string;
   status: 'draft' | 'pending_approval' | 'approved' | 'archived';
   copied_from_config_id: string | null;
@@ -55,13 +55,20 @@ export interface EligibilityAuditRow {
 
 /** All keys present, treating null as "any". Used as React Query key. */
 function scopeKey(s: EligibilityScope) {
+  const sorted = (a: string[]) => [...a].sort().join(',');
   return [
-    s.company_id, s.division_id, s.business_unit_id,
-    s.level_id, s.category_id, s.location_id, s.assessment_year,
+    sorted(s.company_id), sorted(s.division_id), sorted(s.business_unit_id),
+    sorted(s.level_id), sorted(s.category_id), sorted(s.location_id),
+    s.assessment_year,
   ];
 }
 
-function applyScope<T extends { eq: (col: string, val: unknown) => T; is: (col: string, val: null) => T }>(
+/**
+ * Apply scope-array equality. Postgres compares text/uuid arrays element-wise;
+ * because the DB trigger sorts arrays before write, supplying a sorted array
+ * to `.eq()` matches exactly one row per (scope, assessment_year).
+ */
+function applyScope<T extends { eq: (col: string, val: unknown) => T }>(
   q: T,
   scope: EligibilityScope,
 ): T {
@@ -75,8 +82,8 @@ function applyScope<T extends { eq: (col: string, val: unknown) => T; is: (col: 
   ];
   let next = q;
   for (const [k, col] of cols) {
-    const v = scope[k];
-    next = v ? next.eq(col, v) : next.is(col, null);
+    const v = [...(scope[k] as string[])].sort();
+    next = next.eq(col, v);
   }
   next = next.eq('assessment_year', scope.assessment_year);
   return next;
@@ -149,8 +156,8 @@ export function useEligibilityVersionHistory(scope: EligibilityScope | null) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q: any = supabase.from('increment_eligibility_configs').select('*');
       for (const [k, col] of cols) {
-        const v = scope[k];
-        q = v ? q.eq(col, v) : q.is(col, null);
+        const v = [...(scope[k] as string[])].sort();
+        q = q.eq(col, v);
       }
       q = q.neq('assessment_year', scope.assessment_year).order('assessment_year', { ascending: false });
       const { data, error } = await q;
