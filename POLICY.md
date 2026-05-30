@@ -3250,3 +3250,26 @@ Governance source: `docs/safety-integration-governance.md` §Phase 3.
 6. Rollback contract: setting `ui_incident_v2 = false` instantly restores the legacy renderer for every incident. No data migration, no orphaned columns, no cache stampede (same React Query keys).
 
 7. Phase 4 (offline/evidence UX), Phase 5 (emergency overlay), Phase 6 (admin/import), Phase 7 (analytics polish), and Phase 8 (final stabilization) remain blocked behind their own governance gates per §Phase Execution Order.
+
+## §Phase4-Safety — Safety Governance Phase 4 (Offline Queue Inspector, codified 2026-05-30)
+
+Governance source: `docs/safety-integration-governance.md` §Phase 4.
+
+1. Phase 4 is **UI-only**. The contract surface (`safety_offline_v1` IndexedDB schema, `pending_incidents` object store keyed by `client_submission_id`, UNIQUE(reporter_id, client_submission_id) server guard, `safetyIncidentSubmit.ts` upload pipeline, `safety-media` bucket, `safety_incident_evidence` insert path, `useSafetyOfflineSync.flushNow` retry engine) is frozen for this phase. Any PR that edits those surfaces is out of scope and must be rejected.
+
+2. The inspector is gated by `safety_settings.ui_offline_inspector_v1` (boolean JSONB value). Default is `false` in production. Admin or `safety_head` flips it via the existing Safety Settings JSON editor — no bespoke settings UI was added (simplicity-first).
+
+3. Allowed files for Phase 4 changes:
+   - **Added:** `src/components/safety/OfflineQueueInspector.tsx`, `src/test/safety/offlineInspectorNoNewWriters.test.ts`.
+   - **Edited (additive only):** `src/components/safety/SafetyOfflineBadge.tsx` (reads flag; when ON, wraps the existing button as a `Sheet` trigger; legacy `flushNow` path preserved when flag OFF).
+   - **Forbidden:** `src/lib/safetyOfflineQueue.ts` mutation paths (`enqueuePendingIncident`, `recordPendingFailure`, `pruneStalePending`), `src/lib/safetyIncidentSubmit.ts`, `src/hooks/useSafetyOfflineSync.ts` sync engine internals, `client_submission_id` generation, storage bucket, RLS.
+
+4. Allowed read/action helpers (pre-existing, NOT new writers): `listPendingIncidents()`, `deletePendingIncident()`, `useSafetyOfflineSync().flushNow()`. Discard reuses the same delete path the sync engine already uses on success.
+
+5. Regression guard `src/test/safety/offlineInspectorNoNewWriters.test.ts` MUST stay green. It greps Phase 4 files for: direct `safety_incident_evidence.insert`, `safety-media.upload`, `client_submission_id` assignment, any `safety_incidents` write, `transition_safety_incident` RPC, `enqueuePendingIncident`, and `recordPendingFailure`. Any Phase 4 file added later must be appended to the `PHASE4_FILES` list.
+
+6. Rollback contract: setting `ui_offline_inspector_v1 = false` instantly restores the legacy click-to-flush badge. No data migration, no IndexedDB schema change, no queue drain.
+
+7. Render is capped at 200 items to bound DOM cost; the queue is naturally bounded by `pruneStalePending` (10 attempts AND 7 days → discard) so the cap is a defense-in-depth, not the primary limit.
+
+8. Phase 5 (emergency overlay), Phase 6 (admin/import), Phase 7 (analytics polish), and Phase 8 (final stabilization) remain blocked behind their own governance gates per §Phase Execution Order.
