@@ -3364,4 +3364,17 @@ Governance source: `docs/safety-integration-governance.md` §Phase 5.
 ## §Phase13-Safety — Analytics v2 production enablement (codified 2026-05-30)
 
 - `ui_safety_analytics_v2 = true` is now the default-on state for this tenant (v2.66.13.28).
+- §Phase10-Safety invariants remain in force: additive-only v2 sections (trend chart, BU heatmap, KPI drill-down dialog), zero new writers, all aggregation lives in pure helpers (`src/lib/safetyAnalytics.ts`), presentational components stay dumb. Rollback is a single JSON edit on `safety_settings.ui_safety_analytics_v2 → false`.
+
+## §Phase14-Safety — Offline Inspector Retry v2 production enablement (codified 2026-05-30)
+
+- `ui_offline_inspector_retry_v2 = true` is now the default-on state for this tenant (v2.66.13.29). Requires `ui_offline_inspector_v1 = true` (also on).
+- §Phase9-Safety invariants remain in force: zero new writer contracts (per-item Retry reuses the existing `flushOne` → `submitSafetyIncident` + `deletePendingIncident` + `recordPendingFailure` triple), IndexedDB queue contract (`safety_offline_v1` DB, `pending_incidents` store, `client_submission_id` idempotency key, UNIQUE(reporter_id, client_submission_id) server guard) FROZEN, `safetyIncidentSubmit.ts` upload pipeline FROZEN, `safety-media` bucket and `safety_incident_evidence` insert path FROZEN.
+- `ConfirmDestructiveDialog` MUST gate per-item Discard (Core safety rule). Error-class derivation MUST stay in the pure `src/lib/safetyOfflineErrorClassify.ts` helper.
+- Guarded by `src/test/safety/offlineInspectorNoNewWriters.test.ts` and `src/test/safety/safetyOfflineErrorClassify.test.ts`.
+- Rollback = flip `ui_offline_inspector_retry_v2 = false`. Inspector reverts to the Phase 4 read-mostly + "Retry all" + simple per-item Discard layout instantly. No schema or data migration required.
+
+## §Phase13-Safety — Analytics v2 production enablement (codified 2026-05-30)
+
+- `ui_safety_analytics_v2 = true` is now the default-on state for this tenant (v2.66.13.28).
 - §Phase10-Safety invariants remain in force: additive-only v2 sections (trend chart, BU heatmap, KPI drill-down dialog), zero new writers, all aggregation lives in pure helpers (`src/lib/safetyAnalytics.ts`), presentational components stay dumb, rollback is a single JSON edit on `safety_settings.ui_safety_analytics_v2 → false`.
