@@ -380,6 +380,7 @@ export default function UserManagement() {
       mobileNumber,
       isActive,
       groupDoj,
+      doj,
     }: {
       userId: string;
       role: AppRole;
@@ -392,6 +393,7 @@ export default function UserManagement() {
       mobileNumber?: string;
       isActive?: boolean;
       groupDoj?: string | null;
+      doj?: string | null;
     }) => {
       const updatePayload: Record<string, any> = {
         full_name: fullName || null,
@@ -402,6 +404,7 @@ export default function UserManagement() {
         employee_code: employeeCode || null,
         mobile_number: mobileNumber !== undefined ? (mobileNumber || null) : undefined,
         group_doj: groupDoj !== undefined ? (groupDoj || null) : undefined,
+        doj: doj !== undefined ? (doj || null) : undefined,
       };
 
       if (isActive !== undefined) {
@@ -447,6 +450,7 @@ export default function UserManagement() {
       company_id?: string;
       portal_access?: boolean;
       group_doj?: string;
+      doj?: string;
     }) => {
       const { data: session } = await supabase.auth.getSession();
       
@@ -462,6 +466,7 @@ export default function UserManagement() {
           company_id: data.company_id || undefined,
           portal_access: data.portal_access,
           group_doj: data.group_doj || undefined,
+          doj: data.doj || undefined,
         },
       });
 
